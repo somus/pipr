@@ -1,0 +1,219 @@
+.github/ISSUE_TEMPLATE/bug.yml
+  s_244160aac0e74b::t_ee9e3202b57684 1-37
+.github/ISSUE_TEMPLATE/config.yml
+  s_244160aac0e74b::t_5b0e806d58dd58 1
+.github/ISSUE_TEMPLATE/feature.yml
+  s_244160aac0e74b::t_c36c2fce9a9ab7 1-41
+.github/ISSUE_TEMPLATE/task.yml
+  s_244160aac0e74b::t_f08a9852674727 1-42
+.github/PULL_REQUEST_TEMPLATE.md
+  s_244160aac0e74b::t_f36c94c1b10ac6 1-21
+.github/workflows/ci.yml
+  s_244160aac0e74b::t_8d3a4e1313540d 1-45
+.github/workflows/release-please.yml
+  s_244160aac0e74b::t_9d74a81a8432a8 1-58
+.github/workflows/release.yml
+  s_244160aac0e74b::t_fdc1e827c2b196 1-95
+.pipr/tsconfig.json
+  s_3a9769e34fbdcc::t_30dba3f1da2a44 1-10
+.pipr/types/pipr-sdk.d.ts
+  s_3a9769e34fbdcc::t_a17bc64571104f 1-565
+.release-please-manifest.json
+  s_244160aac0e74b::t_20ee0be33c86ab 1-3
+README.md
+  s_244160aac0e74b::t_700c3c600ad15c 1-143
+action.yml
+  s_244160aac0e74b::t_d40b4953546c43 1-26
+apps/docs/content/docs/guide/comments.mdx
+  s_244160aac0e74b::t_f9ebda402a498a 1-185
+apps/docs/content/docs/guide/configuration.mdx
+  s_3a9769e34fbdcc::t_75071696781288 1-313
+apps/docs/content/docs/guide/entrypoints.mdx
+  s_3a9769e34fbdcc::t_e1e36b5f33da0b 1-182
+apps/docs/content/docs/guide/github-action.mdx
+  s_244160aac0e74b::t_a8b9594c7c52f7 1-130
+apps/docs/content/docs/guide/index.mdx
+  s_244160aac0e74b::t_b944fb69a009e0 1-36
+apps/docs/content/docs/guide/quickstart.mdx
+  s_244160aac0e74b::t_047670518bc5a2 1-178
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_244160aac0e74b::t_95422d7d7d4deb 1-158
+apps/docs/content/docs/guide/trust-security.mdx
+  s_244160aac0e74b::t_1b61e36b8fa2d1 1-107
+apps/docs/content/docs/index.mdx
+  s_244160aac0e74b::t_dc6bd19ac9df9b 1-134
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_611e522ea23400::t_c75c26202daa4e 1-146
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_611e522ea23400::t_4aa3d08fd4a954 1-150
+apps/docs/content/docs/recipes/ci-triage-command.mdx
+  s_611e522ea23400::t_5f0adb0625af7a 1-136
+apps/docs/content/docs/recipes/default-review.mdx
+  s_611e522ea23400::t_28113997cea4bd 1-137
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_611e522ea23400::t_a66790530ba44a 1-171
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_611e522ea23400::t_1a8e79561cfe48 1-159
+apps/docs/content/docs/recipes/index.mdx
+  s_7446cd23509fd9::t_5a3bbc65f007a7 1-58
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_611e522ea23400::t_57cd23c9f1d90c 1-142
+apps/docs/content/docs/recipes/multi-agent-review.mdx
+  s_611e522ea23400::t_610f50678d1b67 1-191
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_611e522ea23400::t_12caf389ae3904 1-351
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_611e522ea23400::t_3d0dff5764aa15 1-135
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_611e522ea23400::t_4d4dc69f97c385 1-140
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_611e522ea23400::t_02bc55e69a1abe 1-148
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_611e522ea23400::t_34467075b36213 1-200
+apps/docs/content/docs/reference/architecture.mdx
+  s_3a9769e34fbdcc::t_843dd6a95c63f2 1-99
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_3a9769e34fbdcc::t_96aae911cca23c 1-169
+apps/docs/content/docs/reference/development.mdx
+  s_244160aac0e74b::t_59232354140528 1-193
+apps/docs/content/docs/reference/index.mdx
+  s_3a9769e34fbdcc::t_04b44e1da56f2d 1-16
+apps/docs/package.json
+  s_244160aac0e74b::t_c24b9bd1d2252f 1-50
+apps/docs/public/images/pipr/pipr-mark-dark.svg
+  s_244160aac0e74b::t_cdc00a3a0a54a9 1-5
+apps/docs/public/images/pipr/pipr-mark-light.svg
+  s_244160aac0e74b::t_3a3d0752e3af74 1-5
+apps/docs/public/images/pipr/pipr-mark.svg
+  s_244160aac0e74b::t_05026bf2088015 1-14
+apps/docs/scripts/sync-recipes.ts
+  s_244160aac0e74b::t_d3278e6dc80de8 1-586
+apps/docs/source.config.ts
+  s_7446cd23509fd9::t_514e12cf42d915 1-166
+apps/docs/src/lib/layout.shared.tsx
+  s_244160aac0e74b::t_4dee709d5b9ee0 1-28
+apps/docs/src/lib/source.ts
+  s_244160aac0e74b::t_28801672efa28d 1-46
+apps/docs/src/routes/__root.tsx
+  s_244160aac0e74b::t_760bdf6b6a6073 1-49
+apps/docs/src/routes/docs/$.tsx
+  s_244160aac0e74b::t_e436fe7635b0aa 1-137
+apps/docs/src/routes/index.tsx
+  s_244160aac0e74b::t_6f52504cf83dee 1-736
+apps/docs/src/routes/og/docs/$.tsx
+  s_244160aac0e74b::t_715e9bfb408bcf 1-40
+apps/docs/src/styles/app.css
+  s_244160aac0e74b::t_0899a52a833435 1-90
+apps/docs/vite.config.ts
+  s_244160aac0e74b::t_5041a286ad99b1 1-123
+bun.lock
+  s_611e522ea23400::t_3c066316d5bfdc 1-1554
+docs/adr/0003-typescript-pipr-config.md
+  s_3a9769e34fbdcc::t_cf6b72aaf42670 1-17
+hk.pkl
+  s_244160aac0e74b::t_1880a4cc433a37 1-43
+package.json
+  s_244160aac0e74b::t_bc2b0ce96f255e 1-52
+packages/cli/build-release.ts
+  s_3a9769e34fbdcc::t_79a5c9ceb4d1eb 1-161
+packages/cli/package.json
+  s_244160aac0e74b::t_0d90a661ed3d67 1-40
+packages/cli/src/tests/main.test.ts
+  s_244160aac0e74b::t_1a4d589134d316 1-636
+packages/e2e/action-metadata.ts
+  s_244160aac0e74b::t_f96a074a19391d 1-27
+packages/e2e/assertions.test.ts
+  s_244160aac0e74b::t_f23b120004fa0c 1-241
+packages/runtime/package.json
+  s_244160aac0e74b::t_221cdd67586893 1-66
+packages/runtime/src/action/action-logging.ts
+  s_3a9769e34fbdcc::t_75303c86cfa63d 1-62
+packages/runtime/src/action/entry-dispatch.ts
+  s_3a9769e34fbdcc::t_2216d5c1e2c299 1-242
+packages/runtime/src/action/tests/commands.test.ts
+  s_3a9769e34fbdcc::t_0205c58a178821 1-1787
+packages/runtime/src/action/tests/entry-dispatch.test.ts
+  s_3a9769e34fbdcc::t_cff58af142b233 1-141
+packages/runtime/src/action/types.ts
+  s_3a9769e34fbdcc::t_623dd8dc0bdcd2 1-132
+packages/runtime/src/config/init.ts
+  s_244160aac0e74b::t_0b2ab9d83931d2 1-280
+packages/runtime/src/config/project.ts
+  s_3a9769e34fbdcc::t_d1e4ef7d729bea 1-212
+packages/runtime/src/config/recipes/bug-hunter.ts
+  s_3a9769e34fbdcc::t_1d7f4e0157cfa0 1-58
+packages/runtime/src/config/recipes/default-review.ts
+  s_3a9769e34fbdcc::t_31c6fb84aeb302 1-48
+packages/runtime/src/config/recipes/pr-briefing.ts
+  s_3a9769e34fbdcc::t_f87e28e9191a27 1-47
+packages/runtime/src/config/tests/config.test.ts
+  s_3a9769e34fbdcc::t_8b7c400823e689 1-422
+packages/runtime/src/config/tests/init.test.ts
+  s_244160aac0e74b::t_e3ec71ca64888c 1-435
+packages/runtime/src/config/ts-loader.ts
+  s_3a9769e34fbdcc::t_5b386ec06a1206 1-222
+packages/runtime/src/review/task/task-runtime.ts
+  s_3a9769e34fbdcc::t_e1ad5c80ab8e07 1-554
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_244160aac0e74b::t_2ed9421e8c5e1f 1-1923
+packages/runtime/src/review/tests/verifier.test.ts
+  s_3a9769e34fbdcc::t_153efc46e8cd17 1-491
+packages/sdk/package.json
+  s_244160aac0e74b::t_2536299495310a 1-55
+packages/sdk/src/index.ts
+  s_3a9769e34fbdcc::t_07488d14907001 1-539
+packages/sdk/src/runtime-contract.ts
+  s_3a9769e34fbdcc::t_ec56b1ef0662dc 1-30
+packages/sdk/src/tests/index.test.ts
+  s_244160aac0e74b::t_d8d781f6560aff 1-952
+release-please-config.json
+  s_244160aac0e74b::t_001a538c1a41d7 1-72
+scripts/check-conventional-commit.ts
+  s_244160aac0e74b::t_6ef43e9ee85219 1-92
+scripts/check-release-metadata.ts
+  s_244160aac0e74b::t_30f287127fc6c3 1-166
+scripts/sync-release-lockfile.ts
+  s_244160aac0e74b::t_21f90f1b32e98a 1-97
+scripts/tests/release-scripts.test.ts
+  s_244160aac0e74b::t_bb6c07f57d3bfa 1-261
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "9d62142ce8ffd9d46b4386f9b1423bebc91a007c",
+  "prompts": {},
+  "sessions": {
+    "s_244160aac0e74b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f14f8-9a9a-7c11-ae99-96554b6ee62b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_3a9769e34fbdcc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f0357-2a1e-78b0-8eb1-3c03781a3330",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_611e522ea23400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef836-1781-7052-a770-eac8bfbc3291",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_7446cd23509fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f17fc-b6e9-7d60-be27-43447448acc8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
