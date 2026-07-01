@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+env:
+  PIPR_GHCR_ACTION_IMAGE: ghcr.io/somus/pipr
+  PIPR_TEST_ACTION_IMAGE: pipr-action:e2e
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: jdx/mise-action@v4
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - id: version
+        run: |
+          case "$GITHUB_REF_NAME" in
+            v*) ;;
+            *)
+              echo "release tag must start with v: $GITHUB_REF_NAME" >&2
+              exit 1
+              ;;
+          esac
+          version="${GITHUB_REF_NAME#v}"
+          root_version="$(bun -e "console.log((await import('./package.json')).default.version)")"
+          sdk_version="$(bun -e "console.log((await import('./packages/sdk/package.json')).default.version)")"
+          runtime_version="$(bun -e "console.log((await import('./packages/runtime/package.json')).default.version)")"
+          cli_version="$(bun -e "console.log((await import('./packages/cli/package.json')).default.version)")"
+          test "$root_version" = "$version"
+          test "$sdk_version" = "$version"
+          test "$runtime_version" = "$version"
+          test "$cli_version" = "$version"
+          grep -q "image: docker://ghcr.io/somus/pipr:v${version}" action.yml
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: bun run build:release:cli
+      - run: npm pack --dry-run --json
+        working-directory: packages/sdk
+      - run: npm pack --dry-run --json
+        working-directory: packages/runtime
+      - run: npm pack --dry-run --json
+        working-directory: packages/cli
+      - name: Build local image for e2e
+        run: docker build --tag "$PIPR_TEST_ACTION_IMAGE" .
+      - run: PIPR_ACTION_IMAGE=${{ env.PIPR_TEST_ACTION_IMAGE }} bun run --cwd packages/e2e check:container
+      - run: npm publish --access public
+        working-directory: packages/sdk
+      - run: npm publish --access public
+        working-directory: packages/runtime
+      - run: npm publish --access public
+        working-directory: packages/cli
+      - run: gh release upload "$GITHUB_REF_NAME" dist/release/pipr-* --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.PIPR_GHCR_ACTION_IMAGE }}
+          tags: |
+            type=raw,value=v${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@v4
+      - name: Publish GHCR image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

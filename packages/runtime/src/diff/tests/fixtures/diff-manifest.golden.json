@@ -1,0 +1,60 @@
+{
+  "files": [
+    {
+      "path": "src/a.ts",
+      "status": "modified",
+      "language": "ts",
+      "additions": 2,
+      "deletions": 1,
+      "hunks": [
+        {
+          "hunkIndex": 1,
+          "header": "@@ -1,3 +1,4 @@",
+          "oldStart": 1,
+          "oldLines": 3,
+          "newStart": 1,
+          "newLines": 4,
+          "contentHash": "c4f5f071f199"
+        }
+      ],
+      "commentableRanges": [
+        {
+          "id": "rng_21ff24dd_h1_LEFT_2_2_c4f5f071f199",
+          "path": "src/a.ts",
+          "side": "LEFT",
+          "startLine": 2,
+          "endLine": 2,
+          "kind": "deleted",
+          "hunkIndex": 1,
+          "hunkHeader": "@@ -1,3 +1,4 @@",
+          "hunkContentHash": "c4f5f071f199",
+          "preview": "two"
+        },
+        {
+          "id": "rng_21ff24dd_h1_RIGHT_2_2_c4f5f071f199",
+          "path": "src/a.ts",
+          "side": "RIGHT",
+          "startLine": 2,
+          "endLine": 2,
+          "kind": "added",
+          "hunkIndex": 1,
+          "hunkHeader": "@@ -1,3 +1,4 @@",
+          "hunkContentHash": "c4f5f071f199",
+          "preview": "TWO"
+        },
+        {
+          "id": "rng_21ff24dd_h1_RIGHT_4_4_c4f5f071f199",
+          "path": "src/a.ts",
+          "side": "RIGHT",
+          "startLine": 4,
+          "endLine": 4,
+          "kind": "added",
+          "hunkIndex": 1,
+          "hunkHeader": "@@ -1,3 +1,4 @@",
+          "hunkContentHash": "c4f5f071f199",
+          "preview": "four"
+        }
+      ]
+    }
+  ]
+}

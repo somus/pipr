@@ -1,0 +1,130 @@
+---
+title: "GitHub Action"
+description: "GitHub workflow setup, trusted options, outputs, permissions, dry runs, and commands."
+---
+
+The GitHub workflow runs `pipr action` inside the prebuilt Pipr image. GitHub is the first code host adapter; `.pipr/config.ts` remains provider-neutral.
+
+## Workflow
+
+```yaml
+name: pipr
+
+on:
+  pull_request:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: somus/pipr@v0.1.0 # x-release-please-version
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+```
+
+## Events
+
+| Event | Why Pipr listens |
+| --- | --- |
+| `pull_request` | Runs configured change request tasks on actions such as opened, synchronize, reopened, and ready for review. |
+| `issue_comment.created` | Handles `@pipr` commands on pull requests. Comments on issues without a pull request are ignored. |
+| `pull_request_review_comment.created` | Lets Pipr process replies to Pipr-owned Inline Review Comments through the verifier. |
+
+The config still decides which tasks run. The workflow only delivers events to `pipr action`.
+
+## Trusted options
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `config-dir` | `.pipr` | Directory containing `config.ts`. Local type support files are not required by the Action. |
+
+Provider settings come from the base-commit `.pipr/config.ts`, not from pull request code. The Action uses the base config's default model and configured fallbacks, including provider backend, model name, API key env name, and provider options.
+
+`contents: write` is required by GitHub's integration token for resolving review threads. `checks: write` lets Pipr publish task and aggregate Check Runs when enabled by config. `pull-requests: write` publishes Inline Review Comments and lets Pipr respond to user replies on Pipr-owned Inline Review Comments. `issues: write` publishes and updates the Main Review Comment and command response comments. Command help is exposed through the `main-comment` output. If GitHub denies the cleanup call or the API fails, the review still succeeds and records the issue in `publication.metadata.inlineResolutionErrors`.
+
+## Pinning
+
+Use the release tag you trust in production:
+
+```yaml
+- uses: somus/pipr@v0.1.0 # x-release-please-version
+```
+
+Use `somus/pipr@main` only when you intentionally want the current main-branch Action. The generated workflow uses the latest released tag at generation time.
+
+## Outputs
+
+| Output | Description |
+| --- | --- |
+| `main-comment` | Rendered main pull request review comment body, command response body, or command help body. |
+| `inline-comments` | JSON array of inline review comment publication items. |
+| `dropped-findings` | JSON array of findings dropped during validation. |
+| `publication` | JSON publication result for main and inline comments. On command-response runs, this is `{ action, id }` for the response issue comment. On `pull_request_review_comment` verifier runs, this contains verifier thread action errors such as `inlineResolutionErrors`. |
+
+## Trust model
+
+For pull request Action runs, Pipr loads `.pipr/config.ts` and local imports from the pull request base commit. Pi reviews the pull request head, so PR-authored config changes are visible as code under review but cannot change review settings for the current run.
+
+Pi runs in a read-only workspace copy with only `read`, `grep`, `find`, and `ls`. Condensed Diff Manifest runs may receive Pipr Diff Read Tools, which expose bounded reads over Pipr-owned diff data and base/head snapshots.
+
+## Dry run
+
+Set `PIPR_DRY_RUN=1` to load the event and trusted config without running Pi or publishing comments:
+
+```yaml
+env:
+  PIPR_DRY_RUN: "1"
+```
+
+Dry run is useful for checking Action packaging, event parsing, and trusted config loading.
+
+For local event checks, use the CLI:
+
+```bash
+pipr dry-run --event path/to/github-event.json
+```
+
+`dry-run` requires an event file because it exercises the Action event parser. For normal local review, use `pipr review --base <sha>`.
+
+## Command comments
+
+`issue_comment` events are used for `@pipr` commands on pull requests. Pipr checks that the comment targets a pull request, fetches pull request metadata, checks the commenter permission, parses command arguments, and then starts the task.
+
+Command tasks can answer with `ctx.command.reply(...)`. Pipr publishes that as a normal pull request issue comment and upserts it by source command comment.
+
+`pull_request_review_comment` events are used for verifier replies. When a user replies to a Pipr-owned Inline Review Comment, Pipr can run its internal verifier against the current diff and thread context. If the finding is fixed, Pipr replies and resolves the thread. If the finding is still valid, Pipr can reply with a short explanation and keep the thread open.
+
+Permissions are ordered:
+
+```text
+read < triage < write < maintain < admin
+```
+
+Command permission defaults to `write`.
+
+## Forks
+
+GitHub decides which secrets are available for forked pull requests. If the provider secret is unavailable and the selected config requires it, Pipr fails before running Pi. Keep secrets in GitHub Actions secrets and reference them with `pipr.secret({ name: "ENV_NAME" })`; do not put raw keys in config.
+
+The trusted config still comes from the base commit. A fork can propose changes to `.pipr/config.ts`, but those changes are reviewed as code and do not change the active run.
+
+## Related docs
+
+- [Quickstart](/docs/guide/quickstart)
+- [Runtime Guide](/docs/guide/runtime)
+- [Code Host Adapters](/docs/reference/code-host-adapters)
+- [Configuration](/docs/guide/configuration)

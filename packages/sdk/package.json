@@ -1,0 +1,55 @@
+{
+  "name": "@usepipr/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript configuration SDK for pipr pull request review automation",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/somus/pipr.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/somus/pipr/issues"
+  },
+  "homepage": "https://github.com/somus/pipr#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./review": {
+      "types": "./dist/review.d.mts",
+      "default": "./dist/review.mjs"
+    },
+    "./tools": {
+      "types": "./dist/tools.d.mts",
+      "default": "./dist/tools.mjs"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.mts",
+      "default": "./dist/internal.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts src/review.ts src/tools.ts src/internal.ts --dts --format esm --out-dir dist",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "biome check src",
+    "format:check": "biome check src",
+    "prepack": "bun run build",
+    "check": "bun run lint && bun run typecheck && bun run test"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

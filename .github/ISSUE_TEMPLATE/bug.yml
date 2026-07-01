@@ -1,0 +1,37 @@
+name: Bug report
+description: Report a reproducible Pipr bug.
+title: "fix: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and the behavior you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include config, command, workflow event, or PR context needed to reproduce.
+      placeholder: |
+        1. Run ...
+        2. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: State affected CLI, runtime, GitHub Action, SDK, docs, or release behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Share logs, failing checks, screenshots, or the smallest command that proves the bug.
+    validations:
+      required: false

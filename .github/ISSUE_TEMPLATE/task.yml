@@ -1,0 +1,42 @@
+name: Task
+description: Track a scoped maintenance, release, docs, or internal change.
+title: "chore: "
+labels:
+  - task
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: State exactly what should change and what is out of scope.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - Runtime
+        - Config
+        - Docker Action
+        - Public API
+        - Docs
+        - Release
+        - Repo maintenance
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: List the commands, checks, or manual validation needed.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Link related PRs, issues, ADRs, docs, or external references.
+    validations:
+      required: false

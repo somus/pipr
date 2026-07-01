@@ -1,0 +1,43 @@
+amends "package://github.com/jdx/hk/releases/download/v1.48.0/hk@1.48.0#/Config.pkl"
+
+local biome = new Step {
+  glob = List("*.ts", "*.tsx", "*.js", "*.jsx", "*.json", "*.jsonc", "*.md", "*.yml", "*.yaml")
+  check = "bunx biome check {{files}}"
+  fix = "bunx biome check --write {{files}}"
+}
+
+local repoCheck = new Step {
+  check = "bun run check"
+}
+
+local conventionalCommit = new Step {
+  check = "bun scripts/check-conventional-commit.ts {{commit_msg_file}}"
+}
+
+hooks {
+  ["commit-msg"] {
+    steps {
+      ["conventional-commit"] = conventionalCommit
+    }
+  }
+
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps {
+      ["biome"] = biome
+    }
+  }
+
+  ["pre-push"] {
+    steps {
+      ["check"] = repoCheck
+    }
+  }
+
+  ["check"] {
+    steps {
+      ["check"] = repoCheck
+    }
+  }
+}

@@ -1,0 +1,90 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "fumadocs-twoslash/twoslash.css";
+
+@theme {
+  --color-fd-background: hsl(72, 24%, 97%);
+  --color-fd-foreground: hsl(90, 13%, 8%);
+  --color-fd-muted: hsl(72, 18%, 92%);
+  --color-fd-muted-foreground: hsl(82, 9%, 38%);
+  --color-fd-popover: hsl(72, 26%, 99%);
+  --color-fd-popover-foreground: hsl(90, 13%, 8%);
+  --color-fd-card: hsl(72, 20%, 95%);
+  --color-fd-card-foreground: hsl(90, 13%, 8%);
+  --color-fd-border: hsla(80, 18%, 72%, 45%);
+  --color-fd-primary: hsl(74, 72%, 29%);
+  --color-fd-primary-foreground: hsl(72, 26%, 98%);
+  --color-fd-secondary: hsl(72, 18%, 91%);
+  --color-fd-secondary-foreground: hsl(90, 13%, 8%);
+  --color-fd-accent: hsla(75, 38%, 76%, 45%);
+  --color-fd-accent-foreground: hsl(90, 13%, 8%);
+  --color-fd-ring: hsl(76, 65%, 38%);
+  --color-pipr-ink: hsl(96, 18%, 5%);
+  --color-pipr-panel: hsl(95, 16%, 8%);
+  --color-pipr-cream: hsl(72, 26%, 92%);
+  --color-pipr-lime: hsl(75, 79%, 66%);
+  --color-pipr-cyan: hsl(186, 58%, 63%);
+  --color-pipr-red: hsl(3, 72%, 67%);
+  --color-pipr-amber: hsl(40, 88%, 64%);
+}
+
+.dark {
+  --color-fd-background: hsl(90, 15%, 5%);
+  --color-fd-foreground: hsl(72, 22%, 91%);
+  --color-fd-muted: hsl(90, 12%, 11%);
+  --color-fd-muted-foreground: hsl(75, 13%, 64%);
+  --color-fd-popover: hsl(90, 14%, 7%);
+  --color-fd-popover-foreground: hsl(72, 22%, 91%);
+  --color-fd-card: hsl(90, 13%, 9%);
+  --color-fd-card-foreground: hsl(72, 22%, 91%);
+  --color-fd-border: hsla(78, 18%, 45%, 28%);
+  --color-fd-primary: hsl(75, 79%, 66%);
+  --color-fd-primary-foreground: hsl(90, 19%, 7%);
+  --color-fd-secondary: hsl(86, 14%, 13%);
+  --color-fd-secondary-foreground: hsl(72, 22%, 91%);
+  --color-fd-accent: hsla(76, 45%, 34%, 35%);
+  --color-fd-accent-foreground: hsl(72, 22%, 91%);
+  --color-fd-ring: hsl(75, 77%, 62%);
+}
+
+.twoslash-hover {
+  text-decoration-color: color-mix(in oklab, var(--color-fd-primary) 65%, transparent);
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 0.18em;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  /* biome-ignore lint/complexity/noImportantStyles: Override the dialog scroll-lock inline style. */
+  margin-right: 0px !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Override the dialog scroll-lock inline style. */
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+.recipe-file-explorer [data-recipe-file-content] > figure {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-fd-card);
+  box-shadow: none;
+}
+
+.recipe-file-explorer [data-recipe-file-content] > figure > div[role="region"] {
+  min-height: 380px;
+  max-height: 560px;
+}
+
+@media (min-width: 768px) {
+  .pipr-docs-footer:has(> a:only-child) > a {
+    width: calc(50% - 0.5rem);
+  }
+
+  .pipr-docs-footer:has(> a:only-child) > a.text-end {
+    justify-self: end;
+  }
+}

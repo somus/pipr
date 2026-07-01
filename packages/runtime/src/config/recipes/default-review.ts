@@ -1,0 +1,48 @@
+import type { OfficialInitRecipe } from "./types.js";
+
+export const defaultReviewRecipe = {
+  id: "default-review",
+  title: "Default Review",
+  description: "General pull request review with bounded inline comments.",
+  sourceTools: ["pipr"],
+  configTs: `import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+    options: { thinking: "high" },
+  });
+
+  pipr.review({
+    id: "review",
+    model,
+    instructions: \`
+      Review the pull request diff for correctness, security,
+      maintainability, and test coverage.
+      Return only actionable findings that target valid diff ranges.
+    \`,
+    inlineComments: { max: 5 },
+    timeout: "5m",
+    comment: (result, context) => ({
+      main:
+        context.platform.id === "local"
+          ? [
+              "## Summary",
+              "",
+              result.summary.body,
+              "",
+              "## Inline Findings",
+              "",
+              result.inlineFindings.length === 0
+                ? "No inline findings."
+                : result.inlineFindings.map((finding) => \`- \${finding.body}\`).join("\\n"),
+            ].join("\\n")
+          : result.summary.body,
+      inlineFindings: result.inlineFindings,
+    }),
+  });
+});
+`,
+} as const satisfies OfficialInitRecipe;

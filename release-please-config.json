@@ -1,0 +1,72 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "include-component-in-tag": false,
+      "include-v-in-tag": true,
+      "bump-patch-for-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "packages/sdk/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/runtime/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/runtime/package.json",
+          "jsonpath": "$.dependencies['@usepipr/sdk']"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.dependencies['@usepipr/runtime']"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.dependencies['@usepipr/sdk']"
+        },
+        {
+          "type": "generic",
+          "path": "action.yml"
+        },
+        {
+          "type": "generic",
+          "path": "README.md"
+        },
+        {
+          "type": "generic",
+          "path": "packages/runtime/src/config/init.ts"
+        },
+        {
+          "type": "generic",
+          "path": "packages/runtime/src/config/tests/init.test.ts"
+        },
+        {
+          "type": "generic",
+          "path": "packages/cli/src/tests/main.test.ts"
+        },
+        {
+          "type": "generic",
+          "path": "apps/docs/scripts/sync-recipes.ts"
+        },
+        {
+          "type": "generic",
+          "path": "apps/docs/content/docs/**/*.mdx",
+          "glob": true
+        }
+      ]
+    }
+  }
+}

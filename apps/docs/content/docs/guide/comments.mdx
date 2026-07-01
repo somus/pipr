@@ -1,0 +1,185 @@
+---
+title: "Comments and Findings"
+description: "How Pipr builds main comments, inline comments, dropped findings, prior state, and verifier replies."
+---
+
+Pipr treats comments as runtime output, not userland side effects. Review Tasks emit one final value, then Pipr validates findings and publishes through the active code host adapter.
+
+Use this page when a pull request comment is missing, duplicated, capped, or different from the model output.
+
+## Pull request output
+
+A normal review can create three visible surfaces on a pull request.
+
+| Surface | Where it appears | What it is for |
+| --- | --- | --- |
+| Main Review Comment | Pull request conversation | The task summary, metadata, and non-inline workflow output. |
+| Inline Review Comment | Pull request diff | One actionable Review Finding anchored to one validated Diff Manifest range. |
+| Command response | Pull request conversation | The answer to one source `@pipr` command comment. |
+
+Action outputs also include publication metadata, inline drafts, and dropped findings for debugging.
+
+## Task output types
+
+Tasks choose one final output shape. Pipr rejects missing or duplicate final outputs.
+
+| Task output | Publication behavior |
+| --- | --- |
+| `ctx.comment(markdown)` | Publishes or updates the Main Review Comment only. |
+| `ctx.comment({ main, inlineFindings })` | Publishes or updates the Main Review Comment and valid Inline Review Comments. |
+| `ctx.command?.reply(markdown)` | Publishes or updates a command response issue comment keyed to the source command. |
+
+## Main Review Comment
+
+The Main Review Comment is the single visible summary for a review task. Pipr upserts it by hidden marker, then replaces the visible body on rerun.
+
+<img
+  alt="GitHub pull request comment from github-actions bot titled pipr Review with a summary of security and error-handling findings"
+  src="/images/pipr/main-review-comment.png"
+/>
+
+Use it for:
+
+- review summary
+- task metadata
+- dropped finding counts
+- reviewer context
+- main-comment-only workflows such as PR briefing or changelog draft
+
+Do not use it for every finding when the finding can anchor to a valid diff range. Inline comments are better for actionable code issues.
+
+```ts twoslash
+// @include: task-context
+await ctx.comment("## Review\n\nNo blocking findings.");
+```
+
+## Inline Review Comments
+
+Inline Review Comments come from `ReviewFinding[]`. Each finding must point to a valid commentable Diff Manifest range.
+
+<img
+  alt="GitHub inline review comment from github-actions bot with a suggested replacement for an unsafe fetch helper"
+  src="/images/pipr/inline-review-comment.png"
+/>
+
+```ts twoslash
+// @include: task-result
+await ctx.comment({
+  main: result.summary.body,
+  inlineFindings: result.inlineFindings,
+});
+```
+
+Each finding must target a valid Diff Manifest range:
+
+```ts twoslash
+import type { ReviewFinding } from "@usepipr/sdk";
+
+const finding: ReviewFinding = {
+  body: "The timeout is not applied to this subprocess call.",
+  path: "packages/runtime/src/pi/runner.ts",
+  rangeId: "rng_...",
+  side: "RIGHT",
+  startLine: 42,
+  endLine: 42,
+  suggestedFix: "await runWithTimeout(command, timeoutMs);",
+};
+```
+
+`suggestedFix` must be exact replacement code for the selected range. Do not include Markdown fences, prose, labels, or partial context outside the replacement.
+
+## Dropped findings
+
+Pipr drops invalid findings and continues the review. Dropped findings appear in the Action `dropped-findings` output and publication metadata.
+
+| Reason | Fix |
+| --- | --- |
+| `path` does not match a changed Diff Manifest file | Pass the manifest to the agent and ask for findings only on changed files. |
+| `rangeId` does not exist for that file | Use the `rangeId` values from the Diff Manifest, not model-invented ids. |
+| `side`, `startLine`, or `endLine` does not match the range | Copy the side and line range from the selected Diff Manifest range. |
+| Finding is outside task path scope | Use the same `paths` in `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. |
+| Finding duplicates another current finding | Keep one finding per issue and range. |
+| Output has unsupported fields | Use `pipr.schemas.review` or map custom schema output into `ReviewFinding[]`. |
+
+Dropped findings do not fail the whole review because the remaining valid findings can still help reviewers.
+
+## Inline caps
+
+Cap inline comments to keep reviews useful and avoid flooding a pull request.
+
+```ts twoslash
+// @include: pipr-reviewer
+pipr.review({
+  id: "review",
+  reviewer,
+  inlineComments: { max: 5 },
+});
+```
+
+The cap applies to published inline drafts. Keep the Main Review Comment useful when some findings are skipped by the cap, for example by summarizing counts or highest-risk findings.
+
+## Prior state
+
+Pipr stores review state in hidden markers on Pipr-owned comments so reruns can keep track of prior findings.
+
+State tracks:
+
+- reviewed head SHA
+- task scope
+- finding ids
+- path and range
+- side and lines
+- status
+
+Tasks can read prior state:
+
+```ts twoslash
+// @include: task-context
+const prior = await ctx.review.prior();
+```
+
+Default review flows pass matching open prior locations back to the reviewer so reruns can avoid losing still-open findings.
+
+## Deduplication
+
+Pipr dedupes Inline Review Comments before publication.
+
+Deduplication uses:
+
+- stable finding id
+- reviewed head SHA
+- Pipr-owned same-head location overlap
+
+This lets wording change without duplicating comments on the same range.
+
+## Verifier replies
+
+The internal verifier can recheck Pipr-owned Inline Review Comments after new commits or reviewer replies.
+
+The verifier can run on:
+
+- `pull_request.synchronize`, to recheck prior open findings after a new commit
+- `pull_request_review_comment.created`, when a user replies to a Pipr-owned Inline Review Comment
+
+When the verifier marks a finding fixed, Pipr can reply and resolve the GitHub review thread when permissions allow. When the finding is still valid, Pipr can reply with a short explanation and leave the thread open.
+
+Thread cleanup failures are recorded in `publication.metadata.inlineResolutionErrors` and do not make the review itself fail.
+
+## Command responses
+
+Command responses are separate from review comments. They are pull request issue comments keyed to the source command comment:
+
+```ts twoslash
+// @include: task-context
+await ctx.command?.reply("The CI failure points to the package build step.");
+```
+
+Rerunning the same source command updates the previous Pipr response for that command.
+
+## Next steps
+
+Use these pages when you need to change how comments are produced.
+
+- [Configuration](/docs/guide/configuration) covers `inlineComments`, checks, schemas, and retry behavior.
+- [Custom Tasks](/docs/guide/custom-tasks) shows how to call `ctx.comment(...)` from task code.
+- [Troubleshooting](/docs/guide/troubleshooting) covers missing comments, dropped findings, and verifier failures.

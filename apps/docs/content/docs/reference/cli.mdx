@@ -1,0 +1,131 @@
+---
+title: "CLI Reference"
+description: "Pipr CLI commands for init, Action runs, config validation, dry runs, inspect, and local review."
+---
+
+The CLI is the local and Action entrypoint for Pipr.
+
+```bash
+pipr <command> [options]
+```
+
+Run `pipr <command> --help` for command-specific help.
+
+## `pipr init`
+
+Create editable TypeScript config:
+
+```bash
+pipr init
+```
+
+Options:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--config-dir <dir>` | `.pipr` | Config directory to create. |
+| `--adapters <adapters>` | `github` | Adapter files to initialize. Use `none` to skip workflow files. |
+| `--recipe <recipe>` | none | Starter recipe id. |
+| `--no-types` | false | Skip `.pipr/tsconfig.json` and `.pipr/types/**` local editor type support. |
+| `--types-only` | false | Add or refresh only local editor type support for an existing config. |
+| `--force` | false | Overwrite existing Pipr files. |
+
+Examples:
+
+```bash
+pipr init --adapters none
+pipr init --recipe security-sast
+pipr init --no-types
+pipr init --types-only
+pipr init --config-dir .config/pipr
+```
+
+`--types-only` cannot be combined with `--no-types`, `--recipe`, or `--adapters`.
+
+See [Init Recipes](/docs/recipes) for recipe ids.
+
+## `pipr action`
+
+Run inside the GitHub Docker Action:
+
+```bash
+pipr action
+```
+
+Options:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--config-dir <dir>` | `.pipr` | Config directory to load. |
+
+`pipr action` expects GitHub Actions environment variables such as `GITHUB_EVENT_PATH` and `GITHUB_WORKSPACE`. Most users call it through `uses: somus/pipr@...`, not directly.
+
+## `pipr check`
+
+Type-load config and validate the runtime plan:
+
+```bash
+pipr check
+```
+
+Options:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--config-dir <dir>` | `.pipr` | Config directory to load. |
+| `--require-env` | false | Fail when configured provider env vars are missing. |
+
+Use `--require-env` when validating a local environment that should be able to run Pi.
+
+## `pipr dry-run`
+
+Load config and a GitHub event without publishing:
+
+```bash
+pipr dry-run --event path/to/event.json
+```
+
+Options:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--event <path>` | required | GitHub event JSON path. |
+| `--config-dir <dir>` | `.pipr` | Config directory to load. |
+
+Use this for Action event parsing and trusted config loading. Use `pipr review` for normal local review runs.
+
+## `pipr inspect`
+
+Print the loaded runtime plan:
+
+```bash
+pipr inspect
+```
+
+Options:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--config-dir <dir>` | `.pipr` | Config directory to load. |
+
+The output includes models, agents, tasks, commands, tools, publication settings, checks, and limits.
+
+## `pipr review`
+
+Run configured change-request review tasks locally without publishing:
+
+```bash
+pipr review --base origin/main
+```
+
+Options:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--base <sha>` | required | Base commit, branch, or ref. |
+| `--head <sha>` | working tree | Head commit, branch, or ref. Omit to include staged and unstaged tracked-file edits. |
+| `--config-dir <dir>` | `.pipr` | Config directory to load. |
+| `--pi-executable <path>` | `pi` on PATH | Pi executable for local runs. |
+| `--json` | false | Print structured local review output. |
+
+See [Local Runs](/docs/guide/local-runs) for behavior differences between local and GitHub Action runs.

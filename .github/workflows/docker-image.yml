@@ -1,0 +1,22 @@
+name: Docker image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PIPR_TEST_ACTION_IMAGE: pipr-action:e2e
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun run build:packages
+      - name: Build local image for e2e
+        run: docker build --tag "$PIPR_TEST_ACTION_IMAGE" .
+      - run: PIPR_ACTION_IMAGE=${{ env.PIPR_TEST_ACTION_IMAGE }} bun run --cwd packages/e2e check:container

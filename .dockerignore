@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+.turbo
+.fallow
+apps/docs/.source
+apps/docs/.cache
+apps/docs/.output
+apps/docs/.tanstack
+apps/docs/src/routeTree.gen.ts
+.git
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example

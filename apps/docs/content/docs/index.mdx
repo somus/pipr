@@ -1,0 +1,134 @@
+---
+title: "Pipr Docs"
+description: "Code-owned AI review for pull requests, with TypeScript policy, Pi execution, validated findings, and GitHub publication."
+---
+
+Pipr is code-owned AI review for pull requests. Review policy lives in `.pipr/config.ts`, runs in local development or CI, and publishes only validated GitHub comments.
+
+Use these docs to run the first review, start from a recipe, or tune review policy with the Pipr SDK.
+
+## What makes Pipr different
+
+Pipr is built for maintainers who want AI review without handing review policy to an opaque control plane.
+
+| Principle | What it means |
+| --- | --- |
+| Review policy is code | Models, instructions, limits, and publication behavior live in `.pipr/config.ts`. |
+| Runs stay yours | Pipr runs in local development or your CI runner, not in a hosted Pipr service. |
+| Config is trusted | GitHub Action runs load `.pipr/config.ts` from the pull request base commit, so PR-authored config changes cannot alter the active run. |
+| Comments are validated | Pipr checks Review Findings against the Diff Manifest before publishing Main Review Comments or Inline Review Comments. |
+
+## Start here
+
+Pick the page that matches the next job you want Pipr to do.
+
+| Goal | Page |
+| --- | --- |
+| Add Pipr to a GitHub repository | [Quickstart](/docs/guide/quickstart) |
+| Review the generated workflow | [GitHub Action](/docs/guide/github-action) |
+| Run without publishing comments | [Local Runs](/docs/guide/local-runs) |
+| Change what Pipr reviews | [Configuration](/docs/guide/configuration) |
+| Add `@pipr` commands | [Entrypoints](/docs/guide/entrypoints) |
+| Build a custom workflow | [Custom Tasks](/docs/guide/custom-tasks) |
+| Understand PR comments | [Comments and Findings](/docs/guide/comments) |
+| Start from a generated config | [Recipes](/docs/recipes) |
+| Look up SDK types and options | [Pipr SDK Reference](/docs/reference/sdk-reference) |
+
+## First review
+
+Install the CLI, generate the default policy and workflow, then validate the config before opening a pull request:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh
+pipr init
+pipr check
+```
+
+Add the provider secret referenced by `.pipr/config.ts`, commit the generated files, and open or update a pull request. Pipr runs from the GitHub Action and publishes review output when the task succeeds.
+
+## What Pipr creates
+
+`pipr init` creates the authoring files for repository-owned review policy:
+
+```text
+repo/
+├── .pipr/
+│   ├── config.ts              # repository-local TypeScript config
+│   ├── tsconfig.json          # optional local editor settings
+│   └── types/
+│       └── pipr-sdk.d.ts      # generated Pipr SDK declarations
+└── .github/
+    └── workflows/
+        └── pipr.yml           # GitHub Action delivery target
+```
+
+The config is the public runtime authoring surface. The local Pipr SDK type files support editors; `pipr check` can synthesize them when they are missing, and the GitHub Action does not require them.
+
+## Minimal config
+
+The default config registers one review policy that can run from GitHub pull request events, an `@pipr review` command, and local `pipr review --base <sha>`:
+
+```ts
+import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+    options: { thinking: "high" },
+  });
+
+  pipr.review({
+    id: "review",
+    model,
+    instructions: `
+      Review the pull request diff for correctness, security,
+      maintainability, and test coverage.
+      Return only actionable findings that target valid diff ranges.
+    `,
+    inlineComments: { max: 5 },
+    timeout: "5m",
+  });
+});
+```
+
+Use [Configuration](/docs/guide/configuration) to tune models, path scope, commands, checks, schemas, and retry behavior.
+
+## How a run works
+
+Pipr owns orchestration, validation, and publication. Pi executes the agent.
+
+1. A code host adapter parses a change request event, command comment, or local run context.
+2. Pipr loads `.pipr/config.ts` from the trusted config source.
+3. Pipr builds a Diff Manifest with commentable ranges.
+4. Selected Review Tasks call `ctx.pi.run(...)`.
+5. Pipr validates structured Review Findings against the Diff Manifest.
+6. Pipr reduces task output into one Main Review Comment and capped Inline Review Comments.
+7. The adapter maps provider-neutral publication items to native code host API payloads.
+
+Use [Runtime Guide](/docs/guide/runtime) for the full flow and [Trust and Security](/docs/guide/trust-security) for the base config, secret, and read-only workspace boundaries.
+
+## Use Pipr when
+
+Use Pipr when a repository needs AI review automation that is versioned with the codebase and controlled by maintainers:
+
+- Review pull requests on GitHub events.
+- Run the same review logic locally before opening a pull request.
+- Add `@pipr` commands for focused review tasks.
+- Avoid a hosted Pipr control plane for review policy.
+- Keep model, provider, command, and publication policy in trusted base-branch TypeScript.
+- Publish findings only when they target validated diff ranges.
+- Preserve prior review state so reruns can track open and resolved findings.
+
+Pipr is not a generic CI runner. It does not let tasks write arbitrary GitHub comments, mutate files during review, or parse raw diffs in userland. Review Tasks gather context and call Pi; Pipr owns diff modeling, validation, stale-head checks, and publication.
+
+## Docs map
+
+The docs are split by task, generated starters, and exact reference material.
+
+| Section | Use it for |
+| --- | --- |
+| [Guide](/docs/guide) | Install Pipr, write `.pipr/config.ts`, run locally, and understand runtime behavior. |
+| [Recipes](/docs/recipes) | Start from canonical `pipr init` configs for common review workflows. |
+| [Reference](/docs/reference) | Look up CLI commands, SDK APIs, adapter behavior, and maintainer internals. |

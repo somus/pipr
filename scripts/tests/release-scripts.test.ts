@@ -1,0 +1,261 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { chmodSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+const repoRoot = path.resolve(import.meta.dirname, "../..");
+const excludedFixturePaths = new Set([
+  ".cache",
+  ".git",
+  ".output",
+  ".turbo",
+  "dist",
+  "node_modules",
+]);
+
+let tempDir: string;
+beforeEach(async () => {
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "pipr-scripts-"));
+  const binDir = path.join(tempDir, "bin");
+  mkdirSync(binDir);
+  const hkPath = path.join(binDir, "hk");
+  writeFileSync(
+    hkPath,
+    [
+      "#!/usr/bin/env bun",
+      "const [util, command, file] = Bun.argv.slice(2);",
+      'if (util !== "util" || command !== "check-conventional-commit" || !file) process.exit(2);',
+      "const subject = (await Bun.file(file).text()).split(/\\r?\\n/, 1)[0] ?? '';",
+      "const conventional = /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\\([^)]+\\))?!?: .+/.test(subject);",
+      "process.exit(conventional ? 0 : 1);",
+      "",
+    ].join("\n"),
+  );
+  chmodSync(hkPath, 0o755);
+});
+
+afterEach(async () => {
+  await rm(tempDir, { force: true, recursive: true });
+});
+
+describe("check-conventional-commit", () => {
+  it("accepts conventional messages and generated commit subjects", () => {
+    expect(
+      runScript("scripts/check-conventional-commit.ts", ["--message", "feat: add release"]),
+    ).toBe(0);
+    expect(
+      runScript("scripts/check-conventional-commit.ts", ["--message", "Merge branch main"]),
+    ).toBe(0);
+  });
+
+  it("rejects generated-looking PR titles", () => {
+    expect(
+      runScript("scripts/check-conventional-commit.ts", ["--title", "feat: add release"]),
+    ).toBe(0);
+    expect(
+      runScript("scripts/check-conventional-commit.ts", ["--title", "Merge branch main"]),
+    ).not.toBe(0);
+  });
+
+  it("rejects invalid messages", () => {
+    expect(
+      runScript("scripts/check-conventional-commit.ts", ["--message", "release things"]),
+    ).not.toBe(0);
+  });
+
+  it("checks every commit subject in a range", () => {
+    const repository = path.join(tempDir, "repo");
+    run("git", ["init", repository]);
+    run("git", ["config", "user.email", "test@example.com"], { cwd: repository });
+    run("git", ["config", "user.name", "Test"], { cwd: repository });
+    write(path.join(repository, "file.txt"), "base\n");
+    run("git", ["add", "file.txt"], { cwd: repository });
+    run("git", ["commit", "-m", "chore: base"], { cwd: repository });
+    const base = git(repository, "rev-parse", "HEAD");
+    write(path.join(repository, "file.txt"), "base\nfeature\n");
+    run("git", ["commit", "-am", "feat: valid"], { cwd: repository });
+    expect(
+      runScript(
+        path.join(repoRoot, "scripts/check-conventional-commit.ts"),
+        ["--range", `${base}..HEAD`],
+        repository,
+      ),
+    ).toBe(0);
+
+    write(path.join(repository, "file.txt"), "base\nfeature\nbad\n");
+    run("git", ["commit", "-am", "bad subject"], { cwd: repository });
+    expect(
+      runScript(
+        path.join(repoRoot, "scripts/check-conventional-commit.ts"),
+        ["--range", `${base}..HEAD`],
+        repository,
+      ),
+    ).not.toBe(0);
+  });
+});
+
+describe("sync-release-lockfile", () => {
+  it("normalizes Bun workspace metadata after a version bump", () => {
+    const repository = copyRepositoryFixture();
+    bumpReleaseFixture(repository, "0.1.1");
+    run("bun", [path.join(repoRoot, "scripts/sync-release-lockfile.ts"), "--root", repository], {
+      cwd: repoRoot,
+    });
+    const metadataCheck = scriptResult("scripts/check-release-metadata.ts", [], repository);
+    if (metadataCheck.exitCode !== 0) {
+      throw new Error(metadataCheck.stderr || metadataCheck.stdout || "metadata check failed");
+    }
+
+    const lockfile = readFileSync(path.join(repository, "bun.lock"), "utf8");
+    expect(lockfile).toContain('"@usepipr/runtime": "0.1.1"');
+    expect(lockfile).toContain('"@usepipr/sdk": "0.1.1"');
+  });
+});
+
+describe("check-release-metadata", () => {
+  it("rejects missing public package publish steps", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace(
+        "      - run: npm publish --access public\n        working-directory: packages/runtime\n",
+        "",
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects unsafe authenticated release PR pushes", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release-please.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace(" -c core.hooksPath=/dev/null push", " push"),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects published package dependency drift from the root catalog", () => {
+    const repository = copyRepositoryFixture();
+    const packagePath = path.join(repository, "packages/sdk/package.json");
+    const pkg = JSON.parse(readFileSync(packagePath, "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    pkg.dependencies.zod = "0.0.0";
+    write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+});
+
+function runScript(script: string, args: string[], cwd = repoRoot): number {
+  return scriptResult(script, args, cwd).exitCode;
+}
+
+function scriptResult(
+  script: string,
+  args: string[],
+  cwd = repoRoot,
+): { exitCode: number; stdout: string; stderr: string } {
+  const result = Bun.spawnSync(["bun", script, ...args], {
+    cwd,
+    env: commandEnv(),
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  return {
+    exitCode: result.exitCode,
+    stderr: result.stderr.toString(),
+    stdout: result.stdout.toString(),
+  };
+}
+
+function run(
+  command: string,
+  args: string[],
+  options: { cwd?: string; env?: Record<string, string> } = {},
+): void {
+  const result = Bun.spawnSync([command, ...args], {
+    cwd: options.cwd,
+    env: commandEnv(options.env),
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.toString() || `${command} failed`);
+  }
+}
+
+function git(cwd: string, ...args: string[]): string {
+  const result = Bun.spawnSync(["git", ...args], {
+    cwd,
+    env: commandEnv(),
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.toString() || "git failed");
+  }
+  return result.stdout.toString().trim();
+}
+
+function commandEnv(extra: Record<string, string> = {}): Bun.Env {
+  return {
+    ...Bun.env,
+    PATH: `${path.join(tempDir, "bin")}:${Bun.env.PATH ?? ""}`,
+    TMPDIR: tempDir,
+    ...extra,
+  };
+}
+
+function write(filePath: string, value: string): void {
+  writeFileSync(filePath, value);
+}
+
+function copyRepositoryFixture(): string {
+  const repository = path.join(tempDir, "release");
+  cpSync(repoRoot, repository, {
+    filter: (source) => !source.split(path.sep).some((part) => excludedFixturePaths.has(part)),
+    recursive: true,
+  });
+  return repository;
+}
+
+function bumpReleaseFixture(repository: string, version: string): void {
+  for (const relativePath of [
+    "package.json",
+    "packages/sdk/package.json",
+    "packages/runtime/package.json",
+    "packages/cli/package.json",
+  ]) {
+    const filePath = path.join(repository, relativePath);
+    const pkg = JSON.parse(readFileSync(filePath, "utf8")) as {
+      version: string;
+      dependencies?: Record<string, string>;
+    };
+    pkg.version = version;
+    if (pkg.dependencies?.["@usepipr/sdk"]) {
+      pkg.dependencies["@usepipr/sdk"] = version;
+    }
+    if (pkg.dependencies?.["@usepipr/runtime"]) {
+      pkg.dependencies["@usepipr/runtime"] = version;
+    }
+    write(filePath, `${JSON.stringify(pkg, null, 2)}\n`);
+  }
+
+  for (const relativePath of [
+    "action.yml",
+    "README.md",
+    "packages/runtime/src/config/init.ts",
+    "packages/runtime/src/config/tests/init.test.ts",
+    "packages/cli/src/tests/main.test.ts",
+    "apps/docs/scripts/sync-recipes.ts",
+  ]) {
+    const filePath = path.join(repository, relativePath);
+    write(filePath, readFileSync(filePath, "utf8").replaceAll("0.1.0", version));
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@pipr/e2e",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "pipr-e2e-action-fixture": "./action-fixture.ts",
+    "pipr-e2e-check": "./check.ts",
+    "pipr-e2e-container-check": "./container-check.ts",
+    "pipr-e2e-run": "./run.ts"
+  },
+  "scripts": {
+    "test": "bun ./assertions.test.ts",
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "format:check": "biome check .",
+    "check": "bun run lint && bun run typecheck && bun run test",
+    "check:actions": "bun ./check.ts",
+    "check:container": "bun ./container-check.ts"
+  },
+  "dependencies": {
+    "@usepipr/runtime": "workspace:*"
+  }
+}

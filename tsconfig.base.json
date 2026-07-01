@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "baseUrl": ".",
+    "paths": {
+      "@usepipr/sdk": ["packages/sdk/src/index.ts"],
+      "@usepipr/sdk/internal": ["packages/sdk/src/internal.ts"],
+      "@usepipr/sdk/review": ["packages/sdk/src/review.ts"],
+      "@usepipr/sdk/tools": ["packages/sdk/src/tools.ts"],
+      "@usepipr/runtime": ["packages/runtime/src/index.ts"],
+      "@usepipr/runtime/e2e/action-fixture": ["packages/runtime/src/e2e/action-fixture.ts"],
+      "@usepipr/runtime/e2e/pi-contract": ["packages/runtime/src/e2e/pi-contract.ts"],
+      "@usepipr/runtime/runtime-tools-extension": [
+        "packages/runtime/src/pi/runtime-tools-extension.ts"
+      ]
+    },
+    "strict": true,
+    "ignoreDeprecations": "6.0",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "types": ["bun", "node"]
+  }
+}

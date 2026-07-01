@@ -1,0 +1,26 @@
+name: pipr
+description: Pi-powered pull request automation runtime
+branding:
+  icon: git-pull-request
+  color: purple
+inputs:
+  config-dir:
+    description: pipr configuration directory
+    required: false
+    default: .pipr
+outputs:
+  main-comment:
+    description: Rendered main PR review comment body, command response body, or command help body
+  inline-comments:
+    description: JSON array of inline review comment publication items
+  dropped-findings:
+    description: JSON array of findings dropped during validation
+  publication:
+    description: JSON publication result for review, command response, or verifier publication
+runs:
+  using: docker
+  image: docker://ghcr.io/somus/pipr:v0.1.0 # x-release-please-version
+  args:
+    - action
+    - --config-dir
+    - ${{ inputs.config-dir }}

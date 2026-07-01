@@ -1,0 +1,313 @@
+---
+title: "Configuration"
+description: "Common Pipr config recipes and examples."
+---
+
+Pipr uses `.pipr/config.ts` as the repository-local authoring surface. The config is TypeScript and must export `definePipr(...)`.
+
+This page shows common patterns. For triggers and commands, see [Entrypoints](/docs/guide/entrypoints). For task handlers, see [Custom Tasks](/docs/guide/custom-tasks). For the full public API, see [Pipr SDK Reference](/docs/reference/sdk-reference). For generated starter configs, see [Init Recipes](/docs/recipes).
+
+`pipr init` writes generated SDK declarations under `.pipr/types`. If you prefer package-managed types, install the SDK:
+
+```bash
+npm install -D @usepipr/sdk
+```
+
+## Minimal review
+
+```ts twoslash
+import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+    options: { thinking: "high" },
+  });
+
+  const reviewer = pipr.reviewer({
+    name: "reviewer",
+    model,
+    instructions: `
+      Review the pull request diff for correctness, security,
+      maintainability, and test coverage.
+      Return only actionable findings that target valid diff ranges.
+    `,
+  });
+
+  pipr.review({
+    id: "review",
+    reviewer,
+    entrypoints: {
+      changeRequest: ["opened", "updated", "reopened", "ready"],
+      command: { pattern: "@pipr review", permission: "write" },
+    },
+    inlineComments: { max: 5 },
+    timeout: "5m",
+  });
+});
+```
+
+`pipr.review` registers a change request review task and the `@pipr review` command unless `entrypoints` disables them.
+
+Use `pipr.review(...)` for the default path: one reviewer, one Review Task, optional path scope, optional command, capped inline comments, and optional task check.
+
+Use `paths` to scope a review recipe to matching repository paths:
+
+```ts twoslash
+// @include: pipr-reviewer
+pipr.review({
+  id: "runtime-review",
+  reviewer,
+  paths: {
+    include: ["packages/runtime/**"],
+    exclude: ["**/*.test.ts"],
+  },
+});
+```
+
+`paths` filters the Diff Manifest and publishable Inline Review Comments. Pi still receives read-only access to the whole repository, and Pipr instructs it to read nonmatching files only when needed to review matching files.
+
+The `entrypoints` object is the preferred public API:
+
+```ts twoslash
+import type { ReviewEntrypoints } from "@usepipr/sdk";
+
+const entrypoints = {
+  changeRequest: ["opened", "updated", "reopened", "ready"],
+  command: { pattern: "@pipr review", permission: "write" },
+} satisfies ReviewEntrypoints;
+```
+
+Use [Entrypoints](/docs/guide/entrypoints) for command arguments, permissions, and local review task selection.
+
+## Models
+
+Model ids default to `<provider>/<model>`:
+
+```ts twoslash
+// @include: pipr-builder
+const primary = pipr.model({
+  provider: "deepseek",
+  model: "deepseek-v4-pro",
+  apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  options: { thinking: "high" },
+});
+```
+
+Provider secrets are env-only. `pipr.secret({ name: "DEEPSEEK_API_KEY" })` records the env var name and does not put raw secret values in the runtime plan.
+
+Model ids default to `<provider>/<model>`. Set an explicit `id` only when two profiles use the same provider and model with different options.
+
+## Diff Manifest limits
+
+Pipr sends the full Diff Manifest while it fits configured limits. When it is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools for range-scoped context.
+
+```ts twoslash
+// @include: pipr-builder
+pipr.limits({
+  timeoutSeconds: 300,
+  diffManifest: {
+    fullMaxBytes: 131072,
+    fullMaxEstimatedTokens: 32000,
+    condensedMaxBytes: 262144,
+    condensedMaxEstimatedTokens: 64000,
+    toolResponseMaxBytes: 65536,
+  },
+});
+```
+
+## Custom task
+
+Use `pipr.agent`, `pipr.task`, and `pipr.on.changeRequest` when the default review recipe is not enough. See [Custom Tasks](/docs/guide/custom-tasks) for the full task context.
+
+```ts twoslash
+// @include: pipr-model
+const security = pipr.agent({
+  name: "security-reviewer",
+  model,
+  instructions: "Review only security issues.",
+  output: pipr.schemas.review,
+  prompt: () => pipr.prompt`
+    Review this pull request for security issues.
+  `,
+});
+
+const task = pipr.task({
+  name: "security-review",
+  check: { name: "security" },
+  async run(ctx) {
+    const paths = { include: ["packages/runtime/**"] };
+    const manifest = await ctx.change.diffManifest({ compressed: true, paths });
+    const result = await ctx.pi.run(security, { manifest }, { paths });
+    await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
+  },
+});
+
+pipr.on.changeRequest({ actions: ["opened", "updated"], task });
+```
+
+Pass `manifest` to `ctx.pi.run(...)`. Pipr injects the full or condensed Diff Manifest into the Pi prompt and attaches read-only diff tools when needed.
+
+Inline findings passed to `ctx.comment(...)` must target valid Diff Manifest ranges.
+
+## Custom schemas
+
+Use custom schemas for intermediate agents and custom workflows. Use `pipr.schemas.review` only for output that should publish Inline Review Comments.
+
+Use SDK-owned Zod for typed agent outputs:
+
+```ts twoslash
+import { definePipr, z } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const specialistOutput = pipr.schema({
+    id: "security/specialist-output",
+    schema: z.strictObject({
+      summary: z.string(),
+      risks: z.array(z.string()),
+    }),
+  });
+
+  const jsonBacked = pipr.jsonSchema<{ summary: string }>({
+    id: "security/summary",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["summary"],
+      properties: {
+        summary: { type: "string" },
+      },
+    },
+  });
+
+  void specialistOutput;
+  void jsonBacked;
+});
+```
+
+The runtime includes schema details in the Pi prompt when they are available. Tasks can map custom outputs into `ctx.comment(...)`.
+
+To publish inline comments from a custom schema, map the custom output into `ReviewFinding[]` and pass it to `ctx.comment({ inlineFindings })`. Use `suggestedFix` only for exact replacement code, without Markdown fences or prose.
+
+Schema metadata is model-visible prompt content. Do not put secrets, private data, or sensitive internal notes in JSON Schema fields such as `description`, `examples`, `default`, or `$comment`.
+
+## Commands and local review
+
+Commands run from pull request issue comments:
+
+```ts twoslash
+// @include: pipr-task
+pipr.command({ pattern: "@pipr security", permission: "write", task });
+```
+
+Use a final rest capture for free-form command text:
+
+```ts twoslash
+// @include: pipr-ask-agent
+const ask = pipr.task<{ question: string }>({
+  name: "ask",
+  async run(ctx, input) {
+    const manifest = await ctx.change.diffManifest({ compressed: true });
+    const prior = await ctx.review.prior();
+    const answer = await ctx.pi.run(askAgent, { question: input.question, manifest, prior });
+
+    await ctx.command?.reply(answer.body);
+  },
+});
+
+pipr.command({ pattern: "@pipr ask <question...>", permission: "read", task: ask });
+```
+
+Command replies publish a normal pull request issue comment keyed to the source command comment. They do not update the Main Review Comment or publish Inline Review Comments.
+
+Permission levels are provider-neutral:
+
+```text
+read < triage < write < maintain < admin
+```
+
+The active code host adapter maps native roles into these levels.
+
+Local review runs the same change-request task logic without GitHub publishing:
+
+```ts twoslash
+// @include: pipr-task
+pipr.on.changeRequest({ actions: ["opened", "updated"], task });
+```
+
+Run local review with an explicit base commit:
+
+```bash
+pipr review --base origin/main
+```
+
+`pipr review` runs every unique task registered through `pipr.on.changeRequest(...)`, ignoring the configured action filters. Use `local: false` on tasks that should run only in CI:
+
+```ts twoslash
+// @include: pipr-security-agent
+const task = pipr.task({
+  name: "expensive-ci-review",
+  local: false,
+  async run(ctx) {
+    const manifest = await ctx.change.diffManifest({ compressed: true });
+    const result = await ctx.pi.run(securityAgent, { manifest });
+    await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
+  },
+});
+```
+
+See [Local Runs](/docs/guide/local-runs) for local execution behavior.
+
+## Fallback and retry
+
+`ctx.pi.run(agent, input, { model, fallbacks })` can override the agent primary model and fallback list for one call. Otherwise Pipr uses:
+
+1. the call override
+2. `agent.model`
+3. `agent.fallbacks`
+4. the trusted base config default provider
+
+Invalid structured output gets one repair attempt by default. Transient Pi execution retries default to zero.
+
+```ts twoslash
+// @include: pipr-models
+const reviewer = pipr.agent({
+  name: "review",
+  model,
+  fallbacks: [backupModel],
+  instructions: "Review the pull request.",
+  output: pipr.schemas.review,
+  retry: {
+    invalidOutput: 1,
+    transientFailure: 1,
+  },
+  prompt: () => "Review the pull request.",
+});
+```
+
+For GitHub Action pull request runs, Pipr resolves this order from the base-commit `.pipr/config.ts`; pull request changes to config are reviewed as code but do not affect the current run.
+
+## Inspect
+
+Use `pipr inspect` to see the loaded runtime plan:
+
+```bash
+pipr inspect
+```
+
+It prints registered models, agents, tasks, events, commands, and tools.
+
+## Decision guide
+
+| Need | Use |
+| --- | --- |
+| One normal pull request review | `pipr.review(...)` |
+| Different review scope by path | `pipr.review({ paths })` |
+| Manual rerun from a comment | `entrypoints.command` or `pipr.command(...)` |
+| Local preflight before pushing | `pipr review --base <ref>` |
+| CI-only task | `local: false` on `pipr.task(...)` |
+| Multiple Pi calls or custom inputs | `pipr.task(...)` |
+| Custom structured output | `pipr.schema(...)` or `pipr.jsonSchema(...)` |
+| Reusable config extension | `definePlugin(...)` and `pipr.use(...)` |

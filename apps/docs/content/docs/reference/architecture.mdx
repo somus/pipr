@@ -1,0 +1,99 @@
+---
+title: "Architecture"
+description: "Pipr runtime architecture and trust boundaries."
+---
+
+Pipr owns code host change request runtime behavior. Pi owns agent execution.
+
+For a broader introduction, see [Pipr Docs](/docs). For the public TypeScript API, see [Pipr SDK Reference](/docs/reference/sdk-reference).
+
+## Package map
+
+| Area | Responsibility |
+| --- | --- |
+| `packages/sdk` | Public TypeScript config builder, schemas, review contracts, prompt helpers, and generated declaration source. |
+| `packages/runtime` | Config loading, task orchestration, Diff Manifest creation, Pi execution, validation, publication planning, GitHub adapter, and local adapter. |
+| `packages/cli` | CLI command parsing and release binary entrypoint. |
+| `packages/e2e` | Local Action fixture checks, container checks, and dry-run scenarios. |
+| `apps/docs` | Fumadocs documentation app and migrated public docs content. |
+
+The package root public surfaces stay small. Runtime internals stay behind domain folders such as `config`, `diff`, `pi`, `review`, `hosts`, and `action`.
+
+## Runtime flow
+
+1. Load the trusted TypeScript config.
+2. Parse the code host change request or command event through an adapter.
+3. Build the Diff Manifest from local git state.
+4. Run selected Review Tasks.
+5. Call Pi through `ctx.pi.run()`.
+6. Emit exactly one final output from the task.
+7. For review output, validate structured findings against the Diff Manifest and build the Main Review Comment and Inline Review Comments.
+8. For command response output, build a normal pull request issue comment keyed to the source command comment.
+9. Publish comments through the code host adapter after stale-head checks.
+
+## Data flow
+
+```text
+.pipr/config.ts
+  -> RuntimePlan
+  -> selected Review Task
+  -> Diff Manifest
+  -> Pi agent call
+  -> structured ReviewResult
+  -> validated Review Findings
+  -> PublicationPlan
+  -> code host adapter writes
+```
+
+The Diff Manifest is the central contract between git state, model-visible context, validation, and inline publication. Tasks should pass it into Pi instead of parsing raw diffs.
+
+## Trust boundaries
+
+For GitHub Action pull request runs, Pipr loads `.pipr/config.ts` and local imports from the base commit. The pull request head is reviewed, but PR-authored config changes cannot change the current run's executable review settings.
+
+Provider backend, model, API-key env, and provider options come from the trusted base config, not pull request code.
+
+Pi receives a read-only workspace copy. It can use only read-only built-in tools and Pipr-owned Diff Read Tools for condensed manifest runs.
+
+## Extension points
+
+User config can register models, agents, tasks, commands, limits, and typed plugin handles through `@usepipr/sdk`.
+
+Pipr-owned runtime code keeps diff creation, Pi invocation policy, structured output validation, stale-head checks, marker dedupe, and code host writes out of userland tasks. GitHub is the first adapter; GitLab, Bitbucket, and Azure DevOps support is coming soon.
+
+See [Code Host Adapters](/docs/reference/code-host-adapters) for the adapter boundary.
+
+## Review ownership
+
+Review Tasks may:
+
+- inspect provider-neutral change metadata
+- request Diff Manifest projections
+- call Pi with typed agents
+- map custom output into comments
+- emit one final review, command response, or check outcome
+
+Review Tasks may not:
+
+- write code host comments directly
+- choose provider secrets at runtime from pull request code
+- publish invalid inline ranges
+- bypass stale-head checks
+- mutate the Pi workspace
+
+This split keeps `.pipr/config.ts` expressive without making it responsible for runtime safety.
+
+## Adapter ownership
+
+Core runtime produces provider-neutral events and publication items. Adapters map native provider behavior into that model.
+
+The GitHub adapter owns:
+
+- native event parsing
+- permission normalization
+- safe checkout
+- comment API calls
+- inline location payload mapping
+- review thread reply and resolution APIs
+
+Core runtime imports no GitHub modules directly.

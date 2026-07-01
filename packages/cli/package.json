@@ -1,0 +1,40 @@
+{
+  "name": "@usepipr/cli",
+  "version": "0.1.0",
+  "description": "Command line interface for pipr pull request review automation",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/somus/pipr.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/somus/pipr/issues"
+  },
+  "homepage": "https://github.com/somus/pipr#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "pipr": "./dist/main.mjs"
+  },
+  "scripts": {
+    "build": "tsdown src/main.ts --dts --format esm --out-dir dist",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --timeout 30000",
+    "lint": "biome check src",
+    "format:check": "biome check src",
+    "prepack": "bun run build",
+    "check": "bun run lint && bun run typecheck && bun run test"
+  },
+  "dependencies": {
+    "@actions/core": "3.0.1",
+    "@usepipr/runtime": "0.1.0",
+    "@usepipr/sdk": "0.1.0",
+    "commander": "15.0.0"
+  }
+}

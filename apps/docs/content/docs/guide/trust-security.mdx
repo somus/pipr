@@ -1,0 +1,107 @@
+---
+title: "Trust and Security"
+description: "Trusted base config, secret handling, read-only Pi execution, and publication safety."
+---
+
+Pipr is designed around the assumption that pull request code can be untrusted. Runtime policy comes from trusted config, not from the pull request head.
+
+## Run mode boundaries
+
+Each run mode uses a different source for config, diff data, secrets, and writes.
+
+| Boundary | Local review | GitHub Action pull request run | GitHub command run |
+| --- | --- | --- | --- |
+| Config source | Current local workspace | Pull request base commit | Pull request base commit |
+| Diff source | Local git refs or working tree | Checked-out pull request head and base | Current pull request head and base |
+| Secret source | Exported env vars or Bun-loaded env files | GitHub Actions secrets available to the workflow | GitHub Actions secrets available to the workflow |
+| Model-visible code context | Diff Manifest plus read-only local workspace access through Pi | Diff Manifest plus read-only Action workspace access through Pi | Diff Manifest plus read-only Action workspace access through Pi |
+| Code host writes | Disabled | Main Review Comment, Inline Review Comments, and Check Runs when configured | Command response comments or configured review output |
+| Best use | Prompt and config iteration before pushing | Production pull request review | Maintainer-triggered follow-up tasks |
+
+## Trusted base config
+
+For GitHub Action pull request runs:
+
+1. Pipr loads `.pipr/config.ts` and local imports from the base commit.
+2. Pipr validates the runtime plan and required provider env vars.
+3. Pipr checks out the pull request head for review.
+4. Pi reviews the pull request code.
+5. Publication uses policy from the base config.
+
+Pull request changes to `.pipr/config.ts` are reviewed as code. They do not change the active model, provider, command permissions, task selection, or publication policy for the current run.
+
+## Secrets
+
+Use `pipr.secret(...)` for provider keys:
+
+```ts twoslash
+// @include: pipr-builder
+const model = pipr.model({
+  provider: "deepseek",
+  model: "deepseek-v4-pro",
+  apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+});
+```
+
+The config stores the env var name, not the secret value. The Action receives the value from GitHub Actions secrets:
+
+```yaml
+env:
+  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+```
+
+Do not put raw provider keys, tokens, or private data in `.pipr/config.ts`, schema descriptions, prompt examples, or generated docs.
+
+## Pi workspace
+
+Pi runs with a read-only workspace copy. The runtime passes only read-only built-in tools plus Pipr-owned Diff Read Tools for condensed manifest runs.
+
+Diff Read Tools expose bounded reads over:
+
+- Diff Manifest files
+- base snapshots
+- head snapshots
+- known range ids
+
+They do not expose arbitrary shell access or write access.
+
+## Publication safety
+
+Before publishing, Pipr checks the current pull request head SHA. If the head changed after review execution, publication stops before writes.
+
+Review Tasks do not call code host APIs directly. They emit final output, then Pipr:
+
+- validates structured findings
+- drops invalid findings
+- caps inline comments
+- upserts the Main Review Comment by marker
+- dedupes same-head inline comments
+- records publication metadata
+
+## Forks
+
+Forked pull requests follow GitHub's secret availability rules. If a required provider secret is unavailable, Pipr fails before Pi execution.
+
+The base config rule still applies for forks. Fork-authored config changes are visible in the diff but do not change the running task policy.
+
+## Command permissions
+
+Commands have provider-neutral permissions:
+
+```text
+read < triage < write < maintain < admin
+```
+
+The GitHub adapter maps repository permission to these levels before a command task runs. Keep commands that inspect sensitive context at `write` or higher.
+
+## Sensitive prompt content
+
+Schema metadata and prompt text can be shown to the model. Do not place secrets or private operational notes in:
+
+- JSON Schema `description`
+- JSON Schema `examples`
+- JSON Schema `default`
+- JSON Schema `$comment`
+- reviewer instructions
+- command response templates
+- generated documentation

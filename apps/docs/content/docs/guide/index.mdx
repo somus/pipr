@@ -1,0 +1,36 @@
+---
+title: "Guide"
+description: "Install Pipr, configure review tasks, and understand how runs publish comments."
+---
+
+Use this section when you are adding Pipr to a repository, changing how it reviews pull requests, or debugging what it publishes.
+
+## First run
+
+Follow this path for the first successful pull request review.
+
+1. Install the CLI from the GitHub Release installer.
+2. Run `pipr init` in the repository root.
+3. Add the provider secret used by `.pipr/config.ts`.
+4. Review the generated GitHub workflow and commit the files.
+5. Open or update a pull request and check the Main Review Comment.
+6. Use local review commands while tuning config.
+
+## Pages
+
+Pick the page based on the job you are doing.
+
+| Page | Use it for |
+| --- | --- |
+| [Quickstart](/docs/guide/quickstart) | The shortest path from install to the first review. |
+| [GitHub Action](/docs/guide/github-action) | Workflow YAML, permissions, outputs, dry runs, and command events. |
+| [Local Runs](/docs/guide/local-runs) | Running review tasks locally without publishing comments. |
+| [Comments and Findings](/docs/guide/comments) | Main comments, inline comments, dropped findings, prior state, and verifier replies. |
+| [Troubleshooting](/docs/guide/troubleshooting) | Symptom-first fixes for setup, config, Action, model, and publication failures. |
+| [Configuration](/docs/guide/configuration) | Common config examples, models, limits, schemas, retry, and inspect patterns. |
+| [Entrypoints](/docs/guide/entrypoints) | Change request triggers, `@pipr` commands, local review, and permissions. |
+| [Custom Tasks](/docs/guide/custom-tasks) | Building task handlers with `ctx.change`, `ctx.pi`, `ctx.review`, `ctx.comment`, and `ctx.check`. |
+| [Runtime Guide](/docs/guide/runtime) | Run modes, Diff Manifest, Pi execution, validation, publication, and failure behavior. |
+| [Trust and Security](/docs/guide/trust-security) | Base-commit config, read-only Pi workspace, secret handling, and fork behavior. |
+
+For starter configs, use [Recipes](/docs/recipes). For exact API names and flags, use [Reference](/docs/reference).

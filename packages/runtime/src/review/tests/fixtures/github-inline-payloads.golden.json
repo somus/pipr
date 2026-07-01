@@ -1,0 +1,16 @@
+[
+  {
+    "path": "src/a.ts",
+    "commit_id": "head123",
+    "line": 12,
+    "side": "RIGHT",
+    "start_line": 10,
+    "start_side": "RIGHT"
+  },
+  {
+    "path": "src/a.ts",
+    "commit_id": "head123",
+    "line": 12,
+    "side": "RIGHT"
+  }
+]

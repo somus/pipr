@@ -1,0 +1,58 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - uses: actions/checkout@v6
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/mise-action@v4
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+      - name: Sync release PR lockfile
+        id: lockfile
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          RELEASE_PLEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          branch="$(bun -e "const pr = JSON.parse(process.env.RELEASE_PLEASE_PR ?? '{}'); if (!pr.headBranchName) process.exit(1); process.stdout.write(pr.headBranchName);")"
+          worktree="$RUNNER_TEMP/pipr-release-pr"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "worktree=$worktree" >> "$GITHUB_OUTPUT"
+          git fetch origin "$branch"
+          git worktree add -B "$branch" "$worktree" FETCH_HEAD
+          bun run sync:release-lockfile -- --root "$worktree"
+          if git -C "$worktree" diff --quiet -- bun.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git -C "$worktree" config user.name "github-actions[bot]"
+          git -C "$worktree" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$worktree" add bun.lock
+          git -C "$worktree" commit -m "chore: update bun lockfile"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push release PR lockfile
+        if: ${{ steps.lockfile.outputs.changed == 'true' }}
+        env:
+          PIPR_RELEASE_PLEASE_TOKEN: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token }}
+        run: |
+          git -C "${{ steps.lockfile.outputs.worktree }}" -c core.hooksPath=/dev/null push "https://x-access-token:${PIPR_RELEASE_PLEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${{ steps.lockfile.outputs.branch }}"

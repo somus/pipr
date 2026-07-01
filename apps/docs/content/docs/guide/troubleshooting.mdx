@@ -1,0 +1,158 @@
+---
+title: "Troubleshooting"
+description: "Common Pipr setup, config, Action, model, and publication failures."
+---
+
+Start with the narrowest command that can reproduce the failure. Fix local config errors before debugging GitHub publication.
+
+```bash
+pipr check
+pipr inspect
+pipr review --base origin/main
+```
+
+For GitHub Action behavior, set `PIPR_DRY_RUN=1` or use `pipr dry-run --event <path>`.
+
+## Choose the diagnostic
+
+Use the symptom to pick the first diagnostic command.
+
+| Symptom | Start with |
+| --- | --- |
+| Config does not load | `pipr check` |
+| Runtime plan looks wrong | `pipr inspect` |
+| Local review cannot find a base | `pipr review --base <ref>` |
+| GitHub Action does not publish | GitHub Action logs and workflow permissions |
+| Command comment is ignored | Event type, command pattern, and commenter permission |
+| Findings are dropped | Action `dropped-findings` output |
+| Pi output is invalid | Task logs and model output repair metadata |
+| Publication stopped after a new commit | Current pull request head SHA |
+
+## Config does not load
+
+Run `pipr check` from the repository root:
+
+```bash
+pipr check
+```
+
+Common causes:
+
+- `.pipr/config.ts` does not export `definePipr(...)`.
+- The config callback is async. `definePipr(...)` must be synchronous.
+- A local import from `.pipr/config.ts` cannot be resolved.
+- A task, command, or model id is duplicated.
+- A command pattern does not start with `@pipr`.
+- A secret name is not an environment variable name such as `DEEPSEEK_API_KEY`.
+
+Use `pipr inspect` after `pipr check` passes to confirm the runtime plan matches the config you expected.
+Run `pipr init --types-only` if your editor is missing local Pipr SDK types.
+
+Expected result: `pipr check` exits successfully before you try a model run.
+
+## Provider env var is missing
+
+GitHub Action runs require configured provider env vars before Pi execution. Check the env var name in `.pipr/config.ts`, then add the matching GitHub Actions secret and pass it through the workflow:
+
+```yaml
+env:
+  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+```
+
+Locally, export the same env var or run `pipr check` without `--require-env` when you only need config validation.
+
+## Local review cannot find a base
+
+`pipr review` requires an explicit base because Pipr needs a comparison point for the Diff Manifest.
+
+```bash
+pipr review --base origin/main
+```
+
+Fetch the remote branch when the ref is missing:
+
+```bash
+git fetch origin main
+```
+
+Use `--head` only when reviewing something other than `HEAD`.
+
+## GitHub Action does not publish
+
+Check the workflow before changing task code.
+
+- `actions/checkout` uses `fetch-depth: 0`.
+- `GITHUB_TOKEN` is present in the Action environment.
+- Workflow permissions include `pull-requests: write`, `issues: write`, and `checks: write` when checks are enabled.
+- `contents: write` is available when verifier thread resolution is enabled.
+- The pull request event action matches a configured change request entrypoint.
+- A command comment is on a pull request, not a plain issue.
+
+If `PIPR_DRY_RUN=1` is set, Pipr stops before model execution and publication by design.
+
+Expected result: the Action reaches the publication step and records `publication` metadata.
+
+## Command comment is ignored
+
+Command comments are parsed only from `issue_comment.created` events on pull requests. Edited comments do not trigger command parsing.
+
+Common causes:
+
+- The comment did not start with the configured pattern, such as `@pipr review`.
+- The commenter does not meet the configured permission.
+- The command has required arguments that were not supplied.
+- The config does not register the command.
+- The comment was edited instead of created.
+
+Use [Entrypoints](/docs/guide/entrypoints) for command grammar and permission details.
+
+## Findings are dropped
+
+Pipr drops invalid findings and continues the review. Read the Action `dropped-findings` output first.
+
+Common reasons:
+
+- `path` does not match a changed file in the Diff Manifest.
+- `rangeId` does not exist for that path.
+- `side`, `startLine`, or `endLine` does not match the selected range.
+- The finding is outside the task path scope.
+- The file was excluded as generated, binary, removed, lockfile, or too large for inline review.
+- The finding duplicates another current finding.
+
+Dropped findings are exposed in the Action `dropped-findings` output and in publication metadata.
+
+Fix the agent prompt or output mapping so findings use the exact Diff Manifest path, range id, side, and line numbers. See [Comments and Findings](/docs/guide/comments#dropped-findings).
+
+## Pi output is invalid
+
+Review agents must return structured JSON matching their declared output schema. For review comments, use `pipr.schemas.review`.
+
+Invalid output can receive one repair attempt when retry settings allow it.
+
+If invalid output persists:
+
+- Make instructions shorter and more explicit.
+- Include the exact output schema in the prompt only through SDK schema helpers.
+- Avoid asking for prose before or after JSON.
+- Reduce custom schema complexity.
+- Run locally with the smallest changed diff that reproduces the issue.
+
+## Stale head before publication
+
+Pipr checks the current pull request head before writing comments. If the head changed after review execution, publication stops before writes.
+
+Rerun the workflow on the latest commit. This prevents Pipr from publishing comments for an older diff.
+
+## Verifier cannot resolve a thread
+
+The verifier can reply to Pipr-owned Inline Review Comments and resolve GitHub review threads when permissions allow.
+
+If the API call fails, Pipr records the error in `publication.metadata.inlineResolutionErrors` and keeps the review run successful. Check that the workflow grants `contents: write` and `pull-requests: write`.
+
+## Next steps
+
+Use these pages when the first diagnostic identifies the failing area.
+
+- [GitHub Action](/docs/guide/github-action) covers workflow events, permissions, outputs, dry runs, and forks.
+- [Comments and Findings](/docs/guide/comments) covers dropped findings, inline caps, dedupe, and verifier replies.
+- [Local Runs](/docs/guide/local-runs) covers `--base`, `--head`, local secrets, and local output.

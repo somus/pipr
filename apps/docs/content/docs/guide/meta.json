@@ -1,0 +1,22 @@
+{
+  "title": "Guide",
+  "description": "Install, configure, and run Pipr.",
+  "icon": "BookOpen",
+  "root": true,
+  "pages": [
+    "---[Rocket]Start---",
+    "index",
+    "quickstart",
+    "github-action",
+    "local-runs",
+    "troubleshooting",
+    "---[Settings]Configure---",
+    "configuration",
+    "entrypoints",
+    "custom-tasks",
+    "---[Play]Run---",
+    "runtime",
+    "comments",
+    "trust-security"
+  ]
+}

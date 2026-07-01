@@ -1,0 +1,199 @@
+---
+title: "Runtime Guide"
+description: "Run modes, trust model, Diff Manifest, Pi execution, validation, and publication behavior."
+---
+
+Pipr runtime has one job: turn a code host change request into a deterministic review run.
+
+Use this page for the end-to-end flow. Use [Comments and Findings](/docs/guide/comments) for publication details and [Trust and Security](/docs/guide/trust-security) for base config, secret, and workspace boundaries.
+
+## Run modes
+
+| Mode | Command or trigger | Publishes comments |
+| --- | --- | --- |
+| Change request event | GitHub `pull_request` event through `pipr action` | Yes |
+| Command comment | GitHub `issue_comment` event such as `@pipr review` | Yes |
+| Local review | `pipr review --base <sha> [--head <sha>]` | No |
+| Dry run | `pipr dry-run --event <path>` or `PIPR_DRY_RUN=1` in Action | No |
+
+Local review uses the local code host adapter. It builds the same Diff Manifest and executes every unique change-request task that is not marked `local: false`, but publication is disabled.
+
+See [Local Runs](/docs/guide/local-runs) for local command examples.
+
+## Change request context
+
+Runtime tasks receive provider-neutral context:
+
+```ts
+import type { DiffManifest } from "@usepipr/sdk";
+
+type TaskContext = {
+  platform: { id: string };
+  repository: {
+    root: string;
+    owner?: string;
+    name: string;
+    defaultBranch?: string;
+    remoteUrl?: string;
+  };
+  change: {
+    number?: number;
+    title: string;
+    description: string;
+    url?: string;
+    author?: { login: string };
+    base: { ref?: string; sha: string };
+    head: { ref?: string; sha: string };
+    isFork?: boolean;
+    diffManifest(options?: {
+      compressed?: boolean;
+      paths?: {
+        include?: string[];
+        exclude?: string[];
+      };
+    }): Promise<DiffManifest>;
+  };
+};
+```
+
+`change.number` means GitHub pull request number today. Future adapters can map it to a provider-native change id, such as a GitLab merge request IID. GitLab, Bitbucket, and Azure DevOps support is coming soon.
+
+## Trust model
+
+For GitHub Action pull request runs:
+
+1. Pipr loads `.pipr/config.ts` and local imports from the base commit.
+2. Pipr checks that configured provider env vars are available.
+3. Pipr checks out the pull request for review.
+4. Pull request changes to `.pipr/config.ts` are reviewed as code, but do not affect the current run.
+5. Pi receives a read-only workspace copy and Pipr-owned diff tools.
+
+This keeps model choice, API-key env names, task registration, command permissions, and publication policy out of untrusted pull request code.
+
+See [Trust and Security](/docs/guide/trust-security) for a focused breakdown.
+
+## Runtime flow
+
+```text
+code host event
+  -> adapter parses provider event
+  -> trusted config loads
+  -> adapter ensures checkout
+  -> Diff Manifest builds
+  -> selected tasks run
+  -> Pi returns structured JSON
+  -> pipr validates findings
+  -> publication plan reduces task output
+  -> adapter publishes native comments
+```
+
+Core runtime never calls GitHub APIs directly. It receives a `ChangeRequestEventContext` and delegates provider-specific reads and writes to the active adapter.
+
+## Diff Manifest
+
+The Diff Manifest is the source of truth for changed files and commentable ranges:
+
+```ts twoslash
+// @include: task-context
+const manifest = await ctx.change.diffManifest({
+  compressed: true,
+  includePreviews: true,
+  paths: {
+    include: ["packages/runtime/**"],
+    exclude: ["**/*.test.ts"],
+  },
+});
+```
+
+Each file carries changed-line ranges that can receive inline comments. Review Findings must point at a valid range:
+
+```ts twoslash
+import type { ReviewFinding } from "@usepipr/sdk";
+
+const finding: ReviewFinding = {
+  body: "Specific issue and why it matters.",
+  path: "src/example.ts",
+  rangeId: "rng_...",
+  side: "RIGHT",
+  startLine: 12,
+  endLine: 12,
+  suggestedFix: "return safeValue;",
+};
+```
+
+`suggestedFix` is optional exact replacement code for that range. Pipr renders it as a GitHub suggested change, so do not include Markdown fences, prose, or labels.
+
+Diff Manifest prompt injection is reserved opt-in. When `ctx.pi.run(...)` receives a parseable Diff Manifest in the `manifest` input field, Pipr injects the authoritative Diff Manifest section exactly once. If `manifest` is omitted, no Diff Manifest section is injected. If `manifest` is present but not a parseable Diff Manifest, it stays ordinary user input.
+
+When the full manifest is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools. The model can ask for more range-scoped context without receiving shell or arbitrary filesystem access. If an agent runs with `toolMode: "none"`, Pipr still injects manifest prompt context when `manifest` is passed, but it does not attach Diff Read Tools.
+
+`paths` filters Diff Manifest files by include and exclude globs. For renamed files, current and previous paths are considered. Path scope also drops publishable findings outside the filter, but it does not restrict Pi read-only access to the rest of the repository.
+
+## Pi execution
+
+Tasks call Pi through `ctx.pi.run(...)`:
+
+```ts twoslash
+// @include: task-pi-review
+const result = await ctx.pi.run(
+  reviewer,
+  { manifest, change: ctx.change },
+  {
+    timeout: "5m",
+    fallbacks: [backupModel],
+  },
+);
+```
+
+Model selection order:
+
+1. `ctx.pi.run(...)` call override
+2. `agent.model`
+3. `agent.fallbacks`
+4. the trusted base config default provider
+
+Invalid structured output receives one repair attempt when configured. Transient retries are opt-in through agent retry settings.
+
+## Publication
+
+Review Tasks do not write code host comments. A selected run emits one final output:
+
+- `ctx.comment(markdown)`
+- `ctx.comment({ main, inlineFindings })`
+- `ctx.command.reply(markdown)` for command-triggered response tasks
+
+For review output, Pipr turns that output into a provider-neutral `PublicationPlan`:
+
+- one Main Review Comment
+- zero or more Inline Review Comment drafts
+- dropped finding metadata
+- run metadata
+
+Command response output publishes a normal pull request issue comment keyed by the source command comment. Rerunning the same source command updates the previous bot response.
+
+Before publishing, Pipr checks the current head SHA. It upserts the Main Review Comment by hidden marker and replaces the visible main body wholesale. That marker also carries Pipr-owned review state for prior finding IDs, locations, statuses, task scope, and head metadata. Reruns pass matching open prior finding locations back to the reviewer and keep open findings visible in state unless the internal verifier explicitly marks them fixed. On `pull_request.synchronize`, the verifier can recheck prior Pipr Inline Review Comments against the current diff, reply with the resolving commit, and resolve the GitHub review thread when permissions allow. On `pull_request_review_comment.created`, the verifier can process user replies to Pipr Inline Review Comments, resolve fixed findings, or explain why a still-valid finding remains open. Cleanup failures are recorded in publication metadata without failing the review. Inline Review Comments are deduped by stable finding id, reviewed head SHA, and Pipr-owned same-head location overlap.
+
+See [Comments and Findings](/docs/guide/comments) for the publication model.
+
+## Failure behavior
+
+| Failure | Behavior |
+| --- | --- |
+| No matching event or command | Action is ignored. |
+| Config load or validation failure | Run fails before Pi execution. |
+| Missing provider env when required | Run fails before Pi execution. |
+| Pi returns invalid JSON after repair | Task fails and metadata records failure. |
+| Finding targets invalid range | Finding is dropped, run continues. |
+| Stale head before publication | Publication stops before writes. |
+| Comment API failure | Publication metadata is emitted and the Action fails. |
+| Stale review-thread cleanup failure | Publication metadata records the cleanup error and the Action continues. |
+
+## Local checks
+
+```bash
+pipr check
+pipr inspect
+pipr review --base origin/main
+```
+
+`pipr inspect` prints models, agents, tasks, change request triggers, commands, tools, publication settings, and limits.

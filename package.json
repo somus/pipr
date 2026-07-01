@@ -1,0 +1,61 @@
+{
+  "name": "pipr",
+  "version": "0.1.0",
+  "description": "Pi-powered GitHub pull request review runtime",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/somus/pipr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/somus/pipr/issues"
+  },
+  "homepage": "https://github.com/somus/pipr#readme",
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "catalog": {
+    "@types/bun": "1.3.14",
+    "@types/node": "25.9.3",
+    "typescript": "6.0.3",
+    "zod": "4.4.3"
+  },
+  "scripts": {
+    "build": "bun run build:packages",
+    "build:packages": "turbo run build --filter=@usepipr/sdk --filter=@usepipr/runtime --filter=@usepipr/cli",
+    "build:docs": "turbo run build --filter=@pipr/docs",
+    "build:all": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "format": "biome check --write .",
+    "format:check": "biome check .",
+    "format:check:packages": "biome check .github .pipr packages scripts action.yml Dockerfile package.json tsconfig.json tsconfig.base.json turbo.json release-please-config.json .release-please-manifest.json .fallowrc.json --files-ignore-unknown=true",
+    "format:check:docs": "biome check apps/docs docs *.md --files-ignore-unknown=true --no-errors-on-unmatched",
+    "fallow": "fallow --fail-on-issues --format compact",
+    "fallow:packages": "fallow --fail-on-issues --format compact --workspace '!@pipr/docs'",
+    "fallow:docs": "fallow --fail-on-issues --format compact --workspace @pipr/docs",
+    "build:release:cli": "bun packages/cli/build-release.ts",
+    "sync:release-lockfile": "bun scripts/sync-release-lockfile.ts",
+    "hooks-install": "hk install --mise",
+    "check:release-metadata": "bun scripts/check-release-metadata.ts",
+    "check:conventional-commit": "bun scripts/check-conventional-commit.ts --message \"chore: validate conventional commit check\"",
+    "check:scripts": "bun test scripts/tests",
+    "check:packages": "bun run check:release-metadata && bun run check:conventional-commit && bun run check:scripts && bun run build:packages && turbo run lint typecheck test --filter='!@pipr/docs' && bun run format:check:packages && bun run fallow:packages",
+    "check:docs": "turbo run lint typecheck test build --filter=@pipr/docs && bun run format:check:docs && bun run fallow:docs",
+    "check": "bun run check:packages && bun run check:docs",
+    "check:actions": "bun run --cwd packages/e2e check:actions"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.0",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "fallow": "2.97.0",
+    "tsdown": "0.22.3",
+    "turbo": "2.9.18",
+    "typescript": "catalog:"
+  }
+}
