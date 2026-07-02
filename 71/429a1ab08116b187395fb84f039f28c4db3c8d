@@ -1,0 +1,25 @@
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_e86d7229599bc1::t_ac17ee59d8d0f2 277
+packages/runtime/src/config/sdk-module.ts
+  s_e86d7229599bc1::t_3afd8de5dd161b 2,13-18,27-39
+packages/runtime/src/config/tests/sdk-module.test.ts
+  s_e86d7229599bc1::t_a95839fdad7852 1-50
+packages/runtime/src/config/ts-loader.ts
+  s_e86d7229599bc1::t_9f6ad96e2d98bc 10,174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "71429a1ab08116b187395fb84f039f28c4db3c8d",
+  "prompts": {},
+  "sessions": {
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
