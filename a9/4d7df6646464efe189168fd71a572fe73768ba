@@ -1,0 +1,25 @@
+.github/workflows/release-please.yml
+  s_067b8d581740e3::t_ef47e4fcabb953 30,43,49-50,53
+.github/workflows/release.yml
+  s_067b8d581740e3::t_ec019b1ba4af67 4-6,28-103,105-106,108-109
+package.json
+  s_067b8d581740e3::t_df6c5f34bc0636 40
+scripts/check-release-metadata.ts
+  s_067b8d581740e3::t_4a72837c553d5f 83-106,169-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "a94d7df6646464efe189168fd71a572fe73768ba",
+  "prompts": {},
+  "sessions": {
+    "s_067b8d581740e3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1e88-dc2f-79c3-9d37-4134b3e641ba",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
