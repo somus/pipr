@@ -1,0 +1,133 @@
+.pipr/config.ts
+  s_e86d7229599bc1::t_f7950c00468773 21-22
+.pipr/types/pipr-sdk.d.ts
+  s_e86d7229599bc1::t_c8013b3bf96f2c 38-77,114-189,192,225-228,230-232,234-240,242-248,250-253,255-259,261-264,279-280,333-355,574-602,606
+apps/docs/content/docs/guide/comments.mdx
+  s_e86d7229599bc1::t_4fbaff28e9c798 112,179
+apps/docs/content/docs/guide/configuration.mdx
+  s_e86d7229599bc1::t_eaf25ddfac612f 39-40,55,110-119
+apps/docs/content/docs/guide/entrypoints.mdx
+  s_e86d7229599bc1::t_8e2a0738e03eaf 17-20
+apps/docs/content/docs/index.mdx
+  s_e86d7229599bc1::t_3a5d30ca1f1c13 82-83
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_e86d7229599bc1::t_a3808e53e3291f 58-59
+apps/docs/content/docs/recipes/default-review.mdx
+  s_e86d7229599bc1::t_ae6077389f4144 49-50,133
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_e86d7229599bc1::t_59b501a2fb9f48 49-50
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_e86d7229599bc1::t_cbaaa9d6598c7e 60-69
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_e86d7229599bc1::t_779508b375fd04 12,15,299-300,457,467,487-496
+apps/docs/scripts/sync-recipes.ts
+  s_e86d7229599bc1::t_998965afde6144 191
+apps/docs/src/routes/index.tsx
+  s_e86d7229599bc1::t_cb716bcf6e4849 288-289
+docs/adr/0004-pipr-owned-review-run.md
+  s_e86d7229599bc1::t_009f7fb670e95c 12
+packages/cli/src/release/sdk-declaration.ts
+  s_e86d7229599bc1::t_bd1ac85b2030ef 14
+packages/e2e/action-fixture.ts
+  s_e86d7229599bc1::t_2f2b4fa40bf5eb 7
+packages/e2e/pi-contract.ts
+  s_e86d7229599bc1::t_d8e9ff9553956a 6
+packages/e2e/scenarios.ts
+  s_e86d7229599bc1::t_91c892cd663c04 99-109
+packages/runtime/package.json
+  s_e86d7229599bc1::t_546b06785c72ef 29-31,39
+packages/runtime/src/action/tests/commands.test.ts
+  s_e86d7229599bc1::t_975c0bff07358c 1177,1315
+packages/runtime/src/commands/grammar.ts
+  s_e86d7229599bc1::t_2ebacc05433d15 1-9,28-29,33,37,44,66-67,70,73,90,116
+packages/runtime/src/commands/tests/grammar.test.ts
+  s_e86d7229599bc1::t_4b3148bdc20483 2,76-99
+packages/runtime/src/config/recipes/bug-hunter.ts
+  s_e86d7229599bc1::t_2b1ea968fbb2ee 27-28
+packages/runtime/src/config/recipes/default-review.ts
+  s_e86d7229599bc1::t_5d2094321d5620 18-19
+packages/runtime/src/config/recipes/pr-briefing.ts
+  s_e86d7229599bc1::t_dc7897e7da81d9 18-19
+packages/runtime/src/config/recipes/quality-gate.ts
+  s_e86d7229599bc1::t_a55a46e1856f0c 29-38
+packages/runtime/src/config/tests/config.test.ts
+  s_e86d7229599bc1::t_0eac7f9f848ae6 317,322
+packages/runtime/src/config/tests/init.test.ts
+  s_e86d7229599bc1::t_d78a0aa443c62b 38-39
+packages/runtime/src/internal/testing.ts
+  s_e86d7229599bc1::t_40776c3eb4bcb4 1,7-12
+packages/runtime/src/pi/runtime-tools-extension.ts
+  s_e86d7229599bc1::t_fd0f2713dacfe1 1
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_e86d7229599bc1::t_604bec2058b422 6,105,108,114
+packages/runtime/src/review/agent/review-run.ts
+  s_e86d7229599bc1::t_6182587368c23a 13,439-440
+packages/runtime/src/review/contract.ts
+  s_e86d7229599bc1::t_f5ca18fe8c3514 3,8-9,12,14-15,17,19-20
+packages/runtime/src/review/review.ts
+  s_e86d7229599bc1::t_32310819ccff41 12,14-16,21,28-29
+packages/runtime/src/review/task/task-output.ts
+  s_e86d7229599bc1::t_c13f05966cb165 8,279
+packages/runtime/src/review/task/task-runtime.ts
+  s_e86d7229599bc1::t_fef12a3817ae74 19,27,91,101,252,415,419,526
+packages/runtime/src/review/tests/review.test.ts
+  s_e86d7229599bc1::t_1628e2ab273e47 3,5-6,8,13,31,33,37,43,48,53,59,66,75,82,91,100,113,122,127,136,149,165,178,188
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_e86d7229599bc1::t_9ea827c519add5 1476,1478,1489,1493,1495-1497
+packages/runtime/src/tests/types.test.ts
+  s_e86d7229599bc1::t_549adfb3721065 2,20
+packages/runtime/src/types.ts
+  s_e86d7229599bc1::t_e0f48a98c8065c 1-9,12-23,27,116-118,120,134,144,158,176
+packages/sdk/package.json
+  s_e86d7229599bc1::t_99f9aac4866913 36
+packages/sdk/src/builder.ts
+  s_e86d7229599bc1::t_6c321025ee2aca 1-12,16-21,33,83,148,265,378,384,386-387
+packages/sdk/src/command-grammar.ts
+  s_e86d7229599bc1::t_9abfc009444202 1-49
+packages/sdk/src/index.ts
+  s_e86d7229599bc1::t_a1433607db9ba2 4-12,25-110
+packages/sdk/src/internal-contract.ts
+  s_e86d7229599bc1::t_404dc31b0d59ab 1-13
+packages/sdk/src/internal.ts
+  s_e86d7229599bc1::t_5ae55202c93979 1-7
+packages/sdk/src/prompt.ts
+  s_e86d7229599bc1::t_265c94e2b86514 1
+packages/sdk/src/review-contract.ts
+  s_e86d7229599bc1::t_3e0cadee9f5f62 2
+packages/sdk/src/runtime-contract.ts
+  s_e86d7229599bc1::t_6773dc8ee7a7b1 1,8-10
+packages/sdk/src/schema.ts
+  s_e86d7229599bc1::t_814a7e21310bca 2-7,14
+packages/sdk/src/tests/index.test.ts
+  s_e86d7229599bc1::t_268f185dba5129 5,7-9,15-23,26-70,270-271,326,430-458,461-467,501,839,849,858
+packages/sdk/src/types/agent.ts
+  s_e86d7229599bc1::t_037a5309eb89c3 1-64
+packages/sdk/src/types/config.ts
+  s_e86d7229599bc1::t_1be9a595714104 1-87
+packages/sdk/src/types/manifest.ts
+  s_e86d7229599bc1::t_671c46ac8a06c9 1-86
+packages/sdk/src/types/prompt.ts
+  s_e86d7229599bc1::t_3ac772a7f848b7 1-19
+packages/sdk/src/types/schema.ts
+  s_e86d7229599bc1::t_f2aac785b733b1 1-37
+packages/sdk/src/types/task.ts
+  s_e86d7229599bc1::t_6797c86c93edd3 1-5,9-23,27-296
+tsconfig.base.json
+  s_e86d7229599bc1::t_02425851f56ade 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "052e3e4afa1c32307733500e1837593f938493ff",
+  "prompts": {},
+  "sessions": {
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
