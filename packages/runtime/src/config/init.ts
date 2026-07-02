@@ -195,7 +195,7 @@ function starterPackageJson(): string {
     {
       private: true,
       dependencies: {
-        "@usepipr/sdk": defaultSdkVersion,
+        "@usepipr/sdk": process.env.PIPR_INTERNAL_INIT_SDK_VERSION ?? defaultSdkVersion,
       },
       devDependencies: {
         "@types/bun": defaultTypesBunVersion,

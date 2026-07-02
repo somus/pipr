@@ -9,6 +9,9 @@ import {
   officialInitRecipeFiles,
   supportedOfficialInitRecipes,
 } from "../recipes.js";
+import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
+
+useLocalInitSdk();
 
 const configCoreInitFiles = [path.join(".pipr", "config.ts")];
 

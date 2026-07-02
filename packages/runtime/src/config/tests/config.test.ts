@@ -10,6 +10,9 @@ import {
   validateProject,
 } from "../project.js";
 import { loadTypescriptConfig } from "../ts-loader.js";
+import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
+
+useLocalInitSdk();
 
 describe("loadRuntimeProject", () => {
   it("requires an initialized TypeScript config", async () => {

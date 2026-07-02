@@ -547,6 +547,7 @@ function minimalEnv(): NodeJS.ProcessEnv {
       env[key] = value;
     }
   }
+  env.PIPR_INTERNAL_INIT_SDK_VERSION = `file:${path.join(repoRoot, "packages/sdk")}`;
   return env;
 }
 

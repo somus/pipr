@@ -5,10 +5,13 @@ import path from "node:path";
 import { shouldSkipConfigInstall } from "../config-deps.js";
 import { initOfficialMinimalProject } from "../init.js";
 import { loadTypescriptConfig, prepareConfigDirectory } from "../ts-loader.js";
+import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
 import {
   writeThirdPartyPackageManifest,
   writeThirdPartyPiprProject,
 } from "./helpers/third-party-config.js";
+
+useLocalInitSdk();
 
 describe("loadTypescriptConfig installable deps", () => {
   it("loads config that imports a third-party dep from .pipr/package.json and bun.lock", async () => {
