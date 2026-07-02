@@ -19,7 +19,7 @@ outputs:
     description: JSON publication result for review, command response, or verifier publication
 runs:
   using: docker
-  image: docker://ghcr.io/somus/pipr:v0.1.3 # x-release-please-version
+  image: docker://ghcr.io/somus/pipr:v0.2.0 # x-release-please-version
   args:
     - action
     - --config-dir
