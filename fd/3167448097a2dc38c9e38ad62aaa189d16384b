@@ -1,0 +1,21 @@
+packages/sdk/src/builder.ts
+  s_e86d7229599bc1::t_4b1006abb5473a 1,15-17,24,293-319,321-332,335-357,378-380,384-389,391,394-410,412,415-417
+packages/sdk/src/tests/index.test.ts
+  s_e86d7229599bc1::t_a3aa8e79716534 472-501
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "fd3167448097a2dc38c9e38ad62aaa189d16384b",
+  "prompts": {},
+  "sessions": {
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
