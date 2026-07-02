@@ -469,6 +469,36 @@ describe("definePipr", () => {
         }),
       ),
     ).toThrow("pipr.config limits.diffManifest received unsupported option fields: fullMaxTokens");
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({
+            publication: { autoResolve: { userReplies: { extra: true } } },
+          } as never);
+        }),
+      ),
+    ).toThrow(
+      "pipr.config publication.autoResolve.userReplies received unsupported option fields: extra",
+    );
+  });
+
+  it("rejects invalid config option values at runtime", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({ publication: { maxInlineComments: -1 } } as never);
+        }),
+      ),
+    ).toThrow("pipr.config received invalid option value");
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({
+            publication: { autoResolve: { userReplies: { allowedActors: "owner" } } },
+          } as never);
+        }),
+      ),
+    ).toThrow("pipr.config received invalid option value");
   });
 
   it("rejects conflicting global inline publication settings", () => {

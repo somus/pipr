@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { assertSupportedCommandRestCapture } from "./command-grammar.js";
 import {
   builtinReadOnlyToolBrand,
@@ -11,13 +12,16 @@ import type { RuntimePlan } from "./runtime-contract.js";
 import { jsonSchema, schema, schemas } from "./schema.js";
 import type { Agent, AgentDefinition, AgentTool, BuiltinToolCatalog } from "./types/agent.js";
 import type {
+  AggregateCheckOptions,
+  AutoResolveOptions,
+  AutoResolveUserRepliesOptions,
   ChangeRequestAction,
   ChecksOptions,
   ModelProfile,
   PiprConfigOptions,
   PublicationOptions,
 } from "./types/config.js";
-import type { RuntimeLimits } from "./types/manifest.js";
+import type { DiffManifestLimits, RuntimeLimits } from "./types/manifest.js";
 import type { Markdown } from "./types/prompt.js";
 import type {
   CommandOptions,
@@ -286,30 +290,70 @@ const reviewRecipeOptionKeys = new Set([
 ]);
 
 const reviewRecipeEntrypointKeys = new Set(["changeRequest", "command"]);
-const piprConfigOptionKeys = new Set(["publication", "checks", "limits"]);
-const publicationOptionKeys = new Set(["maxInlineComments", "autoResolve"]);
-const autoResolveOptionKeys = new Set([
-  "enabled",
-  "model",
-  "instructions",
-  "synchronize",
-  "userReplies",
+
+const modelProfileConfigSchema: z.ZodType<ModelProfile> = z.custom<ModelProfile>(
+  (value) =>
+    typeof value === "object" &&
+    value !== null &&
+    (value as { kind?: unknown }).kind === "pipr.model" &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    typeof (value as { provider?: unknown }).provider === "string" &&
+    typeof (value as { model?: unknown }).model === "string",
+);
+
+const autoResolveUserRepliesOptionsSchema: z.ZodType<AutoResolveUserRepliesOptions> =
+  z.strictObject({
+    enabled: z.boolean().optional(),
+    respondWhenStillValid: z.boolean().optional(),
+    allowedActors: z.enum(["author-or-write", "write", "any"]).optional(),
+  });
+
+const autoResolveOptionsSchema: z.ZodType<AutoResolveOptions> = z.union([
+  z.literal(false),
+  z.strictObject({
+    enabled: z.boolean().optional(),
+    model: modelProfileConfigSchema.optional(),
+    instructions: z.string().min(1).max(4000).optional(),
+    synchronize: z.boolean().optional(),
+    userReplies: z.union([z.boolean(), autoResolveUserRepliesOptionsSchema]).optional(),
+  }),
 ]);
-const autoResolveUserRepliesOptionKeys = new Set([
-  "enabled",
-  "respondWhenStillValid",
-  "allowedActors",
+
+const publicationOptionsSchema: z.ZodType<PublicationOptions> = z.strictObject({
+  maxInlineComments: z.number().int().min(0).max(50).optional(),
+  autoResolve: autoResolveOptionsSchema.optional(),
+});
+
+const aggregateCheckOptionsSchema: z.ZodType<AggregateCheckOptions> = z.union([
+  z.literal(false),
+  z.strictObject({
+    enabled: z.boolean().optional(),
+    name: z.string().min(1).optional(),
+  }),
 ]);
-const checksOptionKeys = new Set(["aggregate"]);
-const aggregateCheckOptionKeys = new Set(["enabled", "name"]);
-const runtimeLimitOptionKeys = new Set(["timeoutSeconds", "diffManifest"]);
-const diffManifestLimitOptionKeys = new Set([
-  "fullMaxBytes",
-  "fullMaxEstimatedTokens",
-  "condensedMaxBytes",
-  "condensedMaxEstimatedTokens",
-  "toolResponseMaxBytes",
-]);
+
+const checksOptionsSchema: z.ZodType<ChecksOptions> = z.strictObject({
+  aggregate: aggregateCheckOptionsSchema.optional(),
+});
+
+const diffManifestLimitsSchema: z.ZodType<DiffManifestLimits> = z.strictObject({
+  fullMaxBytes: z.number().int().positive().optional(),
+  fullMaxEstimatedTokens: z.number().int().positive().optional(),
+  condensedMaxBytes: z.number().int().positive().optional(),
+  condensedMaxEstimatedTokens: z.number().int().positive().optional(),
+  toolResponseMaxBytes: z.number().int().positive().optional(),
+});
+
+const runtimeLimitsSchema: z.ZodType<RuntimeLimits> = z.strictObject({
+  timeoutSeconds: z.number().int().positive().max(3600).optional(),
+  diffManifest: diffManifestLimitsSchema.optional(),
+});
+
+const piprConfigOptionsSchema: z.ZodType<PiprConfigOptions> = z.strictObject({
+  publication: publicationOptionsSchema.optional(),
+  checks: checksOptionsSchema.optional(),
+  limits: runtimeLimitsSchema.optional(),
+});
 
 function assertKnownReviewRecipeOptions(options: ReviewRecipeOptions): void {
   const unknownKeys = Object.keys(options).filter((key) => !reviewRecipeOptionKeys.has(key));
@@ -331,83 +375,46 @@ function assertKnownReviewRecipeOptions(options: ReviewRecipeOptions): void {
 }
 
 function assertKnownPiprConfigOptions(options: unknown): asserts options is PiprConfigOptions {
-  assertOptionsObject("pipr.config", options);
-  assertKnownOptionKeys("pipr.config", options, piprConfigOptionKeys);
-  if (options.publication !== undefined) {
-    assertKnownPublicationOptions(options.publication);
-  }
-  if (options.checks !== undefined) {
-    assertKnownChecksOptions(options.checks);
-  }
-  if (options.limits !== undefined) {
-    assertKnownRuntimeLimits(options.limits);
+  const parsed = piprConfigOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    throw new Error(formatPiprConfigOptionsError(parsed.error));
   }
 }
 
-function assertKnownPublicationOptions(options: unknown): asserts options is PublicationOptions {
-  assertOptionsObject("pipr.config publication", options);
-  assertKnownOptionKeys("pipr.config publication", options, publicationOptionKeys);
-  const autoResolve = options.autoResolve;
-  if (autoResolve !== undefined && autoResolve !== false) {
-    assertOptionsObject("pipr.config publication.autoResolve", autoResolve);
-    assertKnownOptionKeys(
-      "pipr.config publication.autoResolve",
-      autoResolve,
-      autoResolveOptionKeys,
-    );
-    const userReplies = autoResolve.userReplies;
-    if (userReplies !== undefined && typeof userReplies !== "boolean") {
-      assertOptionsObject("pipr.config publication.autoResolve.userReplies", userReplies);
-      assertKnownOptionKeys(
-        "pipr.config publication.autoResolve.userReplies",
-        userReplies,
-        autoResolveUserRepliesOptionKeys,
-      );
+function formatPiprConfigOptionsError(error: z.ZodError): string {
+  const unsupportedFields = firstUnsupportedConfigFields(error.issues, []);
+  if (unsupportedFields) {
+    return `${piprConfigLabel(unsupportedFields.path)} received unsupported option fields: ${unsupportedFields.keys.join(
+      ", ",
+    )}`;
+  }
+  return `pipr.config received invalid option value: ${z.prettifyError(error)}`;
+}
+
+function firstUnsupportedConfigFields(
+  issues: readonly z.ZodIssue[],
+  parentPath: readonly PropertyKey[],
+): { path: PropertyKey[]; keys: string[] } | undefined {
+  for (const issue of issues) {
+    const path = [...parentPath, ...issue.path];
+    if (issue.code === "unrecognized_keys") {
+      return { path, keys: issue.keys };
+    }
+    if (issue.code === "invalid_union") {
+      for (const branchIssues of issue.errors) {
+        const unsupportedFields = firstUnsupportedConfigFields(branchIssues, path);
+        if (unsupportedFields) {
+          return unsupportedFields;
+        }
+      }
     }
   }
+  return undefined;
 }
 
-function assertKnownChecksOptions(options: unknown): asserts options is ChecksOptions {
-  assertOptionsObject("pipr.config checks", options);
-  assertKnownOptionKeys("pipr.config checks", options, checksOptionKeys);
-  const aggregate = options.aggregate;
-  if (aggregate !== undefined && aggregate !== false) {
-    assertOptionsObject("pipr.config checks.aggregate", aggregate);
-    assertKnownOptionKeys("pipr.config checks.aggregate", aggregate, aggregateCheckOptionKeys);
-  }
-}
-
-function assertKnownRuntimeLimits(options: unknown): asserts options is RuntimeLimits {
-  assertOptionsObject("pipr.config limits", options);
-  assertKnownOptionKeys("pipr.config limits", options, runtimeLimitOptionKeys);
-  if (options.diffManifest !== undefined) {
-    assertOptionsObject("pipr.config limits.diffManifest", options.diffManifest);
-    assertKnownOptionKeys(
-      "pipr.config limits.diffManifest",
-      options.diffManifest,
-      diffManifestLimitOptionKeys,
-    );
-  }
-}
-
-function assertOptionsObject(
-  label: string,
-  value: unknown,
-): asserts value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} requires an options object`);
-  }
-}
-
-function assertKnownOptionKeys(
-  label: string,
-  value: Record<string, unknown>,
-  knownKeys: Set<string>,
-): void {
-  const unknownKeys = Object.keys(value).filter((key) => !knownKeys.has(key));
-  if (unknownKeys.length > 0) {
-    throw new Error(`${label} received unsupported option fields: ${unknownKeys.join(", ")}.`);
-  }
+function piprConfigLabel(pathSegments: PropertyKey[]): string {
+  const path = pathSegments.join(".");
+  return path ? `pipr.config ${path}` : "pipr.config";
 }
 
 function reviewRecipeReviewerOptions(options: ReviewerOptions, name: string): ReviewerOptions {
