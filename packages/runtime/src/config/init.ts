@@ -35,7 +35,7 @@ type StarterFile = {
   contents: string;
 };
 
-const defaultWorkflowActionRef = "somus/pipr@v0.1.0"; // x-release-please-version
+const defaultWorkflowActionRef = "somus/pipr@v0.1.1"; // x-release-please-version
 
 export function listOfficialMinimalFiles(adapters?: readonly string[]): string[] {
   return officialMinimalFilePaths(resolveOfficialInitAdapters(adapters));

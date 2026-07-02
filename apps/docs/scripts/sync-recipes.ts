@@ -7,7 +7,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const docsDir = path.resolve(here, "../content/docs/recipes");
 const publicDir = path.resolve(here, "../public");
 const mode = process.argv.includes("--check") ? "check" : "sync";
-const defaultWorkflowActionRef = "somus/pipr@v0.1.0"; // x-release-please-version
+const defaultWorkflowActionRef = "somus/pipr@v0.1.1"; // x-release-please-version
 
 function starterWorkflow(recipe: (typeof recipes)[number]): string {
   const lines = [
