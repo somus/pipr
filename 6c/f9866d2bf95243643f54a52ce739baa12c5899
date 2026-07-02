@@ -1,0 +1,37 @@
+.github/workflows/pipr.yml
+  s_067b8d581740e3::t_b13413c974d46a 24
+scripts/sync-release-lockfile.ts
+  s_067b8d581740e3::t_2269404d930ba1 21,74-80
+.github/workflows/release-please.yml
+  s_067b8d581740e3::t_ef47e4fcabb953 30,43,49-50,53
+package.json
+  s_067b8d581740e3::t_df6c5f34bc0636 40
+.github/workflows/release.yml
+  s_067b8d581740e3::t_ec019b1ba4af67 4-6,28-103,105-106,108-109
+action.yml
+  s_067b8d581740e3::t_20cc021fc4d4ce 1
+scripts/tests/release-scripts.test.ts
+  s_067b8d581740e3::t_7f90defa1c078d 116-118
+scripts/check-release-metadata.ts
+  s_067b8d581740e3::t_4a72837c553d5f 85,91-114,177-188
+  s_067b8d581740e3::t_20cc021fc4d4ce 74-77
+  s_067b8d581740e3::t_7ea768ea0fb529 82
+  s_067b8d581740e3::t_283d2103e7ec34 83-84
+  s_067b8d581740e3::t_1dde63ebad29dd 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "6cf9866d2bf95243643f54a52ce739baa12c5899",
+  "prompts": {},
+  "sessions": {
+    "s_067b8d581740e3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1e88-dc2f-79c3-9d37-4134b3e641ba",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
