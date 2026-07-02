@@ -1,0 +1,21 @@
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_e86d7229599bc1::t_8780c0a23d3ac5 84
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_e86d7229599bc1::t_24062e0bcf1db5 1-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "482c2f633aa513521452deba7cd5ba43337b2a66",
+  "prompts": {},
+  "sessions": {
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
