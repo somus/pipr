@@ -81,7 +81,7 @@ function renderAgentDefinitionPrompt<Input>(
   context: AgentPromptContext,
 ) {
   // Runtime input was selected by the user task that called ctx.pi.run for this agent.
-  return agent.definition.prompt(input as Input, context);
+  return agent.definition.prompt(input as Input, { ...context });
 }
 
 function promptSection(title: string, body: string | undefined): string | undefined {
