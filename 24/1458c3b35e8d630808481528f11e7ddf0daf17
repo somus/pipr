@@ -1,0 +1,22 @@
+scripts/sync-release-lockfile.ts
+  s_067b8d581740e3::t_ca02b2d2b26939 20,66-71
+  s_067b8d581740e3::t_3c2c37debf43f3 72
+scripts/tests/release-scripts.test.ts
+  s_067b8d581740e3::t_ca02b2d2b26939 113-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "241458c3b35e8d630808481528f11e7ddf0daf17",
+  "prompts": {},
+  "sessions": {
+    "s_067b8d581740e3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1e88-dc2f-79c3-9d37-4134b3e641ba",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
