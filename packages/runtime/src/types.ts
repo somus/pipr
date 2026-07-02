@@ -1,41 +1,35 @@
+import type {
+  CommentableRange,
+  DiffHunk,
+  DiffManifest,
+  DiffManifestFile,
+  FileStatus,
+  RangeKind,
+  ReviewSide,
+} from "@usepipr/sdk";
 import { z } from "zod";
 import { piProviderProfileSchema } from "./pi/contract.js";
-import { prReviewSchema, reviewFindingSchema } from "./review/contract.js";
+import { reviewFindingSchema, reviewResultSchema } from "./review/contract.js";
 
 export type {
-  PrReview,
+  CommentableRange,
+  DiffHunk,
+  DiffManifest,
+  DiffManifestFile,
+  FileStatus,
+  PathFilter,
+  RangeKind,
+  ReviewSide,
+} from "@usepipr/sdk";
+
+export type {
   ReviewFinding,
+  ReviewResult,
 } from "./review/contract.js";
 
 const nonEmptyStringSchema = z.string().min(1);
 
 const providerConfigSchema = piProviderProfileSchema;
-
-const pathGlobPatternSchema = z
-  .string()
-  .min(1)
-  .superRefine((pattern, context) => {
-    if (pattern.includes("\0")) {
-      context.addIssue({ code: "custom", message: "must not contain NUL bytes" });
-    }
-    if (pattern.includes("\\")) {
-      context.addIssue({ code: "custom", message: "must use POSIX '/' separators" });
-    }
-    if (pattern.startsWith("/") || /^[A-Za-z]:\//.test(pattern)) {
-      context.addIssue({ code: "custom", message: "must be repo-relative" });
-    }
-    if (pattern.startsWith("!")) {
-      context.addIssue({ code: "custom", message: "must use paths.exclude instead of negation" });
-    }
-    if (pattern.split("/").includes("..")) {
-      context.addIssue({ code: "custom", message: "must not contain '..' segments" });
-    }
-  });
-
-const pathFilterSchema = z.strictObject({
-  include: z.array(pathGlobPatternSchema).min(1).optional(),
-  exclude: z.array(pathGlobPatternSchema).min(1).optional(),
-});
 
 const diffManifestLimitsConfigSchema = z.strictObject({
   fullMaxBytes: z.number().int().positive().optional(),
@@ -119,11 +113,11 @@ const changeRequestEventContextSchema = z.strictObject({
   workspace: nonEmptyStringSchema,
 });
 
-const fileStatusSchema = z.enum(["added", "modified", "removed", "renamed"]);
-export const reviewSideSchema = z.enum(["RIGHT", "LEFT"]);
-const rangeKindSchema = z.enum(["added", "deleted", "context", "mixed"]);
+const fileStatusSchema: z.ZodType<FileStatus> = z.enum(["added", "modified", "removed", "renamed"]);
+export const reviewSideSchema: z.ZodType<ReviewSide> = z.enum(["RIGHT", "LEFT"]);
+const rangeKindSchema: z.ZodType<RangeKind> = z.enum(["added", "deleted", "context", "mixed"]);
 
-export const commentableRangeSchema = z.strictObject({
+export const commentableRangeSchema: z.ZodType<CommentableRange> = z.strictObject({
   id: nonEmptyStringSchema,
   path: nonEmptyStringSchema,
   side: reviewSideSchema,
@@ -137,7 +131,7 @@ export const commentableRangeSchema = z.strictObject({
   preview: z.string().optional(),
 });
 
-const diffHunkSchema = z.strictObject({
+const diffHunkSchema: z.ZodType<DiffHunk> = z.strictObject({
   hunkIndex: z.number().int().positive(),
   header: nonEmptyStringSchema,
   oldStart: z.number().int().min(0),
@@ -147,7 +141,7 @@ const diffHunkSchema = z.strictObject({
   contentHash: z.string().regex(/^[a-f0-9]{12}$/),
 });
 
-const diffManifestFileSchema = z.strictObject({
+const diffManifestFileSchema: z.ZodType<DiffManifestFile> = z.strictObject({
   path: nonEmptyStringSchema,
   previousPath: nonEmptyStringSchema.optional(),
   status: fileStatusSchema,
@@ -161,7 +155,7 @@ const diffManifestFileSchema = z.strictObject({
   excludedReason: nonEmptyStringSchema.optional(),
 });
 
-const diffManifestSchema = z.strictObject({
+const diffManifestSchema: z.ZodType<DiffManifest> = z.strictObject({
   baseSha: nonEmptyStringSchema,
   headSha: nonEmptyStringSchema,
   mergeBaseSha: nonEmptyStringSchema,
@@ -179,7 +173,7 @@ const droppedFindingSchema = z.strictObject({
 });
 
 const validatedReviewSchema = z.strictObject({
-  review: prReviewSchema,
+  review: reviewResultSchema,
   validFindings: z.array(reviewFindingSchema),
   droppedFindings: z.array(droppedFindingSchema),
 });
@@ -187,7 +181,6 @@ const validatedReviewSchema = z.strictObject({
 const commandPermissionLevelSchema = z.enum(["read", "triage", "write", "maintain", "admin"]);
 
 export type ProviderConfig = z.infer<typeof providerConfigSchema>;
-export type PathFilter = z.infer<typeof pathFilterSchema>;
 export type DiffManifestLimitsConfig = z.infer<typeof diffManifestLimitsConfigSchema>;
 export type AutoResolveConfig = z.infer<typeof autoResolveConfigSchema>;
 export type PiprConfig = z.infer<typeof piprConfigSchema>;
@@ -196,13 +189,6 @@ export type PlatformInfo = z.infer<typeof platformInfoSchema>;
 export type RepositoryRef = z.infer<typeof repositoryRefSchema>;
 export type ChangeRequestRef = z.infer<typeof changeRequestRefSchema>;
 export type ChangeRequestEventContext = z.infer<typeof changeRequestEventContextSchema>;
-export type FileStatus = z.infer<typeof fileStatusSchema>;
-export type ReviewSide = z.infer<typeof reviewSideSchema>;
-export type RangeKind = z.infer<typeof rangeKindSchema>;
-export type CommentableRange = z.infer<typeof commentableRangeSchema>;
-export type DiffHunk = z.infer<typeof diffHunkSchema>;
-export type DiffManifestFile = z.infer<typeof diffManifestFileSchema>;
-export type DiffManifest = z.infer<typeof diffManifestSchema>;
 export type DiffManifestPromptMetrics = z.infer<typeof diffManifestPromptMetricsSchema>;
 export type ValidatedReview = z.infer<typeof validatedReviewSchema>;
 export type CommandPermissionLevel = z.infer<typeof commandPermissionLevelSchema>;

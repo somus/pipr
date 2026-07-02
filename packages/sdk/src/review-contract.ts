@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ZodSchema } from "./index.js";
+import type { ZodSchema } from "./types/schema.js";
 
 /** Markdown summary produced by a reviewer for the main review comment. */
 export type ReviewSummary = {

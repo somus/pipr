@@ -15,18 +15,6 @@ export default definePipr((pipr) => {
     options: { thinking: "high" },
   });
 
-  pipr.checks({
-    aggregate: { enabled: true, name: "pipr quality gate" },
-  });
-
-  pipr.limits({
-    timeoutSeconds: 420,
-    diffManifest: {
-      fullMaxEstimatedTokens: 32000,
-      condensedMaxEstimatedTokens: 64000,
-    },
-  });
-
   pipr.config({
     publication: {
       maxInlineComments: 6,
@@ -36,6 +24,16 @@ export default definePipr((pipr) => {
         instructions: "Resolve only when the changed code addresses the finding directly.",
         synchronize: true,
         userReplies: { enabled: true, allowedActors: "write" },
+      },
+    },
+    checks: {
+      aggregate: { enabled: true, name: "pipr quality gate" },
+    },
+    limits: {
+      timeoutSeconds: 420,
+      diffManifest: {
+        fullMaxEstimatedTokens: 32000,
+        condensedMaxEstimatedTokens: 64000,
       },
     },
   });
@@ -49,7 +47,6 @@ export default definePipr((pipr) => {
       If no blocking issue exists, state that no blocking issue exists.
     \`,
     check: { enabled: true, name: "quality gate", required: true },
-    inlineComments: { max: 6 },
     comment: (result) => ({
       main: \`## Quality Gate\\n\\n\${result.summary.body}\`,
       inlineFindings: result.inlineFindings,

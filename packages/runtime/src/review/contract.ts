@@ -1,29 +1,21 @@
-import { reviewOutputSchemaId } from "@usepipr/sdk/internal";
 import {
   parseReviewResult,
+  type ReviewFinding,
   type ReviewResult,
   reviewFindingSchema,
   reviewResultSchema,
-  type ReviewFinding as SdkReviewFinding,
   reviewSchemaExample as sdkReviewSchemaExample,
-} from "@usepipr/sdk/review";
+} from "@usepipr/sdk";
+import { reviewOutputSchemaId } from "@usepipr/sdk/internal";
 import { z } from "zod";
 
-export const prReviewSchemaId = reviewOutputSchemaId;
+export const reviewResultSchemaId = reviewOutputSchemaId;
 
-export { reviewFindingSchema };
+export type { ReviewFinding, ReviewResult };
+export { parseReviewResult, reviewFindingSchema, reviewResultSchema };
 
-export const prReviewSchema = reviewResultSchema;
+export const reviewResultJsonSchema = z.toJSONSchema(reviewResultSchema);
 
-export type ReviewFinding = SdkReviewFinding;
-export type PrReview = ReviewResult;
-
-export const prReviewJsonSchema = z.toJSONSchema(prReviewSchema);
-
-export function parsePrReview(value: unknown): PrReview {
-  return prReviewSchema.parse(parseReviewResult(value)) as PrReview;
-}
-
-export function reviewSchemaExample(): PrReview {
-  return parsePrReview(sdkReviewSchemaExample());
+export function reviewSchemaExample(): ReviewResult {
+  return parseReviewResult(sdkReviewSchemaExample());
 }

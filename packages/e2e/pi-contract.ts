@@ -3,7 +3,7 @@ import {
   piReadOnlyToolNames,
   piRequiredCliFlags,
   piThinkingLevels,
-} from "@usepipr/runtime/e2e/pi-contract";
+} from "@usepipr/runtime/internal/testing";
 
 type CheckOptions = {
   cwd: string;

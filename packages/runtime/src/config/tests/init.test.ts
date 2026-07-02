@@ -35,8 +35,8 @@ describe("initOfficialMinimalProject", () => {
     );
     const sdkTypes = await Bun.file(path.join(rootDir, ".pipr", "types", "pipr-sdk.d.ts")).text();
     expect(sdkTypes).toContain('declare module "@usepipr/sdk"');
-    expect(sdkTypes).toContain('declare module "@usepipr/sdk/review"');
-    expect(sdkTypes).toContain('declare module "@usepipr/sdk/tools"');
+    expect(sdkTypes).not.toContain('declare module "@usepipr/sdk/review"');
+    expect(sdkTypes).not.toContain('declare module "@usepipr/sdk/tools"');
     expect(sdkTypes).not.toContain('declare module "bun"');
     expect(sdkTypes).toContain("reviewResultSchema");
     expect(sdkTypes).toContain("reviewFindingSchema");

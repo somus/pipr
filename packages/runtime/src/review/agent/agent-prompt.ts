@@ -3,7 +3,7 @@ import { renderPromptValue } from "@usepipr/sdk/internal";
 import { compact } from "lodash-es";
 import { piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PriorReviewState } from "../prior-state.js";
-import { prReviewSchemaId, reviewSchemaExample } from "../review.js";
+import { reviewResultSchemaId, reviewSchemaExample } from "../review.js";
 import type { PreparedDiffManifestContext } from "./diff-manifest-context.js";
 
 export type AgentToolResolution = {
@@ -102,16 +102,16 @@ function outputPrompt(schema: Schema<unknown>): string {
   return compact([
     `Schema ID: ${schema.id}.`,
     schema.jsonSchema ? `JSON Schema:\n${JSON.stringify(schema.jsonSchema, null, 2)}` : undefined,
-    schema.id === prReviewSchemaId
+    schema.id === reviewResultSchemaId
       ? `Example:\n${JSON.stringify(reviewSchemaExample(), null, 2)}`
       : undefined,
-    schema.id === prReviewSchemaId
+    schema.id === reviewResultSchemaId
       ? "`suggestedFix` is exact replacement code for the selected range. Do not include Markdown fences, prose, or labels in `suggestedFix`."
       : undefined,
     "Return exactly one JSON value matching the schema.",
     "The first non-whitespace character must be { or [ and the last non-whitespace character must be } or ].",
     "Do not include Markdown, code fences, prose, explanations, or leading/trailing text.",
-    schema.id === prReviewSchemaId
+    schema.id === reviewResultSchemaId
       ? "For inlineFindings, use only fields shown in the schema and only exact Diff Manifest commentable ranges. If no exact range applies, omit the finding."
       : undefined,
   ]).join("\n\n");

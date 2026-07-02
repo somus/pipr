@@ -1,4 +1,4 @@
-import type { Markdown } from "./index.js";
+import type { Markdown } from "./types/prompt.js";
 
 /** Creates trimmed Markdown from a template literal with common indentation removed. */
 export function md(strings: TemplateStringsArray, ...values: unknown[]): Markdown {

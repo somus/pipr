@@ -13,8 +13,6 @@ const twoslashCompilerOptions = {
     "@usepipr/sdk": ["packages/sdk/src/index.ts"],
     "@usepipr/sdk/*": ["packages/sdk/src/*.ts"],
     "@usepipr/sdk/internal": ["packages/sdk/src/internal.ts"],
-    "@usepipr/sdk/review": ["packages/sdk/src/review.ts"],
-    "@usepipr/sdk/tools": ["packages/sdk/src/tools.ts"],
   },
 };
 const guideTwoslashIncludes = new Map<string, string>([

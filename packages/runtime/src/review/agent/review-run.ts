@@ -10,7 +10,7 @@ import { type PiRunOptions, type PiRunResult, runPi } from "../../pi/runner.js";
 import { boundedLogSnippet, type RuntimeActionLog } from "../../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
-import { parsePrReview, prReviewSchemaId } from "../review.js";
+import { parseReviewResult, reviewResultSchemaId } from "../review.js";
 import {
   type AgentRunContext,
   type AgentToolResolution,
@@ -436,8 +436,8 @@ function parseAgentOutput(output: string, agent: Agent): ParseAgentResult {
   for (const payload of jsonPayloadCandidates(output)) {
     try {
       const json = JSON.parse(payload) as unknown;
-      if (agent.definition.output.id === prReviewSchemaId) {
-        return { ok: true, value: parsePrReview(json), repairAttempted: false };
+      if (agent.definition.output.id === reviewResultSchemaId) {
+        return { ok: true, value: parseReviewResult(json), repairAttempted: false };
       }
       return { ok: true, value: agent.definition.output.parse(json), repairAttempted: false };
     } catch (error) {

@@ -78,8 +78,6 @@ type SdkDeclarationAsset = {
 
 const sdkDeclarationModules: SdkDeclarationAsset[] = [
   { moduleName: "@usepipr/sdk", fileName: "index.d.mts" },
-  { moduleName: "@usepipr/sdk/review", fileName: "review.d.mts" },
-  { moduleName: "@usepipr/sdk/tools", fileName: "tools.d.mts" },
 ];
 
 async function rawSdkDeclarations(): Promise<SdkDeclarationModule[]> {

@@ -1473,26 +1473,28 @@ describe("runTaskRuntime", () => {
     expectOnlyInsideFinding(result);
   });
 
-  it("honors pipr.review inlineComments false for default comments", async () => {
+  it("honors publication maxInlineComments 0 for default comments", async () => {
     const plan = testPlan((pipr) => {
+      pipr.config({ publication: { maxInlineComments: 0 } });
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
         instructions: "Review source.",
-        inlineComments: false,
         entrypoints: { command: false },
       });
     });
 
     const result = await runRuntime({
       plan,
+      config: { ...config, publication: { ...config.publication, maxInlineComments: 0 } },
       piRunner: async () => reviewPiResult([finding("hidden", "range-1", 10)]),
     });
 
-    expect(result.review.inlineFindings).toEqual([]);
+    expect(result.review.inlineFindings).toHaveLength(1);
     expect(result.inlineCommentDrafts).toEqual([]);
-    expect(result.mainComment).toContain("No findings.");
-    expect(result.mainComment).not.toContain("hidden");
+    expect(result.publicationPlan.inlineItems).toEqual([]);
+    expect(result.publicationPlan.metadata.cappedInlineFindings).toBe(1);
+    expect(result.mainComment).toContain("hidden");
   });
 });
 

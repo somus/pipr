@@ -1174,7 +1174,7 @@ function reviewConfigTs(
     "    },",
     "  });",
     options.event === false ? "" : '  pipr.on.changeRequest({ actions: ["opened"], task });',
-    options.checks ? "  pipr.checks({ aggregate: { enabled: true } });" : "",
+    options.checks ? "  pipr.config({ checks: { aggregate: { enabled: true } } });" : "",
     autoResolveConfig,
     options.command === false
       ? ""
@@ -1312,7 +1312,7 @@ function multiTaskCheckConfigTs(): string {
     "  });",
     '  pipr.on.changeRequest({ actions: ["opened"], task: summary });',
     '  pipr.on.changeRequest({ actions: ["opened"], task: gate });',
-    "  pipr.checks({ aggregate: { enabled: true } });",
+    "  pipr.config({ checks: { aggregate: { enabled: true } } });",
     "  void model;",
     "});",
   ].join("\n");

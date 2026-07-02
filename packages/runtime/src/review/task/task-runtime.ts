@@ -16,7 +16,7 @@ import type {
   DiffManifest,
   PiprConfig,
   ProviderConfig,
-  PrReview,
+  ReviewResult,
   ValidatedReview,
 } from "../../types.js";
 import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../types.js";
@@ -24,7 +24,7 @@ import { type PiRunner, resolveProvider, runReviewAgent } from "../agent/review-
 import { type InlineCommentDraft, type PublicationPlan, runtimeVersion } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { type PriorReviewState, priorReviewStateForSelectedTasks } from "../prior-state.js";
-import { validatePrReview } from "../review.js";
+import { validateReviewResult } from "../review.js";
 import { runInternalVerifier } from "../verifier.js";
 import {
   type CommandResponseContribution,
@@ -88,7 +88,7 @@ type ReviewRuntimeBaseResult = {
 export type ReviewRuntimeResult =
   | (ReviewRuntimeBaseResult & {
       kind: "review";
-      review: PrReview;
+      review: ReviewResult;
       validated: ValidatedReview;
       publicationPlan: PublicationPlan;
       mainComment: string;
@@ -98,7 +98,7 @@ export type ReviewRuntimeResult =
   | (ReviewRuntimeBaseResult & {
       kind: "skipped";
       skipReason: string;
-      review: PrReview;
+      review: ReviewResult;
       validated: ValidatedReview;
       publicationPlan: PublicationPlan;
       mainComment: string;
@@ -249,7 +249,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   assertReviewCommentOutput(output, options.commandInvocation !== undefined);
 
   const review = collectedReview(output);
-  const validated = validatePrReview(review, diffManifest, {
+  const validated = validateReviewResult(review, diffManifest, {
     expectedHeadSha: options.event.change.head.sha,
     pathScopeForFinding: (_finding, index) => output.findings[index]?.paths,
   });
@@ -412,11 +412,11 @@ function createTaskContext(
         const key = JSON.stringify(manifestOptions ?? {});
         const cached = options.manifestCache.get(key);
         if (cached) {
-          return cloneDiffManifest(cached) as never;
+          return cloneDiffManifest(cached);
         }
         const manifest = projectDiffManifest(options.diffManifest, manifestOptions);
         options.manifestCache.set(key, manifest);
-        return cloneDiffManifest(manifest) as never;
+        return cloneDiffManifest(manifest);
       },
       async changedFiles() {
         return options.diffManifest.files.map((file) => ({
@@ -523,7 +523,7 @@ function skippedTaskRuntimeResult(options: {
     (options.taskName
       ? `Task '${options.taskName}' was not registered`
       : "No tasks matched the change request event");
-  const review: PrReview = { summary: { body: reason }, inlineFindings: [] };
+  const review: ReviewResult = { summary: { body: reason }, inlineFindings: [] };
   const validated: ValidatedReview = { review, validFindings: [], droppedFindings: [] };
   const publishing = buildCommentPublishingPlan({
     event: options.event,

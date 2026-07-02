@@ -15,6 +15,8 @@ export default definePipr((pipr) => {
     options: { thinking: "high" },
   });
 
+  pipr.config({ publication: { maxInlineComments: 5 } });
+
   pipr.review({
     id: "review",
     model,
@@ -23,7 +25,6 @@ export default definePipr((pipr) => {
       maintainability, and test coverage.
       Return only actionable findings that target valid diff ranges.
     \`,
-    inlineComments: { max: 5 },
     timeout: "5m",
     comment: (result, context) => ({
       main:

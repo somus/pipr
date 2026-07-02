@@ -1,17 +1,17 @@
 import { z } from "zod";
-import type {
-  BuiltinSchemaCatalog,
-  JsonSchema,
-  JsonSchemaDefinition,
-  Schema,
-  SchemaDefinition,
-  ZodSchema,
-} from "./index.js";
 import type { ReviewResult, ReviewSummary } from "./review-contract.js";
 import {
   reviewResultSchema as coreReviewResultSchema,
   reviewSummarySchema as coreReviewSummarySchema,
 } from "./review-contract.js";
+import type { BuiltinSchemaCatalog } from "./types/agent.js";
+import type {
+  JsonSchema,
+  JsonSchemaDefinition,
+  Schema,
+  SchemaDefinition,
+  ZodSchema,
+} from "./types/schema.js";
 
 const coreReviewOutputSchemaId = "core/pr-review";
 

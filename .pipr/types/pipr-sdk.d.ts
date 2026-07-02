@@ -35,6 +35,46 @@ const z: {
   toJSONSchema(schema: ZodAny): JsonSchema;
 };
 
+//#region src/types/schema.d.ts
+/** Primitive JSON value supported by JSON Schema based configuration. */
+type JsonPrimitive = string | number | boolean | null;
+/** JSON value accepted by pipr schema and prompt helpers. */
+type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
+/** JSON object accepted by pipr schema and prompt helpers. */
+type JsonObject = {
+  [key: string]: JsonValue;
+};
+/** JSON Schema document or boolean schema. */
+type JsonSchema = JsonObject | boolean;
+/** Result returned by `Schema.safeParse`. */
+type SchemaParseResult<T> = {
+  success: true;
+  data: T;
+} | {
+  success: false;
+  error: Error;
+};
+/** Runtime schema wrapper used by pipr agents, tools, and user config. */
+type Schema<T> = {
+  readonly kind: "pipr.schema";
+  readonly id: string;
+  readonly jsonSchema?: JsonSchema;
+  parse(value: unknown): T;
+  safeParse(value: unknown): SchemaParseResult<T>;
+};
+/** Zod schema type accepted by `pipr.schema` and built-in schema exports. */
+type ZodSchema<T> = ZodType<T>;
+/** Zod-backed schema registration. */
+type SchemaDefinition<T> = {
+  id: string;
+  schema: ZodSchema<T>;
+};
+/** JSON Schema backed schema registration. */
+type JsonSchemaDefinition = {
+  id: string;
+  schema: JsonSchema;
+};
+//#endregion
 //#region src/review-contract.d.ts
 /** Markdown summary produced by a reviewer for the main review comment. */
 type ReviewSummary = {
@@ -71,27 +111,85 @@ function parseReviewFinding(value: unknown): ReviewFinding;
 /** Returns a small valid example for the main pull request review schema. */
 function reviewSchemaExample(): ReviewResult;
 //#endregion
-//#region src/builder.d.ts
-/** Defines a synchronous pipr configuration factory. */
-function definePipr(configure: (pipr: PiprBuilder) => void): {
-  readonly kind: "pipr.config-factory";
+//#region src/types/manifest.d.ts
+/** Include/exclude path filter for scoped reviews and Diff Manifest projection. */
+type PathFilter = {
+  include?: string[];
+  exclude?: string[];
 };
-/** Defines a typed pipr plugin installer. */
-function definePlugin<Handle>(setup: (builder: PiprBuilder) => Handle): PiprPlugin<Handle>;
+/** Side of a pull request diff that a commentable range belongs to. */
+type ReviewSide = "RIGHT" | "LEFT";
+/** Kind of line span represented by a Diff Manifest commentable range. */
+type RangeKind = "added" | "deleted" | "context" | "mixed";
+/** File lifecycle status in a Diff Manifest. */
+type FileStatus = "added" | "modified" | "removed" | "renamed";
+/** Commentable line range that can anchor an Inline Review Comment. */
+type CommentableRange = {
+  id: string;
+  path: string;
+  side: ReviewSide;
+  startLine: number;
+  endLine: number;
+  kind: RangeKind;
+  hunkIndex: number;
+  hunkHeader: string;
+  hunkContentHash: string;
+  summary?: string;
+  preview?: string;
+};
+/** Diff hunk metadata included in a Diff Manifest file entry. */
+type DiffHunk = {
+  hunkIndex: number;
+  header: string;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  contentHash: string;
+};
+/** One changed file in a Diff Manifest. */
+type DiffManifestFile = {
+  path: string;
+  previousPath?: string;
+  status: FileStatus;
+  language?: string;
+  additions: number;
+  deletions: number;
+  hunks: DiffHunk[];
+  commentableRanges: CommentableRange[];
+  signals?: string[];
+  changedSymbols?: string[];
+  excludedReason?: string;
+};
+/** Diff Manifest exposed to reviewers and tasks. */
+type DiffManifest = {
+  baseSha: string;
+  headSha: string;
+  mergeBaseSha: string;
+  files: DiffManifestFile[];
+};
+/** Options for projecting a Diff Manifest for task or prompt use. */
+type DiffManifestOptions = {
+  compressed?: boolean;
+  includePreviews?: boolean;
+  maxPreviewLines?: number;
+  paths?: PathFilter;
+};
+/** Size limits for Diff Manifest prompt and runtime-tool payloads. */
+type DiffManifestLimits = {
+  fullMaxBytes?: number;
+  fullMaxEstimatedTokens?: number;
+  condensedMaxBytes?: number;
+  condensedMaxEstimatedTokens?: number;
+  toolResponseMaxBytes?: number;
+};
+/** Runtime limits for a pipr config. */
+type RuntimeLimits = {
+  timeoutSeconds?: number;
+  diffManifest?: DiffManifestLimits;
+};
 //#endregion
-//#region src/prompt.d.ts
-/** Creates trimmed Markdown from a template literal with common indentation removed. */
-function md(strings: TemplateStringsArray, ...values: unknown[]): Markdown;
-//#endregion
-//#region src/schema.d.ts
-/** Defines a typed schema from a Zod schema. */
-function schema<T>(definition: SchemaDefinition<T>): Schema<T>;
-/** Defines a typed schema from JSON Schema. The generic type is caller supplied. */
-function jsonSchema<T>(definition: JsonSchemaDefinition): Schema<T>;
-/** Built-in schemas available as reusable agent output contracts. */
-const schemas: BuiltinSchemaCatalog;
-//#endregion
-//#region src/index.d.ts
+//#region src/types/config.d.ts
 /** Repository permission levels used to authorize pipr commands. */
 type RepositoryPermission = "read" | "triage" | "write" | "maintain" | "admin";
 /** Pull request lifecycle actions that can trigger change-request tasks. */
@@ -124,62 +222,46 @@ type ModelProfile = {
   readonly apiKey?: SecretRef;
   readonly options?: Record<string, unknown>;
 };
-/** Primitive JSON value supported by JSON Schema based configuration. */
-type JsonPrimitive = string | number | boolean | null;
-/** JSON value accepted by pipr schema and prompt helpers. */
-type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
-/** JSON object accepted by pipr schema and prompt helpers. */
-type JsonObject = {
-  [key: string]: JsonValue;
+/** Aggregate check-run options for a Pipr review run. */
+type AggregateCheckOptions = false | {
+  enabled?: boolean;
+  name?: string;
 };
-/** JSON Schema document or boolean schema. */
-type JsonSchema = JsonObject | boolean;
-/** Result returned by `Schema.safeParse`. */
-type SchemaParseResult<T> = {
-  success: true;
-  data: T;
-} | {
-  success: false;
-  error: Error;
+/** Check-run settings for a pipr config. */
+type ChecksOptions = {
+  aggregate?: AggregateCheckOptions;
 };
-/** Runtime schema wrapper used by pipr agents, tools, and user config. */
-type Schema<T> = {
-  readonly kind: "pipr.schema";
-  readonly id: string;
-  readonly jsonSchema?: JsonSchema;
-  parse(value: unknown): T;
-  safeParse(value: unknown): SchemaParseResult<T>;
+/** Actor policy for auto-resolving inline review threads from user replies. */
+type AutoResolveAllowedActors = "author-or-write" | "write" | "any";
+/** Options controlling auto-resolve behavior for user replies. */
+type AutoResolveUserRepliesOptions = {
+  enabled?: boolean;
+  respondWhenStillValid?: boolean;
+  allowedActors?: AutoResolveAllowedActors;
 };
-/** Zod schema type accepted by `pipr.schema` and built-in schema exports. */
-type ZodSchema<T> = ZodType<T>;
+/** Options controlling automatic stale-finding resolution. */
+type AutoResolveOptions = false | {
+  enabled?: boolean;
+  model?: ModelProfile;
+  instructions?: string;
+  synchronize?: boolean;
+  userReplies?: boolean | AutoResolveUserRepliesOptions;
+};
+/** Review publication settings. */
+type PublicationOptions = {
+  maxInlineComments?: number;
+  autoResolve?: AutoResolveOptions;
+};
+/** Top-level pipr config settings. */
+type PiprConfigOptions = {
+  publication?: PublicationOptions;
+  checks?: ChecksOptions;
+  limits?: RuntimeLimits;
+};
+//#endregion
+//#region src/types/prompt.d.ts
 /** Markdown text accepted by review comments and command replies. */
 type Markdown = string;
-/** Final review comment value produced by a task or review recipe. */
-type CommentValue = Markdown | {
-  main?: Markdown;
-  inlineFindings?: readonly ReviewFinding[];
-};
-/** Prior inline finding persisted by earlier pipr review state. */
-type PriorInlineFinding = {
-  id: string;
-  status: "open" | "resolved";
-  path: string;
-  rangeId: string;
-  side: "RIGHT" | "LEFT";
-  startLine: number;
-  endLine: number;
-};
-/** Prior pipr review state available to tasks through `ctx.review.prior()`. */
-type PriorReview = {
-  main?: Markdown;
-  reviewedHeadSha?: string;
-  inlineFindings: readonly PriorInlineFinding[];
-};
-/** Include/exclude path filter for scoped reviews and Diff Manifest projection. */
-type PathFilter = {
-  include?: string[];
-  exclude?: string[];
-};
 /** Prompt text accepted by agent instructions and prompt functions. */
 type PromptSource = string | PromptText;
 /** Value accepted by prompt rendering helpers. */
@@ -194,6 +276,8 @@ type JsonPromptOptions = {
   pretty?: boolean;
   maxCharacters?: number;
 };
+//#endregion
+//#region src/types/agent.d.ts
 /** Built-in tool catalog exposed on the pipr builder. */
 type BuiltinToolCatalog = {
   readonly readOnly: readonly AgentTool[];
@@ -245,6 +329,29 @@ type Agent<Input = unknown, Output = unknown> = {
   readonly name?: string;
   readonly definition: AgentDefinition<Input, Output>;
   extend(patch: AgentExtension<Input, Output>): Agent<Input, Output>;
+};
+//#endregion
+//#region src/types/task.d.ts
+/** Final review comment value produced by a task or review recipe. */
+type CommentValue = Markdown | {
+  main?: Markdown;
+  inlineFindings?: readonly ReviewFinding[];
+};
+/** Prior inline finding persisted by earlier pipr review state. */
+type PriorInlineFinding = {
+  id: string;
+  status: "open" | "resolved";
+  path: string;
+  rangeId: string;
+  side: "RIGHT" | "LEFT";
+  startLine: number;
+  endLine: number;
+};
+/** Prior pipr review state available to tasks through `ctx.review.prior()`. */
+type PriorReview = {
+  main?: Markdown;
+  reviewedHeadSha?: string;
+  inlineFindings: readonly PriorInlineFinding[];
 };
 /** Function run by a task entrypoint. */
 type TaskHandler<Input> = (context: TaskContext, input: Input) => void | Promise<void>;
@@ -304,9 +411,6 @@ type ReviewEntrypoints = {
 type ReviewRecipeEntrypointOptions = {
   id: string;
   entrypoints?: ReviewEntrypoints;
-  inlineComments?: false | {
-    max?: number;
-  };
   comment?: CommentValue | ((result: ReviewResult, context: ReviewCommentContext) => CommentValue | Promise<CommentValue>);
   check?: TaskCheckOptions;
   timeout?: DurationInput;
@@ -357,52 +461,6 @@ type ChangeRequestRegistrationOptions<Input> = {
   actions: ChangeRequestAction[];
   task: Task<Input>;
 };
-/** Zod-backed schema registration. */
-type SchemaDefinition<T> = {
-  id: string;
-  schema: ZodSchema<T>;
-};
-/** JSON Schema backed schema registration. */
-type JsonSchemaDefinition = {
-  id: string;
-  schema: JsonSchema;
-};
-/** Aggregate check-run options for a Pipr review run. */
-type AggregateCheckOptions = false | {
-  enabled?: boolean;
-  name?: string;
-};
-/** Check-run settings for a pipr config. */
-type ChecksOptions = {
-  aggregate?: AggregateCheckOptions;
-};
-/** Actor policy for auto-resolving inline review threads from user replies. */
-type AutoResolveAllowedActors = "author-or-write" | "write" | "any";
-/** Options controlling auto-resolve behavior for user replies. */
-type AutoResolveUserRepliesOptions = {
-  enabled?: boolean;
-  respondWhenStillValid?: boolean;
-  allowedActors?: AutoResolveAllowedActors;
-};
-/** Options controlling automatic stale-finding resolution. */
-type AutoResolveOptions = false | {
-  enabled?: boolean;
-  model?: ModelProfile;
-  instructions?: string;
-  synchronize?: boolean;
-  userReplies?: boolean | AutoResolveUserRepliesOptions;
-};
-/** Review publication settings. */
-type PublicationOptions = {
-  maxInlineComments?: number;
-  autoResolve?: AutoResolveOptions;
-};
-/** Top-level pipr config settings. */
-type PiprConfigOptions = {
-  publication?: PublicationOptions;
-  checks?: ChecksOptions;
-  limits?: RuntimeLimits;
-};
 /** Handle for reporting task check status from inside a task. */
 type CheckHandle = {
   pass(summary?: string): void;
@@ -424,8 +482,6 @@ type PiprBuilder = {
   review(options: ReviewRecipeOptions): void;
   config(options: PiprConfigOptions): void;
   command<Input = void>(options: CommandRegistrationOptions<Input>): void;
-  checks(options: ChecksOptions): void;
-  limits(options: RuntimeLimits): void;
   use<Handle>(plugin: PiprPlugin<Handle>): Handle;
   tool<Input, Output>(definition: PluginToolDefinition<Input, Output>): AgentTool<Input, Output>;
   schema<T>(definition: SchemaDefinition<T>): Schema<T>;
@@ -464,43 +520,6 @@ type ChangeRequestInfo = {
 /** Code hosting platform metadata. */
 type PlatformInfo = {
   id: string;
-};
-/** Diff Manifest exposed to reviewers and tasks. */
-type DiffManifest = {
-  baseSha: string;
-  headSha: string;
-  mergeBaseSha: string;
-  files: Array<{
-    path: string;
-    previousPath?: string;
-    status: string;
-    language?: string;
-    additions: number;
-    deletions: number;
-    commentableRanges?: unknown[];
-    ranges?: unknown[];
-    preview?: string;
-  }>;
-};
-/** Options for projecting a Diff Manifest for task or prompt use. */
-type DiffManifestOptions = {
-  compressed?: boolean;
-  includePreviews?: boolean;
-  maxPreviewLines?: number;
-  paths?: PathFilter;
-};
-/** Size limits for Diff Manifest prompt and runtime-tool payloads. */
-type DiffManifestLimits = {
-  fullMaxBytes?: number;
-  fullMaxEstimatedTokens?: number;
-  condensedMaxBytes?: number;
-  condensedMaxEstimatedTokens?: number;
-  toolResponseMaxBytes?: number;
-};
-/** Runtime limits for a pipr config. */
-type RuntimeLimits = {
-  timeoutSeconds?: number;
-  diffManifest?: DiffManifestLimits;
 };
 /** Change-request context available inside tasks. */
 type ChangeRequestContext = ChangeRequestInfo & {
@@ -552,14 +571,37 @@ type TaskContext = {
   };
 };
 //#endregion
+//#region src/builder.d.ts
+/** Defines a synchronous pipr configuration factory. */
+function definePipr(configure: (pipr: PiprBuilder) => void): {
+  readonly kind: "pipr.config-factory";
+};
+/** Defines a typed pipr plugin installer. */
+function definePlugin<Handle>(setup: (builder: PiprBuilder) => Handle): PiprPlugin<Handle>;
+//#endregion
+//#region src/command-grammar.d.ts
+function commandPatternParts(pattern: string): string[];
+function tokenizeCommandPattern(value: string): string[];
+function unsupportedCommandRestCaptureError(pattern: string): string | undefined;
+function assertSupportedCommandRestCapture(pattern: string): void;
+function isOptionalCommandPatternPart(value: string): boolean;
+function isCommandCaptureToken(value: string): boolean;
+function isCommandRestCaptureToken(value: string): boolean;
+//#endregion
+//#region src/prompt.d.ts
+/** Creates trimmed Markdown from a template literal with common indentation removed. */
+function md(strings: TemplateStringsArray, ...values: unknown[]): Markdown;
+//#endregion
+//#region src/schema.d.ts
+/** Defines a typed schema from a Zod schema. */
+function schema<T>(definition: SchemaDefinition<T>): Schema<T>;
+/** Defines a typed schema from JSON Schema. The generic type is caller supplied. */
+function jsonSchema<T>(definition: JsonSchemaDefinition): Schema<T>;
+/** Built-in schemas available as reusable agent output contracts. */
+const schemas: BuiltinSchemaCatalog;
+//#endregion
 
 
 
-export { Agent, AgentDefinition, AgentExtension, AgentPromptContext, AgentTool, AggregateCheckOptions, AutoResolveAllowedActors, AutoResolveOptions, AutoResolveUserRepliesOptions, BuiltinSchemaCatalog, BuiltinToolCatalog, ChangeRequestAction, ChangeRequestContext, ChangeRequestInfo, ChangeRequestRegistrationOptions, CheckHandle, ChecksOptions, CommandContext, CommandOptions, CommandRegistrationOptions, CommentValue, DefaultReviewInput, DiffManifest, DiffManifestLimits, DiffManifestOptions, DurationInput, JsonObject, JsonPrimitive, JsonPromptOptions, JsonSchema, JsonSchemaDefinition, JsonValue, Markdown, ModelOptions, ModelProfile, PathFilter, PiRunner, PiprBuilder, PiprConfigOptions, PiprPlugin, PlatformInfo, PluginToolDefinition, PriorInlineFinding, PriorReview, PromptSource, PromptText, PromptValue, PublicationOptions, RepositoryInfo, RepositoryPermission, ReviewCommentContext, ReviewEntrypoints, type ReviewFinding, ReviewRecipeOptions, type ReviewResult, type ReviewSummary, Reviewer, ReviewerOptions, RuntimeLimits, Schema, SchemaDefinition, SchemaParseResult, SecretOptions, SecretRef, Task, TaskCheckOptions, TaskContext, TaskDefinition, TaskHandler, ToolRunOptions, ZodSchema, definePipr, definePlugin, jsonSchema, md, parseReviewFinding, parseReviewResult, parseReviewSummary, reviewFindingSchema, reviewResultSchema, reviewSchemaExample, reviewSummarySchema, schema, schemas, z };
-}
-declare module "@usepipr/sdk/review" {
-export { type AgentPromptContext, type ChangeRequestAction, type CommentValue, type DefaultReviewInput, type Markdown, type PathFilter, type PriorInlineFinding, type PriorReview, type ReviewCommentContext, type ReviewEntrypoints, type ReviewFinding, type ReviewRecipeOptions, type ReviewResult, type ReviewSummary, type Reviewer, type ReviewerOptions, parseReviewFinding, parseReviewResult, parseReviewSummary, reviewFindingSchema, reviewResultSchema, reviewSchemaExample, reviewSummarySchema } from "@usepipr/sdk";
-}
-declare module "@usepipr/sdk/tools" {
-export type { AgentTool, BuiltinSchemaCatalog, BuiltinToolCatalog, JsonObject, JsonValue, PluginToolDefinition, PromptSource, PromptText, PromptValue, Schema, SchemaParseResult, ToolRunOptions } from "@usepipr/sdk";
+export { type Agent, type AgentDefinition, type AgentExtension, type AgentPromptContext, type AgentTool, type AggregateCheckOptions, type AutoResolveAllowedActors, type AutoResolveOptions, type AutoResolveUserRepliesOptions, type BuiltinSchemaCatalog, type BuiltinToolCatalog, type ChangeRequestAction, type ChangeRequestContext, type ChangeRequestInfo, type ChangeRequestRegistrationOptions, type CheckHandle, type ChecksOptions, type CommandContext, type CommandOptions, type CommandRegistrationOptions, type CommentValue, type CommentableRange, type DefaultReviewInput, type DiffHunk, type DiffManifest, type DiffManifestFile, type DiffManifestLimits, type DiffManifestOptions, type DurationInput, type FileStatus, type JsonObject, type JsonPrimitive, type JsonPromptOptions, type JsonSchema, type JsonSchemaDefinition, type JsonValue, type Markdown, type ModelOptions, type ModelProfile, type PathFilter, type PiRunner, type PiprBuilder, type PiprConfigOptions, type PiprPlugin, type PlatformInfo, type PluginToolDefinition, type PriorInlineFinding, type PriorReview, type PromptSource, type PromptText, type PromptValue, type PublicationOptions, type RangeKind, type RepositoryInfo, type RepositoryPermission, type ReviewCommentContext, type ReviewEntrypoints, type ReviewFinding, type ReviewRecipeOptions, type ReviewResult, type ReviewSide, type ReviewSummary, type Reviewer, type ReviewerOptions, type RuntimeLimits, type Schema, type SchemaDefinition, type SchemaParseResult, type SecretOptions, type SecretRef, type Task, type TaskCheckOptions, type TaskContext, type TaskDefinition, type TaskHandler, type ToolRunOptions, type ZodSchema, assertSupportedCommandRestCapture, commandPatternParts, definePipr, definePlugin, isCommandCaptureToken, isCommandRestCaptureToken, isOptionalCommandPatternPart, jsonSchema, md, parseReviewFinding, parseReviewResult, parseReviewSummary, reviewFindingSchema, reviewResultSchema, reviewSchemaExample, reviewSummarySchema, schema, schemas, tokenizeCommandPattern, unsupportedCommandRestCaptureError, z };
 }

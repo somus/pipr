@@ -15,6 +15,8 @@ export default definePipr((pipr) => {
     options: { thinking: "medium" },
   });
 
+  pipr.config({ publication: { maxInlineComments: 0 } });
+
   pipr.review({
     id: "pr-briefing",
     model,
@@ -23,7 +25,6 @@ export default definePipr((pipr) => {
       classify the PR type, explain review risk, and include a concise file walkthrough.
       Return no inline findings unless there is a concrete blocker.
     \`,
-    inlineComments: false,
     comment: (result, context) => [
       "## PR Briefing",
       "",

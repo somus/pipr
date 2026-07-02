@@ -1,39 +1,36 @@
-import type {
-  Agent,
-  AgentDefinition,
-  AgentTool,
-  ChangeRequestAction,
-  ChecksOptions,
-  CommandOptions,
-  CommentValue,
-  DefaultReviewInput,
-  Markdown,
-  ModelProfile,
-  PiprBuilder,
-  PiprPlugin,
-  PublicationOptions,
-  ReviewEntrypoints,
-  Reviewer,
-  ReviewerOptions,
-  ReviewRecipeOptions,
-  RuntimeLimits,
-  Task,
-  ToolRunOptions,
-} from "./index.js";
+import { assertSupportedCommandRestCapture } from "./command-grammar.js";
+import {
+  builtinReadOnlyToolBrand,
+  configFactoryBrand,
+  type InternalPiprConfigFactory,
+} from "./internal-contract.js";
 import { stripCommonIndent } from "./prompt.js";
 import { renderPromptValue } from "./prompt-render.js";
 import type { ReviewResult } from "./review-contract.js";
 import type { RuntimePlan } from "./runtime-contract.js";
 import { jsonSchema, schema, schemas } from "./schema.js";
-
-const configFactoryBrand = Symbol.for("pipr.config.factory");
-const builtinReadOnlyToolBrand = Symbol.for("pipr.builtin.readOnlyTool");
-
-type InternalPiprConfigFactory = {
-  readonly kind: "pipr.config-factory";
-  readonly [configFactoryBrand]: true;
-  build(): RuntimePlan;
-};
+import type { Agent, AgentDefinition, AgentTool, BuiltinToolCatalog } from "./types/agent.js";
+import type {
+  ChangeRequestAction,
+  ChecksOptions,
+  ModelProfile,
+  PublicationOptions,
+} from "./types/config.js";
+import type { RuntimeLimits } from "./types/manifest.js";
+import type { Markdown } from "./types/prompt.js";
+import type {
+  CommandOptions,
+  CommentValue,
+  DefaultReviewInput,
+  PiprBuilder,
+  PiprPlugin,
+  ReviewEntrypoints,
+  Reviewer,
+  ReviewerOptions,
+  ReviewRecipeOptions,
+  Task,
+  ToolRunOptions,
+} from "./types/task.js";
 
 /** Defines a synchronous pipr configuration factory. */
 export function definePipr(configure: (pipr: PiprBuilder) => void): {
@@ -83,7 +80,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
           [builtinReadOnlyToolBrand]: true,
         } as AgentTool,
       ],
-    },
+    } satisfies BuiltinToolCatalog,
     schemas,
     on: {
       changeRequest(options) {
@@ -148,7 +145,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
     },
     review(options) {
       assertKnownReviewRecipeOptions(options);
-      registerReviewRecipe(api, publication, options);
+      registerReviewRecipe(api, options);
     },
     config(options) {
       if (!options || typeof options !== "object") {
@@ -178,12 +175,6 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
         parse: options.parse as ((arguments_: Record<string, string>) => unknown) | undefined,
         task: options.task as Task<unknown>,
       });
-    },
-    checks(options) {
-      checks = mergeConfigField("checks", checks, options);
-    },
-    limits(options) {
-      limits = mergeLimits(limits, options);
     },
     use(plugin) {
       return plugin.setup(api);
@@ -271,23 +262,17 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
   };
 }
 
-function registerReviewRecipe(
-  api: PiprBuilder,
-  publication: RuntimePlan["publication"],
-  options: ReviewRecipeOptions,
-): void {
+function registerReviewRecipe(api: PiprBuilder, options: ReviewRecipeOptions): void {
   const id = options.id;
   const agent = options.reviewer ?? createReviewer(api, reviewRecipeReviewerOptions(options, id));
 
   const task = createReviewRecipeTask(api, id, agent, options);
   registerReviewRecipeEntrypoints(api, task, options);
-  updateReviewRecipePublication(publication, options);
 }
 
 const reviewRecipeOptionKeys = new Set([
   "id",
   "entrypoints",
-  "inlineComments",
   "comment",
   "check",
   "timeout",
@@ -390,16 +375,16 @@ function createReviewRecipeTask(
               change: context.change,
               platform: context.platform,
             })
-          : (options.comment ?? defaultReviewComment(result, options.inlineComments !== false));
+          : (options.comment ?? defaultReviewComment(result));
       await context.comment(source);
     },
   });
 }
 
-function defaultReviewComment(result: ReviewResult, includeInlineFindings: boolean): CommentValue {
+function defaultReviewComment(result: ReviewResult): CommentValue {
   return {
-    main: includeInlineFindings ? defaultReviewMarkdown(result) : result.summary.body,
-    ...(includeInlineFindings ? { inlineFindings: result.inlineFindings } : {}),
+    main: defaultReviewMarkdown(result),
+    inlineFindings: result.inlineFindings,
   };
 }
 
@@ -468,21 +453,6 @@ function reviewStringCommandEntrypoint(entrypoint: string | undefined) {
     pattern: entrypoint ?? "@pipr review",
     options: { permission: "write" as const },
   };
-}
-
-function updateReviewRecipePublication(
-  publication: RuntimePlan["publication"],
-  options: ReviewRecipeOptions,
-): void {
-  const maxInlineComments =
-    options.inlineComments === false ? 0 : (options.inlineComments?.max ?? 5);
-  if (
-    publication.maxInlineComments !== undefined &&
-    publication.maxInlineComments !== maxInlineComments
-  ) {
-    throw new Error("pipr.review inlineComments settings must match across review recipes");
-  }
-  publication.maxInlineComments = maxInlineComments;
 }
 
 function mergePublicationConfig(
@@ -610,30 +580,6 @@ function assertUnique(values: string[], label: string): void {
     }
     seen.add(value);
   }
-}
-
-function assertSupportedCommandRestCapture(pattern: string): void {
-  const parts = pattern.match(/\[[^\]]+\]|[^\s]+/g) ?? [];
-  for (const [index, part] of parts.entries()) {
-    if (part.startsWith("[") && part.endsWith("]")) {
-      const optionalRest = part.slice(1, -1).trim().split(/\s+/).find(isRestCaptureToken);
-      if (optionalRest) {
-        throw new Error(finalRequiredRestCaptureMessage(optionalRest));
-      }
-      continue;
-    }
-    if (isRestCaptureToken(part) && index !== parts.length - 1) {
-      throw new Error(finalRequiredRestCaptureMessage(part));
-    }
-  }
-}
-
-function isRestCaptureToken(value: string): boolean {
-  return /^<[a-z0-9-]+\.\.\.>$/.test(value);
-}
-
-function finalRequiredRestCaptureMessage(token: string): string {
-  return `Rest capture '${token}' must be the final required command pattern token`;
 }
 
 function assertModelIdentity(models: ModelProfile[]): void {

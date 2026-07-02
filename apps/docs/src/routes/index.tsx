@@ -285,9 +285,10 @@ function HeroConfigPreview() {
       </div>
       <pre className="overflow-hidden px-4 py-4 text-[0.76rem] leading-6 text-fd-foreground/80 dark:text-pipr-cream/82">
         <code>{`export default definePipr((pipr) => {
+  pipr.config({ publication: { maxInlineComments: 5 } });
+
   pipr.review({
     instructions: "Return actionable findings only",
-    inlineComments: { max: 5 },
     timeout: "5m",
   });
 });`}</code>

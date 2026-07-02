@@ -9,24 +9,24 @@ import type {
 } from "../types.js";
 import { parseValidatedReview } from "../types.js";
 import {
-  type PrReview,
-  parsePrReview,
-  prReviewJsonSchema,
-  prReviewSchemaId,
+  parseReviewResult,
   type ReviewFinding,
+  type ReviewResult,
+  reviewResultJsonSchema,
+  reviewResultSchemaId,
   reviewSchemaExample,
 } from "./contract.js";
 import { findingRangeMismatchReason } from "./range-validation.js";
 
-export { parsePrReview, prReviewJsonSchema, prReviewSchemaId, reviewSchemaExample };
+export { parseReviewResult, reviewResultJsonSchema, reviewResultSchemaId, reviewSchemaExample };
 
 export type ValidateReviewOptions = {
   expectedHeadSha?: string;
   pathScopeForFinding?: (finding: ReviewFinding, index: number) => PathFilter | undefined;
 };
 
-export function validatePrReview(
-  review: PrReview,
+export function validateReviewResult(
+  review: ReviewResult,
   manifest: DiffManifest,
   options: ValidateReviewOptions,
 ): ValidatedReview {

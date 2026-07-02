@@ -188,7 +188,7 @@ const recipeNotes = new Map([
 
 This is the baseline setup for repositories that want one trusted review path before adding specialist tasks. It uses \`pipr.review\`, so Pipr wires the change request and command entrypoints for you; local \`pipr review\` runs the same change-request task.
 
-- Keep \`inlineComments.max\` low until the repository has enough review history to judge signal quality.
+- Keep \`publication.maxInlineComments\` low until the repository has enough review history to judge signal quality.
 - Put repository-specific review policy in \`instructions\`, not in ad hoc task code.
 - Use \`context.platform.id === "local"\` for text that appears only during local review.
 - Add path filters only after you know which files must not receive inline findings.

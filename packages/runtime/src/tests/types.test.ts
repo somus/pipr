@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { PrReview, ReviewFinding } from "../types.js";
+import type { ReviewFinding, ReviewResult } from "../types.js";
 import {
   parseChangeRequestEventContext,
   parseDiffManifest,
@@ -17,7 +17,7 @@ const finding: ReviewFinding = {
   endLine: 10,
 };
 
-const review: PrReview = {
+const review: ReviewResult = {
   summary: { body: "Looks fine." },
   inlineFindings: [finding],
 };

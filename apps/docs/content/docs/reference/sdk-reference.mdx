@@ -9,11 +9,10 @@ The Pipr SDK is the public TypeScript authoring API for `.pipr/config.ts`.
 import { definePipr } from "@usepipr/sdk";
 ```
 
-Subpath exports are available when you want type and schema names without importing the full builder surface:
+Type and schema names are exported from the SDK root:
 
 ```ts
-import type { ReviewFinding, ReviewResult } from "@usepipr/sdk/review";
-import type { AgentTool, ToolRunOptions } from "@usepipr/sdk/tools";
+import type { AgentTool, ReviewFinding, ReviewResult, ToolRunOptions } from "@usepipr/sdk";
 ```
 
 ## `definePipr`
@@ -73,7 +72,6 @@ pipr.review({
       description: "Run the default pipr review.",
     },
   },
-  inlineComments: { max: 5 },
 });
 ```
 
@@ -298,8 +296,8 @@ When `check` is an object, the individual task Check Run is enabled by default. 
 The workflow job check is usually the branch protection gate. Enable the aggregate Check Run only when you explicitly want one Pipr-owned Check Run across multiple tasks:
 
 ```ts
-pipr.checks({
-  aggregate: { enabled: true, name: "all" },
+pipr.config({
+  checks: { aggregate: { enabled: true, name: "all" } },
 });
 ```
 
@@ -456,7 +454,7 @@ Use `pipr.schemas.review` when an agent directly returns publishable Inline Revi
 
 The `z` export is the recommended typed path for JSON-Schema-representable schemas. Generated `.pipr/types` include a standalone Zod authoring subset so `pipr init` projects type-check without installing `zod`; use `pipr.jsonSchema<T>()` for advanced JSON Schema shapes or when a Zod helper is outside that generated subset.
 
-Parsing helpers and public Zod schemas are exported from `@usepipr/sdk/review`:
+Parsing helpers and public Zod schemas are exported from `@usepipr/sdk`:
 
 ```ts
 import {
@@ -466,7 +464,7 @@ import {
   reviewResultSchema,
   reviewSchemaExample,
   reviewSummarySchema,
-} from "@usepipr/sdk/review";
+} from "@usepipr/sdk";
 ```
 
 Use `reviewResultSchema`, `reviewFindingSchema`, and `reviewSummarySchema` when you need the public review contract as Zod values.
@@ -486,14 +484,16 @@ pipr.prompt`
 ## Runtime limits
 
 ```ts
-pipr.limits({
-  timeoutSeconds: 300,
-  diffManifest: {
-    fullMaxBytes: 131072,
-    fullMaxEstimatedTokens: 32000,
-    condensedMaxBytes: 262144,
-    condensedMaxEstimatedTokens: 64000,
-    toolResponseMaxBytes: 65536,
+pipr.config({
+  limits: {
+    timeoutSeconds: 300,
+    diffManifest: {
+      fullMaxBytes: 131072,
+      fullMaxEstimatedTokens: 32000,
+      condensedMaxBytes: 262144,
+      condensedMaxEstimatedTokens: 64000,
+      toolResponseMaxBytes: 65536,
+    },
   },
 });
 ```

@@ -5,7 +5,7 @@ import type {
   PriorReview,
   ReviewFinding,
 } from "@usepipr/sdk";
-import type { PrReview } from "../../types.js";
+import type { ReviewResult } from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
 
 export type RuntimeCheckConclusion = "success" | "failure" | "neutral";
@@ -276,7 +276,7 @@ function isReviewFindingLike(value: unknown): value is ReviewFinding {
   );
 }
 
-export function collectedReview(output: OutputState): PrReview {
+export function collectedReview(output: OutputState): ReviewResult {
   return {
     summary: { body: "Review completed." },
     inlineFindings: output.findings.map((item) => item.finding),

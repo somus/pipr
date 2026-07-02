@@ -1,3 +1,4 @@
+// Internal Pi sandbox contract loaded by the Pipr runtime. Not user API.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { compact } from "lodash-es";

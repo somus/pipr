@@ -1,4 +1,10 @@
-import type { AgentTool } from "./index.js";
+import {
+  builtinReadOnlyToolBrand,
+  type ConfigFactoryValue,
+  configFactoryBrand,
+  type InternalPiprConfigFactory,
+} from "./internal-contract.js";
+import type { AgentTool } from "./types/agent.js";
 
 export type { RuntimePlan } from "./runtime-contract.js";
 
@@ -13,18 +19,6 @@ export {
 
 /** Stable identifier for pipr's built-in pull request review output schema. */
 export const reviewOutputSchemaId = "core/pr-review";
-
-const configFactoryBrand = Symbol.for("pipr.config.factory");
-const builtinReadOnlyToolBrand = Symbol.for("pipr.builtin.readOnlyTool");
-
-type ConfigFactoryValue = {
-  readonly kind: "pipr.config-factory";
-};
-
-type InternalPiprConfigFactory = ConfigFactoryValue & {
-  readonly [configFactoryBrand]: true;
-  build(): RuntimePlan;
-};
 
 /** Returns whether a tool is one of pipr's built-in read-only tools. */
 export function isBuiltinReadOnlyTool(tool: AgentTool): boolean {

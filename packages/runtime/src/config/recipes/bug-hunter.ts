@@ -24,6 +24,8 @@ export default definePipr((pipr) => {
     options: { thinking: "medium" },
   });
 
+  pipr.config({ publication: { maxInlineComments: 8 } });
+
   const reviewer = pipr.reviewer({
     name: "bug-hunter",
     model: primary,
@@ -42,7 +44,6 @@ export default definePipr((pipr) => {
     paths: {
       exclude: ["docs/**", "**/*.md"],
     },
-    inlineComments: { max: 8 },
     timeout: "7m",
     entrypoints: {
       changeRequest: ["opened", "updated", "reopened", "ready"],

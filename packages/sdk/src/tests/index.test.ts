@@ -2,22 +2,72 @@ import { describe, expect, it } from "bun:test";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ModelProfile, PiprBuilder, Reviewer, TaskContext } from "../index.js";
-import { definePipr, definePlugin, jsonSchema, schema, schemas, z } from "../index.js";
+import type { DiffManifest, ModelProfile, PiprBuilder, Reviewer, TaskContext } from "../index.js";
 import {
-  buildPiprPlan,
-  embeddedSdkDeclaration,
-  readSdkDeclarationSourceWithChunk,
-} from "../internal.js";
-import {
+  definePipr,
+  definePlugin,
+  jsonSchema,
   parseReviewFinding,
   parseReviewResult,
   reviewFindingSchema,
   reviewResultSchema,
   reviewSummarySchema,
-} from "../review.js";
+  schema,
+  schemas,
+  z,
+} from "../index.js";
+import {
+  buildPiprPlan,
+  embeddedSdkDeclaration,
+  readSdkDeclarationSourceWithChunk,
+} from "../internal.js";
 
 describe("definePipr", () => {
+  it("exposes typed Diff Manifest commentable ranges", () => {
+    const manifest: DiffManifest = {
+      baseSha: "base",
+      headSha: "head",
+      mergeBaseSha: "merge",
+      files: [
+        {
+          path: "src/example.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          hunks: [
+            {
+              hunkIndex: 1,
+              header: "@@ -1 +1 @@",
+              oldStart: 1,
+              oldLines: 1,
+              newStart: 1,
+              newLines: 1,
+              contentHash: "abcdef123456",
+            },
+          ],
+          commentableRanges: [
+            {
+              id: "rng_example",
+              path: "src/example.ts",
+              side: "RIGHT",
+              startLine: 1,
+              endLine: 1,
+              kind: "added",
+              hunkIndex: 1,
+              hunkHeader: "@@ -1 +1 @@",
+              hunkContentHash: "abcdef123456",
+            },
+          ],
+        },
+      ],
+    };
+
+    const range = manifest.files[0]?.commentableRanges[0];
+
+    expect(range?.id).toBe("rng_example");
+    expect(range?.side).toBe("RIGHT");
+  });
+
   it("registers models, agents, tasks, events, commands, and tools", () => {
     const factory = definePipr((pipr) => {
       const model = pipr.model({
@@ -217,7 +267,8 @@ describe("definePipr", () => {
         model: "deepseek-v4-pro",
         apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
       });
-      pipr.review({ id: "review", model, instructions: "Review.", inlineComments: { max: 3 } });
+      pipr.config({ publication: { maxInlineComments: 3 } });
+      pipr.review({ id: "review", model, instructions: "Review." });
     });
 
     const plan = buildPiprPlan(factory);
@@ -272,7 +323,7 @@ describe("definePipr", () => {
       permission: "triage",
       description: "Run correctness review.",
     });
-    expect(plan.publication.maxInlineComments).toBe(5);
+    expect(plan.publication.maxInlineComments).toBeUndefined();
   });
 
   it("passes review-level timeout when reusing an explicit reviewer", async () => {
@@ -376,14 +427,44 @@ describe("definePipr", () => {
     expect(tool?.toModelOutput?.({ body: "Looks good." })).toBe("Looks good.");
   });
 
-  it("rejects conflicting global inline publication settings across review recipes", () => {
-    expect(() => buildPiprPlan(reviewRecipeFactory({ max: 3 }, { max: 5 }))).toThrow(
-      "inlineComments settings must match",
-    );
+  it("rejects removed review-level inline publication settings", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          const model = pipr.model({
+            provider: "deepseek",
+            model: "deepseek-v4-pro",
+            apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+          });
+          pipr.review({
+            id: "review",
+            model,
+            instructions: "Review.",
+            inlineComments: { max: 3 },
+          } as never);
+        }),
+      ),
+    ).toThrow("unsupported option fields: inlineComments");
   });
 
-  it("allows matching global inline publication settings across review recipes", () => {
-    const plan = buildPiprPlan(reviewRecipeFactory({ max: 3 }, { max: 3 }));
+  it("rejects conflicting global inline publication settings", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({ publication: { maxInlineComments: 3 } });
+          pipr.config({ publication: { maxInlineComments: 5 } });
+        }),
+      ),
+    ).toThrow("publication.maxInlineComments conflicts");
+  });
+
+  it("allows matching global inline publication settings", () => {
+    const plan = buildPiprPlan(
+      definePipr((pipr) => {
+        pipr.config({ publication: { maxInlineComments: 3 } });
+        pipr.config({ publication: { maxInlineComments: 3 } });
+      }),
+    );
 
     expect(plan.publication).toEqual({ maxInlineComments: 3 });
   });
@@ -417,7 +498,7 @@ describe("definePipr", () => {
         checks: { aggregate: { enabled: true } },
         limits: { timeoutSeconds: 300 },
       });
-      pipr.review({ id: "review", model, instructions: "Review.", inlineComments: { max: 3 } });
+      pipr.review({ id: "review", model, instructions: "Review." });
     });
 
     const plan = buildPiprPlan(factory);
@@ -755,20 +836,17 @@ describe("standalone SDK declarations", () => {
         source: [
           'import { z } from "zod";',
           "export type Schema = z.ZodType<string>;",
+          "export type ReviewFinding = { body: string };",
           'export type FromRoot = import("./index.mjs").Schema;',
           "//# sourceMappingURL=index.d.mts.map",
         ].join("\n"),
-      },
-      {
-        moduleName: "@usepipr/sdk/review",
-        source: "export type { ReviewFinding };\nexport { parseReviewFinding };",
       },
     ]);
 
     expect(declaration).toContain('declare module "@usepipr/sdk"');
     expect(declaration).toContain("type ZodType<T = unknown");
     expect(declaration).toContain("export type Schema = ZodType<string>;");
-    expect(declaration).toContain('export type { ReviewFinding } from "@usepipr/sdk";');
+    expect(declaration).toContain("export type ReviewFinding = { body: string };");
     expect(declaration).not.toContain('from "zod"');
     expect(declaration).not.toContain("z.ZodType");
     expect(declaration).not.toContain("sourceMappingURL");
@@ -777,13 +855,7 @@ describe("standalone SDK declarations", () => {
   it("stitches bundled declaration chunks into the SDK root declaration", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-sdk-declarations-"));
     const declarationPath = path.join(rootDir, "index.d.mts");
-    await writeFile(
-      declarationPath,
-      [
-        'export { RuntimePlan } from "./index-abc_123.mjs";',
-        'export type { ReviewFinding } from "./review.mjs";',
-      ].join("\n"),
-    );
+    await writeFile(declarationPath, 'export { RuntimePlan } from "./index-abc_123.mjs";');
     await writeFile(
       path.join(rootDir, "index-abc_123.d.mts"),
       "export type RuntimePlan = { tasks: string[] };\nexport { RuntimePlan };",
@@ -853,32 +925,6 @@ function expectExplicitReviewerRejectsConstructionFields(
 }
 
 void expectExplicitReviewerRejectsConstructionFields;
-
-type InlineComments = { max?: number };
-
-function reviewRecipeFactory(firstInline: InlineComments, secondInline: InlineComments) {
-  return definePipr((pipr) => {
-    const model = pipr.model({
-      provider: "deepseek",
-      model: "deepseek-v4-pro",
-      apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    });
-    pipr.review({
-      id: "correctness",
-      model,
-      instructions: "Review correctness.",
-      inlineComments: firstInline,
-      entrypoints: { command: false },
-    });
-    pipr.review({
-      id: "security",
-      model,
-      instructions: "Review security.",
-      inlineComments: secondInline,
-      entrypoints: { command: false },
-    });
-  });
-}
 
 function validReviewFinding(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {

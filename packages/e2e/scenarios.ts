@@ -96,21 +96,23 @@ export default definePipr((pipr) => {
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
     options: { thinking: "high" },
   });
-  pipr.limits({
-    timeoutSeconds: 300,
-    diffManifest: {
-      fullMaxBytes: 1,
-      fullMaxEstimatedTokens: 1,
-      condensedMaxBytes: 262144,
-      condensedMaxEstimatedTokens: 65536,
-      toolResponseMaxBytes: 4096,
+  pipr.config({
+    publication: { maxInlineComments: 5 },
+    limits: {
+      timeoutSeconds: 300,
+      diffManifest: {
+        fullMaxBytes: 1,
+        fullMaxEstimatedTokens: 1,
+        condensedMaxBytes: 262144,
+        condensedMaxEstimatedTokens: 65536,
+        toolResponseMaxBytes: 4096,
+      },
     },
   });
   pipr.review({
     id: "review",
     model,
     instructions: "Review the condensed act fixture.",
-    inlineComments: { max: 5 },
   });
 });
 `;

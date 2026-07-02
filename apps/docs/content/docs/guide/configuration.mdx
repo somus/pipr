@@ -36,6 +36,8 @@ export default definePipr((pipr) => {
     `,
   });
 
+  pipr.config({ publication: { maxInlineComments: 5 } });
+
   pipr.review({
     id: "review",
     reviewer,
@@ -43,7 +45,6 @@ export default definePipr((pipr) => {
       changeRequest: ["opened", "updated", "reopened", "ready"],
       command: { pattern: "@pipr review", permission: "write" },
     },
-    inlineComments: { max: 5 },
     timeout: "5m",
   });
 });
@@ -51,7 +52,7 @@ export default definePipr((pipr) => {
 
 `pipr.review` registers a change request review task and the `@pipr review` command unless `entrypoints` disables them.
 
-Use `pipr.review(...)` for the default path: one reviewer, one Review Task, optional path scope, optional command, capped inline comments, and optional task check.
+Use `pipr.review(...)` for the default path: one reviewer, one Review Task, optional path scope, optional command, and optional task check. Use `pipr.config(...)` for publication caps.
 
 Use `paths` to scope a review recipe to matching repository paths:
 
@@ -106,14 +107,16 @@ Pipr sends the full Diff Manifest while it fits configured limits. When it is to
 
 ```ts twoslash
 // @include: pipr-builder
-pipr.limits({
-  timeoutSeconds: 300,
-  diffManifest: {
-    fullMaxBytes: 131072,
-    fullMaxEstimatedTokens: 32000,
-    condensedMaxBytes: 262144,
-    condensedMaxEstimatedTokens: 64000,
-    toolResponseMaxBytes: 65536,
+pipr.config({
+  limits: {
+    timeoutSeconds: 300,
+    diffManifest: {
+      fullMaxBytes: 131072,
+      fullMaxEstimatedTokens: 32000,
+      condensedMaxBytes: 262144,
+      condensedMaxEstimatedTokens: 64000,
+      toolResponseMaxBytes: 65536,
+    },
   },
 });
 ```

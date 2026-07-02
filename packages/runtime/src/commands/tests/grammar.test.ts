@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { assertSupportedCommandRestCapture } from "@usepipr/sdk";
 import {
   commandPatternPrefixMatches,
   firstNonEmptyLine,
@@ -70,6 +71,30 @@ describe("command grammar", () => {
       error,
     });
     expect(commandPatternPrefixMatches("@pipr ask [<question...>]", "@pipr ask now")).toBe(false);
+  });
+
+  it("keeps SDK registration and runtime parse-time rest capture validation aligned", () => {
+    const patterns = [
+      { pattern: "@pipr ask <question...>", valid: true },
+      { pattern: "@pipr ask [<question...>]", valid: false },
+      { pattern: "@pipr ask <question...> --json", valid: false },
+    ];
+
+    for (const { pattern, valid } of patterns) {
+      const parseResult = parseCommandPattern(pattern, "@pipr ask anything --json");
+      if (valid) {
+        expect(() => assertSupportedCommandRestCapture(pattern)).not.toThrow();
+        expect(parseResult.ok).toBe(true);
+      } else {
+        let registrationError = "";
+        try {
+          assertSupportedCommandRestCapture(pattern);
+        } catch (error) {
+          registrationError = error instanceof Error ? error.message : String(error);
+        }
+        expect(parseResult).toEqual({ ok: false, error: registrationError });
+      }
+    }
   });
 
   it("matches static prefixes before validating full patterns", () => {

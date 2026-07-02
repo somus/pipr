@@ -14,11 +14,10 @@ The quickest setup uses `pipr.review(...)`:
 pipr.review({
   id: "review",
   reviewer,
-    entrypoints: {
-      changeRequest: ["opened", "updated", "reopened", "ready"],
-      command: { pattern: "@pipr review", permission: "write" },
-    },
-    inlineComments: { max: 5 },
+  entrypoints: {
+    changeRequest: ["opened", "updated", "reopened", "ready"],
+    command: { pattern: "@pipr review", permission: "write" },
+  },
 });
 ```
 

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
-import type { DiffManifest, PrReview } from "../../types.js";
+import type { DiffManifest, ReviewResult } from "../../types.js";
 import {
-  parsePrReview,
-  prReviewJsonSchema,
+  parseReviewResult,
+  reviewResultJsonSchema,
   reviewSchemaExample,
-  validatePrReview,
+  validateReviewResult,
 } from "../review.js";
 
 const manifest = reviewTestManifest({ includeExcludedLock: true });
 
-const baseReview: PrReview = {
+const baseReview: ReviewResult = {
   summary: { body: "Looks fine." },
   inlineFindings: [
     {
@@ -28,42 +28,42 @@ if (!baseFinding) {
   throw new Error("test fixture missing base finding");
 }
 
-describe("validatePrReview", () => {
+describe("validateReviewResult", () => {
   it("uses one Review Output for examples and runtime schema", () => {
-    const example = parsePrReview(reviewSchemaExample());
+    const example = parseReviewResult(reviewSchemaExample());
 
     expect(example.summary.body).toBe("Concise pull request review summary.");
     expect(example.inlineFindings[0]?.suggestedFix).toBe("return safeValue;");
-    expect(prReviewJsonSchema).toMatchObject({
+    expect(reviewResultJsonSchema).toMatchObject({
       type: "object",
       properties: {
         inlineFindings: { type: "array" },
       },
     });
-    expect(prReviewJsonSchema).not.toHaveProperty(["properties", "nonInlineFindings"]);
+    expect(reviewResultJsonSchema).not.toHaveProperty(["properties", "nonInlineFindings"]);
   });
 
   it("rejects reviewer output outside the published schema contract", () => {
     expect(() =>
-      parsePrReview({
+      parseReviewResult({
         summary: { body: "Looks fine." },
       }),
     ).toThrow();
     expect(() =>
-      parsePrReview({
+      parseReviewResult({
         summary: { body: "Looks fine.", extra: true },
         inlineFindings: [],
       }),
     ).toThrow();
     expect(() =>
-      parsePrReview({
+      parseReviewResult({
         summary: { body: "Looks fine." },
         inlineFindings: [],
         extra: true,
       }),
     ).toThrow();
     expect(() =>
-      parsePrReview({
+      parseReviewResult({
         summary: { body: "Looks fine." },
         inlineFindings: [{ ...baseFinding, suggestedFix: "" }],
       }),
@@ -72,14 +72,14 @@ describe("validatePrReview", () => {
 
   it("rejects non-inline findings in the MVP", () => {
     expect(() =>
-      parsePrReview({
+      parseReviewResult({
         summary: { body: "Looks fine." },
         inlineFindings: [],
         nonInlineFindings: [],
       }),
     ).toThrow();
     expect(() =>
-      parsePrReview({
+      parseReviewResult({
         summary: { body: "Looks fine." },
         inlineFindings: [],
         nonInlineFindings: [{ title: "Later" }],
@@ -88,7 +88,7 @@ describe("validatePrReview", () => {
   });
 
   it("keeps findings inside a commentable range", () => {
-    const validated = validatePrReview(baseReview, manifest, {
+    const validated = validateReviewResult(baseReview, manifest, {
       expectedHeadSha: "head",
     });
 
@@ -97,7 +97,7 @@ describe("validatePrReview", () => {
   });
 
   it("keeps scoped findings on renamed files when the filter matches the previous path", () => {
-    const review: PrReview = {
+    const review: ReviewResult = {
       ...baseReview,
       inlineFindings: [
         {
@@ -110,7 +110,7 @@ describe("validatePrReview", () => {
       ],
     };
 
-    const validated = validatePrReview(review, renamedManifest(), {
+    const validated = validateReviewResult(review, renamedManifest(), {
       pathScopeForFinding: () => ({ include: ["packages/old.ts"] }),
     });
 
@@ -119,12 +119,12 @@ describe("validatePrReview", () => {
   });
 
   it("drops excluded-file findings", () => {
-    const review: PrReview = {
+    const review: ReviewResult = {
       ...baseReview,
       inlineFindings: [{ ...baseFinding, path: "bun.lock", rangeId: "range-lock" }],
     };
 
-    const validated = validatePrReview(review, manifest, {});
+    const validated = validateReviewResult(review, manifest, {});
 
     expect(validated.validFindings).toHaveLength(0);
     expect(validated.droppedFindings.map((drop) => drop.reason)).toEqual([
@@ -133,7 +133,7 @@ describe("validatePrReview", () => {
   });
 
   it("drops semantic mismatches and duplicate fingerprints", () => {
-    const review: PrReview = {
+    const review: ReviewResult = {
       ...baseReview,
       inlineFindings: [
         { ...baseFinding, side: "LEFT" },
@@ -146,7 +146,7 @@ describe("validatePrReview", () => {
       ],
     };
 
-    const validated = validatePrReview(review, manifest, {
+    const validated = validateReviewResult(review, manifest, {
       expectedHeadSha: "head",
     });
 
@@ -162,7 +162,7 @@ describe("validatePrReview", () => {
   });
 
   it("keeps repeated finding bodies when they target different ranges", () => {
-    const review: PrReview = {
+    const review: ReviewResult = {
       ...baseReview,
       inlineFindings: [
         baseFinding,
@@ -175,7 +175,7 @@ describe("validatePrReview", () => {
       ],
     };
 
-    const validated = validatePrReview(review, manifest, {
+    const validated = validateReviewResult(review, manifest, {
       expectedHeadSha: "head",
     });
 
@@ -185,7 +185,7 @@ describe("validatePrReview", () => {
 
   it("fails validation when the Diff Manifest head is stale", () => {
     expect(() =>
-      validatePrReview(baseReview, manifest, {
+      validateReviewResult(baseReview, manifest, {
         expectedHeadSha: "new-head",
       }),
     ).toThrow("does not match expected head SHA");

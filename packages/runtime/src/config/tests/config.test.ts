@@ -314,13 +314,12 @@ export default definePipr((pipr) => {
     ]);
   });
 
-  it("loads SDK subpath imports from the runtime stub", async () => {
+  it("loads root SDK imports from the runtime stub", async () => {
     const rootDir = await newInitializedProject();
     await writePiprConfig(
       rootDir,
       `import { definePipr } from "@usepipr/sdk";
-import { reviewSchemaExample } from "@usepipr/sdk/review";
-import "@usepipr/sdk/tools";
+import { reviewSchemaExample } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const example = reviewSchemaExample();

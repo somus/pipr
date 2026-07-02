@@ -8,11 +8,8 @@
     "paths": {
       "@usepipr/sdk": ["packages/sdk/src/index.ts"],
       "@usepipr/sdk/internal": ["packages/sdk/src/internal.ts"],
-      "@usepipr/sdk/review": ["packages/sdk/src/review.ts"],
-      "@usepipr/sdk/tools": ["packages/sdk/src/tools.ts"],
       "@usepipr/runtime": ["packages/runtime/src/index.ts"],
-      "@usepipr/runtime/e2e/action-fixture": ["packages/runtime/src/e2e/action-fixture.ts"],
-      "@usepipr/runtime/e2e/pi-contract": ["packages/runtime/src/e2e/pi-contract.ts"],
+      "@usepipr/runtime/internal/testing": ["packages/runtime/src/internal/testing.ts"],
       "@usepipr/runtime/runtime-tools-extension": [
         "packages/runtime/src/pi/runtime-tools-extension.ts"
       ]

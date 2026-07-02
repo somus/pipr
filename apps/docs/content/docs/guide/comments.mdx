@@ -109,11 +109,7 @@ Cap inline comments to keep reviews useful and avoid flooding a pull request.
 
 ```ts twoslash
 // @include: pipr-reviewer
-pipr.review({
-  id: "review",
-  reviewer,
-  inlineComments: { max: 5 },
-});
+pipr.config({ publication: { maxInlineComments: 5 } });
 ```
 
 The cap applies to published inline drafts. Keep the Main Review Comment useful when some findings are skipped by the cap, for example by summarizing counts or highest-risk findings.
@@ -180,6 +176,6 @@ Rerunning the same source command updates the previous Pipr response for that co
 
 Use these pages when you need to change how comments are produced.
 
-- [Configuration](/docs/guide/configuration) covers `inlineComments`, checks, schemas, and retry behavior.
+- [Configuration](/docs/guide/configuration) covers publication caps, checks, schemas, and retry behavior.
 - [Custom Tasks](/docs/guide/custom-tasks) shows how to call `ctx.comment(...)` from task code.
 - [Troubleshooting](/docs/guide/troubleshooting) covers missing comments, dropped findings, and verifier failures.

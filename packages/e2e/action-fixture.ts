@@ -4,7 +4,7 @@ import {
   type GitHubPublicationClient,
   PublicationError,
   runActionCommandWithDependencies,
-} from "@usepipr/runtime/e2e/action-fixture";
+} from "@usepipr/runtime/internal/testing";
 import { type ActAssertionMode, assertActFixture } from "./assertions.ts";
 
 type LoadedActionResult = Exclude<ActionCommandResult, { kind: "ignored" }>;

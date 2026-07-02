@@ -1,14 +1,13 @@
+import type { Agent, AgentTool } from "./types/agent.js";
 import type {
-  Agent,
-  AgentTool,
   ChangeRequestAction,
   ChecksOptions,
   ModelProfile,
   PublicationOptions,
   RepositoryPermission,
-  RuntimeLimits,
-  Task,
-} from "./index.js";
+} from "./types/config.js";
+import type { RuntimeLimits } from "./types/manifest.js";
+import type { Task } from "./types/task.js";
 
 /** Runtime plan produced from user configuration. */
 export type RuntimePlan = {
