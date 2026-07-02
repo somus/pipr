@@ -5,7 +5,7 @@ import {
   isOptionalCommandPatternPart,
   tokenizeCommandPattern,
   unsupportedCommandRestCaptureError,
-} from "@usepipr/sdk";
+} from "@usepipr/sdk/internal";
 
 export type CommandPatternParseResult =
   | { ok: true; value: Record<string, string> }

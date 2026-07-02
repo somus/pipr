@@ -447,6 +447,30 @@ describe("definePipr", () => {
     ).toThrow("unsupported option fields: inlineComments");
   });
 
+  it("rejects unsupported config option fields at runtime", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({ typo: true } as never);
+        }),
+      ),
+    ).toThrow("pipr.config received unsupported option fields: typo");
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({ publication: { inlineComments: { max: 3 } } } as never);
+        }),
+      ),
+    ).toThrow("pipr.config publication received unsupported option fields: inlineComments");
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({ limits: { diffManifest: { fullMaxTokens: 1000 } } } as never);
+        }),
+      ),
+    ).toThrow("pipr.config limits.diffManifest received unsupported option fields: fullMaxTokens");
+  });
+
   it("rejects conflicting global inline publication settings", () => {
     expect(() =>
       buildPiprPlan(

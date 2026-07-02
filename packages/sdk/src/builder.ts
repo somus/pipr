@@ -14,6 +14,7 @@ import type {
   ChangeRequestAction,
   ChecksOptions,
   ModelProfile,
+  PiprConfigOptions,
   PublicationOptions,
 } from "./types/config.js";
 import type { RuntimeLimits } from "./types/manifest.js";
@@ -148,9 +149,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       registerReviewRecipe(api, options);
     },
     config(options) {
-      if (!options || typeof options !== "object") {
-        throw new Error("pipr.config requires an options object");
-      }
+      assertKnownPiprConfigOptions(options);
       mergePublicationConfig(publication, options.publication);
       checks = mergeConfigField("checks", checks, options.checks);
       limits = mergeLimits(limits, options.limits);
@@ -287,6 +286,30 @@ const reviewRecipeOptionKeys = new Set([
 ]);
 
 const reviewRecipeEntrypointKeys = new Set(["changeRequest", "command"]);
+const piprConfigOptionKeys = new Set(["publication", "checks", "limits"]);
+const publicationOptionKeys = new Set(["maxInlineComments", "autoResolve"]);
+const autoResolveOptionKeys = new Set([
+  "enabled",
+  "model",
+  "instructions",
+  "synchronize",
+  "userReplies",
+]);
+const autoResolveUserRepliesOptionKeys = new Set([
+  "enabled",
+  "respondWhenStillValid",
+  "allowedActors",
+]);
+const checksOptionKeys = new Set(["aggregate"]);
+const aggregateCheckOptionKeys = new Set(["enabled", "name"]);
+const runtimeLimitOptionKeys = new Set(["timeoutSeconds", "diffManifest"]);
+const diffManifestLimitOptionKeys = new Set([
+  "fullMaxBytes",
+  "fullMaxEstimatedTokens",
+  "condensedMaxBytes",
+  "condensedMaxEstimatedTokens",
+  "toolResponseMaxBytes",
+]);
 
 function assertKnownReviewRecipeOptions(options: ReviewRecipeOptions): void {
   const unknownKeys = Object.keys(options).filter((key) => !reviewRecipeOptionKeys.has(key));
@@ -304,6 +327,86 @@ function assertKnownReviewRecipeOptions(options: ReviewRecipeOptions): void {
         `pipr.review entrypoints received unsupported fields: ${unknownEntrypointKeys.join(", ")}.`,
       );
     }
+  }
+}
+
+function assertKnownPiprConfigOptions(options: unknown): asserts options is PiprConfigOptions {
+  assertOptionsObject("pipr.config", options);
+  assertKnownOptionKeys("pipr.config", options, piprConfigOptionKeys);
+  if (options.publication !== undefined) {
+    assertKnownPublicationOptions(options.publication);
+  }
+  if (options.checks !== undefined) {
+    assertKnownChecksOptions(options.checks);
+  }
+  if (options.limits !== undefined) {
+    assertKnownRuntimeLimits(options.limits);
+  }
+}
+
+function assertKnownPublicationOptions(options: unknown): asserts options is PublicationOptions {
+  assertOptionsObject("pipr.config publication", options);
+  assertKnownOptionKeys("pipr.config publication", options, publicationOptionKeys);
+  const autoResolve = options.autoResolve;
+  if (autoResolve !== undefined && autoResolve !== false) {
+    assertOptionsObject("pipr.config publication.autoResolve", autoResolve);
+    assertKnownOptionKeys(
+      "pipr.config publication.autoResolve",
+      autoResolve,
+      autoResolveOptionKeys,
+    );
+    const userReplies = autoResolve.userReplies;
+    if (userReplies !== undefined && typeof userReplies !== "boolean") {
+      assertOptionsObject("pipr.config publication.autoResolve.userReplies", userReplies);
+      assertKnownOptionKeys(
+        "pipr.config publication.autoResolve.userReplies",
+        userReplies,
+        autoResolveUserRepliesOptionKeys,
+      );
+    }
+  }
+}
+
+function assertKnownChecksOptions(options: unknown): asserts options is ChecksOptions {
+  assertOptionsObject("pipr.config checks", options);
+  assertKnownOptionKeys("pipr.config checks", options, checksOptionKeys);
+  const aggregate = options.aggregate;
+  if (aggregate !== undefined && aggregate !== false) {
+    assertOptionsObject("pipr.config checks.aggregate", aggregate);
+    assertKnownOptionKeys("pipr.config checks.aggregate", aggregate, aggregateCheckOptionKeys);
+  }
+}
+
+function assertKnownRuntimeLimits(options: unknown): asserts options is RuntimeLimits {
+  assertOptionsObject("pipr.config limits", options);
+  assertKnownOptionKeys("pipr.config limits", options, runtimeLimitOptionKeys);
+  if (options.diffManifest !== undefined) {
+    assertOptionsObject("pipr.config limits.diffManifest", options.diffManifest);
+    assertKnownOptionKeys(
+      "pipr.config limits.diffManifest",
+      options.diffManifest,
+      diffManifestLimitOptionKeys,
+    );
+  }
+}
+
+function assertOptionsObject(
+  label: string,
+  value: unknown,
+): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} requires an options object`);
+  }
+}
+
+function assertKnownOptionKeys(
+  label: string,
+  value: Record<string, unknown>,
+  knownKeys: Set<string>,
+): void {
+  const unknownKeys = Object.keys(value).filter((key) => !knownKeys.has(key));
+  if (unknownKeys.length > 0) {
+    throw new Error(`${label} received unsupported option fields: ${unknownKeys.join(", ")}.`);
   }
 }
 

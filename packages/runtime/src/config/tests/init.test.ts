@@ -17,6 +17,8 @@ const typeSupportKeyFiles = [
   path.join(".pipr", "types", "pipr-sdk.d.ts"),
 ];
 
+const repositoryRoot = path.resolve(import.meta.dirname, "../../../../..");
+
 describe("initOfficialMinimalProject", () => {
   it("creates the official minimal .pipr tree and validates it", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
@@ -133,6 +135,18 @@ describe("initOfficialMinimalProject", () => {
     expect(forced.created).toEqual([]);
     expect(forced.overwritten).toEqual(expect.arrayContaining(typeSupportKeyFiles));
     expect(await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text()).toBe("custom: true\n");
+  });
+
+  it("keeps committed SDK type support in sync with generated declarations", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+
+    const generated = await Bun.file(path.join(rootDir, ".pipr", "types", "pipr-sdk.d.ts")).text();
+    const committed = await Bun.file(
+      path.join(repositoryRoot, ".pipr", "types", "pipr-sdk.d.ts"),
+    ).text();
+    expect(generated).toBe(committed);
   });
 
   it("initializes every official recipe and validates the generated config", async () => {

@@ -101,6 +101,8 @@ export default definePipr((pipr) => {
     `,
   });
 
+  pipr.config({ publication: { maxInlineComments: 5 } });
+
   pipr.review({
     id: "review",
     reviewer,
@@ -108,7 +110,6 @@ export default definePipr((pipr) => {
       changeRequest: ["opened", "updated", "reopened", "ready"],
       command: { pattern: "@pipr review", permission: "write" },
     },
-    inlineComments: { max: 5 },
     timeout: "5m",
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { assertSupportedCommandRestCapture } from "@usepipr/sdk";
+import { assertSupportedCommandRestCapture } from "@usepipr/sdk/internal";
 import {
   commandPatternPrefixMatches,
   firstNonEmptyLine,

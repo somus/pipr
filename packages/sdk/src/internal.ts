@@ -10,6 +10,15 @@ export type { RuntimePlan } from "./runtime-contract.js";
 
 import type { RuntimePlan } from "./runtime-contract.js";
 
+export {
+  assertSupportedCommandRestCapture,
+  commandPatternParts,
+  isCommandCaptureToken,
+  isCommandRestCaptureToken,
+  isOptionalCommandPatternPart,
+  tokenizeCommandPattern,
+  unsupportedCommandRestCaptureError,
+} from "./command-grammar.js";
 export { renderPromptValue } from "./prompt-render.js";
 export type { SdkDeclarationModule } from "./standalone-declaration.js";
 export {
