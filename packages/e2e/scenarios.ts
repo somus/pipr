@@ -11,6 +11,10 @@ export type Scenario = {
   publicationFixture?: string;
   assertion?: ScenarioAssertion;
   config?: string;
+  configPackage?: {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
   baseSample?: string;
   headPath: string;
   headContent: string;
@@ -205,12 +209,40 @@ export default definePipr((pipr) => {
 });
 `;
 
+const dryRunConfig = `import { definePipr } from "@usepipr/sdk";
+import { chunk } from "lodash-es";
+
+export default definePipr((pipr) => {
+  void chunk;
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+  pipr.review({
+    id: "review",
+    model,
+    instructions: "Review the act fixture change.",
+  });
+});
+`;
+
 export const scenarios: Record<ScenarioName, Scenario> = {
   "dry-run": {
     name: "dry-run",
     title: "pipr local fixture",
     workflowFile: "pipr-local.yml",
     eventFile: `${fixtureRootPath}/pull_request.json`,
+    config: dryRunConfig,
+    configPackage: {
+      dependencies: {
+        "@usepipr/sdk": "0.1.3",
+        "lodash-es": "4.17.23",
+      },
+      devDependencies: {
+        "@types/bun": "1.3.14",
+      },
+    },
     baseSample: "dry-run base fixture\n",
     headPath: `${fixtureRootPath}/dry-run-head.txt`,
     headContent: "dry-run head fixture\n",
@@ -336,7 +368,38 @@ async function writeScenarioConfig(worktree: string, scenario: Scenario): Promis
   if (scenario.config) {
     await writeWorktreeFile(worktree, ".pipr/config.ts", scenario.config);
   }
+  if (scenario.configPackage) {
+    await writeWorktreeFile(
+      worktree,
+      ".pipr/package.json",
+      `${JSON.stringify({ private: true, ...scenario.configPackage }, null, 2)}\n`,
+    );
+    await writeWorktreeFile(worktree, ".pipr/tsconfig.json", `${starterTsconfig}\n`);
+    const install = Bun.spawn(["bun", "install", "--ignore-scripts"], {
+      cwd: join(worktree, ".pipr"),
+      env: Bun.env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const exitCode = await install.exited;
+    if (exitCode !== 0) {
+      throw new Error(
+        `failed to install .pipr dependencies for ${scenario.name}: ${await new Response(install.stderr).text()}`,
+      );
+    }
+  }
 }
+
+const starterTsconfig = `{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["./**/*.ts"]
+}`;
 
 async function writeScenarioBaseSample(worktree: string, scenario: Scenario): Promise<void> {
   if (scenario.baseSample) {

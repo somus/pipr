@@ -18,11 +18,11 @@ Use `pipr init` without `--recipe` for the default review setup.
 
 Every recipe follows the same setup path.
 
-`pipr init` also writes `.pipr/tsconfig.json` and `.pipr/types/**` with generated Pipr SDK declarations for editor IntelliSense. These files are optional for CI and the GitHub Action; `pipr check` can synthesize the same SDK type support when they are missing.
+`pipr init` writes `.pipr/package.json`, `.pipr/bun.lock`, and `.pipr/tsconfig.json` with pinned `@usepipr/sdk` and `@types/bun` for editor IntelliSense. Use `pipr init --minimal` for a single `.pipr/config.ts` without install.
 
 ```bash
-pipr init --recipe security-sast --no-types
-pipr init --types-only
+pipr init --recipe security-sast --minimal
+npm install -D @usepipr/sdk
 ```
 
 Pipr config and plugin files execute in Bun, so `.pipr/*.ts` files can use the Bun API directly, including imports such as `import { S3Client } from "bun"`.

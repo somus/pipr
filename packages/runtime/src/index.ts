@@ -19,7 +19,7 @@ export {
   runLocalReviewCommand,
   runValidateCommand,
 } from "./action/commands.js";
-export type { InitTypeSupportMode, OfficialInitAdapter } from "./config/init.js";
+export type { OfficialInitAdapter } from "./config/init.js";
 export { supportedOfficialInitAdapters } from "./config/init.js";
 export type {
   OfficialInitRecipe,

@@ -38,8 +38,10 @@ pipr check
 `pipr init` creates:
 
 - `.pipr/config.ts`
+- `.pipr/package.json` with `@usepipr/sdk` and `@types/bun` for editor type support
+- `.pipr/bun.lock` from the initial `bun install` (commit this file)
 - `.pipr/tsconfig.json` for local editor type support
-- `.pipr/types/**` with generated Pipr SDK declarations
+- `.pipr/.gitignore` so `.pipr/node_modules` stays out of git
 - `.github/workflows/pipr.yml`
 
 Existing Pipr files are not overwritten unless `pipr init --force` is used.
@@ -49,13 +51,15 @@ The resulting project layout is:
 ```text
 repo/
 ├── .pipr/
+│   ├── .gitignore
+│   ├── bun.lock
 │   ├── config.ts
-│   ├── tsconfig.json
-│   └── types/
+│   ├── package.json
+│   └── tsconfig.json
 └── .github/workflows/pipr.yml
 ```
 
-Use `pipr init --help` for alternate config directories, adapter generation, recipes, and local type support options.
+Use `pipr init --help` for alternate config directories, adapter generation, recipes, and the single-file `--minimal` layout.
 
 ## 3. Add the provider secret
 
@@ -162,10 +166,8 @@ pipr review --base origin/main
 Use these options after the default review works:
 
 - Run `pipr init --adapters none` to create only the `.pipr` config files.
-- Run `pipr init --no-types` when you do not want to commit local type support.
-- Run `pipr init --types-only` to add local type support back.
+- Run `pipr init --minimal` for a single `.pipr/config.ts` without `package.json`; install `@usepipr/sdk` at the repo root for editor types.
 - Run `pipr init --recipe <id>` to start from a focused config such as `security-sast`, `multi-agent-review`, or `plugin-tool-review`.
-- Install `@usepipr/sdk` with your package manager if you prefer package-managed SDK types in addition to generated local type support.
 
 ## Next steps
 

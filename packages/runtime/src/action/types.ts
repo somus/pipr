@@ -1,4 +1,3 @@
-import type { InitTypeSupportMode } from "../config/init.js";
 import type { LoadedRuntimeProject } from "../config/project.js";
 import type { GitHubCommandClient } from "../hosts/github/command.js";
 import type { GitHubPublicationClient } from "../hosts/github/publication.js";
@@ -19,7 +18,7 @@ export type InitCommandOptions = RuntimeCommandOptions & {
   force: boolean;
   adapters?: readonly string[];
   recipe?: string;
-  typeSupport?: InitTypeSupportMode;
+  minimal?: boolean;
 };
 
 export type DryRunCommandOptions = RuntimeCommandOptions & {

@@ -1,5 +1,6 @@
 import { lstat, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { assertBunAvailable } from "./config-deps.js";
 import { isPathContained, resolveContainedConfigDir } from "./paths.js";
 import { loadRuntimeProject } from "./project.js";
 import {
@@ -7,9 +8,7 @@ import {
   officialInitRecipeFiles,
   officialInitRecipeWorkflowEnvSecrets,
 } from "./recipes.js";
-import { generatedTypeSupportFiles } from "./type-support.js";
-
-export type InitTypeSupportMode = "include" | "skip" | "only";
+import { starterTsconfig } from "./starter-tsconfig.js";
 
 export type InitOfficialMinimalProjectOptions = {
   rootDir: string;
@@ -17,7 +16,7 @@ export type InitOfficialMinimalProjectOptions = {
   force?: boolean;
   adapters?: readonly string[];
   recipe?: string;
-  typeSupport?: InitTypeSupportMode;
+  minimal?: boolean;
 };
 
 export type InitOfficialMinimalProjectResult = {
@@ -36,9 +35,14 @@ type StarterFile = {
 };
 
 const defaultWorkflowActionRef = "somus/pipr@v0.1.3"; // x-release-please-version
+const defaultSdkVersion = "0.1.3"; // x-release-please-version
+const defaultTypesBunVersion = "1.3.14";
 
-export function listOfficialMinimalFiles(adapters?: readonly string[]): string[] {
-  return officialMinimalFilePaths(resolveOfficialInitAdapters(adapters));
+export function listOfficialMinimalFiles(
+  adapters?: readonly string[],
+  options: { minimal?: boolean } = {},
+): string[] {
+  return officialMinimalFilePaths(resolveOfficialInitAdapters(adapters), options);
 }
 
 function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInitAdapter[] {
@@ -67,12 +71,18 @@ function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInit
   return [...selected];
 }
 
-function officialMinimalFilePaths(adapters: readonly OfficialInitAdapter[]): string[] {
-  const files = [
-    path.join(".pipr", "config.ts"),
-    path.join(".pipr", "tsconfig.json"),
-    path.join(".pipr", "types", "pipr-sdk.d.ts"),
-  ];
+function officialMinimalFilePaths(
+  adapters: readonly OfficialInitAdapter[],
+  options: { minimal?: boolean } = {},
+): string[] {
+  const files = [path.join(".pipr", "config.ts")];
+  if (!options.minimal) {
+    files.push(
+      path.join(".pipr", "package.json"),
+      path.join(".pipr", "tsconfig.json"),
+      path.join(".pipr", ".gitignore"),
+    );
+  }
   if (adapters.includes("github")) {
     files.push(path.join(".github", "workflows", "pipr.yml"));
   }
@@ -89,14 +99,11 @@ function unsupportedAdapterError(adapter: string): Error {
 export async function initOfficialMinimalProject(
   options: InitOfficialMinimalProjectOptions,
 ): Promise<InitOfficialMinimalProjectResult> {
-  const { configDir, relativeConfigDir } = resolveContainedConfigDir(options);
+  const { configDir, relativeConfigDir, projectDir } = resolveContainedConfigDir(options);
   const adapters = resolveOfficialInitAdapters(options.adapters);
   const rootDir = path.resolve(options.rootDir);
-  const typeSupport = options.typeSupport ?? "include";
-  const files =
-    typeSupport === "only"
-      ? await generatedTypeSupportFiles(relativeConfigDir)
-      : await starterFiles(relativeConfigDir, adapters, options.recipe, typeSupport !== "skip");
+  const minimal = options.minimal === true;
+  const files = await starterFiles(relativeConfigDir, adapters, options.recipe, minimal);
   const targets = files.map((file) => ({
     ...file,
     absolutePath: path.join(rootDir, file.relativePath),
@@ -104,10 +111,6 @@ export async function initOfficialMinimalProject(
   await assertSafeTargetAncestors(targets, rootDir);
   const existing = await findExistingTargets(targets);
   if (existing.length > 0 && !options.force) {
-    if (typeSupport === "only") {
-      const result = await writeTargets(targets, existing, { skipExisting: true });
-      return { configDir, ...result };
-    }
     throw new Error(
       `Project already contains pipr files: ${existing.join(", ")}. ` +
         "Use --force to replace existing .pipr files.",
@@ -116,9 +119,33 @@ export async function initOfficialMinimalProject(
 
   const result = await writeTargets(targets, existing, { skipExisting: false });
 
-  if (typeSupport !== "only") {
-    await loadRuntimeProject({ rootDir: options.rootDir, configDir });
+  if (!minimal) {
+    await assertBunAvailable();
+    const install = Bun.spawn(["bun", "install", "--ignore-scripts"], {
+      cwd: projectDir,
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exitCode, stderr] = await Promise.all([
+      install.exited,
+      new Response(install.stderr).text(),
+    ]);
+    if (exitCode !== 0) {
+      throw new Error(
+        `${configDir}: bun install failed (exit ${exitCode}).` +
+          (stderr.trim().length > 0 ? `\n${stderr.trim()}` : ""),
+      );
+    }
+    if (await Bun.file(path.join(projectDir, "bun.lock")).exists()) {
+      const lockRelative = path.join(relativeConfigDir, "bun.lock");
+      if (!existing.includes(lockRelative) && !result.created.includes(lockRelative)) {
+        result.created.push(lockRelative);
+      }
+    }
   }
+
+  await loadRuntimeProject({ rootDir: options.rootDir, configDir });
   return { configDir, ...result };
 }
 
@@ -126,7 +153,7 @@ async function starterFiles(
   relativeConfigDir: string,
   adapters: readonly OfficialInitAdapter[],
   recipe?: string,
-  includeTypeSupport = true,
+  minimal = false,
 ): Promise<StarterFile[]> {
   const files: StarterFile[] = [
     {
@@ -138,16 +165,45 @@ async function starterFiles(
       contents: file.contents,
     })),
   ];
-  if (includeTypeSupport) {
-    files.push(...(await generatedTypeSupportFiles(relativeConfigDir)));
+  if (!minimal) {
+    files.push(
+      {
+        relativePath: path.join(relativeConfigDir, "package.json"),
+        contents: starterPackageJson(),
+      },
+      {
+        relativePath: path.join(relativeConfigDir, "tsconfig.json"),
+        contents: starterTsconfig,
+      },
+      {
+        relativePath: path.join(relativeConfigDir, ".gitignore"),
+        contents: "node_modules\n",
+      },
+    );
   }
   if (adapters.includes("github")) {
     files.push({
       relativePath: path.join(".github", "workflows", "pipr.yml"),
-      contents: starterWorkflow(relativeConfigDir.split(path.sep).join("/"), recipe),
+      contents: starterWorkflow(relativeConfigDir.split(path.sep).join("/"), recipe, minimal),
     });
   }
   return files;
+}
+
+function starterPackageJson(): string {
+  return `${JSON.stringify(
+    {
+      private: true,
+      dependencies: {
+        "@usepipr/sdk": defaultSdkVersion,
+      },
+      devDependencies: {
+        "@types/bun": defaultTypesBunVersion,
+      },
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 async function writeTargets(
@@ -239,7 +295,7 @@ async function maybeLstat(
   }
 }
 
-function starterWorkflow(relativeConfigDir: string, recipe?: string): string {
+function starterWorkflow(relativeConfigDir: string, recipe?: string, minimal = false): string {
   const lines = [
     "name: pipr",
     "",
@@ -263,11 +319,19 @@ function starterWorkflow(relativeConfigDir: string, recipe?: string): string {
     "      - uses: actions/checkout@v6",
     "        with:",
     "          fetch-depth: 0",
-    `      - uses: ${defaultWorkflowActionRef}`,
-    "        env:",
-    `          DEEPSEEK_API_KEY: $${["{{ ", "secrets.DEEPSEEK_API_KEY", " }}"].join("")}`,
-    `          GITHUB_TOKEN: $${["{{ ", "github.token", " }}"].join("")}`,
   ];
+  if (!minimal) {
+    lines.push(
+      "      - uses: actions/cache@v4",
+      "        with:",
+      "          path: /home/runner/work/_temp/_github_home/.bun/install/cache",
+      `          key: pipr-bun-${["{{ ", `hashFiles('${relativeConfigDir}/bun.lock')`, " }}"].join("")}`,
+    );
+  }
+  lines.push(`      - uses: ${defaultWorkflowActionRef}`);
+  lines.push("        env:");
+  lines.push(`          DEEPSEEK_API_KEY: $${["{{ ", "secrets.DEEPSEEK_API_KEY", " }}"].join("")}`);
+  lines.push(`          GITHUB_TOKEN: $${["{{ ", "github.token", " }}"].join("")}`);
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
     lines.push(`          ${secret.env}: $${["{{ ", `secrets.${secret.secret}`, " }}"].join("")}`);
   }

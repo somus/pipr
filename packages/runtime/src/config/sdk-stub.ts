@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   embeddedSdkDeclaration,
@@ -6,63 +6,47 @@ import {
   type SdkDeclarationModule,
 } from "@usepipr/sdk/internal";
 import { embeddedSdkAssets } from "./sdk-assets.js";
-import { resolvedSdkPackageRoot } from "./sdk-module.js";
+import {
+  resolvedSdkModulePath,
+  resolvedSdkPackageRoot,
+  sdkModuleStubSource,
+} from "./sdk-module.js";
 
-export type ConfigTypeSupportFile = {
-  relativePath: string;
-  contents: string;
-};
+const sdkDeclarationModules = [{ moduleName: "@usepipr/sdk", fileName: "index.d.mts" }] as const;
 
-const starterTsconfig = `{
-  "compilerOptions": {
-    "strict": true,
-    "noEmit": true,
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler"
-  },
-  "include": ["./**/*.ts"]
-}
-`;
-
-export async function generatedTypeSupportFiles(
-  relativeConfigDir: string,
-  options: { tsconfig?: boolean } = {},
-): Promise<ConfigTypeSupportFile[]> {
-  const files: ConfigTypeSupportFile[] = [];
-  if (options.tsconfig !== false) {
-    files.push({
-      relativePath: path.join(relativeConfigDir, "tsconfig.json"),
-      contents: starterTsconfig,
-    });
-  }
-  files.push({
-    relativePath: path.join(relativeConfigDir, "types", "pipr-sdk.d.ts"),
-    contents: await sdkDeclaration(),
-  });
-  return files;
+export async function installTypedSdkStub(configDir: string): Promise<void> {
+  const sdkRoot = path.join(configDir, "node_modules", "@usepipr", "sdk");
+  await rm(sdkRoot, { recursive: true, force: true });
+  await mkdir(sdkRoot, { recursive: true });
+  await Bun.write(
+    path.join(sdkRoot, "package.json"),
+    JSON.stringify({
+      type: "module",
+      types: "./index.d.ts",
+      exports: {
+        ".": {
+          types: "./index.d.ts",
+          default: "./index.mjs",
+        },
+      },
+    }),
+  );
+  await Bun.write(
+    path.join(sdkRoot, "index.mjs"),
+    sdkModuleStubSource(resolvedSdkModulePath(), embeddedSdkAssets().module),
+  );
+  await Bun.write(path.join(sdkRoot, "index.d.ts"), await sdkStubDeclaration());
 }
 
-export async function writeGeneratedTypeSupport(
-  configDir: string,
-  options: { tsconfig?: boolean } = {},
-): Promise<void> {
-  for (const file of await generatedTypeSupportFiles("", options)) {
-    const target = path.join(configDir, file.relativePath);
-    await mkdir(path.dirname(target), { recursive: true });
-    await Bun.write(target, file.contents);
-  }
-}
-
-async function sdkDeclaration(): Promise<string> {
+async function sdkStubDeclaration(): Promise<string> {
   const embedded = embeddedSdkAssets().declaration;
   if (embedded?.includes('declare module "@usepipr/sdk"')) {
     assertStandaloneSdkDeclaration(embedded);
-    return embedded;
+    return embedded.endsWith("\n") ? embedded : `${embedded}\n`;
   }
   const declaration = embeddedSdkDeclaration(await rawSdkDeclarations());
   assertStandaloneSdkDeclaration(declaration);
-  return declaration;
+  return declaration.endsWith("\n") ? declaration : `${declaration}\n`;
 }
 
 function assertStandaloneSdkDeclaration(declaration: string): void {
@@ -70,15 +54,6 @@ function assertStandaloneSdkDeclaration(declaration: string): void {
     throw new Error("generated SDK declaration must be standalone and must not import zod");
   }
 }
-
-type SdkDeclarationAsset = {
-  moduleName: string;
-  fileName: string;
-};
-
-const sdkDeclarationModules: SdkDeclarationAsset[] = [
-  { moduleName: "@usepipr/sdk", fileName: "index.d.mts" },
-];
 
 async function rawSdkDeclarations(): Promise<SdkDeclarationModule[]> {
   const declarations = await Promise.all(
@@ -97,7 +72,7 @@ async function rawSdkDeclarations(): Promise<SdkDeclarationModule[]> {
     return [{ moduleName: sdkDeclarationModules[0].moduleName, source: embedded }];
   }
   throw new Error(
-    "Unable to locate @usepipr/sdk declaration file. Build @usepipr/sdk before pipr init.",
+    "Unable to locate @usepipr/sdk declaration file. Build @usepipr/sdk before loading config.",
   );
 }
 
