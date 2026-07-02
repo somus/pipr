@@ -1,0 +1,30 @@
+packages/runtime/src/config/tests/init.test.ts
+  s_f47e65199d635e::t_78c294505c7f99 44
+  s_f47e65199d635e::t_3512a2de48fcdd 118
+  s_f47e65199d635e::t_802423271ca2d2 63
+  s_f47e65199d635e::t_3c2970afeef84a 18
+  s_f47e65199d635e::t_cd73949d06f642 71-77
+packages/runtime/src/config/init.ts
+  s_f47e65199d635e::t_3f57ffd135eb7a 178-181
+  s_f47e65199d635e::t_8a2e863b47807a 80-84
+apps/docs/content/docs/guide/quickstart.mdx
+  s_f47e65199d635e::t_3c088f8595d6d0 41-42,44,54-55,57-58,62
+.pipr/.gitignore
+  s_f47e65199d635e::t_717669799941d3 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "ed62dc8c1b9dc0c3568610f6e73783e78d6ac185",
+  "prompts": {},
+  "sessions": {
+    "s_f47e65199d635e": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "948656c1-c77b-4e9f-9795-07588b7b347b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
