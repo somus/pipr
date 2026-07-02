@@ -25,11 +25,11 @@ import type {
   DefaultReviewInput,
   PiprBuilder,
   PiprPlugin,
-  ReviewEntrypoints,
   Reviewer,
   ReviewerOptions,
   ReviewRecipeOptions,
   Task,
+  TaskContext,
   ToolRunOptions,
 } from "./types/task.js";
 
@@ -193,7 +193,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
           throw new Error(`Tool '${definition.name}' must define run`);
         }
         run = (options: ToolRunOptions<unknown>) =>
-          executeTool(options.ctx, options.input as never);
+          executeToolWithRuntimeInput(executeTool, options);
       }
       const tool = {
         kind: "pipr.tool" as const,
@@ -534,24 +534,14 @@ function reviewCommandEntrypoint(options: ReviewRecipeOptions):
     return undefined;
   }
   if (typeof entrypoint === "object") {
-    return reviewObjectCommandEntrypoint(entrypoint);
+    return {
+      pattern: entrypoint.pattern ?? "@pipr review",
+      options: {
+        permission: entrypoint.permission ?? "write",
+        description: entrypoint.description,
+      },
+    };
   }
-  return reviewStringCommandEntrypoint(entrypoint);
-}
-
-function reviewObjectCommandEntrypoint(
-  entrypoint: Exclude<ReviewEntrypoints["command"], string | false | undefined>,
-) {
-  return {
-    pattern: entrypoint.pattern ?? "@pipr review",
-    options: {
-      permission: entrypoint.permission ?? "write",
-      description: entrypoint.description,
-    },
-  };
-}
-
-function reviewStringCommandEntrypoint(entrypoint: string | undefined) {
   return {
     pattern: entrypoint ?? "@pipr review",
     options: { permission: "write" as const },
@@ -686,10 +676,13 @@ function assertUnique(values: string[], label: string): void {
 }
 
 function assertModelIdentity(models: ModelProfile[]): void {
-  const ids = new Set<string>();
-  const effectiveConfigs = new Map<string, string>();
-  const providerModels = new Map<string, string>();
+  assertNoDuplicateModelConfigs(models);
+  assertUniqueModelIds(models);
+  assertProviderModelAliasesDisambiguated(models);
+}
 
+function assertNoDuplicateModelConfigs(models: ModelProfile[]): void {
+  const effectiveConfigs = new Map<string, string>();
   for (const model of models) {
     const effectiveConfig = stableJson({
       provider: model.provider,
@@ -697,11 +690,6 @@ function assertModelIdentity(models: ModelProfile[]): void {
       apiKeyEnv: model.apiKey?.name,
       options: model.options,
     });
-    const providerModel = `${model.provider}/${model.model}`;
-
-    assertUniqueModelId({ model, providerModel, effectiveConfig, ids, effectiveConfigs });
-    ids.add(model.id);
-
     const existingConfigId = effectiveConfigs.get(effectiveConfig);
     if (existingConfigId) {
       throw new Error(
@@ -709,56 +697,51 @@ function assertModelIdentity(models: ModelProfile[]): void {
       );
     }
     effectiveConfigs.set(effectiveConfig, model.id);
+  }
+}
 
-    assertExplicitIdForRepeatedProviderModel(model, providerModel, providerModels);
+function assertUniqueModelIds(models: ModelProfile[]): void {
+  const ids = new Set<string>();
+  for (const model of models) {
+    if (ids.has(model.id)) {
+      const providerModel = `${model.provider}/${model.model}`;
+      throw new Error(
+        model.id === providerModel
+          ? `Model '${providerModel}' is configured more than once with different options. Add an explicit id.`
+          : `Duplicate model id '${model.id}'`,
+      );
+    }
+    ids.add(model.id);
+  }
+}
+
+function assertProviderModelAliasesDisambiguated(models: ModelProfile[]): void {
+  const providerModels = new Map<string, string>();
+  for (const model of models) {
+    const providerModel = `${model.provider}/${model.model}`;
+    const existingProviderModelId = providerModels.get(providerModel);
+    if (
+      existingProviderModelId &&
+      (model.id === providerModel || existingProviderModelId === providerModel)
+    ) {
+      throw new Error(
+        `Model '${providerModel}' is configured more than once with different options. Add an explicit id.`,
+      );
+    }
     providerModels.set(providerModel, model.id);
   }
 }
 
-function assertUniqueModelId(options: {
-  model: ModelProfile;
-  providerModel: string;
-  effectiveConfig: string;
-  ids: Set<string>;
-  effectiveConfigs: Map<string, string>;
-}): void {
-  if (!options.ids.has(options.model.id)) {
-    return;
-  }
-  if (options.model.id !== options.providerModel) {
-    throw new Error(`Duplicate model id '${options.model.id}'`);
-  }
-  const existingConfigId = options.effectiveConfigs.get(options.effectiveConfig);
-  if (existingConfigId) {
-    throw new Error(
-      `Duplicate model config for '${options.model.id}'. Reuse model '${existingConfigId}' instead.`,
-    );
-  }
-  throw explicitModelIdError(options.providerModel);
-}
-
-function assertExplicitIdForRepeatedProviderModel(
-  model: ModelProfile,
-  providerModel: string,
-  providerModels: Map<string, string>,
-): void {
-  const existingProviderModelId = providerModels.get(providerModel);
-  if (
-    existingProviderModelId &&
-    (model.id === providerModel || existingProviderModelId === providerModel)
-  ) {
-    throw explicitModelIdError(providerModel);
-  }
-}
-
-function explicitModelIdError(providerModel: string): Error {
-  return new Error(
-    `Model '${providerModel}' is configured more than once with different options. Add an explicit id.`,
-  );
-}
-
 function stableJson(value: unknown): string {
   return JSON.stringify(stableJsonValue(value));
+}
+
+function executeToolWithRuntimeInput<Input, Output>(
+  execute: (context: TaskContext, input: Input) => Promise<Output>,
+  options: ToolRunOptions<unknown>,
+): Promise<Output> {
+  // Runtime tool inputs are parsed by the tool input schema before this bridge.
+  return execute(options.ctx, options.input as Input);
 }
 
 function stableJsonValue(value: unknown): unknown {

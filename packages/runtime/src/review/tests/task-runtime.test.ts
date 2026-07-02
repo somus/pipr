@@ -588,7 +588,7 @@ describe("runTaskRuntime", () => {
     expect(result.mainComment).toContain("Notes collected.");
   });
 
-  it("keeps scoped Pi result paths when task output maps findings", async () => {
+  it("does not carry scoped Pi result paths through mapped finding arrays", async () => {
     const plan = testPlan((pipr) => {
       const paths = { include: ["src/**"] };
       const agent = defaultReviewAgent(pipr);
@@ -622,16 +622,12 @@ describe("runTaskRuntime", () => {
 
     expect(result.validated.validFindings.map((item) => item.body)).toEqual([
       "mapped: inside body",
+      "mapped: outside body",
     ]);
-    expect(result.validated.droppedFindings).toEqual([
-      {
-        finding: expect.objectContaining({ body: "mapped: outside body" }),
-        reason: "finding path is outside configured paths",
-      },
-    ]);
+    expect(result.validated.droppedFindings).toEqual([]);
   });
 
-  it("keeps scoped Pi result paths when mixed scoped outputs are cloned", async () => {
+  it("does not carry mixed scoped Pi result paths through cloned finding arrays", async () => {
     const plan = testPlan((pipr) => {
       const sourcePaths = { include: ["src/**"] };
       const docsPaths = { include: ["docs/**"] };
@@ -675,14 +671,10 @@ describe("runTaskRuntime", () => {
 
     expect(result.validated.validFindings.map((item) => item.body)).toEqual([
       "mapped: inside body",
+      "mapped: outside body",
       "mapped: docs body",
     ]);
-    expect(result.validated.droppedFindings).toEqual([
-      {
-        finding: expect.objectContaining({ body: "mapped: outside body" }),
-        reason: "finding path is outside configured paths",
-      },
-    ]);
+    expect(result.validated.droppedFindings).toEqual([]);
   });
 
   it("keeps the internal Diff Manifest immutable from task handlers", async () => {

@@ -33,7 +33,7 @@ export function buildCommentPublishingPlan(
     findings: options.validated.validFindings,
     reviewedHeadSha: options.event.change.head.sha,
     selectedTasks: options.metadata.selectedTasks,
-  }).state;
+  });
   const inlineCommentDrafts = prepareInlinePublicationItems({
     validated: options.validated,
     manifest: options.manifest,

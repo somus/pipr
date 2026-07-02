@@ -77,7 +77,7 @@ describe("comments", () => {
         findings: [finding],
         reviewedHeadSha: "head",
         selectedTasks: ["review"],
-      }).state,
+      }),
       metadata: metadata(),
     });
 
