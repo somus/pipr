@@ -18,6 +18,7 @@ const rootDir =
     : path.resolve(import.meta.dirname, "..");
 const lockPath = path.join(rootDir, "bun.lock");
 const actionPath = path.join(rootDir, "action.yml");
+const selfReviewWorkflowPath = path.join(rootDir, ".github/workflows/pipr.yml");
 
 const rootPackage = await readPackageJson("package.json");
 const cliPackage = await readPackageJson("packages/cli/package.json");
@@ -69,6 +70,13 @@ actionMetadata = actionMetadata.replace(
   `docker://ghcr.io/somus/pipr:v${rootPackage.version}`,
 );
 await Bun.write(actionPath, actionMetadata);
+
+let selfReviewWorkflow = await Bun.file(selfReviewWorkflowPath).text();
+selfReviewWorkflow = selfReviewWorkflow.replace(
+  /somus\/pipr@v[0-9]+\.[0-9]+\.[0-9]+/g,
+  `somus/pipr@v${rootPackage.version}`,
+);
+await Bun.write(selfReviewWorkflowPath, selfReviewWorkflow);
 
 async function readPackageJson(relativePath: string): Promise<PackageJson> {
   return (await Bun.file(path.join(rootDir, relativePath)).json()) as PackageJson;

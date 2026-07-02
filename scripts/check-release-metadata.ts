@@ -19,6 +19,7 @@ const rootPackage = await readJson<PackageJson>("package.json");
 const releasePleaseConfig = await readText("release-please-config.json");
 const releaseWorkflow = await readText(".github/workflows/release.yml");
 const releasePleaseWorkflow = await readText(".github/workflows/release-please.yml");
+const selfReviewWorkflow = await readText(".github/workflows/pipr.yml");
 const actionMetadata = await readText("action.yml");
 const bunLock = await readText("bun.lock");
 const releaseVersionExpression = githubExpression("steps.version.outputs.version");
@@ -70,16 +71,59 @@ assert(
   "bun.lock @usepipr/cli sdk dependency must match root",
 );
 
-assert(actionMetadata.startsWith("name: pipr\n"), "action.yml Marketplace name must be pipr");
+assert(
+  actionMetadata.startsWith("name: Pipr Review\n"),
+  "action.yml Marketplace name must be unique for GitHub Marketplace publishing",
+);
 assert(
   actionMetadata.includes(`docker://ghcr.io/somus/pipr:v${rootPackage.version}`),
   "action.yml must pin the release image tag",
+);
+assert(
+  selfReviewWorkflow.includes(`uses: somus/pipr@v${rootPackage.version}`),
+  "Pipr self-review workflow must pin the current release action",
 );
 assert(
   releaseWorkflow.includes("id-token: write"),
   "release workflow must allow npm trusted publishing OIDC",
 );
 assert(!releaseWorkflow.includes("NPM_TOKEN"), "release workflow must not require an npm token");
+assert(
+  !releaseWorkflow.includes("release:\n    types: [published]"),
+  "release workflow must not publish directly from release.published before main CI passes",
+);
+assert(
+  releaseWorkflow.includes("workflow_run:"),
+  "release workflow must wait for the CI workflow before publishing",
+);
+assert(
+  releaseWorkflow.includes("workflows: [CI]"),
+  "release workflow must wait for the CI workflow by name",
+);
+assert(
+  releaseWorkflow.includes("github.event.workflow_run.conclusion == 'success'"),
+  "release workflow must publish only after successful CI",
+);
+assert(
+  releaseWorkflow.includes("github.event.workflow_run.head_branch == 'main'"),
+  "release workflow must publish only for main branch CI",
+);
+assert(
+  releaseWorkflow.includes("gh release list"),
+  "release workflow must resolve the published release tag after CI succeeds",
+);
+assert(
+  releaseWorkflow.includes('"chore: release "*)'),
+  "release workflow must accept Release Please release subjects without a branch scope",
+);
+assert(
+  releaseWorkflow.includes("for attempt in {1..60}"),
+  "release workflow must wait long enough for Release Please to publish the release",
+);
+assert(
+  releaseWorkflow.includes("failing so publish is not silently lost"),
+  "release workflow must fail release commits when no release is found after waiting",
+);
 assert(
   releaseWorkflow.includes(`type=raw,value=v${releaseVersionExpression}`),
   "release workflow must publish v-prefixed image tag",
@@ -141,6 +185,18 @@ assert(
 assert(
   releasePleaseWorkflow.includes('bun run sync:release-lockfile -- --root "$worktree"'),
   "Release Please workflow must run the trusted lockfile sync script against the release worktree",
+);
+assert(
+  releasePleaseWorkflow.includes(
+    'git -C "$worktree" diff --quiet -- bun.lock action.yml .github/workflows/pipr.yml',
+  ),
+  "Release Please workflow must detect release metadata changes",
+);
+assert(
+  releasePleaseWorkflow.includes(
+    'git -C "$worktree" add bun.lock action.yml .github/workflows/pipr.yml',
+  ),
+  "Release Please workflow must commit release metadata changes",
 );
 assert(
   !releasePleaseWorkflow.includes("bun install --frozen-lockfile"),

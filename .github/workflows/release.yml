@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -18,15 +19,94 @@ permissions:
 env:
   PIPR_GHCR_ACTION_IMAGE: ghcr.io/somus/pipr
   PIPR_TEST_ACTION_IMAGE: pipr-action:e2e
-  PIPR_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   TURBO_API: ${{ secrets.TURBO_API }}
   TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM || 'pipr' }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
 
 jobs:
-  publish:
+  resolve:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
     runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+      - name: Resolve release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIPR_INPUT_TAG: ${{ inputs.tag }}
+          PIPR_WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="$PIPR_INPUT_TAG"
+          else
+            subject="$(git log -1 --format=%s "$PIPR_WORKFLOW_RUN_SHA")"
+            case "$subject" in
+              "chore(main): release "*) ;;
+              "chore: release "*) ;;
+              *)
+                echo "Commit is not a Release Please merge commit; skipping publish."
+                echo "publish=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+
+            git fetch --force --tags origin
+            tag=""
+            for attempt in {1..60}; do
+              while IFS= read -r candidate; do
+                if [[ "$(git rev-list -n 1 "$candidate" 2>/dev/null)" == "$PIPR_WORKFLOW_RUN_SHA" ]]; then
+                  tag="$candidate"
+                  break
+                fi
+              done < <(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName,isDraft --jq '.[] | select(.isDraft == false) | .tagName')
+
+              if [[ -n "$tag" ]]; then
+                break
+              fi
+
+              echo "No published release for CI head $PIPR_WORKFLOW_RUN_SHA yet; waiting."
+              sleep 10
+            done
+
+            if [[ -z "$tag" ]]; then
+              echo "No published release for release commit $PIPR_WORKFLOW_RUN_SHA after waiting; failing so publish is not silently lost." >&2
+              exit 1
+            fi
+          fi
+
+          case "$tag" in
+            v*) ;;
+            *)
+              echo "release tag must start with v: $tag" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: resolve
+    if: needs.resolve.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      PIPR_RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
         with:
