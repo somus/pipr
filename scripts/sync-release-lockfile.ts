@@ -17,6 +17,7 @@ const rootDir =
     ? path.resolve(process.argv[rootArgIndex + 1])
     : path.resolve(import.meta.dirname, "..");
 const lockPath = path.join(rootDir, "bun.lock");
+const actionPath = path.join(rootDir, "action.yml");
 
 const rootPackage = await readPackageJson("package.json");
 const cliPackage = await readPackageJson("packages/cli/package.json");
@@ -61,6 +62,13 @@ lockfile = updateWorkspaceBlock(lockfile, "packages/sdk", '  },\n  "catalog": {'
 );
 
 await Bun.write(lockPath, lockfile);
+
+let actionMetadata = await Bun.file(actionPath).text();
+actionMetadata = actionMetadata.replace(
+  /docker:\/\/ghcr\.io\/somus\/pipr:v[0-9]+\.[0-9]+\.[0-9]+/g,
+  `docker://ghcr.io/somus/pipr:v${rootPackage.version}`,
+);
+await Bun.write(actionPath, actionMetadata);
 
 async function readPackageJson(relativePath: string): Promise<PackageJson> {
   return (await Bun.file(path.join(rootDir, relativePath)).json()) as PackageJson;
