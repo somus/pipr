@@ -7,6 +7,12 @@ on:
       - main
       - "release-please--**"
 
+env:
+  TURBO_API: ${{ secrets.TURBO_API }}
+  TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM || 'pipr' }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+
 jobs:
   conventional-commits:
     if: github.event_name == 'pull_request'

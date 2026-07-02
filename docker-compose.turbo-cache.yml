@@ -1,0 +1,17 @@
+services:
+  turbo-cache:
+    image: ducktors/turborepo-remote-cache:2.11.2
+    ports:
+      - "3000:3000"
+    environment:
+      AUTH_MODE: static
+      NODE_ENV: production
+      STORAGE_PROVIDER: local
+      STORAGE_PATH: /data
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${TURBO_REMOTE_CACHE_SIGNATURE_KEY:?set TURBO_REMOTE_CACHE_SIGNATURE_KEY}
+      TURBO_TOKEN: ${TURBO_TOKEN:?set TURBO_TOKEN}
+    volumes:
+      - turbo-cache:/data
+
+volumes:
+  turbo-cache:

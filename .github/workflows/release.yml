@@ -19,6 +19,10 @@ env:
   PIPR_GHCR_ACTION_IMAGE: ghcr.io/somus/pipr
   PIPR_TEST_ACTION_IMAGE: pipr-action:e2e
   PIPR_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  TURBO_API: ${{ secrets.TURBO_API }}
+  TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM || 'pipr' }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
 
 jobs:
   publish:

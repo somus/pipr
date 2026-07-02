@@ -175,7 +175,7 @@ function fullMainCommentBody(): string {
   return [
     mainMarker(),
     "",
-    "# pipr Review",
+    "# Pipr Review",
     "",
     "Full fixture secondary section",
     "",

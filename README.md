@@ -58,6 +58,24 @@ jobs:
 
 See [Docs](apps/docs/content/docs/index.mdx) or [Quickstart](apps/docs/content/docs/guide/quickstart.mdx) for the full first-run path.
 
+## Remote Cache
+
+CI and release workflows read Turborepo remote cache settings from GitHub:
+
+```bash
+gh secret set TURBO_API
+gh secret set TURBO_TOKEN
+gh secret set TURBO_REMOTE_CACHE_SIGNATURE_KEY
+gh variable set TURBO_TEAM --body pipr
+```
+
+`TURBO_API` should point at a deployed `ducktors/turborepo-remote-cache` server. To run that server locally:
+
+```bash
+cp turbo-cache.env.example turbo-cache.env
+docker compose --env-file turbo-cache.env -f docker-compose.turbo-cache.yml up -d
+```
+
 ## Configuration
 
 `pipr init` creates `.pipr/config.ts`:

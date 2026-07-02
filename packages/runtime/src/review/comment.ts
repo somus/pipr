@@ -202,7 +202,7 @@ function renderMainComment(options: {
       reviewState: options.reviewState,
     }),
     "",
-    "# pipr Review",
+    "# Pipr Review",
     "",
     options.main,
     "",

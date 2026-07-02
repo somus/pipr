@@ -16,3 +16,4 @@ apps/docs/src/routeTree.gen.ts
 .env
 .env.*
 !.env.example
+turbo-cache.env

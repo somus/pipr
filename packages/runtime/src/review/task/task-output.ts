@@ -205,7 +205,7 @@ function visibleMainComment(body: string): string {
   while (lines[0] === "") {
     lines.shift();
   }
-  if (lines[0] === "# pipr Review") {
+  if (lines[0] === "# pipr Review" || lines[0] === "# Pipr Review") {
     lines.shift();
   }
   while (lines[0] === "") {
