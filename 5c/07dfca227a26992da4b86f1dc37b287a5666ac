@@ -1,0 +1,25 @@
+apps/docs/package.json
+  s_e86d7229599bc1::t_27efd56c503f39 13
+apps/docs/scripts/tests/source-config.test.ts
+  s_e86d7229599bc1::t_70a487cfb0bcd7 1-12
+apps/docs/source.config.ts
+  s_e86d7229599bc1::t_dc61ad0bec5951 8
+apps/docs/twoslash-config.ts
+  s_e86d7229599bc1::t_73cb70454b048c 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "5c07dfca227a26992da4b86f1dc37b287a5666ac",
+  "prompts": {},
+  "sessions": {
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
