@@ -127,7 +127,7 @@ Diff Manifest prompt injection is reserved opt-in. When `ctx.pi.run(...)` receiv
 
 When the full manifest is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools. The model can ask for more range-scoped context without receiving shell or arbitrary filesystem access. If an agent runs with `toolMode: "none"`, Pipr still injects manifest prompt context when `manifest` is passed, but it does not attach Diff Read Tools.
 
-`paths` filters Diff Manifest files by include and exclude globs. For renamed files, current and previous paths are considered. Path scope also drops publishable findings outside the filter, but it does not restrict Pi read-only access to the rest of the repository.
+`paths` filters Diff Manifest files by include and exclude globs. For renamed files, current and previous paths are considered. When `result.inlineFindings` from a scoped Pi run is passed directly to `ctx.comment(...)`, Pipr drops findings outside the filter. Findings that a task maps, spreads, or clones first are treated as task-authored output and receive normal Diff Manifest range validation. Path scope does not restrict Pi read-only access to the rest of the repository.
 
 ## Pi execution
 

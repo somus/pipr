@@ -2,11 +2,12 @@ import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import { buildPiprPlan, isPiprConfigFactory } from "@usepipr/sdk/internal";
 import { resolveContainedConfigDir } from "./paths.js";
 import { embeddedSdkAssets } from "./sdk-assets.js";
+import { resolvedSdkModulePath, sdkModuleStubSource } from "./sdk-module.js";
 import { writeGeneratedTypeSupport } from "./type-support.js";
 
 export type LoadTypescriptConfigOptions = {
@@ -72,7 +73,10 @@ async function installSdkStub(configDir: string): Promise<void> {
       },
     }),
   );
-  await Bun.write(path.join(sdkRoot, "index.mjs"), await sdkStubSource());
+  await Bun.write(
+    path.join(sdkRoot, "index.mjs"),
+    sdkModuleStubSource(resolvedSdkModulePath(), embeddedSdkAssets().module),
+  );
 }
 
 async function typecheckTypescriptConfig(
@@ -113,6 +117,8 @@ async function typecheckTypescriptConfigWithApi(
   configDir: string,
   tsconfigPath: string,
 ): Promise<void> {
+  // `typescript` and `@types/bun` are runtime dependencies: `pipr check`
+  // typechecks user `.pipr/config.ts` files outside this package's build.
   const ts = await import("typescript");
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (config.error) {
@@ -165,34 +171,6 @@ function formatTypeScriptDiagnostics(
     getCurrentDirectory: () => configDir,
     getNewLine: () => "\n",
   });
-}
-
-async function sdkStubSource(): Promise<string> {
-  const sourcePath = await sdkSourcePath();
-  if (sourcePath) {
-    return `export * from ${JSON.stringify(pathToFileURL(sourcePath).href)};\n`;
-  }
-  const embedded = embeddedSdkAssets().module;
-  if (embedded) {
-    return embedded;
-  }
-  throw new Error("Unable to locate @usepipr/sdk runtime module");
-}
-
-async function sdkSourcePath(): Promise<string | undefined> {
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.resolve(moduleDir, "../../../sdk/src/index.ts"),
-    path.resolve(moduleDir, "../../sdk/src/index.ts"),
-    path.resolve(moduleDir, "../../../sdk/dist/index.mjs"),
-    path.resolve(moduleDir, "../../sdk/dist/index.mjs"),
-  ];
-  for (const candidate of candidates) {
-    if (await fileExists(candidate)) {
-      return candidate;
-    }
-  }
-  return undefined;
 }
 
 function isIgnoredConfigCopyPath(source: string, configDir: string): boolean {

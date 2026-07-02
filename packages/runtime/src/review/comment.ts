@@ -118,7 +118,7 @@ export function buildPublicationPlan(options: BuildPublicationPlanOptions): Publ
       findings: options.inlineItems.map((item) => item.finding),
       reviewedHeadSha: options.metadata.reviewedHeadSha,
       selectedTasks: options.metadata.selectedTasks,
-    }).state;
+    });
   const cappedInlineItems =
     options.maxInlineComments === undefined
       ? options.inlineItems

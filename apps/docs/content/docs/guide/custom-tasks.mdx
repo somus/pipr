@@ -89,7 +89,7 @@ Pass the manifest into Pi with the reserved `manifest` input key. Pipr injects f
 
 Keep stable agent behavior in `instructions`. Put the data and request for one `ctx.pi.run(...)` call in the agent `prompt`.
 
-Path scope filters the manifest and drops publishable findings outside the scope. Pi still has read-only workspace access for broader context.
+Path scope filters the manifest. When a task passes the scoped `result.inlineFindings` array directly to `ctx.comment(...)`, Pipr drops findings outside that scope. If the task maps, spreads, or clones the findings first, Pipr treats them as task-authored output and applies normal Diff Manifest range validation. Pi still has read-only workspace access for broader context.
 
 ## Agent outputs
 

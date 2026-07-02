@@ -1,4 +1,4 @@
-import type { Agent, AgentTool, PathFilter, Schema } from "@usepipr/sdk";
+import type { Agent, AgentPromptContext, AgentTool, PathFilter, Schema } from "@usepipr/sdk";
 import { renderPromptValue } from "@usepipr/sdk/internal";
 import { compact } from "lodash-es";
 import { piReadOnlyToolNames } from "../../pi/contract.js";
@@ -53,9 +53,11 @@ export async function renderAgentPrompt(
     };
   } & PreparedAgentContext,
 ): Promise<string> {
-  const prompt = await options.agent.definition.prompt(options.input as never, {
-    ...options.agentRunContext.prompt,
-  });
+  const prompt = await renderAgentDefinitionPrompt(
+    options.agent,
+    options.input,
+    options.agentRunContext.prompt,
+  );
   const toolMode = options.toolMode ?? "read-only";
   return compact([
     promptSection("Role", "You are pipr's read-only change request agent."),
@@ -71,6 +73,15 @@ export async function renderAgentPrompt(
     priorFindingsPrompt(options.runtime.priorReviewState),
     promptSection("Prompt", renderPromptValue(prompt)),
   ]).join("\n\n");
+}
+
+function renderAgentDefinitionPrompt<Input>(
+  agent: Agent<Input, unknown>,
+  input: unknown,
+  context: AgentPromptContext,
+) {
+  // Runtime input was selected by the user task that called ctx.pi.run for this agent.
+  return agent.definition.prompt(input as Input, { ...context });
 }
 
 function promptSection(title: string, body: string | undefined): string | undefined {

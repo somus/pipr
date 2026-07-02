@@ -97,7 +97,7 @@ Pipr drops invalid findings and continues the review. Dropped findings appear in
 | `path` does not match a changed Diff Manifest file | Pass the manifest to the agent and ask for findings only on changed files. |
 | `rangeId` does not exist for that file | Use the `rangeId` values from the Diff Manifest, not model-invented ids. |
 | `side`, `startLine`, or `endLine` does not match the range | Copy the side and line range from the selected Diff Manifest range. |
-| Finding is outside task path scope | Use the same `paths` in `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. |
+| Finding is outside direct scoped Pi result paths | Use the same `paths` in `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`, and pass `result.inlineFindings` directly when scope enforcement should apply. |
 | Finding duplicates another current finding | Keep one finding per issue and range. |
 | Output has unsupported fields | Use `pipr.schemas.review` or map custom schema output into `ReviewFinding[]`. |
 
