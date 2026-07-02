@@ -1,0 +1,45 @@
+packages/runtime/src/review/tests/comment.test.ts
+  s_067b8d581740e3::t_a2606f6155fae9 85
+.gitignore
+  s_067b8d581740e3::t_bae98a05f37188 19
+packages/cli/src/tests/main.test.ts
+  s_067b8d581740e3::t_a2606f6155fae9 55
+packages/e2e/assertions.test.ts
+  s_067b8d581740e3::t_a2606f6155fae9 178
+.github/workflows/ci.yml
+  s_067b8d581740e3::t_bae98a05f37188 10-15
+packages/runtime/src/review/tests/publish.test.ts
+  s_067b8d581740e3::t_a2606f6155fae9 639
+turbo.json
+  s_067b8d581740e3::t_bae98a05f37188 3-5
+packages/runtime/src/review/comment.ts
+  s_067b8d581740e3::t_bae98a05f37188 205
+packages/runtime/src/review/task/task-output.ts
+  s_067b8d581740e3::t_bae98a05f37188 208
+apps/docs/content/docs/guide/comments.mdx
+  s_067b8d581740e3::t_bae98a05f37188 37
+turbo-cache.env.example
+  s_067b8d581740e3::t_bae98a05f37188 1-2
+docker-compose.turbo-cache.yml
+  s_067b8d581740e3::t_bae98a05f37188 1-17
+README.md
+  s_067b8d581740e3::t_bae98a05f37188 61-78
+.github/workflows/release.yml
+  s_067b8d581740e3::t_bae98a05f37188 22-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "fd6449e201b88b9a00de90fa9baac6b2f215fac6",
+  "prompts": {},
+  "sessions": {
+    "s_067b8d581740e3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1e88-dc2f-79c3-9d37-4134b3e641ba",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
