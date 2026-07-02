@@ -1,18 +1,21 @@
-import pino from "pino";
-
 export type ActionLogSink = {
-  info(message: string): void;
-  notice(message: string): void;
-  warning(message: string): void;
-  error(message: string): void;
-  debug(message: string): void;
+  log(record: ActionLogRecord): void;
   group<T>(name: string, run: () => Promise<T>): Promise<T>;
+};
+
+export type ActionLogRecord = {
+  level: LogLevel;
+  event: string;
+  fields: ActionLogRecordFields;
+  text?: string;
 };
 
 export type ActionLogFields = Record<
   string,
   string | number | boolean | readonly string[] | undefined
 >;
+
+export type ActionLogRecordFields = Record<string, string | number | boolean | readonly string[]>;
 
 export type RuntimeActionLog = {
   info(event: string, fields?: ActionLogFields): void;
@@ -34,7 +37,7 @@ export type RuntimeActionLog = {
   writesToSink: boolean;
 };
 
-type LogLevel = "info" | "notice" | "warning" | "error" | "debug";
+export type LogLevel = "info" | "notice" | "warning" | "error" | "debug";
 
 const sensitiveEnvNamePattern = /(TOKEN|SECRET|PASSWORD|PASS|KEY|AUTH|CREDENTIAL|COOKIE)/i;
 
@@ -52,67 +55,45 @@ export function createRuntimeActionLog(options: {
     (options.env ?? process.env).ACTIONS_STEP_DEBUG === "true" ||
     (options.env ?? process.env).PIPR_LOG_LEVEL === "debug";
   const sink = options.logSink ?? noopActionLogSink;
-  const writer = structuredLogWriter(sink, secrets);
-  const logger = pino<"notice">(
-    {
-      base: undefined,
-      level: debugEnabled ? "debug" : "info",
-      timestamp: false,
-      messageKey: "event",
-      customLevels: {
-        notice: 35,
-      },
-      formatters: {
-        level(label) {
-          return { level: label };
-        },
-      },
-    },
-    writer.stream,
-  );
 
   return {
     debugEnabled,
     writesToSink: options.logSink !== undefined,
     info(event, fields) {
-      writer.level = "info";
-      logger.info(compactFields(fields, secrets), redact(event, secrets));
+      emitRecord(sink, secrets, "info", event, fields);
     },
     notice(event, fields) {
-      writer.level = "notice";
-      logger.notice(compactFields(fields, secrets), redact(event, secrets));
+      emitRecord(sink, secrets, "notice", event, fields);
     },
     warning(event, fields) {
-      writer.level = "warning";
-      logger.warn(compactFields(fields, secrets), redact(event, secrets));
+      emitRecord(sink, secrets, "warning", event, fields);
     },
     error(event, fields) {
-      writer.level = "error";
-      logger.error(compactFields(fields, secrets), redact(event, secrets));
+      emitRecord(sink, secrets, "error", event, fields);
     },
     debug(event, fields) {
       if (debugEnabled) {
-        writer.level = "debug";
-        logger.debug(compactFields(fields, secrets), redact(event, secrets));
+        emitRecord(sink, secrets, "debug", event, fields);
       }
     },
     text(level, event, text) {
       if (level === "debug" && !debugEnabled) {
         return;
       }
-      const message = `${structuredLine(logger, writer, level, redact(event, secrets))}\n${redact(text, secrets)}`;
-      sinkForLevel(sink, level)(message);
+      emitRecord(sink, secrets, level, event, undefined, redact(text, secrets));
     },
     textSnippet(level, event, text, snippetOptions) {
       if (level === "debug" && !debugEnabled) {
         return;
       }
-      const message = `${structuredLine(logger, writer, level, redact(event, secrets))}\n${formatTextSnippet(
-        text,
+      emitRecord(
+        sink,
         secrets,
-        snippetOptions,
-      )}`;
-      sinkForLevel(sink, level)(message);
+        level,
+        event,
+        undefined,
+        formatTextSnippet(text, secrets, snippetOptions),
+      );
     },
     formatTextSnippet(text, snippetOptions) {
       return formatTextSnippet(text, secrets, snippetOptions);
@@ -165,8 +146,8 @@ function redact(message: string, secrets: Set<string>): string {
 function compactFields(
   fields: ActionLogFields | undefined,
   secrets: Set<string>,
-): Record<string, unknown> {
-  const compact: Record<string, unknown> = {};
+): ActionLogRecordFields {
+  const compact: ActionLogRecordFields = {};
   for (const [key, value] of Object.entries(fields ?? {})) {
     if (typeof value === "string") {
       compact[key] = redact(value, secrets);
@@ -187,61 +168,24 @@ function formatTextSnippet(
   return boundedLogSnippet(redact(text, secrets), options);
 }
 
-function structuredLogWriter(
+function emitRecord(
   sink: ActionLogSink,
   secrets: Set<string>,
-): {
-  level: LogLevel;
-  stream: pino.DestinationStream;
-} {
-  const writer = {
-    level: "info" as LogLevel,
-    stream: {
-      write(line: string) {
-        sinkForLevel(sink, writer.level)(redact(line.trimEnd(), secrets));
-      },
-    },
-  };
-  return writer;
-}
-
-function structuredLine(
-  logger: pino.Logger<"notice">,
-  writer: ReturnType<typeof structuredLogWriter>,
   level: LogLevel,
   event: string,
-): string {
-  let line = "";
-  const previousStream = writer.stream.write;
-  writer.stream.write = (value) => {
-    line = value.trimEnd();
-  };
-  writer.level = level;
-  logger[logMethod(level)]({}, event);
-  writer.stream.write = previousStream;
-  return line;
-}
-
-function logMethod(level: LogLevel): "info" | "notice" | "warn" | "error" | "debug" {
-  if (level === "warning") {
-    return "warn";
-  }
-  return level;
-}
-
-function sinkForLevel(sink: ActionLogSink, level: LogLevel): (message: string) => void {
-  if (level === "warning") {
-    return sink.warning.bind(sink);
-  }
-  return sink[level].bind(sink);
+  fields?: ActionLogFields,
+  text?: string,
+): void {
+  sink.log({
+    level,
+    event: redact(event, secrets),
+    fields: compactFields(fields, secrets),
+    text,
+  });
 }
 
 const noopActionLogSink: ActionLogSink = {
-  info() {},
-  notice() {},
-  warning() {},
-  error() {},
-  debug() {},
+  log() {},
   async group(_name, run) {
     return await run();
   },

@@ -10,6 +10,13 @@ describe("createRuntimeActionLog", () => {
 
     log.error("boom", { error: secret, values: [secret] });
 
+    expect(sink.records).toEqual([
+      {
+        level: "error",
+        event: "boom",
+        fields: { error: "***", values: ["***"] },
+      },
+    ]);
     const output = sink.messages.join("\n");
     expect(output).toContain('"error":"***"');
     expect(output).toContain('"values":["***"]');
@@ -27,6 +34,19 @@ describe("createRuntimeActionLog", () => {
     log.debug("debug event", { flag: true });
     log.text("debug", "debug text", "body");
 
+    expect(sink.records).toMatchObject([
+      {
+        level: "debug",
+        event: "debug event",
+        fields: { flag: true },
+      },
+      {
+        level: "debug",
+        event: "debug text",
+        fields: {},
+        text: "body",
+      },
+    ]);
     const output = sink.messages.join("\n");
     expect(output).toContain('"level":"debug"');
     expect(output).toContain('"event":"debug event"');
@@ -44,6 +64,8 @@ describe("createRuntimeActionLog", () => {
 
     log.textSnippet("error", "pi stderr", `${"x".repeat(8180)}${secret}\nafter`);
 
+    expect(sink.records[0]?.text).toContain("***");
+    expect(sink.records[0]?.text).not.toContain(secret);
     const output = sink.messages.join("\n");
     expect(output).toContain("***");
     expect(output).not.toContain(secret);

@@ -3,6 +3,7 @@ import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
   type ActionCommandResult,
+  type ActionLogRecord,
   type ActionLogSink,
   type InitTypeSupportMode,
   PublicationError,
@@ -120,25 +121,30 @@ function actionOptions(options: CliOptions): ActionOptions {
 }
 
 const githubActionsLogSink: ActionLogSink = {
-  info(message) {
-    core.info(message);
-  },
-  notice(message) {
-    core.notice(message);
-  },
-  warning(message) {
-    core.warning(message);
-  },
-  error(message) {
-    core.error(message);
-  },
-  debug(message) {
-    core.debug(message);
+  log(record) {
+    githubActionLogWriters[record.level](formatGitHubActionLogRecord(record));
   },
   async group(name, run) {
     return await core.group(name, run);
   },
 };
+
+const githubActionLogWriters = {
+  info: core.info,
+  notice: core.notice,
+  warning: core.warning,
+  error: core.error,
+  debug: core.debug,
+} satisfies Record<ActionLogRecord["level"], (message: string) => void>;
+
+function formatGitHubActionLogRecord(record: ActionLogRecord): string {
+  const line = JSON.stringify({
+    level: record.level,
+    event: record.event,
+    ...record.fields,
+  });
+  return record.text === undefined ? line : `${line}\n${record.text}`;
+}
 
 function writeActionResult(result: ActionCommandResult): void {
   if (result.kind === "ignored") {
@@ -149,45 +155,56 @@ function writeActionResult(result: ActionCommandResult): void {
 }
 
 type LoadedActionResult = Exclude<ActionCommandResult, { kind: "ignored" }>;
-type LoadedActionResultWriter = (result: LoadedActionResult) => void;
-
-const loadedActionResultWriters = {
-  "command-help": (result) => {
-    assertLoadedActionKind(result, "command-help");
-    writeCommandHelpActionResult(result);
-  },
-  "command-response": (result) => {
-    assertLoadedActionKind(result, "command-response");
-    writeCommandResponseActionResult(result);
-  },
-  "dry-run": (result) => {
-    assertLoadedActionKind(result, "dry-run");
-    writeDryRunActionResult(result);
-  },
-  review: (result) => {
-    assertLoadedActionKind(result, "review");
-    writeReviewActionResult(result);
-  },
-  verifier: (result) => {
-    assertLoadedActionKind(result, "verifier");
-    writeVerifierActionResult(result);
-  },
-} satisfies Record<LoadedActionResult["kind"], LoadedActionResultWriter>;
+type PublishedActionResult = Exclude<LoadedActionResult, { kind: "dry-run" }>;
+type CommandActionResult = Extract<
+  PublishedActionResult,
+  { kind: "command-help" | "command-response" }
+>;
+type ReviewWorkflowActionResult = Exclude<PublishedActionResult, CommandActionResult>;
 
 function writeLoadedActionResult(result: LoadedActionResult): void {
   core.info(
     `pipr loaded change #${result.event.change.number} for ${result.event.repository.slug}`,
   );
   core.info(`pipr config source: ${result.configSource}`);
-  loadedActionResultWriters[result.kind](result);
+  if (result.kind === "dry-run") {
+    writeDryRunActionResult(result);
+    return;
+  }
+  writePublishedActionResult(result);
 }
 
-function assertLoadedActionKind<K extends LoadedActionResult["kind"]>(
-  result: LoadedActionResult,
-  kind: K,
-): asserts result is Extract<LoadedActionResult, { kind: K }> {
-  if (result.kind !== kind) {
-    throw new Error(`Expected '${kind}' action result, got '${result.kind}'`);
+function writePublishedActionResult(result: PublishedActionResult): void {
+  if (result.kind === "command-help" || result.kind === "command-response") {
+    writeCommandActionResult(result);
+    return;
+  }
+  writeReviewWorkflowActionResult(result);
+}
+
+function writeCommandActionResult(result: CommandActionResult): void {
+  switch (result.kind) {
+    case "command-help":
+      writeCommandHelpActionResult(result);
+      break;
+    case "command-response":
+      writeCommandResponseActionResult(result);
+      break;
+    default:
+      result satisfies never;
+  }
+}
+
+function writeReviewWorkflowActionResult(result: ReviewWorkflowActionResult): void {
+  switch (result.kind) {
+    case "review":
+      writeReviewActionResult(result);
+      break;
+    case "verifier":
+      writeVerifierActionResult(result);
+      break;
+    default:
+      result satisfies never;
   }
 }
 
@@ -266,36 +283,23 @@ async function runInit(options: CliOptions): Promise<void> {
 }
 
 function initTypeSupportMode(options: CliOptions): InitTypeSupportMode {
-  const invalidMessage = invalidTypeSupportMessage(options);
-  if (invalidMessage) {
-    throw new Error(invalidMessage);
+  if (options.typesOnly !== true) {
+    return options.types === false ? "skip" : "include";
   }
-  if (options.typesOnly === true) {
-    return "only";
-  }
-  return options.types === false ? "skip" : "include";
+  validateTypesOnlyInitOptions(options);
+  return "only";
 }
 
-const invalidTypeSupportRules: Array<{
-  matches(options: CliOptions): boolean;
-  message: string;
-}> = [
-  {
-    matches: (options) => options.typesOnly === true && options.types === false,
-    message: "--types-only cannot be combined with --no-types",
-  },
-  {
-    matches: (options) => options.typesOnly === true && options.recipe !== undefined,
-    message: "--types-only cannot be combined with --recipe",
-  },
-  {
-    matches: (options) => options.typesOnly === true && options.adapters !== undefined,
-    message: "--types-only cannot be combined with --adapters",
-  },
-];
-
-function invalidTypeSupportMessage(options: CliOptions): string | undefined {
-  return invalidTypeSupportRules.find((rule) => rule.matches(options))?.message;
+function validateTypesOnlyInitOptions(options: CliOptions): void {
+  if (options.types === false) {
+    throw new Error("--types-only cannot be combined with --no-types");
+  }
+  if (options.recipe !== undefined) {
+    throw new Error("--types-only cannot be combined with --recipe");
+  }
+  if (options.adapters !== undefined) {
+    throw new Error("--types-only cannot be combined with --adapters");
+  }
 }
 
 function parseInitAdapters(adapters: string | undefined): string[] | undefined {
@@ -356,56 +360,27 @@ const stderrTaskLog = {
 };
 
 const localConsoleLogSink: ActionLogSink = {
-  info(message) {
-    console.error(formatLocalLogMessage(message));
-  },
-  notice(message) {
-    console.error(formatLocalLogMessage(message));
-  },
-  warning(message) {
-    console.error(formatLocalLogMessage(message));
-  },
-  error(message) {
-    console.error(formatLocalLogMessage(message));
-  },
-  debug(message) {
-    console.error(formatLocalLogMessage(message));
+  log(record) {
+    console.error(formatLocalLogRecord(record));
   },
   async group(_name, run) {
     return await run();
   },
 };
 
-function formatLocalLogMessage(message: string): string {
-  const [firstLine, ...rest] = message.split("\n");
-  const data = parseLocalLogLine(firstLine);
-  if (!data) {
-    return message;
-  }
-
-  const fields = Object.entries(data)
+function formatLocalLogRecord(record: ActionLogRecord): string {
+  const fields = Object.entries(record.fields)
     .map(([key, value]) => formatLocalLogField(key, value))
     .filter((field): field is string => field !== undefined);
-  const prefix = formatLocalLogPrefix(data);
+  const prefix = formatLocalLogPrefix(record);
   const formatted = [...prefix, ...fields].join(" ");
-  return rest.length === 0 ? formatted : [formatted, ...rest].join("\n");
+  return record.text === undefined ? formatted : `${formatted}\n${record.text}`;
 }
 
-function formatLocalLogPrefix(data: Record<string, unknown>): string[] {
-  const level = typeof data.level === "string" ? data.level : "";
-  const event = typeof data.event === "string" ? data.event : "";
-  return ["pipr", localLogPlainLevels.has(level) ? "" : level, event].filter(Boolean);
-}
-
-function parseLocalLogLine(line: string | undefined): Record<string, unknown> | undefined {
-  if (!line?.startsWith("{")) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(line) as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
+function formatLocalLogPrefix(record: ActionLogRecord): string[] {
+  return ["pipr", localLogPlainLevels.has(record.level) ? "" : record.level, record.event].filter(
+    Boolean,
+  );
 }
 
 const localLogNumberFields: Record<string, (value: number) => string> = {
@@ -418,11 +393,10 @@ const localLogNumberFields: Record<string, (value: number) => string> = {
   stdoutBytes: (value) => `stdout=${value}B`,
 };
 
-const localLogHiddenFields = new Set(["level", "event"]);
 const localLogPlainLevels = new Set(["info", "notice"]);
 
 function formatLocalLogField(key: string, value: unknown): string | undefined {
-  if (localLogHiddenFields.has(key) || value == null) {
+  if (value == null) {
     return undefined;
   }
 
@@ -493,21 +467,9 @@ function stripMainCommentMarker(comment: string): string {
 }
 
 function localReviewJson(result: LocalReviewResult) {
-  if (result.kind === "skipped") {
-    return {
-      kind: result.kind,
-      skipReason: result.skipReason,
-      mainComment: result.mainComment,
-      inlineFindings: result.inlineCommentDrafts,
-      droppedFindings: result.validated.droppedFindings,
-      taskChecks: result.taskChecks,
-      provider: result.provider,
-      providerModels: result.publicationPlan.metadata.providerModels ?? [result.provider.model],
-      repairAttempted: result.repairAttempted,
-    };
-  }
   return {
     kind: result.kind,
+    ...(result.kind === "skipped" ? { skipReason: result.skipReason } : {}),
     mainComment: result.mainComment,
     inlineFindings: result.inlineCommentDrafts,
     droppedFindings: result.validated.droppedFindings,
