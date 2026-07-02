@@ -51,7 +51,7 @@ describe("initOfficialMinimalProject", () => {
     expect(sdkTypes).not.toContain('from "zod"');
     expect(sdkTypes).not.toContain("z.ZodType");
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
-    expect(workflow).toContain("uses: somus/pipr@v0.1.0"); // x-release-please-version
+    expect(workflow).toContain("uses: somus/pipr@v0.1.1"); // x-release-please-version
     expect(workflow).toContain("checks: write");
     expect(workflow).toContain("pull_request_review_comment:");
     expect(workflow).toContain("types: [created]");
@@ -317,7 +317,7 @@ export default definePipr((pipr) => {
 
     expect(result.overwritten).toEqual([path.join(".github", "workflows", "pipr.yml")]);
     expect(await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text()).toContain(
-      "uses: somus/pipr@v0.1.0", // x-release-please-version
+      "uses: somus/pipr@v0.1.1", // x-release-please-version
     );
   });
 
