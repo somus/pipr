@@ -3,6 +3,12 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,12 +18,15 @@ permissions:
 env:
   PIPR_GHCR_ACTION_IMAGE: ghcr.io/somus/pipr
   PIPR_TEST_ACTION_IMAGE: pipr-action:e2e
+  PIPR_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.PIPR_RELEASE_TAG }}
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -28,14 +37,14 @@ jobs:
       - run: bun run check
       - id: version
         run: |
-          case "$GITHUB_REF_NAME" in
+          case "$PIPR_RELEASE_TAG" in
             v*) ;;
             *)
-              echo "release tag must start with v: $GITHUB_REF_NAME" >&2
+              echo "release tag must start with v: $PIPR_RELEASE_TAG" >&2
               exit 1
               ;;
           esac
-          version="${GITHUB_REF_NAME#v}"
+          version="${PIPR_RELEASE_TAG#v}"
           root_version="$(bun -e "console.log((await import('./package.json')).default.version)")"
           sdk_version="$(bun -e "console.log((await import('./packages/sdk/package.json')).default.version)")"
           runtime_version="$(bun -e "console.log((await import('./packages/runtime/package.json')).default.version)")"
@@ -62,7 +71,7 @@ jobs:
         working-directory: packages/runtime
       - run: npm publish --access public
         working-directory: packages/cli
-      - run: gh release upload "$GITHUB_REF_NAME" dist/release/pipr-* --clobber
+      - run: gh release upload "$PIPR_RELEASE_TAG" dist/release/pipr-* --clobber
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: docker/metadata-action@v6
