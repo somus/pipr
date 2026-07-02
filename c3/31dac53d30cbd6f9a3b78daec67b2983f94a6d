@@ -1,13 +1,18 @@
 apps/docs/content/docs/guide/comments.mdx
   s_0d6065f763bd53::t_836f1fe7e330b2 100
+  s_e86d7229599bc1::t_5a0e446c6daa97 100
 apps/docs/content/docs/guide/custom-tasks.mdx
   s_0d6065f763bd53::t_839f89d1061f5d 92
+  s_e86d7229599bc1::t_d04ce3f3a4034c 92
 apps/docs/content/docs/guide/runtime.mdx
   s_0d6065f763bd53::t_3aaab549e79106 130
+  s_e86d7229599bc1::t_a07f27b525b80a 130
 apps/docs/content/docs/guide/troubleshooting.mdx
   s_0d6065f763bd53::t_db7020059c7791 118,124
+  s_e86d7229599bc1::t_c2c975be854fd7 118,124
 packages/runtime/src/config/ts-loader.ts
   s_0d6065f763bd53::t_1fdc5cca0864d9 76-79
+  s_e86d7229599bc1::t_c7194eb9b9549a 76-79
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -19,6 +24,14 @@ packages/runtime/src/config/ts-loader.ts
       "agent_id": {
         "tool": "codex",
         "id": "019f229f-601b-7a73-960f-92cd1513f689",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
         "model": "unknown"
       },
       "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
