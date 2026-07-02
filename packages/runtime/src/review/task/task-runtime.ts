@@ -1,4 +1,5 @@
 import type {
+  Agent,
   CommandContext,
   DiffManifestOptions,
   SecretRef,
@@ -190,7 +191,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
             taskName: task.name,
             taskOrder,
           }),
-          task.name === options.taskName ? (options.taskInput as never) : (undefined as never),
+          task.name === options.taskName ? options.taskInput : undefined,
         );
         options.checkSink?.setTaskResult(
           runtimeTaskCheckResult(task.name, output.check ?? { conclusion: "success" }),
@@ -456,7 +457,7 @@ function createTaskContext(
           options.output.repairAttempted = true;
         }
         trackResultFindingScope(options.output, result.value, runOptions?.paths);
-        return result.value as never;
+        return agentOutputForTaskContext(agent, result.value);
       },
     },
     review: {
@@ -471,6 +472,11 @@ function createTaskContext(
     log: options.taskLog ?? console,
   };
   return taskContext;
+}
+
+function agentOutputForTaskContext<Output>(_agent: Agent<unknown, Output>, value: unknown): Output {
+  // The agent output schema was parsed by runReviewAgent before TaskContext resolves.
+  return value as Output;
 }
 
 function resolveTaskSecret(secret: SecretRef, options: RunTaskRuntimeOptions): string {

@@ -1,12 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   embeddedSdkDeclaration,
   readSdkDeclarationSourceWithChunk,
   type SdkDeclarationModule,
 } from "@usepipr/sdk/internal";
 import { embeddedSdkAssets } from "./sdk-assets.js";
+import { resolvedSdkPackageRoot } from "./sdk-module.js";
 
 export type ConfigTypeSupportFile = {
   relativePath: string;
@@ -102,16 +102,10 @@ async function rawSdkDeclarations(): Promise<SdkDeclarationModule[]> {
 }
 
 async function sdkDeclarationPath(fileName: string): Promise<string | undefined> {
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.resolve(moduleDir, "../../sdk/dist", fileName),
-    path.resolve(moduleDir, "../../../sdk/dist", fileName),
-  ];
-  for (const candidate of candidates) {
-    const stats = await Bun.file(candidate).exists();
-    if (stats) {
-      return candidate;
-    }
+  const sdkRoot = resolvedSdkPackageRoot();
+  if (!sdkRoot) {
+    return undefined;
   }
-  return undefined;
+  const candidate = path.join(sdkRoot, "dist", fileName);
+  return (await Bun.file(candidate).exists()) ? candidate : undefined;
 }

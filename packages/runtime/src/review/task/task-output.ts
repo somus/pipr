@@ -5,7 +5,9 @@ import type {
   PriorReview,
   ReviewFinding,
 } from "@usepipr/sdk";
+import { z } from "zod";
 import type { ReviewResult } from "../../types.js";
+import { reviewFindingSchema } from "../contract.js";
 import type { PriorReviewState } from "../prior-state.js";
 
 export type RuntimeCheckConclusion = "success" | "failure" | "neutral";
@@ -49,17 +51,22 @@ type FindingContribution = {
   paths?: PathFilter;
 };
 
-const findingScopeMarker: unique symbol = Symbol("pipr.findingScope");
-
-type ScopedReviewFinding = ReviewFinding & {
-  [findingScopeMarker]?: PathFilter;
-};
-
 export type TaskRunResult = {
   taskName: string;
   output: OutputState;
   error?: unknown;
 };
+
+const agentInlineFindingsOutputSchema = z.custom<{
+  inlineFindings: readonly ReviewFinding[];
+}>(
+  (value) =>
+    z
+      .looseObject({
+        inlineFindings: z.array(reviewFindingSchema),
+      })
+      .safeParse(value).success,
+);
 
 export function createOutputState(): OutputState {
   return {
@@ -89,14 +96,13 @@ function mergeCommentContribution(
   if (!comment) {
     return;
   }
-  if (merged.comment) {
-    throw new Error(
-      `ctx.comment(...) may be called once per selected run; received comments from '${merged.comment.taskName}' and '${comment.taskName}'`,
-    );
-  }
-  if (merged.commandResponse) {
-    throw new Error("ctx.comment(...) and ctx.command.reply(...) cannot both be called");
-  }
+  assertOutputContributionAllowed(
+    merged,
+    "comment",
+    comment.taskName,
+    (existing, next) =>
+      `ctx.comment(...) may be called once per selected run; received comments from '${existing}' and '${next}'`,
+  );
   merged.comment = comment;
 }
 
@@ -107,15 +113,32 @@ function mergeCommandResponseContribution(
   if (!commandResponse) {
     return;
   }
-  if (merged.commandResponse) {
-    throw new Error(
-      `ctx.command.reply(...) may be called once per selected run; received replies from '${merged.commandResponse.taskName}' and '${commandResponse.taskName}'`,
-    );
+  assertOutputContributionAllowed(
+    merged,
+    "commandResponse",
+    commandResponse.taskName,
+    (existing, next) =>
+      `ctx.command.reply(...) may be called once per selected run; received replies from '${existing}' and '${next}'`,
+  );
+  merged.commandResponse = commandResponse;
+}
+
+type OutputContributionKind = "comment" | "commandResponse";
+
+function assertOutputContributionAllowed(
+  state: OutputState,
+  kind: OutputContributionKind,
+  taskName: string,
+  duplicateMessage: (existingTaskName: string, nextTaskName: string) => string,
+): void {
+  const existing = kind === "comment" ? state.comment : state.commandResponse;
+  if (existing) {
+    throw new Error(duplicateMessage(existing.taskName, taskName));
   }
-  if (merged.comment) {
+  const opposite = kind === "comment" ? state.commandResponse : state.comment;
+  if (opposite) {
     throw new Error("ctx.comment(...) and ctx.command.reply(...) cannot both be called");
   }
-  merged.commandResponse = commandResponse;
 }
 
 export function createCheckHandle(state: OutputState): CheckHandle {
@@ -153,14 +176,13 @@ export function runtimeTaskCheckResult(
 }
 
 export function collectComment(state: OutputState, value: CommentValue, taskName: string): void {
-  if (state.commandResponse) {
-    throw new Error("ctx.comment(...) and ctx.command.reply(...) cannot both be called");
-  }
-  if (state.comment) {
-    throw new Error(
+  assertOutputContributionAllowed(
+    state,
+    "comment",
+    taskName,
+    () =>
       `ctx.comment(...) may be called once per selected run; '${taskName}' called it more than once`,
-    );
-  }
+  );
   state.comment = { taskName, value };
   if (typeof value === "string") {
     return;
@@ -169,14 +191,13 @@ export function collectComment(state: OutputState, value: CommentValue, taskName
 }
 
 export function collectCommandResponse(state: OutputState, value: string, taskName: string): void {
-  if (state.comment) {
-    throw new Error("ctx.comment(...) and ctx.command.reply(...) cannot both be called");
-  }
-  if (state.commandResponse) {
-    throw new Error(
+  assertOutputContributionAllowed(
+    state,
+    "commandResponse",
+    taskName,
+    () =>
       `ctx.command.reply(...) may be called once per selected run; '${taskName}' called it more than once`,
-    );
-  }
+  );
   state.commandResponse = { taskName, value };
 }
 
@@ -225,7 +246,7 @@ function collectInlineFindings(
   state.findings.push(
     ...findings.map((finding) => ({
       finding,
-      paths: (finding as ScopedReviewFinding)[findingScopeMarker] ?? arrayScope,
+      paths: arrayScope,
     })),
   );
 }
@@ -235,45 +256,13 @@ export function trackResultFindingScope(
   value: unknown,
   paths: PathFilter | undefined,
 ): void {
-  if (!hasInlineFindings(value)) {
-    return;
-  }
   if (!paths) {
     return;
   }
-  state.findingScopes.set(value.inlineFindings, paths);
-  for (const finding of value.inlineFindings) {
-    if (!isReviewFindingLike(finding)) {
-      continue;
-    }
-    markFindingScope(finding, paths);
+  const parsed = agentInlineFindingsOutputSchema.safeParse(value);
+  if (parsed.success) {
+    state.findingScopes.set(parsed.data.inlineFindings, paths);
   }
-}
-
-function markFindingScope(finding: ReviewFinding, paths: PathFilter): void {
-  Object.defineProperty(finding, findingScopeMarker, {
-    value: paths,
-    enumerable: true,
-    configurable: true,
-  });
-}
-
-function hasInlineFindings(value: unknown): value is { inlineFindings: readonly ReviewFinding[] } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Array.isArray((value as { inlineFindings?: unknown }).inlineFindings)
-  );
-}
-
-function isReviewFindingLike(value: unknown): value is ReviewFinding {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { body?: unknown }).body === "string" &&
-    typeof (value as { path?: unknown }).path === "string" &&
-    typeof (value as { rangeId?: unknown }).rangeId === "string"
-  );
 }
 
 export function collectedReview(output: OutputState): ReviewResult {

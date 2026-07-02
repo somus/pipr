@@ -48,7 +48,7 @@ export async function assertActFullFixture(
   telemetryPath?: string,
 ): Promise<void> {
   assertFullMainComment(readOnlyMainComment(fixture));
-  assertPathScopedDropReasons(fixture);
+  assertFullFixtureDropReasons(fixture);
   assertNoOutOfScopeFinding(fixture);
   assertInlinePayload(readOnlyInlinePayload(fixture), expectedHeadSha);
   if (telemetryPath) {
@@ -114,14 +114,14 @@ function assertFullMainComment(body: string): void {
   );
 }
 
-function assertPathScopedDropReasons(fixture: PublicationFixture): void {
-  const pathScopedDrops = (fixture.droppedFindings ?? []).filter(
-    (drop) => drop.reason === "finding path is outside configured paths",
+function assertFullFixtureDropReasons(fixture: PublicationFixture): void {
+  const rangePathDrops = (fixture.droppedFindings ?? []).filter(
+    (drop) => drop.reason === "finding path does not match range path",
   );
   const duplicateDrops = (fixture.droppedFindings ?? []).filter(
     (drop) => drop.reason === "duplicate finding fingerprint",
   );
-  assertEqual(pathScopedDrops.length, 2, "unexpected path-scoped drop count");
+  assertEqual(rangePathDrops.length, 2, "unexpected range/path drop count");
   assertEqual(duplicateDrops.length, 1, "unexpected duplicate finding drop count");
   assertEqual((fixture.droppedFindings ?? []).length, 3, "unexpected total dropped finding count");
 }

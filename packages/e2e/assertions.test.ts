@@ -41,21 +41,17 @@ await expectFailure("path-missed task was selected", {
   ...validFullFixture(),
   issueComments: [{ body: `${fullMainCommentBody()}\npipr/docs-only` }],
 });
-await expectFailure("unexpected path-scoped drop count", {
+await expectFailure("unexpected range/path drop count", {
   ...validFullFixture(),
   droppedFindings: [droppedFinding("duplicate finding fingerprint")],
 });
-await expectFailure("unexpected path-scoped drop count", {
+await expectFailure("unexpected range/path drop count", {
   ...validFullFixture(),
-  droppedFindings: [droppedFinding("finding path does not match range path")],
+  droppedFindings: [droppedFinding()],
 });
 await expectFailure("unexpected duplicate finding drop count", {
   ...validFullFixture(),
-  droppedFindings: [
-    droppedFinding(),
-    droppedFinding(),
-    droppedFinding("finding path does not match range path"),
-  ],
+  droppedFindings: [droppedFinding(), droppedFinding(), droppedFinding("some other drop reason")],
 });
 await expectFailure("out-of-scope finding was published", {
   ...validFullFixture(),
@@ -167,7 +163,7 @@ function validFullFixture(): PublicationFixture {
   };
 }
 
-function droppedFinding(reason = "finding path is outside configured paths"): { reason: string } {
+function droppedFinding(reason = "finding path does not match range path"): { reason: string } {
   return { reason };
 }
 

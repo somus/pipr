@@ -50,7 +50,7 @@ export function buildPriorReviewState(options: {
   findings: ReviewFinding[];
   reviewedHeadSha: string;
   selectedTasks: string[];
-}): { state: PriorReviewState } {
+}): PriorReviewState {
   const scopedPriorState = priorReviewStateForSelectedTasks(
     options.priorState,
     options.selectedTasks,
@@ -74,37 +74,33 @@ export function buildPriorReviewState(options: {
       usedPriorIds.add(prior.id);
     }
     currentFindingIds.add(id);
-    nextFindings.set(
+    const record: PriorFindingRecord = {
       id,
-      priorFindingRecordSchema.parse({
-        id,
-        status: "open",
-        path: finding.path,
-        rangeId: finding.rangeId,
-        side: finding.side,
-        startLine: finding.startLine,
-        endLine: finding.endLine,
-        firstSeenHeadSha: prior?.firstSeenHeadSha ?? options.reviewedHeadSha,
-        lastSeenHeadSha: options.reviewedHeadSha,
-        lastCommentedHeadSha: prior?.lastCommentedHeadSha,
-      }),
-    );
+      status: "open",
+      path: finding.path,
+      rangeId: finding.rangeId,
+      side: finding.side,
+      startLine: finding.startLine,
+      endLine: finding.endLine,
+      firstSeenHeadSha: prior?.firstSeenHeadSha ?? options.reviewedHeadSha,
+      lastSeenHeadSha: options.reviewedHeadSha,
+      ...(prior?.lastCommentedHeadSha ? { lastCommentedHeadSha: prior.lastCommentedHeadSha } : {}),
+    };
+    nextFindings.set(id, record);
   }
 
   for (const prior of priorFindings.values()) {
     if (nextFindings.has(prior.id)) {
       continue;
     }
-    nextFindings.set(prior.id, priorFindingRecordSchema.parse(prior));
+    nextFindings.set(prior.id, prior);
   }
 
   return {
-    state: priorReviewStateSchema.parse({
-      version: 1,
-      reviewedHeadSha: options.reviewedHeadSha,
-      selectedTasks: options.selectedTasks,
-      findings: cappedFindings([...nextFindings.values()], currentFindingIds),
-    }),
+    version: 1,
+    reviewedHeadSha: options.reviewedHeadSha,
+    selectedTasks: options.selectedTasks,
+    findings: cappedFindings([...nextFindings.values()], currentFindingIds),
   };
 }
 
@@ -113,13 +109,13 @@ export function resolvePriorFindings(
   findingIds: Iterable<string>,
 ): PriorReviewState {
   const resolved = new Set(findingIds);
-  return priorReviewStateSchema.parse({
+  return {
     ...state,
     findings: state.findings.map((finding) => ({
       ...finding,
       status: resolved.has(finding.id) ? "resolved" : finding.status,
     })),
-  });
+  };
 }
 
 export function priorReviewStateForSelectedTasks(
@@ -214,11 +210,7 @@ export function renderVerifierResponseMarker(findingId: string, responseKey: str
 }
 
 export function extractInlineFindingMarkerRecords(commentBodies: string[]): FindingMarkerRecord[] {
-  return commentBodies.flatMap((body) =>
-    [parseFindingHeadMarker(firstNonEmptyLine(body), inlineFindingMarkerPrefix)].filter(
-      (marker): marker is FindingMarkerRecord => marker !== undefined,
-    ),
-  );
+  return extractMarkerRecords(commentBodies, inlineFindingMarkerPrefix);
 }
 
 export function extractInlineFindingMarkers(commentBodies: string[]): Set<string> {
@@ -228,11 +220,7 @@ export function extractInlineFindingMarkers(commentBodies: string[]): Set<string
 export function extractResolvedFindingMarkerRecords(
   commentBodies: string[],
 ): FindingMarkerRecord[] {
-  return commentBodies.flatMap((body) =>
-    [parseFindingHeadMarker(firstNonEmptyLine(body), resolvedFindingMarkerPrefix)].filter(
-      (marker): marker is FindingMarkerRecord => marker !== undefined,
-    ),
-  );
+  return extractMarkerRecords(commentBodies, resolvedFindingMarkerPrefix);
 }
 
 export function applyResolvedFindingMarkers(
@@ -244,7 +232,7 @@ export function applyResolvedFindingMarkers(
       (record) => `${record.id}:${record.head}`,
     ),
   );
-  return priorReviewStateSchema.parse({
+  return {
     ...state,
     findings: state.findings.map((finding) => ({
       ...finding,
@@ -254,18 +242,14 @@ export function applyResolvedFindingMarkers(
           ? "resolved"
           : finding.status,
     })),
-  });
+  };
 }
 
 export function extractVerifierResponseMarkers(commentBodies: string[]): Set<string> {
   return new Set(
-    commentBodies
-      .flatMap((body) =>
-        [parseFindingHeadMarker(firstNonEmptyLine(body), verifierResponseMarkerPrefix)].filter(
-          (marker): marker is FindingMarkerRecord => marker !== undefined,
-        ),
-      )
-      .map((record) => record.marker),
+    extractMarkerRecords(commentBodies, verifierResponseMarkerPrefix).map(
+      (record) => record.marker,
+    ),
   );
 }
 
@@ -287,13 +271,14 @@ export function applyInlineFindingMarkers(
       markerById.set(findingId, headSha);
     }
   }
-  return priorReviewStateSchema.parse({
+  return {
     ...state,
-    findings: state.findings.map((finding) => ({
-      ...finding,
-      lastCommentedHeadSha: markerById.get(finding.id),
-    })),
-  });
+    findings: state.findings.map((finding) => {
+      const headSha = markerById.get(finding.id);
+      const { lastCommentedHeadSha: _lastCommentedHeadSha, ...rest } = finding;
+      return headSha ? { ...rest, lastCommentedHeadSha: headSha } : rest;
+    }),
+  };
 }
 
 export function findingIdFor(finding: ReviewFinding, state?: PriorReviewState): string {
@@ -403,8 +388,16 @@ function parseFindingHeadMarker(
   };
 }
 
+function extractMarkerRecords(commentBodies: string[], prefix: string): FindingMarkerRecord[] {
+  return commentBodies.flatMap((body) =>
+    [parseFindingHeadMarker(firstNonEmptyLine(body), prefix)].filter(
+      (marker): marker is FindingMarkerRecord => marker !== undefined,
+    ),
+  );
+}
+
 function encodeReviewState(state: PriorReviewState): string {
-  return Buffer.from(JSON.stringify(priorReviewStateSchema.parse(state))).toString("base64url");
+  return Buffer.from(JSON.stringify(state)).toString("base64url");
 }
 
 function decodeReviewState(value: string | undefined): PriorReviewState | undefined {
