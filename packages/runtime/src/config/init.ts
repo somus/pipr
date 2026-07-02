@@ -77,7 +77,11 @@ function officialMinimalFilePaths(
 ): string[] {
   const files = [path.join(".pipr", "config.ts")];
   if (!options.minimal) {
-    files.push(path.join(".pipr", "package.json"), path.join(".pipr", "tsconfig.json"));
+    files.push(
+      path.join(".pipr", "package.json"),
+      path.join(".pipr", "tsconfig.json"),
+      path.join(".pipr", ".gitignore"),
+    );
   }
   if (adapters.includes("github")) {
     files.push(path.join(".github", "workflows", "pipr.yml"));
@@ -170,6 +174,10 @@ async function starterFiles(
       {
         relativePath: path.join(relativeConfigDir, "tsconfig.json"),
         contents: starterTsconfig,
+      },
+      {
+        relativePath: path.join(relativeConfigDir, ".gitignore"),
+        contents: "node_modules\n",
       },
     );
   }

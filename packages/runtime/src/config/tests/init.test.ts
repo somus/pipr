@@ -15,6 +15,7 @@ const configCoreInitFiles = [path.join(".pipr", "config.ts")];
 const packageInitFiles = [
   path.join(".pipr", "package.json"),
   path.join(".pipr", "tsconfig.json"),
+  path.join(".pipr", ".gitignore"),
   path.join(".pipr", "bun.lock"),
 ];
 
@@ -40,6 +41,7 @@ describe("initOfficialMinimalProject", () => {
     expect(await Bun.file(path.join(rootDir, ".pipr", "bun.lock")).text()).toContain(
       '"lockfileVersion"',
     );
+    expect(await Bun.file(path.join(rootDir, ".pipr", ".gitignore")).text()).toBe("node_modules\n");
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
     expect(workflow).toContain("uses: somus/pipr@v0.1.3"); // x-release-please-version
     expect(workflow).toContain("actions/cache@v4");
@@ -58,6 +60,7 @@ describe("initOfficialMinimalProject", () => {
     expect(await listFiles(rootDir)).toEqual(
       expect.arrayContaining([
         ".github/workflows/pipr.yml",
+        ".pipr/.gitignore",
         ".pipr/bun.lock",
         ".pipr/config.ts",
         ".pipr/package.json",
@@ -65,7 +68,13 @@ describe("initOfficialMinimalProject", () => {
       ]),
     );
     expect(await listFiles(path.join(rootDir, ".pipr"))).toEqual(
-      expect.arrayContaining(["bun.lock", "config.ts", "package.json", "tsconfig.json"]),
+      expect.arrayContaining([
+        ".gitignore",
+        "bun.lock",
+        "config.ts",
+        "package.json",
+        "tsconfig.json",
+      ]),
     );
     expect(project.kind).toBe("typescript");
     expect(project.settings.config.defaultProvider).toBe("deepseek/deepseek-v4-pro");
@@ -106,6 +115,7 @@ describe("initOfficialMinimalProject", () => {
     expect(result.overwritten).toEqual([]);
     expect(await fileExists(path.join(rootDir, ".pipr", "tsconfig.json"))).toBe(false);
     expect(await fileExists(path.join(rootDir, ".pipr", "package.json"))).toBe(false);
+    expect(await fileExists(path.join(rootDir, ".pipr", ".gitignore"))).toBe(false);
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tools).toEqual([
       "r2_memory_search",
       "r2_memory_store",
