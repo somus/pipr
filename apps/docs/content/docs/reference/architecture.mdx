@@ -97,3 +97,12 @@ The GitHub adapter owns:
 - review thread reply and resolution APIs
 
 Core runtime imports no GitHub modules directly.
+
+## Config package layout
+
+Pipr config supports two tiers:
+
+- **Tier 1:** `.pipr/config.ts` only. No install step; runtime SDK stub supplies the module.
+- **Tier 2:** `.pipr/package.json` + `.pipr/bun.lock` for third-party npm imports and self-contained editor types.
+
+Action runs copy trusted `.pipr/**` from the base commit (excluding `node_modules`), run frozen `bun install` when third-party deps are declared, then replace `@usepipr/sdk` with the image SDK stub for load and typecheck.

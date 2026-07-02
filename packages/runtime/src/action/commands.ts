@@ -52,7 +52,7 @@ export async function runInitCommand(
     force: options.force,
     adapters: options.adapters,
     recipe: options.recipe,
-    typeSupport: options.typeSupport,
+    minimal: options.minimal,
   });
 }
 

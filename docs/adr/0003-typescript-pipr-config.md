@@ -7,8 +7,10 @@ Pipr uses repository-local `.pipr/config.ts` as the only supported user authorin
 `pipr init` creates:
 
 - `.pipr/config.ts`
-- `.pipr/tsconfig.json`
-- `.pipr/types/pipr-sdk.d.ts`
+- `.pipr/package.json` and `.pipr/bun.lock` (tier 2 default)
+- `.pipr/tsconfig.json` (tier 2 default)
+
+Tier 1 (`pipr init --minimal`) creates only `.pipr/config.ts`. Generated `.pipr/types/pipr-sdk.d.ts` is removed; types come from installed `@usepipr/sdk`. See [0006-installable-config-dependencies.md](./0006-installable-config-dependencies.md).
 
 The config imports `definePipr` and optional explicit `definePlugin` plugins from `@usepipr/sdk`, then registers models, agents, tasks, change-request events, commands, limits, and typed plugin tool handles through the builder API. Config execution is trusted planning code: it should register a runtime plan and should not perform repository reads, model calls, platform calls, or git operations.
 

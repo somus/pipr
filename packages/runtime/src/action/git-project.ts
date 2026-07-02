@@ -67,7 +67,13 @@ function listConfigFilesAtCommit(
   return output
     .split("\0")
     .filter(Boolean)
-    .map((entry) => parseGitTreeEntry(entry, commitSha));
+    .map((entry) => parseGitTreeEntry(entry, commitSha))
+    .filter((file) => !isIgnoredGitConfigPath(gitPath, file.path));
+}
+
+function isIgnoredGitConfigPath(gitPath: string, filePath: string): boolean {
+  const relative = gitPath === "." ? filePath : path.posix.relative(gitPath, filePath);
+  return relative === "node_modules" || relative.startsWith("node_modules/");
 }
 
 function parseGitTreeEntry(entry: string, commitSha: string): GitTreeEntry {

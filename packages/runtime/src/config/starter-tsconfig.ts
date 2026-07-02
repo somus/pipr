@@ -1,0 +1,11 @@
+export const starterTsconfig = `{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["./**/*.ts"]
+}
+`;

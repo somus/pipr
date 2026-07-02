@@ -5,7 +5,6 @@ import {
   type ActionCommandResult,
   type ActionLogRecord,
   type ActionLogSink,
-  type InitTypeSupportMode,
   PublicationError,
   runActionCommand,
   runDryRunCommand,
@@ -26,8 +25,7 @@ type CliOptions = {
   force?: boolean;
   adapters?: string;
   recipe?: string;
-  types?: boolean;
-  typesOnly?: boolean;
+  minimal?: boolean;
   requireEnv?: boolean;
   base?: string;
   head?: string;
@@ -57,8 +55,7 @@ function createProgram(): Command {
       `Adapters to initialize (${supportedOfficialInitAdapters.join(", ")}; use 'none' to skip adapter files)`,
     )
     .option("--recipe <recipe>", `Starter recipe (${supportedOfficialInitRecipes.join(", ")})`)
-    .option("--no-types", "Skip local TypeScript support files")
-    .option("--types-only", "Add or refresh local TypeScript support files only")
+    .option("--minimal", "Scaffold a single-file .pipr/config.ts without package.json")
     .option("--force", "Overwrite existing pipr files")
     .action(runInit);
 
@@ -267,38 +264,22 @@ function warnInlineResolutionErrors(errors: string[]): void {
 }
 
 async function runInit(options: CliOptions): Promise<void> {
-  const typeSupport = initTypeSupportMode(options);
   const result = await runInitCommand({
     rootDir: process.cwd(),
     configDir: options.configDir,
     force: options.force === true,
     adapters: parseInitAdapters(options.adapters),
     recipe: options.recipe,
-    typeSupport,
+    minimal: options.minimal === true,
   });
   console.log(
     `created ${result.created.length} file(s)` +
       (result.overwritten.length > 0 ? `; overwrote ${result.overwritten.length}` : ""),
   );
-}
-
-function initTypeSupportMode(options: CliOptions): InitTypeSupportMode {
-  if (options.typesOnly !== true) {
-    return options.types === false ? "skip" : "include";
-  }
-  validateTypesOnlyInitOptions(options);
-  return "only";
-}
-
-function validateTypesOnlyInitOptions(options: CliOptions): void {
-  if (options.types === false) {
-    throw new Error("--types-only cannot be combined with --no-types");
-  }
-  if (options.recipe !== undefined) {
-    throw new Error("--types-only cannot be combined with --recipe");
-  }
-  if (options.adapters !== undefined) {
-    throw new Error("--types-only cannot be combined with --adapters");
+  if (options.minimal === true) {
+    console.log(
+      "For editor types, install @usepipr/sdk at the repo root: npm install -D @usepipr/sdk",
+    );
   }
 }
 

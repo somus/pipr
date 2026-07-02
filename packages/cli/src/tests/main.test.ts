@@ -26,8 +26,7 @@ describe("pipr CLI", () => {
     const init = await runCli(["init", "--help"]);
     expect(init.stdout).toContain("--adapters <adapters>");
     expect(init.stdout).toContain("--recipe <recipe>");
-    expect(init.stdout).toContain("--no-types");
-    expect(init.stdout).toContain("--types-only");
+    expect(init.stdout).toContain("--minimal");
     expect(init.stdout).toContain("github");
     expect(init.stdout).toContain("none");
     expect(init.stdout).toContain("multi-agent-review");
@@ -177,32 +176,14 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("initializes config files without local type support", async () => {
+  it("initializes a minimal single-file config without package.json", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
     try {
-      await runInit(workspace, ["init", "--adapters", "none", "--no-types"]);
+      await runInit(workspace, ["init", "--adapters", "none", "--minimal"]);
 
       expect(await fileExists(path.join(workspace, ".pipr", "tsconfig.json"))).toBe(false);
-      expect(await fileExists(path.join(workspace, ".pipr", "types"))).toBe(false);
-    } finally {
-      await removeWorkspace(workspace);
-    }
-  });
-
-  it("adds local type support after a no-types init", async () => {
-    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
-    try {
-      const init = await runCli(["init", "--adapters", "none", "--no-types"], {}, workspace);
-      const types = await runCli(["init", "--types-only"], {}, workspace);
-      const second = await runCli(["init", "--types-only"], {}, workspace);
-
-      expect(init.exitCode, `${init.stdout}\n${init.stderr}`).toBe(0);
-      expect(types.exitCode, `${types.stdout}\n${types.stderr}`).toBe(0);
-      expect(types.stdout).toMatch(/created \d+ file\(s\)/);
-      expect(second.exitCode, `${second.stdout}\n${second.stderr}`).toBe(0);
-      expect(second.stdout).toContain("created 0 file(s)");
-      expect(await fileExists(path.join(workspace, ".pipr", "tsconfig.json"))).toBe(true);
-      expect(await fileExists(path.join(workspace, ".pipr", "types", "pipr-sdk.d.ts"))).toBe(true);
+      expect(await fileExists(path.join(workspace, ".pipr", "package.json"))).toBe(false);
+      expect(await fileExists(path.join(workspace, ".pipr", "config.ts"))).toBe(true);
     } finally {
       await removeWorkspace(workspace);
     }
@@ -240,17 +221,6 @@ describe("pipr CLI", () => {
         {},
         workspace,
       );
-      const typesWithRecipe = await runCli(
-        ["init", "--types-only", "--recipe", "default-review"],
-        {},
-        workspace,
-      );
-      const typesWithAdapters = await runCli(
-        ["init", "--types-only", "--adapters", "none"],
-        {},
-        workspace,
-      );
-      const typesWithNoTypes = await runCli(["init", "--types-only", "--no-types"], {}, workspace);
 
       expect(unsupported.exitCode).toBe(1);
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).toContain(
@@ -263,18 +233,6 @@ describe("pipr CLI", () => {
       expect(unsupportedRecipe.exitCode).toBe(1);
       expect(`${unsupportedRecipe.stdout}\n${unsupportedRecipe.stderr}`).toContain(
         "Unsupported pipr init recipe 'missing'. Supported recipes:",
-      );
-      expect(typesWithRecipe.exitCode).toBe(1);
-      expect(`${typesWithRecipe.stdout}\n${typesWithRecipe.stderr}`).toContain(
-        "--types-only cannot be combined with --recipe",
-      );
-      expect(typesWithAdapters.exitCode).toBe(1);
-      expect(`${typesWithAdapters.stdout}\n${typesWithAdapters.stderr}`).toContain(
-        "--types-only cannot be combined with --adapters",
-      );
-      expect(typesWithNoTypes.exitCode).toBe(1);
-      expect(`${typesWithNoTypes.stdout}\n${typesWithNoTypes.stderr}`).toContain(
-        "--types-only cannot be combined with --no-types",
       );
     } finally {
       await removeWorkspace(workspace);

@@ -1,0 +1,28 @@
+# Installable config dependencies
+
+Status: Accepted
+
+Pipr config scales from a single TypeScript file to a full Bun package, mirroring Pi agent extension philosophy. Both tiers are first-class:
+
+- **Tier 1 — single file:** `.pipr/config.ts` alone. No `package.json`, no install step. The runtime provides the SDK module. Editor types can come from `@usepipr/sdk` installed at the repo root.
+- **Tier 2 — full package:** `.pipr/package.json` + `.pipr/bun.lock` unlock third-party npm imports and self-contained editor types. `pipr init` scaffolds this layout by default; `pipr init --minimal` scaffolds tier 1.
+
+## Runtime SDK override
+
+The runtime always overrides `@usepipr/sdk` with the image or CLI built-in SDK via a typed stub in temp `node_modules`. A user's npm install of `@usepipr/sdk` is types and editor support only. `pipr check` typechecks against the effective runtime SDK declaration from that stub, so contract breaks surface before merge.
+
+## Installs
+
+- Bun only: when `.pipr/package.json` declares dependencies beyond runtime-provided packages (`@usepipr/sdk`, `@types/bun`), the loader runs `bun install --frozen-lockfile --ignore-scripts` in the temp config directory before loading.
+- Default tier-2 scaffolds skip install when deps are only `@usepipr/sdk` and `@types/bun`; real third-party deps install from the base-commit lockfile.
+- Init runs non-frozen `bun install` in `.pipr/` to produce `bun.lock`. A `bun` binary on PATH is required for init and for configs with third-party deps.
+
+## Security
+
+- Install scripts are disabled (`--ignore-scripts`).
+- GitHub Action runs load `.pipr/**` from the base commit; `package.json` and `bun.lock` are part of trusted config. Frozen installs pin versions to the committed lockfile.
+- `.pipr/node_modules` is gitignored and excluded from config copy; the loader installs into temp dirs instead.
+
+## Supersedes
+
+The generated `.pipr/types/pipr-sdk.d.ts` approach described in [0003-typescript-pipr-config.md](./0003-typescript-pipr-config.md) is superseded by installable `@usepipr/sdk` types in tier 2 and optional root-level SDK devDependency in tier 1.

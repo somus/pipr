@@ -45,8 +45,8 @@ Common causes:
 - A command pattern does not start with `@pipr`.
 - A secret name is not an environment variable name such as `DEEPSEEK_API_KEY`.
 
-Use `pipr inspect` after `pipr check` passes to confirm the runtime plan matches the config you expected.
-Run `pipr init --types-only` if your editor is missing local Pipr SDK types.
+Run `pipr inspect` after `pipr check` passes to confirm the runtime plan matches the config you expected.
+For tier-2 configs, run `bun install` in `.pipr/` if editor types are stale. For tier-1 (`pipr init --minimal`) configs, install `@usepipr/sdk` at the repo root.
 
 Expected result: `pipr check` exits successfully before you try a model run.
 

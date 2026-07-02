@@ -26,7 +26,7 @@ The provider-neutral review target. GitHub maps this to a pull request; future p
 _Avoid_: GitHub-only pull request when describing core runtime
 
 **TypeScript Config**:
-The single supported runtime authoring surface. `pipr init` creates `.pipr/config.ts`; `.pipr/tsconfig.json` and `.pipr/types/**` are optional local editor type support.
+The single supported runtime authoring surface. `pipr init` creates `.pipr/config.ts` by default as part of a tier-2 Bun package (`.pipr/package.json`, `.pipr/bun.lock`, `.pipr/tsconfig.json`). `pipr init --minimal` scaffolds tier 1 (config file only).
 _Avoid_: hidden runtime defaults
 
 **Pipr SDK**:

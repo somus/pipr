@@ -1,14 +1,26 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp } from "node:fs/promises";
-import os from "node:os";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { runGit } from "../../diff/git.js";
+import { writeThirdPartyPiprProject } from "../../config/tests/helpers/third-party-config.js";
 import { loadRuntimeProjectFromGitCommit } from "../git-project.js";
+import { commitGitProjectBase, initGitRepoRoot } from "./helpers/git-project.js";
 
 describe("loadRuntimeProjectFromGitCommit", () => {
+  it("loads trusted config with package.json and bun.lock from the base commit", async () => {
+    const rootDir = await initGitRepoRoot();
+    await writeThirdPartyPiprProject(rootDir);
+    const baseSha = commitGitProjectBase(rootDir);
+
+    const runtime = await loadRuntimeProjectFromGitCommit({
+      rootDir,
+      commitSha: baseSha,
+    });
+
+    expect(runtime.plan.agents[0]?.definition.instructions).toBe("Review with deps.");
+  });
+
   it("loads trusted TypeScript config imports whose git paths contain tabs", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-git-project-"));
-    await initGitRepo(rootDir);
+    const rootDir = await initGitRepoRoot();
     await mkdir(path.join(rootDir, ".pipr", "prompts"), { recursive: true });
     await Bun.write(
       path.join(rootDir, ".pipr", "prompts", "reviewer\tcopy.ts"),
@@ -35,9 +47,7 @@ describe("loadRuntimeProjectFromGitCommit", () => {
         "});",
       ].join("\n"),
     );
-    runGit(["add", "."], rootDir);
-    runGit(["commit", "--no-verify", "-m", "base"], rootDir);
-    const baseSha = runGit(["rev-parse", "HEAD"], rootDir).trim();
+    const baseSha = commitGitProjectBase(rootDir);
 
     const runtime = await loadRuntimeProjectFromGitCommit({
       rootDir,
@@ -48,12 +58,9 @@ describe("loadRuntimeProjectFromGitCommit", () => {
   });
 
   it("fails clearly when the base commit does not contain pipr config", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-git-project-"));
-    await initGitRepo(rootDir);
+    const rootDir = await initGitRepoRoot();
     await Bun.write(path.join(rootDir, "README.md"), "# empty\n");
-    runGit(["add", "."], rootDir);
-    runGit(["commit", "--no-verify", "-m", "base"], rootDir);
-    const baseSha = runGit(["rev-parse", "HEAD"], rootDir).trim();
+    const baseSha = commitGitProjectBase(rootDir);
 
     await expect(
       loadRuntimeProjectFromGitCommit({
@@ -63,12 +70,3 @@ describe("loadRuntimeProjectFromGitCommit", () => {
     ).rejects.toThrow(".pipr/config.ts is required at base commit");
   });
 });
-
-async function initGitRepo(rootDir: string): Promise<void> {
-  await mkdir(rootDir, { recursive: true });
-  runGit(["init", "--initial-branch=main"], rootDir);
-  runGit(["config", "user.name", "pipr test"], rootDir);
-  runGit(["config", "user.email", "pipr@example.test"], rootDir);
-  runGit(["config", "core.hooksPath", "/dev/null"], rootDir);
-  runGit(["config", "commit.gpgsign", "false"], rootDir);
-}
