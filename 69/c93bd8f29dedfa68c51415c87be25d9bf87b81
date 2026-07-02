@@ -1,0 +1,33 @@
+.pipr/types/pipr-sdk.d.ts
+  s_e86d7229599bc1::t_f43d6b26e05779 597
+README.md
+  s_e86d7229599bc1::t_3ba0a47b395892 104-105
+packages/runtime/src/commands/grammar.ts
+  s_e86d7229599bc1::t_ba042dcb3b4572 8
+packages/runtime/src/commands/tests/grammar.test.ts
+  s_e86d7229599bc1::t_e3c116efb9d71e 2
+packages/runtime/src/config/tests/init.test.ts
+  s_e86d7229599bc1::t_4fe51dbf1c889c 20-21,140-151
+packages/sdk/src/builder.ts
+  s_e86d7229599bc1::t_ab2567ef7c3e2a 17,152,289-312,333-412
+packages/sdk/src/internal.ts
+  s_e86d7229599bc1::t_12259266bd3ef0 13-21
+packages/sdk/src/tests/index.test.ts
+  s_e86d7229599bc1::t_a9b34501bc37f9 450-473
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "69c93bd8f29dedfa68c51415c87be25d9bf87b81",
+  "prompts": {},
+  "sessions": {
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
