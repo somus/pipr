@@ -1,0 +1,27 @@
+apps/docs/content/docs/guide/comments.mdx
+  s_0d6065f763bd53::t_836f1fe7e330b2 100
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_0d6065f763bd53::t_839f89d1061f5d 92
+apps/docs/content/docs/guide/runtime.mdx
+  s_0d6065f763bd53::t_3aaab549e79106 130
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_0d6065f763bd53::t_db7020059c7791 118,124
+packages/runtime/src/config/ts-loader.ts
+  s_0d6065f763bd53::t_1fdc5cca0864d9 76-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "c331dac53d30cbd6f9a3b78daec67b2983f94a6d",
+  "prompts": {},
+  "sessions": {
+    "s_0d6065f763bd53": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f229f-601b-7a73-960f-92cd1513f689",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
