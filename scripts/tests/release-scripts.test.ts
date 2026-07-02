@@ -110,6 +110,9 @@ describe("sync-release-lockfile", () => {
     const lockfile = readFileSync(path.join(repository, "bun.lock"), "utf8");
     expect(lockfile).toContain('"@usepipr/runtime": "0.1.1"');
     expect(lockfile).toContain('"@usepipr/sdk": "0.1.1"');
+    expect(readFileSync(path.join(repository, "action.yml"), "utf8")).toContain(
+      "docker://ghcr.io/somus/pipr:v0.1.1",
+    );
   });
 });
 
