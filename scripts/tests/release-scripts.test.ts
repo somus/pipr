@@ -113,6 +113,9 @@ describe("sync-release-lockfile", () => {
     expect(readFileSync(path.join(repository, "action.yml"), "utf8")).toContain(
       "docker://ghcr.io/somus/pipr:v0.1.1",
     );
+    expect(readFileSync(path.join(repository, ".github/workflows/pipr.yml"), "utf8")).toContain(
+      "uses: somus/pipr@v0.1.1",
+    );
   });
 });
 

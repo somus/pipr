@@ -1,4 +1,4 @@
-name: pipr
+name: Pipr Review
 description: Pi-powered pull request automation runtime
 branding:
   icon: git-pull-request

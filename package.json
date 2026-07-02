@@ -37,7 +37,7 @@
     "format:check:docs": "biome check apps/docs docs *.md --files-ignore-unknown=true --no-errors-on-unmatched",
     "fallow": "fallow --fail-on-issues --format compact",
     "fallow:packages": "fallow --fail-on-issues --format compact --workspace '!@pipr/docs'",
-    "fallow:docs": "fallow --fail-on-issues --format compact --workspace @pipr/docs",
+    "fallow:docs": "bun run --cwd apps/docs typegen && fallow --fail-on-issues --format compact --workspace @pipr/docs",
     "build:release:cli": "bun packages/cli/build-release.ts",
     "sync:release-lockfile": "bun scripts/sync-release-lockfile.ts",
     "hooks-install": "hk install --mise",
