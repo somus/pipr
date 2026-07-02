@@ -101,7 +101,7 @@ PIPR_ACTION_IMAGE=pipr-action:e2e bun run --cwd packages/e2e check:container
 The checked-in Action metadata uses the published image directly:
 
 ```text
-docker://ghcr.io/somus/pipr:v0.1.2 # x-release-please-version
+docker://ghcr.io/somus/pipr:v0.1.3 # x-release-please-version
 ```
 
 Local `act` fixtures rewrite that metadata to the `PIPR_ACTION_IMAGE` value so Action checks still exercise the freshly built local image.
@@ -122,8 +122,8 @@ ghcr.io/somus/pipr
 
 Publishing uses the tags:
 
-- release tag, such as `v0.1.2` # x-release-please-version
-- release version, such as `0.1.2` # x-release-please-version
+- release tag, such as `v0.1.3` # x-release-please-version
+- release version, such as `0.1.3` # x-release-please-version
 - `latest`
 
 ## npm and binary release
