@@ -636,7 +636,7 @@ describe("publishGitHubPublicationPlan", () => {
 
     expect(result.mainComment).toEqual({ action: "updated", id: 10 });
     expect(client.issueComments).toHaveLength(1);
-    expect(client.issueComments[0]?.body).toContain("# pipr Review");
+    expect(client.issueComments[0]?.body).toContain("# Pipr Review");
   });
 
   it("ignores inline markers from other authors", async () => {

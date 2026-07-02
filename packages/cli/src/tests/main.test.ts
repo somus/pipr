@@ -52,7 +52,7 @@ describe("pipr CLI", () => {
       );
 
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
-      expect(result.stdout).toContain("# pipr Review");
+      expect(result.stdout).toContain("# Pipr Review");
       expect(result.stdout).toContain("No findings.");
       expect(result.stdout).not.toContain("<!-- pipr:main-comment ");
       expect(result.stderr).toContain("pipr local review start");

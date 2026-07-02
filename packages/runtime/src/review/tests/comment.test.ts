@@ -82,7 +82,7 @@ describe("comments", () => {
     });
 
     expect(plan.mainComment).toContain("<!-- pipr:main-comment change=1 version=1 state=");
-    expect(plan.mainComment).toContain("# pipr Review\n\nSummary body.\n\nTests passed.");
+    expect(plan.mainComment).toContain("# Pipr Review\n\nSummary body.\n\nTests passed.");
     expect(plan.mainComment).not.toContain("pipr:contribution");
     expect(extractPriorReviewState(plan.mainComment, 1)?.findings[0]).not.toHaveProperty("body");
   });
