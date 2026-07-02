@@ -7,7 +7,7 @@ import type { RuntimePlan } from "@usepipr/sdk/internal";
 import { buildPiprPlan, isPiprConfigFactory } from "@usepipr/sdk/internal";
 import { resolveContainedConfigDir } from "./paths.js";
 import { embeddedSdkAssets } from "./sdk-assets.js";
-import { resolvedSdkModulePath } from "./sdk-module.js";
+import { resolvedSdkModulePath, sdkModuleStubSource } from "./sdk-module.js";
 import { writeGeneratedTypeSupport } from "./type-support.js";
 
 export type LoadTypescriptConfigOptions = {
@@ -171,15 +171,7 @@ function formatTypeScriptDiagnostics(
 }
 
 async function sdkStubSource(): Promise<string> {
-  const sourcePath = resolvedSdkModulePath();
-  if (sourcePath) {
-    return `export * from ${JSON.stringify(pathToFileURL(sourcePath).href)};\n`;
-  }
-  const embedded = embeddedSdkAssets().module;
-  if (embedded) {
-    return embedded;
-  }
-  throw new Error("Unable to locate @usepipr/sdk runtime module");
+  return sdkModuleStubSource(resolvedSdkModulePath(), embeddedSdkAssets().module);
 }
 
 function isIgnoredConfigCopyPath(source: string, configDir: string): boolean {

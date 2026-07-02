@@ -274,7 +274,7 @@ Use `ctx.platform.id === "local"` inside a task when the task should run in both
 
 `ctx.command.reply(...)` emits a normal pull request issue comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
 
-When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. The manifest is filtered to matching files, the prompt carries the path scope, and Pipr drops findings from that scoped Pi result when they are outside the scope. That scope is preserved when passing returned findings or cloning them with object spread.
+When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. The manifest is filtered to matching files, the prompt carries the path scope, and Pipr drops findings from that scoped Pi result when `result.inlineFindings` is passed directly to `ctx.comment(...)`. If a task maps, spreads, or clones the returned finding array, Pipr treats the transformed findings as task-authored output and applies normal Diff Manifest range validation.
 
 <auto-type-table path="packages/sdk/src/index.ts" name="TaskContext" />
 
