@@ -7,10 +7,12 @@ Entrypoints decide how a Review Task starts. A task can be selected by a change 
 
 ## `pipr.review` entrypoints
 
-The quickest setup uses `pipr.review(...)`:
+The quickest setup sets a publication cap and uses `pipr.review(...)`:
 
 ```ts twoslash
 // @include: pipr-reviewer
+pipr.config({ publication: { maxInlineComments: 5 } });
+
 pipr.review({
   id: "review",
   reviewer,
