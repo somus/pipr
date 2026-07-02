@@ -1,0 +1,39 @@
+packages/cli/src/main.ts
+  s_e86d7229599bc1::t_327428eebc7fc7 6,124-125,132-148,158-163,170-195,198-207,286-287,289-290,293-302,363-364,371-372,375,377,380-383,399,472
+packages/runtime/package.json
+  s_e86d7229599bc1::t_f61096f16dc4ac 54
+packages/runtime/src/action/command-entry.ts
+  s_e86d7229599bc1::t_4306d8c1c18ea8 1-261
+packages/runtime/src/action/commands.ts
+  s_e86d7229599bc1::t_ed6f092130ca93 10,12-16,30,32
+packages/runtime/src/action/pull-request-entry.ts
+  s_e86d7229599bc1::t_9fe2a36bfcd970 1-63
+packages/runtime/src/action/trusted-runtime.ts
+  s_e86d7229599bc1::t_7d93c07cbad1db 1-38
+packages/runtime/src/action/verifier-entry.ts
+  s_e86d7229599bc1::t_066108cbbc43cf 1-241
+packages/runtime/src/index.ts
+  s_e86d7229599bc1::t_46896b374f895f 4
+packages/runtime/src/shared/logging.ts
+  s_e86d7229599bc1::t_949702767b59ac 2,6-12,18-19,40,63,66,69,72,76,83,89-90,92-96,149-150,171,176-184,188
+packages/runtime/src/shared/tests/logging.test.ts
+  s_e86d7229599bc1::t_d7f037bbb635fe 13-19,37-49,67-68
+packages/runtime/src/tests/helpers/action-log-sink.ts
+  s_e86d7229599bc1::t_0681d1e487b8d5 1,5,13,18,22-24,26-28,37-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "e537f7b44aa4f8fa204a0e7f9e36bf777c30ac7b",
+  "prompts": {},
+  "sessions": {
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
