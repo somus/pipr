@@ -1,0 +1,47 @@
+packages/e2e/assertions.test.ts
+  s_e86d7229599bc1::t_4fb041759eb2c6 44,48,50,54,166
+packages/e2e/assertions.ts
+  s_e86d7229599bc1::t_1079df8a1878bf 51,117-119,124
+packages/runtime/package.json
+  s_e86d7229599bc1::t_6f360851e3337d 61
+packages/runtime/src/config/sdk-module.ts
+  s_e86d7229599bc1::t_fb6b759ac65345 1-21
+packages/runtime/src/config/ts-loader.ts
+  s_e86d7229599bc1::t_a912452996e13b 5,10,117-118,174
+packages/runtime/src/config/type-support.ts
+  s_e86d7229599bc1::t_9a8ac3cee46461 9,105-107,109-110
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_e86d7229599bc1::t_fc96c225b4ff1e 1,56-60,78-86
+packages/runtime/src/review/comment-publishing.ts
+  s_e86d7229599bc1::t_78857a874d6643 36
+packages/runtime/src/review/comment.ts
+  s_e86d7229599bc1::t_6530e6a467fb40 121
+packages/runtime/src/review/prior-state.ts
+  s_e86d7229599bc1::t_c7fbcba88193b6 53,77,79-89,96,100-103,112,118,213,223,235,245,250-252,274,276-281,391-398,400
+packages/runtime/src/review/task/task-output.ts
+  s_e86d7229599bc1::t_32c0c655226822 8,10,60-70,99-105,116-136,138-139,179-183,185,194-198,200,249,262-264
+packages/runtime/src/review/task/task-runtime.ts
+  s_e86d7229599bc1::t_af730b5e4c91e8 2,194,460,477-481
+packages/runtime/src/review/tests/comment.test.ts
+  s_e86d7229599bc1::t_87a0b29623ebf3 80
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_e86d7229599bc1::t_61d05cfc9259ad 591,625,627,630,674,677
+packages/sdk/src/builder.ts
+  s_e86d7229599bc1::t_4cd75f379497ad 31,197,434-440,576-579,581-582,600-611,615-628,636-643
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "bb27f91c37634d8df216c8fd44b2cab4f5c7d729",
+  "prompts": {},
+  "sessions": {
+    "s_e86d7229599bc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2282-0203-7ef2-a08d-ab186d07e158",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
