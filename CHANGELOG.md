@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/somus/pipr/compare/v0.2.0...v0.2.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* decouple init tests from npm publish timing ([2cbb931](https://github.com/somus/pipr/commit/2cbb9315ab83eee6d3b1e498ca69d1455635e2fa))
+
 ## [0.2.0](https://github.com/somus/pipr/compare/v0.1.3...v0.2.0) (2026-07-02)
 
 
