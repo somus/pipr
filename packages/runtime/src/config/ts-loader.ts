@@ -73,7 +73,10 @@ async function installSdkStub(configDir: string): Promise<void> {
       },
     }),
   );
-  await Bun.write(path.join(sdkRoot, "index.mjs"), await sdkStubSource());
+  await Bun.write(
+    path.join(sdkRoot, "index.mjs"),
+    sdkModuleStubSource(resolvedSdkModulePath(), embeddedSdkAssets().module),
+  );
 }
 
 async function typecheckTypescriptConfig(
@@ -168,10 +171,6 @@ function formatTypeScriptDiagnostics(
     getCurrentDirectory: () => configDir,
     getNewLine: () => "\n",
   });
-}
-
-async function sdkStubSource(): Promise<string> {
-  return sdkModuleStubSource(resolvedSdkModulePath(), embeddedSdkAssets().module);
 }
 
 function isIgnoredConfigCopyPath(source: string, configDir: string): boolean {

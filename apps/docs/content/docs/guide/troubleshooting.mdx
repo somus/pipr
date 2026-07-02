@@ -115,13 +115,13 @@ Common reasons:
 - `path` does not match a changed file in the Diff Manifest.
 - `rangeId` does not exist for that path.
 - `side`, `startLine`, or `endLine` does not match the selected range.
-- The finding is outside the task path scope.
+- The finding is outside direct scoped Pi result paths.
 - The file was excluded as generated, binary, removed, lockfile, or too large for inline review.
 - The finding duplicates another current finding.
 
 Dropped findings are exposed in the Action `dropped-findings` output and in publication metadata.
 
-Fix the agent prompt or output mapping so findings use the exact Diff Manifest path, range id, side, and line numbers. See [Comments and Findings](/docs/guide/comments#dropped-findings).
+Fix the agent prompt or output mapping so findings use the exact Diff Manifest path, range id, side, and line numbers. For scoped Pi runs, pass `result.inlineFindings` directly when Pipr should enforce the same `paths` filter on publication. See [Comments and Findings](/docs/guide/comments#dropped-findings).
 
 ## Pi output is invalid
 
