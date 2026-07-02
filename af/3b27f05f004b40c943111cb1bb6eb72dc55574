@@ -1,0 +1,128 @@
+.gitignore
+  s_8a5dc77135c94c::t_9ed6151aad2b6f 2
+apps/docs/content/docs/guide/configuration.mdx
+  s_8a5dc77135c94c::t_bffed18167696f 10
+packages/cli/src/tests/main.test.ts
+  s_8a5dc77135c94c::t_1f98816949ff7a 179,182,185-186
+  s_8a5dc77135c94c::t_f45841b5b33a04 29
+packages/runtime/src/action/git-project.ts
+  s_8a5dc77135c94c::t_ba9c06430eba02 70-76
+apps/docs/content/docs/recipes/index.mdx
+  s_8a5dc77135c94c::t_554887ffe7a4f5 21,24-25
+packages/runtime/src/config/tests/helpers/third-party-config.ts
+  s_8a5dc77135c94c::t_e159f0c940061a 4,20-26
+  s_8a5dc77135c94c::t_c7758ba831a0c5 1-3,5-19,27-58
+apps/docs/content/docs/reference/cli.mdx
+  s_8a5dc77135c94c::t_85b2a896a74cb2 29,37
+docs/adr/0003-typescript-pipr-config.md
+  s_a9604014069edf::t_cda4553c3c5298 13
+  s_8a5dc77135c94c::t_0b6829a32fb5bd 10-12
+docs/CONTEXT.md
+  s_8a5dc77135c94c::t_eaefa6b9633e32 29
+apps/docs/content/docs/guide/github-action.mdx
+  s_8a5dc77135c94c::t_5ce01baec344ff 33-36
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_8a5dc77135c94c::t_66294e9ee3d2eb 1,3-15,17-24,26-108,137-170,176,178-184
+  s_8a5dc77135c94c::t_5cfcc21734f411 2
+  s_c40122b0479a05::t_0bc2ff5042285d 109-136
+  s_8a5dc77135c94c::t_e851f4e62c9bd7 171-172,175
+  s_8a5dc77135c94c::t_d2316b50e04bce 16
+  s_8a5dc77135c94c::t_4c3c3032391f97 25
+  s_8a5dc77135c94c::t_9533cfa012d94d 173-174
+  s_8a5dc77135c94c::t_c0c61882d48f90 177
+apps/docs/content/docs/reference/architecture.mdx
+  s_8a5dc77135c94c::t_26628dffb4b204 100-108
+packages/runtime/src/action/tests/helpers/git-project.ts
+  s_8a5dc77135c94c::t_5b158303b46695 1-3,5,8-13,15-16,21
+  s_8a5dc77135c94c::t_c40b2771a45f26 4,6-7,14,17-20
+packages/runtime/src/config/tests/init.test.ts
+  s_c40122b0479a05::t_05572103e924db 275-276
+  s_8a5dc77135c94c::t_0f19f7f7b9cbd8 341
+  s_8a5dc77135c94c::t_d2083a92912476 277
+  s_8a5dc77135c94c::t_cec0c0f1c14b38 15-16,18,29,37-40,42,45-46,61,63,68,80-85,91,98,108,124,367-369,394
+  s_8a5dc77135c94c::t_fe62e0c673d88b 51
+  s_8a5dc77135c94c::t_ee65a033d8b7ec 41
+packages/runtime/src/action/types.ts
+  s_8a5dc77135c94c::t_f47c1763bf837b 21
+.pipr/package.json
+  s_8a5dc77135c94c::t_99301c1bee77fd 1-9
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_8a5dc77135c94c::t_3cd39b2c14514e 48-49
+packages/runtime/src/config/init.ts
+  s_8a5dc77135c94c::t_21f20fd9323533 19,38-39,41-45,74-81,98,101-102,118-136,140-141,143-144,152,164-174,179,185-200,290,315-319,321-326
+  s_8a5dc77135c94c::t_1baf2908b4beb1 11
+  s_8a5dc77135c94c::t_a6552a3d53126b 137-139
+  s_8a5dc77135c94c::t_e20a3ccf286862 3
+  s_c40122b0479a05::t_85c342b91c4b99 320
+packages/runtime/src/index.ts
+  s_8a5dc77135c94c::t_8172138644c549 22
+packages/runtime/src/config/ts-loader.ts
+  s_c40122b0479a05::t_5dfcfdbeda78f9 110-113
+  s_8a5dc77135c94c::t_2ea712209aaf95 8,10-11,40-41,59-64,82,85,87-90,114-119,122,124,126,150-158,161
+apps/docs/content/docs/index.mdx
+  s_8a5dc77135c94c::t_6de20eebacd5a1 57-59,65
+packages/cli/src/main.ts
+  s_8a5dc77135c94c::t_12df5e1f6daabc 58
+  s_8a5dc77135c94c::t_a2c19e7f0491e4 273,279-282
+  s_8a5dc77135c94c::t_922470db6217cc 28
+apps/docs/content/docs/guide/quickstart.mdx
+  s_8a5dc77135c94c::t_7372e5d1b63b3e 165
+packages/runtime/src/config/sdk-stub.ts
+  s_8a5dc77135c94c::t_6bdb801b480b39 1,9-13,15,17-20,22-23,25-33,35-38,49,75
+  s_8a5dc77135c94c::t_159fec0c1f627e 21,24,34,41,45
+packages/runtime/src/config/starter-tsconfig.ts
+  s_8a5dc77135c94c::t_c6bd18176430aa 1-11
+packages/e2e/scenarios.ts
+  s_8a5dc77135c94c::t_eae175ae6630b4 212-229,236-245
+  s_8a5dc77135c94c::t_4a31aadb50f0f5 371-390,393-402
+  s_8a5dc77135c94c::t_fe72f4a50891c3 14-17
+  s_8a5dc77135c94c::t_882aca7afb4227 403
+packages/runtime/src/action/tests/git-project.test.ts
+  s_8a5dc77135c94c::t_a7c15be247c511 10,14-21
+  s_8a5dc77135c94c::t_103489787fc704 2,4,11,13
+  s_8a5dc77135c94c::t_356abe785409cb 12,63
+  s_8a5dc77135c94c::t_d692caada19fa7 6,9,23,50,61
+packages/runtime/src/config/config-deps.ts
+  s_8a5dc77135c94c::t_fb780486ee2eab 1-57,71-79
+  s_c40122b0479a05::t_77cc45ee93d011 58-70
+apps/docs/scripts/sync-recipes.ts
+  s_8a5dc77135c94c::t_db9f546e24ffa5 422,425-426
+packages/runtime/src/action/commands.ts
+  s_8a5dc77135c94c::t_6832950205069b 55
+.pipr/bun.lock
+  s_8a5dc77135c94c::t_09e904e8753721 1-27
+docs/adr/0006-installable-config-dependencies.md
+  s_a9604014069edf::t_f7b61c485e120d 1-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "af3b27f05f004b40c943111cb1bb6eb72dc55574",
+  "prompts": {},
+  "sessions": {
+    "s_8a5dc77135c94c": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2456fdf3-0a39-430f-8229-a59cd11296bf",
+        "model": "composer-2.5-fast"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_a9604014069edf": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "c52c1201-e3c3-40c8-982f-f1a88e45adbc",
+        "model": "composer-2.5-fast"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_c40122b0479a05": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f23b7f6c-d06c-4d6e-b7e3-a868db5505c3",
+        "model": "composer-2.5-fast"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
