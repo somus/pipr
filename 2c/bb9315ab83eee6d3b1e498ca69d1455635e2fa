@@ -1,0 +1,29 @@
+packages/cli/src/tests/main.test.ts
+  s_a1b7e4385f2174::t_7e12cb57b447b2 550
+packages/runtime/src/config/init.ts
+  s_a1b7e4385f2174::t_f375e7a7e272b4 198
+packages/runtime/src/config/tests/config.test.ts
+  s_a1b7e4385f2174::t_d0d55eb33ace7f 13-15
+packages/runtime/src/config/tests/helpers/local-init-sdk.ts
+  s_a1b7e4385f2174::t_a0d8792d4bc700 1-8
+packages/runtime/src/config/tests/init.test.ts
+  s_a1b7e4385f2174::t_577cea000b8146 12-14
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_a1b7e4385f2174::t_ad7488de70ca1b 8,14-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "2cbb9315ab83eee6d3b1e498ca69d1455635e2fa",
+  "prompts": {},
+  "sessions": {
+    "s_a1b7e4385f2174": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f245c-d3ab-7791-a54d-ea4ebbea2bff",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
