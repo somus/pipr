@@ -1,0 +1,21 @@
+.github/workflows/pipr.yml
+  s_067b8d581740e3::t_0179cc84c9dc0e 24
+bun.lock
+  s_067b8d581740e3::t_d196c0ff68de2c 51,57-58,76,81,95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "b7b7d44956af080b4dc254b075b4fe53f320eea3",
+  "prompts": {},
+  "sessions": {
+    "s_067b8d581740e3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1e88-dc2f-79c3-9d37-4134b3e641ba",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
