@@ -5,16 +5,8 @@ import { remarkSteps } from "fumadocs-core/mdx-plugins/remark-steps";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
+import { repoRoot, twoslashCompilerOptions } from "./twoslash-config.js";
 
-const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
-const twoslashCompilerOptions = {
-  baseUrl: repoRoot,
-  paths: {
-    "@usepipr/sdk": ["packages/sdk/src/index.ts"],
-    "@usepipr/sdk/*": ["packages/sdk/src/*.ts"],
-    "@usepipr/sdk/internal": ["packages/sdk/src/internal.ts"],
-  },
-};
 const guideTwoslashIncludes = new Map<string, string>([
   [
     "pipr-builder",

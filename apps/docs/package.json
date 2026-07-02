@@ -10,7 +10,7 @@
     "preview": "mkdir -p .cache && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite preview",
     "recipes:sync": "bun scripts/sync-recipes.ts",
     "recipes:check": "bun scripts/sync-recipes.ts --check",
-    "test": "bun run recipes:check",
+    "test": "bun run recipes:check && bun test scripts/tests",
     "typegen": "mkdir -p .cache && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage fumadocs-mdx && tsr generate",
     "typecheck": "bun run typegen && tsc --noEmit",
     "lint": "biome check .",
