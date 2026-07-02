@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/somus/pipr/compare/v0.1.1...v0.1.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* capitalize review header ([d5dfb04](https://github.com/somus/pipr/commit/d5dfb04d983743ef69e82146c777ee21f0f7cb27))
+
 ## [0.1.1](https://github.com/somus/pipr/compare/v0.1.0...v0.1.1) (2026-07-02)
 
 
