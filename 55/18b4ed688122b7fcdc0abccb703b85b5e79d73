@@ -1,0 +1,85 @@
+.dockerignore
+  s_7397e33c22e1fb::t_4d3f1db29e4a41 6-9
+.github/renovate.json
+  s_7397e33c22e1fb::t_ad5c00abe4410f 1-35
+.github/workflows/ci.yml
+  s_7397e33c22e1fb::t_a9f4903c5e2ac3 10-13,24,26,31,44,49,52,60,68,72,78,80,82,84,86,88,91-97,103,105-111,113,119,121-127,135,137-143,145,151
+.github/workflows/docker-image.yml
+  s_7397e33c22e1fb::t_a8551c9044e22c 15,17-23,25
+.github/workflows/pipr.yml
+  s_7397e33c22e1fb::t_a63e0b1c6fdde3 20,22
+.github/workflows/release-please.yml
+  s_7397e33c22e1fb::t_e1f8060749acaa 16,19,24,29,44,50
+.github/workflows/release.yml
+  s_7397e33c22e1fb::t_d55d5af3cfad0a 37,42,109,113,116,121-126,156,163,166,174,179,181
+.pipr/bun.lock
+  s_7397e33c22e1fb::t_44c08a4f47cbd1 7,19
+.pipr/package.json
+  s_7397e33c22e1fb::t_91abbe34696db8 4
+Dockerfile
+  s_7397e33c22e1fb::t_593fd7f0727868 1,5-9,13,17-56,59-67
+apps/docs/package.json
+  s_7397e33c22e1fb::t_4fe0225f30c905 16-17,24-30,33,36-37,43-44,47
+bun.lock
+  s_7397e33c22e1fb::t_333b82c6e02082 7-9,11-14,16,25-31,34,37-38,44-45,48,71,86,92,106,151,153,155,157,159,161,163,165,167,227,229,231,233,235,237,239,241,431,433,435,437,439,441,443,445,447,449,451,453,455,457,459,487,489,491,493,495,499,501,503,505,509,513,515,517,519,527,529,531,533,535,537,563,667-668,773,787,789,791,793,795,877,917,1093,1095,1213,1237,1253,1297,1383-1384,1399-1404,1413-1414,1437-1438
+install.sh
+  s_7397e33c22e1fb::t_6539748dcad473 29,32,38,40-66,68-73
+mise.toml
+  s_7397e33c22e1fb::t_863f3e140aca0a 4
+package.json
+  s_7397e33c22e1fb::t_5c97da06338b90 6,23,32-33,37-46,48,51-61,66-69,71,73-75
+packages/cli/build-release.ts
+  s_7397e33c22e1fb::t_01f0c03c307be1 2,54-55,58,148-162
+packages/cli/package.json
+  s_7397e33c22e1fb::t_fa7fc52dbc7ff1 29-30
+packages/e2e/check.ts
+  s_7397e33c22e1fb::t_061285cbf4c21a 8
+packages/e2e/package.json
+  s_7397e33c22e1fb::t_4806eb2c2750e6 14,16
+packages/e2e/run.ts
+  s_7397e33c22e1fb::t_5f64da3b528ea6 102,135
+packages/runtime/package.json
+  s_7397e33c22e1fb::t_18a9dc0992640a 43-46,55,61
+packages/runtime/src/config/starter-tsconfig.ts
+  s_7397e33c22e1fb::t_462689a76fbdca 5
+packages/runtime/src/config/ts-loader.ts
+  s_7397e33c22e1fb::t_60e9a2fa44d9af 124
+packages/sdk/package.json
+  s_7397e33c22e1fb::t_20e71b14f5a2cd 39-40
+release-please-config.json
+  s_7397e33c22e1fb::t_174cd55e15ff00 41-45
+scripts/changed-scope.ts
+  s_7397e33c22e1fb::t_a50f1f073d7626 1-90
+scripts/check-conventional-commit.ts
+  s_7397e33c22e1fb::t_26fe7988bf7058 79,85-107
+scripts/check-release-metadata.ts
+  s_7397e33c22e1fb::t_764ea8463f1709 20-21,29-39,62,64-68,92-95,171-173,176-178,182-185,215-216,221-222,257-290
+scripts/check-runtime-test-split.ts
+  s_7397e33c22e1fb::t_8dc81e215b85ac 1-83
+scripts/docker-e2e.ts
+  s_7397e33c22e1fb::t_bcc762f2dd8672 1-21
+scripts/sync-release-lockfile.ts
+  s_7397e33c22e1fb::t_f825cf77536947 20-21,29,38-42,75-87
+scripts/tests/release-scripts.test.ts
+  s_7397e33c22e1fb::t_ce4d69b3ecac6d 2,114-119,129-177,225,227-228,230,270-272,281-330,350
+tsconfig.json
+  s_7397e33c22e1fb::t_c9f04b1efc45ae 7
+turbo.json
+  s_7397e33c22e1fb::t_0b75d281164f80 25,28-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5518b4ed688122b7fcdc0abccb703b85b5e79d73",
+  "prompts": {},
+  "sessions": {
+    "s_7397e33c22e1fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2674-b59d-7461-8886-a9750ddc4285",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
