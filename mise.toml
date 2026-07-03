@@ -4,8 +4,8 @@ act = "0.2.89"
 hk = "1.49.0"
 
 [tasks.install]
-description = "Install JavaScript dependencies"
-run = "bun install"
+description = "Install JavaScript dependencies and Git hooks"
+run = "bun install && hk install --mise"
 
 [tasks.check]
 description = "Run repository checks"

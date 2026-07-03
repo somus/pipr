@@ -25,6 +25,7 @@ COPY --chown=bun:bun packages/sdk/package.json packages/sdk/package.json
 RUN bun install --frozen-lockfile --ignore-scripts
 
 FROM deps AS build
+COPY --chown=bun:bun skills skills
 COPY --chown=bun:bun packages/cli packages/cli
 COPY --chown=bun:bun packages/runtime packages/runtime
 COPY --chown=bun:bun packages/sdk packages/sdk

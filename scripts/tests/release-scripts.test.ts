@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -166,6 +175,71 @@ describe("release checksums", () => {
     const expected = createHash("sha256").update(readFileSync(binaryPath)).digest("hex");
     const checksums = readFileSync(path.join(releaseDir, "SHA256SUMS"), "utf8");
     expect(checksums).toContain(`${expected}  pipr-linux-x64`);
+
+    const cacheDir = path.join(tempDir, "host-skill-cache");
+    const skill = executableResult(binaryPath, ["skill"], tempDir, {
+      PIPR_SKILL_CACHE_DIR: cacheDir,
+    });
+    expect(skill.exitCode, `${skill.stdout}\n${skill.stderr}`).toBe(0);
+    expect(skill.stdout).toContain("BEGIN SKILL FILE: SKILL.md");
+    expect(skill.stdout).toContain("BEGIN SKILL FILE: references/recipes.md");
+
+    const skillPath = executableResult(binaryPath, ["skill", "path"], tempDir, {
+      PIPR_SKILL_CACHE_DIR: cacheDir,
+    });
+    expect(skillPath.exitCode, `${skillPath.stdout}\n${skillPath.stderr}`).toBe(0);
+    expect(readFileSync(path.join(skillPath.stdout.trim(), "SKILL.md"), "utf8")).toContain(
+      "name: pipr-setup",
+    );
+  }, 30000);
+});
+
+describe("CLI package bundled skills", () => {
+  it("copies skill files through a staging directory", () => {
+    const repository = copyRepositoryFixture();
+    const distDir = path.join(repository, "packages/cli/dist");
+    const skillsDir = path.join(distDir, "skills");
+    writeCreatingDirs(path.join(skillsDir, "stale.txt"), "stale\n");
+
+    run("bun", [path.join(repository, "packages/cli/src/release/copy-skills.ts")], {
+      cwd: repository,
+    });
+
+    expect(readFileSync(path.join(skillsDir, "pipr-setup/SKILL.md"), "utf8")).toContain(
+      "name: pipr-setup",
+    );
+    expect(existsSync(path.join(skillsDir, "stale.txt"))).toBe(false);
+    expect(readdirSync(distDir).filter((entry) => entry.startsWith("skills-"))).toHaveLength(0);
+  });
+
+  it("copies skill files into package dist", () => {
+    run("bun", ["run", "--cwd", "packages/cli", "build"], { cwd: repoRoot });
+
+    const sourceDist = path.join(repoRoot, "packages/cli", "dist");
+    expect(readFileSync(path.join(sourceDist, "skills/pipr-setup/SKILL.md"), "utf8")).toContain(
+      "name: pipr-setup",
+    );
+    const isolatedDist = path.join(tempDir, "isolated-cli-dist");
+    cpSync(sourceDist, isolatedDist, { recursive: true });
+    const cliPath = path.join(isolatedDist, "main.mjs");
+    const cacheDir = path.join(realpathSync(tempDir), "dist-skill-cache");
+    const bunCacheDir = path.join(realpathSync(tempDir), "bun-install-cache");
+    const skill = executableResult(cliPath, ["skill"], repoRoot, {
+      BUN_INSTALL_CACHE_DIR: bunCacheDir,
+      PIPR_SKILL_CACHE_DIR: cacheDir,
+    });
+    expect(skill.exitCode, `${skill.stdout}\n${skill.stderr}`).toBe(0);
+    expect(skill.stdout).toContain("BEGIN SKILL FILE: SKILL.md");
+    expect(skill.stdout).toContain("BEGIN SKILL FILE: references/config-patterns.md");
+
+    const skillPath = executableResult(cliPath, ["skill", "path"], repoRoot, {
+      BUN_INSTALL_CACHE_DIR: bunCacheDir,
+      PIPR_SKILL_CACHE_DIR: cacheDir,
+    });
+    expect(skillPath.exitCode, `${skillPath.stdout}\n${skillPath.stderr}`).toBe(0);
+    expect(
+      readFileSync(path.join(skillPath.stdout.trim(), "references/recipes.md"), "utf8"),
+    ).toContain("Pipr Recipe Selection");
   }, 30000);
 });
 
@@ -260,6 +334,25 @@ function scriptResult(
   };
 }
 
+function executableResult(
+  command: string,
+  args: string[],
+  cwd = repoRoot,
+  env: Record<string, string | undefined> = {},
+): { exitCode: number; stdout: string; stderr: string } {
+  const result = Bun.spawnSync([command, ...args], {
+    cwd,
+    env: commandEnv(env),
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  return {
+    exitCode: result.exitCode,
+    stderr: result.stderr.toString(),
+    stdout: result.stdout.toString(),
+  };
+}
+
 function run(
   command: string,
   args: string[],
@@ -329,7 +422,7 @@ function commandEnv(
   return {
     ...Bun.env,
     PATH: `${path.join(tempDir, "bin")}:${Bun.env.PATH ?? ""}`,
-    TMPDIR: tempDir,
+    TMPDIR: realpathSync(tempDir),
     ...extra,
   };
 }

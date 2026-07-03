@@ -7,6 +7,7 @@ import {
   embeddedSdkDeclaration,
   readSdkDeclarationModules,
 } from "./src/release/sdk-declaration.js";
+import { readBundledSkillCatalog } from "./src/skill-catalog.js";
 
 type ReleaseTarget = {
   target: string;
@@ -50,7 +51,10 @@ await run("bun", ["run", "--cwd", "packages/sdk", "build"]);
 await run("bun", ["run", "--cwd", "packages/runtime", "build"]);
 await mkdir(releaseDir, { recursive: true });
 
-const define = await embeddedSdkDefines();
+const define = {
+  ...(await embeddedSdkDefines()),
+  ...(await embeddedSkillDefines()),
+};
 const targetsToBuild = selectedTargets();
 for (const item of targetsToBuild) {
   await buildTarget(item, define);
@@ -86,6 +90,13 @@ async function embeddedSdkDefines(): Promise<Record<string, string>> {
   return {
     PIPR_EMBEDDED_SDK_MODULE: JSON.stringify(moduleSource),
     PIPR_EMBEDDED_SDK_DECLARATION: JSON.stringify(declarationSource),
+  };
+}
+
+async function embeddedSkillDefines(): Promise<Record<string, string>> {
+  const catalog = await readBundledSkillCatalog(path.join(sourceRoot, "skills"));
+  return {
+    PIPR_EMBEDDED_SKILLS: JSON.stringify(JSON.stringify(catalog)),
   };
 }
 

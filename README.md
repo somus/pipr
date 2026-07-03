@@ -16,6 +16,12 @@ pipr init
 pipr check
 ```
 
+AI agents should load the version-matched setup skill before configuring a repository:
+
+```bash
+pipr skill
+```
+
 Use `pipr init --adapters none` to create only `.pipr` config files. Run
 `pipr init --help` to list supported init adapters.
 

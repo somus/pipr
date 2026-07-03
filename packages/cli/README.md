@@ -13,8 +13,15 @@ The binary exposes these command groups:
 - `pipr dry-run`
 - `pipr inspect`
 - `pipr review`
+- `pipr skill`
 
 Use the CLI reference for option details.
+
+AI agents should start with:
+
+```bash
+pipr skill
+```
 
 ## Technical Notes
 

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { access, chmod, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { access, chmod, lstat, mkdir, mkdtemp, readdir, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import cliPackage from "../../package.json" with { type: "json" };
 import { embeddedSdkDeclaration, readSdkDeclarationModules } from "../release/sdk-declaration.js";
+import {
+  type BundledSkill,
+  containedSkillFilePath,
+  readBundledSkillCatalog,
+  singleBundledSkill,
+} from "../skill-catalog.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const cliProjectDir = path.resolve(testDir, "../..");
@@ -18,10 +25,13 @@ describe("pipr CLI", () => {
 
     expect(result.exitCode).toBe(0);
     expect(action.exitCode).toBe(0);
+    expect(result.stdout).toContain("Start here (for AI agents):");
+    expect(result.stdout).toContain("pipr skill");
     expect(result.stdout).toContain("init [options]");
     expect(result.stdout).toContain("check [options]");
     expect(result.stdout).toContain("inspect [options]");
     expect(result.stdout).toContain("review [options]");
+    expect(result.stdout).toContain("skill");
     expect(result.stdout).not.toContain("run [options] <name>");
     const init = await runCli(["init", "--help"]);
     expect(init.stdout).toContain("--adapters <adapters>");
@@ -32,6 +42,182 @@ describe("pipr CLI", () => {
     expect(init.stdout).toContain("multi-agent-review");
     expect(action.stdout).toContain("--config-dir <dir>");
     expect(action.stdout).not.toContain("--provider <name>");
+  });
+
+  it("prints and materializes the bundled setup skill", async () => {
+    const cacheDir = await mkdtemp(path.join(os.tmpdir(), "pipr-skill-cache-"));
+    try {
+      const get = await runCli(["skill"], { PIPR_SKILL_CACHE_DIR: cacheDir });
+      const pathResult = await runCli(["skill", "path"], {
+        PIPR_SKILL_CACHE_DIR: cacheDir,
+      });
+
+      expect(get.exitCode, `${get.stdout}\n${get.stderr}`).toBe(0);
+      expect(get.stdout).toContain("BEGIN SKILL FILE: SKILL.md");
+      expect(get.stdout).toContain("BEGIN SKILL FILE: references/config-patterns.md");
+      expect(get.stdout).toContain("BEGIN SKILL FILE: references/recipes.md");
+      expect(get.stdout).toContain("name: pipr-setup");
+      expect(get.stdout).toContain("Install and configure Pipr");
+      expect(pathResult.exitCode, `${pathResult.stdout}\n${pathResult.stderr}`).toBe(0);
+      const skillPath = pathResult.stdout.trim();
+      expect(path.basename(skillPath)).toBe("pipr-setup");
+      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+      expect(
+        await Bun.file(path.join(skillPath, "references/config-patterns.md")).text(),
+      ).toContain("Pipr Config Patterns");
+      expect(await Bun.file(path.join(skillPath, "references/recipes.md")).text()).toContain(
+        "Pipr Recipe Selection",
+      );
+    } finally {
+      await removeWorkspace(cacheDir);
+    }
+  });
+
+  it("materializes the bundled setup skill across concurrent path commands", async () => {
+    const cacheDir = await mkdtemp(path.join(os.tmpdir(), "pipr-skill-cache-"));
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          runCliAsync(["skill", "path"], { PIPR_SKILL_CACHE_DIR: cacheDir }),
+        ),
+      );
+
+      for (const result of results) {
+        expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      }
+      const skillPaths = new Set(results.map((result) => result.stdout.trim()));
+      expect(skillPaths.size).toBe(1);
+      const [skillPath = ""] = [...skillPaths];
+      expect(skillPath).not.toBe("");
+      expect(path.basename(skillPath)).toBe("pipr-setup");
+      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+    } finally {
+      await removeWorkspace(cacheDir);
+    }
+  });
+
+  it("replaces stale skill cache files without following symlinks", async () => {
+    const cacheDir = await mkdtemp(path.join(os.tmpdir(), "pipr-skill-cache-"));
+    try {
+      const staleSkillDir = path.join(cacheDir, cliPackage.version, "pipr-setup");
+      const victimPath = path.join(cacheDir, "victim.txt");
+      await mkdir(staleSkillDir, { recursive: true });
+      await Bun.write(victimPath, "do not overwrite\n");
+      await symlink(victimPath, path.join(staleSkillDir, "SKILL.md"));
+
+      const pathResult = await runCli(["skill", "path"], {
+        PIPR_SKILL_CACHE_DIR: cacheDir,
+      });
+
+      expect(pathResult.exitCode, `${pathResult.stdout}\n${pathResult.stderr}`).toBe(0);
+      const skillPath = pathResult.stdout.trim();
+      expect(await Bun.file(victimPath).text()).toBe("do not overwrite\n");
+      expect((await lstat(path.join(skillPath, "SKILL.md"))).isSymbolicLink()).toBe(false);
+      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+    } finally {
+      await removeWorkspace(cacheDir);
+    }
+  });
+
+  it("replaces stale extra files in the skill cache", async () => {
+    const cacheDir = await mkdtemp(path.join(os.tmpdir(), "pipr-skill-cache-"));
+    try {
+      const skill = singleBundledSkill(
+        await readBundledSkillCatalog(path.join(repoRoot, "skills")),
+      );
+      const staleSkillDir = path.join(cacheDir, cliPackage.version, "pipr-setup");
+      for (const file of skill.files) {
+        const target = path.join(staleSkillDir, file.path);
+        await mkdir(path.dirname(target), { recursive: true });
+        await Bun.write(target, file.contents);
+      }
+      await Bun.write(path.join(staleSkillDir, "notes.txt"), "stale\n");
+
+      const pathResult = await runCli(["skill", "path"], {
+        PIPR_SKILL_CACHE_DIR: cacheDir,
+      });
+
+      expect(pathResult.exitCode, `${pathResult.stdout}\n${pathResult.stderr}`).toBe(0);
+      const skillPath = pathResult.stdout.trim();
+      expect(await fileExists(path.join(skillPath, "notes.txt"))).toBe(false);
+      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+    } finally {
+      await removeWorkspace(cacheDir);
+    }
+  });
+
+  it("reuses the skill cache when dotfiles are present", async () => {
+    const cacheDir = await mkdtemp(path.join(os.tmpdir(), "pipr-skill-cache-"));
+    try {
+      const skill = singleBundledSkill(
+        await readBundledSkillCatalog(path.join(repoRoot, "skills")),
+      );
+      const staleSkillDir = path.join(cacheDir, cliPackage.version, "pipr-setup");
+      for (const file of skill.files) {
+        const target = path.join(staleSkillDir, file.path);
+        await mkdir(path.dirname(target), { recursive: true });
+        await Bun.write(target, file.contents);
+      }
+      await Bun.write(path.join(staleSkillDir, ".DS_Store"), "metadata\n");
+
+      const pathResult = await runCli(["skill", "path"], {
+        PIPR_SKILL_CACHE_DIR: cacheDir,
+      });
+
+      expect(pathResult.exitCode, `${pathResult.stdout}\n${pathResult.stderr}`).toBe(0);
+      const skillPath = pathResult.stdout.trim();
+      expect(await Bun.file(path.join(skillPath, ".DS_Store")).text()).toBe("metadata\n");
+      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+    } finally {
+      await removeWorkspace(cacheDir);
+    }
+  });
+
+  it("requires exactly one bundled setup skill", () => {
+    const skill = bundledSkillFixture("pipr-setup");
+
+    expect(singleBundledSkill({ skills: [skill] })).toBe(skill);
+    expect(() => singleBundledSkill({ skills: [] })).toThrow(
+      "Expected exactly one bundled skill named 'pipr-setup'",
+    );
+    expect(() => singleBundledSkill({ skills: [bundledSkillFixture("other")] })).toThrow(
+      "Expected exactly one bundled skill named 'pipr-setup'",
+    );
+    expect(() =>
+      singleBundledSkill({ skills: [skill, bundledSkillFixture("another-skill")] }),
+    ).toThrow("Expected exactly one bundled skill named 'pipr-setup'");
+  });
+
+  it("keeps bundled skill file paths inside the target directory", () => {
+    const root = path.resolve(os.tmpdir(), "pipr-skill-root");
+
+    expect(containedSkillFilePath(root, "references/recipes.md")).toBe(
+      path.join(root, "references", "recipes.md"),
+    );
+    expect(() => containedSkillFilePath(root, path.join(root, "SKILL.md"))).toThrow(
+      "Bundled skill file path must be relative",
+    );
+    expect(() => containedSkillFilePath(root, "../escape.md")).toThrow(
+      "Bundled skill file path escapes the skill directory",
+    );
+  });
+
+  it("rejects unexpected files in the bundled setup skill", async () => {
+    const skillsRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-skills-root-"));
+    try {
+      const skillDir = path.join(skillsRoot, "pipr-setup");
+      await mkdir(path.join(skillDir, "references"), { recursive: true });
+      await Bun.write(path.join(skillDir, "SKILL.md"), "---\ndescription: Test skill\n---\n");
+      await Bun.write(path.join(skillDir, "references/config-patterns.md"), "patterns\n");
+      await Bun.write(path.join(skillDir, "references/recipes.md"), "recipes\n");
+      await Bun.write(path.join(skillDir, "notes.txt"), "internal\n");
+
+      await expect(readBundledSkillCatalog(skillsRoot)).rejects.toThrow(
+        "pipr-setup bundled files must match the release allowlist",
+      );
+    } finally {
+      await removeWorkspace(skillsRoot);
+    }
   });
 
   it("requires an explicit base SHA for local review runs", async () => {
@@ -539,16 +725,55 @@ async function runCli(
   };
 }
 
+async function runCliAsync(
+  args: string[],
+  env: NodeJS.ProcessEnv = {},
+  cwd = process.cwd(),
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const result = Bun.spawn(["bun", cliPath, ...args], {
+    cwd,
+    env: {
+      ...minimalEnv(),
+      ...env,
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    result.exited,
+    result.stdout ? new Response(result.stdout).text() : "",
+    result.stderr ? new Response(result.stderr).text() : "",
+  ]);
+  return { exitCode, stdout, stderr };
+}
+
 function minimalEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
-  for (const key of ["BUN_INSTALL", "HOME", "LANG", "PATH", "TMPDIR", "USER"]) {
+  for (const key of [
+    "BUN_INSTALL",
+    "BUN_INSTALL_CACHE_DIR",
+    "HOME",
+    "LANG",
+    "PATH",
+    "TMPDIR",
+    "USER",
+  ]) {
     const value = process.env[key];
     if (value !== undefined) {
       env[key] = value;
     }
   }
+  env.BUN_INSTALL_CACHE_DIR ??= path.join(repoRoot, "node_modules", ".cache", "pipr-bun-install");
   env.PIPR_INTERNAL_INIT_SDK_VERSION = `file:${path.join(repoRoot, "packages/sdk")}`;
   return env;
+}
+
+function bundledSkillFixture(name: string): BundledSkill {
+  return {
+    name,
+    description: "Test skill",
+    files: [{ path: "SKILL.md", contents: "---\ndescription: Test skill\n---\n" }],
+  };
 }
 
 async function runCommand(command: string, args: string[], cwd: string): Promise<string> {
