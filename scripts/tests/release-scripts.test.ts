@@ -96,6 +96,28 @@ describe("check-conventional-commit", () => {
   });
 });
 
+describe("changed-scope", () => {
+  it("limits docker scope to Docker image and container check inputs", () => {
+    for (const file of [
+      "packages/e2e/action-fixture.ts",
+      "packages/e2e/assertions.ts",
+      "packages/e2e/container-check.ts",
+      "packages/e2e/package.json",
+      "scripts/docker-e2e.ts",
+    ]) {
+      expect(dockerScopeChanged(file)).toBe(true);
+    }
+
+    for (const file of [
+      "packages/e2e/check.ts",
+      "packages/e2e/run.ts",
+      "packages/e2e/assertions.test.ts",
+    ]) {
+      expect(dockerScopeChanged(file)).toBe(false);
+    }
+  });
+});
+
 describe("sync-release-lockfile", () => {
   it("normalizes Bun workspace metadata after a version bump", () => {
     const repository = copyRepositoryFixture();
@@ -267,6 +289,39 @@ function git(cwd: string, ...args: string[]): string {
   return result.stdout.toString().trim();
 }
 
+function dockerScopeChanged(relativePath: string): boolean {
+  const repository = changedScopeRepository(relativePath);
+  const base = git(repository, "rev-parse", "HEAD~1");
+  const head = git(repository, "rev-parse", "HEAD");
+  const result = scriptResult(
+    path.join(repoRoot, "scripts/changed-scope.ts"),
+    ["docker"],
+    repository,
+    {
+      EVENT_NAME: "pull_request",
+      PR_BASE_SHA: base,
+      PR_HEAD_SHA: head,
+    },
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr || result.stdout || "changed-scope failed");
+  }
+  return result.stdout.trim() === "changed=true";
+}
+
+function changedScopeRepository(relativePath: string): string {
+  const repository = path.join(tempDir, `scope-${relativePath.replaceAll(/[/.]/g, "-")}`);
+  run("git", ["init", repository]);
+  run("git", ["config", "user.email", "test@example.com"], { cwd: repository });
+  run("git", ["config", "user.name", "Test"], { cwd: repository });
+  writeCreatingDirs(path.join(repository, relativePath), "before\n");
+  run("git", ["add", relativePath], { cwd: repository });
+  run("git", ["commit", "-m", "chore: base"], { cwd: repository });
+  writeCreatingDirs(path.join(repository, relativePath), "after\n");
+  run("git", ["commit", "-am", "chore: change"], { cwd: repository });
+  return repository;
+}
+
 function commandEnv(
   extra: Record<string, string | undefined> = {},
 ): Record<string, string | undefined> {
@@ -330,6 +385,11 @@ function installFixture(options: { validChecksum: boolean }): {
 
 function write(filePath: string, value: string): void {
   writeFileSync(filePath, value);
+}
+
+function writeCreatingDirs(filePath: string, value: string): void {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  write(filePath, value);
 }
 
 function copyRepositoryFixture(): string {

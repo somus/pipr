@@ -78,11 +78,7 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
     );
   }
 
-  if (
-    file.includes("/tests/") ||
-    file.endsWith(".test.ts") ||
-    file === "packages/e2e/assertions.ts"
-  ) {
+  if (file.includes("/tests/") || file.endsWith(".test.ts")) {
     return false;
   }
 
@@ -97,10 +93,14 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
       ".dockerignore",
       ".github/workflows/ci.yml",
     ].includes(file) ||
+    file === "scripts/docker-e2e.ts" ||
     file.startsWith("packages/cli/") ||
     file.startsWith("packages/runtime/") ||
     file.startsWith("packages/sdk/") ||
-    file.startsWith("packages/e2e/")
+    file === "packages/e2e/package.json" ||
+    file === "packages/e2e/action-fixture.ts" ||
+    file === "packages/e2e/assertions.ts" ||
+    file === "packages/e2e/container-check.ts"
   );
 }
 

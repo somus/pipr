@@ -77,8 +77,8 @@ async function checkGeneratedOrConventionalFile(filePath: string): Promise<void>
 
 async function runConventionalCommitCheck(filePath: string): Promise<void> {
   const result = runHk(["util", "check-conventional-commit", filePath]);
-  if (result.exitCode !== 0) {
-    process.exit(result.exitCode);
+  if ((result.exitCode ?? 1) !== 0) {
+    process.exit(result.exitCode ?? 1);
   }
 }
 
