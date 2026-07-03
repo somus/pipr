@@ -38,8 +38,8 @@ tmp_file="${tmp_dir}/pipr"
 checksum_file="${tmp_dir}/SHA256SUMS"
 
 download() {
-  source_url="$1"
-  target_file="$2"
+  local source_url="$1"
+  local target_file="$2"
 
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL "$source_url" -o "$target_file"

@@ -112,7 +112,7 @@ export default definePipr((pipr) => {
       changeRequest: ["opened", "updated", "reopened", "ready"],
       command: { pattern: "@pipr review", permission: "write" },
     },
-    timeout: "5m",
+    timeout: "10m",
   });
 });
 ```

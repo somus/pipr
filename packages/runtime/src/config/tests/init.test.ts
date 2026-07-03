@@ -82,6 +82,9 @@ describe("initOfficialMinimalProject", () => {
     expect(project.kind).toBe("typescript");
     expect(project.settings.config.defaultProvider).toBe("deepseek/deepseek-v4-pro");
     expect(project.settings.config.publication.maxInlineComments).toBe(5);
+    expect(await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text()).toContain(
+      'timeout: "10m"',
+    );
   });
 
   it("can initialize only the pipr config files without adapter files", async () => {
