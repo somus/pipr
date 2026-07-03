@@ -56,7 +56,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 ```
 
-See [Docs](apps/docs/content/docs/index.mdx) or [Quickstart](apps/docs/content/docs/guide/quickstart.mdx) for the full first-run path.
+See [Docs](https://pipr.run/docs) or
+[Quickstart](https://pipr.run/docs/guide/quickstart) for the full first-run
+path.
 
 ## Remote Cache
 
@@ -115,24 +117,24 @@ export default definePipr((pipr) => {
 });
 ```
 
-The SDK also supports custom agents, tasks, `@pipr` commands, model fallback, local-disabled tasks, and retry settings. See [Configuration](apps/docs/content/docs/guide/configuration.mdx).
+The SDK also supports custom agents, tasks, `@pipr` commands, model fallback, local-disabled tasks, and retry settings. See [Configuration](https://pipr.run/docs/guide/configuration).
 
 ## Docs
 
-- [Docs home](apps/docs/content/docs/index.mdx)
-- [Guide](apps/docs/content/docs/guide/index.mdx)
-- [Recipes](apps/docs/content/docs/recipes/index.mdx)
-- [Quickstart](apps/docs/content/docs/guide/quickstart.mdx)
-- [Configuration](apps/docs/content/docs/guide/configuration.mdx)
-- [Entrypoints](apps/docs/content/docs/guide/entrypoints.mdx)
-- [Custom Tasks](apps/docs/content/docs/guide/custom-tasks.mdx)
-- [Pipr SDK Reference](apps/docs/content/docs/reference/sdk-reference.mdx)
-- [Runtime Guide](apps/docs/content/docs/guide/runtime.mdx)
-- [Comments and Findings](apps/docs/content/docs/guide/comments.mdx)
-- [GitHub Action](apps/docs/content/docs/guide/github-action.mdx)
-- [Code Host Adapters](apps/docs/content/docs/reference/code-host-adapters.mdx)
-- [Architecture](apps/docs/content/docs/reference/architecture.mdx)
-- [Development](apps/docs/content/docs/reference/development.mdx)
+- [Docs home](https://pipr.run/docs)
+- [Guide](https://pipr.run/docs/guide)
+- [Recipes](https://pipr.run/docs/recipes)
+- [Quickstart](https://pipr.run/docs/guide/quickstart)
+- [Configuration](https://pipr.run/docs/guide/configuration)
+- [Entrypoints](https://pipr.run/docs/guide/entrypoints)
+- [Custom Tasks](https://pipr.run/docs/guide/custom-tasks)
+- [Pipr SDK Reference](https://pipr.run/docs/reference/sdk-reference)
+- [Runtime Guide](https://pipr.run/docs/guide/runtime)
+- [Comments and Findings](https://pipr.run/docs/guide/comments)
+- [GitHub Action](https://pipr.run/docs/guide/github-action)
+- [Code Host Adapters](https://pipr.run/docs/reference/code-host-adapters)
+- [Architecture](https://pipr.run/docs/reference/architecture)
+- [Development](https://pipr.run/docs/reference/development)
 - [Product language](docs/CONTEXT.md)
 - [Architecture decisions](docs/adr)
 
