@@ -13,19 +13,20 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - id: release
-        uses: googleapis/release-please-action@v5
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         if: ${{ steps.release.outputs.prs_created == 'true' }}
       - name: Sync release PR metadata
         id: lockfile
@@ -40,13 +41,13 @@ jobs:
           git fetch origin "$branch"
           git worktree add -B "$branch" "$worktree" FETCH_HEAD
           bun run sync:release-lockfile -- --root "$worktree"
-          if git -C "$worktree" diff --quiet -- bun.lock action.yml .github/workflows/pipr.yml; then
+          if git -C "$worktree" diff --quiet -- bun.lock .pipr/bun.lock action.yml .github/workflows/pipr.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git -C "$worktree" config user.name "github-actions[bot]"
           git -C "$worktree" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "$worktree" add bun.lock action.yml .github/workflows/pipr.yml
+          git -C "$worktree" add bun.lock .pipr/bun.lock action.yml .github/workflows/pipr.yml
           git -C "$worktree" commit -m "chore: update release metadata"
           echo "changed=true" >> "$GITHUB_OUTPUT"
 

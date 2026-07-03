@@ -3,6 +3,10 @@ dist
 coverage
 .turbo
 .fallow
+**/node_modules
+**/dist
+**/coverage
+packages/**/src/**/tests
 apps/docs/.source
 apps/docs/.cache
 apps/docs/.output

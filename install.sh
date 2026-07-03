@@ -26,20 +26,51 @@ esac
 asset="pipr-${os}-${arch}"
 if [ "$version" = "latest" ]; then
   url="https://github.com/${repo}/releases/latest/download/${asset}"
+  checksum_url="https://github.com/${repo}/releases/latest/download/SHA256SUMS"
 else
   url="https://github.com/${repo}/releases/download/${version}/${asset}"
+  checksum_url="https://github.com/${repo}/releases/download/${version}/SHA256SUMS"
 fi
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT INT HUP TERM
 tmp_file="${tmp_dir}/pipr"
+checksum_file="${tmp_dir}/SHA256SUMS"
 
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$url" -o "$tmp_file"
-elif command -v wget >/dev/null 2>&1; then
-  wget -q "$url" -O "$tmp_file"
+download() {
+  source_url="$1"
+  target_file="$2"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$source_url" -o "$target_file"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "$source_url" -O "$target_file"
+  else
+    echo "pipr install: curl or wget is required" >&2
+    exit 1
+  fi
+}
+
+download "$url" "$tmp_file"
+download "$checksum_url" "$checksum_file"
+
+expected_checksum="$(awk -v asset="$asset" '$2 == asset { print $1 }' "$checksum_file")"
+if [ -z "$expected_checksum" ]; then
+  echo "pipr install: checksum for ${asset} not found" >&2
+  exit 1
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual_checksum="$(sha256sum "$tmp_file" | awk '{ print $1 }')"
+elif command -v shasum >/dev/null 2>&1; then
+  actual_checksum="$(shasum -a 256 "$tmp_file" | awk '{ print $1 }')"
 else
-  echo "pipr install: curl or wget is required" >&2
+  echo "pipr install: sha256sum or shasum is required" >&2
+  exit 1
+fi
+
+if [ "$actual_checksum" != "$expected_checksum" ]; then
+  echo "pipr install: checksum mismatch for ${asset}" >&2
   exit 1
 fi
 

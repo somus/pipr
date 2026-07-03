@@ -5,7 +5,7 @@ import { envValue, run, scenarioNames, sourceRoot } from "./scenarios.ts";
 const actionImage = envValue("PIPR_ACTION_IMAGE") ?? "pipr-action:act";
 
 if (envValue("PIPR_SKIP_ACTION_IMAGE_BUILD") !== "1") {
-  run("docker", ["build", "-t", actionImage, "."], sourceRoot);
+  run("docker", ["build", "--target", "e2e", "-t", actionImage, "."], sourceRoot);
 }
 
 run("bun", ["run", "--cwd", "packages/runtime", "build"], sourceRoot);

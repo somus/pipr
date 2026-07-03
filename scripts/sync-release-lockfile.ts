@@ -17,6 +17,8 @@ const rootDir =
     ? path.resolve(process.argv[rootArgIndex + 1])
     : path.resolve(import.meta.dirname, "..");
 const lockPath = path.join(rootDir, "bun.lock");
+const selfReviewLockPath = path.join(rootDir, ".pipr/bun.lock");
+const selfReviewPackagePath = path.join(rootDir, ".pipr/package.json");
 const actionPath = path.join(rootDir, "action.yml");
 const selfReviewWorkflowPath = path.join(rootDir, ".github/workflows/pipr.yml");
 
@@ -24,6 +26,7 @@ const rootPackage = await readPackageJson("package.json");
 const cliPackage = await readPackageJson("packages/cli/package.json");
 const runtimePackage = await readPackageJson("packages/runtime/package.json");
 const sdkPackage = await readPackageJson("packages/sdk/package.json");
+const selfReviewPackage = await readPackageJson(".pipr/package.json");
 
 assert.equal(cliPackage.version, rootPackage.version, "@usepipr/cli version must match root");
 assert.equal(
@@ -32,6 +35,11 @@ assert.equal(
   "@usepipr/runtime version must match root",
 );
 assert.equal(sdkPackage.version, rootPackage.version, "@usepipr/sdk version must match root");
+assert.equal(
+  selfReviewPackage.dependencies?.["@usepipr/sdk"],
+  rootPackage.version,
+  ".pipr/package.json @usepipr/sdk dependency must match root",
+);
 
 let lockfile = await Bun.file(lockPath).text();
 
@@ -63,6 +71,19 @@ lockfile = updateWorkspaceBlock(lockfile, "packages/sdk", '  },\n  "catalog": {'
 );
 
 await Bun.write(lockPath, lockfile);
+
+let selfReviewLockfile = await Bun.file(selfReviewLockPath).text();
+selfReviewLockfile = updateQuotedValues(selfReviewLockfile, {
+  "@usepipr/sdk": requiredValue(
+    selfReviewPackage.dependencies?.["@usepipr/sdk"],
+    ".pipr dependency @usepipr/sdk",
+  ),
+});
+selfReviewLockfile = selfReviewLockfile.replace(
+  /@usepipr\/sdk@\d+\.\d+\.\d+/g,
+  `@usepipr/sdk@${rootPackage.version}`,
+);
+await Bun.write(selfReviewLockPath, selfReviewLockfile);
 
 let actionMetadata = await Bun.file(actionPath).text();
 actionMetadata = actionMetadata.replace(

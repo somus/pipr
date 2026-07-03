@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -50,9 +51,11 @@ await run("bun", ["run", "--cwd", "packages/runtime", "build"]);
 await mkdir(releaseDir, { recursive: true });
 
 const define = await embeddedSdkDefines();
-for (const item of selectedTargets()) {
+const targetsToBuild = selectedTargets();
+for (const item of targetsToBuild) {
   await buildTarget(item, define);
 }
+await writeChecksums(targetsToBuild);
 
 function selectedTargets(): ReleaseTarget[] {
   if (process.argv.includes("--host")) {
@@ -140,6 +143,21 @@ async function buildTarget(item: ReleaseTarget, define: Record<string, string>):
     );
   }
   console.log(`built ${item.outfile}`);
+}
+
+async function writeChecksums(items: ReleaseTarget[]): Promise<void> {
+  const outputDirs = new Set(items.map((item) => path.dirname(item.outfile)));
+  const checksumDir = outputDirs.size === 1 ? [...outputDirs][0] : releaseDir;
+  const lines = await Promise.all(
+    items.map(async (item) => {
+      const contents = await Bun.file(item.outfile).arrayBuffer();
+      const digest = createHash("sha256").update(Buffer.from(contents)).digest("hex");
+      return `${digest}  ${path.basename(item.outfile)}`;
+    }),
+  );
+  const checksumPath = path.join(checksumDir as string, "SHA256SUMS");
+  await Bun.write(checksumPath, `${lines.sort().join("\n")}\n`);
+  console.log(`built ${checksumPath}`);
 }
 
 function optionValue(name: string): string | undefined {

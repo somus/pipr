@@ -1,28 +1,69 @@
-FROM oven/bun:1.3.14-alpine
+FROM oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS base
 
 USER root
 RUN apk add --no-cache bash fd git ripgrep \
-  && ln -s /usr/local/bin/bun /usr/local/bin/node \
-  && mkdir -p /home/bun/.pi/agent/bin \
-  && ln -s /usr/bin/rg /home/bun/.pi/agent/bin/rg \
-  && ln -s /usr/bin/fd /home/bun/.pi/agent/bin/fd \
-  && mkdir -p /home/bun/.tmp \
-  && chown -R bun:bun /home/bun/.pi
-RUN chown -R bun:bun /home/bun/.tmp
+  && ln -sf /usr/local/bin/bun /usr/local/bin/node \
+  && mkdir -p /home/bun/.pi/agent/bin /home/bun/.tmp \
+  && ln -sf /usr/bin/rg /home/bun/.pi/agent/bin/rg \
+  && ln -sf /usr/bin/fd /home/bun/.pi/agent/bin/fd \
+  && chown -R bun:bun /home/bun/.pi /home/bun/.tmp
 
 ENV BUN_INSTALL=/usr/local
 ENV TMPDIR=/home/bun/.tmp
-RUN bun add -g @earendil-works/pi-coding-agent@0.79.5 \
+RUN bun add -g @earendil-works/pi-coding-agent@0.80.3 \
   && PI_OFFLINE=1 PI_TELEMETRY=0 pi --help >/dev/null
 
-COPY --chown=bun:bun . /opt/pipr
 WORKDIR /opt/pipr
-RUN bun install --frozen-lockfile --ignore-scripts \
-  && bun run build:packages \
-  && chown -R bun:bun /opt/pipr \
-  && chmod +x /opt/pipr/packages/cli/src/main.ts \
-  && ln -sf /opt/pipr/packages/cli/src/main.ts /usr/local/bin/pipr \
+
+FROM base AS deps
+COPY --chown=bun:bun package.json bun.lock turbo.json tsconfig.json tsconfig.base.json ./
+COPY --chown=bun:bun apps/docs/package.json apps/docs/package.json
+COPY --chown=bun:bun packages/cli/package.json packages/cli/package.json
+COPY --chown=bun:bun packages/e2e/package.json packages/e2e/package.json
+COPY --chown=bun:bun packages/runtime/package.json packages/runtime/package.json
+COPY --chown=bun:bun packages/sdk/package.json packages/sdk/package.json
+RUN bun install --frozen-lockfile --ignore-scripts
+
+FROM deps AS build
+COPY --chown=bun:bun packages/cli packages/cli
+COPY --chown=bun:bun packages/runtime packages/runtime
+COPY --chown=bun:bun packages/sdk packages/sdk
+RUN bun run build:packages
+
+FROM base AS prod-deps
+COPY --chown=bun:bun package.json bun.lock ./
+COPY --chown=bun:bun apps/docs/package.json apps/docs/package.json
+COPY --chown=bun:bun packages/cli/package.json packages/cli/package.json
+COPY --chown=bun:bun packages/e2e/package.json packages/e2e/package.json
+COPY --chown=bun:bun packages/runtime/package.json packages/runtime/package.json
+COPY --chown=bun:bun packages/sdk/package.json packages/sdk/package.json
+RUN bun install --frozen-lockfile --production --ignore-scripts \
+  --filter=@usepipr/cli \
+  --filter=@usepipr/runtime \
+  --filter=@usepipr/sdk
+
+FROM base AS runtime-base
+COPY --from=prod-deps --chown=bun:bun /opt/pipr/package.json /opt/pipr/bun.lock ./
+COPY --from=prod-deps --chown=bun:bun /opt/pipr/node_modules node_modules
+COPY --from=prod-deps --chown=bun:bun /opt/pipr/packages/cli packages/cli
+COPY --from=prod-deps --chown=bun:bun /opt/pipr/packages/runtime packages/runtime
+COPY --from=prod-deps --chown=bun:bun /opt/pipr/packages/sdk packages/sdk
+COPY --from=build --chown=bun:bun /opt/pipr/packages/cli/dist packages/cli/dist
+COPY --from=build --chown=bun:bun /opt/pipr/packages/runtime/dist packages/runtime/dist
+COPY --from=build --chown=bun:bun /opt/pipr/packages/sdk/dist packages/sdk/dist
+RUN chown -R bun:bun /opt/pipr \
+  && chmod +x /opt/pipr/packages/cli/dist/main.mjs \
+  && ln -sf /opt/pipr/packages/cli/dist/main.mjs /usr/local/bin/pipr \
   && pipr action --help >/dev/null
 
+FROM runtime-base AS e2e
+COPY --chown=bun:bun packages/e2e/action-fixture.ts packages/e2e/action-fixture.ts
+COPY --chown=bun:bun packages/e2e/assertions.ts packages/e2e/assertions.ts
+RUN mkdir -p packages/e2e/node_modules/@usepipr \
+  && ln -sf ../../../runtime packages/e2e/node_modules/@usepipr/runtime
+WORKDIR /workspace
+ENTRYPOINT ["pipr"]
+
+FROM runtime-base AS runtime
 WORKDIR /workspace
 ENTRYPOINT ["pipr"]
