@@ -9,6 +9,12 @@ description: "Repo setup, local e2e checks, Docker image release, and npm releas
 mise run install
 ```
 
+This installs Bun workspace dependencies and hk Git hooks. The hooks run Biome before commits, check commit messages, and run the repository gate before pushes. If hooks are missing in an existing clone, run:
+
+```bash
+bun run hooks-install
+```
+
 Run the repository gate:
 
 ```bash

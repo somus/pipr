@@ -1,0 +1,11 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Pipr",
+      "description": "Skills for installing Pipr and writing repository-owned review automation.",
+      "skills": ["pipr-setup"]
+    }
+  ]
+}

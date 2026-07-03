@@ -106,6 +106,24 @@ Options:
 
 The output includes models, agents, tasks, commands, tools, publication settings, checks, and limits.
 
+## `pipr skill`
+
+Print or materialize the Pipr setup skill bundled with this CLI release:
+
+```bash
+pipr skill
+pipr skill path
+```
+
+Subcommands:
+
+| Command | Purpose |
+| --- | --- |
+| `pipr skill` | Print the bundled setup skill and its references to stdout. |
+| `pipr skill path` | Materialize the setup skill under the local Pipr skill cache and print the directory path. |
+
+The bundled skill is version-matched to the CLI. Use `pipr skill` when an AI agent needs to install Pipr, interview for repository review policy, create a custom `.pipr/config.ts`, and validate the setup.
+
 ## `pipr review`
 
 Run configured change-request review tasks locally without publishing:

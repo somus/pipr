@@ -16,6 +16,7 @@ import {
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
 import { Command } from "commander";
+import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
 
 type ActionOptions = Parameters<typeof runActionCommand>[0];
 
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
 function createProgram(): Command {
   const program = new Command();
   program.name("pipr").showHelpAfterError();
+  program.addHelpText("after", agentHelpText);
 
   program
     .command("init")
@@ -95,8 +97,29 @@ function createProgram(): Command {
     .option("--json", "Print structured JSON output")
     .action(runLocalReview);
 
+  const skill = program
+    .command("skill")
+    .description("Print the bundled Pipr setup skill")
+    .action(runSkillGet);
+  skill
+    .command("path")
+    .description("Materialize the bundled Pipr setup skill and print its directory path")
+    .action(runSkillPath);
+
   return program;
 }
+
+const agentHelpText = `
+
+Start here (for AI agents):
+  pipr skill
+
+The Pipr setup skill ships with the CLI and is version-matched to this release.
+Prefer it over guessing commands or config shape from memory.
+
+  skill       Print the bundled setup skill and references
+  skill path  Materialize the setup skill and print its directory path
+`;
 
 async function runAction(options: CliOptions): Promise<void> {
   writeActionResult(await runActionCommand(actionOptions(options)));
@@ -307,6 +330,14 @@ async function runInspect(options: CliOptions): Promise<void> {
     env: process.env,
   });
   console.log(inspect(result, { depth: 8, colors: false }));
+}
+
+async function runSkillGet(): Promise<void> {
+  console.log(formatBundledSkill(await resolveBundledSkill()));
+}
+
+async function runSkillPath(): Promise<void> {
+  console.log(await materializeBundledSkill());
 }
 
 async function runLocalReview(options: CliOptions): Promise<void> {

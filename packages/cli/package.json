@@ -23,7 +23,7 @@
     "pipr": "./dist/main.mjs"
   },
   "scripts": {
-    "build": "tsdown src/main.ts --dts --format esm --out-dir dist",
+    "build": "tsdown src/main.ts --dts --format esm --out-dir dist && bun src/release/copy-skills.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --timeout 30000",
     "lint": "biome lint src",
