@@ -1,6 +1,4 @@
 #!/usr/bin/env bun
-import { spawnSync } from "node:child_process";
-
 const image =
   process.env.PIPR_TEST_ACTION_IMAGE ?? process.env.PIPR_ACTION_IMAGE ?? "pipr-action:e2e";
 
@@ -11,11 +9,12 @@ run(["bun", "run", "--cwd", "packages/e2e", "check:container"], {
 });
 
 function run(command: string[], env = process.env): void {
-  const result = spawnSync(command[0] as string, command.slice(1), {
+  const result = Bun.spawnSync(command, {
     env,
-    stdio: "inherit",
+    stderr: "inherit",
+    stdout: "inherit",
   });
-  if (result.status !== 0) {
-    throw new Error(`${command.join(" ")} failed with exit ${result.status}`);
+  if (result.exitCode !== 0) {
+    throw new Error(`${command.join(" ")} failed with exit ${result.exitCode}`);
   }
 }

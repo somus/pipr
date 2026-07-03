@@ -8,15 +8,43 @@ const scope = process.argv[2] as Scope | undefined;
 assert(scope === "docs" || scope === "docker", "usage: scripts/changed-scope.ts <docs|docker>");
 
 const eventName = env("EVENT_NAME");
-const base = eventName === "pull_request" ? env("PR_BASE_SHA") : env("PUSH_BEFORE_SHA");
-const head = eventName === "pull_request" ? env("PR_HEAD_SHA") : env("HEAD_SHA");
+const changeRange = getChangeRange(eventName);
 
 let changed = true;
-if (base && !/^0+$/.test(base)) {
-  changed = gitChangedFiles(base, head).some((file) => matchesScope(scope, file));
+if (changeRange && !/^0+$/.test(changeRange.base)) {
+  changed = gitChangedFiles(changeRange.base, changeRange.head).some((file) =>
+    matchesScope(scope, file),
+  );
 }
 
 await writeOutput("changed", String(changed));
+
+function getChangeRange(eventName: string): { base: string; head: string } | undefined {
+  if (!eventName) {
+    return undefined;
+  }
+  if (eventName === "pull_request") {
+    return {
+      base: requiredEnv("PR_BASE_SHA", eventName),
+      head: requiredEnv("PR_HEAD_SHA", eventName),
+    };
+  }
+  if (eventName === "push") {
+    return {
+      base: requiredEnv("PUSH_BEFORE_SHA", eventName),
+      head: requiredEnv("HEAD_SHA", eventName),
+    };
+  }
+  return undefined;
+}
+
+function requiredEnv(name: string, eventName: string): string {
+  const value = env(name);
+  if (!value) {
+    throw new Error(`changed-scope: ${name} is required for ${eventName} events`);
+  }
+  return value;
+}
 
 function gitChangedFiles(base: string, head: string): string[] {
   const result = Bun.spawnSync(["git", "diff", "--name-only", base, head], {
