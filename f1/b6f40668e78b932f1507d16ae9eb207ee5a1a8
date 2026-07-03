@@ -1,0 +1,37 @@
+.pipr/config.ts
+  s_7397e33c22e1fb::t_2b442d87168937 30
+README.md
+  s_7397e33c22e1fb::t_182de471bc356d 115
+apps/docs/content/docs/guide/configuration.mdx
+  s_7397e33c22e1fb::t_2c29d2904a8225 44
+apps/docs/content/docs/index.mdx
+  s_7397e33c22e1fb::t_e60736da563869 92
+apps/docs/content/docs/recipes/default-review.mdx
+  s_7397e33c22e1fb::t_1d6ca63db0fc37 59
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_7397e33c22e1fb::t_f4d3356a8616e3 57,150
+apps/docs/src/routes/index.tsx
+  s_7397e33c22e1fb::t_2806df9247d29b 292
+install.sh
+  s_7397e33c22e1fb::t_df18c139ccc9e5 41-42
+packages/runtime/src/config/recipes/default-review.ts
+  s_7397e33c22e1fb::t_57f32824d0ac7b 28
+packages/runtime/src/config/tests/init.test.ts
+  s_7397e33c22e1fb::t_c158d49f8f37e9 85-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f1b6f40668e78b932f1507d16ae9eb207ee5a1a8",
+  "prompts": {},
+  "sessions": {
+    "s_7397e33c22e1fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2674-b59d-7461-8886-a9750ddc4285",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
