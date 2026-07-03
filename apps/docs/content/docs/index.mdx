@@ -1,11 +1,17 @@
 ---
 title: "Pipr Docs"
-description: "Code-owned AI review for pull requests, with TypeScript policy, Pi execution, validated findings, and GitHub publication."
+description: "Code-owned AI review for pull requests: a lean core with composable TypeScript review workflows, validated findings, and GitHub publication."
 ---
 
-Pipr is code-owned AI review for pull requests. Review policy lives in `.pipr/config.ts`, runs in local development or CI, and publishes only validated GitHub comments.
+Pipr is code-owned AI review for pull requests, built as a lean core you compose. The runtime owns the hard parts — diff modeling, Pi agent execution, finding validation, and comment publishing — and everything else is a building block you assemble in `.pipr/config.ts`.
 
-Use these docs to run the first review, start from a recipe, or tune review policy with the Pipr SDK.
+Use these docs to run the first review, start from a recipe, or build your own review workflows with the Pipr SDK.
+
+## One tool instead of a review stack
+
+Most code review tools excel at one thing: one at security findings, another at PR summaries, another at merge gates. Running several of them means overlapping comments, duplicated model spend, and more bot noise on every pull request.
+
+Pipr keeps one lean runtime and lets you compose those workflows yourself. The security review, the PR briefing, the quality gate, and the `@pipr` commands are all config on the same core, published through one validated comment pipeline — one tool, one run, one bill.
 
 ## What makes Pipr different
 
@@ -13,10 +19,23 @@ Pipr is built for maintainers who want AI review without handing review policy t
 
 | Principle | What it means |
 | --- | --- |
+| Lean core, composable everything else | Pipr owns diff modeling, Pi execution, validation, and publishing. Reviews, agents, commands, and tools are building blocks in your config. |
 | Review policy is code | Models, instructions, limits, and publication behavior live in `.pipr/config.ts`. |
 | Runs stay yours | Pipr runs in local development or your CI runner, not in a hosted Pipr service. |
 | Config is trusted | GitHub Action runs load `.pipr/config.ts` from the pull request base commit, so PR-authored config changes cannot alter the active run. |
 | Comments are validated | Pipr checks Review Findings against the Diff Manifest before publishing Main Review Comments or Inline Review Comments. |
+
+## Build on the core
+
+Every level below is plain TypeScript in the same `.pipr/config.ts`, and each one composes with the others. Start at the top and move down only when you need more control.
+
+| Level | You write | Page |
+| --- | --- | --- |
+| 1. Default review | `pipr.review(...)` with your instructions | [Quickstart](/docs/guide/quickstart) |
+| 2. Tuned review | Path scope, models, limits, publication caps | [Configuration](/docs/guide/configuration) |
+| 3. Starter workflows | `pipr init --recipe <id>` for security, briefings, gates, commands | [Recipes](/docs/recipes) |
+| 4. Custom tasks and agents | `pipr.task(...)`, `pipr.agent(...)`, custom schemas, `@pipr` commands | [Custom Tasks](/docs/guide/custom-tasks) |
+| 5. Plugins and tools | `definePlugin(...)` with typed tools agents can call during review | [Pipr SDK Reference](/docs/reference/sdk-reference#plugins) |
 
 ## Start here
 
@@ -115,6 +134,7 @@ Use [Runtime Guide](/docs/guide/runtime) for the full flow and [Trust and Securi
 Use Pipr when a repository needs AI review automation that is versioned with the codebase and controlled by maintainers:
 
 - Review pull requests on GitHub events.
+- Replace a stack of single-purpose review bots with one composable config.
 - Run the same review logic locally before opening a pull request.
 - Add `@pipr` commands for focused review tasks.
 - Avoid a hosted Pipr control plane for review policy.

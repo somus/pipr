@@ -38,6 +38,18 @@ type LandingLink = {
 
 const proofPoints = [
   {
+    title: "Lean core, composable workflows",
+    description:
+      "Pipr owns diff modeling, Pi execution, validation, and publishing. Reviews, gates, commands, and briefings are building blocks you compose on top.",
+    icon: ListChecks,
+  },
+  {
+    title: "One tool, not a review stack",
+    description:
+      "Security review, PR briefings, quality gates, and `@pipr` commands run from one config and one pipeline instead of a bot per job.",
+    icon: Bot,
+  },
+  {
     title: "Review policy lives in code",
     description:
       "Define reviewers, models, commands, limits, and publication policy in `.pipr/config.ts` so review changes go through pull requests.",
@@ -205,12 +217,12 @@ function Hero() {
             Code-owned AI review
           </p>
           <h1 className="max-w-4xl text-3xl font-semibold tracking-normal text-fd-foreground sm:text-5xl lg:text-6xl xl:text-[4rem] xl:leading-[1.05] dark:text-pipr-cream">
-            Review policy belongs in your repository.
+            One lean review core. Compose the rest.
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-7 text-fd-muted-foreground sm:text-lg dark:text-pipr-cream/78">
-            Pipr puts AI review policy in `.pipr/config.ts`, runs in local development or CI, and
-            publishes only validated GitHub comments. You own the policy, runtime, and publication
-            boundary without a hosted Pipr control plane.
+            Pipr owns diff modeling, Pi execution, validation, and publishing. You compose security
+            reviews, briefings, gates, and `@pipr` commands on top in `.pipr/config.ts` as one tool
+            instead of a stack of review bots, with no hosted control plane.
           </p>
           <HeroActions />
           <HeroProofStrip />
@@ -413,8 +425,8 @@ function WhyPipr() {
         <SectionHeader
           icon={ShieldCheck}
           eyebrow="Why Pipr"
-          title="AI review works when maintainers own the policy."
-          description="Opaque review bots ask you to trust policy you cannot version. Pipr keeps the review contract in code, runs where you run it, and validates comments before they reach a pull request."
+          title="Every review tool excels at one thing. Pipr lets you have them all."
+          description="Running a bot per job means overlapping comments, duplicated model spend, and policy you cannot version. Pipr keeps one lean runtime, keeps the review contract in code, and validates comments before they reach a pull request."
         />
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           {proofPoints.map((item) => (

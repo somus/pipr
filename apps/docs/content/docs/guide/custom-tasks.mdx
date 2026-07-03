@@ -3,7 +3,22 @@ title: "Custom Tasks"
 description: "Build custom Review Tasks with Diff Manifest reads, Pi calls, review state, comments, and checks."
 ---
 
-Use custom tasks when `pipr.review(...)` is too small for the workflow. Common reasons include multiple Pi calls, command-specific input, custom schemas, extra checks, custom logging, or a main-comment-only task.
+Custom tasks are how you build your own review workflows on the Pipr core. A task is a plain async function: you gather context, call Pi agents, and emit one output. Pipr keeps owning the hard parts — the Diff Manifest, Pi execution, finding validation, and publishing — so a task stays a short piece of orchestration code, not a review engine.
+
+Use a custom task when `pipr.review(...)` is too small for the workflow. Common reasons include multiple Pi calls, command-specific input, custom schemas, extra checks, custom logging, or a main-comment-only task.
+
+## Building blocks
+
+A workflow composes four pieces, all registered in `.pipr/config.ts`:
+
+| Block | Builder | Job |
+| --- | --- | --- |
+| Model | `pipr.model(...)` | Provider, model name, API key env var, options. |
+| Agent | `pipr.agent(...)` | Instructions, typed output schema, optional tools. |
+| Task | `pipr.task(...)` | Orchestration: read the diff, run agents, emit output. |
+| Entrypoint | `pipr.on.changeRequest(...)` or `pipr.command(...)` | When the task runs. |
+
+Every recipe in [Recipes](/docs/recipes) is these same blocks arranged differently, so any recipe page doubles as a worked example for this guide.
 
 ## Task shape
 
