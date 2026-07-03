@@ -1,0 +1,44 @@
+apps/docs/src/routes/index.tsx
+  s_6d88b46ce1e11f::t_7e321eaf6abc58 224
+  s_6d88b46ce1e11f::t_5f2f35171bbe02 223
+  s_6d88b46ce1e11f::t_7a11a1a2c50e78 225
+  s_6d88b46ce1e11f::t_2302fae5376226 40-51,220,428-429
+apps/docs/content/docs/recipes/index.mdx
+  s_08a4dd0b5d4719::t_631118c77de52f 8-10
+docs/CONTEXT.md
+  s_08a4dd0b5d4719::t_18c6b0b485c222 11-14
+apps/docs/content/docs/guide/index.mdx
+  s_08a4dd0b5d4719::t_f0536c90adeb39 8-9
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_08a4dd0b5d4719::t_629bcfe763c90b 6-21
+apps/docs/scripts/sync-recipes.ts
+  s_08a4dd0b5d4719::t_3db50e88bdc514 409-411
+README.md
+  s_08a4dd0b5d4719::t_95b487932078c8 9-22
+apps/docs/content/docs/index.mdx
+  s_08a4dd0b5d4719::t_6108002de9324e 3,6,8-14,22,28-39,137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "06cf614d56a323a8ee22432a1281291f3d443994",
+  "prompts": {},
+  "sessions": {
+    "s_08a4dd0b5d4719": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "664c4902-8905-4a92-bd95-761fd2b0c4c7",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    },
+    "s_6d88b46ce1e11f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f276b-1b37-73c0-a2fa-5e29e522ac53",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
