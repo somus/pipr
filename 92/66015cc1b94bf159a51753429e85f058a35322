@@ -1,0 +1,25 @@
+bun.lock
+  s_7397e33c22e1fb::t_18d6638db9e8f8 9-10
+package.json
+  s_7397e33c22e1fb::t_bb44d29b1e8c1e 67-68
+scripts/changed-scope.ts
+  s_7397e33c22e1fb::t_96e33cd501f472 11,14-17,22-48
+scripts/docker-e2e.ts
+  s_7397e33c22e1fb::t_e46434500f0d8c 12,14-15,17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9266015cc1b94bf159a51753429e85f058a35322",
+  "prompts": {},
+  "sessions": {
+    "s_7397e33c22e1fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2674-b59d-7461-8886-a9750ddc4285",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
