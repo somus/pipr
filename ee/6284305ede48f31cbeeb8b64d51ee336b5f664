@@ -1,0 +1,29 @@
+README.md
+  s_8ae5c4f6b3f1fa::t_a339049db87426 59-61,120,124-137
+apps/docs/README.md
+  s_8ae5c4f6b3f1fa::t_772a7cdaaa0bad 1,3-4,6-9,12-15,17-21
+packages/cli/README.md
+  s_8ae5c4f6b3f1fa::t_11ef4d8dcf80e6 1-37
+packages/e2e/README.md
+  s_8ae5c4f6b3f1fa::t_ded853f7c224ad 1-39
+packages/runtime/README.md
+  s_8ae5c4f6b3f1fa::t_b10c6b6d342182 1-42
+packages/sdk/README.md
+  s_8ae5c4f6b3f1fa::t_952e2db137fe6e 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "ee6284305ede48f31cbeeb8b64d51ee336b5f664",
+  "prompts": {},
+  "sessions": {
+    "s_8ae5c4f6b3f1fa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2634-b41b-7523-bf73-fddb84e3256c",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
