@@ -107,17 +107,19 @@ const clientLoader = browserCollections.docs.createClientLoader({
     },
   ) {
     return (
-      <DocsPage footer={{ className: "pipr-docs-footer" }} toc={toc}>
-        <DocsTitle>{frontmatter.title}</DocsTitle>
-        <DocsDescription>{frontmatter.description}</DocsDescription>
-        <div className="flex flex-row gap-2 items-center border-b -mt-4 pb-6">
+      <DocsPage className="pipr-docs-page" footer={{ className: "pipr-docs-footer" }} toc={toc}>
+        <DocsTitle className="pipr-docs-title">{frontmatter.title}</DocsTitle>
+        <DocsDescription className="pipr-docs-description">
+          {frontmatter.description}
+        </DocsDescription>
+        <div className="pipr-docs-actions -mt-4 flex flex-row items-center gap-2 border-b pb-6">
           <MarkdownCopyButton markdownUrl={markdownUrl} />
           <ViewOptionsPopover
             markdownUrl={markdownUrl}
             githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/apps/docs/content/docs/${path}`}
           />
         </div>
-        <DocsBody>
+        <DocsBody className="pipr-docs-body">
           <MDX components={getMDXComponents()} />
         </DocsBody>
       </DocsPage>

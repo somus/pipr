@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="38 0 405 250" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Validated review illustration</title>
+  <defs>
+    <filter id="soft-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="validated-glow" cx="74%" cy="42%" r="54%"><stop stop-color="#f6dd28" stop-opacity=".14"/><stop offset="1" stop-color="#f6dd28" stop-opacity="0"/></radialGradient>
+  </defs>
+  <style>
+    svg{overflow:visible}
+    .line{fill:none;stroke:#f4f7f5;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .thin{fill:none;stroke:#f4f7f5;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;opacity:.78}
+    .dash{fill:none;stroke:#f4f7f5;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:5 8;opacity:.72}
+    .tile{fill:rgba(255,255,255,.035);stroke:#f4f7f5;stroke-width:1.8}
+    .faint{opacity:.48}
+    .accent{fill:none;stroke:#b9ff21;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .cyan{stroke:#22d8c3}
+    .purple{stroke:#d9c1ff}
+    .gold{stroke:#f6dd28}
+    .node{fill:#070b08;stroke:#b9ff21;stroke-width:2.2;filter:url(#soft-glow)}
+  </style>
+  <g transform="translate(-38 -1)">
+    <g>
+    <rect x="80" y="38" width="62" height="62" rx="9" class="tile"/>
+    <g transform="translate(94 52) scale(1.4166666666666667)" color="#f4f7f5" ><path d="M15.5 11C15.5 9.067 13.933 7.5 12 7.5C10.067 7.5 8.5 9.067 8.5 11C8.5 12.933 10.067 14.5 12 14.5C13.933 14.5 15.5 12.933 15.5 11Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/><path d="M15.4827 11.3499C15.8047 11.4475 16.1462 11.5 16.5 11.5C18.433 11.5 20 9.933 20 8C20 6.067 18.433 4.5 16.5 4.5C14.6851 4.5 13.1928 5.8814 13.0173 7.65013" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/><path d="M10.9827 7.65013C10.8072 5.8814 9.31492 4.5 7.5 4.5C5.567 4.5 4 6.067 4 8C4 9.933 5.567 11.5 7.5 11.5C7.85381 11.5 8.19535 11.4475 8.51727 11.3499" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/><path d="M22 16.5C22 13.7386 19.5376 11.5 16.5 11.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/><path d="M17.5 19.5C17.5 16.7386 15.0376 14.5 12 14.5C8.96243 14.5 6.5 16.7386 6.5 19.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/><path d="M7.5 11.5C4.46243 11.5 2 13.7386 2 16.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/></g>
+  </g>
+    <g>
+    <rect x="80" y="112" width="62" height="62" rx="9" class="tile"/>
+    <g transform="translate(94 126) scale(1.4166666666666667)" color="#f4f7f5" ><path d="M18.7088 3.49534C16.8165 2.55382 14.5009 2 12 2C9.4991 2 7.1835 2.55382 5.29116 3.49534C4.36318 3.95706 3.89919 4.18792 3.4496 4.91378C3 5.63965 3 6.34248 3 7.74814V11.2371C3 16.9205 7.54236 20.0804 10.173 21.4338C10.9067 21.8113 11.2735 22 12 22C12.7265 22 13.0933 21.8113 13.8269 21.4338C16.4576 20.0804 21 16.9205 21 11.2371L21 7.74814C21 6.34249 21 5.63966 20.5504 4.91378C20.1008 4.18791 19.6368 3.95706 18.7088 3.49534Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/></g>
+  </g>
+    <g>
+    <rect x="80" y="186" width="62" height="62" rx="9" class="tile"/>
+    <g transform="translate(94 200) scale(1.4166666666666667)" color="#f4f7f5" ><path d="M17 8L18.8398 9.85008C19.6133 10.6279 20 11.0168 20 11.5C20 11.9832 19.6133 12.3721 18.8398 13.1499L17 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/><path d="M7 8L5.16019 9.85008C4.38673 10.6279 4 11.0168 4 11.5C4 11.9832 4.38673 12.3721 5.16019 13.1499L7 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/><path d="M14.5 4L9.5 20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/></g>
+  </g>
+    <path d="M158 143h142" class="line"/>
+    <path d="M158 69h78c36 0 41 43 76 43M158 217h78c36 0 41-43 76-43" class="dash"/>
+    <circle cx="314" cy="143" r="5" class="node gold" fill="#0f0e0b"/>
+    <path d="M325 143h38" class="line"/>
+    <g transform="translate(354 131) scale(1.1666666666666667)" color="#f4f7f5" ><path d="M9.00005 6C9.00005 6 15 10.4189 15 12C15 13.5812 9 18 9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></g>
+    <rect x="384" y="82" width="86" height="104" rx="8" fill="rgba(255,255,255,.025)" stroke="#f4f7f5" stroke-width="1.9"/>
+    <circle cx="427" cy="124" r="29" class="gold" stroke-width="2.2"/>
+    <g transform="translate(402 99) scale(2.0833333333333335)" color="#f4f7f5" ><path d="M5 14L8.5 17.5L19 6.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.85"/></g>
+    <path d="M408 157h38M416 171h22" class="line"/>
+    <path d="M452 72l12-10M462 86l15 3M445 67l2-17" class="gold" stroke-width="2.1"/>
+  </g>
+</svg>

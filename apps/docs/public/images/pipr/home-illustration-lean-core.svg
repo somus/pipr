@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="38 0 405 250" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Lean core workflow illustration</title>
+  <defs>
+    <filter id="soft-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="lean-glow" cx="50%" cy="36%" r="50%"><stop stop-color="#74d9be" stop-opacity=".18"/><stop offset="1" stop-color="#74d9be" stop-opacity="0"/></radialGradient>
+  </defs>
+  <style>
+    svg{overflow:visible}
+    .line{fill:none;stroke:#f4f7f5;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .thin{fill:none;stroke:#f4f7f5;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;opacity:.78}
+    .dash{fill:none;stroke:#f4f7f5;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:5 8;opacity:.72}
+    .tile{fill:rgba(255,255,255,.035);stroke:#f4f7f5;stroke-width:1.8}
+    .faint{opacity:.48}
+    .accent{fill:none;stroke:#b9ff21;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .cyan{stroke:#22d8c3}
+    .purple{stroke:#d9c1ff}
+    .gold{stroke:#f6dd28}
+    .node{fill:#070b08;stroke:#b9ff21;stroke-width:2.2;filter:url(#soft-glow)}
+  </style>
+  <g transform="translate(0 2)">
+    <circle cx="240" cy="110" r="90" class="dash"/>
+    <circle cx="240" cy="110" r="58" class="line"/>
+    <circle cx="240" cy="110" r="37" class="thin" stroke="#9adf78" opacity=".72"/>
+    <path d="M240 86l21.5 12.5v25L240 136l-21.5-12.5v-25z" class="accent" filter="url(#soft-glow)"/>
+    <path d="M157 74l38 25M323 74l-38 25M157 146l38-25M323 146l-38-25" class="line"/>
+    <circle cx="157" cy="74" r="5.2" class="node"/><circle cx="323" cy="74" r="5.2" class="node"/>
+    <circle cx="157" cy="146" r="5.2" class="node"/><circle cx="323" cy="146" r="5.2" class="node"/>
+    <g>
+    <rect x="78" y="20" width="68" height="68" rx="9" class="tile"/>
+    <g transform="translate(97 39) scale(1.25)" color="#f4f7f5" ><path d="M8 7L16 7" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M8 11L12 11" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M13 21.5V21C13 18.1716 13 16.7574 13.8787 15.8787C14.7574 15 16.1716 15 19 15H19.5M20 13.3431V10C20 6.22876 20 4.34315 18.8284 3.17157C17.6569 2 15.7712 2 12 2C8.22877 2 6.34315 2 5.17157 3.17157C4 4.34314 4 6.22876 4 10L4 14.5442C4 17.7892 4 19.4117 4.88607 20.5107C5.06508 20.7327 5.26731 20.9349 5.48933 21.1139C6.58831 22 8.21082 22 11.4558 22C12.1614 22 12.5141 22 12.8372 21.886C12.9044 21.8623 12.9702 21.835 13.0345 21.8043C13.3436 21.6564 13.593 21.407 14.0919 20.9081L18.8284 16.1716C19.4065 15.5935 19.6955 15.3045 19.8478 14.9369C20 14.5694 20 14.1606 20 13.3431Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/></g>
+  </g>
+    <path d="M108 67h18M108 73h18" class="accent" stroke-width="1.8"/>
+    <g>
+    <rect x="334" y="20" width="68" height="68" rx="9" class="tile"/>
+    <g transform="translate(353.5 39.5) scale(1.2083333333333333)" color="#f4f7f5" ><path d="M18.8906 12.846C18.5371 14.189 16.8667 15.138 13.5257 17.0361C10.296 18.8709 8.6812 19.7884 7.37983 19.4196C6.8418 19.2671 6.35159 18.9776 5.95624 18.5787C5 17.6139 5 15.7426 5 12C5 8.2574 5 6.3861 5.95624 5.42132C6.35159 5.02245 6.8418 4.73288 7.37983 4.58042C8.6812 4.21165 10.296 5.12907 13.5257 6.96393C16.8667 8.86197 18.5371 9.811 18.8906 11.154C19.0365 11.7084 19.0365 12.2916 18.8906 12.846Z" stroke="currentColor" stroke-linejoin="round" stroke-width="1.65"/></g>
+  </g>
+    <g>
+    <rect x="78" y="152" width="68" height="68" rx="9" class="tile"/>
+    <g transform="translate(97.5 171.5) scale(1.2083333333333333)" color="#f4f7f5" ><path d="M2.5 12C2.5 7.52166 2.5 5.28249 3.89124 3.89124C5.28249 2.5 7.52166 2.5 12 2.5C16.4783 2.5 18.7175 2.5 20.1088 3.89124C21.5 5.28249 21.5 7.52166 21.5 12C21.5 16.4783 21.5 18.7175 20.1088 20.1088C18.7175 21.5 16.4783 21.5 12 21.5C7.52166 21.5 5.28249 21.5 3.89124 20.1088C2.5 18.7175 2.5 16.4783 2.5 12Z" stroke="currentColor" stroke-width="1.65"/><path d="M8 13.75C8 13.75 9.6 14.6625 10.4 16C10.4 16 12.8 10.75 16 9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/></g>
+  </g>
+    <g>
+    <rect x="334" y="152" width="68" height="68" rx="9" class="tile"/>
+    <g transform="translate(352.5 170.5) scale(1.2916666666666667)" color="#f4f7f5" ><path d="M2.99994 17C2.99994 17.93 2.99994 18.395 3.10216 18.7765C3.37956 19.8117 4.18821 20.6204 5.22348 20.8978C5.60498 21 6.06997 21 6.99994 21L16.9999 21C17.9299 21 18.3949 21 18.7764 20.8978C19.8117 20.6204 20.6203 19.8117 20.8977 18.7765C20.9999 18.395 20.9999 17.93 20.9999 17" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/><path d="M16.5 7.49993C16.5 7.49993 13.1858 2.99997 12 2.99996C10.8141 2.99995 7.50002 7.49996 7.50002 7.49996M12 3.99996V16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65"/></g>
+  </g>
+  </g>
+</svg>

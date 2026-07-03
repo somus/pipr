@@ -1,51 +1,60 @@
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/roboto-mono";
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap");
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
 
 @theme {
-  --color-fd-background: hsl(72, 24%, 97%);
-  --color-fd-foreground: hsl(90, 13%, 8%);
-  --color-fd-muted: hsl(72, 18%, 92%);
-  --color-fd-muted-foreground: hsl(82, 9%, 38%);
-  --color-fd-popover: hsl(72, 26%, 99%);
-  --color-fd-popover-foreground: hsl(90, 13%, 8%);
-  --color-fd-card: hsl(72, 20%, 95%);
-  --color-fd-card-foreground: hsl(90, 13%, 8%);
-  --color-fd-border: hsla(80, 18%, 72%, 45%);
-  --color-fd-primary: hsl(74, 72%, 29%);
-  --color-fd-primary-foreground: hsl(72, 26%, 98%);
-  --color-fd-secondary: hsl(72, 18%, 91%);
-  --color-fd-secondary-foreground: hsl(90, 13%, 8%);
-  --color-fd-accent: hsla(75, 38%, 76%, 45%);
-  --color-fd-accent-foreground: hsl(90, 13%, 8%);
-  --color-fd-ring: hsl(76, 65%, 38%);
-  --color-pipr-ink: hsl(96, 18%, 5%);
-  --color-pipr-panel: hsl(95, 16%, 8%);
-  --color-pipr-cream: hsl(72, 26%, 92%);
-  --color-pipr-lime: hsl(75, 79%, 66%);
-  --color-pipr-cyan: hsl(186, 58%, 63%);
-  --color-pipr-red: hsl(3, 72%, 67%);
-  --color-pipr-amber: hsl(40, 88%, 64%);
+  --color-fd-background: #0b0d0b;
+  --color-fd-foreground: #f4f2e8;
+  --color-fd-muted: #141712;
+  --color-fd-muted-foreground: #969b8d;
+  --color-fd-popover: #151912;
+  --color-fd-popover-foreground: #f4f2e8;
+  --color-fd-card: #151912;
+  --color-fd-card-foreground: #f4f2e8;
+  --color-fd-border: #2a3028;
+  --color-fd-primary: #c7ff5f;
+  --color-fd-primary-foreground: #10120d;
+  --color-fd-secondary: #20261d;
+  --color-fd-secondary-foreground: #e1dfd1;
+  --color-fd-accent: #20261d;
+  --color-fd-accent-foreground: #f4f2e8;
+  --color-fd-ring: #c7ff5f;
+  --color-pipr-ink: #0b0d0b;
+  --color-pipr-panel: #151912;
+  --color-pipr-cream: #f4f2e8;
+  --color-pipr-lime: #ddff91;
+  --color-pipr-cyan: #7dd3c7;
+  --color-pipr-red: #ff9cac;
+  --color-pipr-amber: #f5c76b;
+  --font-sans:
+    "Satoshi", ui-sans-serif, system-ui, -apple-system, blinkmacsystemfont, "Segoe UI", sans-serif;
+  --font-mono:
+    "Roboto Mono Variable", "Roboto Mono", ui-monospace, sfmono-regular, menlo, monaco, consolas,
+    "Liberation Mono", "Courier New", monospace;
 }
 
-.dark {
-  --color-fd-background: hsl(90, 15%, 5%);
-  --color-fd-foreground: hsl(72, 22%, 91%);
-  --color-fd-muted: hsl(90, 12%, 11%);
-  --color-fd-muted-foreground: hsl(75, 13%, 64%);
-  --color-fd-popover: hsl(90, 14%, 7%);
-  --color-fd-popover-foreground: hsl(72, 22%, 91%);
-  --color-fd-card: hsl(90, 13%, 9%);
-  --color-fd-card-foreground: hsl(72, 22%, 91%);
-  --color-fd-border: hsla(78, 18%, 45%, 28%);
-  --color-fd-primary: hsl(75, 79%, 66%);
-  --color-fd-primary-foreground: hsl(90, 19%, 7%);
-  --color-fd-secondary: hsl(86, 14%, 13%);
-  --color-fd-secondary-foreground: hsl(72, 22%, 91%);
-  --color-fd-accent: hsla(76, 45%, 34%, 35%);
-  --color-fd-accent-foreground: hsl(72, 22%, 91%);
-  --color-fd-ring: hsl(75, 77%, 62%);
+.dark,
+.light {
+  --color-fd-background: #0b0d0b;
+  --color-fd-foreground: #f4f2e8;
+  --color-fd-muted: #141712;
+  --color-fd-muted-foreground: #969b8d;
+  --color-fd-popover: #151912;
+  --color-fd-popover-foreground: #f4f2e8;
+  --color-fd-card: #151912;
+  --color-fd-card-foreground: #f4f2e8;
+  --color-fd-border: #2a3028;
+  --color-fd-primary: #c7ff5f;
+  --color-fd-primary-foreground: #10120d;
+  --color-fd-secondary: #20261d;
+  --color-fd-secondary-foreground: #e1dfd1;
+  --color-fd-accent: #20261d;
+  --color-fd-accent-foreground: #f4f2e8;
+  --color-fd-ring: #c7ff5f;
 }
 
 .twoslash-hover {
@@ -56,7 +65,216 @@
 }
 
 html {
+  background: var(--color-fd-background);
+  color-scheme: dark;
   scrollbar-gutter: stable;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font-family: var(--font-sans);
+}
+
+body:has(#nd-home-layout) #nd-nav {
+  display: none;
+}
+
+::selection {
+  background: #354322;
+  color: var(--color-fd-foreground);
+}
+
+.pipr-text-pretty {
+  text-wrap: pretty;
+}
+
+.pipr-heading,
+:where(h1, h2, h3, h4, h5, h6) {
+  font-family: "JetBrains Mono Variable", "JetBrains Mono", var(--font-mono);
+}
+
+.pipr-inline-code {
+  white-space: nowrap;
+  border: 1px solid color-mix(in oklab, var(--color-fd-primary) 18%, var(--color-fd-border));
+  border-radius: 0.25rem;
+  background: color-mix(in oklab, var(--color-fd-primary) 7%, transparent);
+  padding: 0.08rem 0.34rem;
+  color: var(--color-fd-secondary-foreground);
+  font-family: "Roboto Mono Variable", "Roboto Mono", var(--font-mono);
+  font-size: 0.9em;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.pipr-run-card {
+  background:
+    linear-gradient(rgba(199, 255, 95, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(199, 255, 95, 0.035) 1px, transparent 1px), #11140f;
+  background-size: 24px 24px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.075),
+    inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.pipr-command-scrollbar {
+  scrollbar-color: color-mix(in oklab, var(--color-fd-primary) 34%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.pipr-command-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.pipr-command-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pipr-command-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-fd-primary) 26%, transparent);
+}
+
+.pipr-command-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--color-fd-primary) 42%, transparent);
+}
+
+#nd-sidebar {
+  background: var(--color-fd-background);
+  border-color: var(--color-fd-border);
+}
+
+#nd-sidebar :where(button, a) {
+  transition-property: background-color, color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+#nd-sidebar :where(button.rounded-lg) {
+  border-color: #22281f;
+  background: #11140f;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.035);
+}
+
+#nd-sidebar :where(button.rounded-lg:hover) {
+  background: #171b14;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+#nd-sidebar :where(button[data-state]) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+#nd-sidebar :where(button[data-state]:hover, button[data-state="open"]) {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+#nd-sidebar :where(a[href^="/docs/"]) {
+  background: transparent;
+  color: var(--color-fd-muted-foreground);
+}
+
+#nd-sidebar :where(a[href^="/docs/"]:hover) {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--color-fd-secondary-foreground);
+}
+
+#nd-sidebar :where(a[href^="/docs/"][data-active="true"]) {
+  background: color-mix(in oklab, var(--color-fd-primary) 13%, transparent);
+  color: var(--color-fd-primary);
+}
+
+#nd-sidebar :where(a[href^="https://github.com"]) {
+  color: var(--color-fd-muted-foreground);
+}
+
+#nd-sidebar :where(a[href^="https://github.com"]:hover) {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--color-fd-foreground);
+}
+
+.pipr-docs-page {
+  max-width: 760px;
+}
+
+.pipr-docs-title {
+  color: var(--color-fd-foreground);
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+.pipr-docs-description {
+  color: var(--color-fd-muted-foreground);
+  text-wrap: pretty;
+}
+
+.pipr-docs-actions {
+  border-color: var(--color-fd-border);
+}
+
+.pipr-docs-body {
+  color: #e1dfd1;
+}
+
+.pipr-docs-body :is(h2, h3, h4) {
+  color: var(--color-fd-foreground);
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+.pipr-docs-body :where(p, li) {
+  text-wrap: pretty;
+}
+
+.pipr-docs-body :where(a) {
+  color: var(--color-fd-foreground);
+  font-weight: 600;
+  text-decoration-color: var(--color-fd-primary);
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
+}
+
+.pipr-docs-body :where(a:hover) {
+  color: var(--color-fd-foreground);
+  text-decoration-color: var(--color-pipr-lime);
+}
+
+.pipr-docs-body :is(h2, h3, h4) :where(a) {
+  color: inherit;
+  text-decoration: none;
+}
+
+.pipr-docs-body :where(code) {
+  border-color: #343c30;
+  background: #20261d;
+}
+
+.pipr-docs-body :where(figure.shiki pre, figure.shiki code, figure.shiki [role="region"]) {
+  border: 0;
+  background: transparent;
+}
+
+.pipr-docs-body :where(figure.shiki code) {
+  padding: 0;
+}
+
+.pipr-docs-body :where(figure.shiki .line) {
+  background: transparent;
+}
+
+.pipr-docs-body :where(figure) {
+  border-color: var(--color-fd-border);
+  background: var(--color-fd-card);
+  box-shadow: none;
+}
+
+.pipr-docs-body :where(figure.shiki) {
+  background: #10130f;
 }
 
 html > body[data-scroll-locked] {
