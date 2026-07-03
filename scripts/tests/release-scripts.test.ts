@@ -299,6 +299,7 @@ function dockerScopeChanged(relativePath: string): boolean {
     repository,
     {
       EVENT_NAME: "pull_request",
+      GITHUB_OUTPUT: undefined,
       PR_BASE_SHA: base,
       PR_HEAD_SHA: head,
     },
