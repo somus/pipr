@@ -121,6 +121,7 @@ async function typecheckTypescriptConfigWithApi(
   const configPath = path.join(configDir, "config.ts");
   const program = ts.createProgram([configPath, ...parsed.fileNames], {
     ...parsed.options,
+    skipLibCheck: true,
     typeRoots: [...new Set([...(parsed.options.typeRoots ?? []), ...bundledTypeRoots])],
     types: [
       ...new Set([...(parsed.options.types ?? []), ...(bundledTypeRoots.length ? ["bun"] : [])]),

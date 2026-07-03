@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
 import { chmodSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -95,6 +96,28 @@ describe("check-conventional-commit", () => {
   });
 });
 
+describe("changed-scope", () => {
+  it("limits docker scope to Docker image and container check inputs", () => {
+    for (const file of [
+      "packages/e2e/action-fixture.ts",
+      "packages/e2e/assertions.ts",
+      "packages/e2e/container-check.ts",
+      "packages/e2e/package.json",
+      "scripts/docker-e2e.ts",
+    ]) {
+      expect(dockerScopeChanged(file)).toBe(true);
+    }
+
+    for (const file of [
+      "packages/e2e/check.ts",
+      "packages/e2e/run.ts",
+      "packages/e2e/assertions.test.ts",
+    ]) {
+      expect(dockerScopeChanged(file)).toBe(false);
+    }
+  });
+});
+
 describe("sync-release-lockfile", () => {
   it("normalizes Bun workspace metadata after a version bump", () => {
     const repository = copyRepositoryFixture();
@@ -110,12 +133,67 @@ describe("sync-release-lockfile", () => {
     const lockfile = readFileSync(path.join(repository, "bun.lock"), "utf8");
     expect(lockfile).toContain('"@usepipr/runtime": "0.1.1"');
     expect(lockfile).toContain('"@usepipr/sdk": "0.1.1"');
+    expect(readFileSync(path.join(repository, ".pipr/package.json"), "utf8")).toContain(
+      '"@usepipr/sdk": "0.1.1"',
+    );
+    expect(readFileSync(path.join(repository, ".pipr/bun.lock"), "utf8")).toContain(
+      '"@usepipr/sdk": "0.1.1"',
+    );
     expect(readFileSync(path.join(repository, "action.yml"), "utf8")).toContain(
       "docker://ghcr.io/somus/pipr:v0.1.1",
     );
     expect(readFileSync(path.join(repository, ".github/workflows/pipr.yml"), "utf8")).toContain(
       "uses: somus/pipr@v0.1.1",
     );
+  });
+});
+
+describe("release checksums", () => {
+  it("writes SHA256SUMS for release binaries", () => {
+    const repository = copyRepositoryFixture();
+    const releaseDir = path.join(repository, "dist", "release");
+    mkdirSync(releaseDir, { recursive: true });
+    const binaryPath = path.join(releaseDir, "pipr-linux-x64");
+    write(binaryPath, "#!/bin/sh\necho pipr\n");
+
+    run("bun", [
+      path.join(repoRoot, "packages/cli/build-release.ts"),
+      "--host",
+      "--outfile",
+      binaryPath,
+    ]);
+
+    const expected = createHash("sha256").update(readFileSync(binaryPath)).digest("hex");
+    const checksums = readFileSync(path.join(releaseDir, "SHA256SUMS"), "utf8");
+    expect(checksums).toContain(`${expected}  pipr-linux-x64`);
+  }, 30000);
+});
+
+describe("install.sh", () => {
+  it("verifies the downloaded binary checksum before install", () => {
+    const fixture = installFixture({ validChecksum: true });
+    const result = scriptResult("install.sh", [], repoRoot, {
+      PATH: `${fixture.binDir}:${Bun.env.PATH ?? ""}`,
+      PIPR_FAKE_RELEASE: fixture.releaseDir,
+      PIPR_INSTALL_DIR: fixture.installDir,
+      PIPR_VERSION: "v0.1.0",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(path.join(fixture.installDir, "pipr"), "utf8")).toContain("fake pipr");
+  });
+
+  it("rejects a binary with a mismatched checksum", () => {
+    const fixture = installFixture({ validChecksum: false });
+    const result = scriptResult("install.sh", [], repoRoot, {
+      PATH: `${fixture.binDir}:${Bun.env.PATH ?? ""}`,
+      PIPR_FAKE_RELEASE: fixture.releaseDir,
+      PIPR_INSTALL_DIR: fixture.installDir,
+      PIPR_VERSION: "v0.1.0",
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("checksum mismatch");
   });
 });
 
@@ -166,10 +244,12 @@ function scriptResult(
   script: string,
   args: string[],
   cwd = repoRoot,
+  env: Record<string, string | undefined> = {},
 ): { exitCode: number; stdout: string; stderr: string } {
-  const result = Bun.spawnSync(["bun", script, ...args], {
+  const command = script.endsWith(".sh") ? ["sh", script, ...args] : ["bun", script, ...args];
+  const result = Bun.spawnSync(command, {
     cwd,
-    env: commandEnv(),
+    env: commandEnv(env),
     stderr: "pipe",
     stdout: "pipe",
   });
@@ -209,7 +289,43 @@ function git(cwd: string, ...args: string[]): string {
   return result.stdout.toString().trim();
 }
 
-function commandEnv(extra: Record<string, string> = {}): Bun.Env {
+function dockerScopeChanged(relativePath: string): boolean {
+  const repository = changedScopeRepository(relativePath);
+  const base = git(repository, "rev-parse", "HEAD~1");
+  const head = git(repository, "rev-parse", "HEAD");
+  const result = scriptResult(
+    path.join(repoRoot, "scripts/changed-scope.ts"),
+    ["docker"],
+    repository,
+    {
+      EVENT_NAME: "pull_request",
+      GITHUB_OUTPUT: undefined,
+      PR_BASE_SHA: base,
+      PR_HEAD_SHA: head,
+    },
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr || result.stdout || "changed-scope failed");
+  }
+  return result.stdout.trim() === "changed=true";
+}
+
+function changedScopeRepository(relativePath: string): string {
+  const repository = path.join(tempDir, `scope-${relativePath.replaceAll(/[/.]/g, "-")}`);
+  run("git", ["init", repository]);
+  run("git", ["config", "user.email", "test@example.com"], { cwd: repository });
+  run("git", ["config", "user.name", "Test"], { cwd: repository });
+  writeCreatingDirs(path.join(repository, relativePath), "before\n");
+  run("git", ["add", relativePath], { cwd: repository });
+  run("git", ["commit", "-m", "chore: base"], { cwd: repository });
+  writeCreatingDirs(path.join(repository, relativePath), "after\n");
+  run("git", ["commit", "-am", "chore: change"], { cwd: repository });
+  return repository;
+}
+
+function commandEnv(
+  extra: Record<string, string | undefined> = {},
+): Record<string, string | undefined> {
   return {
     ...Bun.env,
     PATH: `${path.join(tempDir, "bin")}:${Bun.env.PATH ?? ""}`,
@@ -218,8 +334,63 @@ function commandEnv(extra: Record<string, string> = {}): Bun.Env {
   };
 }
 
+function installFixture(options: { validChecksum: boolean }): {
+  binDir: string;
+  installDir: string;
+  releaseDir: string;
+} {
+  const binDir = path.join(tempDir, "install-bin");
+  const installDir = path.join(tempDir, "install");
+  const releaseDir = path.join(tempDir, "release");
+  mkdirSync(binDir);
+  mkdirSync(releaseDir);
+
+  write(
+    path.join(binDir, "uname"),
+    '#!/bin/sh\nif [ "$1" = "-s" ]; then echo Linux; else echo x86_64; fi\n',
+  );
+  write(
+    path.join(binDir, "curl"),
+    [
+      "#!/bin/sh",
+      "out=",
+      "url=",
+      'while [ "$#" -gt 0 ]; do',
+      '  case "$1" in',
+      '    -o) out="$2"; shift 2 ;;',
+      "    -*) shift ;;",
+      '    *) url="$1"; shift ;;',
+      "  esac",
+      "done",
+      'case "$url" in',
+      '  *SHA256SUMS) cp "$PIPR_FAKE_RELEASE/SHA256SUMS" "$out" ;;',
+      '  *pipr-linux-x64) cp "$PIPR_FAKE_RELEASE/pipr-linux-x64" "$out" ;;',
+      "  *) exit 1 ;;",
+      "esac",
+      "",
+    ].join("\n"),
+  );
+  chmodSync(path.join(binDir, "uname"), 0o755);
+  chmodSync(path.join(binDir, "curl"), 0o755);
+
+  const binary = "#!/bin/sh\necho fake pipr\n";
+  const binaryPath = path.join(releaseDir, "pipr-linux-x64");
+  write(binaryPath, binary);
+  const checksum = createHash("sha256").update(binary).digest("hex");
+  write(
+    path.join(releaseDir, "SHA256SUMS"),
+    `${options.validChecksum ? checksum : "0".repeat(64)}  pipr-linux-x64\n`,
+  );
+  return { binDir, installDir, releaseDir };
+}
+
 function write(filePath: string, value: string): void {
   writeFileSync(filePath, value);
+}
+
+function writeCreatingDirs(filePath: string, value: string): void {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  write(filePath, value);
 }
 
 function copyRepositoryFixture(): string {
@@ -237,6 +408,7 @@ function bumpReleaseFixture(repository: string, version: string): void {
     "packages/sdk/package.json",
     "packages/runtime/package.json",
     "packages/cli/package.json",
+    ".pipr/package.json",
   ]) {
     const filePath = path.join(repository, relativePath);
     const pkg = JSON.parse(readFileSync(filePath, "utf8")) as {

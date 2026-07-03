@@ -25,7 +25,7 @@ export default definePipr((pipr) => {
       maintainability, and test coverage.
       Return only actionable findings that target valid diff ranges.
     \`,
-    timeout: "5m",
+    timeout: "10m",
     comment: (result, context) => ({
       main:
         context.platform.id === "local"

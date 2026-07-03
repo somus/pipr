@@ -17,6 +17,8 @@ type PackageJson = {
 const rootDir = path.resolve(import.meta.dirname, "..");
 const rootPackage = await readJson<PackageJson>("package.json");
 const releasePleaseConfig = await readText("release-please-config.json");
+const ciWorkflow = await readText(".github/workflows/ci.yml");
+const dockerImageWorkflow = await readText(".github/workflows/docker-image.yml");
 const releaseWorkflow = await readText(".github/workflows/release.yml");
 const releasePleaseWorkflow = await readText(".github/workflows/release-please.yml");
 const selfReviewWorkflow = await readText(".github/workflows/pipr.yml");
@@ -24,6 +26,17 @@ const actionMetadata = await readText("action.yml");
 const bunLock = await readText("bun.lock");
 const releaseVersionExpression = githubExpression("steps.version.outputs.version");
 const shaExpression = githubExpression("github.sha");
+const workflowSources = {
+  ".github/workflows/ci.yml": ciWorkflow,
+  ".github/workflows/docker-image.yml": dockerImageWorkflow,
+  ".github/workflows/release.yml": releaseWorkflow,
+  ".github/workflows/release-please.yml": releasePleaseWorkflow,
+  ".github/workflows/pipr.yml": selfReviewWorkflow,
+};
+
+for (const [workflowPath, workflow] of Object.entries(workflowSources)) {
+  assertThirdPartyActionsPinned(workflowPath, workflow);
+}
 
 for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) {
   const pkg = await readJson<PackageJson>(path.join(packagePath, "package.json"));
@@ -46,7 +59,13 @@ for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) 
 }
 
 const cliPackage = await readJson<PackageJson>("packages/cli/package.json");
+const selfReviewPackage = await readJson<PackageJson>(".pipr/package.json");
 assert.equal(cliPackage.bin?.pipr, "./dist/main.mjs", "@usepipr/cli bin must point at dist");
+assert.equal(
+  selfReviewPackage.dependencies?.["@usepipr/sdk"],
+  rootPackage.version,
+  ".pipr/package.json @usepipr/sdk dependency must match root",
+);
 assert.equal(
   rootPackage.scripts?.["sync:release-lockfile"],
   "bun scripts/sync-release-lockfile.ts",
@@ -69,6 +88,10 @@ assert(
 assert(
   cliLock.includes(`"@usepipr/sdk": "${rootPackage.version}"`),
   "bun.lock @usepipr/cli sdk dependency must match root",
+);
+assert(
+  (await readText(".pipr/bun.lock")).includes(`"@usepipr/sdk": "${rootPackage.version}"`),
+  ".pipr/bun.lock @usepipr/sdk dependency must match root",
 );
 
 assert(
@@ -145,19 +168,21 @@ assert(
   "release workflow must not publish sha tag",
 );
 for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) {
-  assert(
-    releaseWorkflow.includes(
-      `- run: npm pack --dry-run --json\n        working-directory: ${packagePath}`,
-    ),
+  assertMatches(
+    releaseWorkflow,
+    workflowStepPattern("npm pack --dry-run --json", packagePath),
     `release workflow must dry-run pack ${packagePath}`,
   );
-  assert(
-    releaseWorkflow.includes(
-      `- run: npm publish --access public\n        working-directory: ${packagePath}`,
-    ),
+  assertMatches(
+    releaseWorkflow,
+    workflowStepPattern("npm publish --access public", packagePath),
     `release workflow must publish ${packagePath}`,
   );
 }
+assert(
+  releaseWorkflow.includes("dist/release/SHA256SUMS"),
+  "release workflow must upload SHA256SUMS",
+);
 assert(
   !releasePleaseConfig.includes('"path": "bun.lock"'),
   "Release Please must not use unsupported generic bun.lock updates",
@@ -187,14 +212,14 @@ assert(
   "Release Please workflow must run the trusted lockfile sync script against the release worktree",
 );
 assert(
-  releasePleaseWorkflow.includes(
-    'git -C "$worktree" diff --quiet -- bun.lock action.yml .github/workflows/pipr.yml',
+  /git -C "\$worktree" diff --quiet -- [^\n]*bun\.lock[^\n]*\.pipr\/bun\.lock[^\n]*action\.yml[^\n]*\.github\/workflows\/pipr\.yml/.test(
+    releasePleaseWorkflow,
   ),
   "Release Please workflow must detect release metadata changes",
 );
 assert(
-  releasePleaseWorkflow.includes(
-    'git -C "$worktree" add bun.lock action.yml .github/workflows/pipr.yml',
+  /git -C "\$worktree" add [^\n]*bun\.lock[^\n]*\.pipr\/bun\.lock[^\n]*action\.yml[^\n]*\.github\/workflows\/pipr\.yml/.test(
+    releasePleaseWorkflow,
   ),
   "Release Please workflow must commit release metadata changes",
 );
@@ -228,4 +253,38 @@ function bunWorkspaceBlock(lockfile: string, workspace: string, nextWorkspace: s
   const end = lockfile.indexOf(`    "${nextWorkspace}": {`, start + 1);
   assert(start >= 0 && end > start, `bun.lock must contain ${workspace} workspace metadata`);
   return lockfile.slice(start, end);
+}
+
+function assertMatches(value: string, pattern: RegExp, message: string): void {
+  assert(pattern.test(value), message);
+}
+
+function workflowStepPattern(command: string, workingDirectory: string): RegExp {
+  return new RegExp(
+    `-\\s+run:\\s+${escapeRegExp(command)}\\s+working-directory:\\s+${escapeRegExp(
+      workingDirectory,
+    )}`,
+    "m",
+  );
+}
+
+function assertThirdPartyActionsPinned(workflowPath: string, workflow: string): void {
+  for (const line of workflow.split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:-\s*)?uses:\s+([^@\s]+)@([^\s#]+)/);
+    if (!match) {
+      continue;
+    }
+    const [, action, ref] = match;
+    if (!action || action.startsWith("./") || action === "somus/pipr") {
+      continue;
+    }
+    assert(
+      /^[0-9a-f]{40}$/.test(ref ?? ""),
+      `${workflowPath} must pin ${action} to a full commit SHA`,
+    );
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

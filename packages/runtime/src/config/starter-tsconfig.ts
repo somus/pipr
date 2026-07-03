@@ -2,6 +2,7 @@ export const starterTsconfig = `{
   "compilerOptions": {
     "strict": true,
     "noEmit": true,
+    "skipLibCheck": true,
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler"

@@ -54,7 +54,7 @@ const reviewer = pipr.reviewer({
   model,
   instructions: "Review the change for correctness and security.",
   tools: pipr.tools.readOnly,
-  timeout: "5m",
+  timeout: "10m",
 });
 
 pipr.config({ publication: { maxInlineComments: 5 } });
@@ -147,7 +147,7 @@ const security = pipr.agent({
     invalidOutput: 1,
     transientFailure: 1,
   },
-  timeout: "5m",
+  timeout: "10m",
 });
 ```
 

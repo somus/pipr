@@ -22,10 +22,31 @@
     "format:check": {
       "outputs": []
     },
-    "//#format:check": {
+    "//#format:check:root": {
       "outputs": []
     },
-    "//#fallow": {
+    "//#format:check:docs-root": {
+      "outputs": []
+    },
+    "//#fallow:packages:root": {
+      "outputs": []
+    },
+    "//#fallow:docs:root": {
+      "outputs": []
+    },
+    "//#check:release-metadata:root": {
+      "outputs": []
+    },
+    "//#check:conventional-commit:root": {
+      "outputs": []
+    },
+    "//#check:scripts:root": {
+      "outputs": []
+    },
+    "//#check:runtime-test-split:root": {
+      "outputs": []
+    },
+    "//#typecheck:root": {
       "outputs": []
     },
     "check": {

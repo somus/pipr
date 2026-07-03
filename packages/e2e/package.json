@@ -11,9 +11,9 @@
   },
   "scripts": {
     "test": "bun ./assertions.test.ts",
-    "lint": "biome check .",
+    "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
-    "format:check": "biome check .",
+    "format:check": "biome format .",
     "check": "bun run lint && bun run typecheck && bun run test",
     "check:actions": "bun ./check.ts",
     "check:container": "bun ./container-check.ts"

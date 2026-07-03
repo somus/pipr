@@ -4,5 +4,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["packages/*/src/**/*.ts", "packages/e2e/*.ts"]
+  "include": ["packages/*/src/**/*.ts", "packages/e2e/*.ts", "scripts/**/*.ts", ".pipr/**/*.ts"]
 }

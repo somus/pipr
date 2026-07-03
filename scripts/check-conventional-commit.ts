@@ -76,13 +76,33 @@ async function checkGeneratedOrConventionalFile(filePath: string): Promise<void>
 }
 
 async function runConventionalCommitCheck(filePath: string): Promise<void> {
-  const result = Bun.spawnSync(["hk", "util", "check-conventional-commit", filePath], {
-    stderr: "inherit",
-    stdout: "inherit",
-  });
-  if (result.exitCode !== 0) {
-    process.exit(result.exitCode);
+  const result = runHk(["util", "check-conventional-commit", filePath]);
+  if ((result.exitCode ?? 1) !== 0) {
+    process.exit(result.exitCode ?? 1);
   }
+}
+
+function runHk(args: string[]): { exitCode: number | null } {
+  try {
+    return Bun.spawnSync(["hk", ...args], {
+      stderr: "inherit",
+      stdout: "inherit",
+    });
+  } catch (error) {
+    if (!isMissingExecutableError(error)) {
+      throw error;
+    }
+    return Bun.spawnSync(["mise", "exec", "--", "hk", ...args], {
+      stderr: "inherit",
+      stdout: "inherit",
+    });
+  }
+}
+
+function isMissingExecutableError(error: unknown): boolean {
+  return (
+    error instanceof Error && "code" in error && (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 function usage(): never {

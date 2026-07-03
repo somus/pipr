@@ -289,7 +289,7 @@ function HeroConfigPreview() {
 
   pipr.review({
     instructions: "Return actionable findings only",
-    timeout: "5m",
+    timeout: "10m",
   });
 });`}</code>
       </pre>

@@ -26,8 +26,8 @@
     "build": "tsdown src/main.ts --dts --format esm --out-dir dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test --timeout 30000",
-    "lint": "biome check src",
-    "format:check": "biome check src",
+    "lint": "biome lint src",
+    "format:check": "biome format src",
     "prepack": "bun run build",
     "check": "bun run lint && bun run typecheck && bun run test"
   },

@@ -39,6 +39,11 @@
           "jsonpath": "$.dependencies['@usepipr/sdk']"
         },
         {
+          "type": "json",
+          "path": ".pipr/package.json",
+          "jsonpath": "$.dependencies['@usepipr/sdk']"
+        },
+        {
           "type": "generic",
           "path": "action.yml"
         },
