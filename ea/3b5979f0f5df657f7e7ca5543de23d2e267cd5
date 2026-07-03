@@ -1,0 +1,89 @@
+skills.sh.json
+  s_1d2e8a81b65d5a::t_2963798f9cb5b2 1-11
+packages/cli/build-release.ts
+  s_1d2e8a81b65d5a::t_b4ddea7dd0486f 10
+  s_1d2e8a81b65d5a::t_fddcf810b47d95 54-57,96-99
+  s_1d2e8a81b65d5a::t_ccf233931be911 100-102
+packages/cli/src/main.ts
+  s_1d2e8a81b65d5a::t_bb0a15df2af8f8 49,108,112-114,122-123,337-338,341
+  s_1d2e8a81b65d5a::t_7b3a3b0e784ae1 100-107,115-121,335-336,339-340
+  s_1d2e8a81b65d5a::t_4d7968b7251b36 19
+  s_1d2e8a81b65d5a::t_3c0c017e6d5fa1 342
+packages/cli/package.json
+  s_1d2e8a81b65d5a::t_4a5e8286ea6502 26
+packages/cli/src/tests/main.test.ts
+  s_1d2e8a81b65d5a::t_ec7902b5a64391 92
+  s_1d2e8a81b65d5a::t_bcbdfe0268af7e 638-646
+  s_1d2e8a81b65d5a::t_09d159ffee8333 2,7,56-57,63,67-91
+  s_1d2e8a81b65d5a::t_2f6a5dff76a74c 28,33,46,49-50
+  s_1d2e8a81b65d5a::t_e7f38835b95020 113-130
+  s_1d2e8a81b65d5a::t_c80521f15278eb 96-110
+  s_1d2e8a81b65d5a::t_93cf41cd55cf2b 9-13
+  s_1d2e8a81b65d5a::t_8567547080cc8e 64-66
+  s_1d2e8a81b65d5a::t_c08d397dd88590 27,47-48,51-55,58-62,93-95,111-112
+  s_1d2e8a81b65d5a::t_bc9967a65d0fd7 652
+  s_1d2e8a81b65d5a::t_cc514bbd668cbc 657-664
+skills/pipr-setup/references/config-patterns.md
+  s_1d2e8a81b65d5a::t_e530e49b13328a 1-166
+Dockerfile
+  s_1d2e8a81b65d5a::t_5db74cdf47b457 28
+apps/docs/content/docs/reference/cli.mdx
+  s_1d2e8a81b65d5a::t_25bfbbac34c5b3 109,111,114-115,122-125
+  s_1d2e8a81b65d5a::t_0586cceef3e2d4 110,112-113,116-121,126
+packages/cli/src/release/copy-skills.ts
+  s_1d2e8a81b65d5a::t_e570f529eac7c1 2,4,10,12-18
+  s_1d2e8a81b65d5a::t_bf025d41e491fb 6
+  s_1d2e8a81b65d5a::t_8b83b05d1d066b 1,3,5,7-9,11
+packages/cli/src/skills.ts
+  s_1d2e8a81b65d5a::t_07dca8ee07b04f 110
+  s_1d2e8a81b65d5a::t_a7758c5df40672 2-8,10,13-15,17,25-27,29-33,35-40,51-52,68-71,73,85,98-109,111-138
+  s_1d2e8a81b65d5a::t_b4ddea7dd0486f 1,9,11-12,16,22,53-67,72,74
+  s_1d2e8a81b65d5a::t_e570f529eac7c1 23-24
+  s_1d2e8a81b65d5a::t_311e94ca8f3344 18-21,75-84,86-97
+  s_1d2e8a81b65d5a::t_75c37612a5d8a8 28,34,41-50
+skills/pipr-setup/SKILL.md
+  s_1d2e8a81b65d5a::t_52e561d95cd3b9 1-15,17-24,26-27,33-34,36,38-103
+  s_1d2e8a81b65d5a::t_6ed3fde1d69e33 16,37
+  s_1d2e8a81b65d5a::t_881418e3f9ede7 25,29,31-32
+  s_1d2e8a81b65d5a::t_d8253a34ddc0ab 28,30
+  s_1d2e8a81b65d5a::t_1fb531e717f8e3 35
+packages/cli/README.md
+  s_1d2e8a81b65d5a::t_0c4378d59abeb5 20-22,24
+  s_1d2e8a81b65d5a::t_99590db3e6ec3b 16,23
+  s_1d2e8a81b65d5a::t_dd528a1c1b0a17 25
+packages/cli/src/skill-catalog.ts
+  s_1d2e8a81b65d5a::t_b736e8c7567089 5
+  s_1d2e8a81b65d5a::t_58093c5b6dc369 1-4,10-45,47-57,61-95,111
+  s_1d2e8a81b65d5a::t_e570f529eac7c1 6-9,46,96-110
+  s_1d2e8a81b65d5a::t_edeb2f342b3fe2 58-60
+README.md
+  s_1d2e8a81b65d5a::t_ffd5bba44f6175 19-24
+scripts/tests/release-scripts.test.ts
+  s_1d2e8a81b65d5a::t_765a47b86c2cc1 199,201,209
+  s_1d2e8a81b65d5a::t_43802111f45590 399
+  s_1d2e8a81b65d5a::t_89303237112aa8 192-198
+  s_1d2e8a81b65d5a::t_eda99d60884bbe 321-329
+  s_1d2e8a81b65d5a::t_30d221036c79de 200,202,210
+  s_1d2e8a81b65d5a::t_8567547080cc8e 214-216
+  s_1d2e8a81b65d5a::t_a0bf2f77b79966 318-320
+  s_1d2e8a81b65d5a::t_4adda69982c417 3
+  s_1d2e8a81b65d5a::t_af236a29c4039c 169-191,203-208,211-213,311-317
+skills/pipr-setup/references/recipes.md
+  s_1d2e8a81b65d5a::t_c8b9019cfb05d4 1-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ea3b5979f0f5df657f7e7ca5543de23d2e267cd5",
+  "prompts": {},
+  "sessions": {
+    "s_1d2e8a81b65d5a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f27df-2b68-7d93-b358-01edd55025ba",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
