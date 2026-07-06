@@ -86,7 +86,7 @@ async function runPreparedFixture(
   options: PiprEvalRunOptions,
 ): Promise<PiprEvalOutput> {
   assertRunOptions(options);
-  const { baseSha, headSha } = await prepareFixture(rootDir, testCase);
+  const { baseSha, headSha } = await prepareFixture(rootDir, testCase, options.mode);
   const result = runLocalReview(rootDir, baseSha, headSha, {
     callsDir,
     piExecutable: options.piExecutable ?? process.env.PIPR_EVAL_PI_EXECUTABLE,
@@ -126,11 +126,12 @@ async function failedEvalOutput(
 async function prepareFixture(
   rootDir: string,
   testCase: PiprEvalCase,
+  mode: PiprEvalRunMode,
 ): Promise<{ baseSha: string; headSha: string }> {
   run("git", ["init", "--quiet"], rootDir);
   run("git", ["config", "user.email", "pipr-evals@example.invalid"], rootDir);
   run("git", ["config", "user.name", "Pipr Evals"], rootDir);
-  await writeFiles(rootDir, { ".pipr/config.ts": configTs(), ...testCase.baseFiles });
+  await writeFiles(rootDir, { ".pipr/config.ts": configTs(mode), ...testCase.baseFiles });
   run("git", ["add", "."], rootDir);
   run("git", ["commit", "--quiet", "-m", "base"], rootDir);
   const baseSha = run("git", ["rev-parse", "HEAD"], rootDir).trim();
@@ -157,14 +158,15 @@ async function writeFiles(rootDir: string, files: Record<string, string>): Promi
   }
 }
 
-function configTs(): string {
+function configTs(mode: PiprEvalRunMode): string {
+  const apiKeyEnv = mode === "deterministic" ? "PIPR_EVAL_PI_CALLS_DIR" : "DEEPSEEK_API_KEY";
   return `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
     provider: "deepseek",
     model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+    apiKey: pipr.secret({ name: ${JSON.stringify(apiKeyEnv)} }),
     options: { thinking: "high" },
   });
 

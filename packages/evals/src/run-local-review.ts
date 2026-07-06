@@ -63,7 +63,7 @@ function readInput(value: string | undefined): HelperInput {
 function deterministicEnv(callsDir: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    DEEPSEEK_API_KEY: callsDir,
+    DEEPSEEK_API_KEY: "pipr-eval-dummy-key",
     PIPR_EVAL_PI_CALLS_DIR: callsDir,
   };
 }

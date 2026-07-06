@@ -241,6 +241,20 @@ describe("runInternalVerifier", () => {
     expect(result.threadActions).toEqual([]);
   });
 
+  it("fails closed when user-reply verifier responses have no visible text", async () => {
+    const fixed = await runVerifier({
+      output: { findings: [{ id: "fnd_existing", status: "fixed", response: "   \n\t" }] },
+    });
+    const stillValid = await runVerifier({
+      output: { findings: [{ id: "fnd_existing", status: "still-valid", response: "   \n\t" }] },
+    });
+
+    expect(fixed.priorReviewState?.findings[0]?.status).toBe("open");
+    expect(fixed.threadActions).toEqual([]);
+    expect(stillValid.priorReviewState?.findings[0]?.status).toBe("open");
+    expect(stillValid.threadActions).toEqual([]);
+  });
+
   it("cites the current head commit when synchronizing fixed findings with model prose", async () => {
     const result = await runVerifier({
       mode: { kind: "synchronize" },
