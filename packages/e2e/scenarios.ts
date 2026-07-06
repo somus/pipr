@@ -186,7 +186,7 @@ export default definePipr((pipr) => {
       });
       const inlineFindings = result.findings.map(({ severity, ...finding }) => ({
         ...finding,
-        body: \`Severity: \${severity}\\n\\n\${finding.body}\`,
+        body: \`Severity: \${severity}. \${finding.body}\`,
       }));
       const grouped = Map.groupBy(result.findings, (finding) => finding.severity);
       const labels = result.findings.length === 0

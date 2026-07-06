@@ -162,7 +162,7 @@ function fixtureEnv(scenario: PublicationScenario): Record<string, string> {
     ? `/workspace/${fixtureRootPath}/${scenario.telemetryDir}`
     : undefined;
   return {
-    DEEPSEEK_API_KEY: telemetryPath ?? "local-fixture-key",
+    DEEPSEEK_API_KEY: "local-fixture-key",
     GITHUB_EVENT_NAME: "pull_request",
     GITHUB_EVENT_PATH: `/workspace/${scenario.eventFile}`,
     GITHUB_OUTPUT: `/workspace/${fixtureRootPath}/github-output-${scenario.name}.txt`,
@@ -176,6 +176,7 @@ function fixtureEnv(scenario: PublicationScenario): Record<string, string> {
     PIPR_ACT_GITHUB_FIXTURE_PATH: `/workspace/${fixtureRootPath}/${scenario.publicationFixture}`,
     PIPR_ACT_PI_EXECUTABLE: `/workspace/${fakePiScript}`,
     ...(telemetryPath ? { PIPR_ACT_TELEMETRY_PATH: telemetryPath } : {}),
+    ...(telemetryPath ? { PIPR_ACT_PI_CALL_DIR: telemetryPath } : {}),
   };
 }
 

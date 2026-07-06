@@ -5,14 +5,22 @@ import { promptEvalCasesForMode, runPiprEvalCase, scorePiprEvalOutput } from "@p
 
 const fakePiPath = fileURLToPath(new URL("./fake-pi", import.meta.url));
 const deterministicCases = promptEvalCasesForMode("deterministic");
+const fallbackCase = deterministicCases[0];
+
+if (!fallbackCase) {
+  throw new Error("missing deterministic prompt eval case");
+}
 
 const previousPiExecutable = process.env.PIPR_EVAL_PI_EXECUTABLE;
-process.env.PIPR_EVAL_PI_EXECUTABLE = fakePiPath;
 try {
-  const fallbackCase = deterministicCases[0];
-  if (!fallbackCase) {
-    throw new Error("missing deterministic prompt eval case");
-  }
+  delete process.env.PIPR_EVAL_PI_EXECUTABLE;
+  const missingExecutableOutput = await runPiprEvalCase(fallbackCase, { mode: "deterministic" });
+  expect(missingExecutableOutput.ok, `${fallbackCase.id}: missing fake Pi should fail`).toBe(false);
+  expect(missingExecutableOutput.error).toContain(
+    "deterministic prompt evals require a fake Pi executable",
+  );
+
+  process.env.PIPR_EVAL_PI_EXECUTABLE = fakePiPath;
   const fallbackOutput = await runPiprEvalCase(fallbackCase, { mode: "deterministic" });
   expect(fallbackOutput.ok, `${fallbackCase.id}: ${fallbackOutput.error ?? "review failed"}`).toBe(
     true,

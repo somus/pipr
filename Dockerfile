@@ -20,6 +20,7 @@ COPY --chown=bun:bun package.json bun.lock turbo.json tsconfig.json tsconfig.bas
 COPY --chown=bun:bun apps/docs/package.json apps/docs/package.json
 COPY --chown=bun:bun packages/cli/package.json packages/cli/package.json
 COPY --chown=bun:bun packages/e2e/package.json packages/e2e/package.json
+COPY --chown=bun:bun packages/evals/package.json packages/evals/package.json
 COPY --chown=bun:bun packages/runtime/package.json packages/runtime/package.json
 COPY --chown=bun:bun packages/sdk/package.json packages/sdk/package.json
 RUN bun install --frozen-lockfile --ignore-scripts
@@ -36,6 +37,7 @@ COPY --chown=bun:bun package.json bun.lock ./
 COPY --chown=bun:bun apps/docs/package.json apps/docs/package.json
 COPY --chown=bun:bun packages/cli/package.json packages/cli/package.json
 COPY --chown=bun:bun packages/e2e/package.json packages/e2e/package.json
+COPY --chown=bun:bun packages/evals/package.json packages/evals/package.json
 COPY --chown=bun:bun packages/runtime/package.json packages/runtime/package.json
 COPY --chown=bun:bun packages/sdk/package.json packages/sdk/package.json
 RUN bun install --frozen-lockfile --production --ignore-scripts \
