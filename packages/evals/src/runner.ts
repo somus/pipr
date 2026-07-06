@@ -41,6 +41,15 @@ export type EvalPiCall = {
   promptBytes: number;
 };
 
+export type EvalDroppedFinding = {
+  reason: string;
+  path: string;
+  rangeId: string;
+  side: "RIGHT" | "LEFT";
+  startLine: number;
+  endLine: number;
+};
+
 export type PiprEvalOutput = {
   ok: boolean;
   kind?: "review" | "skipped";
@@ -48,7 +57,7 @@ export type PiprEvalOutput = {
   error?: string;
   mainComment?: string;
   inlineFindings: EvalInlineFinding[];
-  droppedFindings: Array<{ reason: string; finding: EvalInlineFinding }>;
+  droppedFindings: EvalDroppedFinding[];
   diffRanges: EvalDiffRange[];
   piCalls: EvalPiCall[];
 };
@@ -186,7 +195,8 @@ async function readPiCalls(callsDir: string | undefined): Promise<EvalPiCall[]> 
         .filter((file) => file.endsWith(".json"))
         .sort()
         .map(
-          async (file) => JSON.parse(await readFileText(path.join(callsDir, file))) as EvalPiCall,
+          async (file) =>
+            JSON.parse(await readFile(path.join(callsDir, file), "utf8")) as EvalPiCall,
         ),
     );
   } catch {
@@ -254,16 +264,12 @@ function assertRunOptions(options: PiprEvalRunOptions): void {
   }
 }
 
-async function readFileText(file: string): Promise<string> {
-  return await readFile(file, "utf8");
-}
-
 type LocalReviewEvalJson = {
   kind: "review" | "skipped";
   mainComment: string;
   inlineFindings: Array<{ finding: EvalInlineFinding }>;
   validated: {
-    droppedFindings: Array<{ reason: string; finding: EvalInlineFinding }>;
+    droppedFindings: EvalDroppedFinding[];
   };
   diffRanges: EvalDiffRange[];
 };

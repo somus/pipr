@@ -174,10 +174,11 @@ export function prepareInlinePublicationItems(options: {
       const stateRecord = options.reviewState
         ? matchFindingRecord(options.reviewState, finding)
         : undefined;
-      const publishableFinding = findingWithPublishableSuggestedFix(
-        findingWithPublishableBody(finding),
-        range,
-      );
+      const findingWithBody = findingWithPublishableBody(finding);
+      if (!findingWithBody) {
+        return [];
+      }
+      const publishableFinding = findingWithPublishableSuggestedFix(findingWithBody, range);
       if (
         seenFindingIds.has(findingId) ||
         stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha
@@ -204,8 +205,11 @@ export function prepareInlinePublicationItems(options: {
   );
 }
 
-function findingWithPublishableBody(finding: ReviewFinding): ReviewFinding {
+function findingWithPublishableBody(finding: ReviewFinding): ReviewFinding | undefined {
   const body = conciseInlineFindingBody(finding.body);
+  if (body.length === 0) {
+    return undefined;
+  }
   return body === finding.body ? finding : { ...finding, body };
 }
 

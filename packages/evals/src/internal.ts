@@ -8,6 +8,7 @@ export {
 } from "./cases.js";
 export {
   type EvalDiffRange,
+  type EvalDroppedFinding,
   type EvalInlineFinding,
   type EvalPiCall,
   type PiprEvalOutput,

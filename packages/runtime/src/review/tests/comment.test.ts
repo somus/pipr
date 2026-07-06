@@ -210,6 +210,18 @@ describe("comments", () => {
     expect(item?.body).not.toContain("```suggestion");
   });
 
+  it("skips inline drafts when body normalization leaves no publishable text", () => {
+    const items = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [{ ...finding, body: "   \n\t   " }],
+      },
+      manifest,
+      reviewedHeadSha: "head",
+    });
+
+    expect(items).toEqual([]);
+  });
+
   it("omits suggested-change blocks when a multi-line selection has a shorter replacement", () => {
     const [item] = prepareInlinePublicationItems({
       validated: {

@@ -73,7 +73,7 @@ if (!prompt.includes("Diff Manifest:")) {
   throw new Error("fake-pi could not find Diff Manifest in prompt");
 }
 
-if (prompt.includes('"src/')) {
+if (promptEvalDirectoryFromProviderEnv()) {
   const systemPrompt = readFlagValue("--system-prompt");
   assertPromptEvalPrompt(systemPrompt);
   await recordPromptEvalCall(systemPrompt);
@@ -200,9 +200,7 @@ function promptEvalFindingLocation(range, review) {
 }
 
 async function recordPromptEvalCall(systemPrompt) {
-  const providerEnvName = Bun.env.PIPR_PROVIDER_API_KEY_ENV;
-  const directory =
-    Bun.env.PIPR_EVAL_PI_CALLS_DIR ?? (providerEnvName ? Bun.env[providerEnvName] : undefined);
+  const directory = promptEvalDirectoryFromProviderEnv();
   if (!directory) {
     return;
   }
@@ -623,6 +621,15 @@ function telemetryDirectoryFromProviderEnv() {
   }
   const value = Bun.env[providerEnvName];
   return value?.includes("/packages/e2e/fixtures/act/pi-calls-") ? value : undefined;
+}
+
+function promptEvalDirectoryFromProviderEnv() {
+  const providerEnvName = Bun.env.PIPR_PROVIDER_API_KEY_ENV;
+  if (!providerEnvName) {
+    return undefined;
+  }
+  const value = Bun.env[providerEnvName];
+  return value?.includes("/.pipr-eval-pi-calls") ? value : undefined;
 }
 
 function promptKind() {

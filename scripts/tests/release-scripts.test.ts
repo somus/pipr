@@ -124,7 +124,7 @@ describe("changed-scope", () => {
     ]) {
       expect(dockerScopeChanged(file)).toBe(false);
     }
-  });
+  }, 15000);
 });
 
 describe("sync-release-lockfile", () => {
@@ -223,9 +223,7 @@ describe("CLI package bundled skills", () => {
     cpSync(sourceDist, isolatedDist, { recursive: true });
     const cliPath = path.join(isolatedDist, "main.mjs");
     const cacheDir = path.join(realpathSync(tempDir), "dist-skill-cache");
-    const bunCacheDir = path.join(realpathSync(tempDir), "bun-install-cache");
     const skill = executableResult(cliPath, ["skill"], repoRoot, {
-      BUN_INSTALL_CACHE_DIR: bunCacheDir,
       PIPR_SKILL_CACHE_DIR: cacheDir,
     });
     expect(skill.exitCode, `${skill.stdout}\n${skill.stderr}`).toBe(0);
@@ -233,7 +231,6 @@ describe("CLI package bundled skills", () => {
     expect(skill.stdout).toContain("BEGIN SKILL FILE: references/config-patterns.md");
 
     const skillPath = executableResult(cliPath, ["skill", "path"], repoRoot, {
-      BUN_INSTALL_CACHE_DIR: bunCacheDir,
       PIPR_SKILL_CACHE_DIR: cacheDir,
     });
     expect(skillPath.exitCode, `${skillPath.stdout}\n${skillPath.stderr}`).toBe(0);

@@ -86,13 +86,7 @@ export function scoreForbiddenOutputSuppression(
       finding.rangeId,
       finding.suggestedFix ?? "",
     ]),
-    ...output.droppedFindings.flatMap(({ reason, finding }) => [
-      reason,
-      finding.body,
-      finding.path,
-      finding.rangeId,
-      finding.suggestedFix ?? "",
-    ]),
+    ...output.droppedFindings.flatMap((finding) => [finding.reason, finding.path, finding.rangeId]),
   ].join("\n");
   return Number(forbidden.every((value) => !text.toLowerCase().includes(value.toLowerCase())));
 }

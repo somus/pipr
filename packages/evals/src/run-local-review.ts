@@ -31,7 +31,14 @@ console.log(
     mainComment: result.mainComment,
     inlineFindings: result.inlineCommentDrafts,
     validated: {
-      droppedFindings: result.validated.droppedFindings,
+      droppedFindings: result.validated.droppedFindings.map(({ reason, finding }) => ({
+        reason,
+        path: finding.path,
+        rangeId: finding.rangeId,
+        side: finding.side,
+        startLine: finding.startLine,
+        endLine: finding.endLine,
+      })),
     },
     diffRanges: result.diffManifest.files.flatMap((file) =>
       file.commentableRanges.map((range) => ({
