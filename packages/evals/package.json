@@ -1,0 +1,28 @@
+{
+  "name": "@pipr/evals",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./internal": {
+      "types": "./src/internal.ts",
+      "default": "./src/internal.ts"
+    }
+  },
+  "scripts": {
+    "eval": "bun run build:deps && bun ./node_modules/.bin/evalite run --threshold=90",
+    "eval:dev": "bun run build:deps && bun ./node_modules/.bin/evalite watch --threshold=90",
+    "eval:export": "bun run build:deps && bun ./node_modules/.bin/evalite run --threshold=90 --outputPath=./evalite-export/results.json",
+    "build:deps": "bun run --cwd ../sdk build && bun run --cwd ../runtime build",
+    "lint": "biome lint src",
+    "typecheck": "tsc --noEmit",
+    "format:check": "biome format src evalite.config.ts package.json tsconfig.json"
+  },
+  "dependencies": {
+    "@usepipr/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "evalite": "0.19.0",
+    "vitest": "4.1.9"
+  }
+}

@@ -1,7 +1,12 @@
 import { z } from "zod";
 import runtimePackage from "../../package.json" with { type: "json" };
 import { createDiffRangeIndex } from "../diff/ranges.js";
-import type { ChangeRequestEventContext, DiffManifest, ReviewFinding } from "../types.js";
+import type {
+  ChangeRequestEventContext,
+  CommentableRange,
+  DiffManifest,
+  ReviewFinding,
+} from "../types.js";
 import { commentableRangeSchema, reviewSideSchema } from "../types.js";
 import { reviewFindingSchema } from "./contract.js";
 import {
@@ -111,6 +116,11 @@ export type BuildPublicationPlanOptions = {
   threadActions?: ThreadAction[];
 };
 
+const maxInlineFindingBodyCharacters = 700;
+const maxInlineFindingBodyLines = 4;
+const secretLikeTokenPattern =
+  /\b[A-Za-z0-9][A-Za-z0-9_.:/+=-]*(?:secret|token|api[_-]?key|apikey)[A-Za-z0-9_.:/+=-]{8,}\b/gi;
+
 export function buildPublicationPlan(options: BuildPublicationPlanOptions): PublicationPlan {
   const reviewState =
     options.reviewState ??
@@ -164,6 +174,10 @@ export function prepareInlinePublicationItems(options: {
       const stateRecord = options.reviewState
         ? matchFindingRecord(options.reviewState, finding)
         : undefined;
+      const publishableFinding = findingWithPublishableSuggestedFix(
+        findingWithPublishableBody(finding),
+        range,
+      );
       if (
         seenFindingIds.has(findingId) ||
         stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha
@@ -174,20 +188,97 @@ export function prepareInlinePublicationItems(options: {
       const marker = inlineFindingMarker(findingId, options.reviewedHeadSha);
       return [
         inlinePublicationItemSchema.parse({
-          finding,
+          finding: publishableFinding,
           range,
-          path: finding.path,
-          side: finding.side,
-          startLine: finding.startLine,
-          endLine: finding.endLine,
+          path: publishableFinding.path,
+          side: publishableFinding.side,
+          startLine: publishableFinding.startLine,
+          endLine: publishableFinding.endLine,
           marker,
           findingId,
           reviewedHeadSha: options.reviewedHeadSha,
-          body: renderInlineBody(finding, findingId, options.reviewedHeadSha),
+          body: renderInlineBody(publishableFinding, findingId, options.reviewedHeadSha),
         }),
       ];
     }),
   );
+}
+
+function findingWithPublishableBody(finding: ReviewFinding): ReviewFinding {
+  const body = conciseInlineFindingBody(finding.body);
+  return body === finding.body ? finding : { ...finding, body };
+}
+
+function conciseInlineFindingBody(value: string): string {
+  const firstParagraph = value
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .trim()
+    .split(/\n{2,}/)[0];
+  const visibleLines = (firstParagraph ?? value).split("\n").slice(0, maxInlineFindingBodyLines);
+  const body = redactPotentialSecrets(visibleLines.join("\n").trim());
+  if (body.length <= maxInlineFindingBodyCharacters) {
+    return body;
+  }
+  return `${body.slice(0, maxInlineFindingBodyCharacters).trimEnd()}...`;
+}
+
+function findingWithPublishableSuggestedFix(
+  finding: ReviewFinding,
+  range: CommentableRange,
+): ReviewFinding {
+  if (!finding.suggestedFix) {
+    return finding;
+  }
+  const suggestedLines = splitSuggestedFixLines(finding.suggestedFix);
+  const selectedLineCount = finding.endLine - finding.startLine + 1;
+  if (suggestedLines.length !== selectedLineCount) {
+    return withoutSuggestedFix(finding);
+  }
+
+  const originalLines = selectedRangePreviewLines(finding, range, selectedLineCount);
+  if (originalLines && hasUnchangedSelectionEdge(originalLines, suggestedLines)) {
+    return withoutSuggestedFix(finding);
+  }
+
+  return redactPotentialSecrets(finding.suggestedFix) === finding.suggestedFix
+    ? finding
+    : withoutSuggestedFix(finding);
+}
+
+function withoutSuggestedFix(finding: ReviewFinding): ReviewFinding {
+  const next = { ...finding };
+  delete next.suggestedFix;
+  return next;
+}
+
+function splitSuggestedFixLines(value: string): string[] {
+  const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const withoutFinalNewline = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+  return withoutFinalNewline.length === 0 ? [] : withoutFinalNewline.split("\n");
+}
+
+function selectedRangePreviewLines(
+  finding: ReviewFinding,
+  range: CommentableRange,
+  selectedLineCount: number,
+): string[] | undefined {
+  if (!range.preview) {
+    return undefined;
+  }
+  const offset = finding.startLine - range.startLine;
+  if (offset < 0) {
+    return undefined;
+  }
+  const previewLines = range.preview.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (offset + selectedLineCount > previewLines.length) {
+    return undefined;
+  }
+  return previewLines.slice(offset, offset + selectedLineCount);
+}
+
+function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {
+  return originalLines[0] === suggestedLines[0] || originalLines.at(-1) === suggestedLines.at(-1);
 }
 
 function renderMainComment(options: {
@@ -204,7 +295,7 @@ function renderMainComment(options: {
     "",
     "# Pipr Review",
     "",
-    options.main,
+    redactPotentialSecrets(options.main),
     "",
   ].join("\n");
 }
@@ -231,4 +322,8 @@ function renderSuggestedChange(suggestedFix: string): string {
 
 function longestBacktickRun(value: string): number {
   return Math.max(0, ...[...value.matchAll(/`+/g)].map((match) => match[0].length));
+}
+
+function redactPotentialSecrets(value: string): string {
+  return value.replace(secretLikeTokenPattern, "[redacted secret]");
 }

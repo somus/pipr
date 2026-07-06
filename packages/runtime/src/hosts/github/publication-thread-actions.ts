@@ -145,7 +145,7 @@ async function postThreadActionReplyIfNeeded(
       repo: context.change.repository.slug,
       pullRequestNumber: context.change.change.number,
       commentId: action.commentId,
-      body: [marker.body, "", action.body.replaceAll("<!--", "&lt;!--")].join("\n"),
+      body: [marker.body, "", threadActionReplyBody(context, action)].join("\n"),
     });
     recordThreadActionReply(context, action, marker.key);
     return undefined;
@@ -153,6 +153,17 @@ async function postThreadActionReplyIfNeeded(
     const message = error instanceof Error ? error.message : String(error);
     return `reply to verifier action '${action.findingId}': ${message}`;
   }
+}
+
+function threadActionReplyBody(
+  context: ThreadActionContext,
+  action: PublicationPlan["threadActions"][number],
+): string {
+  const body = action.body.replaceAll("<!--", "&lt;!--");
+  if (action.kind !== "resolve" || body.includes(context.commitUrl)) {
+    return body;
+  }
+  return `${body}\n\nResolved in ${context.commitUrl}.`;
 }
 
 async function loadThreadActionThreads(

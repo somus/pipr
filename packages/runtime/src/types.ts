@@ -30,13 +30,14 @@ export type {
 const nonEmptyStringSchema = z.string().min(1);
 
 const providerConfigSchema = piProviderProfileSchema;
+const optionalPositiveIntegerSchema = z.number().int().positive().optional();
 
 const diffManifestLimitsConfigSchema = z.strictObject({
-  fullMaxBytes: z.number().int().positive().optional(),
-  fullMaxEstimatedTokens: z.number().int().positive().optional(),
-  condensedMaxBytes: z.number().int().positive().optional(),
-  condensedMaxEstimatedTokens: z.number().int().positive().optional(),
-  toolResponseMaxBytes: z.number().int().positive().optional(),
+  fullMaxBytes: optionalPositiveIntegerSchema,
+  fullMaxEstimatedTokens: optionalPositiveIntegerSchema,
+  condensedMaxBytes: optionalPositiveIntegerSchema,
+  condensedMaxEstimatedTokens: optionalPositiveIntegerSchema,
+  toolResponseMaxBytes: optionalPositiveIntegerSchema,
 });
 
 const autoResolveAllowedActorsSchema = z.enum(["author-or-write", "write", "any"]);

@@ -10,7 +10,7 @@
     "pipr-e2e-run": "./run.ts"
   },
   "scripts": {
-    "test": "bun ./assertions.test.ts",
+    "test": "bun ./assertions.test.ts && bun ./prompt-evals.test.ts",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
     "format:check": "biome format .",
@@ -19,6 +19,7 @@
     "check:container": "bun ./container-check.ts"
   },
   "dependencies": {
+    "@pipr/evals": "workspace:*",
     "@usepipr/runtime": "workspace:*"
   }
 }

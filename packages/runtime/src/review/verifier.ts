@@ -251,10 +251,18 @@ function fixedReplyBody(
   options: RunVerifierOptions,
   item: VerifierOutput["findings"][number],
 ): string | undefined {
-  if (options.mode.kind === "user-reply") {
-    return item.response;
+  if (options.mode.kind === "user-reply" && !item.response) {
+    return undefined;
   }
-  return item.response ?? commitResolutionBody(options.event);
+  return fixedReplyWithCommitCitation(item.response, commitResolutionBody(options.event));
+}
+
+function fixedReplyWithCommitCitation(response: string | undefined, citation: string): string {
+  const body = response?.trim();
+  if (!body) {
+    return citation;
+  }
+  return body.includes(citation) ? body : `${body}\n\n${citation}`;
 }
 
 function stillValidReplyAction(

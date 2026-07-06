@@ -99,6 +99,18 @@ describe("comments", () => {
     expect(plan.mainComment).not.toContain("Old summary.");
   });
 
+  it("redacts secret-like tokens from the visible main comment body", () => {
+    const plan = buildPublicationPlan({
+      event,
+      main: "A hard-coded secret was committed: pipr_eval_secret_do_not_repeat_12345.",
+      inlineItems: [],
+      metadata: metadata(),
+    });
+
+    expect(plan.mainComment).toContain("[redacted secret]");
+    expect(plan.mainComment).not.toContain("pipr_eval_secret_do_not_repeat_12345");
+  });
+
   it("dedupes inline drafts with hidden markers", () => {
     const first = prepareInlinePublicationItems({
       validated: { validFindings: [finding] },
@@ -155,6 +167,120 @@ describe("comments", () => {
 
     expect(item?.body).toContain("This can fail.");
     expect(item?.body).not.toContain("```suggestion");
+  });
+
+  it("omits suggested-change blocks when the replacement line span does not match", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            suggestedFix: ["if (failed) {", "  recover();", "}"].join("\n"),
+          },
+        ],
+      },
+      manifest,
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.body).toContain("This can fail.");
+    expect(item?.body).not.toContain("```suggestion");
+  });
+
+  it("redacts secret-like tokens from inline bodies and strips leaking suggestions", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            body: "The literal pipr_eval_secret_do_not_repeat_12345 should not be repeated.",
+            suggestedFix: 'const apiKey = "pipr_eval_secret_do_not_repeat_12345";',
+          },
+        ],
+      },
+      manifest,
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.body).toContain("[redacted secret]");
+    expect(item?.finding.body).not.toContain("pipr_eval_secret_do_not_repeat_12345");
+    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.body).not.toContain("pipr_eval_secret_do_not_repeat_12345");
+    expect(item?.body).not.toContain("```suggestion");
+  });
+
+  it("omits suggested-change blocks when a multi-line selection has a shorter replacement", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            endLine: 12,
+            suggestedFix: "return safeCall();",
+          },
+        ],
+      },
+      manifest: manifestWithRange(10, 12),
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.body).toContain("This can fail.");
+    expect(item?.body).not.toContain("```suggestion");
+  });
+
+  it("omits suggested-change blocks when the replacement includes unchanged edge lines", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            endLine: 14,
+            suggestedFix: [
+              "const next = compute();",
+              "if (next < 0) {",
+              "  return 0;",
+              "}",
+              "return next;",
+            ].join("\n"),
+          },
+        ],
+      },
+      manifest: manifestWithRange(
+        10,
+        14,
+        ["const next = compute();", "if (next < 0) {", "  return next;", "}", "return next;"].join(
+          "\n",
+        ),
+      ),
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.body).toContain("This can fail.");
+    expect(item?.body).not.toContain("```suggestion");
+  });
+
+  it("publishes only a bounded first paragraph for verbose inline finding bodies", () => {
+    const secondParagraph = "This second paragraph should not be published.";
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            body: `${"The actionable issue is concise. ".repeat(40)}\n\n${secondParagraph}`,
+          },
+        ],
+      },
+      manifest,
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.body.length).toBeLessThanOrEqual(703);
+    expect(item?.finding.body).toContain("The actionable issue is concise.");
+    expect(item?.finding.body.endsWith("...")).toBe(true);
+    expect(item?.body).not.toContain(secondParagraph);
   });
 
   it("uses a longer suggestion fence when replacement code contains backticks", () => {
@@ -223,5 +349,20 @@ function metadata() {
     failedTasks: [],
     validFindings: 1,
     droppedFindings: 0,
+  };
+}
+
+function manifestWithRange(startLine: number, endLine: number, preview = "fail()"): DiffManifest {
+  return {
+    ...manifest,
+    files: manifest.files.map((file) => ({
+      ...file,
+      commentableRanges: file.commentableRanges.map((range) => ({
+        ...range,
+        startLine,
+        endLine,
+        preview,
+      })),
+    })),
   };
 }

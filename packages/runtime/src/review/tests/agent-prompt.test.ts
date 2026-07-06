@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Agent, Schema } from "@usepipr/sdk";
 import { type AgentRunContext, renderAgentPrompt } from "../agent/agent-prompt.js";
+import { reviewResultSchemaId } from "../review.js";
 
 const unknownSchema: Schema<unknown> = {
   kind: "pipr.schema",
@@ -13,7 +14,33 @@ const unknownSchema: Schema<unknown> = {
   },
 };
 
+const reviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: reviewResultSchemaId,
+};
+
 describe("renderAgentPrompt", () => {
+  it("includes review policy for core review outputs", async () => {
+    const prompt = await renderTestPrompt(reviewSchema);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Review only changed behavior.");
+    expect(prompt).toContain("Report only actionable defects");
+    expect(prompt).toContain("Do not leave actionable defects or test gaps only in the summary.");
+    expect(prompt).toContain("Keep each inline finding body to one short paragraph");
+    expect(prompt).toContain("one inline finding");
+    expect(prompt).toContain("exact Diff Manifest commentable range");
+    expect(prompt).toContain("smallest contiguous `startLine` to `endLine` span");
+    expect(prompt).toContain("Do not select a larger enclosing block");
+  });
+
+  it("does not include review policy for non-review outputs", async () => {
+    const prompt = await renderTestPrompt(unknownSchema);
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Report only actionable defects");
+  });
+
   it("isolates top-level prompt context mutations from the prepared run context", async () => {
     const promptContext: AgentRunContext["prompt"] = {
       runId: "run-1",
@@ -71,3 +98,51 @@ describe("renderAgentPrompt", () => {
     expect(promptContext).toEqual(originalPromptContext);
   });
 });
+
+async function renderTestPrompt(output: Schema<unknown>): Promise<string> {
+  const agent: Agent<unknown, unknown> = {
+    kind: "pipr.agent",
+    name: "reviewer",
+    definition: {
+      instructions: "Review.",
+      output,
+      prompt: () => "Review this change.",
+    },
+    extend() {
+      throw new Error("unused");
+    },
+  };
+
+  return await renderAgentPrompt({
+    agent,
+    input: {},
+    agentTools: { customTools: [] },
+    agentRunContext: {
+      prompt: {
+        runId: "run-1",
+        repository: { root: "/repo", name: "pipr" },
+        change: {
+          number: 12,
+          title: "Change title",
+          description: "Change description",
+          base: { sha: "base" },
+          head: { sha: "head" },
+        },
+        platform: { id: "github" },
+      },
+      tools: {
+        run: { id: "run-1" },
+        repository: { root: "/repo", name: "pipr" },
+        change: {
+          number: 12,
+          title: "Change title",
+          description: "Change description",
+          base: { sha: "base" },
+          head: { sha: "head" },
+        },
+        platform: { id: "github" },
+      },
+    },
+    runtime: {},
+  });
+}
