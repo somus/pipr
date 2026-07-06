@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { chmod, mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { runLocalReviewCommand } from "@usepipr/runtime";
 
 type HelperInput = {
@@ -16,13 +18,14 @@ if (!input.rootDir || !input.baseSha || !input.headSha) {
   throw new Error("usage: run-local-review.ts <json options>");
 }
 
+const piExecutable = await evalPiExecutable(input);
 const result = await runLocalReviewCommand({
   rootDir: input.rootDir,
   configDir: ".pipr",
   baseSha: input.baseSha,
   headSha: input.headSha,
-  piExecutable: input.piExecutable,
-  env: input.callsDir ? deterministicEnv(input.callsDir) : process.env,
+  piExecutable,
+  env: input.callsDir ? deterministicEnv() : process.env,
 });
 
 console.log(
@@ -60,10 +63,33 @@ function readInput(value: string | undefined): HelperInput {
   return JSON.parse(value) as HelperInput;
 }
 
-function deterministicEnv(callsDir: string): NodeJS.ProcessEnv {
+async function evalPiExecutable(input: HelperInput): Promise<string | undefined> {
+  if (!input.callsDir || !input.piExecutable) {
+    return input.piExecutable;
+  }
+  const wrapperDir = path.join(input.rootDir, ".pipr", ".eval");
+  await mkdir(wrapperDir, { recursive: true });
+  const wrapperPath = path.join(wrapperDir, "fake-pi-wrapper");
+  await writeFile(
+    wrapperPath,
+    `#!/usr/bin/env bun
+Bun.env.PIPR_EVAL_PI_CALLS_DIR = ${JSON.stringify(input.callsDir)};
+const proc = Bun.spawn([${JSON.stringify(input.piExecutable)}, ...Bun.argv.slice(2)], {
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "inherit",
+  env: Bun.env,
+});
+process.exit(await proc.exited);
+`,
+  );
+  await chmod(wrapperPath, 0o700);
+  return wrapperPath;
+}
+
+function deterministicEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
     DEEPSEEK_API_KEY: "pipr-eval-dummy-key",
-    PIPR_EVAL_PI_CALLS_DIR: callsDir,
   };
 }
