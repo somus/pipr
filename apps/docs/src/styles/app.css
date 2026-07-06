@@ -37,26 +37,6 @@
     "Liberation Mono", "Courier New", monospace;
 }
 
-.dark,
-.light {
-  --color-fd-background: #0b0d0b;
-  --color-fd-foreground: #f4f2e8;
-  --color-fd-muted: #141712;
-  --color-fd-muted-foreground: #969b8d;
-  --color-fd-popover: #151912;
-  --color-fd-popover-foreground: #f4f2e8;
-  --color-fd-card: #151912;
-  --color-fd-card-foreground: #f4f2e8;
-  --color-fd-border: #2a3028;
-  --color-fd-primary: #c7ff5f;
-  --color-fd-primary-foreground: #10120d;
-  --color-fd-secondary: #20261d;
-  --color-fd-secondary-foreground: #e1dfd1;
-  --color-fd-accent: #20261d;
-  --color-fd-accent-foreground: #f4f2e8;
-  --color-fd-ring: #c7ff5f;
-}
-
 .twoslash-hover {
   text-decoration-color: color-mix(in oklab, var(--color-fd-primary) 65%, transparent);
   text-decoration-line: underline;
