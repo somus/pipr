@@ -5,6 +5,8 @@ description: "Repo setup, local e2e checks, Docker image release, and npm releas
 
 ## Setup
 
+### Install dependencies
+
 ```bash
 mise run install
 ```
@@ -17,6 +19,8 @@ bun run hooks-install
 
 Run the repository gate:
 
+### Repository gate
+
 ```bash
 mise run check
 ```
@@ -24,6 +28,8 @@ mise run check
 This runs release metadata checks, script tests, package builds, lint, typecheck, tests, format check, and Fallow. It does not run the full docs Vite build.
 
 ## Docs app
+
+### Local dev server
 
 The docs app lives in `apps/docs` and is part of the Bun workspace and Turbo graph.
 
@@ -33,6 +39,8 @@ Run it locally:
 bun run --cwd apps/docs dev
 ```
 
+### Docs checks
+
 Run docs-only checks:
 
 ```bash
@@ -40,6 +48,8 @@ bun run --cwd apps/docs typegen
 bun run --cwd apps/docs typecheck
 bun run --cwd apps/docs test
 ```
+
+### Docs build
 
 Run the full docs build only when validating docs deployment output:
 
@@ -51,6 +61,8 @@ Public docs content lives under `apps/docs/content/docs`. Generated files such a
 
 When moving or adding pages:
 
+### Page changes
+
 - update the nearest `meta.json`
 - keep frontmatter titles and descriptions useful
 - use `/docs/...` links for internal docs routes
@@ -59,11 +71,15 @@ When moving or adding pages:
 
 ## Local Action e2e
 
+### Action gate
+
 Use the local Action gate after editing the GitHub Action, Docker Action packaging, workflow fixtures, Pi CLI mapping, or PR event handling:
 
 ```bash
 mise run check-actions
 ```
+
+### What it runs
 
 This command:
 
@@ -71,6 +87,8 @@ This command:
 - verifies the installed Pi CLI contract
 - runs fixture self-tests
 - runs all local `act` scenarios
+
+### Environment knobs
 
 Supported environment knobs:
 
@@ -85,6 +103,8 @@ Use `PIPR_SKIP_ACTION_IMAGE_BUILD=1` only when the target image already exists a
 
 ## CI Docker e2e
 
+### CI container check
+
 CI does not run `act`. The CI workflow builds a local single-platform Docker image with `load: true`, tags it as `pipr-action:e2e`, and runs:
 
 ```bash
@@ -97,12 +117,16 @@ The Dockerfile builds only the Action packages. Docs output is validated by the 
 
 To run the same check locally:
 
+### Local container check
+
 ```bash
 docker build -t pipr-action:e2e .
 PIPR_ACTION_IMAGE=pipr-action:e2e bun run --cwd packages/e2e check:container
 ```
 
 ## Docker image release
+
+### Action metadata
 
 The checked-in Action metadata uses the published image directly:
 
@@ -114,6 +138,8 @@ Local `act` fixtures rewrite that metadata to the `PIPR_ACTION_IMAGE` value so A
 
 The Docker image is published only by the release workflow:
 
+### Release workflow
+
 ```text
 .github/workflows/release.yml
 ```
@@ -122,9 +148,13 @@ CI and the manual Docker workflow build local `pipr-action:e2e` images for verif
 
 The GHCR image name is:
 
+### GHCR image
+
 ```text
 ghcr.io/somus/pipr
 ```
+
+### Published tags
 
 Publishing uses the tags:
 
@@ -134,10 +164,14 @@ Publishing uses the tags:
 
 ## npm and binary release
 
+### Release artifacts
+
 GitHub Releases publish two artifacts:
 
 - compiled `pipr` CLI binaries attached to the release
 - `@usepipr/sdk`, `@usepipr/runtime`, and `@usepipr/cli` published to npm
+
+### Required setup
 
 Required release setup:
 
@@ -151,11 +185,15 @@ The Release Please workflow opens changelog and version pull requests from Conve
 
 Configure trusted publishing through npm package settings, or with npm 11.15.0 or newer after the package exists:
 
+### Trusted publishing
+
 ```bash
 npm trust github @usepipr/sdk --repo somus/pipr --file .github/workflows/release.yml --allow-publish
 npm trust github @usepipr/runtime --repo somus/pipr --file .github/workflows/release.yml --allow-publish
 npm trust github @usepipr/cli --repo somus/pipr --file .github/workflows/release.yml --allow-publish
 ```
+
+### Build binaries
 
 Build release binaries locally:
 
@@ -169,6 +207,8 @@ Build only the host binary:
 bun run build:release:cli --host --outfile /tmp/pipr
 ```
 
+### Package dry runs
+
 Check packages before publishing:
 
 ```bash
@@ -179,11 +219,15 @@ NPM_CONFIG_CACHE=/private/tmp/pipr-npm-cache npm pack --dry-run --json --workspa
 
 ## GitHub push checklist
 
+### Before pushing
+
 Before pushing a public branch:
 
 ```bash
 mise run check
 ```
+
+### Action changes
 
 For Action or Docker changes:
 
@@ -191,12 +235,16 @@ For Action or Docker changes:
 mise run check-actions
 ```
 
+### Initial remote
+
 Initial remote setup:
 
 ```bash
 git remote add origin git@github.com:somus/pipr.git
 git push -u origin main
 ```
+
+### Draft release
 
 Publish a GitHub Release from a semver tag when the package is ready:
 

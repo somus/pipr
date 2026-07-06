@@ -3,10 +3,11 @@ import { appName, gitConfig } from "./shared";
 
 export function baseOptions(): BaseLayoutProps {
   return {
+    githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
     nav: {
       // JSX supported
       title: (
-        <span className="inline-flex items-center gap-2 font-semibold">
+        <span className="inline-flex items-center gap-2 font-semibold tracking-normal">
           <img
             src="/images/pipr/pipr-mark-light.svg"
             alt=""
@@ -23,6 +24,8 @@ export function baseOptions(): BaseLayoutProps {
         </span>
       ),
     },
-    githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
+    themeSwitch: {
+      enabled: false,
+    },
   };
 }

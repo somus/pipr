@@ -11,6 +11,8 @@ This page shows common patterns. For triggers and commands, see [Entrypoints](/d
 
 ## Minimal review
 
+### Base config
+
 ```ts twoslash
 import { definePipr } from "@usepipr/sdk";
 
@@ -48,7 +50,11 @@ export default definePipr((pipr) => {
 
 `pipr.review` registers a change request review task and the `@pipr review` command unless `entrypoints` disables them.
 
+### Review registration
+
 Use `pipr.review(...)` for the default path: one reviewer, one Review Task, optional path scope, optional command, and optional task check. Use `pipr.config(...)` for publication caps.
+
+### Path scope
 
 Use `paths` to scope a review recipe to matching repository paths:
 
@@ -66,6 +72,8 @@ pipr.review({
 
 `paths` filters the Diff Manifest and publishable Inline Review Comments. Pi still receives read-only access to the whole repository, and Pipr instructs it to read nonmatching files only when needed to review matching files.
 
+### Entrypoints
+
 The `entrypoints` object is the preferred public API:
 
 ```ts twoslash
@@ -81,6 +89,8 @@ Use [Entrypoints](/docs/guide/entrypoints) for command arguments, permissions, a
 
 ## Models
 
+### Model profile
+
 Model ids default to `<provider>/<model>`:
 
 ```ts twoslash
@@ -93,11 +103,17 @@ const primary = pipr.model({
 });
 ```
 
+### Env-only secrets
+
 Provider secrets are env-only. `pipr.secret({ name: "DEEPSEEK_API_KEY" })` records the env var name and does not put raw secret values in the runtime plan.
+
+### Explicit ids
 
 Model ids default to `<provider>/<model>`. Set an explicit `id` only when two profiles use the same provider and model with different options.
 
 ## Diff Manifest limits
+
+### Limit config
 
 Pipr sends the full Diff Manifest while it fits configured limits. When it is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools for range-scoped context.
 
@@ -118,6 +134,8 @@ pipr.config({
 ```
 
 ## Custom task
+
+### Task orchestration
 
 Use `pipr.agent`, `pipr.task`, and `pipr.on.changeRequest` when the default review recipe is not enough. See [Custom Tasks](/docs/guide/custom-tasks) for the full task context.
 
@@ -149,9 +167,13 @@ pipr.on.changeRequest({ actions: ["opened", "updated"], task });
 
 Pass `manifest` to `ctx.pi.run(...)`. Pipr injects the full or condensed Diff Manifest into the Pi prompt and attaches read-only diff tools when needed.
 
+### Manifest and findings
+
 Inline findings passed to `ctx.comment(...)` must target valid Diff Manifest ranges.
 
 ## Custom schemas
+
+### Typed schema helpers
 
 Use custom schemas for intermediate agents and custom workflows. Use `pipr.schemas.review` only for output that should publish Inline Review Comments.
 
@@ -188,11 +210,17 @@ export default definePipr((pipr) => {
 
 The runtime includes schema details in the Pi prompt when they are available. Tasks can map custom outputs into `ctx.comment(...)`.
 
+### Publishing custom output
+
 To publish inline comments from a custom schema, map the custom output into `ReviewFinding[]` and pass it to `ctx.comment({ inlineFindings })`. Use `suggestedFix` only for exact replacement code, without Markdown fences or prose.
+
+### Model-visible metadata
 
 Schema metadata is model-visible prompt content. Do not put secrets, private data, or sensitive internal notes in JSON Schema fields such as `description`, `examples`, `default`, or `$comment`.
 
 ## Commands and local review
+
+### Command task
 
 Commands run from pull request issue comments:
 
@@ -200,6 +228,8 @@ Commands run from pull request issue comments:
 // @include: pipr-task
 pipr.command({ pattern: "@pipr security", permission: "write", task });
 ```
+
+### Free-form command input
 
 Use a final rest capture for free-form command text:
 
@@ -219,7 +249,11 @@ const ask = pipr.task<{ question: string }>({
 pipr.command({ pattern: "@pipr ask <question...>", permission: "read", task: ask });
 ```
 
+### Command publication
+
 Command replies publish a normal pull request issue comment keyed to the source command comment. They do not update the Main Review Comment or publish Inline Review Comments.
+
+### Permission levels
 
 Permission levels are provider-neutral:
 
@@ -228,6 +262,8 @@ read < triage < write < maintain < admin
 ```
 
 The active code host adapter maps native roles into these levels.
+
+### Local review task
 
 Local review runs the same change-request task logic without GitHub publishing:
 
@@ -243,6 +279,8 @@ pipr review --base origin/main
 ```
 
 `pipr review` runs every unique task registered through `pipr.on.changeRequest(...)`, ignoring the configured action filters. Use `local: false` on tasks that should run only in CI:
+
+### CI-only local behavior
 
 ```ts twoslash
 // @include: pipr-security-agent
@@ -261,6 +299,8 @@ See [Local Runs](/docs/guide/local-runs) for local execution behavior.
 
 ## Fallback and retry
 
+### Model resolution order
+
 `ctx.pi.run(agent, input, { model, fallbacks })` can override the agent primary model and fallback list for one call. Otherwise Pipr uses:
 
 1. the call override
@@ -269,6 +309,8 @@ See [Local Runs](/docs/guide/local-runs) for local execution behavior.
 4. the trusted base config default provider
 
 Invalid structured output gets one repair attempt by default. Transient Pi execution retries default to zero.
+
+### Retry settings
 
 ```ts twoslash
 // @include: pipr-models
@@ -286,9 +328,13 @@ const reviewer = pipr.agent({
 });
 ```
 
+### Trusted base resolution
+
 For GitHub Action pull request runs, Pipr resolves this order from the base-commit `.pipr/config.ts`; pull request changes to config are reviewed as code but do not affect the current run.
 
 ## Inspect
+
+### Runtime plan
 
 Use `pipr inspect` to see the loaded runtime plan:
 
@@ -299,6 +345,8 @@ pipr inspect
 It prints registered models, agents, tasks, events, commands, and tools.
 
 ## Decision guide
+
+### Choosing APIs
 
 | Need | Use |
 | --- | --- |

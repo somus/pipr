@@ -1,9 +1,14 @@
 "use client";
 
+import {
+  File01Icon,
+  FileCodeIcon,
+  FileTypeIcon,
+  WorkflowSquare01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { File, Files, Folder } from "fumadocs-ui/components/files";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "fumadocs-ui/components/ui/tabs";
-import type { LucideIcon } from "lucide-react";
-import { FileCode2, FileJson, FileText, FileType2, Workflow } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 
@@ -28,14 +33,14 @@ type TreeNodesProps = {
   nodes: TreeNode[];
 };
 
-const fileIconsBySuffix = new Map<string, LucideIcon>([
-  [".d.ts", FileCode2],
-  [".ts", FileCode2],
-  [".json", FileJson],
-  [".md", FileText],
-  [".mdx", FileText],
-  [".yaml", Workflow],
-  [".yml", Workflow],
+const fileIconsBySuffix = new Map<string, IconSvgElement>([
+  [".d.ts", FileCodeIcon],
+  [".ts", FileCodeIcon],
+  [".json", File01Icon],
+  [".md", File01Icon],
+  [".mdx", File01Icon],
+  [".yaml", WorkflowSquare01Icon],
+  [".yml", WorkflowSquare01Icon],
 ]);
 
 export function RecipeFileExplorer({
@@ -178,9 +183,9 @@ function folderNode(
 }
 
 function fileIcon(path: string): ReactNode {
-  const Icon = fileIconsBySuffix.get(fileSuffix(path)) ?? FileType2;
+  const icon = fileIconsBySuffix.get(fileSuffix(path)) ?? FileTypeIcon;
 
-  return <Icon className="size-4" aria-hidden="true" />;
+  return <HugeiconsIcon icon={icon} size={16} strokeWidth={1.8} aria-hidden="true" />;
 }
 
 function fileSuffix(path: string): string {

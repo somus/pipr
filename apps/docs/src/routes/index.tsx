@@ -1,29 +1,11 @@
+import { GithubIcon, SparklesIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { HomeLayout } from "fumadocs-ui/layouts/home";
-import {
-  ArrowRight,
-  BadgeCheck,
-  BookOpen,
-  Bot,
-  ClipboardCheck,
-  Code2,
-  CookingPot,
-  FileCode2,
-  FileText,
-  GitBranch,
-  GitPullRequest,
-  KeyRound,
-  Library,
-  ListChecks,
-  LockKeyhole,
-  type LucideIcon,
-  MessageSquareText,
-  Rocket,
-  ShieldCheck,
-  Terminal,
-} from "lucide-react";
 import type { ReactNode } from "react";
+import { CopyButton } from "@/components/copy-button";
 import { baseOptions } from "@/lib/layout.shared";
+import { gitConfig } from "@/lib/shared";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -31,165 +13,114 @@ export const Route = createFileRoute("/")({
 
 type LandingLink = {
   title: string;
-  description: string;
+  description: ReactNode;
   path: string;
-  icon: LucideIcon;
 };
 
-const proofPoints = [
+type ConceptCard = {
+  title: string;
+  description: ReactNode;
+  image: string;
+  cardClassName: string;
+  imageClassName: string;
+};
+
+const installCommandLines = [
   {
-    title: "Review policy lives in code",
-    description:
-      "Define reviewers, models, commands, limits, and publication policy in `.pipr/config.ts` so review changes go through pull requests.",
-    icon: FileCode2,
+    id: "install",
+    command: "curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh",
   },
   {
-    title: "No hosted control plane",
-    description:
-      "Run Pipr in local development or your CI runner. You don't need a Pipr SaaS account to decide how reviews run.",
-    icon: Code2,
-  },
-  {
-    title: "Trusted base config",
-    description:
-      "Action runs load maintainer-approved config from the base commit, so pull requests cannot rewrite the active reviewer.",
-    icon: LockKeyhole,
-  },
-  {
-    title: "Validated comments",
-    description:
-      "Pipr checks model output against commentable diff ranges before it publishes Main Review Comments or Inline Review Comments.",
-    icon: BadgeCheck,
+    id: "init",
+    command: "pipr init",
   },
 ];
 
-const reviewSteps = [
-  {
-    label: "01",
-    title: "Load config",
-    description:
-      "Read maintainer-approved `.pipr/config.ts` and local imports from the base branch.",
-    icon: GitBranch,
-  },
-  {
-    label: "02",
-    title: "Model the change",
-    description: "Build a deterministic Diff Manifest with files, hunks, and commentable ranges.",
-    icon: FileText,
-  },
-  {
-    label: "03",
-    title: "Run Pi",
-    description: "Execute the Review Task with bounded, read-only change request context.",
-    icon: Bot,
-  },
-  {
-    label: "04",
-    title: "Validate output",
-    description: "Schema-check findings and drop anything that cannot map to a valid range.",
-    icon: ShieldCheck,
-  },
-  {
-    label: "05",
-    title: "Publish review",
-    description: "Write one Main Review Comment and capped Inline Review Comments through GitHub.",
-    icon: MessageSquareText,
-  },
-];
+const installCommand = installCommandLines.map((line) => line.command).join("\n");
 
-const heroRunSteps = [
-  { title: "Config", icon: GitBranch },
-  { title: "Diff", icon: FileText },
-  { title: "Pi", icon: Bot },
-  { title: "Validate", icon: ShieldCheck },
-  { title: "Publish", icon: MessageSquareText },
-];
+const agentPrompt =
+  "Install and configure Pipr in this repository. Install the CLI with `curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh`, then run `pipr skill` and use the bundled `pipr-setup` skill. Interview me only for missing choices, run `pipr init`, customize `.pipr/config.ts` only as needed, and verify with `pipr inspect` and `pipr check`.";
 
-const recipeLinks = [
+const conceptCards = [
   {
-    title: "Default Review",
-    description: "General pull request review with bounded inline comments.",
-    path: "recipes/default-review",
-    icon: MessageSquareText,
+    title: "Config lives in your repo",
+    description: (
+      <>
+        <InlineCode>.pipr/config.ts</InlineCode> is the review policy that maintainers own and
+        review.
+      </>
+    ),
+    image: "/images/pipr/home-illustration-lean-core.svg",
+    cardClassName:
+      "border-[#33534a] bg-[radial-gradient(ellipse_at_52%_18%,rgba(58,137,118,0.08),transparent_54%),radial-gradient(circle_at_10%_10%,rgba(199,255,95,0.012),transparent_34%),linear-gradient(145deg,#07110e_0%,#040807_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    imageClassName: "mx-auto h-40 w-full max-w-none sm:h-48",
   },
   {
-    title: "Security SAST",
-    description: "Security-focused review with severity and category output.",
-    path: "recipes/security-sast",
-    icon: ShieldCheck,
+    title: "One runtime handles review",
+    description: "Pipr builds the Diff Manifest, runs Pi, validates output, and publishes.",
+    image: "/images/pipr/home-illustration-composable-workflows.svg",
+    cardClassName:
+      "border-[#4a416d] bg-[radial-gradient(ellipse_at_78%_20%,rgba(137,105,205,0.08),transparent_52%),radial-gradient(circle_at_24%_12%,rgba(86,91,150,0.018),transparent_40%),linear-gradient(145deg,#0d0d1b_0%,#070712_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    imageClassName: "mx-auto h-40 w-full max-w-none sm:h-48",
   },
   {
-    title: "Quality Gate",
-    description: "Required check for blocking correctness and test risks.",
-    path: "recipes/quality-gate",
-    icon: ClipboardCheck,
+    title: "Workflows compose on top",
+    description: "Recipes, tasks, commands, and plugins extend the same core.",
+    image: "/images/pipr/home-illustration-commands-plugins.svg",
+    cardClassName:
+      "border-[#25546a] bg-[radial-gradient(ellipse_at_44%_24%,rgba(14,102,142,0.11),transparent_56%),radial-gradient(circle_at_84%_4%,rgba(34,202,169,0.018),transparent_32%),linear-gradient(145deg,#061522_0%,#030a10_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    imageClassName: "mx-auto h-40 w-full max-w-none sm:h-48",
   },
   {
-    title: "Interactive Ask",
-    description: "Free-form `@pipr` command over the diff and prior review context.",
-    path: "recipes/interactive-ask",
-    icon: Bot,
+    title: "Comments are validated first",
+    description: "Pipr publishes one main review and capped inline comments after validation.",
+    image: "/images/pipr/home-illustration-validated-review.svg",
+    cardClassName:
+      "border-[#4b473a] bg-[radial-gradient(ellipse_at_78%_26%,rgba(159,132,35,0.05),transparent_50%),radial-gradient(circle_at_16%_4%,rgba(255,255,255,0.01),transparent_34%),linear-gradient(145deg,#12110e_0%,#080806_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    imageClassName: "mx-auto h-40 w-full max-w-none sm:h-48",
   },
-] satisfies LandingLink[];
+] satisfies ConceptCard[];
 
-const maintainerItems = [
-  {
-    title: "Runs where you run it",
-    description:
-      "Use the same review policy in local development and GitHub Actions before publishing comments to a pull request.",
-    icon: Terminal,
-  },
-  {
-    title: "Secrets stay in env",
-    description:
-      "`pipr.secret({ name })` stores the variable name in the plan. Provider keys come from runner environment variables.",
-    icon: KeyRound,
-  },
-  {
-    title: "GitHub first, provider-neutral core",
-    description:
-      "GitHub is the first code host adapter. The runtime keeps change request concepts provider-neutral.",
-    icon: GitPullRequest,
-  },
-];
-
-const docsPath = [
+const moreInfoLinks = [
   {
     title: "Quickstart",
-    description: "Install Pipr and run the first GitHub Action review.",
+    description: (
+      <>
+        Install the CLI, create <InlineCode>.pipr/config.ts</InlineCode>, and run the first GitHub
+        review.
+      </>
+    ),
     path: "guide/quickstart",
-    icon: Rocket,
-  },
-  {
-    title: "Guide",
-    description: "Configure tasks, entrypoints, comments, trust, and local runs.",
-    path: "guide",
-    icon: BookOpen,
   },
   {
     title: "Recipes",
-    description: "Start from checked-in configs generated by `pipr init --recipe`.",
+    description: "Start from generated configs for common review workflows.",
     path: "recipes",
-    icon: CookingPot,
   },
   {
-    title: "SDK Reference",
-    description: "Look up the TypeScript authoring API for `.pipr/config.ts`.",
-    path: "reference/sdk-reference",
-    icon: Library,
+    title: "CLI reference",
+    description: (
+      <>
+        Read the commands for init, check, inspect, review, and <InlineCode>pipr skill</InlineCode>.
+      </>
+    ),
+    path: "reference/cli",
   },
 ] satisfies LandingLink[];
+
+const repoUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;
 
 function Home() {
   return (
     <HomeLayout {...baseOptions()}>
-      <main className="min-h-[calc(100vh-56px)] overflow-hidden bg-fd-background">
-        <Hero />
-        <WhyPipr />
-        <ReviewFlow />
-        <RecipesToStartFrom />
-        <MaintainerTrust />
-        <DocsPath />
+      <main className="min-h-[calc(100vh-56px)] bg-fd-background text-fd-foreground">
+        <div className="pipr-home-shell mx-auto flex w-full max-w-[53rem] flex-col px-6 py-12 sm:py-16 lg:py-20">
+          <Hero />
+          <InstallPanel />
+          <ConceptCards />
+          <MoreInfo />
+          <Footer />
+        </div>
       </main>
     </HomeLayout>
   );
@@ -197,521 +128,193 @@ function Home() {
 
 function Hero() {
   return (
-    <section className="overflow-hidden border-b border-fd-border bg-fd-background text-fd-foreground dark:border-pipr-lime/20 dark:bg-pipr-ink dark:text-pipr-cream">
-      <div className="mx-auto grid max-w-7xl gap-10 px-6 py-14 sm:py-20 lg:px-8 lg:py-24 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,0.72fr)] xl:items-center xl:gap-14">
-        <div className="max-w-3xl">
-          <p className="mb-4 inline-flex items-center gap-2 rounded-md border border-fd-border bg-fd-card px-3 py-1 text-sm font-medium text-fd-primary dark:border-pipr-lime/25 dark:bg-pipr-panel/80 dark:text-pipr-lime">
-            <GitPullRequest className="size-4" aria-hidden="true" />
-            Code-owned AI review
-          </p>
-          <h1 className="max-w-4xl text-3xl font-semibold tracking-normal text-fd-foreground sm:text-5xl lg:text-6xl xl:text-[4rem] xl:leading-[1.05] dark:text-pipr-cream">
-            Review policy belongs in your repository.
-          </h1>
-          <p className="mt-6 max-w-2xl text-base leading-7 text-fd-muted-foreground sm:text-lg dark:text-pipr-cream/78">
-            Pipr puts AI review policy in `.pipr/config.ts`, runs in local development or CI, and
-            publishes only validated GitHub comments. You own the policy, runtime, and publication
-            boundary without a hosted Pipr control plane.
-          </p>
-          <HeroActions />
-          <HeroProofStrip />
+    <header>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="inline-flex items-center gap-3 text-3xl font-semibold tracking-normal text-fd-foreground">
+          <img
+            src="/images/pipr/pipr-mark-dark.svg"
+            alt=""
+            aria-hidden="true"
+            className="size-8 shrink-0"
+          />
+          Pipr
+        </h1>
+        <a
+          href={repoUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-md border border-fd-border px-3 text-sm font-medium text-fd-secondary-foreground transition-[background-color,color] hover:bg-fd-accent hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+        >
+          <HugeiconsIcon icon={GithubIcon} size={18} strokeWidth={1.8} aria-hidden="true" />
+          GitHub
+        </a>
+      </div>
+      <p className="mt-5 max-w-2xl font-mono text-sm leading-6 text-fd-muted-foreground">
+        pull request review runtime
+      </p>
+      <p className="pipr-heading pipr-text-pretty mt-8 max-w-2xl text-xl font-semibold leading-8 tracking-normal text-fd-foreground sm:text-2xl sm:leading-9">
+        Composable review workflows, one output.
+      </p>
+      <p className="mt-4 max-w-2xl font-mono text-xs leading-5 text-fd-muted-foreground">
+        Platform support: GitHub pull requests only today; other code hosts coming soon.
+      </p>
+    </header>
+  );
+}
+
+function InstallPanel() {
+  return (
+    <section className="mt-10 min-w-0" aria-labelledby="install-heading">
+      <div className="pipr-run-card min-w-0 overflow-hidden rounded-lg">
+        <div className="p-4">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <SectionLabel id="install-heading">Install</SectionLabel>
+            <CopyButton copyText={installCommand} label="Copy" />
+          </div>
+          <pre className="pipr-command-scrollbar mt-4 max-w-full overflow-x-auto whitespace-pre font-mono text-sm leading-7 text-fd-secondary-foreground">
+            <code>
+              {installCommandLines.map((line) => (
+                <span key={line.id} className="block">
+                  <span className="text-fd-primary">$</span> {line.command}
+                </span>
+              ))}
+            </code>
+          </pre>
+          <div className="mt-3 flex min-w-0 items-center justify-between gap-3 border-t border-fd-border/80 pt-3">
+            <div className="flex min-w-0 items-center gap-2 text-sm leading-6 text-fd-muted-foreground">
+              <HugeiconsIcon
+                icon={SparklesIcon}
+                size={16}
+                strokeWidth={1.8}
+                className="shrink-0 text-fd-primary"
+                aria-hidden="true"
+              />
+              <p className="min-w-0 truncate">
+                <span className="pipr-heading font-semibold text-fd-foreground">
+                  Using an agent?
+                </span>{" "}
+                <span className="hidden sm:inline">Copy the bundled Pipr skill prompt.</span>
+              </p>
+            </div>
+            <CopyButton className="shrink-0" copyText={agentPrompt} label="Copy prompt" />
+          </div>
         </div>
-        <HeroReviewScene />
       </div>
     </section>
   );
 }
 
-function HeroActions() {
+function ConceptCards() {
   return (
-    <div className="mt-8 flex flex-wrap gap-3">
-      <DocsLink
-        path="guide/quickstart"
-        className="inline-flex items-center gap-2 rounded-lg bg-pipr-lime px-4 py-2.5 text-sm font-medium text-pipr-ink transition-colors hover:bg-pipr-lime/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pipr-lime"
-      >
-        <Rocket className="size-4" aria-hidden="true" />
-        Run the first review
-        <ArrowRight className="size-4" aria-hidden="true" />
-      </DocsLink>
-      <DocsLink
-        path="recipes"
-        className="inline-flex items-center gap-2 rounded-lg border border-fd-border bg-fd-background px-4 py-2.5 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring dark:border-pipr-lime/25 dark:bg-pipr-panel/80 dark:text-pipr-cream dark:hover:border-pipr-lime/45 dark:hover:bg-pipr-lime/10 dark:focus-visible:outline-pipr-lime"
-      >
-        <CookingPot className="size-4 text-fd-primary dark:text-pipr-lime" aria-hidden="true" />
-        Browse recipes
-      </DocsLink>
-    </div>
-  );
-}
-
-function HeroProofStrip() {
-  return (
-    <dl className="mt-10 hidden max-w-2xl gap-3 text-sm text-fd-muted-foreground sm:grid sm:grid-cols-3 dark:text-pipr-cream/72">
-      <div>
-        <dt className="font-medium text-fd-foreground dark:text-pipr-cream">Config</dt>
-        <dd>Policy in repo</dd>
+    <section className="mt-14" aria-labelledby="what-pipr-does-heading">
+      <div className="max-w-2xl">
+        <SectionLabel>What Pipr is</SectionLabel>
+        <h2
+          id="what-pipr-does-heading"
+          className="pipr-heading mt-4 text-xl font-semibold leading-8 text-fd-foreground"
+        >
+          One review runtime. Repository-owned policy.
+        </h2>
       </div>
-      <div>
-        <dt className="font-medium text-fd-foreground dark:text-pipr-cream">Runtime</dt>
-        <dd>Local or CI runner</dd>
-      </div>
-      <div>
-        <dt className="font-medium text-fd-foreground dark:text-pipr-cream">Output</dt>
-        <dd>Validated comments</dd>
-      </div>
-    </dl>
-  );
-}
-
-function HeroReviewScene() {
-  return (
-    <div className="hidden xl:block" data-hero-review-scene aria-hidden="true">
-      <div className="rounded-lg border border-fd-border bg-fd-card shadow-xl shadow-black/10 dark:border-pipr-lime/20 dark:bg-pipr-panel/90 dark:shadow-2xl dark:shadow-black/25">
-        <HeroConfigPreview />
-        <HeroReviewPreview />
-      </div>
-    </div>
-  );
-}
-
-function HeroConfigPreview() {
-  return (
-    <>
-      <div className="flex items-center justify-between border-b border-fd-border px-4 py-3 text-xs text-fd-muted-foreground dark:border-pipr-lime/15 dark:text-pipr-cream/62">
-        <span className="inline-flex items-center gap-2">
-          <Code2 className="size-3.5 text-fd-primary dark:text-pipr-lime" />
-          .pipr/config.ts
-        </span>
-        <span>source of review policy</span>
-      </div>
-      <pre className="overflow-hidden px-4 py-4 text-[0.76rem] leading-6 text-fd-foreground/80 dark:text-pipr-cream/82">
-        <code>{`export default definePipr((pipr) => {
-  pipr.config({ publication: { maxInlineComments: 5 } });
-
-  pipr.review({
-    instructions: "Return actionable findings only",
-    timeout: "10m",
-  });
-});`}</code>
-      </pre>
-    </>
-  );
-}
-
-function HeroReviewPreview() {
-  return (
-    <div className="border-t border-fd-border dark:border-pipr-lime/15">
-      <HeroReviewHeader />
-      <HeroRunRail />
-      <HeroReviewOutput />
-    </div>
-  );
-}
-
-function HeroReviewHeader() {
-  return (
-    <div className="flex items-center justify-between border-b border-fd-border px-4 py-3 dark:border-pipr-lime/15">
-      <span className="inline-flex items-center gap-2 text-sm font-medium text-fd-foreground dark:text-pipr-cream">
-        <MessageSquareText className="size-4 text-fd-primary dark:text-pipr-lime" />
-        Review run
-      </span>
-      <span className="rounded-md bg-fd-primary/10 px-2 py-1 text-xs text-fd-primary dark:bg-pipr-lime/12 dark:text-pipr-lime">
-        validated
-      </span>
-    </div>
-  );
-}
-
-function HeroRunRail() {
-  return (
-    <div className="border-b border-fd-border px-4 py-3 dark:border-pipr-lime/15">
-      <div className="grid grid-cols-5 gap-1.5">
-        {heroRunSteps.map((step) => (
-          <span
-            key={step.title}
-            className="inline-flex min-w-0 items-center justify-center gap-1 rounded-md border border-fd-border bg-fd-background px-1.5 py-1 text-[0.68rem] font-medium text-fd-muted-foreground dark:border-pipr-lime/20 dark:bg-pipr-lime/5 dark:text-pipr-cream/70"
+      <div className="mx-auto mt-6 grid max-w-[50rem] gap-4 md:grid-cols-2">
+        {conceptCards.map((item) => (
+          <article
+            key={item.title}
+            className={`min-w-0 overflow-hidden rounded-lg border p-4 ${item.cardClassName}`}
           >
-            <step.icon
-              className="size-3 shrink-0 text-fd-primary dark:text-pipr-lime"
-              aria-hidden="true"
-            />
-            {step.title}
-          </span>
+            <div className="-mx-3 flex h-40 items-center justify-center overflow-hidden sm:h-48">
+              <img
+                src={item.image}
+                alt=""
+                aria-hidden="true"
+                loading="lazy"
+                decoding="async"
+                className={`${item.imageClassName} object-contain`}
+              />
+            </div>
+            <h3 className="pipr-heading mt-4 text-xl font-semibold leading-8 text-fd-foreground">
+              {item.title}
+            </h3>
+            <p className="pipr-text-pretty mt-2 max-w-md text-sm leading-6 text-fd-secondary-foreground">
+              {item.description}
+            </p>
+          </article>
         ))}
       </div>
-    </div>
-  );
-}
-
-function HeroReviewOutput() {
-  return (
-    <div className="p-4">
-      <ReviewOutputCard />
-    </div>
-  );
-}
-
-function ReviewOutputCard() {
-  return (
-    <div className="rounded-lg border border-fd-border bg-fd-background p-4 dark:border-pipr-lime/20 dark:bg-pipr-ink/45">
-      <ReviewOutputHeader />
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <ReviewMetric tone="amber" label="Blocking" value="1" />
-        <ReviewMetric tone="cyan" label="Mapped" value="2" />
-        <ReviewMetric tone="red" label="Dropped" value="1" />
-      </div>
-    </div>
-  );
-}
-
-function ReviewOutputHeader() {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <p className="text-xs font-medium text-fd-primary dark:text-pipr-lime">Published output</p>
-        <p className="mt-1 text-sm font-medium text-fd-foreground dark:text-pipr-cream">
-          Main Review Comment
-        </p>
-      </div>
-      <span className="rounded-md border border-fd-border px-2 py-1 text-xs text-fd-muted-foreground dark:border-pipr-lime/20 dark:text-pipr-cream/62">
-        14 files
-      </span>
-    </div>
-  );
-}
-
-function ReviewMetric({
-  tone,
-  label,
-  value,
-}: {
-  tone: "amber" | "cyan" | "red";
-  label: string;
-  value: string;
-}) {
-  const toneClass = {
-    amber: "border-pipr-amber/45 bg-pipr-amber/15",
-    cyan: "border-pipr-cyan/45 bg-pipr-cyan/15",
-    red: "border-pipr-red/45 bg-pipr-red/10",
-  }[tone];
-
-  return (
-    <div className={`rounded-md border p-2 ${toneClass}`}>
-      <span className="block text-[0.68rem] text-fd-muted-foreground dark:text-pipr-cream/58">
-        {label}
-      </span>
-      <span className="mt-0.5 block text-sm font-medium text-fd-foreground dark:text-pipr-cream">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function WhyPipr() {
-  return (
-    <section className="border-b bg-fd-background">
-      <div className="mx-auto max-w-6xl px-6 py-16">
-        <SectionHeader
-          icon={ShieldCheck}
-          eyebrow="Why Pipr"
-          title="AI review works when maintainers own the policy."
-          description="Opaque review bots ask you to trust policy you cannot version. Pipr keeps the review contract in code, runs where you run it, and validates comments before they reach a pull request."
-        />
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
-          {proofPoints.map((item) => (
-            <ProofPoint key={item.title} {...item} />
-          ))}
-        </div>
-      </div>
     </section>
   );
 }
 
-function ProofPoint({
-  title,
-  description,
-  icon: Icon,
-}: {
-  title: string;
-  description: string;
-  icon: LucideIcon;
-}) {
+function MoreInfo() {
   return (
-    <article className="rounded-lg border bg-fd-card p-5">
-      <div className="flex items-start gap-4">
-        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-fd-primary/10 text-fd-primary">
-          <Icon className="size-5" aria-hidden="true" />
-        </span>
-        <div>
-          <h3 className="text-base font-medium text-fd-card-foreground">{title}</h3>
-          <p className="mt-2 text-sm leading-6 text-fd-muted-foreground">{description}</p>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function ReviewFlow() {
-  return (
-    <section className="border-b bg-fd-muted/35">
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-        <SectionHeader
-          icon={ListChecks}
-          eyebrow="How review runs work"
-          title="From config to comment, every boundary is explicit."
-          description="Pipr separates policy loading, diff modeling, Pi execution, validation, and code host publication so maintainers can inspect the review path."
-        />
-        <div className="rounded-lg border bg-fd-background p-4">
-          <ReviewTimeline />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ReviewTimeline({ compact = false }: { compact?: boolean }) {
-  const styles = compact ? reviewTimelineStyles.compact : reviewTimelineStyles.default;
-
-  return (
-    <ol className={styles.list}>
-      {reviewSteps.map((step) => (
-        <ReviewTimelineItem key={step.label} step={step} styles={styles} />
-      ))}
-    </ol>
-  );
-}
-
-type ReviewTimelineStyles = {
-  list: string;
-  label: string;
-  body: string;
-  title: string;
-  icon: string;
-  description: string;
-};
-
-const reviewTimelineStyles = {
-  compact: {
-    list: "space-y-3",
-    label:
-      "mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-pipr-lime/25 bg-pipr-lime/10 text-[0.65rem] font-medium text-pipr-lime",
-    body: "text-xs",
-    title: "inline-flex items-center gap-2 font-medium text-pipr-cream",
-    icon: "size-3.5 text-pipr-lime",
-    description: "mt-1 leading-5 text-pipr-cream/58",
-  },
-  default: {
-    list: "space-y-4",
-    label:
-      "mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-md border bg-fd-card text-xs font-medium text-fd-primary",
-    body: "pb-1",
-    title: "inline-flex items-center gap-2 font-medium text-fd-foreground",
-    icon: "size-4 text-fd-primary",
-    description: "mt-1 text-sm leading-6 text-fd-muted-foreground",
-  },
-} satisfies Record<string, ReviewTimelineStyles>;
-
-function ReviewTimelineItem({
-  step,
-  styles,
-}: {
-  step: (typeof reviewSteps)[number];
-  styles: ReviewTimelineStyles;
-}) {
-  return (
-    <li className="flex gap-3">
-      <span className={styles.label}>{step.label}</span>
-      <div className={styles.body}>
-        <p className={styles.title}>
-          <step.icon className={styles.icon} aria-hidden="true" />
-          {step.title}
-        </p>
-        <p className={styles.description}>{step.description}</p>
-      </div>
-    </li>
-  );
-}
-
-function RecipesToStartFrom() {
-  return (
-    <section className="border-b bg-fd-background">
-      <div className="mx-auto max-w-6xl px-6 py-16">
-        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <SectionHeader
-            icon={CookingPot}
-            eyebrow="Recipes to start from"
-            title="Starter configs for common review workflows."
-            description="Each recipe page shows the install command, generated files, code, and when to use the workflow."
-          />
+    <section className="mt-14" aria-labelledby="more-info-heading">
+      <SectionLabel id="more-info-heading">More information</SectionLabel>
+      <div className="mt-4 border-y border-fd-border">
+        {moreInfoLinks.map((item, index) => (
           <DocsLink
-            path="recipes"
-            className="inline-flex w-fit items-center gap-2 rounded-lg border bg-fd-background px-4 py-2.5 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent"
+            key={item.path}
+            path={item.path}
+            className="group grid gap-3 border-b border-fd-border py-5 last:border-b-0 transition-[background-color] hover:bg-fd-muted/30 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-fd-ring sm:grid-cols-[3rem_11rem_1fr]"
           >
-            View all recipes
-            <ArrowRight className="size-4" aria-hidden="true" />
+            <span className="font-mono text-xs text-fd-muted-foreground tabular-nums">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="inline-flex items-center gap-3 text-sm font-semibold text-fd-foreground">
+              {item.title}
+            </span>
+            <span className="pipr-text-pretty text-sm leading-6 text-fd-muted-foreground transition-colors group-hover:text-fd-secondary-foreground">
+              {item.description}
+            </span>
           </DocsLink>
-        </div>
-        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {recipeLinks.map((recipe) => (
-            <RecipeCTA key={recipe.path} {...recipe} />
-          ))}
-        </div>
+        ))}
       </div>
     </section>
   );
 }
 
-function RecipeCTA({
-  title,
-  description,
-  path,
-  icon: Icon,
-}: {
-  title: string;
-  description: string;
-  path: string;
-  icon: LucideIcon;
-}) {
+function Footer() {
   return (
-    <DocsLink
-      path={path}
-      className="group rounded-lg border bg-fd-card p-5 transition-colors hover:bg-fd-accent"
+    <footer className="mt-20 flex flex-wrap items-center justify-between gap-4 border-t border-fd-border pt-8 text-sm">
+      <span className="font-mono text-xs uppercase tracking-[0.14em] text-fd-muted-foreground">
+        Pipr 2026
+      </span>
+      <nav
+        className="ml-auto flex flex-wrap items-center justify-end gap-x-5 gap-y-2"
+        aria-label="Footer"
+      >
+        <DocsLink
+          path="guide"
+          className="text-fd-muted-foreground transition-[color] hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-fd-ring"
+        >
+          Docs
+        </DocsLink>
+        <a
+          href={repoUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 text-fd-muted-foreground transition-[color] hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-fd-ring"
+        >
+          <HugeiconsIcon icon={GithubIcon} size={16} strokeWidth={1.8} aria-hidden="true" />
+          GitHub
+        </a>
+      </nav>
+    </footer>
+  );
+}
+
+function SectionLabel({ children, id }: { children: ReactNode; id?: string }) {
+  return (
+    <p
+      id={id}
+      className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-fd-muted-foreground"
     >
-      <span className="mb-4 inline-flex size-9 items-center justify-center rounded-md bg-fd-primary/10 text-fd-primary">
-        <Icon className="size-4" aria-hidden="true" />
-      </span>
-      <h3 className="text-base font-medium text-fd-card-foreground">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-fd-muted-foreground">{description}</p>
-      <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-fd-primary">
-        Open recipe
-        <ArrowRight
-          className="size-4 transition-transform group-hover:translate-x-0.5"
-          aria-hidden="true"
-        />
-      </span>
-    </DocsLink>
+      {children}
+    </p>
   );
 }
 
-function MaintainerTrust() {
-  return (
-    <section className="border-b bg-pipr-ink text-pipr-cream">
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
-        <SectionHeader
-          icon={KeyRound}
-          eyebrow="Built for maintainers"
-          title="No hosted Pipr control plane."
-          description="Pipr reads provider keys from your runner environment, keeps model choice in repository-owned config, and publishes through the code host adapter you run."
-          dark
-        />
-        <div className="grid gap-4 md:grid-cols-3">
-          {maintainerItems.map((item) => (
-            <article
-              key={item.title}
-              className="rounded-lg border border-pipr-lime/20 bg-pipr-panel p-5"
-            >
-              <item.icon className="size-5 text-pipr-lime" aria-hidden="true" />
-              <h3 className="mt-4 text-base font-medium text-pipr-cream">{item.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-pipr-cream/68">{item.description}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DocsPath() {
-  return (
-    <section className="bg-fd-background">
-      <div className="mx-auto max-w-6xl px-6 py-16">
-        <SectionHeader
-          icon={BookOpen}
-          eyebrow="Docs path"
-          title="Install it, then tune it like code."
-          description="Start with the first review, use recipes for common policies, and move into SDK APIs when the repository needs more control."
-        />
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
-          {docsPath.map((item) => (
-            <DocsPathLink key={item.path} {...item} />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DocsPathLink({
-  title,
-  description,
-  path,
-  icon: Icon,
-}: {
-  title: string;
-  description: string;
-  path: string;
-  icon: LucideIcon;
-}) {
-  return (
-    <DocsLink
-      path={path}
-      className="flex items-start gap-4 rounded-lg border bg-fd-card p-5 transition-colors hover:bg-fd-accent"
-    >
-      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-fd-primary/10 text-fd-primary">
-        <Icon className="size-5" aria-hidden="true" />
-      </span>
-      <span>
-        <span className="block text-base font-medium text-fd-card-foreground">{title}</span>
-        <span className="mt-2 block text-sm leading-6 text-fd-muted-foreground">{description}</span>
-      </span>
-    </DocsLink>
-  );
-}
-
-function SectionHeader({
-  icon: Icon,
-  eyebrow,
-  title,
-  description,
-  dark = false,
-}: {
-  icon: LucideIcon;
-  eyebrow: string;
-  title: string;
-  description: string;
-  dark?: boolean;
-}) {
-  return (
-    <div className="max-w-2xl">
-      <p
-        className={
-          dark
-            ? "mb-3 inline-flex items-center gap-2 text-sm font-medium text-pipr-lime"
-            : "mb-3 inline-flex items-center gap-2 text-sm font-medium text-fd-primary"
-        }
-      >
-        <Icon className="size-4" aria-hidden="true" />
-        {eyebrow}
-      </p>
-      <h2
-        className={
-          dark
-            ? "text-2xl font-semibold tracking-normal text-pipr-cream sm:text-3xl"
-            : "text-2xl font-semibold tracking-normal text-fd-foreground sm:text-3xl"
-        }
-      >
-        {title}
-      </h2>
-      <p
-        className={
-          dark
-            ? "mt-3 text-sm leading-6 text-pipr-cream/68"
-            : "mt-3 text-sm leading-6 text-fd-muted-foreground"
-        }
-      >
-        {description}
-      </p>
-    </div>
-  );
+function InlineCode({ children }: { children: ReactNode }) {
+  return <code className="pipr-inline-code">{children}</code>;
 }
 
 function DocsLink({

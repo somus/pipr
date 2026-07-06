@@ -7,6 +7,8 @@ Local runs execute the same change-request Review Tasks without using GitHub pub
 
 ## Commands
 
+### Review working tree
+
 Run the configured change-request review tasks:
 
 ```bash
@@ -15,17 +17,23 @@ pipr review --base origin/main
 
 When `--head` is omitted, Pipr reviews the working tree. That includes committed changes after the merge base plus staged and unstaged edits to tracked files.
 
+### Review a ref
+
 Set an explicit head when reviewing a committed ref instead of the working tree:
 
 ```bash
 pipr review --base origin/main --head HEAD~1
 ```
 
+### Custom config directory
+
 Use a custom config directory when the repository does not use `.pipr`:
 
 ```bash
 pipr review --config-dir .config/pipr --base origin/main
 ```
+
+### Local Pi executable
 
 Use a custom Pi executable during local development:
 
@@ -34,6 +42,8 @@ pipr review --base origin/main --pi-executable /path/to/pi
 ```
 
 ## What local runs do
+
+### Runtime steps
 
 Local runs:
 
@@ -46,9 +56,13 @@ Local runs:
 - stream readable progress logs to stderr
 - print the rendered final output to stdout, or structured output with `--json`
 
+### Disabled publication
+
 Local runs do not publish Main Review Comments, Inline Review Comments, command response comments, or Check Runs.
 
 ## Base and head
+
+### Required base
 
 `--base` is required because Pipr needs a comparison point. Use a branch name, remote ref, or commit SHA:
 
@@ -58,11 +72,15 @@ pipr review --base main
 pipr review --base 2a4f6c9
 ```
 
+### Working tree head
+
 When `--head` is omitted, Pipr compares `--base` to the current working tree. This is the usual local workflow when you want to review uncommitted edits on a synced branch:
 
 ```bash
 pipr review --base main
 ```
+
+### Ref-to-ref comparison
 
 Set `--head` explicitly when you want a strict ref-to-ref comparison:
 
@@ -72,6 +90,8 @@ pipr review --base origin/main --head feature-branch
 ```
 
 ## Local task selection
+
+### Review recipe
 
 `pipr review` runs tasks registered for change-request events:
 
@@ -85,6 +105,8 @@ pipr.review({
   },
 });
 ```
+
+### Custom change-request tasks
 
 Custom tasks use `pipr.on.changeRequest(...)`:
 
@@ -110,6 +132,8 @@ const task = pipr.task({
 pipr.on.changeRequest({ actions: ["opened", "updated"], task });
 ```
 
+### CI-only tasks
+
 Local review ignores the configured action filters and runs every unique change-request task. Mark tasks that should only run in CI with `local: false`:
 
 ```ts
@@ -126,9 +150,13 @@ Use `ctx.platform.id === "local"` when a task should still run locally but rende
 
 ## Output
 
+### Stdout and stderr
+
 During local review, Pipr writes progress logs to stderr and the final review output to stdout. The default stdout format is Markdown without Pipr's internal comment marker, followed by any local inline finding drafts. `--json` keeps the full structured result, including review metadata, inline drafts, dropped findings, task checks, provider models, and repair metadata.
 
 ## Environment
+
+### Provider secrets
 
 Local runs read provider secrets from the process environment. Because the CLI runs on Bun, standard Bun env files in the working directory are loaded automatically:
 
@@ -143,9 +171,13 @@ When running the CLI from source, pass explicit env files with Bun:
 bun --env-file=.pipr/.env packages/cli/src/main.ts review --base origin/main
 ```
 
+### Source checkout trust
+
 Unlike GitHub Action pull request runs, local review loads `.pipr/config.ts` from the current workspace. Run it only on branches whose config and task code you trust, because those tasks can access exported env vars and Bun-loaded `.env` values through `ctx.secret(...)`.
 
 ## Config validation
+
+### Check and inspect
 
 Use these before running a model:
 
@@ -153,6 +185,8 @@ Use these before running a model:
 pipr check
 pipr inspect
 ```
+
+### Required env validation
 
 `pipr check` type-loads config and validates the runtime plan. Add `--require-env` when you want local checks to fail if configured provider env vars are missing:
 
@@ -163,6 +197,8 @@ pipr check --require-env
 `pipr inspect` prints the registered models, agents, tasks, commands, tools, publication settings, and limits.
 
 ## Local versus Action runs
+
+### Behavior matrix
 
 | Behavior | Local run | GitHub Action run |
 | --- | --- | --- |

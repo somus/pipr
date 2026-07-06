@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -13.1 194.6 120.2" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Commands and plugins extension illustration</title>
+  <style>
+    .line{stroke:#d8d8da;stroke-width:.78;stroke-linecap:round;stroke-linejoin:round}
+    .fine{stroke:#eaeaea;stroke-width:.56;stroke-linecap:round;stroke-linejoin:round}
+    .bright{stroke:#eaeaea;stroke-width:.96;stroke-linecap:round;stroke-linejoin:round}
+    .cyan{stroke:#00f0de;stroke-width:.9;stroke-linecap:round;stroke-linejoin:round}
+    .dash{stroke:#d8d8da;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:2.8 3.2}
+    .dash-fine{stroke:#d8d8da;stroke-width:.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:2.3 2.7}
+    .fill{fill:#eaeaea}
+  </style>
+
+  <rect class="line" x="4" y="27.3" width="47.6" height="40.4" rx="3"/>
+  <path class="fine" d="M4.1 37.9h47.3"/>
+  <circle class="line" cx="9.8" cy="32.8" r=".9"/>
+  <circle class="line" cx="14.5" cy="32.8" r=".9"/>
+  <circle class="line" cx="19.4" cy="32.8" r=".9"/>
+  <path class="bright" stroke-width="2.4" d="m12.9 50.2 4.2 4.2-4.3 4.3"/>
+  <path class="cyan" stroke-width="1.1" d="M23.1 60h7.4"/>
+
+  <circle class="line" cx="60.9" cy="47.2" r="1.8"/>
+  <path class="dash" d="M65.6 47.1h21.9"/>
+  <circle class="line" cx="108.4" cy="47.5" r="20.6"/>
+  <path class="line" d="M99.3 43.8c0-.6.5-1 1.1-1h15.5c.5 0 .9.3 1 .7.2.9.5 4.6-.3 7-1.6 4.7-5.7 6.1-8.6 6-2.4.1-7.1-1.9-8.4-7.2-.4-1.6-.4-3.8-.3-5.5Z"/>
+  <path class="cyan" d="M103 36.5v6.1M112.9 36.5v6.1"/>
+  <path class="line" d="M107.9 56.7v3.9"/>
+  <circle class="line" cx="135.9" cy="47.2" r="1.9"/>
+
+  <path class="dash-fine" d="M140.6 47.1h23.2"/>
+  <path class="dash-fine" d="M144 17.5v57.9"/>
+  <path class="dash-fine" d="M146 14.8h16.8"/>
+  <path class="dash-fine" d="M145 76.9h18.1"/>
+  <path class="bright" d="m161.2 11.8 2.8 2.8-2.6 2.7"/>
+  <path class="bright" d="m161.2 44.5 2.8 2.6-2.7 2.6"/>
+  <path class="bright" d="m161.2 74.8 2.8 3-2.7 2.7"/>
+
+  <rect class="line" x="168.7" y="3.5" width="21.7" height="23.1" rx="2.5"/>
+  <path class="bright" d="M180.7 11h1.5c.4 0 .7.4.7.9v2c.8 0 1.7-.1 1.7 1.2 0 2.1-1 1.8-1.4 1.8v2.6c0 .4-.4.7-.9.7h-1.9l.3-1.2c-.2-1.4-2.4-1.5-2.8.1v1.1h-2c-.5 0-1-.6-1-1.1v-1.9c0-.5.3-.7.8-.7.8.4 2.1-1.1 1.2-2.2-.8-1-2.1-.1-2.1-1v-1.6c0-.5.5-.7 1-.7h2.3l-.1-1.1c.5-2.2 3.1-.5 2.3 1.1Z"/>
+
+  <rect class="line" x="168.7" y="35.9" width="21.7" height="22" rx="2.4"/>
+  <path class="bright" d="M177.6 42.3c-1-.1-1.7.7-1.5 1.7.1 2-.2 2.7-1.3 3 1.2.2 1.4.8 1.3 2.8 0 1 0 2.3 1.6 2.3"/>
+  <path class="bright" d="M181.3 42.3c1.1 0 1.5.7 1.5 2.1-.2 1.6.3 2.5 1.4 2.6-1 .4-1.4.9-1.4 2v1.5c0 .8-.6 1.6-1.5 1.6"/>
+
+  <rect class="line" x="168.7" y="66.7" width="21.8" height="23" rx="2.5"/>
+  <path class="bright" d="m184.7 76.9-.1 1.9-1.3.2-.5.8.8 1.1-1.2 1.4-1-.7-.9.4-.1 1.3-2 .2-.3-1.3-.8-.4-1 .7-1.3-1 .6-1.1-.4-1-1.1-.4-.1-2.1 1.2-.2.4-.9-.5-1.1 1.2-1.4 1.2.5.7-.3.2-1.2h2l.1 1.1 1 .5 1.1-.6 1.3 1.3-.7 1 .3.9 1.2.4Z"/>
+  <circle class="bright" cx="179.4" cy="78.1" r="1.7"/>
+</svg>

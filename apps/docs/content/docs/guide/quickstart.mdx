@@ -5,6 +5,8 @@ description: "Get Pipr running in a repository that uses GitHub pull requests."
 
 This guide gets Pipr running on a GitHub pull request. You will install the CLI, generate `.pipr/config.ts` and the GitHub workflow, add one provider secret, and confirm that Pipr can publish review output.
 
+GitHub pull requests are the only supported code host target today. GitLab, Bitbucket, and Azure DevOps support is coming soon.
+
 ## Prerequisites
 
 Before you start, make sure the repository can run GitHub Actions and has a model provider key available.
@@ -16,11 +18,15 @@ Before you start, make sure the repository can run GitHub Actions and has a mode
 
 ## 1. Install Pipr
 
+### Install command
+
 Install the CLI from the latest GitHub Release:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh
 ```
+
+### Release and install directory
 
 The installer downloads the matching GitHub Release binary to `~/.local/bin`. Set
 `PIPR_VERSION=v0.1.0` to install a specific release or `PIPR_INSTALL_DIR=/usr/local/bin`
@@ -28,12 +34,16 @@ to choose a different destination.
 
 ## 2. Create the default config
 
+### Initialize and validate
+
 Run `pipr init` from the repository root, then validate the generated config:
 
 ```bash
 pipr init
 pipr check
 ```
+
+### Generated files
 
 `pipr init` creates:
 
@@ -45,6 +55,8 @@ pipr check
 - `.github/workflows/pipr.yml`
 
 Existing Pipr files are not overwritten unless `pipr init --force` is used.
+
+### Project layout
 
 The resulting project layout is:
 
@@ -63,6 +75,8 @@ Use `pipr init --help` for alternate config directories, adapter generation, rec
 
 ## 3. Add the provider secret
 
+### Default model
+
 The default config uses DeepSeek:
 
 ```ts twoslash
@@ -74,11 +88,15 @@ const model = pipr.model({
 });
 ```
 
+### GitHub Actions secret
+
 Create a GitHub Actions secret named `DEEPSEEK_API_KEY`.
 
 If you change the model provider in `.pipr/config.ts`, commit that change and add the matching secret name. The Action reads provider env var names from the trusted base-branch config.
 
 ## 4. Review the workflow
+
+### Generated workflow
 
 `pipr init` creates `.github/workflows/pipr.yml`:
 
@@ -111,11 +129,17 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 ```
 
+### Trusted checkout and config
+
 `fetch-depth: 0` is required so Pipr can compare the pull request head against the trusted base commit. Pipr loads provider, model, and API key settings from the base-branch `.pipr/config.ts`, so pull request changes cannot alter the model used for that run.
+
+### Workflow permissions
 
 The generated workflow grants the permissions Pipr needs to publish comments, checks, and verifier thread updates. Use [GitHub Action](/docs/guide/github-action) for the full event, output, and permission details.
 
 ## 5. Commit and open a pull request
+
+### Commit generated files
 
 Commit the generated config and workflow:
 
@@ -124,21 +148,29 @@ git add .pipr .github/workflows/pipr.yml
 git commit -m "Add Pipr review"
 ```
 
+### Open the pull request
+
 Open or update a pull request. Pipr runs the configured Review Task and publishes review output when the Action succeeds.
 
 ## 6. Trigger a manual review
 
 The default config also registers an `@pipr` command for manual reruns. Comment on the pull request:
 
+### Command comment
+
 ```text
 @pipr review
 ```
+
+### Command access
 
 Command access defaults to repository `write` permission.
 
 ## Expected pull request output
 
 A successful GitHub run publishes the review surfaces configured by `.pipr/config.ts`.
+
+### Published surfaces
 
 The default review publishes:
 
@@ -147,9 +179,13 @@ The default review publishes:
 - optional Check Runs when checks are enabled by config
 - Action outputs for the main comment, inline drafts, dropped findings, and publication metadata
 
+### Dropped findings
+
 If Pipr drops a finding, the finding failed runtime validation. The most common reason is an invalid path, side, or range for the current Diff Manifest. See [Comments and Findings](/docs/guide/comments).
 
 ## Check the config locally
+
+### Local commands
 
 Use local commands while tuning config or prompts:
 
@@ -159,9 +195,13 @@ pipr inspect
 pipr review --base origin/main
 ```
 
+### Local review behavior
+
 `pipr review` runs every unique change-request task from the local workspace config and prints output instead of publishing GitHub comments. See [Local Runs](/docs/guide/local-runs).
 
 ## Optional setup
+
+### Init options
 
 Use these options after the default review works:
 
@@ -172,6 +212,8 @@ Use these options after the default review works:
 ## Next steps
 
 After the first review works, tune the config and review workflow for your repository.
+
+### Read next
 
 - Read [Configuration](/docs/guide/configuration) for common config patterns.
 - Read [Entrypoints](/docs/guide/entrypoints) to tune GitHub, command, and local review behavior.

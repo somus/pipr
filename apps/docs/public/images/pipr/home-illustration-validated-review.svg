@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -15.8 245 151.3" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Validated review funnel illustration</title>
+  <style>
+    .box{stroke:#e6e6e5;stroke-width:.93;stroke-linecap:round;stroke-linejoin:round}
+    .line{stroke:#e6e6e5;stroke-width:.93;stroke-linecap:round;stroke-linejoin:round}
+    .soft{stroke:#e6e6e5;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round}
+    .dash{stroke:#e6e6e5;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1.6 2.35}
+    .gold{stroke:#f2cc42;stroke-width:1.14;stroke-linecap:round;stroke-linejoin:round}
+    .check{stroke:#fff;stroke-width:2.15;stroke-linecap:round;stroke-linejoin:round}
+  </style>
+
+  <rect class="box" x="5.3" y="3.6" width="33.3" height="29.2" rx="3.1"/>
+  <circle class="line" cx="21.9" cy="13.9" r="2.8"/>
+  <path class="line" d="M17.1 23.6v-1.3c0-2 1.6-3.7 3.6-3.7h2.5c2 0 3.6 1.7 3.6 3.7v1.3"/>
+  <path class="line" d="M17.1 10.5a3.2 3.2 0 0 0-.9-.1 3 3 0 0 0-3 3c0 1.6 1.2 2.8 2.8 3"/>
+  <path class="line" d="M26.8 10.5a3.2 3.2 0 0 1 .9-.1 3 3 0 0 1 3 3c0 1.6-1.2 2.8-2.8 3"/>
+  <path class="line" d="M13 23.4v-.9c0-1.8 1.4-3.3 3.3-3.3"/>
+  <path class="line" d="M27.6 19.2c1.8 0 3.3 1.5 3.3 3.3v.9"/>
+
+  <rect class="box" x="5.2" y="45.4" width="33.5" height="28.7" rx="3.1"/>
+  <path class="line" d="M21.5 52.7c-1.4 1.1-3.3 2-6.5 2.2v4.1c0 5.1 3.7 7.7 6.4 8.5 2.7-.8 6.4-3.5 6.4-8.5v-4.1c-3.1-.2-5-1.1-6.3-2.2Z"/>
+
+  <rect class="box" x="5.2" y="86.5" width="33.5" height="29.7" rx="3.1"/>
+  <path class="line" d="m16.8 97.2-3.2 3.8 3.5 3.5"/>
+  <path class="line" d="m26 97.1 3.7 3.9-3.8 3.7"/>
+  <path class="line" d="m22.8 96.7-2.5 8.5"/>
+
+  <path class="line" d="M45.5 17.5h38.8"/>
+  <path class="dash" d="M86.3 17.6c8.5 0 17.3 7.3 17.3 17.6 0 8.8 2.5 14.5 9.5 19.9 1.4 1.1 4.5 2.8 5.5 4.5"/>
+  <path class="line" d="M45.5 60h49.8"/>
+  <path class="dash" d="M97.9 60h20.8"/>
+  <path class="line" d="M45.5 100.8h37.8"/>
+  <path class="dash" d="M85.8 100.8c8.7.3 17.8-7.2 17.8-18.7 0-6.3 2.1-13.7 10.3-18.5 1.3-.7 4.1-2.6 5.4-3.2"/>
+
+  <ellipse class="gold" cx="124.7" cy="59.9" rx="1.6" ry="1.7"/>
+  <path class="line" d="M130.4 60h17.4"/>
+  <path class="line" d="m144.6 56.4 3.5 3.5-3.5 3.4"/>
+
+  <rect class="box" x="157.3" y="31.6" width="65" height="65.8" rx="4.4"/>
+  <circle class="gold" cx="189.9" cy="57.7" r="15.4"/>
+  <path class="check" d="m181.9 58.8 6 6 11.6-12.2"/>
+  <path class="line" d="M171.3 82h37.5"/>
+  <path class="line" d="M180.2 88.5h19.5"/>
+
+  <path class="gold" d="m230.7 22-.6 5"/>
+  <path class="gold" d="m235 33.8 4.5.6"/>
+  <path class="gold" d="m239 25.7-4.9 3.8"/>
+</svg>
