@@ -161,13 +161,30 @@ describe("publishGitHubPublicationPlan", () => {
   });
 
   it("blocks publication when the PR head changed", async () => {
+    const client = new FakePublicationClient("new-head");
+    client.issueComments.push({
+      id: 1,
+      body: "Existing main comment.",
+      authorLogin: client.ownerLogin,
+    });
+    client.reviewComments.push(
+      fakeReviewComment({
+        id: 10,
+        body: `${renderInlineFindingMarker("fnd_existing", "head")}\n\nExisting inline.`,
+        authorLogin: client.ownerLogin,
+      }),
+    );
+    client.reviewThreads.push({ id: "thread-1", isResolved: false, commentIds: [10] });
+    const initialState = publicationClientSideEffects(client);
+
     await expect(
       publishGitHubPublicationPlan({
-        client: new FakePublicationClient("new-head"),
+        client,
         change: event,
         plan: plan(),
       }),
     ).rejects.toThrow("Change request head changed");
+    expect(publicationClientSideEffects(client)).toEqual(initialState);
   });
 
   it("blocks command response publication when the PR head changed", async () => {
@@ -1271,4 +1288,15 @@ class FakePublicationClient implements GitHubPublicationClient {
   }
 
   async updateCheckRun() {}
+}
+
+function publicationClientSideEffects(client: FakePublicationClient) {
+  return {
+    issueComments: structuredClone(client.issueComments),
+    reviewComments: structuredClone(client.reviewComments),
+    reviewThreads: structuredClone(client.reviewThreads),
+    reviewCommentPayloads: structuredClone(client.reviewCommentPayloads),
+    reviewReplies: structuredClone(client.reviewReplies),
+    resolvedThreadIds: [...client.resolvedThreadIds],
+  };
 }
