@@ -1,0 +1,20 @@
+apps/docs/src/components/copy-button.test.tsx
+  s_6d88b46ce1e11f::t_976b3de81331f8 3,206-229
+  s_6d88b46ce1e11f::t_512924e5e334fc 230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1a2171c6ed66eea6062c9d755fa16d70e1037315",
+  "prompts": {},
+  "sessions": {
+    "s_6d88b46ce1e11f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f276b-1b37-73c0-a2fa-5e29e522ac53",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
