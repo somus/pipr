@@ -1,0 +1,40 @@
+packages/runtime/src/review/agent/review-run.ts
+  s_7a68215b665717::t_963b229bd2b288 41,115
+packages/runtime/src/review/verifier.ts
+  s_7a68215b665717::t_1b7112dc1821c2 46,117
+packages/runtime/src/review/tests/publish.test.ts
+  s_7a68215b665717::t_cfd462e8f02d06 203-236
+packages/runtime/src/review/task/task-runtime.ts
+  s_7a68215b665717::t_8c5d1d5bc50ee1 521-523
+  s_7a68215b665717::t_5ecf3bef4a2312 170-176,181,270,361,389,402,408,464,488-520,524
+  s_7a68215b665717::t_2ef80b34c0fbd0 525
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_7a68215b665717::t_8c1c4d087c5159 262
+packages/sdk/src/types/task.ts
+  s_7a68215b665717::t_acf25dd9ebeb19 279
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_7a68215b665717::t_84bc2f3af2ff89 189
+  s_7a68215b665717::t_f5397deb57bbcd 193-198,200,213
+  s_7a68215b665717::t_ca3f75914074ab 134-188,190-192,199,201-212,214-215,1576-1583,1595-1596,1643-1657,1875-1882
+  s_7a68215b665717::t_6a35ff5bc43210 1883
+docs/adr/0004-pipr-owned-review-run.md
+  s_7a68215b665717::t_fed3af00b12c89 18-23
+docs/adr/0005-pipr-owned-comment-publishing.md
+  s_7a68215b665717::t_10b48b2c863d92 24-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c37f78340b2d3bb44a1ed0f51471e983f0dc06f3",
+  "prompts": {},
+  "sessions": {
+    "s_7a68215b665717": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3590-f6a9-7db0-a0e1-1310843faa94",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
