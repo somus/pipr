@@ -167,11 +167,18 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   }
   const selectedTasks = tasks.map((task) => task.name);
   options.log?.info("task runtime start", { selectedTasks, taskCount: tasks.length });
+  const runId = stableReviewRunId({
+    event: options.event,
+    selectedTasks,
+    trustedConfigSha: options.trustedConfigSha,
+    trustedConfigHash: options.trustedConfigHash,
+    commandInvocation: options.commandInvocation,
+  });
   const loadedPriorReviewState =
     options.priorReviewState ?? (await options.loadPriorReviewState?.());
   const priorMainComment = options.priorMainComment ?? (await options.loadPriorMainComment?.());
   const priorReviewState = priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks);
-  const runtimeOptions = { ...options, priorReviewState, priorMainComment };
+  const runtimeOptions = { ...options, priorReviewState, priorMainComment, runId };
 
   const manifestCache = new Map<string, DiffManifest>();
   const taskResults = await Promise.all(
@@ -260,6 +267,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     provider,
     diffManifest,
     priorReviewState,
+    runId,
   });
   const publishing = buildCommentPublishingPlan({
     event: options.event,
@@ -350,6 +358,7 @@ async function runSynchronizeVerifier(options: {
   provider: ProviderConfig;
   diffManifest: DiffManifest;
   priorReviewState: PriorReviewState | undefined;
+  runId: string;
 }): Promise<Awaited<ReturnType<typeof runInternalVerifier>>> {
   if (options.options.event.rawAction !== "synchronize") {
     return {
@@ -377,6 +386,7 @@ async function runSynchronizeVerifier(options: {
     priorReviewState: options.priorReviewState,
     threadContexts: (await options.options.loadInlineThreadContexts?.()) ?? [],
     mode: { kind: "synchronize" },
+    runId: options.runId,
   });
 }
 
@@ -389,12 +399,13 @@ function createTaskContext(
     output: OutputState;
     taskName: string;
     taskOrder: number;
+    runId: string;
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");
   let taskContext: TaskContext;
   taskContext = {
-    run: { id: crypto.randomUUID() },
+    run: { id: options.runId },
     repository: {
       root: options.workspace,
       owner: repositorySlugParts.length > 1 ? repositorySlugParts[0] : undefined,
@@ -450,7 +461,7 @@ function createTaskContext(
           agent,
           input,
           runOptions,
-          runtime: { ...options, taskContext },
+          runtime: { ...options, taskContext, runId: options.runId },
         });
         options.output.providerModels.push(...result.providerModels);
         if (result.repairAttempted) {
@@ -472,6 +483,44 @@ function createTaskContext(
     log: options.taskLog ?? console,
   };
   return taskContext;
+}
+
+function stableReviewRunId(options: {
+  event: ChangeRequestEventContext;
+  selectedTasks: string[];
+  trustedConfigSha?: string;
+  trustedConfigHash?: string;
+  commandInvocation?: RuntimeCommandInvocation;
+}): string {
+  const hash = new Bun.CryptoHasher("sha256")
+    .update(
+      JSON.stringify({
+        platform: options.event.platform.id,
+        repository: options.event.repository.slug,
+        changeNumber: options.event.change.number,
+        baseSha: options.event.change.base.sha,
+        headSha: options.event.change.head.sha,
+        trustedConfigHash: options.trustedConfigHash,
+        trustedConfigSha: options.trustedConfigSha,
+        selectedTasks: options.selectedTasks,
+        command: options.commandInvocation
+          ? {
+              name: options.commandInvocation.name,
+              line: options.commandInvocation.line,
+              arguments: sortedCommandArguments(options.commandInvocation.arguments),
+            }
+          : undefined,
+      }),
+    )
+    .digest("hex")
+    .slice(0, 24);
+  return `pipr-${hash}`;
+}
+
+function sortedCommandArguments(arguments_: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(arguments_).sort(([left], [right]) => left.localeCompare(right)),
+  );
 }
 
 function agentOutputForTaskContext<Output>(_agent: Agent<unknown, Output>, value: unknown): Output {

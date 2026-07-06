@@ -38,6 +38,7 @@ export type RunReviewAgentOptions = {
     piRunner?: PiRunner;
     taskContext?: TaskContext;
     priorReviewState?: PriorReviewState;
+    runId?: string;
     log?: RuntimeActionLog;
   };
 };
@@ -111,7 +112,7 @@ export function resolveProvider(config: PiprConfig, providerId: string): Provide
 }
 
 function createAgentRunContext(runtime: RunReviewAgentOptions["runtime"]): AgentRunContext {
-  const runId = crypto.randomUUID();
+  const runId = runtime.runId ?? runtime.taskContext?.run.id ?? crypto.randomUUID();
   const repositorySlugParts = runtime.event.repository.slug.split("/");
   const repository = {
     root: runtime.workspace,

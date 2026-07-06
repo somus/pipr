@@ -21,3 +21,11 @@ Comment Publishing:
 - reports comment publishing failures in metadata and fails the Action for the MVP
 
 The runtime controls validation, stale-head checks, marker dedupe, and API writes while user configuration owns final comment composition. The GitHub adapter maps inline findings to GitHub `line`, `side`, `start_line`, and `start_side`; future adapters can map the same neutral inline items to their native diff position model.
+
+## Retry behavior
+
+GitHub comments are the durability store for publication. The Main Review Comment marker stores Pipr-owned review state. Inline Review Comment markers prove which findings were actually posted.
+
+On rerun, Pipr reloads its owned comments, updates the Main Review Comment, skips already posted inline markers, and posts missing Inline Review Comments. If inline publication fails after a partial write, the Action fails, but a later rerun continues from the markers already present on GitHub.
+
+Pipr checks the current change request head SHA before any code host write. A review computed for an old head fails without updating the Main Review Comment, posting Inline Review Comments, command responses, or thread actions.

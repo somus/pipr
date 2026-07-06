@@ -200,6 +200,40 @@ describe("publishGitHubPublicationPlan", () => {
     expect(client.reviewCommentPayloads).toHaveLength(0);
   });
 
+  it("recovers from partial inline publication on retry", async () => {
+    const client = new FakePublicationClient("head");
+    const publicationPlan = plan();
+    const createReviewComment = client.createReviewComment.bind(client);
+    let attempts = 0;
+    client.createReviewComment = async (options) => {
+      attempts += 1;
+      if (attempts === 2) {
+        throw new Error("inline failed once");
+      }
+      return await createReviewComment(options);
+    };
+
+    await expect(
+      publishGitHubPublicationPlan({ client, change: event, plan: publicationPlan }),
+    ).rejects.toMatchObject({
+      result: {
+        inlineComments: { posted: 1, skipped: 0, failed: 1 },
+        metadata: {
+          inlinePublicationErrors: ["inline failed once"],
+        },
+      },
+    });
+    const retry = await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: publicationPlan,
+    });
+
+    expect(client.issueComments).toHaveLength(1);
+    expect(client.reviewCommentPayloads).toHaveLength(2);
+    expect(retry.inlineComments).toEqual({ posted: 1, skipped: 1, failed: 0 });
+  });
+
   it("dedupes same-head inline comments by location when finding wording changes", async () => {
     const client = new FakePublicationClient("head");
     await publishGitHubPublicationPlan({

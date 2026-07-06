@@ -259,7 +259,7 @@ Use `ctx.platform.id === "local"` inside a task when the task should run in both
 
 | Property | Purpose |
 | --- | --- |
-| `ctx.run.id` | Stable id for the current runtime execution. |
+| `ctx.run.id` | Stable id for the selected Review Run, not the process attempt. |
 | `ctx.platform.id` | Code host id, such as `github` or `local`; use this for local-aware task behavior. |
 | `ctx.repository` | Provider-neutral repository metadata. |
 | `ctx.change` | Provider-neutral change request metadata plus diff helpers. |

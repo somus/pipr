@@ -276,6 +276,7 @@ export type CommandContext = {
 
 /** Context object passed to task handlers. */
 export type TaskContext = {
+  /** Stable id for the selected Review Run, not the process attempt. */
   readonly run: { id: string };
   readonly repository: RepositoryInfo;
   readonly change: ChangeRequestContext;

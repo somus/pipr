@@ -43,6 +43,7 @@ export type RunVerifierOptions = {
   priorReviewState?: PriorReviewState;
   threadContexts: InlineThreadContext[];
   mode: VerifierMode;
+  runId?: string;
   log?: RuntimeActionLog;
 };
 
@@ -113,6 +114,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         env: options.env,
         piExecutable: options.piExecutable,
         piRunner: options.piRunner,
+        runId: options.runId,
         log: options.log,
       },
     });
