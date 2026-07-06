@@ -86,6 +86,8 @@ jobs:
             command: bunx turbo run build lint typecheck test format:check --filter=@usepipr/cli
           - name: e2e
             command: bunx turbo run lint typecheck test format:check --filter=@pipr/e2e
+          - name: evals
+            command: bunx turbo run lint typecheck test format:check --filter=@pipr/evals
     name: packages (${{ matrix.name }})
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

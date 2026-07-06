@@ -4,7 +4,8 @@ import {
   type InlineCommentDraft,
   type PublicationMetadata,
   type PublicationPlan,
-  prepareInlinePublicationItems,
+  prepareInlinePublicationItemsForPublishableFindings,
+  preparePublishableInlineFindings,
   type ThreadAction,
 } from "./comment.js";
 import { buildPriorReviewState, type PriorReviewState } from "./prior-state.js";
@@ -28,15 +29,18 @@ export type CommentPublishingPlan = {
 export function buildCommentPublishingPlan(
   options: BuildCommentPublishingPlanOptions,
 ): CommentPublishingPlan {
+  const publishableInlineFindings = preparePublishableInlineFindings({
+    validated: options.validated,
+    manifest: options.manifest,
+  });
   const reviewState = buildPriorReviewState({
     priorState: options.priorReviewState,
-    findings: options.validated.validFindings,
+    findings: publishableInlineFindings.map((item) => item.finding),
     reviewedHeadSha: options.event.change.head.sha,
     selectedTasks: options.metadata.selectedTasks,
   });
-  const inlineCommentDrafts = prepareInlinePublicationItems({
-    validated: options.validated,
-    manifest: options.manifest,
+  const inlineCommentDrafts = prepareInlinePublicationItemsForPublishableFindings({
+    publishableFindings: publishableInlineFindings,
     reviewedHeadSha: options.event.change.head.sha,
     reviewState,
   });

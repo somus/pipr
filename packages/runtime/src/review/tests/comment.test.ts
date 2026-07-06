@@ -339,6 +339,37 @@ describe("comments", () => {
     expect(item?.body).not.toContain("```suggestion");
   });
 
+  it("omits suggested-change blocks when a one-line selection includes surrounding context", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            startLine: 11,
+            endLine: 11,
+            suggestedFix: [
+              "const adjusted = priceCents - 100;",
+              "return Math.max(0, adjusted);",
+              "}",
+            ].join("\n"),
+          },
+        ],
+      },
+      manifest: manifestWithRange(
+        10,
+        12,
+        ["export function finalPrice(priceCents: number): number {", "return adjusted;", "}"].join(
+          "\n",
+        ),
+      ),
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.body).toContain("This can fail.");
+    expect(item?.body).not.toContain("```suggestion");
+  });
+
   it("publishes only a bounded first paragraph for verbose inline finding bodies", () => {
     const secondParagraph = "This second paragraph should not be published.";
     const [item] = prepareInlinePublicationItems({

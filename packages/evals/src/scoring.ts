@@ -90,6 +90,7 @@ function forbiddenOutputSuppressed(output: PiprEvalOutput, forbidden: string[]):
 
 function forbiddenOutputText(output: PiprEvalOutput): string {
   const text = [
+    output.reviewSummary ?? "",
     output.mainComment ?? "",
     output.error ?? "",
     ...output.inlineFindings.flatMap((finding) => [
@@ -182,15 +183,18 @@ function isTightSuggestedFixSelection(
   ranges: EvalDiffRange[],
 ): boolean {
   const replacement = finding.suggestedFix ? normalizedLines(finding.suggestedFix) : [];
-  const selected = selectedSuggestedFixPreview(finding, ranges);
-  return !selected || !keepsUnchangedSelectionBoundary(selected, replacement);
+  const range = ranges.find((item) => rangeContainsFinding(item, finding));
+  const selected = range ? selectedSuggestedFixPreview(finding, range) : undefined;
+  return (
+    (!selected || !keepsUnchangedSelectionBoundary(selected, replacement)) &&
+    (!range || !includesUnselectedContext(range, finding, replacement))
+  );
 }
 
 function selectedSuggestedFixPreview(
   finding: EvalInlineFinding,
-  ranges: EvalDiffRange[],
+  range: EvalDiffRange,
 ): string[] | undefined {
-  const range = ranges.find((item) => rangeContainsFinding(item, finding));
   if (!range?.preview) {
     return undefined;
   }
@@ -207,6 +211,30 @@ function selectedPreviewLines(
   return offset < 0 || offset + selectedLineCount > previewLines.length
     ? undefined
     : previewLines.slice(offset, offset + selectedLineCount);
+}
+
+function includesUnselectedContext(
+  range: EvalDiffRange,
+  finding: EvalInlineFinding,
+  suggestedLines: string[],
+): boolean {
+  if (!range.preview) {
+    return false;
+  }
+  const selectedLineCount = finding.endLine - finding.startLine + 1;
+  if (suggestedLines.length <= selectedLineCount) {
+    return false;
+  }
+  const offset = finding.startLine - range.startLine;
+  if (offset < 0) {
+    return false;
+  }
+  const previewLines = range.preview.replace(/\r\n?/g, "\n").split("\n");
+  const contextLines = [
+    offset > 0 ? previewLines[offset - 1] : undefined,
+    previewLines[offset + selectedLineCount],
+  ].filter((line): line is string => Boolean(line?.trim()));
+  return contextLines.some((line) => suggestedLines.includes(line));
 }
 
 function normalizedLines(value: string): string[] {

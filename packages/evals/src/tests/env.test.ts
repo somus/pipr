@@ -33,6 +33,17 @@ describe("eval environment boundaries", () => {
     expect(env.UNRELATED_SECRET_TOKEN).toBeUndefined();
   });
 
+  it("requires a model key for live review runs", () => {
+    expect(() =>
+      evalReviewEnv({
+        mode: "live",
+        sourceEnv: {
+          PATH: "/bin",
+        },
+      }),
+    ).toThrow("DEEPSEEK_API_KEY is required for live prompt evals");
+  });
+
   it("uses a dummy provider key for deterministic review runs", () => {
     const env = evalReviewEnv({
       mode: "deterministic",

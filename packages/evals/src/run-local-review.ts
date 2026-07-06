@@ -30,9 +30,11 @@ const result = await runLocalReviewCommand({
 console.log(
   JSON.stringify({
     kind: result.kind,
+    reviewSummary: result.review.summary.body,
     mainComment: result.mainComment,
     inlineFindings: result.inlineCommentDrafts,
     validated: {
+      validFindings: result.validated.validFindings,
       droppedFindings: result.validated.droppedFindings.map(({ reason, finding }) => ({
         reason,
         path: finding.path,

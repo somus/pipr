@@ -64,6 +64,10 @@ const inlinePublicationItemsSchema = z.array(inlinePublicationItemSchema);
 
 export type InlinePublicationItem = z.infer<typeof inlinePublicationItemSchema>;
 export type InlineCommentDraft = InlinePublicationItem;
+export type PublishableInlineFinding = {
+  finding: ReviewFinding;
+  range: CommentableRange;
+};
 
 const threadActionSchema = z.strictObject({
   kind: z.enum(["resolve", "reply"]),
@@ -160,21 +164,44 @@ export function prepareInlinePublicationItems(options: {
   reviewedHeadSha: string;
   reviewState?: PriorReviewState;
 }): InlinePublicationItem[] {
+  return prepareInlinePublicationItemsForPublishableFindings({
+    publishableFindings: preparePublishableInlineFindings({
+      validated: options.validated,
+      manifest: options.manifest,
+    }),
+    reviewedHeadSha: options.reviewedHeadSha,
+    reviewState: options.reviewState,
+  });
+}
+
+export function preparePublishableInlineFindings(options: {
+  validated: {
+    validFindings: ReviewFinding[];
+  };
+  manifest: DiffManifest;
+}): PublishableInlineFinding[] {
   const ranges = createDiffRangeIndex(options.manifest);
+  return options.validated.validFindings.flatMap((finding) => {
+    const range = ranges.rangeById(finding.rangeId);
+    if (!range) {
+      throw new Error(`Validated finding range '${finding.rangeId}' is missing from Diff Manifest`);
+    }
+    const findingWithBody = findingWithPublishableBody(finding);
+    if (!findingWithBody) {
+      return [];
+    }
+    return [{ finding: findingWithPublishableSuggestedFix(findingWithBody, range), range }];
+  });
+}
+
+export function prepareInlinePublicationItemsForPublishableFindings(options: {
+  publishableFindings: PublishableInlineFinding[];
+  reviewedHeadSha: string;
+  reviewState?: PriorReviewState;
+}): InlinePublicationItem[] {
   const seenFindingIds = new Set<string>();
   return inlinePublicationItemsSchema.parse(
-    options.validated.validFindings.flatMap((finding) => {
-      const range = ranges.rangeById(finding.rangeId);
-      if (!range) {
-        throw new Error(
-          `Validated finding range '${finding.rangeId}' is missing from Diff Manifest`,
-        );
-      }
-      const findingWithBody = findingWithPublishableBody(finding);
-      if (!findingWithBody) {
-        return [];
-      }
-      const publishableFinding = findingWithPublishableSuggestedFix(findingWithBody, range);
+    options.publishableFindings.flatMap(({ finding: publishableFinding, range }) => {
       const findingId = findingIdFor(publishableFinding, options.reviewState);
       const stateRecord = options.reviewState
         ? matchFindingRecord(options.reviewState, publishableFinding)
@@ -241,6 +268,9 @@ function findingWithPublishableSuggestedFix(
   if (originalLines && hasUnchangedSelectionEdge(originalLines, suggestedLines)) {
     return withoutSuggestedFix(finding);
   }
+  if (suggestionIncludesUnselectedContext(finding, range, selectedLineCount, suggestedLines)) {
+    return withoutSuggestedFix(finding);
+  }
 
   return redactPotentialSecrets(finding.suggestedFix) === finding.suggestedFix
     ? finding
@@ -276,6 +306,27 @@ function selectedRangePreviewLines(
     return undefined;
   }
   return previewLines.slice(offset, offset + selectedLineCount);
+}
+
+function suggestionIncludesUnselectedContext(
+  finding: ReviewFinding,
+  range: CommentableRange,
+  selectedLineCount: number,
+  suggestedLines: string[],
+): boolean {
+  if (!range.preview || suggestedLines.length <= selectedLineCount) {
+    return false;
+  }
+  const offset = finding.startLine - range.startLine;
+  if (offset < 0) {
+    return false;
+  }
+  const previewLines = range.preview.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const contextLines = [
+    offset > 0 ? previewLines[offset - 1] : undefined,
+    previewLines[offset + selectedLineCount],
+  ].filter((line): line is string => Boolean(line?.trim()));
+  return contextLines.some((line) => suggestedLines.includes(line));
 }
 
 function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {

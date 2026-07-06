@@ -202,7 +202,7 @@ export function displayValue(user: User): string {
   },
   {
     id: "verbose-inline-finding-body",
-    description: "Publishes a bounded inline body when a reviewer returns verbose prose.",
+    description: "Returns a concise inline body for a finding that invites verbose prose.",
     modes: ["deterministic"],
     baseFiles: {
       [reviewTargetPath]: `export function renderVerboseMessage(value: string | undefined): string {

@@ -27,30 +27,14 @@ const markerReviews: MarkerReview[] = [
     preview: "return value.trim();",
     side: "RIGHT",
     body: "The new return path calls trim on a possibly undefined display value and can throw before the fallback.",
-    suggestedFix: [
-      "  const value = user.name ?? user.displayName;",
-      "  if (!value) {",
-      '    return "Anonymous";',
-      "  }",
-      "  return value.trim();",
-    ].join("\n"),
   },
   {
     preview: "return adjusted;",
     body: "A negative adjusted price can be returned without clamping to zero.",
-    suggestedFix: [
-      "export function finalPrice(priceCents: number): number {",
-      "  const adjusted = priceCents - 100;",
-      "  return Math.max(0, adjusted);",
-      "}",
-    ].join("\n"),
   },
   {
     preview: "return verboseMessage(value);",
-    body: [
-      "The verbose message path can throw when value is undefined because the new helper is called without preserving the fallback.",
-      "This paragraph should not be published. It repeats the same concern in a long explanation with implementation details, speculation about callers, and broad remediation notes that would make the inline comment harder to scan during review.",
-    ].join("\n\n"),
+    body: "The verbose message path can throw when value is undefined because the new helper is called without preserving the fallback.",
   },
   {
     preview: "return value!.trim();",

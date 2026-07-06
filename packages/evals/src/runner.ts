@@ -56,9 +56,11 @@ const evalDroppedFindingSchema = z.object({
 
 const localReviewEvalJsonSchema = z.object({
   kind: z.enum(["review", "skipped"]),
+  reviewSummary: z.string(),
   mainComment: z.string(),
   inlineFindings: z.array(z.object({ finding: evalInlineFindingSchema })),
   validated: z.object({
+    validFindings: z.array(evalInlineFindingSchema),
     droppedFindings: z.array(evalDroppedFindingSchema),
   }),
   diffRanges: z.array(evalDiffRangeSchema),
@@ -74,8 +76,10 @@ export type PiprEvalOutput = {
   kind?: "review" | "skipped";
   fixturePath?: string;
   error?: string;
+  reviewSummary?: string;
   mainComment?: string;
   inlineFindings: EvalInlineFinding[];
+  publicationInlineFindings: EvalInlineFinding[];
   droppedFindings: EvalDroppedFinding[];
   diffRanges: EvalDiffRange[];
   piCalls: EvalPiCall[];
@@ -137,8 +141,10 @@ async function successfulEvalOutput(
     ok: true,
     kind: result.kind,
     fixturePath: keepFixtures() ? rootDir : undefined,
+    reviewSummary: result.reviewSummary,
     mainComment: result.mainComment,
-    inlineFindings: result.inlineFindings.map((draft) => draft.finding),
+    inlineFindings: result.validated.validFindings,
+    publicationInlineFindings: result.inlineFindings.map((draft) => draft.finding),
     droppedFindings: result.validated.droppedFindings,
     diffRanges: result.diffRanges,
     piCalls: await readPiCalls(callsDir),
@@ -157,6 +163,7 @@ async function failedEvalOutput(
     fixturePath: keepFixtures() ? rootDir : undefined,
     error: piCallsResult.error ? `${originalError}; ${piCallsResult.error}` : originalError,
     inlineFindings: [],
+    publicationInlineFindings: [],
     droppedFindings: [],
     diffRanges: [],
     piCalls: piCallsResult.piCalls,
