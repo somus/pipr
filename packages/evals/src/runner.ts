@@ -123,12 +123,12 @@ async function runPreparedFixture(
 }
 
 function evalRunOptions(options: PiprEvalRunOptions): PiprEvalRunOptions {
+  if (options.mode === "live") {
+    return options;
+  }
   return {
     ...options,
-    piExecutable:
-      options.piExecutable ??
-      process.env.PIPR_EVAL_PI_EXECUTABLE ??
-      (options.mode === "deterministic" ? packagedFakePi : undefined),
+    piExecutable: options.piExecutable ?? process.env.PIPR_EVAL_PI_EXECUTABLE ?? packagedFakePi,
   };
 }
 
@@ -330,6 +330,9 @@ function assertRunOptions(options: PiprEvalRunOptions): void {
       throw new Error("deterministic prompt evals require a fake Pi executable");
     }
     return;
+  }
+  if (options.piExecutable || process.env.PIPR_EVAL_PI_EXECUTABLE) {
+    throw new Error("live prompt evals must not set Pi executable overrides");
   }
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("DEEPSEEK_API_KEY is required for live prompt evals");
