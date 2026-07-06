@@ -34,8 +34,8 @@ type StarterFile = {
   contents: string;
 };
 
-const defaultWorkflowActionRef = "somus/pipr@v0.2.0"; // x-release-please-version
-const defaultSdkVersion = "0.2.0"; // x-release-please-version
+const defaultWorkflowActionRef = "somus/pipr@v0.2.1"; // x-release-please-version
+const defaultSdkVersion = "0.2.1"; // x-release-please-version
 const defaultTypesBunVersion = "1.3.14";
 
 export function listOfficialMinimalFiles(

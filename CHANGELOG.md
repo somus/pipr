@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/somus/pipr/compare/v0.2.0...v0.2.1) (2026-07-06)
+
+
+### Features
+
+* **cli:** bundle pipr setup skill ([#18](https://github.com/somus/pipr/issues/18)) ([801957d](https://github.com/somus/pipr/commit/801957d8ea8ed5d04ddeaf8efa8d122c174e7c83))
+* make review runs retry-safe ([#21](https://github.com/somus/pipr/issues/21)) ([98dc50f](https://github.com/somus/pipr/commit/98dc50f10d24e0f4c00d49fc2df951d4b90f953a))
+
 ## [0.2.0](https://github.com/somus/pipr/compare/v0.1.3...v0.2.0) (2026-07-02)
 
 
