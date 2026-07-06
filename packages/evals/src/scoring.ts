@@ -1,5 +1,6 @@
 import type { PiprEvalExpected } from "./cases.js";
 import type { EvalDiffRange, EvalInlineFinding, PiprEvalOutput } from "./runner.js";
+import { piprEvalForbiddenOutputText } from "./runner.js";
 
 export type PiprEvalScore = {
   name: string;
@@ -84,24 +85,8 @@ function forbiddenOutputSuppressed(output: PiprEvalOutput, forbidden: string[]):
   if (forbidden.length === 0) {
     return true;
   }
-  const text = forbiddenOutputText(output).toLowerCase();
+  const text = piprEvalForbiddenOutputText(output).toLowerCase();
   return forbidden.every((value) => !text.includes(value.toLowerCase()));
-}
-
-function forbiddenOutputText(output: PiprEvalOutput): string {
-  const text = [
-    output.reviewSummary ?? "",
-    output.mainComment ?? "",
-    output.error ?? "",
-    ...output.inlineFindings.flatMap((finding) => [
-      finding.body,
-      finding.path,
-      finding.rangeId,
-      finding.suggestedFix ?? "",
-    ]),
-    ...output.droppedFindings.flatMap((finding) => [finding.reason, finding.path, finding.rangeId]),
-  ].join("\n");
-  return text;
 }
 
 export function scoreValidAnchoring(output: PiprEvalOutput): number {
@@ -187,21 +172,11 @@ function isTightSuggestedFixSelection(
 ): boolean {
   const replacement = finding.suggestedFix ? normalizedLines(finding.suggestedFix) : [];
   const range = ranges.find((item) => rangeContainsFinding(item, finding));
-  const selected = range ? selectedSuggestedFixPreview(finding, range) : undefined;
+  const selected = range?.preview ? selectedPreviewLines(range, finding) : undefined;
   return (
     (!selected || !keepsUnchangedSelectionBoundary(selected, replacement)) &&
     (!range || !includesUnselectedContext(range, finding, replacement))
   );
-}
-
-function selectedSuggestedFixPreview(
-  finding: EvalInlineFinding,
-  range: EvalDiffRange,
-): string[] | undefined {
-  if (!range?.preview) {
-    return undefined;
-  }
-  return selectedPreviewLines(range, finding);
 }
 
 function selectedPreviewLines(
