@@ -1,0 +1,49 @@
+packages/e2e/prompt-evals.test.ts
+  s_0d14705f05322a::t_b2b18a63791864 4
+  s_0d14705f05322a::t_0e0f3b58f957e2 2
+packages/e2e/package.json
+  s_0d14705f05322a::t_21cc3fb2a873df 17-18
+packages/evals/src/scoring.ts
+  s_0d14705f05322a::t_75edf6375543e8 73-79,81,83-87,99,178-185,188-192,194,197
+  s_0d14705f05322a::t_1c067c792531cc 198-203,206-209,218-221,224-227
+  s_0d14705f05322a::t_0dd5217064e251 153,193
+packages/evals/src/cases.ts
+  s_0d14705f05322a::t_1ceb4bfa903d02 52
+packages/runtime/src/review/tests/publish.test.ts
+  s_0d14705f05322a::t_a7c38f11f9db9c 440,445-447
+packages/e2e/README.md
+  s_0d14705f05322a::t_dd1b5420329bb4 27,38-44
+apps/docs/content/docs/reference/development.mdx
+  s_0d14705f05322a::t_61d49168f183fa 118-123
+packages/evals/src/deterministic-smoke.ts
+  s_0d14705f05322a::t_fbd17f54cc2570 1-51
+packages/runtime/src/hosts/github/publication-thread-actions.ts
+  s_0d14705f05322a::t_5c5c6bbacf3b7d 145,155-156
+packages/evals/package.json
+  s_0d14705f05322a::t_60e942d53a0d5f 10
+  s_0d14705f05322a::t_7f4c5a1ef68dd8 11
+packages/evals/src/runner.ts
+  s_0d14705f05322a::t_3175532dd5ad88 66
+  s_0d14705f05322a::t_2932c79d9e5516 89,96-116
+  s_0d14705f05322a::t_9390201541cbc8 8
+packages/evals/src/fake-pi.ts
+  s_0d14705f05322a::t_334ca6853ea6a5 28
+  s_0d14705f05322a::t_916e62d581dd23 8
+  s_0d14705f05322a::t_674123f31a7fbf 1-7,9-27,29-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ba28cead59926c162d54a35966d8ea444f4cfbd3",
+  "prompts": {},
+  "sessions": {
+    "s_0d14705f05322a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f35e5-09d7-7be0-ba5c-ee305f9d1c92",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
