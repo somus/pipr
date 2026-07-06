@@ -82,6 +82,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@usepipr/runtime": "workspace:*",
+        "zod": "4.4.3",
       },
       "devDependencies": {
         "evalite": "0.19.0",

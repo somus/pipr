@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import path from "node:path";
+import * as z from "zod";
 
 const prompt = await readPrompt(process.argv.at(-1) ?? "");
 const args = process.argv.slice(2, -1);
@@ -68,6 +69,23 @@ const markerReviews: MarkerReview[] = [
     select: "preview-line",
   },
 ];
+
+const diffManifestRangeSchema = z.object({
+  id: z.string(),
+  path: z.string(),
+  side: z.enum(["RIGHT", "LEFT"]),
+  startLine: z.number().int(),
+  endLine: z.number().int(),
+  preview: z.string().optional(),
+});
+
+const diffManifestPromptSchema = z.object({
+  files: z.array(
+    z.object({
+      commentableRanges: z.array(diffManifestRangeSchema),
+    }),
+  ),
+});
 
 if (!prompt.includes("Diff Manifest:")) {
   throw new Error("fake-pi could not find Diff Manifest in prompt");
@@ -221,7 +239,7 @@ function parsePromptJson(startLabel: string): DiffManifestPrompt {
   assert(start !== -1, `prompt missing ${startLabel}`);
   const contentStart = start + startLabel.length;
   const end = readNextPromptSectionIndex(contentStart);
-  return JSON.parse(prompt.slice(contentStart, end).trim()) as DiffManifestPrompt;
+  return diffManifestPromptSchema.parse(JSON.parse(prompt.slice(contentStart, end).trim()));
 }
 
 function readNextPromptSectionIndex(contentStart: number): number {
@@ -252,15 +270,5 @@ type MarkerReview = {
   duplicate?: boolean;
 };
 
-type DiffManifestPrompt = {
-  files: Array<{ commentableRanges: DiffManifestRange[] }>;
-};
-
-type DiffManifestRange = {
-  id: string;
-  path: string;
-  side: "RIGHT" | "LEFT";
-  startLine: number;
-  endLine: number;
-  preview?: string;
-};
+type DiffManifestPrompt = z.infer<typeof diffManifestPromptSchema>;
+type DiffManifestRange = z.infer<typeof diffManifestRangeSchema>;

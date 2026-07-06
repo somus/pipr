@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as z from "zod";
 import type { PiprEvalCase } from "./cases.js";
 
 type PiprEvalRunMode = "live" | "deterministic";
@@ -12,43 +13,60 @@ type PiprEvalRunOptions = {
   piExecutable?: string;
 };
 
-export type EvalInlineFinding = {
-  body: string;
-  path: string;
-  rangeId: string;
-  side: "RIGHT" | "LEFT";
-  startLine: number;
-  endLine: number;
-  suggestedFix?: string;
-};
+const evalSideSchema = z.enum(["RIGHT", "LEFT"]);
 
-export type EvalDiffRange = {
-  path: string;
-  rangeId: string;
-  side: "RIGHT" | "LEFT";
-  startLine: number;
-  endLine: number;
-  preview?: string;
-};
+const evalInlineFindingSchema = z.object({
+  body: z.string(),
+  path: z.string(),
+  rangeId: z.string(),
+  side: evalSideSchema,
+  startLine: z.number().int(),
+  endLine: z.number().int(),
+  suggestedFix: z.string().optional(),
+});
 
-export type EvalPiCall = {
-  reviewPolicy: boolean;
-  schemaOnlySystemPrompt: boolean;
-  strictJsonSystemPrompt: boolean;
-  secretHygieneSystemPrompt: boolean;
-  systemPromptHasReviewPolicy: boolean;
-  untrustedDataSystemPrompt: boolean;
-  promptBytes: number;
-};
+const evalDiffRangeSchema = z.object({
+  path: z.string(),
+  rangeId: z.string(),
+  side: evalSideSchema,
+  startLine: z.number().int(),
+  endLine: z.number().int(),
+  preview: z.string().optional(),
+});
 
-export type EvalDroppedFinding = {
-  reason: string;
-  path: string;
-  rangeId: string;
-  side: "RIGHT" | "LEFT";
-  startLine: number;
-  endLine: number;
-};
+const evalPiCallSchema = z.object({
+  reviewPolicy: z.boolean(),
+  schemaOnlySystemPrompt: z.boolean(),
+  strictJsonSystemPrompt: z.boolean(),
+  secretHygieneSystemPrompt: z.boolean(),
+  systemPromptHasReviewPolicy: z.boolean(),
+  untrustedDataSystemPrompt: z.boolean(),
+  promptBytes: z.number().int(),
+});
+
+const evalDroppedFindingSchema = z.object({
+  reason: z.string(),
+  path: z.string(),
+  rangeId: z.string(),
+  side: evalSideSchema,
+  startLine: z.number().int(),
+  endLine: z.number().int(),
+});
+
+const localReviewEvalJsonSchema = z.object({
+  kind: z.enum(["review", "skipped"]),
+  mainComment: z.string(),
+  inlineFindings: z.array(z.object({ finding: evalInlineFindingSchema })),
+  validated: z.object({
+    droppedFindings: z.array(evalDroppedFindingSchema),
+  }),
+  diffRanges: z.array(evalDiffRangeSchema),
+});
+
+export type EvalInlineFinding = z.infer<typeof evalInlineFindingSchema>;
+export type EvalDiffRange = z.infer<typeof evalDiffRangeSchema>;
+export type EvalPiCall = z.infer<typeof evalPiCallSchema>;
+export type EvalDroppedFinding = z.infer<typeof evalDroppedFindingSchema>;
 
 export type PiprEvalOutput = {
   ok: boolean;
@@ -130,17 +148,30 @@ async function failedEvalOutput(
   callsDir: string | undefined,
   error: unknown,
 ): Promise<PiprEvalOutput> {
+  const piCallsResult = await readPiCallsAfterFailure(callsDir);
+  const originalError = error instanceof Error ? error.message : String(error);
   const output = {
     ok: false,
     fixturePath: keepFixtures() ? rootDir : undefined,
-    error: error instanceof Error ? error.message : String(error),
+    error: piCallsResult.error ? `${originalError}; ${piCallsResult.error}` : originalError,
     inlineFindings: [],
     droppedFindings: [],
     diffRanges: [],
-    piCalls: await readPiCalls(callsDir),
+    piCalls: piCallsResult.piCalls,
   } satisfies PiprEvalOutput;
   await cleanupFixture(rootDir);
   return output;
+}
+
+async function readPiCallsAfterFailure(
+  callsDir: string | undefined,
+): Promise<{ piCalls: EvalPiCall[]; error?: string }> {
+  try {
+    return { piCalls: await readPiCalls(callsDir) };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { piCalls: [], error: `failed to read Pi call logs: ${detail}` };
+  }
 }
 
 async function prepareFixture(
@@ -208,20 +239,23 @@ async function readPiCalls(callsDir: string | undefined): Promise<EvalPiCall[]> 
   if (!callsDir) {
     return [];
   }
-  try {
-    const files = await readdir(callsDir);
-    return await Promise.all(
-      files
-        .filter((file) => file.endsWith(".json"))
-        .sort()
-        .map(
-          async (file) =>
-            JSON.parse(await readFile(path.join(callsDir, file), "utf8")) as EvalPiCall,
-        ),
-    );
-  } catch {
+  const files = await readdir(callsDir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  });
+  if (!files) {
     return [];
   }
+  return await Promise.all(
+    files
+      .filter((file) => file.endsWith(".json"))
+      .sort()
+      .map(async (file) =>
+        evalPiCallSchema.parse(JSON.parse(await readFile(path.join(callsDir, file), "utf8"))),
+      ),
+  );
 }
 
 async function cleanupFixture(rootDir: string): Promise<void> {
@@ -269,7 +303,7 @@ function runLocalReview(
     ],
     rootDir,
   );
-  return JSON.parse(output) as LocalReviewEvalJson;
+  return localReviewEvalJsonSchema.parse(JSON.parse(output));
 }
 
 function assertRunOptions(options: PiprEvalRunOptions): void {
@@ -284,12 +318,4 @@ function assertRunOptions(options: PiprEvalRunOptions): void {
   }
 }
 
-type LocalReviewEvalJson = {
-  kind: "review" | "skipped";
-  mainComment: string;
-  inlineFindings: Array<{ finding: EvalInlineFinding }>;
-  validated: {
-    droppedFindings: EvalDroppedFinding[];
-  };
-  diffRanges: EvalDiffRange[];
-};
+type LocalReviewEvalJson = z.infer<typeof localReviewEvalJsonSchema>;

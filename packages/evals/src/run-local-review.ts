@@ -3,20 +3,19 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runLocalReviewCommand } from "@usepipr/runtime";
+import * as z from "zod";
 
-type HelperInput = {
-  rootDir: string;
-  baseSha: string;
-  headSha: string;
-  piExecutable?: string;
-  callsDir?: string;
-};
+const helperInputSchema = z.object({
+  rootDir: z.string().min(1),
+  baseSha: z.string().min(1),
+  headSha: z.string().min(1),
+  piExecutable: z.string().min(1).optional(),
+  callsDir: z.string().min(1).optional(),
+});
+
+type HelperInput = z.infer<typeof helperInputSchema>;
 
 const input = readInput(process.argv[2]);
-
-if (!input.rootDir || !input.baseSha || !input.headSha) {
-  throw new Error("usage: run-local-review.ts <json options>");
-}
 
 const piExecutable = await evalPiExecutable(input);
 const result = await runLocalReviewCommand({
@@ -60,7 +59,7 @@ function readInput(value: string | undefined): HelperInput {
   if (!value) {
     throw new Error("usage: run-local-review.ts <json options>");
   }
-  return JSON.parse(value) as HelperInput;
+  return helperInputSchema.parse(JSON.parse(value));
 }
 
 async function evalPiExecutable(input: HelperInput): Promise<string | undefined> {
