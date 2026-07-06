@@ -170,28 +170,33 @@ function isTightSuggestedFixSelection(
   ranges: EvalDiffRange[],
 ): boolean {
   const replacement = finding.suggestedFix ? normalizedLines(finding.suggestedFix) : [];
-  const selectedLineCount = finding.endLine - finding.startLine + 1;
-  if (replacement.length !== selectedLineCount) {
-    return false;
-  }
-
   const range = ranges.find((item) => rangeContainsFinding(item, finding));
   if (!range?.preview) {
     return true;
   }
+  const selectedLineCount = finding.endLine - finding.startLine + 1;
   const offset = finding.startLine - range.startLine;
   const preview = range.preview.replace(/\r\n?/g, "\n").split("\n");
   if (offset < 0 || offset + selectedLineCount > preview.length) {
     return true;
   }
   const selected = preview.slice(offset, offset + selectedLineCount);
-  return selected[0] !== replacement[0] && selected.at(-1) !== replacement.at(-1);
+  return !hasUnchangedSelectionEdge(selected, replacement);
 }
 
 function normalizedLines(value: string): string[] {
   const normalized = value.replace(/\r\n?/g, "\n");
   const body = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
   return body.length === 0 ? [] : body.split("\n");
+}
+
+function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {
+  const firstLineUnchanged = originalLines[0] === suggestedLines[0];
+  const lastLineUnchanged = originalLines.at(-1) === suggestedLines.at(-1);
+  if (originalLines.length === suggestedLines.length || originalLines.length === 1) {
+    return firstLineUnchanged || lastLineUnchanged;
+  }
+  return firstLineUnchanged && lastLineUnchanged;
 }
 
 function hasExpectedOutput(

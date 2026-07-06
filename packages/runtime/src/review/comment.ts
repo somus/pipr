@@ -236,9 +236,6 @@ function findingWithPublishableSuggestedFix(
   }
   const suggestedLines = splitSuggestedFixLines(finding.suggestedFix);
   const selectedLineCount = finding.endLine - finding.startLine + 1;
-  if (suggestedLines.length !== selectedLineCount) {
-    return withoutSuggestedFix(finding);
-  }
 
   const originalLines = selectedRangePreviewLines(finding, range, selectedLineCount);
   if (originalLines && hasUnchangedSelectionEdge(originalLines, suggestedLines)) {
@@ -282,7 +279,12 @@ function selectedRangePreviewLines(
 }
 
 function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {
-  return originalLines[0] === suggestedLines[0] || originalLines.at(-1) === suggestedLines.at(-1);
+  const firstLineUnchanged = originalLines[0] === suggestedLines[0];
+  const lastLineUnchanged = originalLines.at(-1) === suggestedLines.at(-1);
+  if (originalLines.length === suggestedLines.length || originalLines.length === 1) {
+    return firstLineUnchanged || lastLineUnchanged;
+  }
+  return firstLineUnchanged && lastLineUnchanged;
 }
 
 function renderMainComment(options: {

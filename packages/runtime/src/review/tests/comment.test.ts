@@ -169,7 +169,7 @@ describe("comments", () => {
     expect(item?.body).not.toContain("```suggestion");
   });
 
-  it("omits suggested-change blocks when the replacement line span does not match", () => {
+  it("publishes suggested-change blocks when one selected line expands to multiple replacement lines", () => {
     const [item] = prepareInlinePublicationItems({
       validated: {
         validFindings: [
@@ -180,6 +180,33 @@ describe("comments", () => {
         ],
       },
       manifest,
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBe(["if (failed) {", "  recover();", "}"].join("\n"));
+    expect(item?.body).toContain("This can fail.");
+    expect(item?.body).toContain("```suggestion\nif (failed) {\n  recover();\n}\n```");
+  });
+
+  it("omits suggested-change blocks when a one-line selection keeps that line as context", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            startLine: 5,
+            endLine: 5,
+            suggestedFix: [
+              "  const value = user.name ?? user.displayName;",
+              "  if (!value) {",
+              '    return "Anonymous";',
+              "  }",
+              "  return value.trim();",
+            ].join("\n"),
+          },
+        ],
+      },
+      manifest: manifestWithRange(5, 5, "  return value.trim();"),
       reviewedHeadSha: "head",
     });
 
@@ -222,7 +249,7 @@ describe("comments", () => {
     expect(items).toEqual([]);
   });
 
-  it("omits suggested-change blocks when a multi-line selection has a shorter replacement", () => {
+  it("publishes suggested-change blocks when a multi-line selection has a shorter replacement", () => {
     const [item] = prepareInlinePublicationItems({
       validated: {
         validFindings: [
@@ -237,9 +264,9 @@ describe("comments", () => {
       reviewedHeadSha: "head",
     });
 
-    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.finding.suggestedFix).toBe("return safeCall();");
     expect(item?.body).toContain("This can fail.");
-    expect(item?.body).not.toContain("```suggestion");
+    expect(item?.body).toContain("```suggestion\nreturn safeCall();\n```");
   });
 
   it("omits suggested-change blocks when the replacement includes unchanged edge lines", () => {

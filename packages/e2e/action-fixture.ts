@@ -64,20 +64,20 @@ async function actionFixtureContext(): Promise<ActionFixtureContext> {
       env: Bun.env,
       eventPath: requiredEnv("GITHUB_EVENT_PATH"),
       dryRun: envValue("PIPR_DRY_RUN") === "1",
-      piExecutable: await actionPiExecutable(rootDir, requiredEnv("PIPR_ACT_PI_EXECUTABLE")),
+      piExecutable: await actionPiExecutable(requiredEnv("PIPR_ACT_PI_EXECUTABLE")),
       githubPublicationClient: fixturePublicationClient(fixturePath),
     },
   };
 }
 
-async function actionPiExecutable(rootDir: string, piExecutable: string): Promise<string> {
+async function actionPiExecutable(piExecutable: string): Promise<string> {
   const callsDir = envValue("PIPR_ACT_PI_CALL_DIR");
   if (!callsDir) {
     return piExecutable;
   }
-  const wrapperDir = path.join(rootDir, ".pipr", ".act");
-  await mkdir(wrapperDir, { recursive: true });
-  const wrapperPath = path.join(wrapperDir, "fake-pi-wrapper");
+  await mkdir(callsDir, { recursive: true });
+  await chmod(callsDir, 0o777);
+  const wrapperPath = path.join(callsDir, "fake-pi-wrapper");
   await writeFile(
     wrapperPath,
     `#!/usr/bin/env bun
