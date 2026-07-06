@@ -101,6 +101,29 @@ PIPR_ACT_PI_CALL_DIR=/tmp/pipr-pi-calls
 
 Use `PIPR_SKIP_ACTION_IMAGE_BUILD=1` only when the target image already exists and should be reused.
 
+## Prompt evals
+
+Deterministic prompt eval smoke tests run with the e2e package tests:
+
+```bash
+bun run --cwd packages/e2e test
+```
+
+They use the fake Pi harness and do not call a model API. To point them at a custom fake Pi executable, set:
+
+```bash
+PIPR_EVAL_PI_EXECUTABLE=/absolute/path/to/fake-pi
+```
+
+Live prompt evals run through Evalite and call DeepSeek through the local Pipr review path. Run them explicitly when `DEEPSEEK_API_KEY` is available:
+
+```bash
+DEEPSEEK_API_KEY=... bun run eval:prompts
+DEEPSEEK_API_KEY=... bun run --cwd packages/evals eval:export
+```
+
+`eval:export` writes `packages/evals/evalite-export/results.json`. Live evals are nondeterministic and are not part of `mise run check`.
+
 ## CI Docker e2e
 
 ### CI container check
