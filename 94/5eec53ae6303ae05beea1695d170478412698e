@@ -1,0 +1,39 @@
+apps/docs/src/styles/app.css
+  s_6d88b46ce1e11f::t_447e668ffe7dd8 8-30
+  s_6d88b46ce1e11f::t_be632928c01a95 31
+apps/docs/src/components/copy-button.tsx
+  s_6d88b46ce1e11f::t_82734d4740eea8 28,30,50
+  s_6d88b46ce1e11f::t_b86f4390b5ac68 36-44
+  s_6d88b46ce1e11f::t_447e668ffe7dd8 6,21,24-27,29,31-35,71-73
+apps/docs/package.json
+  s_6d88b46ce1e11f::t_b86f4390b5ac68 13
+  s_6d88b46ce1e11f::t_9660a1d73c0280 49
+apps/docs/public/fonts/satoshi/SOURCE.md
+  s_6d88b46ce1e11f::t_447e668ffe7dd8 1-5,9-12
+  s_6d88b46ce1e11f::t_b86f4390b5ac68 6-8
+apps/docs/src/components/copy-button.test.tsx
+  s_6d88b46ce1e11f::t_c20fcc5ff357e3 42-51,152,155,159-160,166-167,177,180,184,193,196
+  s_6d88b46ce1e11f::t_8c6768866bebac 204
+  s_6d88b46ce1e11f::t_583de61944b01a 2,60-61,65,69,73,77,81,85,92-104
+  s_6d88b46ce1e11f::t_447e668ffe7dd8 1,5-19,35-37,41,52-56,58-59,63,76,78,106,115-116,129,131,144-148,150-151,153-154,156-158,161-165,168-173,175-176,178-179,181-183,185-189,191-192,194-195,197-199,202-203,205-206
+  s_6d88b46ce1e11f::t_afe94066b70aa4 3-4,26-29,31-34,38,40,62,64,66-68,70-72,74-75,79-80,82-84,86-91,105,107-108,117-128,130,132-143,149,174,190,200
+  s_6d88b46ce1e11f::t_78ac5308643a47 20-25,30,39,57,109-114,201
+bun.lock
+  s_6d88b46ce1e11f::t_b5080a2230808c 47,583-586,645-646,755,833-834,1325-1326,1333-1334,1421-1422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "945eec53ae6303ae05beea1695d170478412698e",
+  "prompts": {},
+  "sessions": {
+    "s_6d88b46ce1e11f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f276b-1b37-73c0-a2fa-5e29e522ac53",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
