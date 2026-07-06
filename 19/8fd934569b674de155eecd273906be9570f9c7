@@ -1,0 +1,21 @@
+apps/docs/src/routes/index.tsx
+  s_6d88b46ce1e11f::t_560df3f8ba1012 28-39,176-178
+apps/docs/src/components/copy-button.tsx
+  s_6d88b46ce1e11f::t_480e4de9e82ed1 25-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "198fd934569b674de155eecd273906be9570f9c7",
+  "prompts": {},
+  "sessions": {
+    "s_6d88b46ce1e11f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f276b-1b37-73c0-a2fa-5e29e522ac53",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
