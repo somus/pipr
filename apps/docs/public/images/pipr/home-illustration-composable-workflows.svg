@@ -1,45 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="38 0 405 250" fill="none" role="img" aria-labelledby="title">
-  <title id="title">Composable workflows illustration</title>
-  <defs>
-    <filter id="soft-glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="7" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <radialGradient id="workflow-glow" cx="70%" cy="28%" r="55%"><stop stop-color="#b99cff" stop-opacity=".18"/><stop offset="1" stop-color="#b99cff" stop-opacity="0"/></radialGradient>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 198.4 122.5" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Runtime workflow grid illustration</title>
   <style>
-    svg{overflow:visible}
-    .line{fill:none;stroke:#f4f7f5;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    .thin{fill:none;stroke:#f4f7f5;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;opacity:.78}
-    .dash{fill:none;stroke:#f4f7f5;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:5 8;opacity:.72}
-    .tile{fill:rgba(255,255,255,.035);stroke:#f4f7f5;stroke-width:1.8}
-    .faint{opacity:.48}
-    .accent{fill:none;stroke:#b9ff21;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    .cyan{stroke:#22d8c3}
-    .purple{stroke:#d9c1ff}
-    .gold{stroke:#f6dd28}
-    .node{fill:#070b08;stroke:#b9ff21;stroke-width:2.2;filter:url(#soft-glow)}
+    .dash{stroke:#a595ba;stroke-width:.78;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:3.1 3.4}
+    .grid{stroke:#e3dfda;stroke-width:.82;stroke-linecap:round;stroke-linejoin:round}
+    .icon{stroke:#e3dfdc;stroke-width:.92;stroke-linecap:round;stroke-linejoin:round}
+    .soft{stroke:#c4b5d4;stroke-width:.82;stroke-linecap:round;stroke-linejoin:round}
+    .panel{fill:#2b233c;fill-opacity:.5;stroke:#e3dfda;stroke-width:.82}
+    .star-box{fill:#2a2137;fill-opacity:.62;stroke:#e3dfdc;stroke-width:.86}
   </style>
-  <g transform="translate(-36 0)">
-  <path d="M326 38H405c15 0 22 7 22 22v58H370" class="dash purple" opacity=".66"/>
-  <path d="M370 118h57v61c0 14-7 20-21 20h-82" class="dash purple" opacity=".66"/>
-  <g>
-    <rect x="82" y="86" width="288" height="116" rx="8" class="line"/>
-    <path d="M154 86v116M226 86v116M298 86v116M82 144h288" class="thin"/>
-    <g transform="translate(102 99) scale(1.3333333333333333)" color="#f7f7fb" ><path d="M17 8.5C17 5.73858 14.7614 3.5 12 3.5C9.23858 3.5 7 5.73858 7 8.5C7 11.2614 9.23858 13.5 12 13.5C14.7614 13.5 17 11.2614 17 8.5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M19 20.5C19 16.634 15.866 13.5 12 13.5C8.13401 13.5 5 16.634 5 20.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/></g>
-    <g transform="translate(174 99) scale(1.3333333333333333)" color="#f7f7fb" ><path d="M17 8L18.8398 9.85008C19.6133 10.6279 20 11.0168 20 11.5C20 11.9832 19.6133 12.3721 18.8398 13.1499L17 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M7 8L5.16019 9.85008C4.38673 10.6279 4 11.0168 4 11.5C4 11.9832 4.38673 12.3721 5.16019 13.1499L7 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M14.5 4L9.5 20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/></g>
-    <path d="M256.5 115H267.5M262 109.5V120.5" class="line" stroke="#f7faf7"/>
-    <g transform="translate(318 99) scale(1.3333333333333333)" color="#d9c1ff" ><path d="M18.7088 3.49534C16.8165 2.55382 14.5009 2 12 2C9.4991 2 7.1835 2.55382 5.29116 3.49534C4.36318 3.95706 3.89919 4.18792 3.4496 4.91378C3 5.63965 3 6.34248 3 7.74814V11.2371C3 16.9205 7.54236 20.0804 10.173 21.4338C10.9067 21.8113 11.2735 22 12 22C12.7265 22 13.0933 21.8113 13.8269 21.4338C16.4576 20.0804 21 16.9205 21 11.2371L21 7.74814C21 6.34249 21 5.63966 20.5504 4.91378C20.1008 4.18791 19.6368 3.95706 18.7088 3.49534Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/></g>
-    <g transform="translate(102 157) scale(1.3333333333333333)" color="#f7f7fb" ><path d="M3.5 9V14C3.5 17.7712 3.5 19.6569 4.67157 20.8284C5.84315 22 7.72876 22 11.5 22H12.5C16.2712 22 18.1569 22 19.3284 20.8284C20.5 19.6569 20.5 17.7712 20.5 14V10C20.5 6.22876 20.5 4.34315 19.3284 3.17157C18.1569 2 16.2712 2 12.5 2H12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M13.5 17H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M13.5 7H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M13.5 12H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M6.5 16.5C6.5 16.5 7.46758 16.7672 8 18C8 18 9 15 11 14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M10 5H3.5M10 5C10 4.15973 7.67332 2.58984 7.08333 2M10 5C10 5.84027 7.67331 7.41016 7.08333 8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/></g>
-    <path d="M184.5 173H195.5M190 167.5V178.5" class="line" stroke="#f7faf7"/>
-    <g transform="translate(246 157) scale(1.3333333333333333)" color="#f7f7fb" ><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.55"/><path d="M12 8V12L14 14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/></g>
-    <g transform="translate(318 157) scale(1.3333333333333333)" color="#f7f7fb" ><path d="M8 9V17" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M13 5V17" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M18 13V17" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/><path d="M3 3V13C3 16.7712 3 18.6569 4.17157 19.8284C5.34315 21 7.22876 21 11 21H21" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55"/></g>
-    <path d="M413 116H425M419 110V122" class="line" stroke="#f7faf7"/>
-    <g transform="rotate(7 421 54)">
-      <rect x="387" y="18" width="68" height="68" rx="9" fill="rgba(141,111,201,.28)" stroke="#f4f0ff" stroke-width="1.8"/>
-      <g transform="translate(405 36) scale(1.3333333333333333)" color="#d9c1ff" ><path d="M13.7276 3.44418L15.4874 6.99288C15.7274 7.48687 16.3673 7.9607 16.9073 8.05143L20.0969 8.58575C22.1367 8.92853 22.6167 10.4206 21.1468 11.8925L18.6671 14.3927C18.2471 14.8161 18.0172 15.6327 18.1471 16.2175L18.8571 19.3125C19.417 21.7623 18.1271 22.71 15.9774 21.4296L12.9877 19.6452C12.4478 19.3226 11.5579 19.3226 11.0079 19.6452L8.01827 21.4296C5.8785 22.71 4.57865 21.7522 5.13859 19.3125L5.84851 16.2175C5.97849 15.6327 5.74852 14.8161 5.32856 14.3927L2.84884 11.8925C1.389 10.4206 1.85895 8.92853 3.89872 8.58575L7.08837 8.05143C7.61831 7.9607 8.25824 7.48687 8.49821 6.99288L10.258 3.44418C11.2179 1.51861 12.7777 1.51861 13.7276 3.44418Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></g>
-    </g>
-    <path d="M452 20l8-9M460 32l13 2M442 17l1-14" class="line" opacity=".9"/>
+  <path class="grid" d="M75.1 51.8H7.4c-1.5 0-2.8 1.3-2.8 2.8v60.7c0 1.5 1.3 2.8 2.8 2.8h134.8c1.5 0 2.8-1.3 2.8-2.8V54.6c0-1.5-1.3-2.8-2.8-2.8h-32.6"/>
+  <path class="grid" d="M40.1 51.8v66.3M75.1 51.8v66.3M109.6 51.8v66.3M4.6 83.5H145"/>
+  <rect class="panel" x="109.6" y="51.8" width="35.4" height="31.7"/>
+
+  <path class="dash" d="M75.1 51.8h34.5"/>
+  <path class="dash" d="M90.5 51.8V31.4c0-1.7 1.4-3.1 3.1-3.1h55.5"/>
+  <path class="dash" d="M180.5 52v61.5c0 2.9-1.2 4.4-3.2 4.4H145"/>
+  <path class="dash" d="M145 83.5h35.5"/>
+
+  <path class="icon" d="M16.6 74v-1c0-2 1.5-3.5 3.4-3.5h3.9c1.9 0 3.5 1.6 3.5 3.5v1"/>
+  <circle class="icon" cx="21.9" cy="64.3" r="2.7"/>
+
+  <path class="icon" d="m54.3 64.2-3.6 3.4 3.3 3.2"/>
+  <path class="icon" d="m61.5 64.4 3.3 3.2-3.4 3.3"/>
+  <path class="icon" d="m56.7 71.2 2.2-7.1"/>
+
+  <path class="soft" d="M89.5 67.7h5.6M92.3 64.9v5.6"/>
+  <path class="soft" d="M159.3 67.7h6.2M162.4 64.9v5.6"/>
+  <path class="soft" d="M54.8 100.6h5.7M57.6 97.7v6"/>
+
+  <path class="soft" d="M133 63.2c-2.2-.1-4.8-1.8-5.7-2.5-.9.8-3.4 2.3-5.9 2.4v3.6c0 5.3 4 6.9 5.8 7.3 2.9-.9 5.8-3.1 5.8-7.3v-3.5Z"/>
+
+  <path class="icon" d="M18.8 95.2h10.5M18.8 101.1h10.4M18.8 106.6h10.4"/>
+  <circle class="icon" cx="15.3" cy="95.3" r=".8"/>
+  <circle class="icon" cx="15.3" cy="101.1" r=".8"/>
+  <circle class="icon" cx="15.3" cy="106.7" r=".8"/>
+
+  <path class="icon" d="M92.2 93.9v7.1h6.7c.1-3.5-2.7-7.2-6.7-7.1Z"/>
+  <path class="icon" d="M98.7 102.5c-.6 3-3.2 5.2-6.5 5.2-3.1 0-6.6-2.5-6.6-6.3.1-3.8 3.3-6.8 6.6-6.8"/>
+
+  <path class="icon" d="M121.5 107.3v-5.2h3.5v5.2M129 107.3v-9h3.9v9M120 107.4h14.8"/>
+  <path class="icon" d="M129 98.3h-3.9v9"/>
+  <path class="icon" d="M132.9 94.3v13.1"/>
+
+  <g transform="rotate(7 166.2 28.1)">
+    <rect class="star-box" x="150.2" y="11.7" width="31.2" height="31.2" rx="3"/>
+    <path class="soft" d="m166.2 20.2 2.4 4.8 5.3.8-3.9 3.8.9 5.3-4.7-2.5-4.7 2.5.9-5.3-3.8-3.8 5.3-.8 2.3-4.8Z"/>
   </g>
-  </g>
+  <path class="icon" d="m186.3 4.3-.6 4.3M193.2 7.7l-4.3 2.9M194.1 14.4l-3.9-.4"/>
 </svg>

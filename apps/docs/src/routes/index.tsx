@@ -145,6 +145,9 @@ function Hero() {
       <p className="pipr-heading pipr-text-pretty mt-8 max-w-2xl text-xl font-semibold leading-8 tracking-normal text-fd-foreground sm:text-2xl sm:leading-9">
         Composable review workflows, one output.
       </p>
+      <p className="mt-4 max-w-2xl font-mono text-xs leading-5 text-fd-muted-foreground">
+        Platform support: GitHub pull requests only today; other code hosts coming soon.
+      </p>
     </header>
   );
 }
