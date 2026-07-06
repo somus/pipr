@@ -3,7 +3,7 @@
 import { Copy01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import copyToClipboard from "copy-to-clipboard";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type CopyButtonProps = {
   copyText: string;
@@ -18,16 +18,36 @@ const baseButtonClass =
 export function CopyButton({ copyText, label, ariaLabel, className }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const resetTimer = useRef<number | null>(null);
+  const mounted = useRef(true);
   const buttonClass = [baseButtonClass, className].filter(Boolean).join(" ");
 
-  function handleCopy() {
-    if (!copyToClipboard(copyText)) {
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+
+      if (resetTimer.current !== null) {
+        window.clearTimeout(resetTimer.current);
+        resetTimer.current = null;
+      }
+    };
+  }, []);
+
+  async function handleCopy() {
+    let copiedToClipboard = false;
+
+    try {
+      copiedToClipboard = await copyToClipboard(copyText);
+    } catch {
+      copiedToClipboard = false;
+    }
+
+    if (!copiedToClipboard || !mounted.current) {
       return;
     }
 
     setCopied(true);
 
-    if (resetTimer.current) {
+    if (resetTimer.current !== null) {
       window.clearTimeout(resetTimer.current);
     }
 
@@ -48,6 +68,9 @@ export function CopyButton({ copyText, label, ariaLabel, className }: CopyButton
     >
       <HugeiconsIcon icon={Copy01Icon} size={14} strokeWidth={1.8} aria-hidden="true" />
       <span data-copy-label>{copied ? "Copied" : label}</span>
+      <span role="status" aria-live="polite" className="sr-only">
+        {copied ? `${label} copied` : ""}
+      </span>
     </button>
   );
 }
