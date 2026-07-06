@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { Window as HappyWindow } from "happy-dom";
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 let copyResult = true;
@@ -202,5 +202,30 @@ describe("CopyButton", () => {
     });
 
     expect(clearedTimer).toBe(0);
+  });
+
+  it("copies after StrictMode effect remounts", async () => {
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <CopyButton copyText="pipr init" label="Copy" />
+        </StrictMode>,
+      );
+    });
+
+    const button = getButton();
+
+    await act(async () => {
+      button.click();
+    });
+
+    expect(copyCalls).toEqual(["pipr init"]);
+    expect(button.querySelector("[data-copy-label]")?.textContent).toBe("Copied");
+
+    await act(async () => {
+      timeoutCallback?.();
+    });
+
+    expect(button.querySelector("[data-copy-label]")?.textContent).toBe("Copy");
   });
 });
