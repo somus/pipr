@@ -22,6 +22,8 @@ export function CopyButton({ copyText, label, ariaLabel, className }: CopyButton
   const buttonClass = [baseButtonClass, className].filter(Boolean).join(" ");
 
   useEffect(() => {
+    mounted.current = true;
+
     return () => {
       mounted.current = false;
 

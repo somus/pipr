@@ -25,8 +25,18 @@ type ConceptCard = {
   imageClassName: string;
 };
 
-const installCommand = `curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh
-pipr init`;
+const installCommandLines = [
+  {
+    id: "install",
+    command: "curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh",
+  },
+  {
+    id: "init",
+    command: "pipr init",
+  },
+];
+
+const installCommand = installCommandLines.map((line) => line.command).join("\n");
 
 const agentPrompt =
   "Install and configure Pipr in this repository. Install the CLI with `curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh`, then run `pipr skill` and use the bundled `pipr-setup` skill. Interview me only for missing choices, run `pipr init`, customize `.pipr/config.ts` only as needed, and verify with `pipr inspect` and `pipr check`.";
@@ -163,9 +173,9 @@ function InstallPanel() {
           </div>
           <pre className="pipr-command-scrollbar mt-4 max-w-full overflow-x-auto whitespace-pre font-mono text-sm leading-7 text-fd-secondary-foreground">
             <code>
-              {installCommand.split("\n").map((line) => (
-                <span key={line} className="block">
-                  <span className="text-fd-primary">$</span> {line}
+              {installCommandLines.map((line) => (
+                <span key={line.id} className="block">
+                  <span className="text-fd-primary">$</span> {line.command}
                 </span>
               ))}
             </code>
