@@ -12,12 +12,13 @@ const fallbackCase = deterministicCases[0];
 assert(fallbackCase, "missing deterministic prompt eval case");
 
 const previousPiExecutable = process.env.PIPR_EVAL_PI_EXECUTABLE;
+const deterministicPiExecutable = previousPiExecutable ?? fakePiPath;
 try {
   delete process.env.PIPR_EVAL_PI_EXECUTABLE;
   const packagedOutput = await runPiprEvalCase(fallbackCase, { mode: "deterministic" });
   assert(packagedOutput.ok, `${fallbackCase.id}: packaged fake Pi should run`);
 
-  process.env.PIPR_EVAL_PI_EXECUTABLE = fakePiPath;
+  process.env.PIPR_EVAL_PI_EXECUTABLE = deterministicPiExecutable;
   const envOverrideOutput = await runPiprEvalCase(fallbackCase, { mode: "deterministic" });
   assert(envOverrideOutput.ok, `${fallbackCase.id}: fake Pi override should run`);
 } finally {
@@ -31,7 +32,7 @@ try {
 for (const testCase of deterministicCases) {
   const output = await runPiprEvalCase(testCase, {
     mode: "deterministic",
-    piExecutable: fakePiPath,
+    piExecutable: deterministicPiExecutable,
   });
   assert(output.ok, `${testCase.id}: ${output.error ?? "review failed"}`);
 

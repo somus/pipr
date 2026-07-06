@@ -59,7 +59,11 @@ export function scoreFalsePositiveSuppression(
     return 0;
   }
   if (expected.findings.length > 0) {
-    return 1;
+    return Number(
+      output.inlineFindings.every((actual) =>
+        expected.findings.some((finding) => expectedFindingMatches(finding, actual)),
+      ),
+    );
   }
   return Number(
     [output.inlineFindings.length === 0, output.droppedFindings.length === 0].every(Boolean),
@@ -147,6 +151,9 @@ export function scoreFindingCountBudget(
   output: PiprEvalOutput,
   expected: PiprEvalExpected | undefined,
 ): number {
+  if (!output.ok) {
+    return 0;
+  }
   return expected && output.inlineFindings.length <= expected.maxInlineFindings ? 1 : 0;
 }
 
