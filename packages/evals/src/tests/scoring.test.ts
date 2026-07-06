@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { EvalInlineFinding, PiprEvalOutput } from "../runner.js";
 import {
+  scoreFindingCountBudget,
   scoreForbiddenOutputSuppression,
   scoreInlineFindingBodyBudget,
   scoreSuggestedFixRangeShape,
@@ -86,5 +87,9 @@ describe("prompt eval scoring", () => {
         publicationInlineFindings: [finding],
       }),
     ).toBe(0);
+  });
+
+  it("passes finding count budget when no expected budget is configured", () => {
+    expect(scoreFindingCountBudget(output, undefined)).toBe(1);
   });
 });

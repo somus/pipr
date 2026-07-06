@@ -155,7 +155,10 @@ export function scoreFindingCountBudget(
   if (!output.ok) {
     return 0;
   }
-  return expected && output.inlineFindings.length <= expected.maxInlineFindings ? 1 : 0;
+  if (!expected) {
+    return 1;
+  }
+  return output.inlineFindings.length <= expected.maxInlineFindings ? 1 : 0;
 }
 
 function scorePromptPolicy(output: PiprEvalOutput, expected: PiprEvalExpected | undefined): number {
