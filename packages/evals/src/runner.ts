@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as z from "zod";
 import type { PiprEvalCase } from "./cases.js";
+import { evalReviewEnv, evalSubprocessEnv } from "./env.js";
 
 type PiprEvalRunMode = "live" | "deterministic";
 
@@ -108,6 +109,7 @@ async function runPreparedFixture(
   assertRunOptions(runOptions);
   const { baseSha, headSha } = await prepareFixture(rootDir, testCase);
   const result = runLocalReview(rootDir, baseSha, headSha, {
+    mode: runOptions.mode,
     callsDir,
     piExecutable: runOptions.piExecutable,
   });
@@ -273,7 +275,7 @@ function run(command: string, args: string[], cwd: string): string {
   const result = spawnSync(command, args, {
     cwd,
     encoding: "buffer",
-    env: process.env,
+    env: evalSubprocessEnv(),
   });
   if (result.status !== 0) {
     const stderr = textDecoder.decode(result.stderr).trim();
@@ -286,10 +288,10 @@ function runLocalReview(
   rootDir: string,
   baseSha: string,
   headSha: string,
-  options: { piExecutable?: string; callsDir?: string },
+  options: { mode: PiprEvalRunMode; piExecutable?: string; callsDir?: string },
 ): LocalReviewEvalJson {
   const helperPath = path.join(sourceDir, "run-local-review.ts");
-  const output = run(
+  const result = spawnSync(
     "bun",
     [
       helperPath,
@@ -301,8 +303,17 @@ function runLocalReview(
         callsDir: options.callsDir,
       }),
     ],
-    rootDir,
+    {
+      cwd: rootDir,
+      encoding: "buffer",
+      env: evalReviewEnv({ mode: options.mode }),
+    },
   );
+  if (result.status !== 0) {
+    const stderr = textDecoder.decode(result.stderr).trim();
+    throw new Error(`bun ${helperPath} failed with exit ${result.status}: ${stderr}`);
+  }
+  const output = textDecoder.decode(result.stdout);
   return localReviewEvalJsonSchema.parse(JSON.parse(output));
 }
 

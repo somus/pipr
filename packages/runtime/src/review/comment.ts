@@ -170,15 +170,15 @@ export function prepareInlinePublicationItems(options: {
           `Validated finding range '${finding.rangeId}' is missing from Diff Manifest`,
         );
       }
-      const findingId = findingIdFor(finding, options.reviewState);
-      const stateRecord = options.reviewState
-        ? matchFindingRecord(options.reviewState, finding)
-        : undefined;
       const findingWithBody = findingWithPublishableBody(finding);
       if (!findingWithBody) {
         return [];
       }
       const publishableFinding = findingWithPublishableSuggestedFix(findingWithBody, range);
+      const findingId = findingIdFor(publishableFinding, options.reviewState);
+      const stateRecord = options.reviewState
+        ? matchFindingRecord(options.reviewState, publishableFinding)
+        : undefined;
       if (
         seenFindingIds.has(findingId) ||
         stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha

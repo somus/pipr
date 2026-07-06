@@ -237,6 +237,44 @@ describe("comments", () => {
     expect(item?.body).not.toContain("```suggestion");
   });
 
+  it("uses publishable inline finding bodies for marker IDs and review state", () => {
+    const rawFinding = {
+      ...finding,
+      body: "The literal pipr_eval_secret_do_not_repeat_12345 should not be repeated.",
+      suggestedFix: 'const apiKey = "pipr_eval_secret_do_not_repeat_12345";',
+    };
+    const [item] = prepareInlinePublicationItems({
+      validated: { validFindings: [rawFinding] },
+      manifest,
+      reviewedHeadSha: "head",
+    });
+    if (!item) {
+      throw new Error("test fixture missing inline item");
+    }
+    const plan = buildPublicationPlan({
+      event,
+      main: "Summary.",
+      inlineItems: [item],
+      metadata: metadata(),
+    });
+    const state = extractPriorReviewState(plan.mainComment, 1);
+    if (!state) {
+      throw new Error("test fixture missing review state");
+    }
+    const markedState = applyInlineFindingMarkers(state, [item.body]);
+
+    expect(state.findings[0]?.id).toBe(item.findingId);
+    expect(markedState.findings[0]?.lastCommentedHeadSha).toBe("head");
+    expect(
+      prepareInlinePublicationItems({
+        validated: { validFindings: [rawFinding] },
+        manifest,
+        reviewedHeadSha: "head",
+        reviewState: markedState,
+      }),
+    ).toHaveLength(0);
+  });
+
   it("skips inline drafts when body normalization leaves no publishable text", () => {
     const items = prepareInlinePublicationItems({
       validated: {

@@ -24,7 +24,7 @@ const result = await runLocalReviewCommand({
   baseSha: input.baseSha,
   headSha: input.headSha,
   piExecutable,
-  env: input.callsDir ? deterministicEnv() : process.env,
+  env: process.env,
 });
 
 console.log(
@@ -84,11 +84,4 @@ process.exit(await proc.exited);
   );
   await chmod(wrapperPath, 0o700);
   return wrapperPath;
-}
-
-function deterministicEnv(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    DEEPSEEK_API_KEY: "pipr-eval-dummy-key",
-  };
 }

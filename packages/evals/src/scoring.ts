@@ -183,7 +183,7 @@ function isTightSuggestedFixSelection(
 ): boolean {
   const replacement = finding.suggestedFix ? normalizedLines(finding.suggestedFix) : [];
   const selected = selectedSuggestedFixPreview(finding, ranges);
-  return selectedSelectionIsTight(selected, replacement);
+  return !selected || !keepsUnchangedSelectionBoundary(selected, replacement);
 }
 
 function selectedSuggestedFixPreview(
@@ -195,13 +195,6 @@ function selectedSuggestedFixPreview(
     return undefined;
   }
   return selectedPreviewLines(range, finding);
-}
-
-function selectedSelectionIsTight(selected: string[] | undefined, replacement: string[]): boolean {
-  if (!selected) {
-    return true;
-  }
-  return !keepsUnchangedSelectionBoundary(selected, replacement);
 }
 
 function selectedPreviewLines(
