@@ -2,6 +2,7 @@ import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
 import { resolveProvider } from "../review/agent/review-run.js";
 import { isPiprThreadActionReplyBody } from "../review/prior-state.js";
+import { stableReviewRunId } from "../review/run-identity.js";
 import { runInternalVerifier } from "../review/verifier.js";
 import type { RuntimeActionLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
@@ -198,6 +199,17 @@ async function runReviewCommentVerifier(
       },
       respondWhenStillValid: config.publication.autoResolve.userReplies.respondWhenStillValid,
     },
+    runId: stableReviewRunId({
+      event,
+      selectedTasks: ["pipr-internal-verifier"],
+      trustedConfigSha: trustedRuntime.trustedConfigSha,
+      trustedConfigHash: trustedRuntime.trustedConfigHash,
+      verifierInvocation: {
+        mode: "user-reply",
+        commentId: reply.commentId,
+        parentCommentId: reply.parentCommentId,
+      },
+    }),
   });
   return result;
 }

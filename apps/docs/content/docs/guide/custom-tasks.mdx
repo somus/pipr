@@ -3,9 +3,28 @@ title: "Custom Tasks"
 description: "Build custom Review Tasks with Diff Manifest reads, Pi calls, review state, comments, and checks."
 ---
 
-Use custom tasks when `pipr.review(...)` is too small for the workflow. Common reasons include multiple Pi calls, command-specific input, custom schemas, extra checks, custom logging, or a main-comment-only task.
+Custom tasks are how you build your own review workflows on the Pipr core. A task is a plain async function: you gather context, call Pi agents, and emit one output. Pipr keeps owning the hard parts — the Diff Manifest, Pi execution, finding validation, and publishing — so a task stays a short piece of orchestration code, not a review engine.
+
+Use a custom task when `pipr.review(...)` is too small for the workflow. Common reasons include multiple Pi calls, command-specific input, custom schemas, extra checks, custom logging, or a main-comment-only task.
+
+## Building blocks
+
+### Config blocks
+
+A workflow composes four pieces, all registered in `.pipr/config.ts`:
+
+| Block | Builder | Job |
+| --- | --- | --- |
+| Model | `pipr.model(...)` | Provider, model name, API key env var, options. |
+| Agent | `pipr.agent(...)` | Instructions, typed output schema, optional tools. |
+| Task | `pipr.task(...)` | Orchestration: read the diff, run agents, emit output. |
+| Entrypoint | `pipr.on.changeRequest(...)` or `pipr.command(...)` | When the task runs. |
+
+Every recipe in [Recipes](/docs/recipes) is these same blocks arranged differently, so any recipe page doubles as a worked example for this guide.
 
 ## Task shape
+
+### Example task
 
 ```ts twoslash
 // @include: pipr-security-agent
@@ -30,15 +49,21 @@ const task = pipr.task({
 });
 ```
 
+### One final output
+
 A selected Review Task must emit exactly one final output:
 
 - `ctx.comment(markdown)`
 - `ctx.comment({ main, inlineFindings })`
 - `ctx.command.reply(markdown)` for command response workflows
 
+### Publication boundary
+
 Do not call GitHub APIs from task code. Pipr owns publication.
 
 ## Task context
+
+### Context object
 
 Task handlers receive provider-neutral context:
 
@@ -57,6 +82,8 @@ const run = async (ctx: TaskContext, input: unknown) => {
 };
 ```
 
+### Important methods
+
 Important methods:
 
 | Method | Use |
@@ -72,6 +99,8 @@ Important methods:
 
 ## Diff Manifest first
 
+### Build changed-code context
+
 The Diff Manifest is the authoritative model of changed files and valid inline ranges:
 
 ```ts twoslash
@@ -85,13 +114,19 @@ const manifest = await ctx.change.diffManifest({
 });
 ```
 
+### Pass manifest to Pi
+
 Pass the manifest into Pi with the reserved `manifest` input key. Pipr injects full or condensed manifest content into the prompt and attaches bounded Diff Read Tools when the manifest is condensed. Do not also interpolate the manifest in the agent prompt. Omit `manifest` for aggregator or log-only agents that do not need changed-code context.
+
+### Path scope
 
 Keep stable agent behavior in `instructions`. Put the data and request for one `ctx.pi.run(...)` call in the agent `prompt`.
 
 Path scope filters the manifest. When a task passes the scoped `result.inlineFindings` array directly to `ctx.comment(...)`, Pipr drops findings outside that scope. If the task maps, spreads, or clones the findings first, Pipr treats them as task-authored output and applies normal Diff Manifest range validation. Pi still has read-only workspace access for broader context.
 
 ## Agent outputs
+
+### Review schema
 
 Use `pipr.schemas.review` for agents that directly produce publishable review output:
 
@@ -107,6 +142,8 @@ const securityAgent = pipr.agent({
   `,
 });
 ```
+
+### Intermediate schemas
 
 Use custom schemas for intermediate analysis:
 
@@ -125,6 +162,8 @@ Map custom output into `ctx.comment(...)` yourself.
 
 ## Prior review state
 
+### Read prior state
+
 Use prior state when a task should avoid repeating known findings:
 
 ```ts twoslash
@@ -133,9 +172,13 @@ const prior = await ctx.review.prior();
 const result = await ctx.pi.run(reviewer, { manifest, prior });
 ```
 
+### Prior fields
+
 Prior state includes previous inline finding ids, status, path, range id, side, and lines for the same task scope. Pipr also passes matching open prior locations to default review agents.
 
 ## Checks
+
+### Branch protection checks
 
 Task checks let branch protection track review status:
 
@@ -154,6 +197,8 @@ const task = pipr.task({
 Use checks for merge gates. Use comments for reviewer-facing detail.
 
 ## Command input
+
+### Typed command args
 
 Commands can parse arguments into typed task input:
 
@@ -175,6 +220,8 @@ pipr.command({
 ```
 
 ## Task design rules
+
+### Review task rules
 
 - Keep task code deterministic around selection, path scope, and output mapping.
 - Let Pi analyze code; let Pipr validate findings and publish.

@@ -190,6 +190,7 @@ async function dispatchIssueCommentCommand(
       name: parsedResolution.invocation.commandName,
       line: parsedResolution.invocation.line,
       arguments: parsedResolution.invocation.arguments,
+      sourceCommentId: prepared.comment.commentId,
     },
     log,
   });

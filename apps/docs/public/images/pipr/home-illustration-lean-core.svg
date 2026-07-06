@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 159.4 121.7" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Config workflow orbit illustration</title>
+  <style>
+    .orbit{stroke:#9d9e9f;stroke-width:.65;stroke-linecap:round;stroke-dasharray:1.1 3.2;opacity:.86}
+    .core{stroke:#eeeeee;stroke-width:1.05;stroke-linecap:round;stroke-linejoin:round}
+    .thin{stroke:#96cc8c;stroke-width:.72;opacity:.42}
+    .tile{stroke:#eeeeee;stroke-width:.9;stroke-linejoin:round}
+    .line{stroke:#eeeeee;stroke-width:.95;stroke-linecap:round;stroke-linejoin:round}
+    .node{stroke:#96cc32;stroke-width:.85}
+    .accent{stroke:#96ff1d;stroke-width:1.15;stroke-linecap:round;stroke-linejoin:round}
+    .green{stroke:#5de53a}
+    .icon{stroke:#ebebeb;stroke-width:.95;stroke-linecap:round;stroke-linejoin:round}
+  </style>
+  <circle class="orbit" cx="79.7" cy="61" r="49.8"/>
+  <circle class="core" cx="79.7" cy="61" r="30.9"/>
+  <circle class="thin" cx="79.7" cy="61" r="21.8"/>
+  <polygon class="accent green" points="79.7 51.4 88 56.2 88 65.8 79.7 70.6 71.4 65.8 71.4 56.2"/>
+
+  <path class="line" d="M39.5 35.9 54 45"/>
+  <path class="line" d="M105.6 45 120.2 35.7"/>
+  <path class="line" d="M39.6 85.3 53.2 77.2"/>
+  <path class="line" d="M105.8 77 120.2 85.2"/>
+
+  <circle class="node" cx="38" cy="35.1" r="1.75"/>
+  <circle class="node" cx="37.9" cy="86.1" r="1.75"/>
+  <circle class="node" cx="121.7" cy="35.1" r="1.75"/>
+  <circle class="node" cx="121.6" cy="86.2" r="1.75"/>
+
+  <rect class="tile" x="4.8" y="4.8" width="29.8" height="29.7" rx="2.8"/>
+  <rect class="tile" x="124.6" y="4.8" width="30.1" height="29.7" rx="2.8"/>
+  <rect class="tile" x="4.8" y="86.6" width="29.8" height="30.2" rx="2.8"/>
+  <rect class="tile" x="124.6" y="86.6" width="30.1" height="30.2" rx="2.8"/>
+
+  <path class="icon" d="M21.1 12.5h-6.4c-.6 0-1 .4-1 1v12.2c0 .5.4.9.9.9h9.8c.5 0 .9-.4.9-.9v-9.3l-4.2-3.9Z"/>
+  <path class="icon" d="M20.9 12.5v3.7h4"/>
+  <path class="accent green" d="M16.5 19.9h6"/>
+  <path class="accent" d="M16.5 22.8h6"/>
+
+  <path class="icon" d="M136.5 14.2 145 19.7c.5.3.5.7 0 1l-8.2 4.8c-.5.3-.9.1-.9-.5V14.8c0-.6.2-.8.6-.6Z"/>
+
+  <rect class="icon" x="13.5" y="96" width="11.7" height="11.1" rx=".9"/>
+  <path class="icon" d="m16.3 101.5 2.2 2 4-4.2"/>
+
+  <path class="icon" d="M133.9 101.3v5.7c0 .6.4.9.9.9h9.9c.5 0 .9-.3.9-.9v-5.7"/>
+  <path class="icon" d="m136.8 97.9 3.2-2.9 3 2.9"/>
+  <path class="icon" d="M140 95.3v8.6"/>
+</svg>

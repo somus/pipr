@@ -34,11 +34,11 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
-      <body className="flex flex-col min-h-screen">
+      <body className="flex min-h-screen flex-col bg-fd-background text-fd-foreground">
         <RootProvider search={{ SearchDialog }}>
           <Outlet />
         </RootProvider>

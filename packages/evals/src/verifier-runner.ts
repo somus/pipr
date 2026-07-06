@@ -130,6 +130,7 @@ export async function runVerifierEvalCase(testCase: VerifierEvalCase): Promise<V
       diffManifest,
       priorReviewState,
       threadContexts: [threadContext(testCase)],
+      runId: `pipr-eval-${testCase.id}`,
       piRunner: async (run) => {
         piCalls.push({
           model: run.provider.model,

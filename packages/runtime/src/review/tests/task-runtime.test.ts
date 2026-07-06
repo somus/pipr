@@ -131,6 +131,134 @@ describe("runTaskRuntime", () => {
     expect(observedInput).toEqual({ finding: "FND-123" });
   });
 
+  it("uses one stable run id for task, agent prompt, and custom tool contexts", async () => {
+    let taskRunId: string | undefined;
+    let promptRunId: string | undefined;
+    let toolRunId: string | undefined;
+    const plan = testPlan((pipr) => {
+      const customTool = pipr.tool({
+        name: "custom_tool",
+        description: "Store reviewer memory.",
+        input: pipr.schemas.summary,
+        output: pipr.schemas.summary,
+        async run({ ctx, input }) {
+          toolRunId = ctx.run.id;
+          return input;
+        },
+      });
+      const agent = defaultReviewAgent(pipr, {
+        tools: [customTool],
+        prompt(_input, context) {
+          promptRunId = context.runId;
+          return "Review.";
+        },
+      });
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          taskRunId = ctx.run.id;
+          const result = await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+
+    await runRuntime({
+      plan,
+      piRunner: async (options) => {
+        await options.customTools?.tools[0]?.execute(options.customTools.context, {
+          body: "Remember this.",
+        });
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(taskRunId).toEqual(expect.any(String));
+    expect(promptRunId).toBe(taskRunId);
+    expect(toolRunId).toBe(taskRunId);
+  });
+
+  it("derives stable run id from review identity inputs", async () => {
+    const plan = observingRunIdPlan("review");
+    const first = await observeRunId({ plan });
+    const second = await observeRunId({ plan });
+    const changedHead = await observeRunId({
+      plan,
+      event: eventContext({ headSha: "new-head" }),
+      diffManifestBuilder: manifestBuilder({ ...reviewTestManifest(), headSha: "new-head" }),
+    });
+    const changedBase = await observeRunId({
+      plan,
+      event: eventContext({ baseSha: "new-base" }),
+      diffManifestBuilder: manifestBuilder({
+        ...reviewTestManifest(),
+        baseSha: "new-base",
+        mergeBaseSha: "new-base",
+      }),
+    });
+    const changedTask = await observeRunId({ plan: observingRunIdPlan("security") });
+    const changedConfig = await observeRunId({ plan, trustedConfigHash: "new-config-hash" });
+    const changedConfigSha = await observeRunId({ plan, trustedConfigSha: "new-config-sha" });
+    const commandPlan = observingCommandRunIdPlan();
+    const command = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: askCommandInvocation(),
+    });
+    const changedCommand = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: {
+        ...askCommandInvocation(),
+        line: "@pipr ask why?",
+        arguments: { question: "why?" },
+      },
+    });
+    const commandArguments = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: {
+        ...askCommandInvocation(),
+        arguments: { beta: "2", alpha: "1" },
+      },
+    });
+    const reorderedCommandArguments = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: {
+        ...askCommandInvocation(),
+        arguments: { alpha: "1", beta: "2" },
+      },
+    });
+    const localeSensitiveCommandArguments = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: {
+        ...askCommandInvocation(),
+        arguments: { ä: "umlaut", z: "letter" },
+      },
+    });
+    const changedCommandSource = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: { ...askCommandInvocation(), sourceCommentId: 456 },
+    });
+
+    expect(first).toBe(second);
+    expect(changedHead).not.toBe(first);
+    expect(changedBase).not.toBe(first);
+    expect(changedTask).not.toBe(first);
+    expect(changedConfig).not.toBe(first);
+    expect(changedConfigSha).not.toBe(first);
+    expect(changedCommand).not.toBe(command);
+    expect(commandArguments).toBe(reorderedCommandArguments);
+    expect(localeSensitiveCommandArguments).toBe(
+      expectedCodeUnitSortedCommandRunId({ z: "letter", ä: "umlaut" }),
+    );
+    expect(changedCommandSource).not.toBe(command);
+  });
+
   it("rejects multiple final comments across selected tasks", async () => {
     const plan = testPlan((pipr) => {
       const slow = pipr.task({
@@ -1491,7 +1619,14 @@ describe("runTaskRuntime", () => {
 });
 
 function eventContext(
-  options: { action?: string; rawAction?: string; title?: string; description?: string } = {},
+  options: {
+    action?: string;
+    rawAction?: string;
+    title?: string;
+    description?: string;
+    baseSha?: string;
+    headSha?: string;
+  } = {},
 ) {
   return {
     eventName: "pull_request",
@@ -1503,8 +1638,8 @@ function eventContext(
       number: 1,
       title: options.title ?? "PR title",
       description: options.description ?? "PR body",
-      base: { sha: "base" },
-      head: { sha: "head" },
+      base: { sha: options.baseSha ?? "base" },
+      head: { sha: options.headSha ?? "head" },
     },
     workspace: process.cwd(),
   };
@@ -1548,6 +1683,21 @@ function commandTaskPlan(run: Parameters<PiprApi["task"]>[0]["run"]) {
   return testPlan((pipr) => {
     const task = pipr.task({ name: "ask", run });
     pipr.command({ pattern: "@pipr ask <question...>", permission: "read", task });
+  });
+}
+
+function observingRunIdPlan(taskName: string) {
+  return singleTaskPlan({
+    name: taskName,
+    async run(ctx) {
+      await ctx.comment(ctx.run.id);
+    },
+  });
+}
+
+function observingCommandRunIdPlan() {
+  return commandTaskPlan(async (ctx) => {
+    await ctx.comment(ctx.run.id);
   });
 }
 
@@ -1768,12 +1918,51 @@ async function runRuntime(options: RunRuntimeOptions): Promise<ReviewRuntimeResu
   });
 }
 
+async function observeRunId(options: RunRuntimeOptions): Promise<string> {
+  const result = await runRuntime(options);
+  const markerEnd = result.mainComment.indexOf("\n\n# Pipr Review");
+  if (markerEnd < 0) {
+    throw new Error("test fixture missing main comment marker");
+  }
+  return result.mainComment.slice(markerEnd).replace("# Pipr Review", "").trim();
+}
+
 function askCommandInvocation(): NonNullable<RunTaskRuntimeOptions["commandInvocation"]> {
   return {
     name: "ask",
     line: "@pipr ask what changed?",
     arguments: { question: "what changed?" },
+    sourceCommentId: 123,
   };
+}
+
+function expectedCodeUnitSortedCommandRunId(commandArguments: Record<string, string>): string {
+  const event = eventContext();
+  const command = askCommandInvocation();
+  const hash = new Bun.CryptoHasher("sha256")
+    .update(
+      JSON.stringify({
+        platform: event.platform.id,
+        repository: event.repository.slug,
+        changeNumber: event.change.number,
+        baseSha: event.change.base.sha,
+        headSha: event.change.head.sha,
+        selectedTasks: ["ask"],
+        command: {
+          name: command.name,
+          line: command.line,
+          arguments: Object.fromEntries(
+            Object.entries(commandArguments).sort(([left], [right]) =>
+              left < right ? -1 : left > right ? 1 : 0,
+            ),
+          ),
+          sourceCommentId: command.sourceCommentId,
+        },
+      }),
+    )
+    .digest("hex")
+    .slice(0, 24);
+  return `pipr-${hash}`;
 }
 
 function manifestBuilder(manifest: DiffManifest = reviewTestManifest()) {

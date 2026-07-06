@@ -7,6 +7,8 @@ Pipr is designed around the assumption that pull request code can be untrusted. 
 
 ## Run mode boundaries
 
+### Boundary matrix
+
 Each run mode uses a different source for config, diff data, secrets, and writes.
 
 | Boundary | Local review | GitHub Action pull request run | GitHub command run |
@@ -20,6 +22,8 @@ Each run mode uses a different source for config, diff data, secrets, and writes
 
 ## Trusted base config
 
+### Pull request run order
+
 For GitHub Action pull request runs:
 
 1. Pipr loads `.pipr/config.ts` and local imports from the base commit.
@@ -32,6 +36,8 @@ Pull request changes to `.pipr/config.ts` are reviewed as code. They do not chan
 
 ## Secrets
 
+### Provider env var
+
 Use `pipr.secret(...)` for provider keys:
 
 ```ts twoslash
@@ -43,6 +49,8 @@ const model = pipr.model({
 });
 ```
 
+### Action environment
+
 The config stores the env var name, not the secret value. The Action receives the value from GitHub Actions secrets:
 
 ```yaml
@@ -50,11 +58,17 @@ env:
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
+### Secret hygiene
+
 Do not put raw provider keys, tokens, or private data in `.pipr/config.ts`, schema descriptions, prompt examples, or generated docs.
 
 ## Pi workspace
 
+### Read-only tools
+
 Pi runs with a read-only workspace copy. The runtime passes only read-only built-in tools plus Pipr-owned Diff Read Tools for condensed manifest runs.
+
+### Bounded diff reads
 
 Diff Read Tools expose bounded reads over:
 
@@ -67,7 +81,11 @@ They do not expose arbitrary shell access or write access.
 
 ## Publication safety
 
+### Stale head check
+
 Before publishing, Pipr checks the current pull request head SHA. If the head changed after review execution, publication stops before writes.
+
+### Publication plan
 
 Review Tasks do not call code host APIs directly. They emit final output, then Pipr:
 
@@ -80,11 +98,17 @@ Review Tasks do not call code host APIs directly. They emit final output, then P
 
 ## Forks
 
+### Secret availability
+
 Forked pull requests follow GitHub's secret availability rules. If a required provider secret is unavailable, Pipr fails before Pi execution.
+
+### Base config on forks
 
 The base config rule still applies for forks. Fork-authored config changes are visible in the diff but do not change the running task policy.
 
 ## Command permissions
+
+### Permission ladder
 
 Commands have provider-neutral permissions:
 
@@ -95,6 +119,8 @@ read < triage < write < maintain < admin
 The GitHub adapter maps repository permission to these levels before a command task runs. Keep commands that inspect sensitive context at `write` or higher.
 
 ## Sensitive prompt content
+
+### Model-visible fields
 
 Schema metadata and prompt text can be shown to the model. Do not place secrets or private operational notes in:
 

@@ -9,6 +9,8 @@ Use this page for the end-to-end flow. Use [Comments and Findings](/docs/guide/c
 
 ## Run modes
 
+### Mode matrix
+
 | Mode | Command or trigger | Publishes comments |
 | --- | --- | --- |
 | Change request event | GitHub `pull_request` event through `pipr action` | Yes |
@@ -18,9 +20,13 @@ Use this page for the end-to-end flow. Use [Comments and Findings](/docs/guide/c
 
 Local review uses the local code host adapter. It builds the same Diff Manifest and executes every unique change-request task that is not marked `local: false`, but publication is disabled.
 
+### Local review
+
 See [Local Runs](/docs/guide/local-runs) for local command examples.
 
 ## Change request context
+
+### Task context shape
 
 Runtime tasks receive provider-neutral context:
 
@@ -60,6 +66,8 @@ type TaskContext = {
 
 ## Trust model
 
+### Pull request run order
+
 For GitHub Action pull request runs:
 
 1. Pipr loads `.pipr/config.ts` and local imports from the base commit.
@@ -70,9 +78,13 @@ For GitHub Action pull request runs:
 
 This keeps model choice, API-key env names, task registration, command permissions, and publication policy out of untrusted pull request code.
 
+### Trusted policy
+
 See [Trust and Security](/docs/guide/trust-security) for a focused breakdown.
 
 ## Runtime flow
+
+### Execution pipeline
 
 ```text
 code host event
@@ -87,9 +99,13 @@ code host event
   -> adapter publishes native comments
 ```
 
+### Adapter boundary
+
 Core runtime never calls GitHub APIs directly. It receives a `ChangeRequestEventContext` and delegates provider-specific reads and writes to the active adapter.
 
 ## Diff Manifest
+
+### Build manifest
 
 The Diff Manifest is the source of truth for changed files and commentable ranges:
 
@@ -104,6 +120,8 @@ const manifest = await ctx.change.diffManifest({
   },
 });
 ```
+
+### Finding anchors
 
 Each file carries changed-line ranges that can receive inline comments. Review Findings must point at a valid range:
 
@@ -123,13 +141,21 @@ const finding: ReviewFinding = {
 
 `suggestedFix` is optional exact replacement code for that range. Pipr renders it as a GitHub suggested change, so do not include Markdown fences, prose, or labels.
 
+### Prompt injection
+
 Diff Manifest prompt injection is reserved opt-in. When `ctx.pi.run(...)` receives a parseable Diff Manifest in the `manifest` input field, Pipr injects the authoritative Diff Manifest section exactly once. If `manifest` is omitted, no Diff Manifest section is injected. If `manifest` is present but not a parseable Diff Manifest, it stays ordinary user input.
 
+### Condensed reads
+
 When the full manifest is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools. The model can ask for more range-scoped context without receiving shell or arbitrary filesystem access. If an agent runs with `toolMode: "none"`, Pipr still injects manifest prompt context when `manifest` is passed, but it does not attach Diff Read Tools.
+
+### Path scope
 
 `paths` filters Diff Manifest files by include and exclude globs. For renamed files, current and previous paths are considered. When `result.inlineFindings` from a scoped Pi run is passed directly to `ctx.comment(...)`, Pipr drops findings outside the filter. Findings that a task maps, spreads, or clones first are treated as task-authored output and receive normal Diff Manifest range validation. Path scope does not restrict Pi read-only access to the rest of the repository.
 
 ## Pi execution
+
+### Run agents
 
 Tasks call Pi through `ctx.pi.run(...)`:
 
@@ -145,6 +171,8 @@ const result = await ctx.pi.run(
 );
 ```
 
+### Model selection
+
 Model selection order:
 
 1. `ctx.pi.run(...)` call override
@@ -152,15 +180,21 @@ Model selection order:
 3. `agent.fallbacks`
 4. the trusted base config default provider
 
+### Output repair
+
 Invalid structured output receives one repair attempt when configured. Transient retries are opt-in through agent retry settings.
 
 ## Publication
+
+### Final outputs
 
 Review Tasks do not write code host comments. A selected run emits one final output:
 
 - `ctx.comment(markdown)`
 - `ctx.comment({ main, inlineFindings })`
 - `ctx.command.reply(markdown)` for command-triggered response tasks
+
+### Publication plan
 
 For review output, Pipr turns that output into a provider-neutral `PublicationPlan`:
 
@@ -171,11 +205,15 @@ For review output, Pipr turns that output into a provider-neutral `PublicationPl
 
 Command response output publishes a normal pull request issue comment keyed by the source command comment. Rerunning the same source command updates the previous bot response.
 
+### Comment updates and state
+
 Before publishing, Pipr checks the current head SHA. It upserts the Main Review Comment by hidden marker and replaces the visible main body wholesale. That marker also carries Pipr-owned review state for prior finding IDs, locations, statuses, task scope, and head metadata. Reruns pass matching open prior finding locations back to the reviewer and keep open findings visible in state unless the internal verifier explicitly marks them fixed. On `pull_request.synchronize`, the verifier can recheck prior Pipr Inline Review Comments against the current diff, reply with the resolving commit, and resolve the GitHub review thread when permissions allow. On `pull_request_review_comment.created`, the verifier can process user replies to Pipr Inline Review Comments, resolve fixed findings, or explain why a still-valid finding remains open. Cleanup failures are recorded in publication metadata without failing the review. Inline Review Comments are deduped by stable finding id, reviewed head SHA, and Pipr-owned same-head location overlap.
 
 See [Comments and Findings](/docs/guide/comments) for the publication model.
 
 ## Failure behavior
+
+### Failure matrix
 
 | Failure | Behavior |
 | --- | --- |
@@ -189,6 +227,8 @@ See [Comments and Findings](/docs/guide/comments) for the publication model.
 | Stale review-thread cleanup failure | Publication metadata records the cleanup error and the Action continues. |
 
 ## Local checks
+
+### Preflight commands
 
 ```bash
 pipr check

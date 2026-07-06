@@ -1,11 +1,4 @@
-import type {
-  Agent,
-  CommandContext,
-  DiffManifestOptions,
-  SecretRef,
-  Task,
-  TaskContext,
-} from "@usepipr/sdk";
+import type { Agent, DiffManifestOptions, SecretRef, Task, TaskContext } from "@usepipr/sdk";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
 import { selectRuntimeTasks } from "../../action/entry-dispatch.js";
@@ -26,6 +19,7 @@ import { type InlineCommentDraft, type PublicationPlan, runtimeVersion } from ".
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { type PriorReviewState, priorReviewStateForSelectedTasks } from "../prior-state.js";
 import { validateReviewResult } from "../review.js";
+import { type RuntimeCommandInvocation, stableReviewRunId } from "../run-identity.js";
 import { runInternalVerifier } from "../verifier.js";
 import {
   type CommandResponseContribution,
@@ -45,6 +39,7 @@ import {
 } from "./task-output.js";
 
 export type { PiRunner } from "../agent/review-run.js";
+export type { RuntimeCommandInvocation } from "../run-identity.js";
 export type { RuntimeCheckSink, RuntimeTaskCheckResult } from "./task-output.js";
 export type DiffManifestBuilder = (options: BuildDiffManifestOptions) => DiffManifest;
 
@@ -76,8 +71,6 @@ export type RunTaskRuntimeOptions = {
   log?: RuntimeActionLog;
   taskLog?: TaskContext["log"];
 };
-
-export type RuntimeCommandInvocation = Pick<CommandContext, "name" | "line" | "arguments">;
 
 type ReviewRuntimeBaseResult = {
   provider: ProviderConfig;
@@ -167,11 +160,18 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   }
   const selectedTasks = tasks.map((task) => task.name);
   options.log?.info("task runtime start", { selectedTasks, taskCount: tasks.length });
+  const runId = stableReviewRunId({
+    event: options.event,
+    selectedTasks,
+    trustedConfigSha: options.trustedConfigSha,
+    trustedConfigHash: options.trustedConfigHash,
+    commandInvocation: options.commandInvocation,
+  });
   const loadedPriorReviewState =
     options.priorReviewState ?? (await options.loadPriorReviewState?.());
   const priorMainComment = options.priorMainComment ?? (await options.loadPriorMainComment?.());
   const priorReviewState = priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks);
-  const runtimeOptions = { ...options, priorReviewState, priorMainComment };
+  const runtimeOptions = { ...options, priorReviewState, priorMainComment, runId };
 
   const manifestCache = new Map<string, DiffManifest>();
   const taskResults = await Promise.all(
@@ -260,6 +260,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     provider,
     diffManifest,
     priorReviewState,
+    runId,
   });
   const publishing = buildCommentPublishingPlan({
     event: options.event,
@@ -350,6 +351,7 @@ async function runSynchronizeVerifier(options: {
   provider: ProviderConfig;
   diffManifest: DiffManifest;
   priorReviewState: PriorReviewState | undefined;
+  runId: string;
 }): Promise<Awaited<ReturnType<typeof runInternalVerifier>>> {
   if (options.options.event.rawAction !== "synchronize") {
     return {
@@ -377,6 +379,7 @@ async function runSynchronizeVerifier(options: {
     priorReviewState: options.priorReviewState,
     threadContexts: (await options.options.loadInlineThreadContexts?.()) ?? [],
     mode: { kind: "synchronize" },
+    runId: options.runId,
   });
 }
 
@@ -389,12 +392,13 @@ function createTaskContext(
     output: OutputState;
     taskName: string;
     taskOrder: number;
+    runId: string;
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");
   let taskContext: TaskContext;
   taskContext = {
-    run: { id: crypto.randomUUID() },
+    run: { id: options.runId },
     repository: {
       root: options.workspace,
       owner: repositorySlugParts.length > 1 ? repositorySlugParts[0] : undefined,
@@ -450,7 +454,7 @@ function createTaskContext(
           agent,
           input,
           runOptions,
-          runtime: { ...options, taskContext },
+          runtime: { ...options, taskContext, runId: options.runId },
         });
         options.output.providerModels.push(...result.providerModels);
         if (result.repairAttempted) {

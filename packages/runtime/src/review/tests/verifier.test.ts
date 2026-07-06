@@ -366,6 +366,20 @@ describe("runInternalVerifier", () => {
     expect(observedRuntimeTools).toBeUndefined();
   });
 
+  it("passes the supplied stable run id to verifier input", async () => {
+    let observedPrompt = "";
+
+    await runVerifier({
+      runId: "pipr-stable-verifier-run",
+      output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
+      observePrompt: (prompt) => {
+        observedPrompt = prompt;
+      },
+    });
+
+    expect(observedPrompt).toContain('"runId": "pipr-stable-verifier-run"');
+  });
+
   it("matches verifier candidates to the currently commented finding head", async () => {
     const result = await runVerifier({
       mode: { kind: "synchronize" },
@@ -453,6 +467,7 @@ async function runVerifier(options: {
   observeRun?: (run: Parameters<PiRunner>[0]) => void;
   observeModel?: (model: string) => void;
   observePrompt?: (prompt: string) => void;
+  runId?: string;
 }) {
   const piRunner: PiRunner = async (run) => {
     options.observeRun?.(run);
@@ -477,6 +492,7 @@ async function runVerifier(options: {
     threadContexts: verifierThreadContexts(options),
     piRunner,
     mode: verifierMode(options),
+    runId: options.runId ?? "pipr-test-verifier-run",
   });
 }
 

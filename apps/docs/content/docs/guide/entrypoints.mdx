@@ -7,6 +7,8 @@ Entrypoints decide how a Review Task starts. A task can be selected by a change 
 
 ## `pipr.review` entrypoints
 
+### Default review entrypoints
+
 The quickest setup sets a publication cap and uses `pipr.review(...)`:
 
 ```ts twoslash
@@ -22,6 +24,8 @@ pipr.review({
   },
 });
 ```
+
+### Disable an entrypoint
 
 Set an entrypoint to `false` to disable it:
 
@@ -39,6 +43,8 @@ pipr.review({
 
 ## Change request actions
 
+### Supported actions
+
 Supported public action names are:
 
 ```text
@@ -46,6 +52,8 @@ opened | updated | reopened | ready | closed
 ```
 
 GitHub native actions are normalized into those provider-neutral names. For example, a pull request synchronize event maps to `updated`.
+
+### Automatic review
 
 Use change request triggers for automatic review:
 
@@ -59,6 +67,8 @@ pipr.on.changeRequest({
 
 ## Commands
 
+### Command registration
+
 Commands run from pull request issue comments and must start with `@pipr`:
 
 ```ts twoslash
@@ -70,6 +80,8 @@ pipr.command({
   task: securityTask,
 });
 ```
+
+### Command response
 
 Command tasks can publish a command response:
 
@@ -100,11 +112,15 @@ Command responses are normal pull request issue comments keyed to the source com
 
 ## Command grammar
 
+### Named captures
+
 Use static words and named captures:
 
 ```ts twoslash
 const pattern = "@pipr release-note <version>";
 ```
+
+### Rest capture
 
 Use a final rest capture for free-form text:
 
@@ -116,6 +132,8 @@ The rest capture must be the final required position. This keeps command parsing
 
 ## Permissions
 
+### Permission ladder
+
 Permission levels are provider-neutral:
 
 ```text
@@ -123,6 +141,8 @@ read < triage < write < maintain < admin
 ```
 
 GitHub repository permissions are normalized into these levels by the GitHub adapter. Command permission defaults to `write`.
+
+### Lower-permission commands
 
 Use lower permission only for commands that cannot publish review findings or expose sensitive context:
 
@@ -137,6 +157,8 @@ pipr.command({
 
 ## Local review
 
+### Register local tasks
+
 Local review runs without GitHub publication:
 
 ```ts twoslash
@@ -147,6 +169,8 @@ pipr.on.changeRequest({
 });
 ```
 
+### Run locally
+
 Run it with:
 
 ```bash
@@ -154,6 +178,8 @@ pipr review --base origin/main
 ```
 
 `pipr review` runs every unique task registered through `pipr.on.changeRequest(...)`. It ignores configured action filters because there is no local pull request event action.
+
+### CI-only tasks
 
 Set `local: false` on tasks that should not run locally:
 
@@ -173,6 +199,8 @@ const securityTask = pipr.task({
 See [Local Runs](/docs/guide/local-runs) for base/head behavior.
 
 ## Event selection checklist
+
+### Choose an entrypoint
 
 | Need | Entrypoint |
 | --- | --- |

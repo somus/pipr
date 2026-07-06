@@ -254,6 +254,52 @@ describe("runActionCommand issue_comment dispatch", () => {
     }
   });
 
+  it("keys command run ids to the source command comment", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: commandRunIdConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const firstPublication = recordingCommandPublicationClient(workspace);
+    const repeatedPublication = recordingCommandPublicationClient(workspace);
+    const changedPublication = recordingCommandPublicationClient(workspace);
+
+    try {
+      await runIssueCommentCommand(
+        workspace,
+        "@pipr ask what changed?",
+        "read",
+        undefined,
+        firstPublication.client,
+        undefined,
+        123,
+      );
+      await runIssueCommentCommand(
+        workspace,
+        "@pipr ask what changed?",
+        "read",
+        undefined,
+        repeatedPublication.client,
+        undefined,
+        123,
+      );
+      await runIssueCommentCommand(
+        workspace,
+        "@pipr ask what changed?",
+        "read",
+        undefined,
+        changedPublication.client,
+        undefined,
+        456,
+      );
+
+      const firstRunId = commandResponsePayload(firstPublication.writes.created[0]);
+      expect(commandResponsePayload(repeatedPublication.writes.created[0])).toBe(firstRunId);
+      expect(commandResponsePayload(changedPublication.writes.created[0])).not.toBe(firstRunId);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("updates command replies for repeated source comments", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: askConfigTs(),
@@ -914,6 +960,34 @@ describe("runActionCommand pull_request_review_comment dispatch", () => {
       await removeWorkspace(workspace.rootDir);
     }
   });
+
+  it("keys user-reply verifier run ids to the source review reply", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    try {
+      const first = await verifierRunIdFromReplyAction(workspace, {
+        commentId: 11,
+        parentCommentId: 10,
+      });
+      const repeated = await verifierRunIdFromReplyAction(workspace, {
+        commentId: 11,
+        parentCommentId: 10,
+      });
+      const changedReply = await verifierRunIdFromReplyAction(workspace, {
+        commentId: 12,
+        parentCommentId: 10,
+      });
+      const changedParent = await verifierRunIdFromReplyAction(workspace, {
+        commentId: 13,
+        parentCommentId: 20,
+      });
+
+      expect(repeated).toBe(first);
+      expect(changedReply).not.toBe(first);
+      expect(changedParent).not.toBe(first);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
 });
 
 type CommandWorkspace = {
@@ -998,9 +1072,10 @@ async function runIssueCommentCommand(
   checks?: FakeCheckRuns,
   githubPublicationClient?: GitHubPublicationClient,
   logSink?: ActionLogSink,
+  commentId = 123,
 ) {
   const eventPath = path.join(workspace.rootDir, "event.json");
-  await writeIssueCommentEvent(eventPath, body);
+  await writeIssueCommentEvent(eventPath, body, "created", commentId);
   return await runActionCommandWithDependencies({
     rootDir: workspace.rootDir,
     configDir: ".pipr",
@@ -1099,6 +1174,23 @@ async function writeStillValidVerifierOutput(
   );
 }
 
+async function writePromptCapturingVerifierOutput(workspace: CommandWorkspace): Promise<void> {
+  await rm(path.join(workspace.rootDir, "pi-prompt.md"), { force: true });
+  await Bun.write(
+    workspace.piExecutable,
+    [
+      "#!/bin/sh",
+      'prompt_arg=""',
+      'for arg do prompt_arg="$arg"; done',
+      'prompt_path="$' + '{prompt_arg#@}"',
+      'cp "$prompt_path" "$(dirname "$0")/pi-prompt.md"',
+      'touch "$(dirname "$0")/pi-called"',
+      'printf "%s\\n" \'{"findings":[{"id":"fnd_existing","status":"unknown"}]}\'',
+    ].join("\n"),
+  );
+  await chmod(workspace.piExecutable, 0o755);
+}
+
 async function expectVerifierReplyPublished(
   workspace: CommandWorkspace,
   publication: ReturnType<typeof verifierPublicationClient>,
@@ -1118,6 +1210,35 @@ async function expectVerifierReplyPublished(
   expect(result).toMatchObject({ kind: "verifier", errors: [] });
   expect(publication.reviewReplies).toHaveLength(1);
   await expectPiCalled(workspace);
+}
+
+async function verifierRunIdFromReplyAction(
+  workspace: CommandWorkspace,
+  options: {
+    commentId: number;
+    parentCommentId: number;
+  },
+): Promise<string> {
+  const eventPath = path.join(workspace.rootDir, "event.json");
+  await writeReviewCommentEvent(eventPath, options);
+  await writePromptCapturingVerifierOutput(workspace);
+
+  await expect(
+    runReviewCommentAction(workspace, {
+      githubClient: fakeGitHubClient(workspace, "write"),
+      githubPublicationClient: verifierPublicationClient(workspace, {
+        parentCommentId: options.parentCommentId,
+        replyCommentId: options.commentId,
+      }),
+    }),
+  ).resolves.toMatchObject({ kind: "verifier", errors: [] });
+
+  const prompt = await Bun.file(path.join(workspace.rootDir, "pi-prompt.md")).text();
+  const runId = prompt.match(/"runId": "([^"]+)"/)?.[1];
+  if (!runId) {
+    throw new Error("test fixture failed to capture verifier run id");
+  }
+  return runId;
 }
 
 async function expectReviewRanAtHead(
@@ -1226,6 +1347,28 @@ function askConfigTs(): string {
     "    },",
     "  });",
     '  pipr.command({ pattern: "@pipr ask <question...>", permission: "read", task: ask });',
+    "});",
+  ].join("\n");
+}
+
+function commandRunIdConfigTs(): string {
+  return [
+    'import { definePipr } from "@usepipr/sdk";',
+    "",
+    "export default definePipr((pipr) => {",
+    "  const model = pipr.model({",
+    '    provider: "deepseek",',
+    '    model: "deepseek-reasoner",',
+    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
+    "  });",
+    "  const ask = pipr.task({",
+    '    name: "ask",',
+    "    async run(ctx) {",
+    "      await ctx.command?.reply(ctx.run.id);",
+    "    },",
+    "  });",
+    '  pipr.command({ pattern: "@pipr ask <question...>", permission: "read", task: ask });',
+    "  void model;",
     "});",
   ].join("\n");
 }
@@ -1370,6 +1513,7 @@ async function writeIssueCommentEvent(
   eventPath: string,
   body: string,
   action = "created",
+  commentId = 123,
 ): Promise<void> {
   await Bun.write(
     eventPath,
@@ -1377,9 +1521,19 @@ async function writeIssueCommentEvent(
       action,
       repository: { full_name: "local/pipr" },
       issue: { number: 1, pull_request: {} },
-      comment: { id: 123, body, user: { login: "somu" } },
+      comment: { id: commentId, body, user: { login: "somu" } },
     }),
   );
+}
+
+function commandResponsePayload(body: string | undefined): string {
+  if (!body) {
+    throw new Error("test fixture missing command response body");
+  }
+  return body
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !line.startsWith("<!--"))
+    .join("\n");
 }
 
 async function writePullRequestEvent(
@@ -1412,6 +1566,7 @@ async function writeReviewCommentEvent(
     action?: string;
     body?: string;
     actor?: string;
+    commentId?: number;
     parentCommentId?: number | null;
   } = {},
 ): Promise<void> {
@@ -1422,7 +1577,7 @@ async function writeReviewCommentEvent(
       repository: { full_name: "local/pipr" },
       pull_request: { number: 1 },
       comment: {
-        id: 11,
+        id: options.commentId ?? 11,
         in_reply_to_id: options.parentCommentId === undefined ? 10 : options.parentCommentId,
         body: options.body ?? "The caller validates this earlier.",
         user: { login: options.actor ?? "somu" },
@@ -1545,14 +1700,19 @@ function recordingCommandPublicationClient(
   return { client, writes };
 }
 
-function verifierPublicationClient(workspace: CommandWorkspace): GitHubPublicationClient & {
+function verifierPublicationClient(
+  workspace: CommandWorkspace,
+  options: { parentCommentId?: number; replyCommentId?: number } = {},
+): GitHubPublicationClient & {
   reviewReplies: Array<{ commentId: number; body: string }>;
 } {
   const reviewReplies: Array<{ commentId: number; body: string }> = [];
   const issueComments = [priorMainCommentWithFindingBody()];
+  const parentCommentId = options.parentCommentId ?? 10;
+  const replyCommentId = options.replyCommentId ?? 11;
   const reviewComments: Awaited<ReturnType<GitHubPublicationClient["listReviewComments"]>> = [
     {
-      id: 10,
+      id: parentCommentId,
       body: `${renderInlineFindingMarker("fnd_existing", "old-head")}\n\nThis can fail.`,
       authorLogin: "github-actions[bot]",
       path: undefined,
@@ -1563,7 +1723,7 @@ function verifierPublicationClient(workspace: CommandWorkspace): GitHubPublicati
       startSide: undefined,
     },
     {
-      id: 11,
+      id: replyCommentId,
       body: "The caller validates this earlier.",
       authorLogin: "somu",
       path: undefined,
@@ -1588,7 +1748,7 @@ function verifierPublicationClient(workspace: CommandWorkspace): GitHubPublicati
       return reviewComments;
     },
     async listReviewThreads() {
-      return [{ id: "thread-1", isResolved: false, commentIds: [10, 11] }];
+      return [{ id: "thread-1", isResolved: false, commentIds: [parentCommentId, replyCommentId] }];
     },
     async createReviewCommentReply(options: { commentId: number; body: string }) {
       reviewReplies.push(options);
