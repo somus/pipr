@@ -24,7 +24,7 @@ already have a Docker image and need the direct-container CI equivalent.
 | `PIPR_SKIP_ACTION_IMAGE_BUILD` | Reuse an existing image when set to `1` |
 | `PIPR_ACT_RUNNER_IMAGE` | Runner image used by local `act` scenarios |
 | `PIPR_ACT_PI_CALL_DIR` | Directory for fake Pi call logs |
-| `PIPR_EVAL_PI_EXECUTABLE` | Fake Pi executable used by deterministic prompt eval smoke tests |
+| `PIPR_EVAL_PI_EXECUTABLE` | Optional fake Pi executable override for deterministic prompt eval smoke tests |
 
 ## Commands
 
@@ -35,7 +35,13 @@ bun run --cwd packages/e2e check:container
 ```
 
 `check` includes deterministic prompt eval smoke tests through the fake Pi
-harness. Run live prompt evals explicitly when model credentials are available:
+harness. To run only those smoke tests:
+
+```bash
+bun run --cwd packages/evals eval:deterministic
+```
+
+Run live prompt evals explicitly when model credentials are available:
 
 ```bash
 DEEPSEEK_API_KEY=... bun run eval:prompts

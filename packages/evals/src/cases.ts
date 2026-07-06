@@ -49,7 +49,7 @@ function multiHunkHead(): string {
   ].join("\n")}\n`;
 }
 
-export const promptEvalCases: PiprEvalCase[] = [
+const promptEvalCases: PiprEvalCase[] = [
   {
     id: "correctness-null-regression",
     description: "Reports a changed null handling regression.",

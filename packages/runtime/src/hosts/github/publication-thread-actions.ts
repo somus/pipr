@@ -12,7 +12,6 @@ import type {
   GitHubReviewThread,
 } from "./publication-client.js";
 import {
-  commitUrlFor,
   currentHeadShaMismatch,
   listOwnedReviewComments,
   reviewThreadByCommentId,
@@ -56,7 +55,6 @@ export async function publishGitHubPublicationThreadActions(options: {
     client: options.client,
     change: options.change,
     reviewedHeadSha: threadActionHeadSha(options),
-    commitUrl: commitUrlFor(options.change, threadActionHeadSha(options)),
     resolvedKeys: new Set(
       extractResolvedFindingMarkerRecords(
         options.existingReviewComments.map((comment) => comment.body ?? ""),
@@ -97,7 +95,6 @@ type ThreadActionContext = {
   client: GitHubPublicationClient;
   change: ChangeRequestEventContext;
   reviewedHeadSha: string;
-  commitUrl: string;
   resolvedKeys: Set<string>;
   responseMarkers: Set<string>;
   threadById: Map<string, GitHubReviewThread>;
@@ -145,7 +142,7 @@ async function postThreadActionReplyIfNeeded(
       repo: context.change.repository.slug,
       pullRequestNumber: context.change.change.number,
       commentId: action.commentId,
-      body: [marker.body, "", threadActionReplyBody(context, action)].join("\n"),
+      body: [marker.body, "", threadActionReplyBody(action)].join("\n"),
     });
     recordThreadActionReply(context, action, marker.key);
     return undefined;
@@ -155,15 +152,8 @@ async function postThreadActionReplyIfNeeded(
   }
 }
 
-function threadActionReplyBody(
-  context: ThreadActionContext,
-  action: PublicationPlan["threadActions"][number],
-): string {
-  const body = action.body.replaceAll("<!--", "&lt;!--");
-  if (action.kind !== "resolve" || body.includes(context.commitUrl)) {
-    return body;
-  }
-  return `${body}\n\nResolved in ${context.commitUrl}.`;
+function threadActionReplyBody(action: PublicationPlan["threadActions"][number]): string {
+  return action.body.replaceAll("<!--", "&lt;!--");
 }
 
 async function loadThreadActionThreads(

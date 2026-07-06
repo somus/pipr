@@ -74,7 +74,6 @@
         "pipr-e2e-run": "./run.ts",
       },
       "dependencies": {
-        "@pipr/evals": "workspace:*",
         "@usepipr/runtime": "workspace:*",
       },
     },

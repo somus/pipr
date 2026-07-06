@@ -59,11 +59,6 @@ export function reviewThreadByCommentId(
   return index;
 }
 
-export function commitUrlFor(change: ChangeRequestEventContext, sha: string): string {
-  const repoUrl = change.repository.url ?? `https://github.com/${change.repository.slug}`;
-  return `${repoUrl.replace(/\/$/, "")}/commit/${sha}`;
-}
-
 export function findOwnedIssueComment(
   comments: GitHubIssueComment[],
   ownerLogin: string,

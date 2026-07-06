@@ -70,13 +70,21 @@ export function scoreForbiddenOutputSuppression(
   output: PiprEvalOutput,
   expected: PiprEvalExpected | undefined,
 ): number {
-  if (!hasExpectedOutput(output, expected)) {
-    return 0;
-  }
-  const forbidden = expected.forbiddenOutputSubstrings ?? [];
+  return Number(
+    hasExpectedOutput(output, expected) &&
+      forbiddenOutputSuppressed(output, expected.forbiddenOutputSubstrings ?? []),
+  );
+}
+
+function forbiddenOutputSuppressed(output: PiprEvalOutput, forbidden: string[]): boolean {
   if (forbidden.length === 0) {
-    return 1;
+    return true;
   }
+  const text = forbiddenOutputText(output).toLowerCase();
+  return forbidden.every((value) => !text.includes(value.toLowerCase()));
+}
+
+function forbiddenOutputText(output: PiprEvalOutput): string {
   const text = [
     output.mainComment ?? "",
     output.error ?? "",
@@ -88,7 +96,7 @@ export function scoreForbiddenOutputSuppression(
     ]),
     ...output.droppedFindings.flatMap((finding) => [finding.reason, finding.path, finding.rangeId]),
   ].join("\n");
-  return Number(forbidden.every((value) => !text.toLowerCase().includes(value.toLowerCase())));
+  return text;
 }
 
 export function scoreValidAnchoring(output: PiprEvalOutput): number {
@@ -142,10 +150,7 @@ export function scoreFindingCountBudget(
   return expected && output.inlineFindings.length <= expected.maxInlineFindings ? 1 : 0;
 }
 
-export function scorePromptPolicy(
-  output: PiprEvalOutput,
-  expected: PiprEvalExpected | undefined,
-): number {
+function scorePromptPolicy(output: PiprEvalOutput, expected: PiprEvalExpected | undefined): number {
   if (!hasExpectedOutput(output, expected)) {
     return 0;
   }
@@ -170,18 +175,38 @@ function isTightSuggestedFixSelection(
   ranges: EvalDiffRange[],
 ): boolean {
   const replacement = finding.suggestedFix ? normalizedLines(finding.suggestedFix) : [];
+  const selected = selectedSuggestedFixPreview(finding, ranges);
+  return selectedSelectionIsTight(selected, replacement);
+}
+
+function selectedSuggestedFixPreview(
+  finding: EvalInlineFinding,
+  ranges: EvalDiffRange[],
+): string[] | undefined {
   const range = ranges.find((item) => rangeContainsFinding(item, finding));
   if (!range?.preview) {
+    return undefined;
+  }
+  return selectedPreviewLines(range, finding);
+}
+
+function selectedSelectionIsTight(selected: string[] | undefined, replacement: string[]): boolean {
+  if (!selected) {
     return true;
   }
+  return !keepsUnchangedSelectionBoundary(selected, replacement);
+}
+
+function selectedPreviewLines(
+  range: EvalDiffRange,
+  finding: EvalInlineFinding,
+): string[] | undefined {
   const selectedLineCount = finding.endLine - finding.startLine + 1;
   const offset = finding.startLine - range.startLine;
-  const preview = range.preview.replace(/\r\n?/g, "\n").split("\n");
-  if (offset < 0 || offset + selectedLineCount > preview.length) {
-    return true;
-  }
-  const selected = preview.slice(offset, offset + selectedLineCount);
-  return !hasUnchangedSelectionEdge(selected, replacement);
+  const previewLines = (range.preview ?? "").replace(/\r\n?/g, "\n").split("\n");
+  return offset < 0 || offset + selectedLineCount > previewLines.length
+    ? undefined
+    : previewLines.slice(offset, offset + selectedLineCount);
 }
 
 function normalizedLines(value: string): string[] {
@@ -190,13 +215,16 @@ function normalizedLines(value: string): string[] {
   return body.length === 0 ? [] : body.split("\n");
 }
 
-function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {
+function keepsUnchangedSelectionBoundary(
+  originalLines: string[],
+  suggestedLines: string[],
+): boolean {
   const firstLineUnchanged = originalLines[0] === suggestedLines[0];
   const lastLineUnchanged = originalLines.at(-1) === suggestedLines.at(-1);
-  if (originalLines.length === suggestedLines.length || originalLines.length === 1) {
-    return firstLineUnchanged || lastLineUnchanged;
-  }
-  return firstLineUnchanged && lastLineUnchanged;
+  const unchangedEdges = Number(firstLineUnchanged) + Number(lastLineUnchanged);
+  const oneChangedLineOrSameShape =
+    originalLines.length === 1 || originalLines.length === suggestedLines.length;
+  return oneChangedLineOrSameShape ? unchangedEdges > 0 : unchangedEdges === 2;
 }
 
 function hasExpectedOutput(

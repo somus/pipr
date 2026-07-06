@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PiprEvalCase } from "./cases.js";
 
-export type PiprEvalRunMode = "live" | "deterministic";
+type PiprEvalRunMode = "live" | "deterministic";
 
 type PiprEvalRunOptions = {
   mode: PiprEvalRunMode;
@@ -63,6 +63,7 @@ export type PiprEvalOutput = {
 };
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
+const packagedFakePi = fileURLToPath(new URL("./fake-pi.ts", import.meta.url));
 const textDecoder = new TextDecoder();
 
 export async function runPiprEvalCase(
@@ -85,17 +86,34 @@ async function runPreparedFixture(
   testCase: PiprEvalCase,
   options: PiprEvalRunOptions,
 ): Promise<PiprEvalOutput> {
-  const runOptions = {
-    ...options,
-    piExecutable: options.piExecutable ?? process.env.PIPR_EVAL_PI_EXECUTABLE,
-  };
+  const runOptions = evalRunOptions(options);
   assertRunOptions(runOptions);
   const { baseSha, headSha } = await prepareFixture(rootDir, testCase);
   const result = runLocalReview(rootDir, baseSha, headSha, {
     callsDir,
     piExecutable: runOptions.piExecutable,
   });
-  const output = {
+  const output = await successfulEvalOutput(rootDir, callsDir, result);
+  await cleanupFixture(rootDir);
+  return output;
+}
+
+function evalRunOptions(options: PiprEvalRunOptions): PiprEvalRunOptions {
+  return {
+    ...options,
+    piExecutable:
+      options.piExecutable ??
+      process.env.PIPR_EVAL_PI_EXECUTABLE ??
+      (options.mode === "deterministic" ? packagedFakePi : undefined),
+  };
+}
+
+async function successfulEvalOutput(
+  rootDir: string,
+  callsDir: string | undefined,
+  result: LocalReviewEvalJson,
+): Promise<PiprEvalOutput> {
+  return {
     ok: true,
     kind: result.kind,
     fixturePath: keepFixtures() ? rootDir : undefined,
@@ -105,8 +123,6 @@ async function runPreparedFixture(
     diffRanges: result.diffRanges,
     piCalls: await readPiCalls(callsDir),
   } satisfies PiprEvalOutput;
-  await cleanupFixture(rootDir);
-  return output;
 }
 
 async function failedEvalOutput(

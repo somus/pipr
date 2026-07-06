@@ -14,12 +14,12 @@
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
     "format:check": "biome format .",
-    "check": "bun run lint && bun run typecheck && bun run test",
+    "check": "bun run lint && bun run typecheck && bun run build:deps && bun run test",
+    "build:deps": "bun run --cwd ../sdk build && bun run --cwd ../runtime build",
     "check:actions": "bun ./check.ts",
     "check:container": "bun ./container-check.ts"
   },
   "dependencies": {
-    "@pipr/evals": "workspace:*",
     "@usepipr/runtime": "workspace:*"
   }
 }

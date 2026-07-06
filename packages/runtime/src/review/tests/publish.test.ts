@@ -437,12 +437,14 @@ describe("publishGitHubPublicationPlan", () => {
     expectThreadResolved(client, "thread-1");
   });
 
-  it("adds the resolving commit link before closing stale inline threads", async () => {
+  it("publishes verifier-supplied commit links before closing stale inline threads", async () => {
     const { client, publicationPlan } = staleResolutionFixture({ resolved: false });
     if (publicationPlan.threadActions[0]) {
       publicationPlan.threadActions[0] = {
         ...publicationPlan.threadActions[0],
-        body: "The verifier confirmed this is fixed.",
+        body:
+          "The verifier confirmed this is fixed.\n\n" +
+          "Resolved in https://github.com/local/pipr/commit/head.",
       };
     }
 

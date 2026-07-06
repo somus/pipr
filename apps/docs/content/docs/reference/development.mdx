@@ -115,6 +115,12 @@ They use the fake Pi harness and do not call a model API. To point them at a cus
 PIPR_EVAL_PI_EXECUTABLE=/absolute/path/to/fake-pi
 ```
 
+To run only deterministic prompt eval smoke tests:
+
+```bash
+bun run --cwd packages/evals eval:deterministic
+```
+
 Live prompt evals run through Evalite and call DeepSeek through the local Pipr review path. Run them explicitly when `DEEPSEEK_API_KEY` is available:
 
 ```bash
