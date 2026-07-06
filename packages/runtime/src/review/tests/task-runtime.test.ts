@@ -231,6 +231,14 @@ describe("runTaskRuntime", () => {
         arguments: { alpha: "1", beta: "2" },
       },
     });
+    const localeSensitiveCommandArguments = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: {
+        ...askCommandInvocation(),
+        arguments: { ä: "umlaut", z: "letter" },
+      },
+    });
     const changedCommandSource = await observeRunId({
       plan: commandPlan,
       taskName: "ask",
@@ -245,6 +253,9 @@ describe("runTaskRuntime", () => {
     expect(changedConfigSha).not.toBe(first);
     expect(changedCommand).not.toBe(command);
     expect(commandArguments).toBe(reorderedCommandArguments);
+    expect(localeSensitiveCommandArguments).toBe(
+      expectedCodeUnitSortedCommandRunId({ z: "letter", ä: "umlaut" }),
+    );
     expect(changedCommandSource).not.toBe(command);
   });
 
@@ -1923,6 +1934,35 @@ function askCommandInvocation(): NonNullable<RunTaskRuntimeOptions["commandInvoc
     arguments: { question: "what changed?" },
     sourceCommentId: 123,
   };
+}
+
+function expectedCodeUnitSortedCommandRunId(commandArguments: Record<string, string>): string {
+  const event = eventContext();
+  const command = askCommandInvocation();
+  const hash = new Bun.CryptoHasher("sha256")
+    .update(
+      JSON.stringify({
+        platform: event.platform.id,
+        repository: event.repository.slug,
+        changeNumber: event.change.number,
+        baseSha: event.change.base.sha,
+        headSha: event.change.head.sha,
+        selectedTasks: ["ask"],
+        command: {
+          name: command.name,
+          line: command.line,
+          arguments: Object.fromEntries(
+            Object.entries(commandArguments).sort(([left], [right]) =>
+              left < right ? -1 : left > right ? 1 : 0,
+            ),
+          ),
+          sourceCommentId: command.sourceCommentId,
+        },
+      }),
+    )
+    .digest("hex")
+    .slice(0, 24);
+  return `pipr-${hash}`;
 }
 
 function manifestBuilder(manifest: DiffManifest = reviewTestManifest()) {

@@ -42,6 +42,8 @@ export function stableReviewRunId(options: {
 
 function sortedCommandArguments(arguments_: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(arguments_).sort(([left], [right]) => left.localeCompare(right)),
+    Object.entries(arguments_).sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0,
+    ),
   );
 }
