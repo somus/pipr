@@ -8,6 +8,10 @@ Use these terms consistently in product docs, code comments, issues, and pull re
 The code review automation product that reviews code host change requests through Pi-powered agents.
 _Avoid_: legacy product names
 
+**Pipr Core**:
+The lean runtime surface Pipr owns: diff modeling, Pi execution, review validation, and comment publishing. Every review workflow — default review, recipes, custom tasks, commands, plugins — is composed on top of this core in user config, so one tool replaces a stack of single-purpose review bots.
+_Avoid_: framework, all-in-one review bot, per-workflow runtime forks
+
 **Pipr Configuration**:
 The repository-local TypeScript config under `.pipr/config.ts`.
 _Avoid_: legacy configuration roots, `.pi/`

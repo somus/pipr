@@ -6,6 +6,20 @@ Pipr is a Pi-powered code review runtime. It loads a repository-local TypeScript
 
 GitHub is the first delivery target. Internally, GitHub is a code host adapter, so `.pipr/config.ts` stays provider-neutral. GitLab, Bitbucket, and Azure DevOps support is coming soon.
 
+## Why Pipr
+
+Every code review tool excels at something different: one finds security issues, another writes PR summaries, another gates merges. Getting all of that means running several bots on every pull request, with overlapping comments, duplicated model spend, and no single place to control the policy.
+
+Pipr takes the Pi approach: a lean core plus the building blocks to compose what you need. The runtime owns the hard, safety-critical parts — diff modeling, Pi agent execution, structured output validation, and comment publishing. Everything on top is TypeScript you own:
+
+- `pipr.review(...)` for a tuned default review
+- `pipr init --recipe <id>` starters for security SAST, PR briefings, quality gates, dependency risk, and more
+- `pipr.task(...)` and `pipr.agent(...)` for custom workflows with typed schemas
+- `pipr.command(...)` for `@pipr` commands
+- `definePlugin(...)` for typed tools agents can call during review
+
+One config, one run, one validated comment pipeline — instead of a stack of single-purpose review tools.
+
 ## Quickstart
 
 Create the TypeScript config and default GitHub Action workflow:
