@@ -1,0 +1,26 @@
+packages/evals/src/scoring.ts
+  s_0d14705f05322a::t_4352977c1c5848 175
+  s_0d14705f05322a::t_d124570b0b8432 3,88
+packages/evals/src/runner.ts
+  s_0d14705f05322a::t_1cfa21b8117ccc 195-199,275-279
+  s_0d14705f05322a::t_b6ef172485853f 88-92,95,108-113,131-136,155,157-194,200-257,264,268-274,280-285
+packages/evals/src/tests/runner.test.ts
+  s_0d14705f05322a::t_7c251272372b9b 2-4,7,10-12,51-81,91-95
+  s_0d14705f05322a::t_831c6f23f25d10 96-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "81c22edbe53ff278d8e14f75842d6abe694ba568",
+  "prompts": {},
+  "sessions": {
+    "s_0d14705f05322a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f35e5-09d7-7be0-ba5c-ee305f9d1c92",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
