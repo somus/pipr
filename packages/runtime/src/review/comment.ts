@@ -1,7 +1,12 @@
 import { z } from "zod";
 import runtimePackage from "../../package.json" with { type: "json" };
 import { createDiffRangeIndex } from "../diff/ranges.js";
-import type { ChangeRequestEventContext, DiffManifest, ReviewFinding } from "../types.js";
+import type {
+  ChangeRequestEventContext,
+  CommentableRange,
+  DiffManifest,
+  ReviewFinding,
+} from "../types.js";
 import { commentableRangeSchema, reviewSideSchema } from "../types.js";
 import { reviewFindingSchema } from "./contract.js";
 import {
@@ -59,6 +64,10 @@ const inlinePublicationItemsSchema = z.array(inlinePublicationItemSchema);
 
 export type InlinePublicationItem = z.infer<typeof inlinePublicationItemSchema>;
 export type InlineCommentDraft = InlinePublicationItem;
+export type PublishableInlineFinding = {
+  finding: ReviewFinding;
+  range: CommentableRange;
+};
 
 const threadActionSchema = z.strictObject({
   kind: z.enum(["resolve", "reply"]),
@@ -111,6 +120,11 @@ export type BuildPublicationPlanOptions = {
   threadActions?: ThreadAction[];
 };
 
+const maxInlineFindingBodyCharacters = 700;
+const maxInlineFindingBodyLines = 4;
+const secretLikeTokenPattern =
+  /\b[A-Za-z0-9][A-Za-z0-9_.:/+=-]*(?:secret|token|api[_-]?key|apikey)[A-Za-z0-9_.:/+=-]{8,}\b/gi;
+
 export function buildPublicationPlan(options: BuildPublicationPlanOptions): PublicationPlan {
   const reviewState =
     options.reviewState ??
@@ -150,19 +164,47 @@ export function prepareInlinePublicationItems(options: {
   reviewedHeadSha: string;
   reviewState?: PriorReviewState;
 }): InlinePublicationItem[] {
+  return prepareInlinePublicationItemsForPublishableFindings({
+    publishableFindings: preparePublishableInlineFindings({
+      validated: options.validated,
+      manifest: options.manifest,
+    }),
+    reviewedHeadSha: options.reviewedHeadSha,
+    reviewState: options.reviewState,
+  });
+}
+
+export function preparePublishableInlineFindings(options: {
+  validated: {
+    validFindings: ReviewFinding[];
+  };
+  manifest: DiffManifest;
+}): PublishableInlineFinding[] {
   const ranges = createDiffRangeIndex(options.manifest);
+  return options.validated.validFindings.flatMap((finding) => {
+    const range = ranges.rangeById(finding.rangeId);
+    if (!range) {
+      throw new Error(`Validated finding range '${finding.rangeId}' is missing from Diff Manifest`);
+    }
+    const findingWithBody = findingWithPublishableBody(finding);
+    if (!findingWithBody) {
+      return [];
+    }
+    return [{ finding: findingWithPublishableSuggestedFix(findingWithBody, range), range }];
+  });
+}
+
+export function prepareInlinePublicationItemsForPublishableFindings(options: {
+  publishableFindings: PublishableInlineFinding[];
+  reviewedHeadSha: string;
+  reviewState?: PriorReviewState;
+}): InlinePublicationItem[] {
   const seenFindingIds = new Set<string>();
   return inlinePublicationItemsSchema.parse(
-    options.validated.validFindings.flatMap((finding) => {
-      const range = ranges.rangeById(finding.rangeId);
-      if (!range) {
-        throw new Error(
-          `Validated finding range '${finding.rangeId}' is missing from Diff Manifest`,
-        );
-      }
-      const findingId = findingIdFor(finding, options.reviewState);
+    options.publishableFindings.flatMap(({ finding: publishableFinding, range }) => {
+      const findingId = findingIdFor(publishableFinding, options.reviewState);
       const stateRecord = options.reviewState
-        ? matchFindingRecord(options.reviewState, finding)
+        ? matchFindingRecord(options.reviewState, publishableFinding)
         : undefined;
       if (
         seenFindingIds.has(findingId) ||
@@ -174,20 +216,126 @@ export function prepareInlinePublicationItems(options: {
       const marker = inlineFindingMarker(findingId, options.reviewedHeadSha);
       return [
         inlinePublicationItemSchema.parse({
-          finding,
+          finding: publishableFinding,
           range,
-          path: finding.path,
-          side: finding.side,
-          startLine: finding.startLine,
-          endLine: finding.endLine,
+          path: publishableFinding.path,
+          side: publishableFinding.side,
+          startLine: publishableFinding.startLine,
+          endLine: publishableFinding.endLine,
           marker,
           findingId,
           reviewedHeadSha: options.reviewedHeadSha,
-          body: renderInlineBody(finding, findingId, options.reviewedHeadSha),
+          body: renderInlineBody(publishableFinding, findingId, options.reviewedHeadSha),
         }),
       ];
     }),
   );
+}
+
+function findingWithPublishableBody(finding: ReviewFinding): ReviewFinding | undefined {
+  const body = conciseInlineFindingBody(finding.body);
+  if (body.length === 0) {
+    return undefined;
+  }
+  return body === finding.body ? finding : { ...finding, body };
+}
+
+function conciseInlineFindingBody(value: string): string {
+  const firstParagraph = value
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .trim()
+    .split(/\n{2,}/)[0];
+  const visibleLines = (firstParagraph ?? value).split("\n").slice(0, maxInlineFindingBodyLines);
+  const body = redactPotentialSecrets(visibleLines.join("\n").trim());
+  if (body.length <= maxInlineFindingBodyCharacters) {
+    return body;
+  }
+  return `${body.slice(0, maxInlineFindingBodyCharacters).trimEnd()}...`;
+}
+
+function findingWithPublishableSuggestedFix(
+  finding: ReviewFinding,
+  range: CommentableRange,
+): ReviewFinding {
+  if (!finding.suggestedFix) {
+    return finding;
+  }
+  const suggestedLines = splitSuggestedFixLines(finding.suggestedFix);
+  const selectedLineCount = finding.endLine - finding.startLine + 1;
+
+  const originalLines = selectedRangePreviewLines(finding, range, selectedLineCount);
+  if (originalLines && hasUnchangedSelectionEdge(originalLines, suggestedLines)) {
+    return withoutSuggestedFix(finding);
+  }
+  if (suggestionIncludesUnselectedContext(finding, range, selectedLineCount, suggestedLines)) {
+    return withoutSuggestedFix(finding);
+  }
+
+  return redactPotentialSecrets(finding.suggestedFix) === finding.suggestedFix
+    ? finding
+    : withoutSuggestedFix(finding);
+}
+
+function withoutSuggestedFix(finding: ReviewFinding): ReviewFinding {
+  const next = { ...finding };
+  delete next.suggestedFix;
+  return next;
+}
+
+function splitSuggestedFixLines(value: string): string[] {
+  const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const withoutFinalNewline = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+  return withoutFinalNewline.length === 0 ? [] : withoutFinalNewline.split("\n");
+}
+
+function selectedRangePreviewLines(
+  finding: ReviewFinding,
+  range: CommentableRange,
+  selectedLineCount: number,
+): string[] | undefined {
+  if (!range.preview) {
+    return undefined;
+  }
+  const offset = finding.startLine - range.startLine;
+  if (offset < 0) {
+    return undefined;
+  }
+  const previewLines = range.preview.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (offset + selectedLineCount > previewLines.length) {
+    return undefined;
+  }
+  return previewLines.slice(offset, offset + selectedLineCount);
+}
+
+function suggestionIncludesUnselectedContext(
+  finding: ReviewFinding,
+  range: CommentableRange,
+  selectedLineCount: number,
+  suggestedLines: string[],
+): boolean {
+  if (!range.preview || suggestedLines.length <= selectedLineCount) {
+    return false;
+  }
+  const offset = finding.startLine - range.startLine;
+  if (offset < 0) {
+    return false;
+  }
+  const previewLines = range.preview.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const contextLines = [
+    offset > 0 ? previewLines[offset - 1] : undefined,
+    previewLines[offset + selectedLineCount],
+  ].filter((line): line is string => Boolean(line?.trim()));
+  return contextLines.some((line) => suggestedLines.includes(line));
+}
+
+function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {
+  const firstLineUnchanged = originalLines[0] === suggestedLines[0];
+  const lastLineUnchanged = originalLines.at(-1) === suggestedLines.at(-1);
+  if (originalLines.length === suggestedLines.length || originalLines.length === 1) {
+    return firstLineUnchanged || lastLineUnchanged;
+  }
+  return firstLineUnchanged && lastLineUnchanged;
 }
 
 function renderMainComment(options: {
@@ -204,7 +352,7 @@ function renderMainComment(options: {
     "",
     "# Pipr Review",
     "",
-    options.main,
+    redactPotentialSecrets(options.main),
     "",
   ].join("\n");
 }
@@ -231,4 +379,8 @@ function renderSuggestedChange(suggestedFix: string): string {
 
 function longestBacktickRun(value: string): number {
   return Math.max(0, ...[...value.matchAll(/`+/g)].map((match) => match[0].length));
+}
+
+function redactPotentialSecrets(value: string): string {
+  return value.replace(secretLikeTokenPattern, "[redacted secret]");
 }

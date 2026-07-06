@@ -64,6 +64,7 @@ export async function renderAgentPrompt(
     promptSection("Tools", toolsPrompt(options.diffManifest, toolMode)),
     customToolPrompt(options.agentTools),
     pathScopePrompt(options.runOptions?.paths),
+    reviewPolicyPrompt(options.agent.definition.output),
     promptSection("Output", outputPrompt(options.agent.definition.output)),
     promptSection("Diff Manifest", options.diffManifest?.body),
     promptSection("Instructions", renderPromptValue(options.agent.definition.instructions)),
@@ -119,6 +120,15 @@ function outputPrompt(schema: Schema<unknown>): string {
     schema.id === reviewResultSchemaId
       ? "`suggestedFix` is exact replacement code for the selected range. Do not include Markdown fences, prose, or labels in `suggestedFix`."
       : undefined,
+    schema.id === reviewResultSchemaId
+      ? "GitHub applies `suggestedFix` to the selected `startLine` through `endLine`. Select the smallest contiguous line span that the replacement code should replace."
+      : undefined,
+    schema.id === reviewResultSchemaId
+      ? "If a fix changes only part of a line, select that whole line and put the full replacement line in `suggestedFix`. If a fix changes multiple lines, select exactly those original lines and put the full replacement block in `suggestedFix`."
+      : undefined,
+    schema.id === reviewResultSchemaId
+      ? "Do not select a larger enclosing block to replace a smaller statement, and do not select one line when the replacement is for a multi-line section. Omit `suggestedFix` if the exact replacement range is uncertain."
+      : undefined,
     "Return exactly one JSON value matching the schema.",
     "The first non-whitespace character must be { or [ and the last non-whitespace character must be } or ].",
     "Do not include Markdown, code fences, prose, explanations, or leading/trailing text.",
@@ -126,6 +136,26 @@ function outputPrompt(schema: Schema<unknown>): string {
       ? "For inlineFindings, use only fields shown in the schema and only exact Diff Manifest commentable ranges. If no exact range applies, omit the finding."
       : undefined,
   ]).join("\n\n");
+}
+
+function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
+  if (schema.id !== reviewResultSchemaId) {
+    return undefined;
+  }
+  return promptSection(
+    "Review Policy",
+    [
+      "Review only changed behavior.",
+      "Report only actionable defects, security risks, regressions, or meaningful test gaps.",
+      "Put each actionable issue in inlineFindings. Do not leave actionable defects or test gaps only in the summary.",
+      "Keep each inline finding body to one short paragraph, at most two sentences, and under 700 characters.",
+      "Omit speculative, style-only, broad refactor, external-fact, and out-of-diff findings.",
+      "Use read tools when more context is needed. If evidence is insufficient, omit the finding.",
+      "Emit one inline finding per issue, anchored to the exact Diff Manifest commentable range.",
+      "`suggestedFix` must be exact replacement code for the selected range.",
+      "For `suggestedFix`, choose the smallest contiguous `startLine` to `endLine` span that should be replaced. Do not select an enclosing function, block, or single line unless that exact span is the replacement target.",
+    ].join("\n"),
+  );
 }
 
 function pathScopePrompt(paths: PathFilter | undefined): string | undefined {

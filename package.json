@@ -61,7 +61,8 @@
     "check:packages": "bun run build:packages && turbo run lint typecheck test format:check --filter='!@pipr/docs' && bun run check:quality",
     "check:docs": "turbo run lint typecheck test build format:check --filter=@pipr/docs && bun run check:quality:docs",
     "check": "bun run check:packages && bun run check:docs",
-    "check:actions": "bun run --cwd packages/e2e check:actions"
+    "check:actions": "bun run --cwd packages/e2e check:actions",
+    "eval:prompts": "bun run --cwd packages/evals eval"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",

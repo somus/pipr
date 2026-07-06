@@ -125,7 +125,13 @@ describe("publishGitHubPublicationPlan", () => {
     const publicationPlan = plan({
       validated: {
         ...validated,
-        validFindings: [{ ...firstFinding, suggestedFix: "safeCall();" }, secondFinding],
+        validFindings: [
+          {
+            ...firstFinding,
+            suggestedFix: ["safeCall();", "recover();", "return;"].join("\n"),
+          },
+          secondFinding,
+        ],
       },
     });
     const first = await publishGitHubPublicationPlan({
@@ -150,7 +156,7 @@ describe("publishGitHubPublicationPlan", () => {
       side: "RIGHT",
       start_line: 10,
       start_side: "RIGHT",
-      body: expect.stringContaining("```suggestion\nsafeCall();\n```"),
+      body: expect.stringContaining("```suggestion\nsafeCall();\nrecover();\nreturn;\n```"),
     });
     expect(client.reviewCommentPayloads[1]).toMatchObject({
       path: "src/a.ts",
@@ -428,6 +434,30 @@ describe("publishGitHubPublicationPlan", () => {
 
     expect(result.metadata.inlineResolutionErrors).toEqual([]);
     expect(client.reviewReplies).toHaveLength(1);
+    expectThreadResolved(client, "thread-1");
+  });
+
+  it("publishes verifier-supplied commit links before closing stale inline threads", async () => {
+    const { client, publicationPlan } = staleResolutionFixture({ resolved: false });
+    if (publicationPlan.threadActions[0]) {
+      publicationPlan.threadActions[0] = {
+        ...publicationPlan.threadActions[0],
+        body:
+          "The verifier confirmed this is fixed.\n\n" +
+          "Resolved in https://github.com/local/pipr/commit/head.",
+      };
+    }
+
+    await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: publicationPlan,
+    });
+
+    expect(client.reviewReplies[0]?.body).toContain("The verifier confirmed this is fixed.");
+    expect(client.reviewReplies[0]?.body).toContain(
+      "Resolved in https://github.com/local/pipr/commit/head.",
+    );
     expectThreadResolved(client, "thread-1");
   });
 

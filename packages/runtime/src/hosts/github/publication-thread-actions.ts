@@ -12,7 +12,6 @@ import type {
   GitHubReviewThread,
 } from "./publication-client.js";
 import {
-  commitUrlFor,
   currentHeadShaMismatch,
   listOwnedReviewComments,
   reviewThreadByCommentId,
@@ -56,7 +55,6 @@ export async function publishGitHubPublicationThreadActions(options: {
     client: options.client,
     change: options.change,
     reviewedHeadSha: threadActionHeadSha(options),
-    commitUrl: commitUrlFor(options.change, threadActionHeadSha(options)),
     resolvedKeys: new Set(
       extractResolvedFindingMarkerRecords(
         options.existingReviewComments.map((comment) => comment.body ?? ""),
@@ -97,7 +95,6 @@ type ThreadActionContext = {
   client: GitHubPublicationClient;
   change: ChangeRequestEventContext;
   reviewedHeadSha: string;
-  commitUrl: string;
   resolvedKeys: Set<string>;
   responseMarkers: Set<string>;
   threadById: Map<string, GitHubReviewThread>;

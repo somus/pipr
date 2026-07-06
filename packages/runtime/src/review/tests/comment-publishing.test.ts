@@ -204,6 +204,36 @@ describe("buildCommentPublishingPlan", () => {
         .map((finding) => finding.status),
     ).toEqual(["open", "open"]);
   });
+
+  it("uses publishable findings for review state when prior overlaps are ambiguous", () => {
+    const currentFinding = finding(
+      `${"The actionable issue is concise. ".repeat(40)}\n\nThis paragraph is not published.`,
+      "range-1",
+      10,
+    );
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [priorFindingRecord("fnd_prior_a"), priorFindingRecord("fnd_prior_b")],
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    const draft = publishing.inlineCommentDrafts[0];
+    if (!draft) {
+      throw new Error("test fixture missing inline draft");
+    }
+
+    expect(publishing.publicationPlan.reviewState.findings).toContainEqual(
+      expect.objectContaining({ id: draft.findingId, lastSeenHeadSha: "head" }),
+    );
+  });
 });
 
 function metadata(options: { validFindings: number }) {

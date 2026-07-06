@@ -161,11 +161,7 @@ function fixtureWorkflow(item: Scenario): string {
       : []),
     "      - uses: ./.github/act",
     "        env:",
-    `          DEEPSEEK_API_KEY: ${
-      item.telemetryDir
-        ? `${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`
-        : "local-fixture-key"
-    }`,
+    "          DEEPSEEK_API_KEY: local-fixture-key",
     "          GITHUB_TOKEN: local-fixture-token",
     '          GIT_CONFIG_COUNT: "1"',
     "          GIT_CONFIG_KEY_0: safe.directory",
@@ -175,6 +171,7 @@ function fixtureWorkflow(item: Scenario): string {
     `          PIPR_ACT_ASSERTION: ${item.assertion}`,
     ...(item.telemetryDir
       ? [
+          `          PIPR_ACT_PI_CALL_DIR: ${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`,
           `          PIPR_ACT_TELEMETRY_PATH: ${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`,
         ]
       : []),

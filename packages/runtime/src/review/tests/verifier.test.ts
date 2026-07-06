@@ -129,7 +129,9 @@ describe("runInternalVerifier", () => {
         findingHeadSha: "old-head",
         commentId: 10,
         threadId: "thread-1",
-        body: "Agreed, this is resolved by the current change.",
+        body:
+          "Agreed, this is resolved by the current change.\n\n" +
+          "Resolved in https://github.com/local/pipr/commit/new-head.",
         responseKey: "new-head:fixed:fnd_existing",
       },
     ]);
@@ -237,6 +239,42 @@ describe("runInternalVerifier", () => {
 
     expect(result.priorReviewState?.findings[0]?.status).toBe("open");
     expect(result.threadActions).toEqual([]);
+  });
+
+  it("fails closed when user-reply verifier responses have no visible text", async () => {
+    const fixed = await runVerifier({
+      output: { findings: [{ id: "fnd_existing", status: "fixed", response: "   \n\t" }] },
+    });
+    const stillValid = await runVerifier({
+      output: { findings: [{ id: "fnd_existing", status: "still-valid", response: "   \n\t" }] },
+    });
+
+    expect(fixed.priorReviewState?.findings[0]?.status).toBe("open");
+    expect(fixed.threadActions).toEqual([]);
+    expect(stillValid.priorReviewState?.findings[0]?.status).toBe("open");
+    expect(stillValid.threadActions).toEqual([]);
+  });
+
+  it("cites the current head commit when synchronizing fixed findings with model prose", async () => {
+    const result = await runVerifier({
+      mode: { kind: "synchronize" },
+      output: {
+        findings: [
+          {
+            id: "fnd_existing",
+            status: "fixed",
+            response: "The changed code now preserves the fallback.",
+          },
+        ],
+      },
+    });
+
+    expect(result.threadActions[0]).toMatchObject({
+      kind: "resolve",
+      body:
+        "The changed code now preserves the fallback.\n\n" +
+        "Resolved in https://github.com/local/pipr/commit/new-head.",
+    });
   });
 
   it("bounds parent comments and user replies in the verifier prompt", async () => {

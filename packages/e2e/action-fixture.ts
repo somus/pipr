@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { chmod, mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import {
   type ActionCommandResult,
   type GitHubPublicationClient,
@@ -36,7 +38,7 @@ const actionResultHandlers: ActionResultHandlers = {
 
 async function main(): Promise<void> {
   assertActionCommand(process.argv[2] ?? "action");
-  const context = actionFixtureContext();
+  const context = await actionFixtureContext();
   const result = await runActionCommandWithDependencies(context.options);
   await handleActionResult(result);
   if (result.kind === "review") {
@@ -51,20 +53,46 @@ function assertActionCommand(command: string): void {
   }
 }
 
-function actionFixtureContext(): ActionFixtureContext {
+async function actionFixtureContext(): Promise<ActionFixtureContext> {
   const fixturePath = requiredEnv("PIPR_ACT_GITHUB_FIXTURE_PATH");
+  const rootDir = envValue("GITHUB_WORKSPACE") ?? process.cwd();
   return {
     fixturePath,
     options: {
-      rootDir: envValue("GITHUB_WORKSPACE") ?? process.cwd(),
+      rootDir,
       configDir: envValue("INPUT_CONFIG-DIR") || ".pipr",
       env: Bun.env,
       eventPath: requiredEnv("GITHUB_EVENT_PATH"),
       dryRun: envValue("PIPR_DRY_RUN") === "1",
-      piExecutable: requiredEnv("PIPR_ACT_PI_EXECUTABLE"),
+      piExecutable: await actionPiExecutable(requiredEnv("PIPR_ACT_PI_EXECUTABLE")),
       githubPublicationClient: fixturePublicationClient(fixturePath),
     },
   };
+}
+
+async function actionPiExecutable(piExecutable: string): Promise<string> {
+  const callsDir = envValue("PIPR_ACT_PI_CALL_DIR");
+  if (!callsDir) {
+    return piExecutable;
+  }
+  await mkdir(callsDir, { recursive: true });
+  await chmod(callsDir, 0o777);
+  const wrapperPath = path.join(callsDir, "fake-pi-wrapper");
+  await writeFile(
+    wrapperPath,
+    `#!/usr/bin/env bun
+Bun.env.PIPR_ACT_PI_CALL_DIR = ${JSON.stringify(callsDir)};
+const proc = Bun.spawn([${JSON.stringify(piExecutable)}, ...Bun.argv.slice(2)], {
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "inherit",
+  env: Bun.env,
+});
+process.exit(await proc.exited);
+`,
+  );
+  await chmod(wrapperPath, 0o700);
+  return wrapperPath;
 }
 
 function requiredEnv(name: string): string {

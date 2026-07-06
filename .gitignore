@@ -3,6 +3,7 @@ dist
 coverage
 .turbo
 .fallow
+packages/evals/evalite-export
 apps/docs/.source
 apps/docs/.cache
 apps/docs/.output

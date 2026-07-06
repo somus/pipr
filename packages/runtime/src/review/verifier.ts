@@ -254,10 +254,19 @@ function fixedReplyBody(
   options: RunVerifierOptions,
   item: VerifierOutput["findings"][number],
 ): string | undefined {
-  if (options.mode.kind === "user-reply") {
-    return item.response;
+  const response = verifierResponseBody(item.response);
+  if (options.mode.kind === "user-reply" && !response) {
+    return undefined;
   }
-  return item.response ?? commitResolutionBody(options.event);
+  return fixedReplyWithCommitCitation(response, commitResolutionBody(options.event));
+}
+
+function fixedReplyWithCommitCitation(response: string | undefined, citation: string): string {
+  const body = response?.trim();
+  if (!body) {
+    return citation;
+  }
+  return body.includes(citation) ? body : `${body}\n\n${citation}`;
 }
 
 function stillValidReplyAction(
@@ -265,7 +274,8 @@ function stillValidReplyAction(
   candidate: { finding: PriorFindingRecord; thread: InlineThreadContext },
   item: VerifierOutput["findings"][number],
 ): ThreadAction | undefined {
-  if (options.mode.kind !== "user-reply" || !options.mode.respondWhenStillValid || !item.response) {
+  const body = verifierResponseBody(item.response);
+  if (options.mode.kind !== "user-reply" || !options.mode.respondWhenStillValid || !body) {
     return undefined;
   }
   return {
@@ -274,9 +284,14 @@ function stillValidReplyAction(
     findingHeadSha: candidate.thread.findingHeadSha,
     commentId: candidate.thread.parentCommentId,
     threadId: candidate.thread.threadId,
-    body: item.response,
+    body,
     responseKey: `reply-${options.mode.reply.commentId}:still-valid:${item.id}`,
   };
+}
+
+function verifierResponseBody(response: string | undefined): string | undefined {
+  const body = response?.trim();
+  return body && body.length > 0 ? body : undefined;
 }
 
 function internalVerifierAgent(
