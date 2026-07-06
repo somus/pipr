@@ -1,0 +1,178 @@
+apps/docs/content/docs/guide/entrypoints.mdx
+  s_0d14705f05322a::t_743e603ec18214 10-11,28-29,46-47,56-57,70-71,84-85,115-116,123-124,135-136,145-146,160-161,172-173,182-183,203
+  s_0d14705f05322a::t_0d2a0918891b01 204
+apps/docs/public/images/pipr/home-illustration-composable-workflows.svg
+  s_0d14705f05322a::t_743e603ec18214 1-50
+apps/docs/src/routes/index.tsx
+  s_0d14705f05322a::t_743e603ec18214 1-2,6,8,16,20-26,28,30-31,34-35,39,41-44,46-56,59-64,67-72,75-80,82,84,87-92,97,101-107,111-112,116-123,131-150,152-161,165,167-200,207,209-217,219-242,248,250-253,255-257,259-267,269,275,277-279,281-301,305,307-309,311-312,316-317
+apps/docs/content/docs/guide/github-action.mdx
+  s_0d14705f05322a::t_743e603ec18214 6,10-11,39,57-58,65-66,71-72,76,92-93,96-97,102-103,113-114,125-126,131-132,135-136,147-148,151
+  s_0d14705f05322a::t_d6246b2534d1b0 152
+apps/docs/content/docs/recipes/default-review.mdx
+  s_0d14705f05322a::t_743e603ec18214 107
+apps/docs/content/docs/guide/configuration.mdx
+  s_0d14705f05322a::t_743e603ec18214 14-15,53-54,57-58,75-76,92-93,106-107,110-111,116-117,138-139,170-171,176-177,213-214,217-218,223-224,232-233,252-253,256-257,266-267,283-284,302-303,313-314,331-332,337-338,349
+  s_0d14705f05322a::t_247907b1611847 350
+apps/docs/public/images/pipr/home-illustration-lean-core.svg
+  s_0d14705f05322a::t_743e603ec18214 1-47
+README.md
+  s_0d14705f05322a::t_743e603ec18214 9-22,73
+docs/CONTEXT.md
+  s_0d14705f05322a::t_743e603ec18214 11-14
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_0d14705f05322a::t_743e603ec18214 120
+apps/docs/content/docs/guide/trust-security.mdx
+  s_0d14705f05322a::t_743e603ec18214 10-11,25-26,39-40,52-53,61-62,67-68,71-72,84-85,88-89,101-102,105-106,111-112,123
+  s_0d14705f05322a::t_7fc14bc264d730 124
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_0d14705f05322a::t_743e603ec18214 262
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_0d14705f05322a::t_743e603ec18214 311
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_0d14705f05322a::t_743e603ec18214 115
+docs/adr/0004-pipr-owned-review-run.md
+  s_0d14705f05322a::t_743e603ec18214 18-23
+apps/docs/content/docs/guide/quickstart.mdx
+  s_0d14705f05322a::t_743e603ec18214 8-9,21-22,29-30,37-38,46-47,59-60,78-79,91-92,99-100,126,132-133,136-137,142-143,151-152,159-160,165-166,173-174,182-183,188-189,198-199,204-205,216
+  s_0d14705f05322a::t_5a8e954edc2eff 217
+packages/runtime/src/config/init.ts
+  s_0d14705f05322a::t_743e603ec18214 37-38
+apps/docs/content/docs/recipes/index.mdx
+  s_0d14705f05322a::t_743e603ec18214 8-10
+apps/docs/public/images/pipr/home-illustration-validated-review.svg
+  s_0d14705f05322a::t_743e603ec18214 1-48
+packages/runtime/src/action/verifier-entry.ts
+  s_0d14705f05322a::t_743e603ec18214 5,202-212
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_0d14705f05322a::t_743e603ec18214 117
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_0d14705f05322a::t_743e603ec18214 134-261,1622-1629,1641-1642,1689-1703,1921-1929,1935,1939-1966
+  s_0d14705f05322a::t_464590c74b552b 1967
+packages/runtime/src/config/tests/init.test.ts
+  s_0d14705f05322a::t_743e603ec18214 49,315
+apps/docs/scripts/sync-recipes.ts
+  s_0d14705f05322a::t_743e603ec18214 10,409-411
+.github/workflows/pipr.yml
+  s_0d14705f05322a::t_743e603ec18214 25
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_0d14705f05322a::t_743e603ec18214 6-23,27-28,52-53,60-61,66-67,85-86,102-103,117-118,121-122,129-130,146-147,165-166,175-176,181-182,201-202,224
+  s_0d14705f05322a::t_e13aa4cf91abb6 225
+apps/docs/src/components/recipe-file-explorer.tsx
+  s_0d14705f05322a::t_743e603ec18214 3-9,36-43,186,188
+packages/runtime/src/action/tests/commands.test.ts
+  s_0d14705f05322a::t_743e603ec18214 257-302,963-990,1075,1078,1177-1193,1215-1243,1354-1375,1516,1524,1529-1538,1569,1580,1703-1706,1711-1712,1715,1726,1751
+packages/runtime/src/review/agent/review-run.ts
+  s_0d14705f05322a::t_743e603ec18214 41,115-118
+CHANGELOG.md
+  s_0d14705f05322a::t_743e603ec18214 3-10
+apps/docs/content/docs/reference/development.mdx
+  s_0d14705f05322a::t_743e603ec18214 8-9,22-23,32-33,42-43,52-53,64-65,74-75,82-83,91-92,106-107,120-121,129-130,134,141-142,151-152,157-158,161-162,167-168,174-175,188-189,196-197,210-211,222-223,230-231,238-239,247
+  s_0d14705f05322a::t_3a307d2652493b 248
+apps/docs/public/fonts/satoshi/SOURCE.md
+  s_0d14705f05322a::t_743e603ec18214 1-12
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_0d14705f05322a::t_743e603ec18214 110
+apps/docs/public/images/pipr/home-illustration-commands-plugins.svg
+  s_0d14705f05322a::t_743e603ec18214 1-47
+apps/docs/src/lib/layout.shared.tsx
+  s_0d14705f05322a::t_743e603ec18214 6,10,27-29
+packages/runtime/src/review/run-identity.ts
+  s_0d14705f05322a::t_743e603ec18214 1-49
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_0d14705f05322a::t_743e603ec18214 106
+packages/cli/package.json
+  s_0d14705f05322a::t_743e603ec18214 3,36-37
+packages/runtime/src/review/task/task-runtime.ts
+  s_0d14705f05322a::t_743e603ec18214 1,22,42,163-169,174,263,354,382,395,401,457
+apps/docs/content/docs/guide/runtime.mdx
+  s_0d14705f05322a::t_743e603ec18214 12-13,23-24,29-30,69-70,81-82,87-88,102-103,108-109,124-125,144-145,148-149,152-153,158-159,174-175,183-184,189-190,197-198,208-209,216-217,231
+  s_0d14705f05322a::t_5d0ea101d2ee92 232
+packages/runtime/package.json
+  s_0d14705f05322a::t_743e603ec18214 3,53
+action.yml
+  s_0d14705f05322a::t_743e603ec18214 22
+apps/docs/package.json
+  s_0d14705f05322a::t_743e603ec18214 13,22-25,31,49
+apps/docs/src/components/copy-button.tsx
+  s_0d14705f05322a::t_743e603ec18214 1-78
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_0d14705f05322a::t_743e603ec18214 129
+apps/docs/src/styles/app.css
+  s_0d14705f05322a::t_743e603ec18214 1-2,8-31,33-60,71-72,74-280
+packages/runtime/src/review/tests/verifier.test.ts
+  s_0d14705f05322a::t_743e603ec18214 369-382,470,495
+packages/cli/src/tests/main.test.ts
+  s_0d14705f05322a::t_743e603ec18214 346
+apps/docs/src/routes/docs/$.tsx
+  s_0d14705f05322a::t_743e603ec18214 110-115,122
+packages/sdk/package.json
+  s_0d14705f05322a::t_743e603ec18214 3
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_0d14705f05322a::t_743e603ec18214 141
+packages/runtime/src/action/command-entry.ts
+  s_0d14705f05322a::t_743e603ec18214 193
+packages/sdk/src/types/task.ts
+  s_0d14705f05322a::t_743e603ec18214 279
+apps/docs/content/docs/guide/comments.mdx
+  s_0d14705f05322a::t_743e603ec18214 12-13,22-23,28-29,40-41,49-51,61-62,70-71,87-88,105-106,111-112,124-125,141-142,154-155,167-168,181-182,190-191,198-199,211
+  s_0d14705f05322a::t_fe279673f1460c 212
+.pipr/package.json
+  s_0d14705f05322a::t_743e603ec18214 4
+packages/evals/src/verifier-runner.ts
+  s_0d14705f05322a::t_3f9cb52fe6e0b1 133
+packages/runtime/src/review/tests/review-run.test.ts
+  s_0d14705f05322a::t_743e603ec18214 1-96
+apps/docs/content/docs/index.mdx
+  s_0d14705f05322a::t_743e603ec18214 3,6,8-16,24,30-41,139
+apps/docs/content/docs/recipes/multi-agent-review.mdx
+  s_0d14705f05322a::t_743e603ec18214 161
+.release-please-manifest.json
+  s_0d14705f05322a::t_743e603ec18214 2
+docs/adr/0005-pipr-owned-comment-publishing.md
+  s_0d14705f05322a::t_743e603ec18214 13,24-31
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_0d14705f05322a::t_743e603ec18214 112
+apps/docs/content/docs/guide/local-runs.mdx
+  s_0d14705f05322a::t_743e603ec18214 10-11,20-21,28-29,36-37,46-47,59-60,65-66,75-76,83-84,94-95,109-110,135-136,153-154,159-160,174-175,180-181,189-190,201
+  s_0d14705f05322a::t_d40b249a8b5621 202
+apps/docs/content/docs/recipes/ci-triage-command.mdx
+  s_0d14705f05322a::t_743e603ec18214 113
+package.json
+  s_0d14705f05322a::t_743e603ec18214 3
+packages/runtime/src/review/tests/publish.test.ts
+  s_0d14705f05322a::t_743e603ec18214 170-185,188,193,226-259,1320-1329
+  s_0d14705f05322a::t_1408c2e7d475a8 1330
+apps/docs/src/routes/__root.tsx
+  s_0d14705f05322a::t_743e603ec18214 37,41
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_0d14705f05322a::t_743e603ec18214 18-19,35-36,43-44,57-58,63-64,72-73,78-79,88-89,98-99,109-110,113-114,119-120,123-124,137-138,141-142,154-155,160-161,166-167,178-179,186-187,194
+  s_0d14705f05322a::t_19de7d35a16094 195
+apps/docs/content/docs/guide/index.mdx
+  s_0d14705f05322a::t_743e603ec18214 8-11
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_0d14705f05322a::t_743e603ec18214 170
+packages/runtime/src/review/verifier.ts
+  s_0d14705f05322a::t_743e603ec18214 46,117,138
+apps/docs/src/components/copy-button.test.tsx
+  s_0d14705f05322a::t_743e603ec18214 1-231
+.pipr/bun.lock
+  s_0d14705f05322a::t_aafae0ed3e082e 7,19
+bun.lock
+  s_0d14705f05322a::t_c14faa3529b8dc 20-23,29,47,56,62-63,93,97,111,288-291,296-299,634-637,722-723,796-797,844,954-955,1560-1561,1670-1671
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "54756e6366d013adb5ad857bd456c82b993fc8f6",
+  "prompts": {},
+  "sessions": {
+    "s_0d14705f05322a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f35e5-09d7-7be0-ba5c-ee305f9d1c92",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
