@@ -254,6 +254,52 @@ describe("runActionCommand issue_comment dispatch", () => {
     }
   });
 
+  it("keys command run ids to the source command comment", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: commandRunIdConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const firstPublication = recordingCommandPublicationClient(workspace);
+    const repeatedPublication = recordingCommandPublicationClient(workspace);
+    const changedPublication = recordingCommandPublicationClient(workspace);
+
+    try {
+      await runIssueCommentCommand(
+        workspace,
+        "@pipr ask what changed?",
+        "read",
+        undefined,
+        firstPublication.client,
+        undefined,
+        123,
+      );
+      await runIssueCommentCommand(
+        workspace,
+        "@pipr ask what changed?",
+        "read",
+        undefined,
+        repeatedPublication.client,
+        undefined,
+        123,
+      );
+      await runIssueCommentCommand(
+        workspace,
+        "@pipr ask what changed?",
+        "read",
+        undefined,
+        changedPublication.client,
+        undefined,
+        456,
+      );
+
+      const firstRunId = commandResponsePayload(firstPublication.writes.created[0]);
+      expect(commandResponsePayload(repeatedPublication.writes.created[0])).toBe(firstRunId);
+      expect(commandResponsePayload(changedPublication.writes.created[0])).not.toBe(firstRunId);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("updates command replies for repeated source comments", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: askConfigTs(),
@@ -998,9 +1044,10 @@ async function runIssueCommentCommand(
   checks?: FakeCheckRuns,
   githubPublicationClient?: GitHubPublicationClient,
   logSink?: ActionLogSink,
+  commentId = 123,
 ) {
   const eventPath = path.join(workspace.rootDir, "event.json");
-  await writeIssueCommentEvent(eventPath, body);
+  await writeIssueCommentEvent(eventPath, body, "created", commentId);
   return await runActionCommandWithDependencies({
     rootDir: workspace.rootDir,
     configDir: ".pipr",
@@ -1230,6 +1277,28 @@ function askConfigTs(): string {
   ].join("\n");
 }
 
+function commandRunIdConfigTs(): string {
+  return [
+    'import { definePipr } from "@usepipr/sdk";',
+    "",
+    "export default definePipr((pipr) => {",
+    "  const model = pipr.model({",
+    '    provider: "deepseek",',
+    '    model: "deepseek-reasoner",',
+    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
+    "  });",
+    "  const ask = pipr.task({",
+    '    name: "ask",',
+    "    async run(ctx) {",
+    "      await ctx.command?.reply(ctx.run.id);",
+    "    },",
+    "  });",
+    '  pipr.command({ pattern: "@pipr ask <question...>", permission: "read", task: ask });',
+    "  void model;",
+    "});",
+  ].join("\n");
+}
+
 function headOnlyConfigTs(): string {
   return [
     'import { definePipr } from "@usepipr/sdk";',
@@ -1370,6 +1439,7 @@ async function writeIssueCommentEvent(
   eventPath: string,
   body: string,
   action = "created",
+  commentId = 123,
 ): Promise<void> {
   await Bun.write(
     eventPath,
@@ -1377,9 +1447,19 @@ async function writeIssueCommentEvent(
       action,
       repository: { full_name: "local/pipr" },
       issue: { number: 1, pull_request: {} },
-      comment: { id: 123, body, user: { login: "somu" } },
+      comment: { id: commentId, body, user: { login: "somu" } },
     }),
   );
+}
+
+function commandResponsePayload(body: string | undefined): string {
+  if (!body) {
+    throw new Error("test fixture missing command response body");
+  }
+  return body
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !line.startsWith("<!--"))
+    .join("\n");
 }
 
 async function writePullRequestEvent(

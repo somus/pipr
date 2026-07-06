@@ -188,8 +188,18 @@ describe("runTaskRuntime", () => {
       event: eventContext({ headSha: "new-head" }),
       diffManifestBuilder: manifestBuilder({ ...reviewTestManifest(), headSha: "new-head" }),
     });
+    const changedBase = await observeRunId({
+      plan,
+      event: eventContext({ baseSha: "new-base" }),
+      diffManifestBuilder: manifestBuilder({
+        ...reviewTestManifest(),
+        baseSha: "new-base",
+        mergeBaseSha: "new-base",
+      }),
+    });
     const changedTask = await observeRunId({ plan: observingRunIdPlan("security") });
     const changedConfig = await observeRunId({ plan, trustedConfigHash: "new-config-hash" });
+    const changedConfigSha = await observeRunId({ plan, trustedConfigSha: "new-config-sha" });
     const commandPlan = observingCommandRunIdPlan();
     const command = await observeRunId({
       plan: commandPlan,
@@ -205,12 +215,37 @@ describe("runTaskRuntime", () => {
         arguments: { question: "why?" },
       },
     });
+    const commandArguments = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: {
+        ...askCommandInvocation(),
+        arguments: { beta: "2", alpha: "1" },
+      },
+    });
+    const reorderedCommandArguments = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: {
+        ...askCommandInvocation(),
+        arguments: { alpha: "1", beta: "2" },
+      },
+    });
+    const changedCommandSource = await observeRunId({
+      plan: commandPlan,
+      taskName: "ask",
+      commandInvocation: { ...askCommandInvocation(), sourceCommentId: 456 },
+    });
 
     expect(first).toBe(second);
     expect(changedHead).not.toBe(first);
+    expect(changedBase).not.toBe(first);
     expect(changedTask).not.toBe(first);
     expect(changedConfig).not.toBe(first);
+    expect(changedConfigSha).not.toBe(first);
     expect(changedCommand).not.toBe(command);
+    expect(commandArguments).toBe(reorderedCommandArguments);
+    expect(changedCommandSource).not.toBe(command);
   });
 
   it("rejects multiple final comments across selected tasks", async () => {
@@ -1886,6 +1921,7 @@ function askCommandInvocation(): NonNullable<RunTaskRuntimeOptions["commandInvoc
     name: "ask",
     line: "@pipr ask what changed?",
     arguments: { question: "what changed?" },
+    sourceCommentId: 123,
   };
 }
 

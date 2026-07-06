@@ -43,7 +43,7 @@ export type RunVerifierOptions = {
   priorReviewState?: PriorReviewState;
   threadContexts: InlineThreadContext[];
   mode: VerifierMode;
-  runId?: string;
+  runId: string;
   log?: RuntimeActionLog;
 };
 
@@ -135,6 +135,7 @@ function verifierInput(
 ) {
   return {
     manifest: options.diffManifest,
+    runId: options.runId,
     mode: options.mode.kind,
     reviewedHeadSha: prior.reviewedHeadSha,
     currentHeadSha: options.event.change.head.sha,

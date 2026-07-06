@@ -1,11 +1,4 @@
-import type {
-  Agent,
-  CommandContext,
-  DiffManifestOptions,
-  SecretRef,
-  Task,
-  TaskContext,
-} from "@usepipr/sdk";
+import type { Agent, DiffManifestOptions, SecretRef, Task, TaskContext } from "@usepipr/sdk";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
 import { selectRuntimeTasks } from "../../action/entry-dispatch.js";
@@ -26,6 +19,7 @@ import { type InlineCommentDraft, type PublicationPlan, runtimeVersion } from ".
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { type PriorReviewState, priorReviewStateForSelectedTasks } from "../prior-state.js";
 import { validateReviewResult } from "../review.js";
+import { type RuntimeCommandInvocation, stableReviewRunId } from "../run-identity.js";
 import { runInternalVerifier } from "../verifier.js";
 import {
   type CommandResponseContribution,
@@ -45,6 +39,7 @@ import {
 } from "./task-output.js";
 
 export type { PiRunner } from "../agent/review-run.js";
+export type { RuntimeCommandInvocation } from "../run-identity.js";
 export type { RuntimeCheckSink, RuntimeTaskCheckResult } from "./task-output.js";
 export type DiffManifestBuilder = (options: BuildDiffManifestOptions) => DiffManifest;
 
@@ -76,8 +71,6 @@ export type RunTaskRuntimeOptions = {
   log?: RuntimeActionLog;
   taskLog?: TaskContext["log"];
 };
-
-export type RuntimeCommandInvocation = Pick<CommandContext, "name" | "line" | "arguments">;
 
 type ReviewRuntimeBaseResult = {
   provider: ProviderConfig;
@@ -483,44 +476,6 @@ function createTaskContext(
     log: options.taskLog ?? console,
   };
   return taskContext;
-}
-
-function stableReviewRunId(options: {
-  event: ChangeRequestEventContext;
-  selectedTasks: string[];
-  trustedConfigSha?: string;
-  trustedConfigHash?: string;
-  commandInvocation?: RuntimeCommandInvocation;
-}): string {
-  const hash = new Bun.CryptoHasher("sha256")
-    .update(
-      JSON.stringify({
-        platform: options.event.platform.id,
-        repository: options.event.repository.slug,
-        changeNumber: options.event.change.number,
-        baseSha: options.event.change.base.sha,
-        headSha: options.event.change.head.sha,
-        trustedConfigHash: options.trustedConfigHash,
-        trustedConfigSha: options.trustedConfigSha,
-        selectedTasks: options.selectedTasks,
-        command: options.commandInvocation
-          ? {
-              name: options.commandInvocation.name,
-              line: options.commandInvocation.line,
-              arguments: sortedCommandArguments(options.commandInvocation.arguments),
-            }
-          : undefined,
-      }),
-    )
-    .digest("hex")
-    .slice(0, 24);
-  return `pipr-${hash}`;
-}
-
-function sortedCommandArguments(arguments_: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(arguments_).sort(([left], [right]) => left.localeCompare(right)),
-  );
 }
 
 function agentOutputForTaskContext<Output>(_agent: Agent<unknown, Output>, value: unknown): Output {

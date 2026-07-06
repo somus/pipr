@@ -10,7 +10,7 @@ Comment Publishing:
 - renders one deterministic Main Review Comment body from review output
 - renders and publishes command response output as a normal pull request issue comment keyed to the source command comment
 - leaves multi-agent or multi-task summary composition to user configuration
-- verifies the current change request head SHA before any write
+- verifies the current change request head SHA before publication writes
 - upserts the Main Review Comment by hidden marker and stores Pipr-owned review state on that marker
 - caps Inline Review Comments only when `publication.maxInlineComments` is configured
 - dedupes Inline Review Comments by stable finding id, reviewed head SHA, and Pipr-owned same-head location overlap
@@ -28,4 +28,4 @@ GitHub comments are the durability store for publication. The Main Review Commen
 
 On rerun, Pipr reloads its owned comments, updates the Main Review Comment, skips already posted inline markers, and posts missing Inline Review Comments. If inline publication fails after a partial write, the Action fails, but a later rerun continues from the markers already present on GitHub.
 
-Pipr checks the current change request head SHA before any code host write. A review computed for an old head fails without updating the Main Review Comment, posting Inline Review Comments, command responses, or thread actions.
+Pipr checks the current change request head SHA before starting publication writes. If the head already differs, a review computed for an old head fails without updating the Main Review Comment, posting Inline Review Comments, command responses, or thread actions. This is a pre-publication guard, not an atomic lock across the later code host API sequence; marker dedupe keeps retries safe if a race or partial failure occurs.
