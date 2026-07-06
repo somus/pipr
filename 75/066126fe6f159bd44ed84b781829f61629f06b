@@ -1,0 +1,46 @@
+apps/docs/public/images/pipr/home-illustration-composable-workflows.svg
+  s_6d88b46ce1e11f::t_e56f1ca0d12ea4 1-2,5-9,12-47,49
+  s_244160aac0e74b::t_9e09b0ea9c7fdc 4,11
+apps/docs/content/docs/guide/quickstart.mdx
+  s_6d88b46ce1e11f::t_a2f6f28cd40d22 8-9
+apps/docs/src/routes/index.tsx
+  s_6d88b46ce1e11f::t_d97b184a5b8ffa 148-150
+apps/docs/content/docs/index.mdx
+  s_6d88b46ce1e11f::t_a2f6f28cd40d22 3,8
+  s_6d88b46ce1e11f::t_cd0e91cfc06c61 9
+apps/docs/public/images/pipr/home-illustration-commands-plugins.svg
+  s_6d88b46ce1e11f::t_2b20d1d26d88a8 2,4-10,12-46
+  s_244160aac0e74b::t_0e391d94689b5a 1
+apps/docs/public/images/pipr/home-illustration-lean-core.svg
+  s_6d88b46ce1e11f::t_80e770b3b597a6 1-2,4-12,14-46
+apps/docs/content/docs/guide/github-action.mdx
+  s_6d88b46ce1e11f::t_a2f6f28cd40d22 6
+apps/docs/content/docs/guide/index.mdx
+  s_6d88b46ce1e11f::t_a2f6f28cd40d22 8-9
+apps/docs/public/images/pipr/home-illustration-validated-review.svg
+  s_244160aac0e74b::t_3b0413f46aef9b 1-2,4-9,11-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "75066126fe6f159bd44ed84b781829f61629f06b",
+  "prompts": {},
+  "sessions": {
+    "s_244160aac0e74b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f14f8-9a9a-7c11-ae99-96554b6ee62b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_6d88b46ce1e11f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f276b-1b37-73c0-a2fa-5e29e522ac53",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
