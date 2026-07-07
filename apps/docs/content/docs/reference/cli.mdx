@@ -30,7 +30,7 @@ Update a CLI installed from the compiled GitHub Release binary:
 pipr update
 ```
 
-The command downloads the latest binary for the current platform, verifies the release checksum, validates the downloaded binary with `--version`, and replaces the current executable. If the installed version is already current, the command exits without replacing it.
+The command checks the latest release, downloads the matching binary only when a newer version exists, verifies the release checksum, validates the downloaded binary with `--version`, and replaces the current executable. If the installed version is already current, the command exits without replacing it.
 
 `pipr update` does not update package-manager installs. For npm or Bun installs, use:
 

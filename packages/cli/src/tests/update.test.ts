@@ -111,6 +111,7 @@ describe("pipr update", () => {
   it("does not replace the executable when it is already current", async () => {
     await withUpdateWorkspace(async ({ executablePath }) => {
       const binary = versionBinary("0.1.0");
+      const requests: string[] = [];
 
       const result = await runPiprUpdate({
         currentVersion: "0.1.0",
@@ -119,18 +120,24 @@ describe("pipr update", () => {
           asset: "pipr-linux-x64",
           binary,
           checksum: sha256(binary),
+          releaseVersion: "0.1.0",
+          requests,
         }),
         platform: { platform: "linux", arch: "x64" },
       });
 
       expect(result).toEqual({ kind: "up-to-date", version: "0.1.0" });
       expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
+      expect(requests).not.toContain(
+        "https://github.com/somus/pipr/releases/latest/download/pipr-linux-x64",
+      );
     });
   });
 
   it("does not replace the executable when the local version is newer than latest", async () => {
     await withUpdateWorkspace(async ({ executablePath }) => {
       const binary = versionBinary("0.1.0");
+      const requests: string[] = [];
 
       const result = await runPiprUpdate({
         currentVersion: "0.2.0",
@@ -139,12 +146,37 @@ describe("pipr update", () => {
           asset: "pipr-linux-x64",
           binary,
           checksum: sha256(binary),
+          releaseVersion: "0.1.0",
+          requests,
         }),
         platform: { platform: "linux", arch: "x64" },
       });
 
       expect(result).toEqual({ kind: "up-to-date", version: "0.2.0" });
       expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
+      expect(requests).not.toContain(
+        "https://github.com/somus/pipr/releases/latest/download/pipr-linux-x64",
+      );
+    });
+  });
+
+  it("uses the official release source by default", async () => {
+    await withUpdateWorkspace(async ({ executablePath }) => {
+      const requests: string[] = [];
+
+      await runPiprUpdate({
+        currentVersion: "0.1.0",
+        executablePath,
+        fetch: fakeReleaseFetch({
+          asset: "pipr-linux-x64",
+          binary: versionBinary("0.2.0"),
+          checksum: sha256(versionBinary("0.2.0")),
+          requests,
+        }),
+        platform: { platform: "linux", arch: "x64" },
+      });
+
+      expect(requests[0]).toBe("https://api.github.com/repos/somus/pipr/releases/latest");
     });
   });
 });
@@ -168,9 +200,15 @@ function fakeReleaseFetch(options: {
   binary: string;
   checksum: string;
   checksumAsset?: string;
+  releaseVersion?: string;
+  requests?: string[];
 }): typeof fetch {
   return (async (input: Parameters<typeof fetch>[0]) => {
     const url = String(input);
+    options.requests?.push(url);
+    if (url.endsWith("/releases/latest") && url.startsWith("https://api.github.com/repos/")) {
+      return Response.json({ tag_name: `v${options.releaseVersion ?? "0.2.0"}` });
+    }
     if (url.endsWith(`/download/${options.asset}`)) {
       return new Response(options.binary);
     }

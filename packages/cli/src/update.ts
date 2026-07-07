@@ -19,6 +19,10 @@ type UpdateOptions = {
   repo?: string;
 };
 
+type LatestRelease = {
+  tag_name?: unknown;
+};
+
 const defaultRepo = "somus/pipr";
 const supportedPlatforms: Partial<Record<NodeJS.Platform, string>> = {
   darwin: "darwin",
@@ -73,6 +77,10 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
   const platform = options.platform ?? { platform: process.platform, arch: process.arch };
   const asset = releaseAssetForPlatform(platform);
   const repo = options.repo ?? defaultRepo;
+  const version = await latestReleaseVersion(fetchRelease, repo);
+  if (compareSemver(version, options.currentVersion) <= 0) {
+    return { kind: "up-to-date", version: options.currentVersion };
+  }
   const [binary, checksums] = await Promise.all([
     downloadBytes(fetchRelease, releaseDownloadUrl(repo, asset)),
     downloadText(fetchRelease, releaseDownloadUrl(repo, "SHA256SUMS")),
@@ -87,12 +95,14 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
   try {
     await writeFile(tempPath, binary);
     await chmod(tempPath, 0o755);
-    const version = await downloadedVersion(tempPath);
-    if (!isSemver(version)) {
-      throw new Error(`downloaded pipr binary reported invalid version: ${version}`);
+    const binaryVersion = await downloadedVersion(tempPath);
+    if (!isSemver(binaryVersion)) {
+      throw new Error(`downloaded pipr binary reported invalid version: ${binaryVersion}`);
     }
-    if (compareSemver(version, options.currentVersion) <= 0) {
-      return { kind: "up-to-date", version: options.currentVersion };
+    if (binaryVersion !== version) {
+      throw new Error(
+        `downloaded pipr binary reported ${binaryVersion}, expected latest ${version}`,
+      );
     }
     await rename(tempPath, options.executablePath);
     replaced = true;
@@ -102,6 +112,25 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
       await rm(tempPath, { force: true });
     }
   }
+}
+
+async function latestReleaseVersion(
+  fetchRelease: (url: string) => Promise<Response>,
+  repo: string,
+): Promise<string> {
+  const response = await fetchRelease(`https://api.github.com/repos/${repo}/releases/latest`);
+  if (!response.ok) {
+    throw new Error(`failed to fetch latest release metadata: HTTP ${response.status}`);
+  }
+  const release = (await response.json()) as LatestRelease;
+  if (typeof release.tag_name !== "string") {
+    throw new Error("latest release metadata is missing tag_name");
+  }
+  const version = release.tag_name.replace(/^v/, "");
+  if (!isSemver(version)) {
+    throw new Error(`latest release tag is not a valid semver version: ${release.tag_name}`);
+  }
+  return version;
 }
 
 function releaseDownloadUrl(repo: string, asset: string): string {
