@@ -1,0 +1,56 @@
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_1e8586bb74efb5::t_32246e17b87c27 1896
+packages/runtime/src/config/config-deps.ts
+  s_1e8586bb74efb5::t_6f3d26afed4d52 49
+packages/runtime/src/diff/tests/path-filter.test.ts
+  s_1e8586bb74efb5::t_536f73d7797bf7 3,38,41-42
+packages/e2e/assertions.test.ts
+  s_1e8586bb74efb5::t_661bf56b0ccd8d 20-28,115-116,121-123,128-130,135-139,143-146,158-160,162-166,172-177,181-183
+  s_1e8586bb74efb5::t_a7f748a78c15a5 184,276-277
+  s_1e8586bb74efb5::t_c7aa0954104d3d 117-120,124-127,131-134,140-142,147-157,161,167-171,178-180,211-223,254-275
+  s_1e8586bb74efb5::t_eddace9497806a 185
+packages/runtime/src/config/tests/init.test.ts
+  s_1e8586bb74efb5::t_fca7433d0a35ee 5,25-30,38
+packages/evals/src/tests/runner.test.ts
+  s_1e8586bb74efb5::t_b96f7d8e94726f 15,17-20,22-31,33-38
+apps/docs/src/components/copy-button.test.tsx
+  s_1e8586bb74efb5::t_558ad3840f7ad7 52-87,184,186,189-190,192,194-195,201,203,206,211,213,224,226,229,231,233
+packages/sdk/src/builder.ts
+  s_1e8586bb74efb5::t_0fa7610af1f461 187,189
+packages/runtime/src/review/tests/comment.test.ts
+  s_1e8586bb74efb5::t_78ada28a93a494 503-513
+  s_1e8586bb74efb5::t_707e68ce137308 163,186-197,311-323,330,345-349,366-376,389-398
+  s_1e8586bb74efb5::t_fa4ac00cd69028 500-502
+packages/sdk/src/tests/index.test.ts
+  s_1e8586bb74efb5::t_0fa7610af1f461 83,218
+packages/cli/src/tests/main.test.ts
+  s_1e8586bb74efb5::t_d45ef249508c27 715-734
+  s_1e8586bb74efb5::t_5735a2ff4069ce 108,121,124,136,139
+packages/runtime/src/review/tests/comment-publishing.test.ts
+  s_1e8586bb74efb5::t_755127e3155203 181,214,261-266
+  s_1e8586bb74efb5::t_8ba7360e56564e 267-269
+packages/sdk/src/types/task.ts
+  s_1e8586bb74efb5::t_0fa7610af1f461 172
+packages/runtime/src/config/tests/config.test.ts
+  s_1e8586bb74efb5::t_9a9e4d6fc6e44e 261,268
+  s_1e8586bb74efb5::t_46d5fadaf8fa36 135-138,141-143
+  s_1e8586bb74efb5::t_9b66556de886e4 6,34,51,69,98,124,133
+packages/e2e/action-fixture.ts
+  s_1e8586bb74efb5::t_efb5c868d6257a 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "656d642090525a548c0cf2a675024607c476f847",
+  "prompts": {},
+  "sessions": {
+    "s_1e8586bb74efb5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3c60-86e5-7e13-a9ce-cc355d2d7d57",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
