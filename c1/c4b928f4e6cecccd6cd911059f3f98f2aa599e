@@ -1,0 +1,21 @@
+CONTRIBUTING.md
+  s_a13fe5359bb92b::t_4e77b61130428d 35-61
+apps/docs/content/docs/project/contributing.mdx
+  s_a13fe5359bb92b::t_4e77b61130428d 34-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c1c4b928f4e6cecccd6cd911059f3f98f2aa599e",
+  "prompts": {},
+  "sessions": {
+    "s_a13fe5359bb92b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3af4-72a7-7c33-99fa-56ff06c55f5a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
