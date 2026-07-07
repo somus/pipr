@@ -1,0 +1,19 @@
+packages/runtime/src/review/tests/comment.test.ts
+  s_979590bd7b8481::t_8e2da8037c233a 353-373
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "742325b3bd6dc25042dac8440a826a4a4e687f37",
+  "prompts": {},
+  "sessions": {
+    "s_979590bd7b8481": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3bbd-aa02-7ab3-9d89-199d9212da86",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
