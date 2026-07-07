@@ -376,10 +376,7 @@ async function runUpdate(): Promise<void> {
 
 async function writeAvailableUpdateNotice(options: MainOptions): Promise<void> {
   const env = options.env ?? process.env;
-  if (
-    env.PIPR_UPDATE_NOTICE === "0" ||
-    (env.PIPR_UPDATE_NOTICE !== "1" && (env.CI === "true" || env.GITHUB_ACTIONS === "true"))
-  ) {
+  if (shouldSkipUpdateNotice(env)) {
     return;
   }
   try {
@@ -394,6 +391,21 @@ async function writeAvailableUpdateNotice(options: MainOptions): Promise<void> {
   } catch {
     return;
   }
+}
+
+function shouldSkipUpdateNotice(env: NodeJS.ProcessEnv): boolean {
+  if (env.PIPR_UPDATE_NOTICE === "0") {
+    return true;
+  }
+  if (env.PIPR_UPDATE_NOTICE === "1") {
+    return false;
+  }
+
+  const ci = env.CI?.trim().toLowerCase();
+  return (
+    (ci !== undefined && ci !== "" && ci !== "0" && ci !== "false") ||
+    env.GITHUB_ACTIONS !== undefined
+  );
 }
 
 function formatUpdateNotice(notice: UpdateNotice): string {

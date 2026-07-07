@@ -58,7 +58,13 @@ describe("pipr CLI", () => {
     const originalLog = console.log;
     console.log = () => {};
     try {
-      for (const env of [{ PIPR_UPDATE_NOTICE: "0" }, { CI: "true" }, { GITHUB_ACTIONS: "true" }]) {
+      const skippedNoticeEnvs = [
+        { PIPR_UPDATE_NOTICE: "0" },
+        { CI: "true" },
+        { CI: "1" },
+        { GITHUB_ACTIONS: "false" },
+      ];
+      for (const env of skippedNoticeEnvs) {
         const requests: string[] = [];
         const notices: string[] = [];
 
