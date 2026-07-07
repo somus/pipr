@@ -1,0 +1,76 @@
+packages/cli/src/tests/main.test.ts
+  s_180f242369a742::t_19df13a90ca040 45
+  s_180f242369a742::t_8b709366a9aade 8,23-44,46-48,805,854-861
+  s_180f242369a742::t_5d52850519f73f 862-863
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/content/docs/guide/quickstart.mdx
+  s_180f242369a742::t_a158e8b6810f21 28
+packages/cli/src/update.ts
+  s_180f242369a742::t_2ead6eb1524544 14-20,24,28-33,120-152
+scripts/tests/release-scripts.test.ts
+  s_180f242369a742::t_5e9d62c800638a 260-265
+Dockerfile.docs
+  s_180f242369a742::t_a8ceee9131ff63 26
+apps/docs/content/docs/recipes/ci-triage-command.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+packages/cli/src/tests/update.test.ts
+  s_180f242369a742::t_69b851edb09396 6,27-79
+  s_79592a1bbcbc51::t_47bc3126e592d9 80
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/scripts/sync-recipes.ts
+  s_180f242369a742::t_a158e8b6810f21 486
+packages/cli/src/main.ts
+  s_180f242369a742::t_d7010f3aac1775 21-26,44-53,55,59,379-404,578-588
+apps/docs/content/docs/index.mdx
+  s_180f242369a742::t_a158e8b6810f21 64
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/content/docs/recipes/default-review.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+apps/docs/src/routes/index.tsx
+  s_180f242369a742::t_a158e8b6810f21 31,42
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+README.md
+  s_180f242369a742::t_a158e8b6810f21 44
+apps/docs/content/docs/recipes/multi-agent-review.mdx
+  s_180f242369a742::t_a158e8b6810f21 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "31fa7d4170712470efe3d34c09dc731b3d31b217",
+  "prompts": {},
+  "sessions": {
+    "s_180f242369a742": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3dbb-98cf-7563-931e-d56c4f3a2bd6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_79592a1bbcbc51": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3d60-e15a-7181-9a00-e78ec5928f73",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
