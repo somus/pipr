@@ -206,6 +206,24 @@ describe("definePipr", () => {
     buildPiprPlan(factory);
   });
 
+  it("rejects custom tools that only define legacy execute", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.tool({
+            name: "legacy_tool",
+            description: "Legacy tool.",
+            input: pipr.schemas.summary,
+            output: pipr.schemas.summary,
+            async execute(_context: TaskContext, input: unknown) {
+              return input;
+            },
+          } as never);
+        }),
+      ),
+    ).toThrow("Tool 'legacy_tool' must define run");
+  });
+
   it("rejects custom tools that collide with built-in read-only tools", () => {
     expect(() =>
       buildPiprPlan(
