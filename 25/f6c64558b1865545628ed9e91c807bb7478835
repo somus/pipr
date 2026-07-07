@@ -1,0 +1,21 @@
+Dockerfile.docs
+  s_7336b6c05dcbd6::t_c5ab22b884cf88 23
+apps/docs/nginx.conf
+  s_7336b6c05dcbd6::t_c5ab22b884cf88 9-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "25f6c64558b1865545628ed9e91c807bb7478835",
+  "prompts": {},
+  "sessions": {
+    "s_7336b6c05dcbd6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3d5a-cfd4-7843-bb6f-0d7035fea558",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
