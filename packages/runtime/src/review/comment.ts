@@ -9,6 +9,7 @@ import type {
 } from "../types.js";
 import { commentableRangeSchema, reviewSideSchema } from "../types.js";
 import { reviewFindingSchema } from "./contract.js";
+import { isPublishableSuggestedFixSelection } from "./inline-publication-policy.js";
 import {
   buildPriorReviewState,
   findingIdFor,
@@ -261,14 +262,17 @@ function findingWithPublishableSuggestedFix(
   if (!finding.suggestedFix) {
     return finding;
   }
-  const suggestedLines = splitSuggestedFixLines(finding.suggestedFix);
-  const selectedLineCount = finding.endLine - finding.startLine + 1;
-
-  const originalLines = selectedRangePreviewLines(finding, range, selectedLineCount);
-  if (originalLines && hasUnchangedSelectionEdge(originalLines, suggestedLines)) {
-    return withoutSuggestedFix(finding);
-  }
-  if (suggestionIncludesUnselectedContext(finding, range, selectedLineCount, suggestedLines)) {
+  if (
+    !isPublishableSuggestedFixSelection({
+      side: range.side,
+      kind: range.kind,
+      rangeStartLine: range.startLine,
+      startLine: finding.startLine,
+      endLine: finding.endLine,
+      preview: range.preview,
+      suggestedFix: finding.suggestedFix,
+    })
+  ) {
     return withoutSuggestedFix(finding);
   }
 
@@ -281,61 +285,6 @@ function withoutSuggestedFix(finding: ReviewFinding): ReviewFinding {
   const next = { ...finding };
   delete next.suggestedFix;
   return next;
-}
-
-function splitSuggestedFixLines(value: string): string[] {
-  const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const withoutFinalNewline = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
-  return withoutFinalNewline.length === 0 ? [] : withoutFinalNewline.split("\n");
-}
-
-function selectedRangePreviewLines(
-  finding: ReviewFinding,
-  range: CommentableRange,
-  selectedLineCount: number,
-): string[] | undefined {
-  if (!range.preview) {
-    return undefined;
-  }
-  const offset = finding.startLine - range.startLine;
-  if (offset < 0) {
-    return undefined;
-  }
-  const previewLines = range.preview.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  if (offset + selectedLineCount > previewLines.length) {
-    return undefined;
-  }
-  return previewLines.slice(offset, offset + selectedLineCount);
-}
-
-function suggestionIncludesUnselectedContext(
-  finding: ReviewFinding,
-  range: CommentableRange,
-  selectedLineCount: number,
-  suggestedLines: string[],
-): boolean {
-  if (!range.preview || suggestedLines.length <= selectedLineCount) {
-    return false;
-  }
-  const offset = finding.startLine - range.startLine;
-  if (offset < 0) {
-    return false;
-  }
-  const previewLines = range.preview.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  const contextLines = [
-    offset > 0 ? previewLines[offset - 1] : undefined,
-    previewLines[offset + selectedLineCount],
-  ].filter((line): line is string => Boolean(line?.trim()));
-  return contextLines.some((line) => suggestedLines.includes(line));
-}
-
-function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {
-  const firstLineUnchanged = originalLines[0] === suggestedLines[0];
-  const lastLineUnchanged = originalLines.at(-1) === suggestedLines.at(-1);
-  if (originalLines.length === suggestedLines.length || originalLines.length === 1) {
-    return firstLineUnchanged || lastLineUnchanged;
-  }
-  return firstLineUnchanged && lastLineUnchanged;
 }
 
 function renderMainComment(options: {

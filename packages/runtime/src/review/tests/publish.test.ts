@@ -64,7 +64,7 @@ const manifest: DiffManifest = {
           hunkIndex: 1,
           hunkHeader: "@@ -9,1 +10,3 @@",
           hunkContentHash: "deadbeefcafe",
-          preview: "fail()\nrecover()",
+          preview: "fail()\nrecover()\nreturn",
         },
         {
           id: "range-2",

@@ -129,6 +129,9 @@ function outputPrompt(schema: Schema<unknown>): string {
     schema.id === reviewResultSchemaId
       ? "Do not select a larger enclosing block to replace a smaller statement, and do not select one line when the replacement is for a multi-line section. Omit `suggestedFix` if the exact replacement range is uncertain."
       : undefined,
+    schema.id === reviewResultSchemaId
+      ? "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose."
+      : undefined,
     "Return exactly one JSON value matching the schema.",
     "The first non-whitespace character must be { or [ and the last non-whitespace character must be } or ].",
     "Do not include Markdown, code fences, prose, explanations, or leading/trailing text.",
@@ -154,6 +157,7 @@ function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
       "Emit one inline finding per issue, anchored to the exact Diff Manifest commentable range.",
       "`suggestedFix` must be exact replacement code for the selected range.",
       "For `suggestedFix`, choose the smallest contiguous `startLine` to `endLine` span that should be replaced. Do not select an enclosing function, block, or single line unless that exact span is the replacement target.",
+      "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
     ].join("\n"),
   );
 }

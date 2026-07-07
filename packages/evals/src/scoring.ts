@@ -1,3 +1,4 @@
+import { isPublishableSuggestedFixSelection } from "@usepipr/runtime/internal/testing";
 import type { PiprEvalExpected } from "./cases.js";
 import type { EvalDiffRange, EvalInlineFinding, PiprEvalOutput } from "./runner.js";
 import { piprEvalForbiddenOutputText } from "./runner.js";
@@ -170,67 +171,19 @@ function isTightSuggestedFixSelection(
   finding: EvalInlineFinding,
   ranges: EvalDiffRange[],
 ): boolean {
-  const replacement = finding.suggestedFix ? normalizedLines(finding.suggestedFix) : [];
   const range = ranges.find((item) => rangeContainsFinding(item, finding));
-  const selected = range?.preview ? selectedPreviewLines(range, finding) : undefined;
-  return (
-    (!selected || !keepsUnchangedSelectionBoundary(selected, replacement)) &&
-    (!range || !includesUnselectedContext(range, finding, replacement))
-  );
-}
-
-function selectedPreviewLines(
-  range: EvalDiffRange,
-  finding: EvalInlineFinding,
-): string[] | undefined {
-  const selectedLineCount = finding.endLine - finding.startLine + 1;
-  const offset = finding.startLine - range.startLine;
-  const previewLines = (range.preview ?? "").replace(/\r\n?/g, "\n").split("\n");
-  return offset < 0 || offset + selectedLineCount > previewLines.length
-    ? undefined
-    : previewLines.slice(offset, offset + selectedLineCount);
-}
-
-function includesUnselectedContext(
-  range: EvalDiffRange,
-  finding: EvalInlineFinding,
-  suggestedLines: string[],
-): boolean {
-  if (!range.preview) {
+  if (!range || !finding.suggestedFix) {
     return false;
   }
-  const selectedLineCount = finding.endLine - finding.startLine + 1;
-  if (suggestedLines.length <= selectedLineCount) {
-    return false;
-  }
-  const offset = finding.startLine - range.startLine;
-  if (offset < 0) {
-    return false;
-  }
-  const previewLines = range.preview.replace(/\r\n?/g, "\n").split("\n");
-  const contextLines = [
-    offset > 0 ? previewLines[offset - 1] : undefined,
-    previewLines[offset + selectedLineCount],
-  ].filter((line): line is string => Boolean(line?.trim()));
-  return contextLines.some((line) => suggestedLines.includes(line));
-}
-
-function normalizedLines(value: string): string[] {
-  const normalized = value.replace(/\r\n?/g, "\n");
-  const body = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
-  return body.length === 0 ? [] : body.split("\n");
-}
-
-function keepsUnchangedSelectionBoundary(
-  originalLines: string[],
-  suggestedLines: string[],
-): boolean {
-  const firstLineUnchanged = originalLines[0] === suggestedLines[0];
-  const lastLineUnchanged = originalLines.at(-1) === suggestedLines.at(-1);
-  const unchangedEdges = Number(firstLineUnchanged) + Number(lastLineUnchanged);
-  const oneChangedLineOrSameShape =
-    originalLines.length === 1 || originalLines.length === suggestedLines.length;
-  return oneChangedLineOrSameShape ? unchangedEdges > 0 : unchangedEdges === 2;
+  return isPublishableSuggestedFixSelection({
+    side: range.side,
+    kind: "added",
+    rangeStartLine: range.startLine,
+    startLine: finding.startLine,
+    endLine: finding.endLine,
+    preview: range.preview,
+    suggestedFix: finding.suggestedFix,
+  });
 }
 
 function hasExpectedOutput(

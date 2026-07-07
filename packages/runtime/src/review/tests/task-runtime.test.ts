@@ -1125,6 +1125,9 @@ describe("runTaskRuntime", () => {
       "For inlineFindings, use only fields shown in the schema and only exact Diff Manifest commentable ranges.",
     );
     expect(observedPrompt).toContain(
+      "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
+    );
+    expect(observedPrompt).toContain(
       "Diff Manifest:\nUse this as the authoritative changed-code context",
     );
     expect(observedPrompt).toContain(

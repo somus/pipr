@@ -298,13 +298,86 @@ describe("comments", () => {
           },
         ],
       },
-      manifest: manifestWithRange(10, 12),
+      manifest: manifestWithRange(10, 12, ["fail()", "recover()", "return"].join("\n")),
       reviewedHeadSha: "head",
     });
 
     expect(item?.finding.suggestedFix).toBe("return safeCall();");
     expect(item?.body).toContain("This can fail.");
     expect(item?.body).toContain("```suggestion\nreturn safeCall();\n```");
+  });
+
+  it("omits broad suggested-change blocks while keeping the finding", () => {
+    const selectedLines = [
+      "---",
+      'title: "Changelog"',
+      'description: "Release history for Pipr."',
+      "---",
+      "",
+      "This changelog is generated from Conventional Commits by Release Please.",
+      "",
+      "## 0.2.2 (2026-07-06)",
+      "",
+      "### Features",
+      "",
+      "- harden review prompts and evals",
+      ...Array.from({ length: 42 }, (_, index) => `release line ${index}`),
+    ];
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            startLine: 1,
+            endLine: selectedLines.length,
+            suggestedFix: [
+              "---",
+              'title: "Changelog"',
+              'description: "Release history for Pipr."',
+              "---",
+              "",
+              "For the full release history, see CHANGELOG.md.",
+            ].join("\n"),
+          },
+        ],
+      },
+      manifest: manifestWithRange(1, selectedLines.length, selectedLines.join("\n")),
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.body).toContain("This can fail.");
+    expect(item?.body).not.toContain("```suggestion");
+  });
+
+  it("omits suggested-change blocks for left-side findings", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            side: "LEFT",
+            suggestedFix: "safeCall();",
+          },
+        ],
+      },
+      manifest: {
+        ...manifest,
+        files: manifest.files.map((file) => ({
+          ...file,
+          commentableRanges: file.commentableRanges.map((range) => ({
+            ...range,
+            side: "LEFT",
+            kind: "deleted",
+          })),
+        })),
+      },
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.body).toContain("This can fail.");
+    expect(item?.body).not.toContain("```suggestion");
   });
 
   it("omits suggested-change blocks when the replacement includes unchanged edge lines", () => {
