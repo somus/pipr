@@ -5,8 +5,8 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import cliPackage from "../../package.json" with { type: "json" };
-import { runMain } from "../main.js";
 import { embeddedSdkDeclaration, readSdkDeclarationModules } from "../release/sdk-declaration.js";
+import { runMain } from "../runner.js";
 import {
   type BundledSkill,
   containedSkillFilePath,
@@ -20,30 +20,77 @@ const repoRoot = path.resolve(cliProjectDir, "../..");
 const cliPath = path.join(cliProjectDir, "src", "main.ts");
 
 describe("pipr CLI", () => {
-  it("prints an update notice before running commands when a newer release is available", async () => {
-    const logs: string[] = [];
-    const notices: string[] = [];
+  it("prints update notices to stderr before running CLI commands", async () => {
+    const events: Array<{ stream: "stdout" | "stderr"; message: string }> = [];
     const originalLog = console.log;
+    const originalError = console.error;
     console.log = (message?: unknown) => {
-      logs.push(String(message));
+      events.push({ stream: "stdout", message: String(message) });
+    };
+    console.error = (message?: unknown) => {
+      events.push({ stream: "stderr", message: String(message) });
     };
     try {
       await runMain({
         argv: ["bun", "pipr", "version"],
         env: {},
         updateNoticeFetch: fakeLatestReleaseFetch("9.9.9"),
+      });
+      await runMain({
+        argv: ["bun", "pipr", "skill"],
+        env: {},
+        updateNoticeFetch: fakeLatestReleaseFetch("9.9.9"),
+      });
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+    }
+
+    const notice = `pipr 9.9.9 is available (current ${cliPackage.version}). Run \`pipr update\` for release binaries, or reinstall @usepipr/cli with npm/Bun.`;
+    expect(events[0]).toEqual({ stream: "stderr", message: notice });
+    expect(events[1]).toEqual({ stream: "stdout", message: cliPackage.version });
+    expect(events[2]).toEqual({ stream: "stderr", message: notice });
+    expect(events[3]?.stream).toBe("stdout");
+    expect(events[3]?.message).toContain("BEGIN SKILL FILE: SKILL.md");
+  });
+
+  it("skips update notices when disabled or running in CI by default", async () => {
+    const originalLog = console.log;
+    console.log = () => {};
+    try {
+      for (const env of [{ PIPR_UPDATE_NOTICE: "0" }, { CI: "true" }, { GITHUB_ACTIONS: "true" }]) {
+        const requests: string[] = [];
+        const notices: string[] = [];
+
+        await runMain({
+          argv: ["bun", "pipr", "version"],
+          env,
+          updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
+          writeUpdateNotice(message) {
+            notices.push(message);
+          },
+        });
+
+        expect(requests).toEqual([]);
+        expect(notices).toEqual([]);
+      }
+
+      const requests: string[] = [];
+      const notices: string[] = [];
+      await runMain({
+        argv: ["bun", "pipr", "version"],
+        env: { CI: "true", PIPR_UPDATE_NOTICE: "1" },
+        updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
         writeUpdateNotice(message) {
           notices.push(message);
         },
       });
+
+      expect(requests).toEqual(["https://api.github.com/repos/somus/pipr/releases/latest"]);
+      expect(notices).toHaveLength(1);
     } finally {
       console.log = originalLog;
     }
-
-    expect(logs).toEqual([cliPackage.version]);
-    expect(notices).toEqual([
-      `pipr 9.9.9 is available (current ${cliPackage.version}). Run \`pipr update\` for release binaries, or reinstall @usepipr/cli with npm/Bun.`,
-    ]);
   });
 
   it("prints the CLI version", async () => {
@@ -851,9 +898,10 @@ function pullRequestPayload(baseSha = "base", headSha = "head"): unknown {
   };
 }
 
-function fakeLatestReleaseFetch(version: string): typeof fetch {
+function fakeLatestReleaseFetch(version: string, requests: string[] = []): typeof fetch {
   return (async (input: Parameters<typeof fetch>[0]) => {
     const url = String(input);
+    requests.push(url);
     if (url === "https://api.github.com/repos/somus/pipr/releases/latest") {
       return Response.json({ tag_name: `v${version}` });
     }

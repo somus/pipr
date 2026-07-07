@@ -263,6 +263,24 @@ describe("install.sh", () => {
     );
   });
 
+  it("uses the hosted install URL in docs and generated recipe sources", () => {
+    const oldInstallUrl = "https://raw.githubusercontent.com/somus/pipr/main/install.sh";
+    const checkedFiles = [
+      "README.md",
+      "apps/docs/scripts/sync-recipes.ts",
+      "apps/docs/src/routes/index.tsx",
+      "apps/docs/content/docs/index.mdx",
+      "apps/docs/content/docs/guide/quickstart.mdx",
+      ...readdirSync(path.join(repoRoot, "apps/docs/content/docs/recipes"))
+        .filter((entry) => entry.endsWith(".mdx"))
+        .map((entry) => `apps/docs/content/docs/recipes/${entry}`),
+    ];
+
+    for (const file of checkedFiles) {
+      expect(readFileSync(path.join(repoRoot, file), "utf8")).not.toContain(oldInstallUrl);
+    }
+  });
+
   it("verifies the downloaded binary checksum before install", () => {
     const fixture = installFixture({ validChecksum: true });
     const result = scriptResult("install.sh", [], repoRoot, {
