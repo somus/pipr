@@ -1,0 +1,27 @@
+Dockerfile.docs
+  s_7336b6c05dcbd6::t_7b801e66263780 1-5,8,12-13,15-26
+  s_7336b6c05dcbd6::t_42b62269f7f384 6-7,9-11,14
+package.json
+  s_7336b6c05dcbd6::t_7b801e66263780 38
+apps/docs/README.md
+  s_7336b6c05dcbd6::t_7b801e66263780 22-35
+apps/docs/nginx.conf
+  s_7336b6c05dcbd6::t_e0e2bf0699dc54 20
+  s_7336b6c05dcbd6::t_7b801e66263780 1-19,21-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c1090cdc44c9c87350a4e281926d2ac8007acaea",
+  "prompts": {},
+  "sessions": {
+    "s_7336b6c05dcbd6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3d5a-cfd4-7843-bb6f-0d7035fea558",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
