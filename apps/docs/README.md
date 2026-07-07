@@ -19,6 +19,20 @@ bun run --cwd apps/docs typecheck
 bun run build:docs
 ```
 
+## Dokploy
+
+Use the dedicated docs Dockerfile when deploying this app through Dokploy:
+
+| Setting | Value |
+| --- | --- |
+| Build Type | `Dockerfile` |
+| Dockerfile Path | `Dockerfile.docs` |
+| Docker Context Path | `.` |
+| Domain port | `80` |
+
+The image builds `@pipr/docs` and serves `apps/docs/.output/public` through
+Nginx. The existing root `Dockerfile` remains the Pipr Action image.
+
 ## Docs
 
 - [Hosted Docs](https://pipr.run/docs)
