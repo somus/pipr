@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { releaseAssetForPlatform, runPiprUpdate } from "../update.js";
@@ -67,6 +67,31 @@ describe("pipr update", () => {
     });
   });
 
+  it("rejects non-stable latest release versions before downloading assets", async () => {
+    await withUpdateWorkspace(async ({ executablePath }) => {
+      const binary = versionBinary("0.2.0-beta.1");
+      const requests: string[] = [];
+
+      await expect(
+        runPiprUpdate({
+          currentVersion: "0.1.0",
+          executablePath,
+          fetch: fakeReleaseFetch({
+            asset: "pipr-linux-x64",
+            binary,
+            checksum: sha256(binary),
+            releaseVersion: "0.2.0-beta.1",
+            requests,
+          }),
+          platform: { platform: "linux", arch: "x64" },
+        }),
+      ).rejects.toThrow("latest release tag is not a stable semver version");
+
+      expect(requests).toEqual(["https://api.github.com/repos/somus/pipr/releases/latest"]);
+      expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
+    });
+  });
+
   it("rejects invalid downloaded binary versions before replacing the executable", async () => {
     await withUpdateWorkspace(async ({ executablePath }) => {
       const binary = versionBinary("not-a-version");
@@ -105,6 +130,39 @@ describe("pipr update", () => {
 
       expect(result).toEqual({ kind: "updated", version: "0.2.0", previousVersion: "0.1.0" });
       expect(await Bun.file(executablePath).text()).toBe(binary);
+    });
+  });
+
+  it("refuses to follow an existing temp path before replacing the executable", async () => {
+    await withUpdateWorkspace(async ({ executablePath }) => {
+      const binary = versionBinary("0.2.0");
+      const tempPath = path.join(path.dirname(executablePath), `.pipr-update-${process.pid}-12345`);
+      const symlinkTarget = path.join(path.dirname(executablePath), "target");
+      const originalNow = Date.now;
+
+      await Bun.write(symlinkTarget, "target\n");
+      await symlink(symlinkTarget, tempPath);
+      Date.now = () => 12345;
+      try {
+        await expect(
+          runPiprUpdate({
+            currentVersion: "0.1.0",
+            executablePath,
+            fetch: fakeReleaseFetch({
+              asset: "pipr-linux-x64",
+              binary,
+              checksum: sha256(binary),
+            }),
+            platform: { platform: "linux", arch: "x64" },
+          }),
+        ).rejects.toThrow();
+      } finally {
+        Date.now = originalNow;
+      }
+
+      expect(await Bun.file(symlinkTarget).text()).toBe("target\n");
+      expect(await Bun.file(tempPath).text()).toBe("target\n");
+      expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
     });
   });
 

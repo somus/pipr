@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, open, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 export type ReleasePlatform = {
@@ -72,6 +72,11 @@ export function resolveCurrentExecutablePath(
 }
 
 export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResult> {
+  if (!isStableSemver(options.currentVersion)) {
+    throw new Error(
+      `current pipr version is not a stable semver version: ${options.currentVersion}`,
+    );
+  }
   const fetchRelease = options.fetch ?? globalThis.fetch.bind(globalThis);
   const platform = options.platform ?? { platform: process.platform, arch: process.arch };
   const asset = releaseAssetForPlatform(platform);
@@ -90,12 +95,19 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
     path.dirname(options.executablePath),
     `.pipr-update-${process.pid}-${Date.now()}`,
   );
+  let createdTemp = false;
   let replaced = false;
   try {
-    await writeFile(tempPath, binary);
+    const tempFile = await open(tempPath, "wx", 0o700);
+    createdTemp = true;
+    try {
+      await tempFile.writeFile(binary);
+    } finally {
+      await tempFile.close();
+    }
     await chmod(tempPath, 0o755);
     const binaryVersion = await downloadedVersion(tempPath);
-    if (!isSemver(binaryVersion)) {
+    if (!isStableSemver(binaryVersion)) {
       throw new Error(`downloaded pipr binary reported invalid version: ${binaryVersion}`);
     }
     if (binaryVersion !== version) {
@@ -107,7 +119,7 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
     replaced = true;
     return { kind: "updated", previousVersion: options.currentVersion, version };
   } finally {
-    if (!replaced) {
+    if (createdTemp && !replaced) {
       await rm(tempPath, { force: true });
     }
   }
@@ -128,8 +140,8 @@ async function latestRelease(fetchRelease: (url: string) => Promise<Response>): 
     throw new Error("latest release metadata is missing tag_name");
   }
   const version = release.tag_name.replace(/^v/, "");
-  if (!isSemver(version)) {
-    throw new Error(`latest release tag is not a valid semver version: ${release.tag_name}`);
+  if (!isStableSemver(version)) {
+    throw new Error(`latest release tag is not a stable semver version: ${release.tag_name}`);
   }
   return { tag: release.tag_name, version };
 }
@@ -195,28 +207,18 @@ async function downloadedVersion(executablePath: string): Promise<string> {
   return stdout.trim();
 }
 
-function isSemver(version: string): boolean {
-  return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version);
+function isStableSemver(version: string): boolean {
+  return /^\d+\.\d+\.\d+$/.test(version);
 }
 
 function compareSemver(left: string, right: string): number {
-  const [leftCore] = left.split(/[-+]/, 1);
-  const [rightCore] = right.split(/[-+]/, 1);
-  const leftParts = leftCore.split(".").map(Number);
-  const rightParts = rightCore.split(".").map(Number);
+  const leftParts = left.split(".").map(Number);
+  const rightParts = right.split(".").map(Number);
   for (let index = 0; index < 3; index += 1) {
     const difference = leftParts[index] - rightParts[index];
     if (difference !== 0) {
       return difference;
     }
   }
-  if (left === right) {
-    return 0;
-  }
-  const leftPrerelease = left.includes("-");
-  const rightPrerelease = right.includes("-");
-  if (leftPrerelease === rightPrerelease) {
-    return left.localeCompare(right);
-  }
-  return leftPrerelease ? -1 : 1;
+  return 0;
 }
