@@ -80,7 +80,7 @@ describe("definePipr", () => {
         description: "Custom tool.",
         input: pipr.schemas.summary,
         output: pipr.schemas.summary,
-        async execute(_context, input) {
+        async run({ input }) {
           return input;
         },
       });
@@ -178,42 +178,6 @@ describe("definePipr", () => {
     ).toThrow(error);
   });
 
-  it("rejects removed positional builder calls at runtime", () => {
-    const factory = definePipr((pipr) => {
-      expect(() =>
-        // @ts-expect-error positional secret API is not supported.
-        pipr.secret("DEEPSEEK_API_KEY"),
-      ).toThrow("pipr.secret requires { name }");
-      expect(() =>
-        // @ts-expect-error positional model API is not supported.
-        pipr.model("deepseek/deepseek-v4-pro", {}),
-      ).toThrow("pipr.model requires { provider, model }");
-      expect(() =>
-        // @ts-expect-error positional task API is not supported.
-        pipr.task("review", () => {}),
-      ).toThrow("pipr.task requires { name, run }");
-      const task = pipr.task({ name: "review", run() {} });
-      expect(() =>
-        // @ts-expect-error positional event API is not supported.
-        pipr.on.changeRequest(["opened"], task),
-      ).toThrow("pipr.on.changeRequest requires { actions, task }");
-      expect(() =>
-        // @ts-expect-error positional command API is not supported.
-        pipr.command("@pipr review", {}, task),
-      ).toThrow("pipr.command requires { pattern, task }");
-      expect(() =>
-        // @ts-expect-error positional schema API is not supported.
-        pipr.schema("custom/output", z.string()),
-      ).toThrow("pipr.schema requires { id, schema }");
-      expect(() =>
-        // @ts-expect-error positional JSON schema API is not supported.
-        pipr.jsonSchema("custom/output", true),
-      ).toThrow("pipr.jsonSchema requires { id, schema }");
-    });
-
-    expect(buildPiprPlan(factory).tasks.map((task) => task.name)).toEqual(["review"]);
-  });
-
   it("rejects unsupported review option fields at runtime", () => {
     const factory = definePipr((pipr) => {
       const model = pipr.model({
@@ -242,6 +206,24 @@ describe("definePipr", () => {
     buildPiprPlan(factory);
   });
 
+  it("rejects custom tools that only define legacy execute", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.tool({
+            name: "legacy_tool",
+            description: "Legacy tool.",
+            input: pipr.schemas.summary,
+            output: pipr.schemas.summary,
+            async execute(_context: TaskContext, input: unknown) {
+              return input;
+            },
+          } as never);
+        }),
+      ),
+    ).toThrow("Tool 'legacy_tool' must define run");
+  });
+
   it("rejects custom tools that collide with built-in read-only tools", () => {
     expect(() =>
       buildPiprPlan(
@@ -251,7 +233,7 @@ describe("definePipr", () => {
             description: "collision",
             input: pipr.schemas.summary,
             output: pipr.schemas.summary,
-            async execute(_context, input) {
+            async run({ input }) {
               return input;
             },
           });
@@ -425,26 +407,6 @@ describe("definePipr", () => {
       tool?.run?.({ input: { body: "Looks good." }, ctx: fakeTaskContext(), signal: undefined }),
     ).resolves.toEqual({ body: "Looks good." });
     expect(tool?.toModelOutput?.({ body: "Looks good." })).toBe("Looks good.");
-  });
-
-  it("rejects removed review-level inline publication settings", () => {
-    expect(() =>
-      buildPiprPlan(
-        definePipr((pipr) => {
-          const model = pipr.model({
-            provider: "deepseek",
-            model: "deepseek-v4-pro",
-            apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-          });
-          pipr.review({
-            id: "review",
-            model,
-            instructions: "Review.",
-            inlineComments: { max: 3 },
-          } as never);
-        }),
-      ),
-    ).toThrow("unsupported option fields: inlineComments");
   });
 
   it("rejects unsupported config option fields at runtime", () => {

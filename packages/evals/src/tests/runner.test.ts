@@ -12,40 +12,30 @@ const forbiddenCase = promptEvalCasesForMode("deterministic").find(
 );
 
 describe("prompt eval runner", () => {
-  it("rejects live evals when the caller sets a Pi executable override", async () => {
+  it("rejects live evals when a Pi executable override is set", async () => {
     const testCase = requireLiveCase();
-    const previousKey = process.env.DEEPSEEK_API_KEY;
-    const previousPiExecutable = process.env.PIPR_EVAL_PI_EXECUTABLE;
-    process.env.DEEPSEEK_API_KEY = "dummy-live-key";
-    delete process.env.PIPR_EVAL_PI_EXECUTABLE;
-    try {
-      const output = await runPiprEvalCase(testCase, {
-        mode: "live",
-        piExecutable: "/tmp/fake-pi",
-      });
+    const scenarios = [
+      { envOverride: undefined, piExecutable: "/tmp/fake-pi" },
+      { envOverride: "/tmp/fake-pi", piExecutable: undefined },
+    ];
 
-      expect(output.ok).toBe(false);
-      expect(output.error).toContain("live prompt evals must not set Pi executable overrides");
-    } finally {
-      restoreEnv("DEEPSEEK_API_KEY", previousKey);
-      restoreEnv("PIPR_EVAL_PI_EXECUTABLE", previousPiExecutable);
-    }
-  });
+    for (const scenario of scenarios) {
+      const previousKey = process.env.DEEPSEEK_API_KEY;
+      const previousPiExecutable = process.env.PIPR_EVAL_PI_EXECUTABLE;
+      process.env.DEEPSEEK_API_KEY = "dummy-live-key";
+      restoreEnv("PIPR_EVAL_PI_EXECUTABLE", scenario.envOverride);
+      try {
+        const output = await runPiprEvalCase(testCase, {
+          mode: "live",
+          piExecutable: scenario.piExecutable,
+        });
 
-  it("rejects live evals when the environment sets a Pi executable override", async () => {
-    const testCase = requireLiveCase();
-    const previousKey = process.env.DEEPSEEK_API_KEY;
-    const previousPiExecutable = process.env.PIPR_EVAL_PI_EXECUTABLE;
-    process.env.DEEPSEEK_API_KEY = "dummy-live-key";
-    process.env.PIPR_EVAL_PI_EXECUTABLE = "/tmp/fake-pi";
-    try {
-      const output = await runPiprEvalCase(testCase, { mode: "live" });
-
-      expect(output.ok).toBe(false);
-      expect(output.error).toContain("live prompt evals must not set Pi executable overrides");
-    } finally {
-      restoreEnv("DEEPSEEK_API_KEY", previousKey);
-      restoreEnv("PIPR_EVAL_PI_EXECUTABLE", previousPiExecutable);
+        expect(output.ok).toBe(false);
+        expect(output.error).toContain("live prompt evals must not set Pi executable overrides");
+      } finally {
+        restoreEnv("DEEPSEEK_API_KEY", previousKey);
+        restoreEnv("PIPR_EVAL_PI_EXECUTABLE", previousPiExecutable);
+      }
     }
   });
 

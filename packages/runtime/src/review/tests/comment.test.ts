@@ -159,14 +159,8 @@ describe("comments", () => {
   it("omits suggested-change blocks when suggestedFix is absent", () => {
     const findingWithoutSuggestion = { ...finding };
     delete findingWithoutSuggestion.suggestedFix;
-    const [item] = prepareInlinePublicationItems({
-      validated: { validFindings: [findingWithoutSuggestion] },
-      manifest,
-      reviewedHeadSha: "head",
-    });
 
-    expect(item?.body).toContain("This can fail.");
-    expect(item?.body).not.toContain("```suggestion");
+    expectSuggestedChangeOmitted({ finding: findingWithoutSuggestion });
   });
 
   it("publishes suggested-change blocks when one selected line expands to multiple replacement lines", () => {
@@ -189,30 +183,21 @@ describe("comments", () => {
   });
 
   it("omits suggested-change blocks when a one-line selection keeps that line as context", () => {
-    const [item] = prepareInlinePublicationItems({
-      validated: {
-        validFindings: [
-          {
-            ...finding,
-            startLine: 5,
-            endLine: 5,
-            suggestedFix: [
-              "  const value = user.name ?? user.displayName;",
-              "  if (!value) {",
-              '    return "Anonymous";',
-              "  }",
-              "  return value.trim();",
-            ].join("\n"),
-          },
-        ],
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 5,
+        endLine: 5,
+        suggestedFix: [
+          "  const value = user.name ?? user.displayName;",
+          "  if (!value) {",
+          '    return "Anonymous";',
+          "  }",
+          "  return value.trim();",
+        ].join("\n"),
       },
       manifest: manifestWithRange(5, 5, "  return value.trim();"),
-      reviewedHeadSha: "head",
     });
-
-    expect(item?.finding.suggestedFix).toBeUndefined();
-    expect(item?.body).toContain("This can fail.");
-    expect(item?.body).not.toContain("```suggestion");
   });
 
   it("redacts secret-like tokens from inline bodies and strips leaking suggestions", () => {
@@ -323,36 +308,26 @@ describe("comments", () => {
       "- harden review prompts and evals",
       ...Array.from({ length: 42 }, (_, index) => `release line ${index}`),
     ];
-    const [item] = prepareInlinePublicationItems({
-      validated: {
-        validFindings: [
-          {
-            ...finding,
-            startLine: 1,
-            endLine: selectedLines.length,
-            suggestedFix: [
-              "---",
-              'title: "Changelog"',
-              'description: "Release history for Pipr."',
-              "---",
-              "",
-              "For the full release history, see CHANGELOG.md.",
-            ].join("\n"),
-          },
-        ],
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 1,
+        endLine: selectedLines.length,
+        suggestedFix: [
+          "---",
+          'title: "Changelog"',
+          'description: "Release history for Pipr."',
+          "---",
+          "",
+          "For the full release history, see CHANGELOG.md.",
+        ].join("\n"),
       },
       manifest: manifestWithRange(1, selectedLines.length, selectedLines.join("\n")),
-      reviewedHeadSha: "head",
     });
-
-    expect(item?.finding.suggestedFix).toBeUndefined();
-    expect(item?.body).toContain("This can fail.");
-    expect(item?.body).not.toContain("```suggestion");
   });
 
   it("omits suggested-change blocks when the selected preview is unavailable", () => {
-    const [item] = prepareInlinePublicationItems({
-      validated: { validFindings: [finding] },
+    expectSuggestedChangeOmitted({
       manifest: {
         ...manifest,
         files: manifest.files.map((file) => ({
@@ -363,24 +338,15 @@ describe("comments", () => {
           })),
         })),
       },
-      reviewedHeadSha: "head",
     });
-
-    expect(item?.finding.suggestedFix).toBeUndefined();
-    expect(item?.body).toContain("This can fail.");
-    expect(item?.body).not.toContain("```suggestion");
   });
 
   it("omits suggested-change blocks for left-side findings", () => {
-    const [item] = prepareInlinePublicationItems({
-      validated: {
-        validFindings: [
-          {
-            ...finding,
-            side: "LEFT",
-            suggestedFix: "safeCall();",
-          },
-        ],
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        side: "LEFT",
+        suggestedFix: "safeCall();",
       },
       manifest: {
         ...manifest,
@@ -393,30 +359,21 @@ describe("comments", () => {
           })),
         })),
       },
-      reviewedHeadSha: "head",
     });
-
-    expect(item?.finding.suggestedFix).toBeUndefined();
-    expect(item?.body).toContain("This can fail.");
-    expect(item?.body).not.toContain("```suggestion");
   });
 
   it("omits suggested-change blocks when the replacement includes unchanged edge lines", () => {
-    const [item] = prepareInlinePublicationItems({
-      validated: {
-        validFindings: [
-          {
-            ...finding,
-            endLine: 14,
-            suggestedFix: [
-              "const next = compute();",
-              "if (next < 0) {",
-              "  return 0;",
-              "}",
-              "return next;",
-            ].join("\n"),
-          },
-        ],
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        endLine: 14,
+        suggestedFix: [
+          "const next = compute();",
+          "if (next < 0) {",
+          "  return 0;",
+          "}",
+          "return next;",
+        ].join("\n"),
       },
       manifest: manifestWithRange(
         10,
@@ -425,29 +382,20 @@ describe("comments", () => {
           "\n",
         ),
       ),
-      reviewedHeadSha: "head",
     });
-
-    expect(item?.finding.suggestedFix).toBeUndefined();
-    expect(item?.body).toContain("This can fail.");
-    expect(item?.body).not.toContain("```suggestion");
   });
 
   it("omits suggested-change blocks when a one-line selection includes surrounding context", () => {
-    const [item] = prepareInlinePublicationItems({
-      validated: {
-        validFindings: [
-          {
-            ...finding,
-            startLine: 11,
-            endLine: 11,
-            suggestedFix: [
-              "const adjusted = priceCents - 100;",
-              "return Math.max(0, adjusted);",
-              "}",
-            ].join("\n"),
-          },
-        ],
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 11,
+        endLine: 11,
+        suggestedFix: [
+          "const adjusted = priceCents - 100;",
+          "return Math.max(0, adjusted);",
+          "}",
+        ].join("\n"),
       },
       manifest: manifestWithRange(
         10,
@@ -456,12 +404,7 @@ describe("comments", () => {
           "\n",
         ),
       ),
-      reviewedHeadSha: "head",
     });
-
-    expect(item?.finding.suggestedFix).toBeUndefined();
-    expect(item?.body).toContain("This can fail.");
-    expect(item?.body).not.toContain("```suggestion");
   });
 
   it("publishes only a bounded first paragraph for verbose inline finding bodies", () => {
@@ -552,6 +495,20 @@ function metadata() {
     validFindings: 1,
     droppedFindings: 0,
   };
+}
+
+function expectSuggestedChangeOmitted(
+  options: { finding?: ReviewFinding; manifest?: DiffManifest } = {},
+): void {
+  const [item] = prepareInlinePublicationItems({
+    validated: { validFindings: [options.finding ?? finding] },
+    manifest: options.manifest ?? manifest,
+    reviewedHeadSha: "head",
+  });
+
+  expect(item?.finding.suggestedFix).toBeUndefined();
+  expect(item?.body).toContain("This can fail.");
+  expect(item?.body).not.toContain("```suggestion");
 }
 
 function manifestWithRange(startLine: number, endLine: number, preview = "fail()"): DiffManifest {

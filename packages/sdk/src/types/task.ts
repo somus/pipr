@@ -169,8 +169,7 @@ export type PluginToolDefinition<Input, Output> = {
   description: string;
   input: Schema<Input>;
   output: Schema<Output>;
-  execute?(context: TaskContext, input: Input): Promise<Output>;
-  run?(options: ToolRunOptions<Input>): Output | Promise<Output>;
+  run(options: ToolRunOptions<Input>): Output | Promise<Output>;
   toModelOutput?(output: Output): PromptValue;
 };
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readdir, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { initOfficialMinimalProject, listOfficialMinimalFiles } from "../init.js";
+import { initOfficialMinimalProject } from "../init.js";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import {
   listOfficialInitRecipes,
@@ -22,6 +22,12 @@ const packageInitFiles = [
   path.join(".pipr", "bun.lock"),
 ];
 
+const defaultInitFiles = [
+  ...configCoreInitFiles,
+  ...packageInitFiles,
+  path.join(".github", "workflows", "pipr.yml"),
+];
+
 describe("initOfficialMinimalProject", () => {
   it("creates the official minimal .pipr tree and validates it", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
@@ -29,7 +35,7 @@ describe("initOfficialMinimalProject", () => {
     const result = await initOfficialMinimalProject({ rootDir });
     const project = await loadRuntimeProject({ rootDir });
 
-    expect(result.created).toEqual(expect.arrayContaining(listOfficialMinimalFiles()));
+    expect(result.created).toEqual(expect.arrayContaining(defaultInitFiles));
     expect(result.created).toEqual(expect.arrayContaining(packageInitFiles));
     expect(result.overwritten).toEqual([]);
     expect(await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text()).toContain(

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { DiffManifest } from "../../types.js";
-import {
-  diffManifestHasPathMatch,
-  filterDiffManifestByPaths,
-  pathMatchesFilter,
-} from "../path-filter.js";
+import { filterDiffManifestByPaths, pathMatchesFilter } from "../path-filter.js";
 
 describe("path filters", () => {
   it("matches glob patterns with include default and exclude precedence", () => {
@@ -39,16 +35,11 @@ describe("path filters", () => {
       }).files.map((file) => file.path),
     ).toEqual([]);
     expect(
-      diffManifestHasPathMatch(manifest(), {
+      filterDiffManifestByPaths(manifest(), {
         include: ["packages/new.ts"],
         exclude: ["packages/old.ts"],
-      }),
-    ).toBe(false);
-  });
-
-  it("reports whether any Diff Manifest file matches", () => {
-    expect(diffManifestHasPathMatch(manifest(), { include: ["docs/**"] })).toBe(true);
-    expect(diffManifestHasPathMatch(manifest(), { include: ["apps/web/**"] })).toBe(false);
+      }).files.map((file) => file.path),
+    ).toEqual([]);
   });
 });
 

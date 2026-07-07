@@ -14,4 +14,3 @@ export {
   isPublishableSuggestedFixSelection,
   type SuggestedFixPublicationSelection,
 } from "../review/inline-publication-policy.js";
-export { PublicationError } from "../review/publication-result.js";

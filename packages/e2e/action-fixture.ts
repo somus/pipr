@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { PublicationError } from "@usepipr/runtime";
 import {
   type ActionCommandResult,
   type GitHubPublicationClient,
-  PublicationError,
   runActionCommandWithDependencies,
 } from "@usepipr/runtime/internal/testing";
 import { type ActAssertionMode, assertActFixture } from "./assertions.ts";

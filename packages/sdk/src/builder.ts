@@ -33,8 +33,6 @@ import type {
   ReviewerOptions,
   ReviewRecipeOptions,
   Task,
-  TaskContext,
-  ToolRunOptions,
 } from "./types/task.js";
 
 /** Defines a synchronous pipr configuration factory. */
@@ -186,18 +184,9 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       if (definition.name === "readOnly") {
         throw new Error("Tool name 'readOnly' is reserved for pipr built-in tools");
       }
-      const execute = definition.execute;
-      let run = definition.run;
-      if (!run && !execute) {
-        throw new Error(`Tool '${definition.name}' must define run`);
-      }
+      const run = definition.run;
       if (!run) {
-        const executeTool = execute;
-        if (!executeTool) {
-          throw new Error(`Tool '${definition.name}' must define run`);
-        }
-        run = (options: ToolRunOptions<unknown>) =>
-          executeToolWithRuntimeInput(executeTool, options);
+        throw new Error(`Tool '${definition.name}' must define run`);
       }
       const tool = {
         kind: "pipr.tool" as const,
@@ -741,14 +730,6 @@ function assertProviderModelAliasesDisambiguated(models: ModelProfile[]): void {
 
 function stableJson(value: unknown): string {
   return JSON.stringify(stableJsonValue(value));
-}
-
-function executeToolWithRuntimeInput<Input, Output>(
-  execute: (context: TaskContext, input: Input) => Promise<Output>,
-  options: ToolRunOptions<unknown>,
-): Promise<Output> {
-  // Runtime tool inputs are parsed by the tool input schema before this bridge.
-  return execute(options.ctx, options.input as Input);
 }
 
 function stableJsonValue(value: unknown): unknown {

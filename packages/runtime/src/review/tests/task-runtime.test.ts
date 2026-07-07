@@ -1893,7 +1893,7 @@ function memoryTool(pipr: PiprApi) {
     description: "Store reviewer memory.",
     input: pipr.schemas.summary,
     output: pipr.schemas.summary,
-    async execute(_context, input) {
+    async run({ input }) {
       return input;
     },
   });
