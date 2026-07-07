@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 import { chmod, open, rename, rm } from "node:fs/promises";
 import path from "node:path";
+import type { ReleasePlatform } from "./release/targets.js";
+import { releaseAssetForPlatform } from "./release/targets.js";
 
-export type ReleasePlatform = {
-  platform: NodeJS.Platform;
-  arch: NodeJS.Architecture;
-};
+export { releaseAssetForPlatform } from "./release/targets.js";
 
 export type UpdateResult =
   | { kind: "up-to-date"; version: string }
@@ -23,33 +22,12 @@ type LatestRelease = {
 };
 
 const officialRepo = "somus/pipr";
-const supportedPlatforms: Partial<Record<NodeJS.Platform, string>> = {
-  darwin: "darwin",
-  linux: "linux",
-};
-const supportedArchitectures: Partial<Record<NodeJS.Architecture, string>> = {
-  arm64: "arm64",
-  x64: "x64",
-};
-
 const packageManagerUpdateHelp = [
   "pipr update only supports compiled GitHub Release binaries.",
   "If you installed with npm, run: npm install -g @usepipr/cli@latest",
   "If you installed with Bun, run: bun install -g @usepipr/cli@latest",
   "If you installed from source, pull the repository and rebuild the CLI.",
 ].join("\n");
-
-export function releaseAssetForPlatform(platform: ReleasePlatform): string {
-  const os = supportedPlatforms[platform.platform];
-  if (!os) {
-    throw new Error(`pipr update unsupported OS: ${platform.platform}`);
-  }
-  const arch = supportedArchitectures[platform.arch];
-  if (!arch) {
-    throw new Error(`pipr update unsupported architecture: ${platform.arch}`);
-  }
-  return `pipr-${os}-${arch}`;
-}
 
 export function resolveCurrentExecutablePath(
   options: { argv?: string[]; execPath?: string } = {},

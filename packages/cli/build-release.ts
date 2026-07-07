@@ -7,28 +7,16 @@ import {
   embeddedSdkDeclaration,
   readSdkDeclarationModules,
 } from "./src/release/sdk-declaration.js";
+import {
+  type ReleaseTarget,
+  releaseTargetForPlatform,
+  releaseTargets,
+} from "./src/release/targets.js";
 import { readBundledSkillCatalog } from "./src/skill-catalog.js";
-
-type ReleaseTarget = {
-  target: string;
-  outfile: string;
-};
 
 const sourceRoot = path.resolve(import.meta.dirname, "../..");
 const releaseDir = path.join(sourceRoot, "dist", "release");
 const cliEntrypoint = path.join(sourceRoot, "packages", "cli", "src", "main.ts");
-const targets: ReleaseTarget[] = [
-  { target: "bun-linux-x64-baseline", outfile: "pipr-linux-x64" },
-  { target: "bun-linux-arm64", outfile: "pipr-linux-arm64" },
-  { target: "bun-darwin-x64", outfile: "pipr-darwin-x64" },
-  { target: "bun-darwin-arm64", outfile: "pipr-darwin-arm64" },
-];
-const hostTargets = new Map<string, ReleaseTarget>([
-  ["linux/x64", targets[0] as ReleaseTarget],
-  ["linux/arm64", targets[1] as ReleaseTarget],
-  ["darwin/x64", targets[2] as ReleaseTarget],
-  ["darwin/arm64", targets[3] as ReleaseTarget],
-]);
 
 const sdkRuntimeExports = [
   "definePipr",
@@ -66,14 +54,16 @@ function selectedTargets(): ReleaseTarget[] {
     const target = hostTarget();
     return [{ ...target, outfile: optionValue("--outfile") ?? releaseOutfile(target) }];
   }
-  return targets.map((item) => ({ ...item, outfile: releaseOutfile(item) }));
+  return releaseTargets.map((item) => ({ ...item, outfile: releaseOutfile(item) }));
 }
 
 function hostTarget(): ReleaseTarget {
-  const key = `${process.platform}/${process.arch}`;
-  const target = hostTargets.get(key);
+  const platform = { platform: process.platform, arch: process.arch };
+  const target = releaseTargetForPlatform(platform);
   if (!target) {
-    throw new Error(`unsupported host platform for release binary: ${key}`);
+    throw new Error(
+      `unsupported host platform for release binary: ${platform.platform}/${platform.arch}`,
+    );
   }
   return target;
 }
