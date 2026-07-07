@@ -31,6 +31,28 @@ mise run check-actions
 
 Use narrower package commands while developing when they prove the change. See [Development](/docs/reference/development) for local e2e, release, docs, and Docker workflow details.
 
+## Remote cache
+
+CI and release workflows use Turborepo remote caching when these GitHub settings exist:
+
+```bash
+gh secret set TURBO_API
+gh secret set TURBO_TOKEN
+gh secret set TURBO_REMOTE_CACHE_SIGNATURE_KEY
+gh variable set TURBO_TEAM --body pipr
+```
+
+Set `TURBO_API` to a deployed [`ducktors/turborepo-remote-cache`](https://github.com/ducktors/turborepo-remote-cache) server. `TURBO_TEAM` defaults to `pipr` in CI, but set it explicitly when you configure the repository.
+
+To run the cache server locally:
+
+```bash
+cp turbo-cache.env.example turbo-cache.env
+docker compose --env-file turbo-cache.env -f docker-compose.turbo-cache.yml up -d
+```
+
+Before sharing a cache server, replace the example `TURBO_TOKEN` and `TURBO_REMOTE_CACHE_SIGNATURE_KEY` values with long random strings.
+
 ## Pull requests
 
 Keep changes scoped to the behavior you are changing. In the pull request, include:
