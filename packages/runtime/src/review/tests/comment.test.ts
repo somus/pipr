@@ -350,6 +350,27 @@ describe("comments", () => {
     expect(item?.body).not.toContain("```suggestion");
   });
 
+  it("omits suggested-change blocks when the selected preview is unavailable", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: { validFindings: [finding] },
+      manifest: {
+        ...manifest,
+        files: manifest.files.map((file) => ({
+          ...file,
+          commentableRanges: file.commentableRanges.map((range) => ({
+            ...range,
+            preview: undefined,
+          })),
+        })),
+      },
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBeUndefined();
+    expect(item?.body).toContain("This can fail.");
+    expect(item?.body).not.toContain("```suggestion");
+  });
+
   it("omits suggested-change blocks for left-side findings", () => {
     const [item] = prepareInlinePublicationItems({
       validated: {
