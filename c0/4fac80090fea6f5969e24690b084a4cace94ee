@@ -1,0 +1,31 @@
+packages/cli/build-release.ts
+  s_180f242369a742::t_0c62254b4745a8 10,12-14,57,61-62
+  s_180f242369a742::t_06ce46498ace67 11,64-66
+apps/docs/content/docs/guide/quickstart.mdx
+  s_180f242369a742::t_bc31087e94d753 58
+apps/docs/content/docs/reference/cli.mdx
+  s_180f242369a742::t_9776f09303f867 42
+packages/cli/src/release/targets.ts
+  s_180f242369a742::t_06ce46498ace67 24-26
+  s_180f242369a742::t_27566970f5d53a 1-23,27-38
+packages/cli/src/update.ts
+  s_180f242369a742::t_0980820097fc9c 4
+  s_180f242369a742::t_df74336f0375a2 5
+  s_180f242369a742::t_1c737dcf3cd0d6 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c04fac80090fea6f5969e24690b084a4cace94ee",
+  "prompts": {},
+  "sessions": {
+    "s_180f242369a742": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3dbb-98cf-7563-931e-d56c4f3a2bd6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
