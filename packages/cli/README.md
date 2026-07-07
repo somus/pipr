@@ -17,6 +17,8 @@ The binary exposes these command groups:
 - `pipr inspect`
 - `pipr review`
 - `pipr skill`
+- `pipr update`
+- `pipr version`
 
 Use the CLI reference for option details.
 
@@ -25,6 +27,24 @@ AI agents should start with:
 ```bash
 pipr skill
 ```
+
+## Updating
+
+For compiled GitHub Release binaries, update the local executable:
+
+```bash
+pipr update
+```
+
+For package-manager installs, update the package:
+
+```bash
+npm install -g @usepipr/cli@latest
+bun install -g @usepipr/cli@latest
+```
+
+`pipr update` updates only the local CLI executable. It does not update GitHub
+Action workflow pins.
 
 ## Technical Notes
 

@@ -1,0 +1,170 @@
+import { createHash } from "node:crypto";
+import { chmod, rename, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+export type ReleasePlatform = {
+  platform: NodeJS.Platform;
+  arch: NodeJS.Architecture;
+};
+
+export type UpdateResult =
+  | { kind: "up-to-date"; version: string }
+  | { kind: "updated"; previousVersion: string; version: string };
+
+type UpdateOptions = {
+  currentVersion: string;
+  executablePath: string;
+  fetch?: (url: string) => Promise<Response>;
+  platform?: ReleasePlatform;
+  repo?: string;
+};
+
+const defaultRepo = "somus/pipr";
+const supportedPlatforms: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: "darwin",
+  linux: "linux",
+};
+const supportedArchitectures: Partial<Record<NodeJS.Architecture, string>> = {
+  arm64: "arm64",
+  x64: "x64",
+};
+
+const packageManagerUpdateHelp = [
+  "pipr update only supports compiled GitHub Release binaries.",
+  "If you installed with npm, run: npm install -g @usepipr/cli@latest",
+  "If you installed with Bun, run: bun install -g @usepipr/cli@latest",
+  "If you installed from source, pull the repository and rebuild the CLI.",
+].join("\n");
+
+export function releaseAssetForPlatform(platform: ReleasePlatform): string {
+  const os = supportedPlatforms[platform.platform];
+  if (!os) {
+    throw new Error(`pipr update unsupported OS: ${platform.platform}`);
+  }
+  const arch = supportedArchitectures[platform.arch];
+  if (!arch) {
+    throw new Error(`pipr update unsupported architecture: ${platform.arch}`);
+  }
+  return `pipr-${os}-${arch}`;
+}
+
+export function resolveCurrentExecutablePath(
+  options: { argv?: string[]; execPath?: string } = {},
+): string {
+  const execPath = options.execPath ?? process.execPath;
+  const argv = options.argv ?? process.argv;
+  const execName = path.basename(execPath).toLowerCase();
+  const scriptPath = argv[1];
+  if (
+    execName === "bun" ||
+    execName.startsWith("bun-") ||
+    execName === "node" ||
+    execName.startsWith("node-") ||
+    scriptPath?.endsWith(".ts") ||
+    scriptPath?.endsWith(".mjs")
+  ) {
+    throw new Error(packageManagerUpdateHelp);
+  }
+  return execPath;
+}
+
+export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResult> {
+  const fetchRelease = options.fetch ?? globalThis.fetch.bind(globalThis);
+  const platform = options.platform ?? { platform: process.platform, arch: process.arch };
+  const asset = releaseAssetForPlatform(platform);
+  const repo = options.repo ?? defaultRepo;
+  const [binary, checksums] = await Promise.all([
+    downloadBytes(fetchRelease, releaseDownloadUrl(repo, asset)),
+    downloadText(fetchRelease, releaseDownloadUrl(repo, "SHA256SUMS")),
+  ]);
+  verifyChecksum(binary, expectedChecksum(checksums, asset), asset);
+
+  const tempPath = path.join(
+    path.dirname(options.executablePath),
+    `.pipr-update-${process.pid}-${Date.now()}`,
+  );
+  let replaced = false;
+  try {
+    await writeFile(tempPath, binary);
+    await chmod(tempPath, 0o755);
+    const version = await downloadedVersion(tempPath);
+    if (!isSemver(version)) {
+      throw new Error(`downloaded pipr binary reported invalid version: ${version}`);
+    }
+    if (version === options.currentVersion) {
+      return { kind: "up-to-date", version };
+    }
+    await rename(tempPath, options.executablePath);
+    replaced = true;
+    return { kind: "updated", previousVersion: options.currentVersion, version };
+  } finally {
+    if (!replaced) {
+      await rm(tempPath, { force: true });
+    }
+  }
+}
+
+function releaseDownloadUrl(repo: string, asset: string): string {
+  return `https://github.com/${repo}/releases/latest/download/${asset}`;
+}
+
+async function downloadBytes(
+  fetchRelease: (url: string) => Promise<Response>,
+  url: string,
+): Promise<Buffer> {
+  const response = await fetchRelease(url);
+  if (!response.ok) {
+    throw new Error(`failed to download ${url}: HTTP ${response.status}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function downloadText(
+  fetchRelease: (url: string) => Promise<Response>,
+  url: string,
+): Promise<string> {
+  const response = await fetchRelease(url);
+  if (!response.ok) {
+    throw new Error(`failed to download ${url}: HTTP ${response.status}`);
+  }
+  return await response.text();
+}
+
+function expectedChecksum(checksums: string, asset: string): string {
+  for (const line of checksums.split(/\r?\n/)) {
+    const [checksum, name] = line.trim().split(/\s+/);
+    if (name === asset && checksum) {
+      return checksum;
+    }
+  }
+  throw new Error(`checksum for ${asset} not found`);
+}
+
+function verifyChecksum(binary: Buffer, expected: string, asset: string): void {
+  const actual = createHash("sha256").update(binary).digest("hex");
+  if (actual !== expected) {
+    throw new Error(`checksum mismatch for ${asset}`);
+  }
+}
+
+async function downloadedVersion(executablePath: string): Promise<string> {
+  const process = Bun.spawn([executablePath, "--version"], {
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    process.exited,
+    process.stdout ? new Response(process.stdout).text() : "",
+    process.stderr ? new Response(process.stderr).text() : "",
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(
+      `downloaded pipr binary failed --version: ${stderr.trim() || stdout.trim() || exitCode}`,
+    );
+  }
+  return stdout.trim();
+}
+
+function isSemver(version: string): boolean {
+  return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version);
+}

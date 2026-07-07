@@ -19,6 +19,18 @@ const repoRoot = path.resolve(cliProjectDir, "../..");
 const cliPath = path.join(cliProjectDir, "src", "main.ts");
 
 describe("pipr CLI", () => {
+  it("prints the CLI version", async () => {
+    const flag = await runCli(["--version"]);
+    const command = await runCli(["version"]);
+
+    expect(flag.exitCode, `${flag.stdout}\n${flag.stderr}`).toBe(0);
+    expect(command.exitCode, `${command.stdout}\n${command.stderr}`).toBe(0);
+    expect(flag.stdout).toBe(`${cliPackage.version}\n`);
+    expect(command.stdout).toBe(`${cliPackage.version}\n`);
+    expect(flag.stderr).toBe("");
+    expect(command.stderr).toBe("");
+  });
+
   it("prints TS-first subcommands", async () => {
     const result = await runCli(["--help"]);
     const action = await runCli(["action", "--help"]);
@@ -32,6 +44,8 @@ describe("pipr CLI", () => {
     expect(result.stdout).toContain("inspect [options]");
     expect(result.stdout).toContain("review [options]");
     expect(result.stdout).toContain("skill");
+    expect(result.stdout).toContain("update");
+    expect(result.stdout).toContain("version");
     expect(result.stdout).not.toContain("run [options] <name>");
     const init = await runCli(["init", "--help"]);
     expect(init.stdout).toContain("--adapters <adapters>");
@@ -42,6 +56,17 @@ describe("pipr CLI", () => {
     expect(init.stdout).toContain("multi-agent-review");
     expect(action.stdout).toContain("--config-dir <dir>");
     expect(action.stdout).not.toContain("--provider <name>");
+  });
+
+  it("does not self-update when running from source", async () => {
+    const result = await runCli(["update"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      "pipr update only supports compiled GitHub Release binaries",
+    );
+    expect(`${result.stdout}\n${result.stderr}`).toContain("npm install -g @usepipr/cli@latest");
+    expect(`${result.stdout}\n${result.stderr}`).toContain("bun install -g @usepipr/cli@latest");
   });
 
   it("prints and materializes the bundled setup skill", async () => {

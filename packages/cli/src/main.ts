@@ -16,7 +16,9 @@ import {
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
 import { Command } from "commander";
+import cliPackage from "../package.json" with { type: "json" };
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
+import { resolveCurrentExecutablePath, runPiprUpdate } from "./update.js";
 
 type ActionOptions = Parameters<typeof runActionCommand>[0];
 
@@ -45,7 +47,7 @@ async function main(): Promise<void> {
 
 function createProgram(): Command {
   const program = new Command();
-  program.name("pipr").showHelpAfterError();
+  program.name("pipr").version(cliPackage.version).showHelpAfterError();
   program.addHelpText("after", agentHelpText);
 
   program
@@ -96,6 +98,10 @@ function createProgram(): Command {
     .option("--pi-executable <path>", "Pi executable path")
     .option("--json", "Print structured JSON output")
     .action(runLocalReview);
+
+  program.command("version").description("Print the CLI version").action(runVersion);
+
+  program.command("update").description("Update a GitHub Release binary install").action(runUpdate);
 
   const skill = program
     .command("skill")
@@ -338,6 +344,23 @@ async function runSkillGet(): Promise<void> {
 
 async function runSkillPath(): Promise<void> {
   console.log(await materializeBundledSkill());
+}
+
+function runVersion(): void {
+  console.log(cliPackage.version);
+}
+
+async function runUpdate(): Promise<void> {
+  const result = await runPiprUpdate({
+    currentVersion: cliPackage.version,
+    executablePath: resolveCurrentExecutablePath(),
+    repo: process.env.PIPR_REPO,
+  });
+  if (result.kind === "up-to-date") {
+    console.log(`pipr ${result.version} is already up to date`);
+    return;
+  }
+  console.log(`updated pipr from ${result.previousVersion} to ${result.version}`);
 }
 
 async function runLocalReview(options: CliOptions): Promise<void> {

@@ -46,6 +46,8 @@ pipr init
 pipr check
 ```
 
+Check the installed CLI version with `pipr --version`. Update a release binary with `pipr update`; for package-manager installs, update `@usepipr/cli` through npm or Bun. Updating the local CLI does not change the GitHub Action pin in `.github/workflows/pipr.yml`.
+
 AI agents should load the version-matched setup skill before configuring a repository:
 
 ```bash

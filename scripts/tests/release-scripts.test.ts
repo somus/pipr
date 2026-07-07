@@ -177,6 +177,13 @@ describe("release checksums", () => {
     expect(checksums).toContain(`${expected}  pipr-linux-x64`);
 
     const cacheDir = path.join(tempDir, "host-skill-cache");
+    const versionFlag = executableResult(binaryPath, ["--version"], tempDir);
+    const versionCommand = executableResult(binaryPath, ["version"], tempDir);
+    expect(versionFlag.exitCode, `${versionFlag.stdout}\n${versionFlag.stderr}`).toBe(0);
+    expect(versionCommand.exitCode, `${versionCommand.stdout}\n${versionCommand.stderr}`).toBe(0);
+    expect(versionFlag.stdout).toMatch(/^\d+\.\d+\.\d+\n$/);
+    expect(versionCommand.stdout).toBe(versionFlag.stdout);
+
     const skill = executableResult(binaryPath, ["skill"], tempDir, {
       PIPR_SKILL_CACHE_DIR: cacheDir,
     });
