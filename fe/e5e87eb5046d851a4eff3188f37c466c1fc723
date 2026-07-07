@@ -1,0 +1,27 @@
+packages/cli/src/update.ts
+  s_180f242369a742::t_b3c9cbf22c008c 22-25,80-83,98-100,102-105,117-133
+  s_180f242369a742::t_692c1198a20191 134-135
+apps/docs/content/docs/reference/cli.mdx
+  s_180f242369a742::t_93cc5ead4b0a9e 33
+packages/cli/src/tests/update.test.ts
+  s_180f242369a742::t_b3c9cbf22c008c 114,124,140,150,162-179,203-204,208-211
+  s_180f242369a742::t_ac169cc82f94be 131-133,157-159
+  s_180f242369a742::t_7eb91543aa4e9d 123,149
+  s_180f242369a742::t_78d7617dd9df2d 160-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fee5e87eb5046d851a4eff3188f37c466c1fc723",
+  "prompts": {},
+  "sessions": {
+    "s_180f242369a742": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3dbb-98cf-7563-931e-d56c4f3a2bd6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
