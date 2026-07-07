@@ -129,7 +129,7 @@ describe("pipr update", () => {
       expect(result).toEqual({ kind: "up-to-date", version: "0.1.0" });
       expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
       expect(requests).not.toContain(
-        "https://github.com/somus/pipr/releases/latest/download/pipr-linux-x64",
+        "https://github.com/somus/pipr/releases/download/v0.1.0/pipr-linux-x64",
       );
     });
   });
@@ -155,28 +155,35 @@ describe("pipr update", () => {
       expect(result).toEqual({ kind: "up-to-date", version: "0.2.0" });
       expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
       expect(requests).not.toContain(
-        "https://github.com/somus/pipr/releases/latest/download/pipr-linux-x64",
+        "https://github.com/somus/pipr/releases/download/v0.1.0/pipr-linux-x64",
       );
     });
   });
 
-  it("uses the official release source by default", async () => {
+  it("uses the official release source and pins downloads to the resolved tag", async () => {
     await withUpdateWorkspace(async ({ executablePath }) => {
       const requests: string[] = [];
+      const binary = versionBinary("0.2.0");
 
       await runPiprUpdate({
         currentVersion: "0.1.0",
         executablePath,
         fetch: fakeReleaseFetch({
           asset: "pipr-linux-x64",
-          binary: versionBinary("0.2.0"),
-          checksum: sha256(versionBinary("0.2.0")),
+          binary,
+          checksum: sha256(binary),
           requests,
         }),
         platform: { platform: "linux", arch: "x64" },
       });
 
       expect(requests[0]).toBe("https://api.github.com/repos/somus/pipr/releases/latest");
+      expect(requests).toContain(
+        "https://github.com/somus/pipr/releases/download/v0.2.0/pipr-linux-x64",
+      );
+      expect(requests).toContain(
+        "https://github.com/somus/pipr/releases/download/v0.2.0/SHA256SUMS",
+      );
     });
   });
 });
@@ -209,10 +216,10 @@ function fakeReleaseFetch(options: {
     if (url.endsWith("/releases/latest") && url.startsWith("https://api.github.com/repos/")) {
       return Response.json({ tag_name: `v${options.releaseVersion ?? "0.2.0"}` });
     }
-    if (url.endsWith(`/download/${options.asset}`)) {
+    if (url.endsWith(`/${options.asset}`)) {
       return new Response(options.binary);
     }
-    if (url.endsWith("/download/SHA256SUMS")) {
+    if (url.endsWith("/SHA256SUMS")) {
       return new Response(`${options.checksum}  ${options.checksumAsset ?? options.asset}\n`);
     }
     return new Response("not found", { status: 404 });

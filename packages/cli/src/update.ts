@@ -16,14 +16,13 @@ type UpdateOptions = {
   executablePath: string;
   fetch?: (url: string) => Promise<Response>;
   platform?: ReleasePlatform;
-  repo?: string;
 };
 
 type LatestRelease = {
   tag_name?: unknown;
 };
 
-const defaultRepo = "somus/pipr";
+const officialRepo = "somus/pipr";
 const supportedPlatforms: Partial<Record<NodeJS.Platform, string>> = {
   darwin: "darwin",
   linux: "linux",
@@ -76,14 +75,14 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
   const fetchRelease = options.fetch ?? globalThis.fetch.bind(globalThis);
   const platform = options.platform ?? { platform: process.platform, arch: process.arch };
   const asset = releaseAssetForPlatform(platform);
-  const repo = options.repo ?? defaultRepo;
-  const version = await latestReleaseVersion(fetchRelease, repo);
+  const release = await latestRelease(fetchRelease);
+  const version = release.version;
   if (compareSemver(version, options.currentVersion) <= 0) {
     return { kind: "up-to-date", version: options.currentVersion };
   }
   const [binary, checksums] = await Promise.all([
-    downloadBytes(fetchRelease, releaseDownloadUrl(repo, asset)),
-    downloadText(fetchRelease, releaseDownloadUrl(repo, "SHA256SUMS")),
+    downloadBytes(fetchRelease, releaseDownloadUrl(release.tag, asset)),
+    downloadText(fetchRelease, releaseDownloadUrl(release.tag, "SHA256SUMS")),
   ]);
   verifyChecksum(binary, expectedChecksum(checksums, asset), asset);
 
@@ -114,11 +113,13 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
   }
 }
 
-async function latestReleaseVersion(
-  fetchRelease: (url: string) => Promise<Response>,
-  repo: string,
-): Promise<string> {
-  const response = await fetchRelease(`https://api.github.com/repos/${repo}/releases/latest`);
+async function latestRelease(fetchRelease: (url: string) => Promise<Response>): Promise<{
+  tag: string;
+  version: string;
+}> {
+  const response = await fetchRelease(
+    `https://api.github.com/repos/${officialRepo}/releases/latest`,
+  );
   if (!response.ok) {
     throw new Error(`failed to fetch latest release metadata: HTTP ${response.status}`);
   }
@@ -130,11 +131,11 @@ async function latestReleaseVersion(
   if (!isSemver(version)) {
     throw new Error(`latest release tag is not a valid semver version: ${release.tag_name}`);
   }
-  return version;
+  return { tag: release.tag_name, version };
 }
 
-function releaseDownloadUrl(repo: string, asset: string): string {
-  return `https://github.com/${repo}/releases/latest/download/${asset}`;
+function releaseDownloadUrl(tag: string, asset: string): string {
+  return `https://github.com/${officialRepo}/releases/download/${tag}/${asset}`;
 }
 
 async function downloadBytes(
