@@ -1,0 +1,49 @@
+apps/docs/content/docs/project/security.mdx
+  s_a13fe5359bb92b::t_b36e4b85ce2620 1-41
+apps/docs/content/docs/meta.json
+  s_a13fe5359bb92b::t_b36e4b85ce2620 3
+apps/docs/content/docs/project/index.mdx
+  s_a13fe5359bb92b::t_b36e4b85ce2620 1-14
+README.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 1-6,8,10,12-23,27,29,37,41,55,58,61,92,94,98,139-162,166
+CONTRIBUTING.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 3-5,8-9,14-18,24-25,31-33,37-38,40-41,48-60
+CHANGELOG.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 3-6
+packages/runtime/README.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 7-9,31
+packages/e2e/README.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 6-8
+apps/docs/content/docs/project/contributing.mdx
+  s_a13fe5359bb92b::t_b36e4b85ce2620 1-57
+apps/docs/content/docs/index.mdx
+  s_a13fe5359bb92b::t_72338a881309a9 57,159
+SECURITY.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 3-5,8-15,19-21,23,32-44
+apps/docs/README.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 9-12
+apps/docs/content/docs/project/changelog.mdx
+  s_a13fe5359bb92b::t_b36e4b85ce2620 1-48
+packages/cli/README.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 6-8
+apps/docs/content/docs/project/meta.json
+  s_a13fe5359bb92b::t_b36e4b85ce2620 1-7
+packages/sdk/README.md
+  s_a13fe5359bb92b::t_d198b7e8a7db62 7-8,18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "39088b7377936eccfed8a624bc97a9c87d71f25a",
+  "prompts": {},
+  "sessions": {
+    "s_a13fe5359bb92b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3af4-72a7-7c33-99fa-56ff06c55f5a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
