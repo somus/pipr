@@ -1,0 +1,19 @@
+apps/docs/nginx.conf
+  s_7336b6c05dcbd6::t_90d97cd2f65070 7,11,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1c8ce3f30fe3194ce975a78466522c956040a050",
+  "prompts": {},
+  "sessions": {
+    "s_7336b6c05dcbd6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3d5a-cfd4-7843-bb6f-0d7035fea558",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
