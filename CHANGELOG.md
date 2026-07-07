@@ -4,6 +4,28 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.3.0](https://github.com/somus/pipr/compare/v0.2.2...v0.3.0) (2026-07-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove legacy SDK tool execute compatibility ([#27](https://github.com/somus/pipr/issues/27))
+
+### Features
+
+* **cli:** add version and update commands ([#30](https://github.com/somus/pipr/issues/30)) ([63f3869](https://github.com/somus/pipr/commit/63f3869b3f259a3b6ecb4b25726c845f998224fe))
+
+
+### Bug Fixes
+
+* **docs:** serve root shell in docs image ([#29](https://github.com/somus/pipr/issues/29)) ([587754a](https://github.com/somus/pipr/commit/587754a9f96214387fabd989365de1043db8b644))
+* **runtime:** tighten suggested change publication ([#25](https://github.com/somus/pipr/issues/25)) ([e3d3646](https://github.com/somus/pipr/commit/e3d364623028783fc45ef6154f718a5a8d997673))
+
+
+### Code Refactoring
+
+* remove legacy SDK tool execute compatibility ([#27](https://github.com/somus/pipr/issues/27)) ([baf2dc3](https://github.com/somus/pipr/commit/baf2dc3d9bdee911f87b7396d2ae7f7e4592621d))
+
 ## [0.2.2](https://github.com/somus/pipr/compare/v0.2.1...v0.2.2) (2026-07-06)
 
 
