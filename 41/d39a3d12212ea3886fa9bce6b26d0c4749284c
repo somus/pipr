@@ -1,0 +1,30 @@
+scripts/tests/release-scripts.test.ts
+  s_180f242369a742::t_a0a73b17f3d140 266-283
+packages/cli/src/tests/main.test.ts
+  s_180f242369a742::t_737b409375a2f0 88
+  s_180f242369a742::t_51c0e1bc074a61 9,23-24,26,28-31,38-57,78-81,83
+  s_180f242369a742::t_f07ddec434665f 58-60,901,904
+  s_180f242369a742::t_d6bc111b85542c 61-77,82,89-90
+packages/cli/src/runner.ts
+  s_180f242369a742::t_26726a61a067a2 379-382
+  s_180f242369a742::t_91c9f6dc5db4d0 399
+  s_180f242369a742::t_66477b57ce62ff 1-378,383-398,400-577
+packages/cli/src/main.ts
+  s_180f242369a742::t_a5d72f05352d91 3-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "41d39a3d12212ea3886fa9bce6b26d0c4749284c",
+  "prompts": {},
+  "sessions": {
+    "s_180f242369a742": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3dbb-98cf-7563-931e-d56c4f3a2bd6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
