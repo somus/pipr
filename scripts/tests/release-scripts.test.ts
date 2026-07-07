@@ -13,6 +13,7 @@ import {
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { releaseAssetForPlatform, releaseTargets } from "../../packages/cli/src/release/targets.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const excludedFixturePaths = new Set([
@@ -199,6 +200,14 @@ describe("release checksums", () => {
       "name: pipr-setup",
     );
   }, 30000);
+
+  it("keeps updater asset names aligned with release targets", () => {
+    const releaseAssetNames = releaseTargets
+      .map((target) => releaseAssetForPlatform(target))
+      .sort();
+    expect(releaseAssetNames).toEqual(releaseTargets.map((target) => target.outfile).sort());
+    expect(new Set(releaseAssetNames).size).toBe(releaseTargets.length);
+  });
 });
 
 describe("CLI package bundled skills", () => {

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { chmod, open, rename, rm } from "node:fs/promises";
+import { chmod, mkdtemp, open, rename, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type { ReleasePlatform } from "./release/targets.js";
 import { releaseAssetForPlatform } from "./release/targets.js";
@@ -168,21 +169,32 @@ function verifyChecksum(binary: Buffer, expected: string, asset: string): void {
 }
 
 async function downloadedVersion(executablePath: string): Promise<string> {
-  const process = Bun.spawn([executablePath, "--version"], {
-    stderr: "pipe",
-    stdout: "pipe",
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    process.stdout ? new Response(process.stdout).text() : "",
-    process.stderr ? new Response(process.stderr).text() : "",
-  ]);
-  if (exitCode !== 0) {
-    throw new Error(
-      `downloaded pipr binary failed --version: ${stderr.trim() || stdout.trim() || exitCode}`,
-    );
+  const validationCwd = await mkdtemp(path.join(os.tmpdir(), "pipr-update-version-"));
+  try {
+    const process = Bun.spawn([executablePath, "--version"], {
+      cwd: validationCwd,
+      env: {
+        HOME: validationCwd,
+        PATH: "/usr/bin:/bin",
+        TMPDIR: validationCwd,
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([
+      process.exited,
+      process.stdout ? new Response(process.stdout).text() : "",
+      process.stderr ? new Response(process.stderr).text() : "",
+    ]);
+    if (exitCode !== 0) {
+      throw new Error(
+        `downloaded pipr binary failed --version: ${stderr.trim() || stdout.trim() || exitCode}`,
+      );
+    }
+    return stdout.trim();
+  } finally {
+    await rm(validationCwd, { force: true, recursive: true });
   }
-  return stdout.trim();
 }
 
 function isStableSemver(version: string): boolean {

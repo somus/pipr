@@ -24,6 +24,29 @@ describe("pipr update", () => {
     );
   });
 
+  it("rejects non-stable current versions before fetching release metadata", async () => {
+    await withUpdateWorkspace(async ({ executablePath }) => {
+      const requests: string[] = [];
+
+      await expect(
+        runPiprUpdate({
+          currentVersion: "0.1.0-beta.1",
+          executablePath,
+          fetch: fakeReleaseFetch({
+            asset: "pipr-linux-x64",
+            binary: versionBinary("0.2.0"),
+            checksum: "unused",
+            requests,
+          }),
+          platform: { platform: "linux", arch: "x64" },
+        }),
+      ).rejects.toThrow("current pipr version is not a stable semver version");
+
+      expect(requests).toEqual([]);
+      expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
+    });
+  });
+
   it("rejects checksum mismatches before replacing the executable", async () => {
     await withUpdateWorkspace(async ({ executablePath }) => {
       const binary = versionBinary("0.2.0");
@@ -110,6 +133,63 @@ describe("pipr update", () => {
       ).rejects.toThrow("invalid version");
 
       expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
+    });
+  });
+
+  it("rejects mismatched downloaded binary versions before replacing the executable", async () => {
+    await withUpdateWorkspace(async ({ executablePath }) => {
+      const binary = versionBinary("0.3.0");
+
+      await expect(
+        runPiprUpdate({
+          currentVersion: "0.1.0",
+          executablePath,
+          fetch: fakeReleaseFetch({
+            asset: "pipr-linux-x64",
+            binary,
+            checksum: sha256(binary),
+            releaseVersion: "0.2.0",
+          }),
+          platform: { platform: "linux", arch: "x64" },
+        }),
+      ).rejects.toThrow("downloaded pipr binary reported 0.3.0, expected latest 0.2.0");
+
+      expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
+    });
+  });
+
+  it("validates downloaded binary versions without caller env or cwd", async () => {
+    await withUpdateWorkspace(async ({ executablePath }) => {
+      const originalSecret = Bun.env.PIPR_UPDATE_TEST_SECRET;
+      const binary = [
+        "#!/bin/sh",
+        'if [ "$PIPR_UPDATE_TEST_SECRET" = "secret" ]; then echo leaked secret >&2; exit 2; fi',
+        `if [ "$(pwd)" = ${shellQuote(process.cwd())} ]; then echo inherited cwd >&2; exit 3; fi`,
+        "echo 0.2.0",
+        "",
+      ].join("\n");
+
+      Bun.env.PIPR_UPDATE_TEST_SECRET = "secret";
+      try {
+        const result = await runPiprUpdate({
+          currentVersion: "0.1.0",
+          executablePath,
+          fetch: fakeReleaseFetch({
+            asset: "pipr-linux-x64",
+            binary,
+            checksum: sha256(binary),
+          }),
+          platform: { platform: "linux", arch: "x64" },
+        });
+
+        expect(result).toEqual({ kind: "updated", version: "0.2.0", previousVersion: "0.1.0" });
+      } finally {
+        if (originalSecret === undefined) {
+          delete Bun.env.PIPR_UPDATE_TEST_SECRET;
+        } else {
+          Bun.env.PIPR_UPDATE_TEST_SECRET = originalSecret;
+        }
+      }
     });
   });
 
@@ -290,4 +370,8 @@ function versionBinary(version: string): string {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }
