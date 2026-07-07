@@ -91,8 +91,8 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
     if (!isSemver(version)) {
       throw new Error(`downloaded pipr binary reported invalid version: ${version}`);
     }
-    if (version === options.currentVersion) {
-      return { kind: "up-to-date", version };
+    if (compareSemver(version, options.currentVersion) <= 0) {
+      return { kind: "up-to-date", version: options.currentVersion };
     }
     await rename(tempPath, options.executablePath);
     replaced = true;
@@ -167,4 +167,26 @@ async function downloadedVersion(executablePath: string): Promise<string> {
 
 function isSemver(version: string): boolean {
   return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version);
+}
+
+function compareSemver(left: string, right: string): number {
+  const [leftCore] = left.split(/[-+]/, 1);
+  const [rightCore] = right.split(/[-+]/, 1);
+  const leftParts = leftCore.split(".").map(Number);
+  const rightParts = rightCore.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const difference = leftParts[index] - rightParts[index];
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  if (left === right) {
+    return 0;
+  }
+  const leftPrerelease = left.includes("-");
+  const rightPrerelease = right.includes("-");
+  if (leftPrerelease === rightPrerelease) {
+    return left.localeCompare(right);
+  }
+  return leftPrerelease ? -1 : 1;
 }

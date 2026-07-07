@@ -354,7 +354,6 @@ async function runUpdate(): Promise<void> {
   const result = await runPiprUpdate({
     currentVersion: cliPackage.version,
     executablePath: resolveCurrentExecutablePath(),
-    repo: process.env.PIPR_REPO,
   });
   if (result.kind === "up-to-date") {
     console.log(`pipr ${result.version} is already up to date`);

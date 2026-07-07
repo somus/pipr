@@ -45,6 +45,28 @@ describe("pipr update", () => {
     });
   });
 
+  it("rejects missing checksum entries before replacing the executable", async () => {
+    await withUpdateWorkspace(async ({ executablePath }) => {
+      const binary = versionBinary("0.2.0");
+
+      await expect(
+        runPiprUpdate({
+          currentVersion: "0.1.0",
+          executablePath,
+          fetch: fakeReleaseFetch({
+            asset: "pipr-linux-x64",
+            binary,
+            checksum: sha256(binary),
+            checksumAsset: "pipr-darwin-arm64",
+          }),
+          platform: { platform: "linux", arch: "x64" },
+        }),
+      ).rejects.toThrow("checksum for pipr-linux-x64 not found");
+
+      expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
+    });
+  });
+
   it("rejects invalid downloaded binary versions before replacing the executable", async () => {
     await withUpdateWorkspace(async ({ executablePath }) => {
       const binary = versionBinary("not-a-version");
@@ -105,6 +127,26 @@ describe("pipr update", () => {
       expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
     });
   });
+
+  it("does not replace the executable when the local version is newer than latest", async () => {
+    await withUpdateWorkspace(async ({ executablePath }) => {
+      const binary = versionBinary("0.1.0");
+
+      const result = await runPiprUpdate({
+        currentVersion: "0.2.0",
+        executablePath,
+        fetch: fakeReleaseFetch({
+          asset: "pipr-linux-x64",
+          binary,
+          checksum: sha256(binary),
+        }),
+        platform: { platform: "linux", arch: "x64" },
+      });
+
+      expect(result).toEqual({ kind: "up-to-date", version: "0.2.0" });
+      expect(await Bun.file(executablePath).text()).toBe("old pipr\n");
+    });
+  });
 });
 
 async function withUpdateWorkspace(
@@ -125,6 +167,7 @@ function fakeReleaseFetch(options: {
   asset: string;
   binary: string;
   checksum: string;
+  checksumAsset?: string;
 }): typeof fetch {
   return (async (input: Parameters<typeof fetch>[0]) => {
     const url = String(input);
@@ -132,7 +175,7 @@ function fakeReleaseFetch(options: {
       return new Response(options.binary);
     }
     if (url.endsWith("/download/SHA256SUMS")) {
-      return new Response(`${options.checksum}  ${options.asset}\n`);
+      return new Response(`${options.checksum}  ${options.checksumAsset ?? options.asset}\n`);
     }
     return new Response("not found", { status: 404 });
   }) as typeof fetch;
