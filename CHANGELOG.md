@@ -1,5 +1,9 @@
 # Changelog
 
+This changelog is generated from Conventional Commits by Release Please.
+Published releases and downloadable CLI artifacts are available on
+[GitHub Releases](https://github.com/somus/pipr/releases).
+
 ## [0.2.2](https://github.com/somus/pipr/compare/v0.2.1...v0.2.2) (2026-07-06)
 
 

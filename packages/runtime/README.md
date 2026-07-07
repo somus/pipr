@@ -4,6 +4,9 @@
 execution, Diff Manifest creation, Pi execution, review validation, and
 publication planning.
 
+Most users should interact with this package through the `pipr` CLI or the
+GitHub Action. Repository configs should import from `@usepipr/sdk`.
+
 ## Technical Notes
 
 - The package root exports command APIs for init, Action runs, dry runs,
@@ -25,7 +28,7 @@ publication planning.
 | `src/review` | Task execution, agent prompts, validation, comments, and publication plans |
 | `src/hosts` | Code host adapters for GitHub and local runs |
 
-## Commands
+## Local Checks
 
 ```bash
 bun run --cwd packages/runtime test:config-init

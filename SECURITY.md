@@ -1,14 +1,26 @@
 # Security Policy
 
+Use this policy to report vulnerabilities in Pipr. Do not open a public issue
+for security reports.
+
 ## Supported versions
 
-pipr is early. CLI binaries ship through GitHub Releases, the config SDK ships as `@usepipr/sdk` on npm, and the Docker Action image ships through GHCR. Security fixes target the default branch and current release line until the project starts maintaining separate release branches.
+Pipr is early. Security fixes target the default branch and the current release
+line until the project starts maintaining separate release branches.
+
+Pipr ships through:
+
+- CLI binaries attached to GitHub Releases
+- `@usepipr/sdk`, `@usepipr/runtime`, and `@usepipr/cli` on npm
+- the Docker Action image on GHCR
 
 ## Reporting a vulnerability
 
-Please report security issues through GitHub Security Advisories for `somus/pipr`.
+Report security issues through
+[GitHub Security Advisories](https://github.com/somus/pipr/security/advisories/new)
+for `somus/pipr`.
 
-Do not open a public issue for vulnerabilities. Include:
+Include:
 
 - affected behavior or file path
 - steps to reproduce
@@ -17,4 +29,16 @@ Do not open a public issue for vulnerabilities. Include:
 
 ## Scope
 
-Relevant security areas include GitHub Action execution, pull request trust boundaries, provider secret handling, Pi tool access, Diff Manifest path handling, and GitHub comment publishing.
+Relevant security areas include:
+
+- GitHub Action execution
+- pull request trust boundaries
+- provider secret handling
+- Pi tool access
+- Diff Manifest path handling
+- GitHub comment publishing
+- package release and Docker Action publishing
+
+Do not include raw provider keys, tokens, private repository contents, or other
+sensitive data in the report unless GitHub Security Advisories requires it for
+reproduction.

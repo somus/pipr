@@ -1,0 +1,57 @@
+---
+title: "Contributing"
+description: "Set up the Pipr repository, run checks, and prepare pull requests."
+---
+
+Use this page when you are changing Pipr itself. The canonical source is [CONTRIBUTING.md](https://github.com/somus/pipr/blob/main/CONTRIBUTING.md).
+
+## Setup
+
+Install dependencies through the repo toolchain:
+
+```bash
+mise run install
+```
+
+This installs Bun workspace dependencies and Git hooks.
+
+## Checks
+
+Run the repository gate before opening or updating a pull request:
+
+```bash
+mise run check
+```
+
+Run the Action gate after editing any GitHub Action behavior, Docker packaging, workflow fixtures, Pi CLI mapping, or PR event handling:
+
+```bash
+mise run check-actions
+```
+
+Use narrower package commands while developing when they prove the change. See [Development](/docs/reference/development) for local e2e, release, docs, and Docker workflow details.
+
+## Pull requests
+
+Keep changes scoped to the behavior you are changing. In the pull request, include:
+
+- a short summary of user-visible behavior or docs changed
+- CLI, runtime, config, Docker Action, docs, or public API impact
+- exact verification commands and results
+
+Use the project language in [docs/CONTEXT.md](https://github.com/somus/pipr/blob/main/docs/CONTEXT.md). Architectural changes should update or add an ADR under [docs/adr](https://github.com/somus/pipr/tree/main/docs/adr).
+
+## Documentation
+
+Put docs content in the narrowest matching place:
+
+| Content | Location |
+| --- | --- |
+| First-run and product overview | `README.md` and `/docs` |
+| Configuration examples | [Configuration](/docs/guide/configuration) |
+| GitHub Action usage | [GitHub Action](/docs/guide/github-action) |
+| Maintainer workflows | [Development](/docs/reference/development) |
+| Durable architecture decisions | [docs/adr](https://github.com/somus/pipr/tree/main/docs/adr) |
+| Product vocabulary | [docs/CONTEXT.md](https://github.com/somus/pipr/blob/main/docs/CONTEXT.md) |
+
+When you add or move docs-site pages, update the nearest `meta.json` and run the docs checks before opening the pull request.

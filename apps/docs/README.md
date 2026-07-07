@@ -6,6 +6,10 @@
 Docs content lives under `apps/docs/content/docs`. Generated paths such as
 `.source`, `.output`, `.tanstack`, and `src/routeTree.gen.ts` stay ignored.
 
+GitHub Markdown files remain canonical for project policy pages such as
+`CONTRIBUTING.md`, `SECURITY.md`, and `CHANGELOG.md`. The docs app may include
+reader-friendly adaptations that link back to those source files.
+
 ## Commands
 
 ```bash

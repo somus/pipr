@@ -4,6 +4,8 @@
 Use it to define Pipr models, reviewers, tasks, commands, tools, schemas, and
 publication settings.
 
+This is the package user configs import directly.
+
 ## Technical Notes
 
 - The package root exports `definePipr`, `definePlugin`, `z`, schemas, prompt
@@ -13,7 +15,7 @@ publication settings.
   import from the package root.
 - The build emits ESM and declaration files to `dist`.
 
-## Commands
+## Local Checks
 
 ```bash
 bun run --cwd packages/sdk check

@@ -3,6 +3,9 @@
 `@pipr/e2e` is Pipr's private harness for local Action checks, direct-container
 checks, fake Pi runs, and fixture scenarios.
 
+This workspace package is for Pipr maintainers. It is not part of the public
+SDK or CLI surface.
+
 ## Technical Notes
 
 - `pipr-e2e-check` builds the local Action image, verifies the Pi CLI contract,

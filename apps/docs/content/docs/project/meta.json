@@ -1,0 +1,7 @@
+{
+  "title": "Project",
+  "description": "Contributing, security, and release notes.",
+  "icon": "Info",
+  "root": true,
+  "pages": ["index", "contributing", "security", "changelog"]
+}

@@ -1,16 +1,32 @@
-# Pipr
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/docs/public/images/pipr/pipr-mark-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="apps/docs/public/images/pipr/pipr-mark-light.svg">
+    <img alt="Pipr" src="apps/docs/public/images/pipr/pipr-mark.svg" width="120">
+  </picture>
 
-[![CI](https://github.com/somus/pipr/actions/workflows/ci.yml/badge.svg)](https://github.com/somus/pipr/actions/workflows/ci.yml)
+  <h1>Pipr</h1>
 
-Pipr is a Pi-powered code review runtime. It loads a repository-local TypeScript config, builds a deterministic Diff Manifest, runs Pi for structured review output, validates findings against commentable ranges, and publishes one Main Review Comment plus capped Inline Review Comments.
+  <p><strong>Code-owned AI review for GitHub pull requests.</strong></p>
 
-GitHub is the first delivery target. Internally, GitHub is a code host adapter, so `.pipr/config.ts` stays provider-neutral. GitLab, Bitbucket, and Azure DevOps support is coming soon.
+  <p>
+    <a href="https://github.com/somus/pipr/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/somus/pipr/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="https://github.com/somus/pipr/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/somus/pipr?label=release"></a>
+    <a href="https://www.npmjs.com/package/@usepipr/cli"><img alt="npm CLI version" src="https://img.shields.io/npm/v/@usepipr/cli?label=npm%20cli"></a>
+    <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/somus/pipr"></a>
+    <a href="https://pipr.run/docs"><img alt="Docs" src="https://img.shields.io/badge/docs-pipr.run-2D3526"></a>
+  </p>
+</div>
+
+Pipr runs AI pull request review from your repository. It loads `.pipr/config.ts`, builds a deterministic Diff Manifest, runs Pi for structured review output, validates findings against commentable ranges, and publishes one Main Review Comment plus capped Inline Review Comments.
+
+GitHub is the first delivery target. Internally, GitHub is a Code Host Adapter, so `.pipr/config.ts` stays provider-neutral. GitLab, Bitbucket, and Azure DevOps support is coming soon.
 
 ## Why Pipr
 
-Every code review tool excels at something different: one finds security issues, another writes PR summaries, another gates merges. Getting all of that means running several bots on every pull request, with overlapping comments, duplicated model spend, and no single place to control the policy.
+Most code review tools specialize: one finds security issues, another writes PR summaries, another gates merges. Running several of them creates overlapping comments, duplicated model spend, and scattered policy.
 
-Pipr takes the Pi approach: a lean core plus the building blocks to compose what you need. The runtime owns the hard, safety-critical parts — diff modeling, Pi agent execution, structured output validation, and comment publishing. Everything on top is TypeScript you own:
+Pipr keeps one lean runtime and lets you compose the review workflow in TypeScript:
 
 - `pipr.review(...)` for a tuned default review
 - `pipr init --recipe <id>` starters for security SAST, PR briefings, quality gates, dependency risk, and more
@@ -18,11 +34,11 @@ Pipr takes the Pi approach: a lean core plus the building blocks to compose what
 - `pipr.command(...)` for `@pipr` commands
 - `definePlugin(...)` for typed tools agents can call during review
 
-One config, one run, one validated comment pipeline — instead of a stack of single-purpose review tools.
+The runtime owns diff modeling, Pi execution, structured output validation, stale-head checks, and comment publishing. Review policy stays in code you own.
 
 ## Quickstart
 
-Create the TypeScript config and default GitHub Action workflow:
+Install the CLI, create the TypeScript config and default GitHub Action workflow, then validate the setup:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh
@@ -36,16 +52,13 @@ AI agents should load the version-matched setup skill before configuring a repos
 pipr skill
 ```
 
-Use `pipr init --adapters none` to create only `.pipr` config files. Run
-`pipr init --help` to list supported init adapters.
-
-Set the provider secret used by the default config:
+Set the provider secret referenced by the generated config:
 
 ```bash
-DEEPSEEK_API_KEY=...
+gh secret set DEEPSEEK_API_KEY
 ```
 
-`pipr init` creates `.github/workflows/pipr.yml`:
+`pipr init` creates `.github/workflows/pipr.yml` with the default GitHub Action:
 
 ```yaml
 name: pipr
@@ -76,31 +89,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 ```
 
-See [Docs](https://pipr.run/docs) or
-[Quickstart](https://pipr.run/docs/guide/quickstart) for the full first-run
-path.
+Use `pipr init --adapters none` to create only `.pipr` config files. Run `pipr init --help` for the full option list.
 
-## Remote Cache
-
-CI and release workflows read Turborepo remote cache settings from GitHub:
-
-```bash
-gh secret set TURBO_API
-gh secret set TURBO_TOKEN
-gh secret set TURBO_REMOTE_CACHE_SIGNATURE_KEY
-gh variable set TURBO_TEAM --body pipr
-```
-
-`TURBO_API` should point at a deployed `ducktors/turborepo-remote-cache` server. To run that server locally:
-
-```bash
-cp turbo-cache.env.example turbo-cache.env
-docker compose --env-file turbo-cache.env -f docker-compose.turbo-cache.yml up -d
-```
+See [Quickstart](https://pipr.run/docs/guide/quickstart) for the full first-run path.
 
 ## Configuration
 
-`pipr init` creates `.pipr/config.ts`:
+`pipr init` creates `.pipr/config.ts`. The default config registers one review task that runs on pull request events, on `@pipr review`, and from local `pipr review --base <ref>` commands:
 
 ```ts
 import { definePipr } from "@usepipr/sdk";
@@ -141,26 +136,34 @@ The SDK also supports custom agents, tasks, `@pipr` commands, model fallback, lo
 
 ## Docs
 
-- [Docs home](https://pipr.run/docs)
-- [Guide](https://pipr.run/docs/guide)
-- [Recipes](https://pipr.run/docs/recipes)
-- [Quickstart](https://pipr.run/docs/guide/quickstart)
-- [Configuration](https://pipr.run/docs/guide/configuration)
-- [Entrypoints](https://pipr.run/docs/guide/entrypoints)
-- [Custom Tasks](https://pipr.run/docs/guide/custom-tasks)
-- [Pipr SDK Reference](https://pipr.run/docs/reference/sdk-reference)
-- [Runtime Guide](https://pipr.run/docs/guide/runtime)
-- [Comments and Findings](https://pipr.run/docs/guide/comments)
-- [GitHub Action](https://pipr.run/docs/guide/github-action)
-- [Code Host Adapters](https://pipr.run/docs/reference/code-host-adapters)
-- [Architecture](https://pipr.run/docs/reference/architecture)
-- [Development](https://pipr.run/docs/reference/development)
-- [Product language](docs/CONTEXT.md)
-- [Architecture decisions](docs/adr)
+| Goal | Page |
+| --- | --- |
+| Add Pipr to a GitHub repository | [Quickstart](https://pipr.run/docs/guide/quickstart) |
+| Configure models, scopes, commands, and publication | [Configuration](https://pipr.run/docs/guide/configuration) |
+| Start from a generated review workflow | [Recipes](https://pipr.run/docs/recipes) |
+| Build custom tasks and agents | [Custom Tasks](https://pipr.run/docs/guide/custom-tasks) |
+| Look up CLI flags | [CLI Reference](https://pipr.run/docs/reference/cli) |
+| Look up SDK types and options | [Pipr SDK Reference](https://pipr.run/docs/reference/sdk-reference) |
+| Understand runtime and publication behavior | [Runtime Guide](https://pipr.run/docs/guide/runtime) |
+| Contribute to Pipr | [Contributing](https://pipr.run/docs/project/contributing) |
+| Report vulnerabilities | [Security Policy](https://pipr.run/docs/project/security) |
+| Read release history | [Changelog](https://pipr.run/docs/project/changelog) |
+
+Project language lives in [docs/CONTEXT.md](docs/CONTEXT.md). Architecture decisions live in [docs/adr](docs/adr).
+
+## Packages
+
+| Package | Role |
+| --- | --- |
+| [`@usepipr/sdk`](packages/sdk) | Public TypeScript authoring SDK for `.pipr/config.ts`. |
+| [`@usepipr/runtime`](packages/runtime) | Config loading, diff creation, task execution, validation, and publication planning. |
+| [`@usepipr/cli`](packages/cli) | `pipr` binary and command-line entrypoint. |
+| [`@pipr/e2e`](packages/e2e) | Private local Action and container test harness. |
+| [`@pipr/docs`](apps/docs) | Fumadocs site source for `https://pipr.run/docs`. |
 
 ## Status
 
-Pipr is early. CLI binaries ship through GitHub Releases, `@usepipr/sdk`, `@usepipr/runtime`, and `@usepipr/cli` ship through npm, and the Docker Action image ships through GHCR.
+Pipr is early. CLI binaries ship through [GitHub Releases](https://github.com/somus/pipr/releases), `@usepipr/sdk`, `@usepipr/runtime`, and `@usepipr/cli` ship through npm, and the Docker Action image ships through GHCR.
 
 ## Privacy
 
