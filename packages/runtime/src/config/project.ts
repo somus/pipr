@@ -46,12 +46,6 @@ export async function loadRuntimeProject(
   };
 }
 
-export async function loadRuntimeConfig(
-  options: LoadRuntimeProjectOptions,
-): Promise<RuntimeSettings> {
-  return (await loadRuntimeProject(options)).settings;
-}
-
 export async function validateProject(
   options: ValidateProjectOptions,
 ): Promise<LoadedRuntimeProject> {

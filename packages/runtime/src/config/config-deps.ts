@@ -46,7 +46,7 @@ export async function installConfigDependencies(
   }
 }
 
-export function shouldSkipConfigInstall(manifest: PackageManifest): boolean {
+function shouldSkipConfigInstall(manifest: PackageManifest): boolean {
   const packages = [
     ...Object.keys(manifest.dependencies ?? {}),
     ...Object.keys(manifest.devDependencies ?? {}),

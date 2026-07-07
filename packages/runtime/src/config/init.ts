@@ -38,13 +38,6 @@ const defaultWorkflowActionRef = "somus/pipr@v0.2.2"; // x-release-please-versio
 const defaultSdkVersion = "0.2.2"; // x-release-please-version
 const defaultTypesBunVersion = "1.3.14";
 
-export function listOfficialMinimalFiles(
-  adapters?: readonly string[],
-  options: { minimal?: boolean } = {},
-): string[] {
-  return officialMinimalFilePaths(resolveOfficialInitAdapters(adapters), options);
-}
-
 function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInitAdapter[] {
   if (adapters === undefined) {
     return [...supportedOfficialInitAdapters];
@@ -69,24 +62,6 @@ function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInit
     selected.add(adapter);
   }
   return [...selected];
-}
-
-function officialMinimalFilePaths(
-  adapters: readonly OfficialInitAdapter[],
-  options: { minimal?: boolean } = {},
-): string[] {
-  const files = [path.join(".pipr", "config.ts")];
-  if (!options.minimal) {
-    files.push(
-      path.join(".pipr", "package.json"),
-      path.join(".pipr", "tsconfig.json"),
-      path.join(".pipr", ".gitignore"),
-    );
-  }
-  if (adapters.includes("github")) {
-    files.push(path.join(".github", "workflows", "pipr.yml"));
-  }
-  return files;
 }
 
 function unsupportedAdapterError(adapter: string): Error {

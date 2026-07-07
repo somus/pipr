@@ -49,6 +49,42 @@ function getButton() {
   return button;
 }
 
+async function renderCopyButton(options: { strictMode?: boolean } = {}) {
+  await act(async () => {
+    root.render(
+      options.strictMode ? (
+        <StrictMode>
+          <CopyButton copyText="pipr init" label="Copy" />
+        </StrictMode>
+      ) : (
+        <CopyButton copyText="pipr init" label="Copy" />
+      ),
+    );
+  });
+
+  return getButton();
+}
+
+async function clickCopyButton(button: HTMLButtonElement): Promise<void> {
+  await act(async () => {
+    button.click();
+  });
+}
+
+async function runResetTimer(): Promise<void> {
+  await act(async () => {
+    timeoutCallback?.();
+  });
+}
+
+function copyLabel(button: HTMLButtonElement): string | null | undefined {
+  return button.querySelector("[data-copy-label]")?.textContent;
+}
+
+function statusText(button: HTMLButtonElement): string | null | undefined {
+  return button.querySelector('[role="status"]')?.textContent;
+}
+
 beforeEach(() => {
   copyResult = true;
   copyCalls = [];
@@ -145,56 +181,36 @@ afterEach(async () => {
 
 describe("CopyButton", () => {
   it("copies text and resets the success label", async () => {
-    await act(async () => {
-      root.render(<CopyButton copyText="pipr init" label="Copy" />);
-    });
+    const button = await renderCopyButton();
 
-    const button = getButton();
-
-    await act(async () => {
-      button.click();
-    });
+    await clickCopyButton(button);
 
     expect(copyCalls).toEqual(["pipr init"]);
-    expect(button.querySelector("[data-copy-label]")?.textContent).toBe("Copied");
-    expect(button.querySelector('[role="status"]')?.textContent).toBe("Copy copied");
+    expect(copyLabel(button)).toBe("Copied");
+    expect(statusText(button)).toBe("Copy copied");
 
-    await act(async () => {
-      timeoutCallback?.();
-    });
+    await runResetTimer();
 
-    expect(button.querySelector("[data-copy-label]")?.textContent).toBe("Copy");
-    expect(button.querySelector('[role="status"]')?.textContent).toBe("");
+    expect(copyLabel(button)).toBe("Copy");
+    expect(statusText(button)).toBe("");
   });
 
   it("does not show success when copying fails", async () => {
     copyResult = false;
 
-    await act(async () => {
-      root.render(<CopyButton copyText="pipr init" label="Copy" />);
-    });
+    const button = await renderCopyButton();
 
-    const button = getButton();
-
-    await act(async () => {
-      button.click();
-    });
+    await clickCopyButton(button);
 
     expect(copyCalls).toEqual(["pipr init"]);
-    expect(button.querySelector("[data-copy-label]")?.textContent).toBe("Copy");
+    expect(copyLabel(button)).toBe("Copy");
     expect(timeoutCallback).toBeUndefined();
   });
 
   it("clears the reset timer on unmount", async () => {
-    await act(async () => {
-      root.render(<CopyButton copyText="pipr init" label="Copy" />);
-    });
+    const button = await renderCopyButton();
 
-    const button = getButton();
-
-    await act(async () => {
-      button.click();
-    });
+    await clickCopyButton(button);
 
     await act(async () => {
       root.unmount();
@@ -205,27 +221,15 @@ describe("CopyButton", () => {
   });
 
   it("copies after StrictMode effect remounts", async () => {
-    await act(async () => {
-      root.render(
-        <StrictMode>
-          <CopyButton copyText="pipr init" label="Copy" />
-        </StrictMode>,
-      );
-    });
+    const button = await renderCopyButton({ strictMode: true });
 
-    const button = getButton();
-
-    await act(async () => {
-      button.click();
-    });
+    await clickCopyButton(button);
 
     expect(copyCalls).toEqual(["pipr init"]);
-    expect(button.querySelector("[data-copy-label]")?.textContent).toBe("Copied");
+    expect(copyLabel(button)).toBe("Copied");
 
-    await act(async () => {
-      timeoutCallback?.();
-    });
+    await runResetTimer();
 
-    expect(button.querySelector("[data-copy-label]")?.textContent).toBe("Copy");
+    expect(copyLabel(button)).toBe("Copy");
   });
 });

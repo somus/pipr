@@ -20,13 +20,6 @@ type CompiledPattern = {
 
 const compiledFilters = new WeakMap<PathFilter, CompiledFilter>();
 
-export function diffManifestHasPathMatch(
-  manifest: DiffManifest,
-  filter: PathFilter | undefined,
-): boolean {
-  return manifest.files.some((file) => diffFileMatchesPathFilter(file, filter));
-}
-
 export function filterDiffManifestByPaths(
   manifest: DiffManifest,
   filter: PathFilter | undefined,

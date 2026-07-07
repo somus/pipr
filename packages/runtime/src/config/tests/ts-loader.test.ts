@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { cp, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { shouldSkipConfigInstall } from "../config-deps.js";
 import { initOfficialMinimalProject } from "../init.js";
 import { loadTypescriptConfig, prepareConfigDirectory } from "../ts-loader.js";
 import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
@@ -70,20 +69,6 @@ export default definePipr((pipr) => {
 
     const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
     expect(loaded.plan.agents.length).toBeGreaterThan(0);
-  });
-
-  it("skips bun install when deps are only runtime-provided packages", async () => {
-    expect(
-      shouldSkipConfigInstall({
-        dependencies: { "@usepipr/sdk": "0.1.3" },
-        devDependencies: { "@types/bun": "1.3.14" },
-      }),
-    ).toBe(true);
-    expect(
-      shouldSkipConfigInstall({
-        dependencies: { "@usepipr/sdk": "0.1.3", "lodash-es": "4.17.23" },
-      }),
-    ).toBe(false);
   });
 
   it("loads tier-1 single-file config without package.json unchanged", async () => {

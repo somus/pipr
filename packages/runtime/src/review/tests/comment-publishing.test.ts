@@ -178,12 +178,7 @@ describe("buildCommentPublishingPlan", () => {
       main: "Review completed.",
       validated: { ...validated, validFindings: [currentFinding] },
       manifest,
-      priorReviewState: {
-        version: 1,
-        reviewedHeadSha: "old-head",
-        selectedTasks: ["review"],
-        findings: [priorFindingRecord("fnd_prior_a"), priorFindingRecord("fnd_prior_b")],
-      },
+      priorReviewState: ambiguousPriorState(),
       metadata: metadata({ validFindings: 1 }),
     });
 
@@ -216,12 +211,7 @@ describe("buildCommentPublishingPlan", () => {
       main: "Review completed.",
       validated: { ...validated, validFindings: [currentFinding] },
       manifest,
-      priorReviewState: {
-        version: 1,
-        reviewedHeadSha: "old-head",
-        selectedTasks: ["review"],
-        findings: [priorFindingRecord("fnd_prior_a"), priorFindingRecord("fnd_prior_b")],
-      },
+      priorReviewState: ambiguousPriorState(),
       metadata: metadata({ validFindings: 1 }),
     });
 
@@ -265,6 +255,15 @@ function priorState(options: {
         lastCommentedHeadSha: options.lastCommentedHeadSha,
       },
     ],
+  };
+}
+
+function ambiguousPriorState(): PriorReviewState {
+  return {
+    version: 1,
+    reviewedHeadSha: "old-head",
+    selectedTasks: ["review"],
+    findings: [priorFindingRecord("fnd_prior_a"), priorFindingRecord("fnd_prior_b")],
   };
 }
 

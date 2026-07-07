@@ -3,12 +3,7 @@ import { access, mkdir, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { initOfficialMinimalProject } from "../init.js";
-import {
-  inspectRuntimePlan,
-  loadRuntimeConfig,
-  loadRuntimeProject,
-  validateProject,
-} from "../project.js";
+import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import { loadTypescriptConfig } from "../ts-loader.js";
 import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
 
@@ -36,7 +31,7 @@ describe("loadRuntimeProject", () => {
   it("normalizes TypeScript model config for current runtime execution", async () => {
     const rootDir = await newInitializedProject();
 
-    const settings = await loadRuntimeConfig({ rootDir });
+    const settings = (await loadRuntimeProject({ rootDir })).settings;
 
     expect(settings.source).toContain(".pipr/config.ts");
     expect(settings.config.defaultProvider).toBe("deepseek/deepseek-v4-pro");
@@ -53,7 +48,7 @@ describe("loadRuntimeProject", () => {
   it("defaults publication autoResolve to verifier-enabled defaults", async () => {
     const rootDir = await newInitializedProject();
 
-    const settings = await loadRuntimeConfig({ rootDir });
+    const settings = (await loadRuntimeProject({ rootDir })).settings;
 
     expect(settings.config.publication.autoResolve).toEqual({
       enabled: true,
@@ -71,7 +66,7 @@ describe("loadRuntimeProject", () => {
     const rootDir = await newInitializedProject();
     await writePiprConfig(rootDir, configWithAutoResolve("false"));
 
-    const settings = await loadRuntimeConfig({ rootDir });
+    const settings = (await loadRuntimeProject({ rootDir })).settings;
 
     expect(settings.config.publication.autoResolve).toEqual({
       enabled: false,
@@ -100,7 +95,7 @@ describe("loadRuntimeProject", () => {
       }`),
     );
 
-    const settings = await loadRuntimeConfig({ rootDir });
+    const settings = (await loadRuntimeProject({ rootDir })).settings;
 
     expect(settings.config.publication.autoResolve).toEqual({
       enabled: true,
@@ -126,7 +121,7 @@ describe("loadRuntimeProject", () => {
       }`),
     );
 
-    await expect(loadRuntimeConfig({ rootDir })).rejects.toThrow(
+    await expect(loadRuntimeProject({ rootDir })).rejects.toThrow(
       "publication.autoResolve.model cannot be set when autoResolve is disabled",
     );
   });
@@ -135,15 +130,17 @@ describe("loadRuntimeProject", () => {
     const rootDir = await newInitializedProject();
 
     await expect(
-      loadRuntimeConfig({ rootDir, env: {}, requireProviderEnv: false }),
+      loadRuntimeProject({ rootDir, env: {}, requireProviderEnv: false }),
     ).resolves.toMatchObject({
-      config: {
-        defaultProvider: "deepseek/deepseek-v4-pro",
+      settings: {
+        config: {
+          defaultProvider: "deepseek/deepseek-v4-pro",
+        },
       },
     });
-    await expect(loadRuntimeConfig({ rootDir, env: {}, requireProviderEnv: true })).rejects.toThrow(
-      "Missing provider env vars: DEEPSEEK_API_KEY",
-    );
+    await expect(
+      loadRuntimeProject({ rootDir, env: {}, requireProviderEnv: true }),
+    ).rejects.toThrow("Missing provider env vars: DEEPSEEK_API_KEY");
   });
 
   it("type-checks .pipr/config.ts during validation", async () => {
@@ -261,14 +258,14 @@ export default definePipr((pipr) => {
       description: "Store reviewer memory.",
       input: pluginPipr.schemas.summary,
       output: pluginPipr.schemas.summary,
-      execute: async (_ctx, input) => input,
+      run: async ({ input }) => input,
     }),
     search: pluginPipr.tool({
       name: "pipr_search_memories",
       description: "Search reviewer memories.",
       input: pluginPipr.schemas.summary,
       output: pluginPipr.schemas.summary,
-      execute: async (_ctx, input) => input,
+      run: async ({ input }) => input,
     }),
   })));
   const model = pipr.model({
