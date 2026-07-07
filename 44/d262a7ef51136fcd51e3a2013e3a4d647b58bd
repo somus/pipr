@@ -1,0 +1,19 @@
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_1e8586bb74efb5::t_18c5c1f4bd917e 411-413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "44d262a7ef51136fcd51e3a2013e3a4d647b58bd",
+  "prompts": {},
+  "sessions": {
+    "s_1e8586bb74efb5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3c60-86e5-7e13-a9ce-cc355d2d7d57",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
