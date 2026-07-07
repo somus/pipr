@@ -408,6 +408,9 @@ Tool `run(...)` receives:
 | `ctx` | Runtime-provided tool context. |
 | `signal` | Optional abort signal. |
 
+Use `run({ input, ctx, signal })` for custom tools. Pipr rejects legacy
+`execute(context, input)` tool definitions with `Tool '<name>' must define run`.
+
 `toModelOutput(...)` can project a rich internal result into a smaller model-facing value.
 
 <auto-type-table path="packages/sdk/src/index.ts" name="PluginToolDefinition" />
