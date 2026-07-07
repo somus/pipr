@@ -5,6 +5,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import cliPackage from "../../package.json" with { type: "json" };
+import { runMain } from "../main.js";
 import { embeddedSdkDeclaration, readSdkDeclarationModules } from "../release/sdk-declaration.js";
 import {
   type BundledSkill,
@@ -19,6 +20,32 @@ const repoRoot = path.resolve(cliProjectDir, "../..");
 const cliPath = path.join(cliProjectDir, "src", "main.ts");
 
 describe("pipr CLI", () => {
+  it("prints an update notice before running commands when a newer release is available", async () => {
+    const logs: string[] = [];
+    const notices: string[] = [];
+    const originalLog = console.log;
+    console.log = (message?: unknown) => {
+      logs.push(String(message));
+    };
+    try {
+      await runMain({
+        argv: ["bun", "pipr", "version"],
+        env: {},
+        updateNoticeFetch: fakeLatestReleaseFetch("9.9.9"),
+        writeUpdateNotice(message) {
+          notices.push(message);
+        },
+      });
+    } finally {
+      console.log = originalLog;
+    }
+
+    expect(logs).toEqual([cliPackage.version]);
+    expect(notices).toEqual([
+      `pipr 9.9.9 is available (current ${cliPackage.version}). Run \`pipr update\` for release binaries, or reinstall @usepipr/cli with npm/Bun.`,
+    ]);
+  });
+
   it("prints the CLI version", async () => {
     const flag = await runCli(["--version"]);
     const command = await runCli(["version"]);
@@ -775,6 +802,7 @@ function minimalEnv(): NodeJS.ProcessEnv {
   }
   env.BUN_INSTALL_CACHE_DIR ??= path.join(repoRoot, "node_modules", ".cache", "pipr-bun-install");
   env.PIPR_INTERNAL_INIT_SDK_VERSION = `file:${path.join(repoRoot, "packages/sdk")}`;
+  env.PIPR_UPDATE_NOTICE = "0";
   return env;
 }
 
@@ -821,6 +849,16 @@ function pullRequestPayload(baseSha = "base", headSha = "head"): unknown {
       },
     },
   };
+}
+
+function fakeLatestReleaseFetch(version: string): typeof fetch {
+  return (async (input: Parameters<typeof fetch>[0]) => {
+    const url = String(input);
+    if (url === "https://api.github.com/repos/somus/pipr/releases/latest") {
+      return Response.json({ tag_name: `v${version}` });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
 }
 
 async function listFiles(rootDir: string, prefix = ""): Promise<string[]> {

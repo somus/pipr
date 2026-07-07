@@ -11,11 +11,24 @@ export type UpdateResult =
   | { kind: "up-to-date"; version: string }
   | { kind: "updated"; previousVersion: string; version: string };
 
+export type UpdateNotice = {
+  currentVersion: string;
+  latestVersion: string;
+};
+
+type ReleaseFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
 type UpdateOptions = {
   currentVersion: string;
   executablePath: string;
-  fetch?: (url: string) => Promise<Response>;
+  fetch?: ReleaseFetch;
   platform?: ReleasePlatform;
+};
+
+type UpdateNoticeOptions = {
+  currentVersion: string;
+  fetch?: ReleaseFetch;
+  timeoutMs?: number;
 };
 
 type LatestRelease = {
@@ -104,7 +117,39 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
   }
 }
 
-async function latestRelease(fetchRelease: (url: string) => Promise<Response>): Promise<{
+export async function availablePiprUpdateNotice(
+  options: UpdateNoticeOptions,
+): Promise<UpdateNotice | undefined> {
+  if (!isStableSemver(options.currentVersion)) {
+    return undefined;
+  }
+  const fetchRelease = withFetchTimeout(
+    options.fetch ?? globalThis.fetch.bind(globalThis),
+    options.timeoutMs,
+  );
+  const release = await latestRelease(fetchRelease);
+  if (compareSemver(release.version, options.currentVersion) <= 0) {
+    return undefined;
+  }
+  return { currentVersion: options.currentVersion, latestVersion: release.version };
+}
+
+function withFetchTimeout(fetchRelease: ReleaseFetch, timeoutMs: number | undefined): ReleaseFetch {
+  if (timeoutMs === undefined) {
+    return fetchRelease;
+  }
+  return async (url, init) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetchRelease(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+}
+
+async function latestRelease(fetchRelease: ReleaseFetch): Promise<{
   tag: string;
   version: string;
 }> {

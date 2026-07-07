@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { chmod, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { releaseAssetForPlatform, runPiprUpdate } from "../update.js";
+import { availablePiprUpdateNotice, releaseAssetForPlatform, runPiprUpdate } from "../update.js";
 
 describe("pipr update", () => {
   it("resolves release assets for supported platforms", () => {
@@ -22,6 +22,60 @@ describe("pipr update", () => {
     expect(() => releaseAssetForPlatform({ platform: "linux", arch: "ia32" })).toThrow(
       "unsupported architecture",
     );
+  });
+
+  it("returns an update notice when the latest release is newer", async () => {
+    const requests: string[] = [];
+
+    const notice = await availablePiprUpdateNotice({
+      currentVersion: "0.1.0",
+      fetch: fakeReleaseFetch({
+        asset: "pipr-linux-x64",
+        binary: "unused",
+        checksum: "unused",
+        releaseVersion: "0.2.0",
+        requests,
+      }),
+    });
+
+    expect(notice).toEqual({ currentVersion: "0.1.0", latestVersion: "0.2.0" });
+    expect(requests).toEqual(["https://api.github.com/repos/somus/pipr/releases/latest"]);
+  });
+
+  it("does not return an update notice when the current version is already latest", async () => {
+    const requests: string[] = [];
+
+    const notice = await availablePiprUpdateNotice({
+      currentVersion: "0.2.0",
+      fetch: fakeReleaseFetch({
+        asset: "pipr-linux-x64",
+        binary: "unused",
+        checksum: "unused",
+        releaseVersion: "0.2.0",
+        requests,
+      }),
+    });
+
+    expect(notice).toBeUndefined();
+    expect(requests).toEqual(["https://api.github.com/repos/somus/pipr/releases/latest"]);
+  });
+
+  it("does not fetch an update notice for non-stable current versions", async () => {
+    const requests: string[] = [];
+
+    const notice = await availablePiprUpdateNotice({
+      currentVersion: "0.2.0-beta.1",
+      fetch: fakeReleaseFetch({
+        asset: "pipr-linux-x64",
+        binary: "unused",
+        checksum: "unused",
+        releaseVersion: "0.2.0",
+        requests,
+      }),
+    });
+
+    expect(notice).toBeUndefined();
+    expect(requests).toEqual([]);
   });
 
   it("rejects non-stable current versions before fetching release metadata", async () => {

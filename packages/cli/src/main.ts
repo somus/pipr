@@ -18,7 +18,12 @@ import {
 import { Command } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
-import { resolveCurrentExecutablePath, runPiprUpdate } from "./update.js";
+import {
+  availablePiprUpdateNotice,
+  resolveCurrentExecutablePath,
+  runPiprUpdate,
+  type UpdateNotice,
+} from "./update.js";
 
 type ActionOptions = Parameters<typeof runActionCommand>[0];
 
@@ -36,13 +41,22 @@ type CliOptions = {
   json?: boolean;
 };
 
-async function main(): Promise<void> {
+type MainOptions = {
+  argv?: string[];
+  env?: NodeJS.ProcessEnv;
+  updateNoticeFetch?: typeof fetch;
+  writeUpdateNotice?: (message: string) => void;
+};
+
+export async function runMain(options: MainOptions = {}): Promise<void> {
+  const argv = options.argv ?? process.argv;
+  await writeAvailableUpdateNotice(options);
   const program = createProgram();
-  if (process.argv.length <= 2) {
+  if (argv.length <= 2) {
     program.outputHelp();
     return;
   }
-  await program.parseAsync(process.argv);
+  await program.parseAsync(argv);
 }
 
 function createProgram(): Command {
@@ -362,6 +376,32 @@ async function runUpdate(): Promise<void> {
   console.log(`updated pipr from ${result.previousVersion} to ${result.version}`);
 }
 
+async function writeAvailableUpdateNotice(options: MainOptions): Promise<void> {
+  const env = options.env ?? process.env;
+  if (env.PIPR_UPDATE_NOTICE === "0") {
+    return;
+  }
+  try {
+    const notice = await availablePiprUpdateNotice({
+      currentVersion: cliPackage.version,
+      fetch: options.updateNoticeFetch,
+      timeoutMs: 750,
+    });
+    if (notice) {
+      (options.writeUpdateNotice ?? console.error)(formatUpdateNotice(notice));
+    }
+  } catch {
+    return;
+  }
+}
+
+export function formatUpdateNotice(notice: UpdateNotice): string {
+  return (
+    `pipr ${notice.latestVersion} is available (current ${notice.currentVersion}). ` +
+    "Run `pipr update` for release binaries, or reinstall @usepipr/cli with npm/Bun."
+  );
+}
+
 async function runLocalReview(options: CliOptions): Promise<void> {
   if (!options.base) {
     throw new Error("pipr review requires --base <sha>");
@@ -535,12 +575,14 @@ async function runDryRun(options: CliOptions): Promise<void> {
   );
 }
 
-main().catch((error: unknown) => {
-  if (error instanceof PublicationError && error.result) {
-    core.setOutput("publication", JSON.stringify(error.result));
-    core.error(`pipr publication metadata: ${JSON.stringify(error.result)}`);
-  }
-  const message = error instanceof Error ? error.message : String(error);
-  core.setFailed(message);
-  process.exitCode = 1;
-});
+if (import.meta.main) {
+  runMain().catch((error: unknown) => {
+    if (error instanceof PublicationError && error.result) {
+      core.setOutput("publication", JSON.stringify(error.result));
+      core.error(`pipr publication metadata: ${JSON.stringify(error.result)}`);
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    core.setFailed(message);
+    process.exitCode = 1;
+  });
+}

@@ -483,7 +483,7 @@ Use this recipe to ${useCase}
 Install Pipr, generate the recipe, then validate the config:
 
 \`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh
+curl -fsSL https://pipr.run/install.sh | sh
 ${command}
 pipr check
 \`\`\`

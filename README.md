@@ -41,7 +41,7 @@ The runtime owns diff modeling, Pi execution, structured output validation, stal
 Install the CLI, create the TypeScript config and default GitHub Action workflow, then validate the setup:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh
+curl -fsSL https://pipr.run/install.sh | sh
 pipr init
 pipr check
 ```

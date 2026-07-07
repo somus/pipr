@@ -257,6 +257,12 @@ describe("CLI package bundled skills", () => {
 });
 
 describe("install.sh", () => {
+  it("is published by the docs image at the hosted install URL path", () => {
+    expect(readFileSync(path.join(repoRoot, "Dockerfile.docs"), "utf8")).toContain(
+      "COPY install.sh /usr/share/nginx/html/install.sh",
+    );
+  });
+
   it("verifies the downloaded binary checksum before install", () => {
     const fixture = installFixture({ validChecksum: true });
     const result = scriptResult("install.sh", [], repoRoot, {
