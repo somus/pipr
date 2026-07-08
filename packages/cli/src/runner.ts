@@ -439,7 +439,11 @@ function isUpdateCommand(argv: string[]): boolean {
   if (args[0] === "--") {
     args.shift();
   }
-  return args[0] === "update" || (args.length >= 2 && args[0] === "help" && args[1] === "update");
+  return (
+    args[0] === "update" ||
+    (args.length >= 2 && args[0] === "help" && args[1] === "update") ||
+    (args.length >= 2 && args[0] === "--help" && args[1] === "update")
+  );
 }
 
 async function runLocalReview(options: CliOptions & { base: string }): Promise<void> {

@@ -11,8 +11,7 @@ function handleFatalError(error: unknown): void {
   const sanitizedMessage = sanitizeTerminalMessage(message);
   if (!isGitHubActions()) {
     console.error(`error: ${sanitizedMessage}`);
-    process.exitCode = 1;
-    return;
+    process.exit(1);
   }
   writeGitHubActionsFailure(error, sanitizedMessage);
   process.exitCode = 1;

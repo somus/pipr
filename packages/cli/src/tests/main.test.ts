@@ -112,6 +112,14 @@ describe("pipr CLI", () => {
         notices.push(message);
       },
     });
+    await runMain({
+      argv: ["bun", "pipr", "--help", "update"],
+      env: { GITHUB_ACTIONS: "true", PIPR_UPDATE_NOTICE: "1" },
+      updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
+      writeUpdateNotice(message) {
+        notices.push(message);
+      },
+    });
 
     expect(requests).toEqual([]);
     expect(notices).toEqual([]);
