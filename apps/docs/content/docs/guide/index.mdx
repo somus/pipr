@@ -20,6 +20,22 @@ Follow this path for the first successful pull request review.
 5. Open or update a pull request and check the Main Review Comment.
 6. Use local review commands while tuning config.
 
+## Setup success checklist
+
+Use this checklist before changing reviewer instructions. It catches the most common first-run setup failures.
+
+| Check | Command or place to inspect | Expected result |
+| --- | --- | --- |
+| CLI installed | `pipr --version` | A Pipr release version prints. |
+| Config loads | `pipr check` | The runtime plan validates. |
+| Plan matches intent | `pipr inspect` | Models, tasks, commands, and publication limits match `.pipr/config.ts`. |
+| Provider secret exists | GitHub repository Actions secrets | The secret name matches `pipr.secret({ name })`. |
+| Workflow has full history | `.github/workflows/pipr.yml` | `actions/checkout` uses `fetch-depth: 0`. |
+| Workflow can write expected output | Workflow `permissions` block | Permissions match the enabled comment and check features. |
+| First PR output appears | Pull request conversation and Files changed tab | Pipr publishes a Main Review Comment and any valid Inline Review Comments. |
+
+If a check fails, use [Troubleshooting](/docs/guide/troubleshooting#first-run-failure-ladder) before changing task code.
+
 ## Pages
 
 Pick the page based on the job you are doing.

@@ -16,6 +16,21 @@ pipr check
 
 Use `pipr init` without `--recipe` for the default review setup.
 
+## Choose a recipe
+
+Choose by the review job first, then tune noise after the first successful run.
+
+| Goal | Start with | Default noise level |
+| --- | --- | --- |
+| General pull request review | [Default Review](/docs/recipes/default-review) | Balanced inline comments |
+| Real bug detection | [Bug Hunter](/docs/recipes/bug-hunter) | Focused inline comments |
+| Security risks with attack paths | [Security SAST](/docs/recipes/security-sast) | High-signal inline findings and a check |
+| Merge blocking policy | [Quality Gate](/docs/recipes/quality-gate) | Blocking findings plus required check |
+| Reviewer orientation | [PR Briefing](/docs/recipes/pr-briefing) | Main comment only |
+| CI log diagnosis | [CI Triage Command](/docs/recipes/ci-triage-command) | Command response only |
+| Repository policy checks | [PR Hygiene](/docs/recipes/pr-hygiene) | Summary plus selected findings |
+| Dependency changes | [Dependency Risk](/docs/recipes/dependency-risk) | Dependency-scoped review |
+
 ## Common setup
 
 Every recipe follows the same setup path.
@@ -38,6 +53,18 @@ Tune generated recipes in the config before changing runtime code.
 - Use `--adapters none` when you want only the `.pipr` config files.
 - Use a local run before opening a pull request when the recipe adds custom commands or tasks.
 - Tune instructions first, then limits. Runtime limits are guardrails; prompts define what the reviewer treats as actionable.
+
+## Tune review noise
+
+Start lean, then widen coverage once maintainers trust the output.
+
+| Need | Tune this first |
+| --- | --- |
+| Fewer inline comments | Lower `publication.maxInlineComments` or switch to a main-comment recipe. |
+| Narrower review scope | Add `paths.include` and `paths.exclude` to the recipe config. |
+| More actionable findings | Make instructions require impact, evidence, and a valid changed-code range. |
+| Less style feedback | Say which categories are out of scope instead of asking for a broad review. |
+| Manual-only review | Use a command recipe or remove change request entrypoints. |
 
 ## Recipe catalog
 

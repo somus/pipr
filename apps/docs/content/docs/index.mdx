@@ -9,6 +9,21 @@ GitHub pull requests are the only supported code host target today. GitLab, Bitb
 
 Use these docs to run the first review, start from a recipe, or build your own review workflows with the Pipr SDK.
 
+## First review path
+
+Use this path when you want one successful GitHub pull request review before tuning prompts or recipes.
+
+| Step | Do this | Prove it worked |
+| --- | --- | --- |
+| 1. Install the CLI | Run the release installer. | `pipr --version` prints a release version. |
+| 2. Generate review policy | Run `pipr init` in the repository root | `.pipr/config.ts` and `.github/workflows/pipr.yml` exist. |
+| 3. Validate config | Run `pipr check` | The config loads before any model call. |
+| 4. Add the provider secret | Add the secret named in `pipr.secret({ name })` | The Action has the matching env var. |
+| 5. Open a pull request | Commit the generated files and push a PR | The Action reaches model execution. |
+| 6. Confirm output | Check the pull request conversation and Files changed tab | Pipr publishes one Main Review Comment and valid Inline Review Comments. |
+
+If the first run fails, start with [Troubleshooting](/docs/guide/troubleshooting#first-run-failure-ladder). It narrows setup failures before you change review code.
+
 ## One tool instead of a review stack
 
 Most code review tools excel at one thing: one at security findings, another at PR summaries, another at merge gates. Running several of them means overlapping comments, duplicated model spend, and more bot noise on every pull request.

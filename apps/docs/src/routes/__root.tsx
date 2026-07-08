@@ -18,8 +18,7 @@ export const Route = createRootRoute({
       },
       {
         name: "description",
-        content:
-          "Documentation for Pipr, a Pi-powered GitHub pull request review automation runtime.",
+        content: "Documentation for Pipr, code-owned AI review for GitHub pull requests.",
       },
     ],
     links: [

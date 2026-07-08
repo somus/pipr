@@ -1,7 +1,7 @@
 {
   "name": "pipr",
   "version": "0.3.1",
-  "description": "Pi-powered GitHub pull request review runtime",
+  "description": "Code-owned AI review for GitHub pull requests",
   "private": true,
   "type": "module",
   "license": "MIT",

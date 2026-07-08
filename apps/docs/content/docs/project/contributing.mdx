@@ -23,6 +23,15 @@ Run the repository gate before opening or updating a pull request:
 mise run check
 ```
 
+For docs-only changes, run the docs checks that prove the edited surface:
+
+```bash
+bun run --cwd apps/docs recipes:check
+bun run --cwd apps/docs typecheck
+bun run --cwd apps/docs build
+bun run format:check:docs
+```
+
 Run the Action gate after editing any GitHub Action behavior, Docker packaging, workflow fixtures, Pi CLI mapping, or PR event handling:
 
 ```bash

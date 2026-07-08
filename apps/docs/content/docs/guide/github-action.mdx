@@ -64,7 +64,18 @@ Provider settings come from the base-commit `.pipr/config.ts`, not from pull req
 
 ### Permissions
 
-`contents: write` is required by GitHub's integration token for resolving review threads. `checks: write` lets Pipr publish task and aggregate Check Runs when enabled by config. `pull-requests: write` publishes Inline Review Comments and lets Pipr respond to user replies on Pipr-owned Inline Review Comments. `issues: write` publishes and updates the Main Review Comment and command response comments. Command help is exposed through the `main-comment` output. If GitHub denies the cleanup call or the API fails, the review still succeeds and records the issue in `publication.metadata.inlineResolutionErrors`.
+Use the generated permission block unless you have intentionally disabled the matching feature in `.pipr/config.ts`.
+
+| Feature | GitHub write | Required permission |
+| --- | --- | --- |
+| Main Review Comment | Create or update a pull request issue comment | `issues: write` |
+| Command response | Create or update the reply for one source `@pipr` command comment | `issues: write` |
+| Inline Review Comments | Publish comments on valid diff ranges | `pull-requests: write` |
+| Inline verifier replies | Reply to user comments on Pipr-owned Inline Review Comments | `pull-requests: write` |
+| Review thread resolution | Resolve GitHub review threads for findings the verifier marks fixed | `contents: write` and `pull-requests: write` |
+| Task or aggregate Check Runs | Create and update GitHub Check Runs when checks are enabled | `checks: write` |
+
+Command help is exposed through the `main-comment` output. If GitHub denies verifier cleanup or the API fails, the review still succeeds and records the issue in `publication.metadata.inlineResolutionErrors`.
 
 ## Pinning
 
@@ -82,9 +93,9 @@ Use `somus/pipr@main` only when you intentionally want the current main-branch A
 
 | Output | Description |
 | --- | --- |
-| `main-comment` | Rendered main pull request review comment body, command response body, or command help body. |
-| `inline-comments` | JSON array of inline review comment publication items. |
-| `dropped-findings` | JSON array of findings dropped during validation. |
+| `main-comment` | Rendered Main Review Comment body, command response body, or command help body. |
+| `inline-comments` | JSON array of Inline Review Comment publication items. |
+| `dropped-findings` | JSON array of Review Findings dropped during validation. |
 | `publication` | JSON publication result for main and inline comments. On command-response runs, this is `{ action, id }` for the response issue comment. On `pull_request_review_comment` verifier runs, this contains verifier thread action errors such as `inlineResolutionErrors`. |
 
 ## Trust model

@@ -1,20 +1,20 @@
 name: Pipr Review
-description: Pi-powered pull request automation runtime
+description: Code-owned AI review for GitHub pull requests
 branding:
   icon: git-pull-request
   color: purple
 inputs:
   config-dir:
-    description: pipr configuration directory
+    description: Directory containing Pipr Configuration
     required: false
     default: .pipr
 outputs:
   main-comment:
-    description: Rendered main PR review comment body, command response body, or command help body
+    description: Rendered Main Review Comment body, command response body, or command help body
   inline-comments:
-    description: JSON array of inline review comment publication items
+    description: JSON array of Inline Review Comment publication items
   dropped-findings:
-    description: JSON array of findings dropped during validation
+    description: JSON array of Review Findings dropped during validation
   publication:
     description: JSON publication result for review, command response, or verifier publication
 runs:

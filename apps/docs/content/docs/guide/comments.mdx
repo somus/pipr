@@ -19,6 +19,22 @@ A normal review can create three visible surfaces on a pull request.
 | Inline Review Comment | Pull request diff | One actionable Review Finding anchored to one validated Diff Manifest range. |
 | Command response | Pull request conversation | The answer to one source `@pipr` command comment. |
 
+### How to read a Pipr review
+
+Start with the Main Review Comment, then inspect Inline Review Comments only for issues that need code changes.
+
+| Part | What to look for | What it means |
+| --- | --- | --- |
+| Main Review Comment | Summary, counts, task metadata, and skipped or dropped finding notes | The overall review result for one task. |
+| Inline Review Comment | One finding on one validated diff range | A concrete issue Pipr could anchor to changed code. |
+| Suggested fix | A GitHub suggested change block | Exact replacement code for the selected range. |
+| Dropped findings | Action output or metadata count | The model proposed a finding Pipr refused to publish. |
+| Inline cap | Fewer inline comments than total findings | `publication.maxInlineComments` limited diff noise. |
+| Prior state | Repeated finding ids and open locations | Pipr is tracking findings across reruns. |
+| Verifier reply | A reply on a Pipr-owned inline thread | Pipr rechecked whether the finding is fixed or still valid. |
+
+This shape keeps review finite: one summary, bounded inline issues, and explicit state for what changed across reruns.
+
 ### Debug outputs
 
 Action outputs also include publication metadata, inline drafts, and dropped findings for debugging.

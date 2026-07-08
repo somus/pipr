@@ -13,6 +13,21 @@ pipr review --base origin/main
 
 For GitHub Action behavior, set `PIPR_DRY_RUN=1` or use `pipr dry-run --event <path>`.
 
+## First-run failure ladder
+
+Follow this order for a new setup. It separates config failures from GitHub publication failures.
+
+| Step | Check | Fix |
+| --- | --- | --- |
+| 1. Config load | Run `pipr check`. | Fix `.pipr/config.ts`, local imports, duplicate ids, or invalid command patterns. |
+| 2. Runtime plan | Run `pipr inspect`. | Confirm the selected model, task, entrypoints, commands, and publication limits. |
+| 3. Provider secret | Compare `pipr.secret({ name })` with workflow `env`. | Add the matching GitHub Actions secret and pass it to the Action. |
+| 4. Checkout depth | Inspect `.github/workflows/pipr.yml`. | Set `actions/checkout` to `fetch-depth: 0`. |
+| 5. Workflow permissions | Inspect the workflow `permissions` block. | Grant the permissions for the comments, checks, and verifier features you enabled. |
+| 6. Fork behavior | Check whether the PR comes from a fork. | Follow GitHub's secret availability rules. If the provider secret is unavailable, rerun from a trusted branch or adjust the workflow policy. |
+| 7. Stale head | Compare the reviewed head with the current PR head. | Rerun the workflow on the latest commit. |
+| 8. Dropped findings | Read the `dropped-findings` output. | Fix the prompt or mapper so findings use exact Diff Manifest paths, range ids, sides, and lines. |
+
 ## Choose the diagnostic
 
 ### Symptom table

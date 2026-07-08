@@ -7,12 +7,26 @@ This guide gets Pipr running on a GitHub pull request. You will install the CLI,
 
 GitHub pull requests are the only supported code host target today. GitLab, Bitbucket, and Azure DevOps support is coming soon.
 
+## First review checklist
+
+Complete these checks in order. Do not tune prompts or recipes until the generated setup can run once.
+
+| Milestone | Command or action | Success signal |
+| --- | --- | --- |
+| Install Pipr | Run the install command in step 1. | `pipr --version` prints a release version. |
+| Generate config | `pipr init` | `.pipr/config.ts` and `.github/workflows/pipr.yml` exist. |
+| Validate config | `pipr check` | The config loads without requiring a model call. |
+| Add provider secret | Add `DEEPSEEK_API_KEY` or your configured secret | The workflow passes that env var to the Action. |
+| Open a pull request | Commit the generated files and push a PR | The GitHub Action starts a Pipr run. |
+| Confirm output | Open the PR conversation and Files changed tab | You see one Main Review Comment and any valid Inline Review Comments. |
+
 ## Prerequisites
 
 Before you start, make sure the repository can run GitHub Actions and has a model provider key available.
 
 - A GitHub repository with pull requests enabled.
 - Permission to add a workflow under `.github/workflows`.
+- Permission to add repository Actions secrets.
 - A provider API key available as a GitHub Actions secret.
 - A full checkout in CI, because Pipr compares pull request head against the trusted base commit.
 
@@ -207,6 +221,21 @@ The default review publishes:
 ### Dropped findings
 
 If Pipr drops a finding, the finding failed runtime validation. The most common reason is an invalid path, side, or range for the current Diff Manifest. See [Comments and Findings](/docs/guide/comments).
+
+## If the first run fails
+
+Use the narrowest diagnostic first.
+
+| Symptom | First diagnostic |
+| --- | --- |
+| Config fails before the Action runs | Run `pipr check`. |
+| The runtime plan is not what you expected | Run `pipr inspect`. |
+| The Action cannot compare the diff | Confirm `fetch-depth: 0` in the workflow. |
+| The model does not start | Confirm the provider secret name and workflow `env` mapping. |
+| The Action runs but does not publish | Check workflow permissions and publication metadata. |
+| Inline comments are missing | Check the `dropped-findings` Action output. |
+
+See [Troubleshooting](/docs/guide/troubleshooting#first-run-failure-ladder) for the full first-run ladder.
 
 ## Check the config locally
 

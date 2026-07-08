@@ -81,6 +81,20 @@ They do not expose arbitrary shell access or write access.
 
 ## Publication safety
 
+### What Pipr writes
+
+Review Tasks do not receive broad code host write tools. They emit one final output, then Pipr validates and publishes through the active adapter.
+
+| Output surface | When Pipr writes it | Safety control |
+| --- | --- | --- |
+| Main Review Comment | A task calls `ctx.comment(...)` with main output | Upserted by Pipr marker and replaced on rerun. |
+| Inline Review Comment | A task passes valid `ReviewFinding[]` | Anchored to Diff Manifest ranges, capped by config, and deduped. |
+| Command response | A command task calls `ctx.command.reply(...)` | Keyed to the source command comment and updated on rerun. |
+| Check Run | Checks are enabled in config | Created and completed by the runtime after task execution. |
+| Verifier reply or thread resolution | The internal verifier marks a prior finding fixed or still valid | Limited to Pipr-owned Inline Review Comments. |
+
+Generic GitHub agents often expose many read and write tools directly to the model. Pipr's review path is narrower: model output becomes proposed review data, and the runtime decides what can be published.
+
 ### Stale head check
 
 Before publishing, Pipr checks the current pull request head SHA. If the head changed after review execution, publication stops before writes.
@@ -95,6 +109,29 @@ Review Tasks do not call code host APIs directly. They emit final output, then P
 - upserts the Main Review Comment by marker
 - dedupes same-head inline comments
 - records publication metadata
+
+## Guarantees and limits
+
+### Runtime guarantees
+
+Pipr makes deterministic checks around model output and publication:
+
+- Pull request Action runs load `.pipr/config.ts` from the base commit.
+- Pi receives read-only repository access during review.
+- Review Findings must match a changed Diff Manifest file and range before inline publication.
+- Pipr checks the current head SHA before publishing review output.
+- Reruns use Pipr-owned markers to update the Main Review Comment and skip duplicate Inline Review Comments.
+- Invalid findings are dropped with metadata instead of being published on invented locations.
+
+### Runtime limits
+
+Pipr does not turn model judgment into a guarantee of correctness:
+
+- AI review can miss bugs or report false positives. Human review still owns the merge decision.
+- Pipr does not resume an interrupted Pi model call in the MVP. A rerun reconstructs the same inputs and runs the agent again.
+- The stale-head check happens before publication writes. Marker dedupe keeps retries safe, but it is not an atomic lock across every later GitHub API call.
+- Local review does not publish comments. It proves config, diff, and model behavior before CI publication.
+- Path scope limits the Diff Manifest and publishable findings for scoped runs. It does not prevent Pi from reading the rest of the read-only workspace.
 
 ## Forks
 
