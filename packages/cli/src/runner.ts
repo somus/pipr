@@ -349,9 +349,7 @@ async function runCheck(options: CliOptions): Promise<void> {
     requireProviderEnv: options.requireEnv === true,
   });
   console.log(`valid: ${settings.source}`);
-  for (const warning of settings.warnings) {
-    console.log(`warning: ${warning}`);
-  }
+  writeConfigWarnings(settings.warnings);
 }
 
 async function runInspect(options: CliOptions): Promise<void> {
@@ -360,7 +358,15 @@ async function runInspect(options: CliOptions): Promise<void> {
     configDir: options.configDir,
     env: process.env,
   });
-  console.log(inspect(result, { depth: 8, colors: false }));
+  const { warnings, ...plan } = result;
+  writeConfigWarnings(warnings);
+  console.log(inspect(plan, { depth: 8, colors: false }));
+}
+
+function writeConfigWarnings(warnings: readonly string[]): void {
+  for (const warning of warnings) {
+    console.log(`warning: ${warning}`);
+  }
 }
 
 async function runSkillGet(): Promise<void> {
@@ -595,6 +601,7 @@ async function runDryRun(options: CliOptions): Promise<void> {
     env: process.env,
     eventPath: options.event,
   });
+  writeConfigWarnings(result.warnings);
   console.log(
     inspect(
       {

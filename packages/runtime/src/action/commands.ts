@@ -73,7 +73,10 @@ export async function runInspectCommand(
   options: RuntimeCommandOptions,
 ): Promise<InspectCommandResult> {
   const runtime = await loadRuntimeProject({ ...options, requireProviderEnv: false });
-  return inspectRuntimePlan(runtime.plan, runtime.settings.source);
+  return {
+    ...inspectRuntimePlan(runtime.plan, runtime.settings.source),
+    warnings: runtime.settings.warnings,
+  };
 }
 
 /** Loads the runtime config and pull request event without running review publication. */
@@ -94,6 +97,7 @@ export async function runDryRunCommand(
   return {
     configSource: runtime.settings.source,
     event,
+    warnings: runtime.settings.warnings,
   };
 }
 

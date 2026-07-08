@@ -672,6 +672,29 @@ describe("pipr CLI", () => {
     }
   });
 
+  it("prints config version warnings for inspect and dry-run", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
+    try {
+      await initWorkspaceConfig(workspace);
+      await writeSdkDependency(workspace, "0.1.0");
+      const eventPath = path.join(workspace, "event.json");
+      await Bun.write(eventPath, JSON.stringify(pullRequestPayload()));
+
+      const inspect = await runCli(["inspect"], {}, workspace);
+      const dryRun = await runCli(["dry-run", "--event", eventPath], {}, workspace);
+      const warning =
+        `.pipr/package.json pins @usepipr/sdk 0.1.0, but this Pipr runtime is ${cliPackage.version}. ` +
+        "Run `pipr init --force` or update .pipr/package.json and .pipr/bun.lock when ready.";
+
+      expect(inspect.exitCode, `${inspect.stdout}\n${inspect.stderr}`).toBe(0);
+      expect(inspect.stdout).toContain(`warning: ${warning}`);
+      expect(dryRun.exitCode, `${dryRun.stdout}\n${dryRun.stderr}`).toBe(0);
+      expect(dryRun.stdout).toContain(`warning: ${warning}`);
+    } finally {
+      await removeWorkspace(workspace);
+    }
+  });
+
   it("embeds standalone SDK declarations for release init", async () => {
     const declaration = embeddedSdkDeclaration(await readSdkDeclarationModules(repoRoot));
 
@@ -831,6 +854,27 @@ async function initWorkspaceConfig(workspace: string): Promise<void> {
   if (result.exitCode !== 0) {
     throw new Error(`pipr init failed: ${result.stderr || result.stdout}`);
   }
+}
+
+async function writeSdkDependency(workspace: string, version: string): Promise<void> {
+  const packageJsonPath = path.join(workspace, ".pipr", "package.json");
+  const manifest = (await Bun.file(packageJsonPath).json()) as {
+    dependencies?: Record<string, string>;
+  };
+  await Bun.write(
+    packageJsonPath,
+    `${JSON.stringify(
+      {
+        ...manifest,
+        dependencies: {
+          ...manifest.dependencies,
+          "@usepipr/sdk": version,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
 
 async function runInitAndCheck(
