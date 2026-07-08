@@ -9,6 +9,7 @@ import type {
   ReviewFinding,
 } from "../types.js";
 import { commentableRangeSchema, reviewSideSchema } from "../types.js";
+import { mainCommentTitle, renderMainCommentAttribution } from "./comment-branding.js";
 import { reviewFindingSchema } from "./contract.js";
 import { isPublishableSuggestedFixSelection } from "./inline-publication-policy.js";
 import {
@@ -146,6 +147,7 @@ export function buildPublicationPlan(options: BuildPublicationPlanOptions): Publ
       event: options.event,
       reviewState,
       main: options.main,
+      reviewedHeadSha: metadata.reviewedHeadSha,
     }),
     mainMarker: mainCommentMarker,
     changeNumber: options.event.change.number,
@@ -290,6 +292,7 @@ function renderMainComment(options: {
   event: Pick<ChangeRequestEventContext, "change">;
   reviewState: PriorReviewState;
   main: string;
+  reviewedHeadSha: string;
 }): string {
   return [
     renderMainCommentMarker({
@@ -298,9 +301,11 @@ function renderMainComment(options: {
       reviewState: options.reviewState,
     }),
     "",
-    "# Pipr Review",
+    mainCommentTitle,
     "",
     redactPotentialSecrets(options.main),
+    "",
+    renderMainCommentAttribution(options.reviewedHeadSha),
     "",
   ].join("\n");
 }
@@ -312,11 +317,32 @@ function renderInlineBody(
 ): string {
   return [
     renderInlineFindingMarker(findingId, reviewedHeadSha),
-    finding.body,
-    finding.suggestedFix ? `\n${renderSuggestedChange(finding.suggestedFix)}` : "",
+    renderInlineFindingBody(finding.body),
+    finding.suggestedFix ? renderSuggestedChangeSection(finding.suggestedFix) : "",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function renderInlineFindingBody(body: string): string {
+  return startsWithStructuredMarkdown(body) ? body : ["**Issue**", "", body].join("\n");
+}
+
+function startsWithStructuredMarkdown(value: string): boolean {
+  const body = value.trimStart();
+  return (
+    /^#{1,6}\s/.test(body) ||
+    /^>/.test(body) ||
+    /^(\d+[.)]|[-*+])\s/.test(body) ||
+    /^\|/.test(body) ||
+    /^(```|~~~)/.test(body) ||
+    /^<\s*[a-z][\w:-]*(\s|>|\/>)/i.test(body) ||
+    /^\*\*[^*\n]+\*\*/.test(body)
+  );
+}
+
+function renderSuggestedChangeSection(suggestedFix: string): string {
+  return ["**Suggested change**", "", renderSuggestedChange(suggestedFix)].join("\n");
 }
 
 function renderSuggestedChange(suggestedFix: string): string {

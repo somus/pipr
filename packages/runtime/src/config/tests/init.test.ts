@@ -34,13 +34,15 @@ describe("initOfficialMinimalProject", () => {
 
     const result = await initOfficialMinimalProject({ rootDir });
     const project = await loadRuntimeProject({ rootDir });
+    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
 
     expect(result.created).toEqual(expect.arrayContaining(defaultInitFiles));
     expect(result.created).toEqual(expect.arrayContaining(packageInitFiles));
     expect(result.overwritten).toEqual([]);
-    expect(await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text()).toContain(
-      "pipr.review",
-    );
+    expect(configTs).toContain("pipr.review");
+    expect(configTs).toContain("## Review Result");
+    expect(configTs).toContain("reviewResultTable");
+    expect(configTs).toContain("See inline comments in the diff.");
     expect(await Bun.file(path.join(rootDir, ".pipr", "tsconfig.json")).text()).toContain(
       "moduleResolution",
     );
@@ -88,9 +90,7 @@ describe("initOfficialMinimalProject", () => {
     expect(project.kind).toBe("typescript");
     expect(project.settings.config.defaultProvider).toBe("deepseek/deepseek-v4-pro");
     expect(project.settings.config.publication.maxInlineComments).toBe(5);
-    expect(await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text()).toContain(
-      'timeout: "10m"',
-    );
+    expect(configTs).toContain('timeout: "10m"');
   });
 
   it("can initialize only the pipr config files without adapter files", async () => {
@@ -135,6 +135,8 @@ describe("initOfficialMinimalProject", () => {
   });
 
   it("initializes every official recipe and validates the generated config", async () => {
+    expect(supportedOfficialInitRecipes).toContain("rich-review");
+    expect(supportedOfficialInitRecipes).toContain("fix-suggestions");
     expect(listOfficialInitRecipes().map((recipe) => recipe.id)).toEqual([
       ...supportedOfficialInitRecipes,
     ]);
@@ -156,6 +158,49 @@ describe("initOfficialMinimalProject", () => {
       expect(configTs).not.toContain("json(input.manifest");
       expect(configTs).not.toContain("input.manifest");
     }
+  });
+
+  it("initializes the rich review recipe with category and severity labels", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "rich-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
+
+    expect(configTs).toContain("severity");
+    expect(configTs).toContain("category");
+    expect(configTs).toContain("@pipr rich-review");
+    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("rich-review");
+  });
+
+  it("initializes the fix suggestions recipe as a command-first exact patch workflow", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-fix-suggestions-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "fix-suggestions",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
+    const inspected = inspectRuntimePlan(project.plan, ".pipr/config.ts");
+
+    expect(configTs).toContain("suggestedFix: z.string().min(1)");
+    expect(configTs).toContain("@pipr improve");
+    expect(configTs).toContain("maxInlineComments: 6");
+    expect(inspected.agents).toContain("fix-suggestions");
+    expect(inspected.tasks).toContain("fix-suggestions");
+    expect(inspected.commands).toContainEqual({
+      pattern: "@pipr improve",
+      task: "fix-suggestions",
+      permission: "write",
+    });
   });
 
   it("initializes advanced recipes with inspectable agents, tools, and commands", async () => {

@@ -58,24 +58,43 @@ export default definePipr((pipr) => {
     `,
     timeout: "10m",
     comment: (result, context) => ({
-      main:
+      main: [
+        "## Summary",
+        "",
+        result.summary.body,
+        "",
+        "## Review Result",
+        "",
+        reviewResultTable(result.inlineFindings.length),
+        "",
         context.platform.id === "local"
-          ? [
-              "## Summary",
-              "",
-              result.summary.body,
-              "",
-              "## Inline Findings",
-              "",
-              result.inlineFindings.length === 0
-                ? "No inline findings."
-                : result.inlineFindings.map((finding) => `- ${finding.body}`).join("\n"),
-            ].join("\n")
-          : result.summary.body,
+          ? inlineFindingsSection(result.inlineFindings)
+          : inlineFindingsNote(result.inlineFindings.length),
+      ].join("\n"),
       inlineFindings: result.inlineFindings,
     }),
   });
 });
+
+function reviewResultTable(inlineFindingCount: number): string {
+  return [
+    "| Signal | Result |",
+    "| --- | ---: |",
+    `| Inline findings | ${inlineFindingCount} |`,
+  ].join("\n");
+}
+
+function inlineFindingsNote(inlineFindingCount: number): string {
+  return inlineFindingCount === 0 ? "No inline findings." : "See inline comments in the diff.";
+}
+
+function inlineFindingsSection(findings: Array<{ body: string }>): string {
+  return [
+    "## Inline Findings",
+    "",
+    findings.length === 0 ? "No inline findings." : findings.map((finding) => `- ${finding.body}`).join("\n"),
+  ].join("\n");
+}
 ```
 
 </RecipeFilePane>

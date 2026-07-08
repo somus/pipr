@@ -743,7 +743,9 @@ describe("publishGitHubPublicationPlan", () => {
 
     expect(result.mainComment).toEqual({ action: "updated", id: 10 });
     expect(client.issueComments).toHaveLength(1);
-    expect(client.issueComments[0]?.body).toContain("# Pipr Review");
+    expect(client.issueComments[0]?.body).toContain(
+      '# <img src="https://pipr.run/apple-touch-icon.png" width="22" height="22" alt=""> Pipr Review',
+    );
   });
 
   it("ignores inline markers from other authors", async () => {

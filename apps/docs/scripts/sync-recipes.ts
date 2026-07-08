@@ -59,6 +59,14 @@ const recipeDescriptions = new Map([
     "Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with a reviewer tuned for actionable bug reports.",
   ],
   [
+    "rich-review",
+    "Run a general review that labels findings by severity and category before publishing validated inline comments.",
+  ],
+  [
+    "fix-suggestions",
+    "Run a command-triggered improvement pass that publishes only exact suggested fixes maintainers can apply from review.",
+  ],
+  [
     "multi-agent-review",
     "Run specialist security, test, and maintainability agents, then merge their output through an aggregator into one concise pull request review.",
   ],
@@ -112,6 +120,14 @@ const recipeExpectedOutputs = new Map([
   [
     "bug-hunter",
     "Pipr publishes bug-focused review output with bounded inline comments. Use the command entrypoint when maintainers want to rerun the bug review on a risky pull request.",
+  ],
+  [
+    "rich-review",
+    "Pipr publishes a labeled Main Review Comment with severity and category tables, then maps each labeled issue into a validated Inline Review Comment.",
+  ],
+  [
+    "fix-suggestions",
+    "Pipr runs from `@pipr improve`, publishes a Main Review Comment summarizing exact suggested changes, and creates Inline Review Comments only for findings with a concrete `suggestedFix`.",
   ],
   [
     "multi-agent-review",
@@ -203,6 +219,28 @@ Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by 
 - Expand \`paths.exclude\` for generated files, snapshots, vendored code, or fixtures that produce noisy findings.
 - Keep the command entrypoint \`@pipr bugs\` for manual reruns on risky PRs that did not need a full review.
 - Tune the reviewer instructions around the bug classes your project sees: data loss, race conditions, migrations, API compatibility, or missed tests.
+`,
+  ],
+  [
+    "rich-review",
+    `## Recipe notes
+
+Rich Review keeps Pipr's core finding contract small while asking the reviewer for severity and category labels in a custom schema. The task renders those labels in the Main Review Comment and prefixes each Inline Review Comment body before publishing normal \`ReviewFinding[]\`.
+
+- Tune the severity definitions before using labels as merge policy.
+- Add or remove categories to match the risks your maintainers already discuss in review.
+- Keep rationale in the collapsed main-comment details so inline comments stay short in the diff.
+`,
+  ],
+  [
+    "fix-suggestions",
+    `## Recipe notes
+
+Fix Suggestions is command-first so maintainers can ask for exact patches only when they want them. The recipe requires \`suggestedFix\` in its custom schema, then maps those suggestions into normal Pipr Inline Review Comments.
+
+- Keep \`@pipr improve\` manual until maintainers trust the patch quality.
+- Tune categories around your most common small fixes, such as tests, typing, or maintainability.
+- Do not broaden this into general review feedback; use Rich Review or Bug Hunter when a patch is not exact.
 `,
   ],
   [
@@ -424,6 +462,8 @@ Choose by the review job first, then tune noise after the first successful run.
 | Goal | Start with | Default noise level |
 | --- | --- | --- |
 | General pull request review | [Default Review](/docs/recipes/default-review) | Balanced inline comments |
+| Labeled general review | [Rich Review](/docs/recipes/rich-review) | Severity and category labels |
+| Exact suggested fixes | [Fix Suggestions](/docs/recipes/fix-suggestions) | Command-triggered patch suggestions |
 | Real bug detection | [Bug Hunter](/docs/recipes/bug-hunter) | Focused inline comments |
 | Security risks with attack paths | [Security SAST](/docs/recipes/security-sast) | High-signal inline findings and a check |
 | Merge blocking policy | [Quality Gate](/docs/recipes/quality-gate) | Blocking findings plus required check |

@@ -4,12 +4,14 @@ import { ciTriageCommandRecipe } from "./recipes/ci-triage-command.js";
 import { defaultReviewRecipe } from "./recipes/default-review.js";
 import { dependencyRiskRecipe } from "./recipes/dependency-risk.js";
 import { diffDiagnosticsRecipe } from "./recipes/diff-diagnostics.js";
+import { fixSuggestionsRecipe } from "./recipes/fix-suggestions.js";
 import { interactiveAskRecipe } from "./recipes/interactive-ask.js";
 import { multiAgentReviewRecipe } from "./recipes/multi-agent-review.js";
 import { pluginToolReviewRecipe } from "./recipes/plugin-tool-review.js";
 import { prBriefingRecipe } from "./recipes/pr-briefing.js";
 import { prHygieneRecipe } from "./recipes/pr-hygiene.js";
 import { qualityGateRecipe } from "./recipes/quality-gate.js";
+import { richReviewRecipe } from "./recipes/rich-review.js";
 import { securitySastRecipe } from "./recipes/security-sast.js";
 import type {
   OfficialInitRecipe,
@@ -20,6 +22,8 @@ import type {
 export const supportedOfficialInitRecipes = [
   "default-review",
   "bug-hunter",
+  "rich-review",
+  "fix-suggestions",
   "security-sast",
   "quality-gate",
   "diff-diagnostics",
@@ -39,6 +43,8 @@ export type { OfficialInitRecipe, OfficialInitRecipeFile, OfficialInitRecipeWork
 const officialInitRecipeRegistry = {
   "default-review": defaultReviewRecipe,
   "bug-hunter": bugHunterRecipe,
+  "rich-review": richReviewRecipe,
+  "fix-suggestions": fixSuggestionsRecipe,
   "security-sast": securitySastRecipe,
   "quality-gate": qualityGateRecipe,
   "diff-diagnostics": diffDiagnosticsRecipe,

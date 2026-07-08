@@ -7,6 +7,7 @@ import type {
 } from "@usepipr/sdk";
 import { z } from "zod";
 import type { ReviewResult } from "../../types.js";
+import { isMainCommentAttribution, isMainCommentTitle } from "../comment-branding.js";
 import { reviewFindingSchema } from "../contract.js";
 import type { PriorReviewState } from "../prior-state.js";
 
@@ -222,11 +223,15 @@ export function priorReviewForTask(
 }
 
 function visibleMainComment(body: string): string {
-  const lines = body.split("\n").filter((line) => !line.startsWith("<!-- pipr:main-comment "));
+  const lines = body
+    .split("\n")
+    .filter(
+      (line) => !line.startsWith("<!-- pipr:main-comment ") && !isMainCommentAttribution(line),
+    );
   while (lines[0] === "") {
     lines.shift();
   }
-  if (lines[0] === "# pipr Review" || lines[0] === "# Pipr Review") {
+  if (lines[0] && isMainCommentTitle(lines[0])) {
     lines.shift();
   }
   while (lines[0] === "") {
