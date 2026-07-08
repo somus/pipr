@@ -1,6 +1,7 @@
 import path from "node:path";
 
 const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
+const defaultScaffoldTypescriptSpec = "typescript@6.0.3";
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -37,7 +38,10 @@ export async function installConfigDependencies(
   if (options.frozen) {
     args.push("--frozen-lockfile");
   }
-  if (installablePackages.every((dependency) => dependency.name === "typescript")) {
+  if (
+    installablePackages.length === 1 &&
+    installablePackages[0]?.spec === defaultScaffoldTypescriptSpec
+  ) {
     // Bun verifies the runtime-owned SDK tarball even though Pipr replaces it with a stub.
     // Keep normal integrity checks for third-party config dependencies.
     args.push("--no-verify");

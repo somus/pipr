@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { cp, mkdtemp } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { installConfigDependencies } from "../config-deps.js";
 import { initOfficialMinimalProject } from "../init.js";
 import { loadTypescriptConfig, prepareConfigDirectory } from "../ts-loader.js";
 import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
@@ -170,8 +171,15 @@ export default definePipr((pipr) => {
   it("does not execute stale TypeScript from original .pipr/node_modules", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
     await initOfficialMinimalProject({ rootDir, adapters: [] });
+    const staleTypescriptDir = path.join(rootDir, ".pipr", "node_modules", "typescript");
+    await rm(staleTypescriptDir, { recursive: true, force: true });
+    await mkdir(path.join(staleTypescriptDir, "lib"), { recursive: true });
     await Bun.write(
-      path.join(rootDir, ".pipr", "node_modules", "typescript", "lib", "typescript.js"),
+      path.join(staleTypescriptDir, "package.json"),
+      `${JSON.stringify({ name: "typescript", version: "0.0.0-stale" }, null, 2)}\n`,
+    );
+    await Bun.write(
+      path.join(staleTypescriptDir, "lib", "typescript.js"),
       'throw new Error("stale local TypeScript executed");\n',
     );
     await writePiprConfig(
@@ -247,6 +255,39 @@ export default definePipr((pipr) => {
 });
 
 describe("prepareConfigDirectory", () => {
+  it("uses no-verify only for default scaffold TypeScript installs", async () => {
+    const originalSpawn = Bun.spawn;
+    const commands: string[][] = [];
+    Bun.spawn = ((command: string[]) => {
+      commands.push(command);
+      return {
+        exited: Promise.resolve(0),
+        stdout: new Response("").body,
+        stderr: new Response("").body,
+      } as unknown as ReturnType<typeof Bun.spawn>;
+    }) as typeof Bun.spawn;
+    try {
+      const defaultConfigDir = await writePackageForInstallTest({
+        devDependencies: { typescript: "6.0.3" },
+      });
+      await installConfigDependencies(defaultConfigDir, { frozen: true });
+
+      const customConfigDir = await writePackageForInstallTest({
+        devDependencies: { typescript: "file:./typescript-local" },
+      });
+      await installConfigDependencies(customConfigDir, { frozen: true });
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+
+    const installCommands = commands.filter((command) => command[1] === "install");
+    expect(installCommands).toHaveLength(2);
+    expect(installCommands[0]).toContain("--no-verify");
+    expect(installCommands[0]).toContain("typescript@6.0.3");
+    expect(installCommands[1]).not.toContain("--no-verify");
+    expect(installCommands[1]).toContain("typescript@file:./typescript-local");
+  });
+
   it("writes a typed SDK stub without running install for runtime-provided deps", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
     await Bun.write(
@@ -293,4 +334,17 @@ async function installPiprConfigDependencies(configDir: string): Promise<void> {
   if (exitCode !== 0) {
     throw new Error(stderr);
   }
+}
+
+async function writePackageForInstallTest(manifest: {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}): Promise<string> {
+  const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-install-"));
+  await Bun.write(
+    path.join(configDir, "package.json"),
+    `${JSON.stringify({ private: true, ...manifest }, null, 2)}\n`,
+  );
+  await Bun.write(path.join(configDir, "bun.lock"), "");
+  return configDir;
 }
