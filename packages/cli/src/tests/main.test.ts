@@ -573,6 +573,7 @@ describe("pipr CLI", () => {
     try {
       const result = await runCli(["check"], { GITHUB_ACTIONS: "true" }, workspace);
       const review = await runCli(["review"], { GITHUB_ACTIONS: "true" }, workspace);
+      const version = await runCli(["--version"], { GITHUB_ACTIONS: "true" }, workspace);
 
       expect(result.exitCode).toBe(1);
       expect(`${result.stdout}\n${result.stderr}`).toContain("::error::");
@@ -581,6 +582,9 @@ describe("pipr CLI", () => {
       expect(`${review.stdout}\n${review.stderr}`).toContain(
         "required option '--base <sha>' not specified",
       );
+      expect(version.exitCode).toBe(0);
+      expect(version.stdout.trim()).toBe(cliPackage.version);
+      expect(`${version.stdout}\n${version.stderr}`).not.toContain("::error::");
     } finally {
       await removeWorkspace(workspace);
     }

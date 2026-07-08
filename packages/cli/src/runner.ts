@@ -13,7 +13,7 @@ import {
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
-import { Command } from "commander";
+import { Command, CommanderError } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
 import {
@@ -57,7 +57,14 @@ export async function runMain(options: MainOptions = {}): Promise<void> {
     program.outputHelp();
     return;
   }
-  await program.parseAsync(argv);
+  try {
+    await program.parseAsync(argv);
+  } catch (error) {
+    if (error instanceof CommanderError && error.exitCode === 0) {
+      return;
+    }
+    throw error;
+  }
 }
 
 function createProgram(options: { exitOverride?: boolean } = {}): Command {
