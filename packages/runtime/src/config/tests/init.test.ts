@@ -52,9 +52,14 @@ describe("initOfficialMinimalProject", () => {
     expect(await Bun.file(path.join(rootDir, ".pipr", "tsconfig.json")).text()).toContain(
       "moduleResolution",
     );
-    expect(await Bun.file(path.join(rootDir, ".pipr", "package.json")).text()).toContain(
-      "@usepipr/sdk",
+    const packageJson = JSON.parse(
+      await Bun.file(path.join(rootDir, ".pipr", "package.json")).text(),
     );
+    expect(packageJson.dependencies).toMatchObject({ "@usepipr/sdk": expect.any(String) });
+    expect(packageJson.devDependencies).toMatchObject({
+      "@types/bun": "1.3.14",
+      typescript: "6.0.3",
+    });
     expect(await Bun.file(path.join(rootDir, ".pipr", "bun.lock")).text()).toContain(
       '"lockfileVersion"',
     );

@@ -22,6 +22,17 @@ export type LoadedTypescriptConfig = {
   tempRoot: string;
 };
 
+type TypescriptApi = typeof import("typescript");
+
+type TypescriptForConfig = {
+  ts: TypescriptApi;
+  packageRoot?: string;
+};
+
+type CompilerHostWithDefaultLibLocation = import("typescript").CompilerHost & {
+  getDefaultLibLocation?: () => string;
+};
+
 export async function loadTypescriptConfig(
   options: LoadTypescriptConfigOptions,
 ): Promise<LoadedTypescriptConfig> {
@@ -100,7 +111,7 @@ async function typecheckTypescriptConfigWithApi(
 ): Promise<void> {
   // `typescript` and `@types/bun` are runtime dependencies: `pipr check`
   // typechecks user `.pipr/config.ts` files outside this package's build.
-  const ts = await import("typescript");
+  const { ts, packageRoot } = await loadTypescriptForConfig(configDir);
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (config.error) {
     throw new Error(formatTypeScriptDiagnostics(ts, [config.error], configDir));
@@ -119,14 +130,20 @@ async function typecheckTypescriptConfigWithApi(
     }
   }
   const configPath = path.join(configDir, "config.ts");
-  const program = ts.createProgram([configPath, ...parsed.fileNames], {
+  const compilerOptions = {
     ...parsed.options,
     skipLibCheck: true,
     typeRoots: [...new Set([...(parsed.options.typeRoots ?? []), ...bundledTypeRoots])],
     types: [
       ...new Set([...(parsed.options.types ?? []), ...(bundledTypeRoots.length ? ["bun"] : [])]),
     ],
-  });
+  };
+  const compilerHost = await createTypescriptCompilerHost(ts, compilerOptions, packageRoot);
+  const program = ts.createProgram(
+    [configPath, ...parsed.fileNames],
+    compilerOptions,
+    compilerHost,
+  );
   const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)];
   if (diagnostics.length > 0) {
     throw new Error(
@@ -136,8 +153,62 @@ async function typecheckTypescriptConfigWithApi(
   }
 }
 
+async function loadTypescriptForConfig(configDir: string): Promise<TypescriptForConfig> {
+  const localPackageRoot = path.join(configDir, "node_modules", "typescript");
+  const localApiPath = path.join(localPackageRoot, "lib", "typescript.js");
+  if (await fileExists(localApiPath)) {
+    return {
+      ts: typescriptApi(await import(pathToFileURL(localApiPath).href)),
+      packageRoot: localPackageRoot,
+    };
+  }
+
+  const ts = typescriptApi(await import("typescript"));
+  return { ts, packageRoot: await runtimeTypescriptPackageRoot() };
+}
+
+function typescriptApi(module: unknown): TypescriptApi {
+  const maybeModule = module as TypescriptApi & { default?: TypescriptApi };
+  return typeof maybeModule.createProgram === "function"
+    ? maybeModule
+    : (maybeModule.default ?? maybeModule);
+}
+
+async function runtimeTypescriptPackageRoot(): Promise<string | undefined> {
+  try {
+    const require = createRequire(import.meta.url);
+    const packageRoot = path.dirname(require.resolve("typescript/package.json"));
+    return (await fileExists(path.join(packageRoot, "lib", "typescript.js")))
+      ? packageRoot
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function createTypescriptCompilerHost(
+  ts: TypescriptApi,
+  compilerOptions: import("typescript").CompilerOptions,
+  packageRoot: string | undefined,
+): Promise<import("typescript").CompilerHost> {
+  const compilerHost = ts.createCompilerHost(compilerOptions, true);
+  if (!packageRoot) {
+    return compilerHost;
+  }
+
+  const libDir = path.join(packageRoot, "lib");
+  const defaultLibPath = path.join(libDir, ts.getDefaultLibFileName(compilerOptions));
+  if (!(await fileExists(defaultLibPath))) {
+    return compilerHost;
+  }
+
+  compilerHost.getDefaultLibFileName = () => defaultLibPath;
+  (compilerHost as CompilerHostWithDefaultLibLocation).getDefaultLibLocation = () => libDir;
+  return compilerHost;
+}
+
 function formatTypeScriptDiagnostics(
-  ts: typeof import("typescript"),
+  ts: TypescriptApi,
   diagnostics: import("typescript").Diagnostic[],
   configDir: string,
 ): string {

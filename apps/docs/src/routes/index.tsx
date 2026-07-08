@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
+import { piprAgentSetupPrompt } from "@/lib/agent-prompt";
 import { baseOptions } from "@/lib/layout.shared";
 import { gitConfig } from "@/lib/shared";
 
@@ -37,9 +38,6 @@ const installCommandLines = [
 ];
 
 const installCommand = installCommandLines.map((line) => line.command).join("\n");
-
-const agentPrompt =
-  "Install and configure Pipr in this repository. Install the CLI with `curl -fsSL https://pipr.run/install.sh | sh`, then run `pipr skill` and use the bundled `pipr-setup` skill. Interview me only for missing choices, run `pipr init`, customize `.pipr/config.ts` only as needed, and verify with `pipr inspect` and `pipr check`.";
 
 const conceptCards = [
   {
@@ -196,7 +194,7 @@ function InstallPanel() {
                 <span className="hidden sm:inline">Copy the bundled Pipr skill prompt.</span>
               </p>
             </div>
-            <CopyButton className="shrink-0" copyText={agentPrompt} label="Copy prompt" />
+            <CopyButton className="shrink-0" copyText={piprAgentSetupPrompt} label="Copy prompt" />
           </div>
         </div>
       </div>

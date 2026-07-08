@@ -1,6 +1,6 @@
 import path from "node:path";
 
-const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
+const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun", "typescript"]);
 
 type PackageManifest = {
   dependencies?: Record<string, string>;

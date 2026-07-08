@@ -37,6 +37,7 @@ type StarterFile = {
 const defaultWorkflowActionRef = "somus/pipr@v0.3.3"; // x-release-please-version
 const defaultSdkVersion = "0.3.3"; // x-release-please-version
 const defaultTypesBunVersion = "1.3.14";
+const defaultTypescriptVersion = "6.0.3";
 
 function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInitAdapter[] {
   if (adapters === undefined) {
@@ -174,6 +175,7 @@ function starterPackageJson(): string {
       },
       devDependencies: {
         "@types/bun": defaultTypesBunVersion,
+        typescript: defaultTypescriptVersion,
       },
     },
     null,

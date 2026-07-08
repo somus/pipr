@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { cp, mkdtemp } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { initOfficialMinimalProject } from "../init.js";
@@ -94,7 +94,7 @@ export default definePipr((pipr) => {
     });
   });
 
-  it("typechecks default scaffold config that uses Bun APIs without installing @types/bun", async () => {
+  it("typechecks default scaffold config that uses Bun APIs through local config deps", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
     await initOfficialMinimalProject({ rootDir, adapters: [] });
     await writePiprConfig(
@@ -112,6 +112,48 @@ export default definePipr((pipr) => {
     id: "review",
     model,
     instructions: \`Review this change. Bun version: \${Bun.version}. Config exists: \${file(".pipr/config.ts").exists()}\`,
+  });
+});
+`,
+    );
+
+    await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
+      source: path.join(rootDir, ".pipr", "config.ts"),
+    });
+  });
+
+  it("resolves default lib files from the local .pipr TypeScript package", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    const localLibPath = path.join(
+      rootDir,
+      ".pipr",
+      "node_modules",
+      "typescript",
+      "lib",
+      "lib.es2022.full.d.ts",
+    );
+    const localLib = await Bun.file(localLibPath).text();
+    await Bun.write(
+      localLibPath,
+      `${localLib}\ndeclare const __piprLocalTypeScriptLibSentinel: string;\n`,
+    );
+    await writePiprConfig(
+      rootDir,
+      `import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  type LocalTypescriptSentinel = typeof __piprLocalTypeScriptLibSentinel;
+  const sentinel = "ok" satisfies LocalTypescriptSentinel;
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+  pipr.review({
+    id: "review",
+    model,
+    instructions: \`Review this change. Local TS lib sentinel: \${sentinel}\`,
   });
 });
 `,
@@ -147,11 +189,19 @@ export default definePipr((pipr) => {
 });
 
 describe("prepareConfigDirectory", () => {
-  it("writes a typed SDK stub without running install for default scaffold deps", async () => {
+  it("writes a typed SDK stub without running install for runtime-provided deps", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
-    await cp(
-      path.join(path.resolve(import.meta.dirname, "../../../../../.pipr"), "package.json"),
+    await Bun.write(
       path.join(configDir, "package.json"),
+      `${JSON.stringify(
+        {
+          private: true,
+          dependencies: { "@usepipr/sdk": "0.3.3" },
+          devDependencies: { "@types/bun": "1.3.14", typescript: "6.0.3" },
+        },
+        null,
+        2,
+      )}\n`,
     );
 
     await prepareConfigDirectory(configDir, { frozen: true });

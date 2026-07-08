@@ -163,10 +163,16 @@ describe("pipr CLI", () => {
       expect(get.stdout).toContain("BEGIN SKILL FILE: references/recipes.md");
       expect(get.stdout).toContain("name: pipr-setup");
       expect(get.stdout).toContain("Install and configure Pipr");
+      expect(get.stdout).toContain("## Interview Gate");
+      expect(get.stdout).toContain("Defaults are allowed only");
+      expect(get.stdout).toContain("Provider policy: provider, model, secret env var names");
+      expect(get.stdout).not.toContain("Ask only for missing choices");
       expect(pathResult.exitCode, `${pathResult.stdout}\n${pathResult.stderr}`).toBe(0);
       const skillPath = pathResult.stdout.trim();
       expect(path.basename(skillPath)).toBe("pipr-setup");
-      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+      const skillText = await Bun.file(path.join(skillPath, "SKILL.md")).text();
+      expect(skillText).toContain("name: pipr-setup");
+      expect(skillText).toContain("Do not run `pipr init` until");
       expect(
         await Bun.file(path.join(skillPath, "references/config-patterns.md")).text(),
       ).toContain("Pipr Config Patterns");
