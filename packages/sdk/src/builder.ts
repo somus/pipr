@@ -513,9 +513,9 @@ function registerReviewRecipeEntrypoints(
 
 function reviewChangeRequestEntrypoint(
   options: ReviewRecipeOptions,
-): ChangeRequestAction[] | undefined {
+): readonly ChangeRequestAction[] | undefined {
   const entrypoint = options.entrypoints?.changeRequest;
-  return entrypoint === false ? undefined : [...(entrypoint ?? defaultReviewActions)];
+  return entrypoint === false ? undefined : (entrypoint ?? defaultReviewActions);
 }
 
 function reviewCommandEntrypoint(options: ReviewRecipeOptions):
