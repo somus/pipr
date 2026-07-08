@@ -3,7 +3,7 @@ title: "Custom Tasks"
 description: "Build custom Review Tasks with Diff Manifest reads, Pi calls, review state, comments, and checks."
 ---
 
-Custom tasks are how you build your own review workflows on the Pipr core. A task is a plain async function: you gather context, call Pi agents, and emit one output. Pipr keeps owning the hard parts — the Diff Manifest, Pi execution, finding validation, and publishing — so a task stays a short piece of orchestration code, not a review engine.
+Custom tasks are how you build your own review workflows on the Pipr core. A Review Task is a plain async function: you gather context, build or inspect a Diff Manifest, call Pi Agents, and emit one Review Output. Pipr keeps owning the hard parts: the Diff Manifest contract, Pi execution policy, finding validation, and publishing. A task stays a short piece of orchestration code, not a review engine.
 
 Use a custom task when `pipr.review(...)` is too small for the workflow. Common reasons include multiple Pi calls, command-specific input, custom schemas, extra checks, custom logging, or a main-comment-only task.
 
@@ -21,6 +21,8 @@ A workflow composes four pieces, all registered in `.pipr/config.ts`:
 | Entrypoint | `pipr.on.changeRequest(...)` or `pipr.command(...)` | When the task runs. |
 
 Every recipe in [Recipes](/docs/recipes) is these same blocks arranged differently, so any recipe page doubles as a worked example for this guide.
+
+For the full concept map, see [Concepts](/docs/guide/concepts).
 
 ## Task shape
 
@@ -56,6 +58,8 @@ A selected Review Task must emit exactly one final output:
 - `ctx.comment(markdown)`
 - `ctx.comment({ main, inlineFindings })`
 - `ctx.command.reply(markdown)` for command response workflows
+
+Agent output is not the same thing as Review Output. `ctx.pi.run(...)` returns typed data to the task; `ctx.comment(...)` or `ctx.command?.reply(...)` emits the final value Pipr can publish.
 
 ### Publication boundary
 

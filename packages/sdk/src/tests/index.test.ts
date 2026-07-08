@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import type { DiffManifest, ModelProfile, PiprBuilder, Reviewer, TaskContext } from "../index.js";
 import {
+  defaultReviewActions,
+  defaultReviewEntrypoints,
   definePipr,
   definePlugin,
   jsonSchema,
@@ -266,6 +268,46 @@ describe("definePipr", () => {
     ]);
     expect(plan.commands[0]).toMatchObject({ pattern: "@pipr review", permission: "write" });
     expect(plan.publication.maxInlineComments).toBe(3);
+  });
+
+  it("exports the default review entrypoint constants", () => {
+    expect(defaultReviewActions).toEqual(["opened", "updated", "reopened", "ready"]);
+    expect(defaultReviewEntrypoints).toEqual({
+      changeRequest: defaultReviewActions,
+      command: { pattern: "@pipr review", permission: "write" },
+    });
+  });
+
+  it("accepts default review entrypoints explicitly", () => {
+    const factory = definePipr((pipr) => {
+      const model = pipr.model({
+        provider: "deepseek",
+        model: "deepseek-v4-pro",
+        apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+      });
+      pipr.review({
+        id: "review",
+        model,
+        instructions: "Review.",
+        entrypoints: defaultReviewEntrypoints,
+      });
+    });
+
+    const plan = buildPiprPlan(factory);
+
+    expect(plan.changeRequestTriggers[0]?.actions).toEqual([...defaultReviewActions]);
+    expect(plan.commands[0]).toMatchObject({ pattern: "@pipr review", permission: "write" });
+  });
+
+  it("accepts default review actions for direct change-request registration", () => {
+    const factory = definePipr((pipr) => {
+      const task = pipr.task({ name: "review", run() {} });
+      pipr.on.changeRequest({ actions: defaultReviewActions, task });
+    });
+
+    const plan = buildPiprPlan(factory);
+
+    expect(plan.changeRequestTriggers[0]?.actions).toEqual([...defaultReviewActions]);
   });
 
   it("reuses explicit reviewers and registers provider-neutral entrypoints", () => {
