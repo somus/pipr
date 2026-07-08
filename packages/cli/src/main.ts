@@ -2,13 +2,14 @@
 import * as core from "@actions/core";
 import { PublicationError } from "@usepipr/runtime";
 import { runMain } from "./runner.js";
+import { sanitizeTerminalMessage } from "./terminal-output.js";
 
 runMain().catch(handleFatalError);
 
 function handleFatalError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   if (!isGitHubActions()) {
-    console.error(`error: ${message}`);
+    console.error(`error: ${sanitizeTerminalMessage(message)}`);
     process.exitCode = 1;
     return;
   }

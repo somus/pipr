@@ -81,6 +81,26 @@ describe("pipr CLI", () => {
 
     expect(requests).toEqual([]);
     expect(notices).toEqual([]);
+
+    await runMain({
+      argv: ["bun", "pipr", "update", "--help"],
+      env: { GITHUB_ACTIONS: "true", PIPR_UPDATE_NOTICE: "1" },
+      updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
+      writeUpdateNotice(message) {
+        notices.push(message);
+      },
+    });
+    await runMain({
+      argv: ["bun", "pipr", "help", "update"],
+      env: { GITHUB_ACTIONS: "true", PIPR_UPDATE_NOTICE: "1" },
+      updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
+      writeUpdateNotice(message) {
+        notices.push(message);
+      },
+    });
+
+    expect(requests).toEqual([]);
+    expect(notices).toEqual([]);
   });
 
   it("skips update notices when disabled or running in CI by default", async () => {
@@ -563,6 +583,29 @@ describe("pipr CLI", () => {
         expect(result.stderr, args.join(" ")).not.toContain("%0A");
         expect(result.stderr, args.join(" ")).not.toContain("Cannot find global type");
       }
+    } finally {
+      await removeWorkspace(workspace);
+    }
+  });
+
+  it("strips terminal control sequences from local fatal errors", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
+    try {
+      await mkdir(path.join(workspace, ".pipr"));
+      await Bun.write(
+        path.join(workspace, ".pipr", "config.ts"),
+        'throw new Error("bad \\u001b]0;evil\\u0007\\nnext \\u001b[31mred\\u001b[0m\\rline");\n',
+      );
+
+      const result = await runCli(["check"], {}, workspace);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("error: bad \nnext redline");
+      expect(result.stderr).not.toContain("\u001b");
+      expect(result.stderr).not.toContain("\u0007");
+      expect(result.stderr).not.toContain("\r");
+      expect(result.stderr).not.toContain("::error::");
     } finally {
       await removeWorkspace(workspace);
     }
