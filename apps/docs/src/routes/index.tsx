@@ -28,7 +28,7 @@ type ConceptCard = {
 const installCommandLines = [
   {
     id: "install",
-    command: "curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh",
+    command: "curl -fsSL https://pipr.run/install.sh | sh",
   },
   {
     id: "init",
@@ -39,7 +39,7 @@ const installCommandLines = [
 const installCommand = installCommandLines.map((line) => line.command).join("\n");
 
 const agentPrompt =
-  "Install and configure Pipr in this repository. Install the CLI with `curl -fsSL https://raw.githubusercontent.com/somus/pipr/main/install.sh | sh`, then run `pipr skill` and use the bundled `pipr-setup` skill. Interview me only for missing choices, run `pipr init`, customize `.pipr/config.ts` only as needed, and verify with `pipr inspect` and `pipr check`.";
+  "Install and configure Pipr in this repository. Install the CLI with `curl -fsSL https://pipr.run/install.sh | sh`, then run `pipr skill` and use the bundled `pipr-setup` skill. Interview me only for missing choices, run `pipr init`, customize `.pipr/config.ts` only as needed, and verify with `pipr inspect` and `pipr check`.";
 
 const conceptCards = [
   {
