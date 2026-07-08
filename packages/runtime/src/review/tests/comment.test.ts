@@ -68,7 +68,7 @@ const event = {
 };
 
 const brandedTitle =
-  '# <img src="https://pipr.run/apple-touch-icon.png" width="22" height="22" alt=""> Pipr Review';
+  '# <img src="https://pipr.run/images/pipr/pipr-mark.svg" width="22" height="22" alt=""> Pipr Review';
 
 describe("comments", () => {
   it("renders one whole main comment body with review state", () => {

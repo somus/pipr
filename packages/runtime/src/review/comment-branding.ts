@@ -1,4 +1,4 @@
-const piprLogoUrl = "https://pipr.run/apple-touch-icon.png";
+const piprLogoUrl = "https://pipr.run/images/pipr/pipr-mark.svg";
 export const piprRepositoryUrl = "https://github.com/somus/pipr";
 
 export const mainCommentTitle = `# <img src="${piprLogoUrl}" width="22" height="22" alt=""> Pipr Review`;
