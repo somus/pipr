@@ -1,6 +1,7 @@
 import { z } from "zod";
 import runtimePackage from "../../package.json" with { type: "json" };
 import { createDiffRangeIndex } from "../diff/ranges.js";
+import { redactPotentialSecrets } from "../shared/redaction.js";
 import type {
   ChangeRequestEventContext,
   CommentableRange,
@@ -123,8 +124,6 @@ export type BuildPublicationPlanOptions = {
 
 const maxInlineFindingBodyCharacters = 700;
 const maxInlineFindingBodyLines = 4;
-const secretLikeTokenPattern =
-  /\b[A-Za-z0-9][A-Za-z0-9_.:/+=-]*(?:secret|token|api[_-]?key|apikey)[A-Za-z0-9_.:/+=-]{8,}\b/gi;
 
 export function buildPublicationPlan(options: BuildPublicationPlanOptions): PublicationPlan {
   const reviewState =
@@ -328,8 +327,4 @@ function renderSuggestedChange(suggestedFix: string): string {
 
 function longestBacktickRun(value: string): number {
   return Math.max(0, ...[...value.matchAll(/`+/g)].map((match) => match[0].length));
-}
-
-function redactPotentialSecrets(value: string): string {
-  return value.replace(secretLikeTokenPattern, "[redacted secret]");
 }

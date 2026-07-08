@@ -282,6 +282,32 @@ describe("publishGitHubPublicationPlan", () => {
     expect(client.reviewCommentPayloads).toHaveLength(1);
   });
 
+  it("dedupes same-run inline comments by overlapping same-head location", async () => {
+    const client = new FakePublicationClient("head");
+    const [firstFinding] = validated.validFindings;
+    if (!firstFinding) {
+      throw new Error("test fixture missing validated finding");
+    }
+    const overlappingFinding = {
+      ...firstFinding,
+      body: "Different finding text for the same line range.",
+    };
+
+    const result = await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: plan({
+        validated: {
+          ...validated,
+          validFindings: [firstFinding, overlappingFinding],
+        },
+      }),
+    });
+
+    expect(result.inlineComments).toEqual({ posted: 1, skipped: 1, failed: 0 });
+    expect(client.reviewCommentPayloads).toHaveLength(1);
+  });
+
   it("does not dedupe same-head location comments without a pipr marker", async () => {
     const client = new FakePublicationClient("head");
     client.reviewComments.push(
