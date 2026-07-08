@@ -110,8 +110,14 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
     file.startsWith("packages/sdk/") ||
     file === "packages/e2e/package.json" ||
     file === "packages/e2e/action-fixture.ts" ||
+    file === "packages/e2e/action-metadata.ts" ||
     file === "packages/e2e/assertions.ts" ||
-    file === "packages/e2e/container-check.ts"
+    file === "packages/e2e/check.ts" ||
+    file === "packages/e2e/container-check.ts" ||
+    file === "packages/e2e/fake-pi" ||
+    file === "packages/e2e/pi-contract.ts" ||
+    file === "packages/e2e/run.ts" ||
+    file === "packages/e2e/scenarios.ts"
   );
 }
 

@@ -129,18 +129,24 @@ describe("changed-scope", () => {
   it("limits docker scope to Docker image and container check inputs", () => {
     for (const file of [
       "packages/e2e/action-fixture.ts",
+      "packages/e2e/action-metadata.ts",
       "packages/e2e/assertions.ts",
+      "packages/e2e/check.ts",
       "packages/e2e/container-check.ts",
+      "packages/e2e/fake-pi",
       "packages/e2e/package.json",
+      "packages/e2e/pi-contract.ts",
+      "packages/e2e/run.ts",
+      "packages/e2e/scenarios.ts",
       "scripts/docker-e2e.ts",
     ]) {
       expect(dockerScopeChanged(file)).toBe(true);
     }
 
     for (const file of [
-      "packages/e2e/check.ts",
-      "packages/e2e/run.ts",
       "packages/e2e/assertions.test.ts",
+      "packages/e2e/prompt-evals.test.ts",
+      "packages/e2e/scenarios-cleanup.test.ts",
     ]) {
       expect(dockerScopeChanged(file)).toBe(false);
     }

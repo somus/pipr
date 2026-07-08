@@ -271,9 +271,9 @@ export function trackResultFindingScope(
   }
 }
 
-export function collectedReview(output: OutputState): ReviewResult {
+export function collectedReview(output: OutputState, summaryBody: string): ReviewResult {
   return {
-    summary: { body: "Review completed." },
+    summary: { body: summaryBody },
     inlineFindings: output.findings.map((item) => item.finding),
   };
 }
