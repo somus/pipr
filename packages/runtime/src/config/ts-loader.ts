@@ -30,7 +30,7 @@ export type LoadedTypescriptConfig = {
 export async function loadTypescriptConfig(
   options: LoadTypescriptConfigOptions,
 ): Promise<LoadedTypescriptConfig> {
-  const { projectDir, relativeConfigDir, configDir } = resolveContainedConfigDir(options);
+  const { projectDir, relativeConfigDir } = resolveContainedConfigDir(options);
   const sourceConfigPath = path.join(projectDir, "config.ts");
   if (!(await fileExists(sourceConfigPath))) {
     throw new Error(
@@ -38,7 +38,10 @@ export async function loadTypescriptConfig(
         "Run `pipr init` to create one, or pass `--config-dir <dir>`.",
     );
   }
-  const versionCompatibility = await resolveConfigVersionCompatibility({ projectDir, configDir });
+  const versionCompatibility = await resolveConfigVersionCompatibility({
+    projectDir,
+    configDir: relativeConfigDir,
+  });
   if (options.typecheck) {
     await typecheckTypescriptConfig(path.resolve(options.rootDir), relativeConfigDir);
   }

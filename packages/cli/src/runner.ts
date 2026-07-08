@@ -48,10 +48,11 @@ type MainOptions = {
 
 export async function runMain(options: MainOptions = {}): Promise<void> {
   const argv = options.argv ?? process.argv;
+  const env = options.env ?? process.env;
   if (!isUpdateCommand(argv)) {
     await writeAvailableUpdateNotice(options);
   }
-  const program = createProgram();
+  const program = createProgram({ exitOverride: env.GITHUB_ACTIONS === "true" });
   if (argv.length <= 2) {
     program.outputHelp();
     return;
@@ -59,9 +60,12 @@ export async function runMain(options: MainOptions = {}): Promise<void> {
   await program.parseAsync(argv);
 }
 
-function createProgram(): Command {
+function createProgram(options: { exitOverride?: boolean } = {}): Command {
   const program = new Command();
   program.name("pipr").version(cliPackage.version).showHelpAfterError();
+  if (options.exitOverride) {
+    program.exitOverride();
+  }
   program.addHelpText("after", agentHelpText);
 
   program

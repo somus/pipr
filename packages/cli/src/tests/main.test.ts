@@ -572,9 +572,15 @@ describe("pipr CLI", () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
     try {
       const result = await runCli(["check"], { GITHUB_ACTIONS: "true" }, workspace);
+      const review = await runCli(["review"], { GITHUB_ACTIONS: "true" }, workspace);
 
       expect(result.exitCode).toBe(1);
       expect(`${result.stdout}\n${result.stderr}`).toContain("::error::");
+      expect(review.exitCode).toBe(1);
+      expect(`${review.stdout}\n${review.stderr}`).toContain("::error::");
+      expect(`${review.stdout}\n${review.stderr}`).toContain(
+        "required option '--base <sha>' not specified",
+      );
     } finally {
       await removeWorkspace(workspace);
     }

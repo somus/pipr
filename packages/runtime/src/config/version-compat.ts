@@ -49,12 +49,14 @@ export async function resolveConfigVersionCompatibility(options: {
     return { kind: "unknown", runtimeVersion };
   }
 
-  const packageJsonLabel = `${options.configDir}/package.json`;
+  const packageJsonLabel =
+    options.configDir === "." ? "package.json" : `${options.configDir}/package.json`;
+  const bunLockLabel = options.configDir === "." ? "bun.lock" : `${options.configDir}/bun.lock`;
   if (!isStableSemver(sdkVersion)) {
     return {
       kind: "uncomparable",
       runtimeVersion,
-      warning: `${packageJsonLabel} declares @usepipr/sdk as ${sdkVersion}; use an exact version to enable Pipr config version checks.`,
+      warning: `${packageJsonLabel} declares @usepipr/sdk as ${JSON.stringify(sdkVersion)}; use an exact version to enable Pipr config version checks.`,
     };
   }
   if (!isStableSemver(runtimeVersion)) {
@@ -74,7 +76,7 @@ export async function resolveConfigVersionCompatibility(options: {
       kind: "runtime-newer",
       runtimeVersion,
       configVersion: sdkVersion,
-      warning: `${packageJsonLabel} pins @usepipr/sdk ${sdkVersion}, but this Pipr runtime is ${runtimeVersion}. Run \`pipr init --force\` or update .pipr/package.json and .pipr/bun.lock when ready.`,
+      warning: `${packageJsonLabel} pins @usepipr/sdk ${sdkVersion}, but this Pipr runtime is ${runtimeVersion}. Run \`pipr init --force\` or update ${packageJsonLabel} and ${bunLockLabel} when ready.`,
     };
   }
 

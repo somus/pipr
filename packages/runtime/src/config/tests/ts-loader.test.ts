@@ -151,7 +151,38 @@ export default definePipr((pipr) => {
       kind: "uncomparable",
       runtimeVersion,
       warning:
-        ".pipr/package.json declares @usepipr/sdk as ^0.3.3; use an exact version to enable Pipr config version checks.",
+        '.pipr/package.json declares @usepipr/sdk as "^0.3.3"; use an exact version to enable Pipr config version checks.',
+    });
+  });
+
+  it("escapes non-exact config SDK specs in version warnings", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await writeSdkDependency(rootDir, "^0.3.3\nerror: forged");
+
+    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
+
+    expect(loaded.versionCompatibility.warning).toBe(
+      '.pipr/package.json declares @usepipr/sdk as "^0.3.3\\nerror: forged"; use an exact version to enable Pipr config version checks.',
+    );
+  });
+
+  it("uses the selected config directory in version mismatch remediation", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [], configDir: "config/pipr" });
+    await writeSdkDependency(rootDir, "0.1.0", "config/pipr");
+
+    const loaded = await loadTypescriptConfig({
+      rootDir,
+      configDir: "config/pipr",
+      typecheck: false,
+    });
+
+    expect(loaded.versionCompatibility).toEqual({
+      kind: "runtime-newer",
+      runtimeVersion,
+      configVersion: "0.1.0",
+      warning: `config/pipr/package.json pins @usepipr/sdk 0.1.0, but this Pipr runtime is ${runtimeVersion}. Run \`pipr init --force\` or update config/pipr/package.json and config/pipr/bun.lock when ready.`,
     });
   });
 
@@ -232,8 +263,12 @@ async function writePiprConfig(rootDir: string, contents: string): Promise<void>
   await Bun.write(path.join(rootDir, ".pipr", "config.ts"), contents);
 }
 
-async function writeSdkDependency(rootDir: string, version: string): Promise<void> {
-  const packageJsonPath = path.join(rootDir, ".pipr", "package.json");
+async function writeSdkDependency(
+  rootDir: string,
+  version: string,
+  configDir = ".pipr",
+): Promise<void> {
+  const packageJsonPath = path.join(rootDir, configDir, "package.json");
   const manifest = (await Bun.file(packageJsonPath).json()) as {
     dependencies?: Record<string, string>;
   };
