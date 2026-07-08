@@ -1,0 +1,35 @@
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_9bcb122d5f93b5::t_db11f203c228bb 157
+packages/runtime/src/shared/logging.ts
+  s_9bcb122d5f93b5::t_7e0a1fc83241d5 1-2,145
+packages/runtime/src/hosts/github/publication-review.ts
+  s_9bcb122d5f93b5::t_7e0a1fc83241d5 155,159,173
+packages/runtime/src/review/tests/publish.test.ts
+  s_9bcb122d5f93b5::t_5b24ee08a5e409 285-310
+packages/runtime/src/review/comment.ts
+  s_9bcb122d5f93b5::t_7e0a1fc83241d5 4
+packages/runtime/src/shared/tests/logging.test.ts
+  s_9bcb122d5f93b5::t_7e0a1fc83241d5 74-94
+packages/runtime/src/shared/redaction.ts
+  s_9bcb122d5f93b5::t_7e0a1fc83241d5 1-6
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_9bcb122d5f93b5::t_f5b35657a295b2 132-139
+  s_9bcb122d5f93b5::t_db11f203c228bb 1-5,7-91,93-99,101-131,140-148,150-152,154-198,215-345
+  s_9bcb122d5f93b5::t_cb9caf737bcd51 6,92,100,149,153,199-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "80db53fdf4c1e412331680f14d6c59f79be95390",
+  "prompts": {},
+  "sessions": {
+    "s_9bcb122d5f93b5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f402a-9631-76d1-9516-3400278ec7dd",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
