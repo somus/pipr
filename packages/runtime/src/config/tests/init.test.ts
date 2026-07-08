@@ -2,6 +2,13 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readdir, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  type PiRunner,
+  type ReviewRuntimeResult,
+  runTaskRuntime,
+} from "../../review/task/task-runtime.js";
+import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
+import type { ChangeRequestEventContext } from "../../types.js";
 import { initOfficialMinimalProject } from "../init.js";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import {
@@ -171,6 +178,10 @@ describe("initOfficialMinimalProject", () => {
     const project = await loadRuntimeProject({ rootDir });
     const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
 
+    expect(configTs).toContain("reviewSummarySchema");
+    expect(configTs).toContain("changeSummary: z.array(z.string()).min(1).max(4)");
+    expect(configTs).toContain("reviewerFocus: z.array(z.string()).max(4)");
+    expect(configTs).toContain("summaryTable(result.summary, result.findings.length)");
     expect(configTs).toContain("severity");
     expect(configTs).toContain("category");
     expect(configTs).toContain("@pipr review");
@@ -179,6 +190,236 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).not.toContain("rich-review");
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("reviewer");
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("review");
+  });
+
+  it("initializes the security SAST recipe with structured summary rendering", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "security-sast",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
+
+    expect(configTs).toContain("type SecuritySummary");
+    expect(configTs).toContain(
+      'required: ["headline", "riskLevel", "riskSummary", "reviewerFocus"]',
+    );
+    expect(configTs).toContain("diagramMermaid");
+    expect(configTs).toContain("attackPathDiagramBlock");
+    expect(configTs).toContain("hasConcreteHighOrCriticalRisk");
+    expect(configTs).toContain("$" + "{fence}mermaid");
+    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("security-sast");
+    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("security-sast");
+  });
+
+  it("renders the structured review recipe as a scannable clean summary", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "rich-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: {
+          headline: "Release automation skip is preserved",
+          changeSummary: ["Adds an issue-comment guard for release-please release notes."],
+          riskLevel: "low",
+          riskSummary: "The event guard is narrow and leaves pull request behavior intact.",
+          reviewerFocus: ["Confirm release-please comment markers stay stable."],
+        },
+        findings: [],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain("## Summary");
+    expect(result.mainComment).toContain("**Release automation skip is preserved**");
+    expect(result.mainComment).toContain("| Outcome | Risk | Risk summary |");
+    expect(result.mainComment).toContain(
+      "| No findings | Low | The event guard is narrow and leaves pull request behavior intact. |",
+    );
+    expect(result.mainComment).toContain("## What Changed");
+    expect(result.mainComment).toContain(
+      "- Adds an issue-comment guard for release-please release notes.",
+    );
+    expect(result.mainComment).toContain("## Reviewer Focus");
+    expect(result.mainComment).toContain("- Confirm release-please comment markers stay stable.");
+    expect(result.mainComment).not.toContain("<summary>Finding rationales</summary>");
+    expect(result.inlineCommentDrafts).toEqual([]);
+  });
+
+  it("renders structured review findings with rationales and inline comments", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "rich-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: {
+          headline: "One correctness risk needs review",
+          changeSummary: ["Changes the return value used by the request handler."],
+          riskLevel: "medium",
+          riskSummary: "The changed path affects runtime behavior and has one concrete issue.",
+          reviewerFocus: [],
+        },
+        findings: [
+          {
+            title: "Fallback value is skipped",
+            severity: "medium",
+            category: "correctness",
+            rationale: "The new branch returns before the fallback can run.",
+            body: "This returns before the fallback path can execute.",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 10,
+            endLine: 10,
+          },
+        ],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain("| 1 finding | Medium |");
+    expect(result.mainComment).toContain("| Medium | correctness | Fallback value is skipped |");
+    expect(result.mainComment).toContain("No special reviewer focus.");
+    expect(result.mainComment).toContain("<summary>Finding rationales</summary>");
+    expect(result.mainComment).toContain("The new branch returns before the fallback can run.");
+    expect(result.inlineCommentDrafts).toHaveLength(1);
+    expect(result.inlineCommentDrafts[0]?.body).toContain(
+      "**Medium correctness:** Fallback value is skipped.",
+    );
+  });
+
+  it("renders the security SAST recipe as a clean security summary without a diagram", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "security-sast",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: {
+          headline: "No exploitable security path found",
+          riskLevel: "low",
+          riskSummary: "The changed workflow guard does not expose a new privileged path.",
+          reviewerFocus: [],
+        },
+        risks: [],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain("## Summary");
+    expect(result.mainComment).toContain("**No exploitable security path found**");
+    expect(result.mainComment).toContain("| Status | Summary risk | Max severity | Risks |");
+    expect(result.mainComment).toContain("| Pass | Low | None | 0 |");
+    expect(result.mainComment).toContain("No special security follow-up.");
+    expect(result.mainComment).not.toContain("<summary>Attack path diagram</summary>");
+    expect(result.taskChecks).toContainEqual({
+      taskName: "security-sast",
+      conclusion: "success",
+      summary: "No high or critical security risks found.",
+    });
+  });
+
+  it("renders high security risks with rationales, diagram, check failure, and inline comments", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "security-sast",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: {
+          headline: "Privileged issue-comment path needs review",
+          riskLevel: "high",
+          riskSummary: "A changed issue-comment condition could reach a privileged workflow path.",
+          reviewerFocus: ["Confirm only trusted release automation can trigger this path."],
+        },
+        risks: [
+          {
+            title: "Issue comments can trigger privileged workflow",
+            category: "auth",
+            severity: "high",
+            rationale: "An attacker-controlled issue comment can satisfy the new guard.",
+            finding: {
+              body: "This guard accepts issue comments without proving the actor is trusted.",
+              path: "src/a.ts",
+              rangeId: "range-1",
+              side: "RIGHT",
+              startLine: 10,
+              endLine: 10,
+            },
+          },
+        ],
+        diagramMermaid: [
+          "flowchart TD",
+          "  A[Issue comment] --> B[Workflow guard]",
+          "  B --> C[Privileged job]",
+        ].join("\n"),
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain("| Fail | High | High | 1 |");
+    expect(result.mainComment).toContain(
+      "| High | auth | Issue comments can trigger privileged workflow |",
+    );
+    expect(result.mainComment).toContain("<summary>Risk rationales</summary>");
+    expect(result.mainComment).toContain("<summary>Attack path diagram</summary>");
+    expect(result.mainComment).toContain("```mermaid");
+    expect(result.inlineCommentDrafts).toHaveLength(1);
+    expect(result.taskChecks).toContainEqual({
+      taskName: "security-sast",
+      conclusion: "failure",
+      summary: "High or critical security risk found.",
+    });
   });
 
   it("initializes the fix suggestions recipe as a command-first exact patch workflow", async () => {
@@ -510,6 +751,41 @@ async function projectWithCustomConfig(): Promise<string> {
 
 function recipeConfigFiles(recipe?: string): string[] {
   return officialInitRecipeFiles(recipe).map((file) => path.join(".pipr", file.relativePath));
+}
+
+function eventContext(): ChangeRequestEventContext {
+  return {
+    eventName: "pull_request",
+    action: "opened",
+    platform: { id: "github" },
+    repository: { slug: "local/pipr" },
+    change: {
+      number: 1,
+      title: "PR title",
+      description: "PR body",
+      base: { sha: "base" },
+      head: { sha: "head" },
+    },
+    workspace: process.cwd(),
+  };
+}
+
+function jsonPiRunner(output: unknown): PiRunner {
+  return async () => ({
+    exitCode: 0,
+    stdout: JSON.stringify(output),
+    stderr: "",
+    durationMs: 1,
+  });
+}
+
+function assertReviewResult(
+  result: ReviewRuntimeResult,
+): asserts result is Extract<ReviewRuntimeResult, { kind: "review" }> {
+  expect(result.kind).toBe("review");
+  if (result.kind !== "review") {
+    throw new Error(`expected review runtime result, received ${result.kind}`);
+  }
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

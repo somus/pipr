@@ -60,6 +60,14 @@ type CategorizedFinding = {
   suggestedFix?: string;
 };
 
+type ReviewSummary = {
+  headline: string;
+  changeSummary: string[];
+  riskLevel: "low" | "medium" | "high";
+  riskSummary: string;
+  reviewerFocus: string[];
+};
+
 const categorizedFindingSchema = z.strictObject({
   title: z.string(),
   severity: z.enum(["critical", "high", "medium", "low", "nit"]),
@@ -82,6 +90,14 @@ const categorizedFindingSchema = z.strictObject({
   suggestedFix: z.string().optional(),
 });
 
+const reviewSummarySchema = z.strictObject({
+  headline: z.string(),
+  changeSummary: z.array(z.string()).min(1).max(4),
+  riskLevel: z.enum(["low", "medium", "high"]),
+  riskSummary: z.string(),
+  reviewerFocus: z.array(z.string()).max(4),
+});
+
 export default definePipr((pipr) => {
   const model = pipr.model({
     provider: "deepseek",
@@ -95,7 +111,7 @@ export default definePipr((pipr) => {
   const reviewOutput = pipr.schema({
     id: "review/categorized-findings",
     schema: z.strictObject({
-      summary: z.string(),
+      summary: reviewSummarySchema,
       findings: z.array(categorizedFindingSchema),
     }),
   });
@@ -111,6 +127,11 @@ export default definePipr((pipr) => {
       medium for important follow-up, low for minor actionable improvements,
       and nit only for tiny but concrete issues. Include suggestedFix only when
       there is an exact replacement for the selected range.
+
+      Make summary maintainer-facing and scannable: one concrete headline, one
+      to four behavior-focused change bullets, a risk level with rationale, and
+      reviewer focus only for useful human follow-up. Put actionable defects in
+      findings, not only in summary.
     `,
     output: reviewOutput,
     tools: pipr.tools.readOnly,
@@ -139,19 +160,26 @@ export default definePipr((pipr) => {
       });
       await ctx.comment({
         main: [
-          result.summary,
+          "## Summary",
+          "",
+          `**${result.summary.headline}**`,
+          "",
+          summaryTable(result.summary, result.findings.length),
+          "",
+          "## What Changed",
+          "",
+          bulletList(result.summary.changeSummary, "No changed behavior summarized."),
+          "",
+          "## Reviewer Focus",
+          "",
+          bulletList(result.summary.reviewerFocus, "No special reviewer focus."),
           "",
           "## Findings",
           "",
           findingsTable(result.findings),
           "",
-          "<details>",
-          "<summary>Finding rationales</summary>",
-          "",
-          findingRationales(result.findings),
-          "",
-          "</details>",
-        ].join("\n"),
+          findingRationalesBlock(result.findings),
+        ].filter(Boolean).join("\n"),
         inlineFindings,
       });
     },
@@ -160,6 +188,23 @@ export default definePipr((pipr) => {
   pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
   pipr.command({ pattern: "@pipr review", permission: "write", task });
 });
+
+function summaryTable(summary: ReviewSummary, findingCount: number): string {
+  return [
+    "| Outcome | Risk | Risk summary |",
+    "| --- | --- | --- |",
+    `| ${findingOutcome(findingCount)} | ${labelValue(summary.riskLevel)} | ${tableCell(
+      summary.riskSummary,
+    )} |`,
+  ].join("\n");
+}
+
+function findingOutcome(findingCount: number): string {
+  if (findingCount === 0) {
+    return "No findings";
+  }
+  return findingCount === 1 ? "1 finding" : `${findingCount} findings`;
+}
 
 function findingsTable(findings: CategorizedFinding[]): string {
   if (findings.length === 0) {
@@ -181,22 +226,48 @@ function findingsTable(findings: CategorizedFinding[]): string {
   ].join("\n");
 }
 
-function findingRationales(findings: CategorizedFinding[]): string {
+function findingRationalesBlock(findings: CategorizedFinding[]): string {
   if (findings.length === 0) {
-    return "No findings.";
+    return "";
   }
-  return findings
-    .map((finding, index) =>
-      [
-        `### ${index + 1}. ${finding.title}`,
-        "",
-        `**Severity:** ${finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1)}`,
-        `**Category:** ${finding.category.replaceAll("-", " ")}`,
-        "",
-        finding.rationale,
-      ].join("\n"),
-    )
-    .join("\n\n");
+  return [
+    "<details>",
+    "<summary>Finding rationales</summary>",
+    "",
+    findings
+      .map((finding, index) =>
+        [
+          `### ${index + 1}. ${finding.title}`,
+          "",
+          `**Severity:** ${labelValue(finding.severity)}`,
+          `**Category:** ${labelValue(finding.category)}`,
+          "",
+          finding.rationale,
+        ].join("\n"),
+      )
+      .join("\n\n"),
+    "",
+    "</details>",
+  ].join("\n");
+}
+
+function bulletList(items: string[], emptyText: string): string {
+  if (items.length === 0) {
+    return emptyText;
+  }
+  return items.map((item) => `- ${lineText(item)}`).join("\n");
+}
+
+function labelValue(value: string): string {
+  return value.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
+}
+
+function lineText(value: string): string {
+  return value.replaceAll("\n", " ").trim();
+}
+
+function tableCell(value: string): string {
+  return lineText(value).replaceAll("|", "\\|");
 }
 ```
 
