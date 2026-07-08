@@ -53,11 +53,11 @@ export async function runMain(options: MainOptions = {}): Promise<void> {
     await writeAvailableUpdateNotice(options);
   }
   const program = createProgram({ exitOverride: env.GITHUB_ACTIONS === "true" });
-  if (argv.length <= 2) {
-    program.outputHelp();
-    return;
-  }
   try {
+    if (argv.length <= 2) {
+      program.outputHelp();
+      return;
+    }
     await program.parseAsync(argv);
   } catch (error) {
     if (error instanceof CommanderError && error.exitCode === 0) {
@@ -436,13 +436,13 @@ function formatUpdateNotice(notice: UpdateNotice): string {
 
 function isUpdateCommand(argv: string[]): boolean {
   const args = argv.slice(2);
+  if (args[0] === "--") {
+    args.shift();
+  }
   return args[0] === "update" || (args.length >= 2 && args[0] === "help" && args[1] === "update");
 }
 
-async function runLocalReview(options: CliOptions): Promise<void> {
-  if (!options.base) {
-    throw new Error("pipr review requires --base <sha>");
-  }
+async function runLocalReview(options: CliOptions & { base: string }): Promise<void> {
   const result = await runLocalReviewCommand({
     rootDir: process.cwd(),
     configDir: options.configDir,

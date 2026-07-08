@@ -82,6 +82,20 @@ describe("pipr CLI", () => {
     expect(requests).toEqual([]);
     expect(notices).toEqual([]);
 
+    await expect(
+      runMain({
+        argv: ["bun", "pipr", "--", "update"],
+        env: {},
+        updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
+        writeUpdateNotice(message) {
+          notices.push(message);
+        },
+      }),
+    ).rejects.toThrow("pipr update only supports compiled GitHub Release binaries");
+
+    expect(requests).toEqual([]);
+    expect(notices).toEqual([]);
+
     await runMain({
       argv: ["bun", "pipr", "update", "--help"],
       env: { GITHUB_ACTIONS: "true", PIPR_UPDATE_NOTICE: "1" },
@@ -185,6 +199,15 @@ describe("pipr CLI", () => {
     expect(init.stdout).toContain("multi-agent-review");
     expect(action.stdout).toContain("--config-dir <dir>");
     expect(action.stdout).not.toContain("--provider <name>");
+  });
+
+  it("prints no-args help without failing inside GitHub Actions", async () => {
+    const result = await runCli([], { GITHUB_ACTIONS: "true" });
+
+    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("Usage: pipr");
+    expect(result.stdout).toContain("Start here (for AI agents):");
+    expect(`${result.stdout}\n${result.stderr}`).not.toContain("::error::");
   });
 
   it("does not self-update when running from source", async () => {
