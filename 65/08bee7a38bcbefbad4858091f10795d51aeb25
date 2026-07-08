@@ -1,0 +1,19 @@
+.github/workflows/pipr.yml
+  s_5ea74a1740a58f::t_54f64d1c80197b 18-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6508bee7a38bcbefbad4858091f10795d51aeb25",
+  "prompts": {},
+  "sessions": {
+    "s_5ea74a1740a58f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4210-2ab1-71c0-85fa-1fb7aad83bbd",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
