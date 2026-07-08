@@ -1,11 +1,7 @@
 import path from "node:path";
+import { normalizePackageManifest, type PackageManifest } from "./package-manifest.js";
 
 const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
-
-type PackageManifest = {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-};
 
 export async function installConfigDependencies(
   configDir: string,
@@ -15,7 +11,7 @@ export async function installConfigDependencies(
   if (!(await fileExists(packageJsonPath))) {
     return;
   }
-  const manifest = JSON.parse(await Bun.file(packageJsonPath).text()) as PackageManifest;
+  const manifest = normalizePackageManifest(JSON.parse(await Bun.file(packageJsonPath).text()));
   if (shouldSkipConfigInstall(manifest)) {
     return;
   }

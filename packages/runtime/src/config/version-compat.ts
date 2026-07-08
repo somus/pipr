@@ -1,11 +1,7 @@
 import path from "node:path";
 import { compareStableSemver, isStableSemver } from "../shared/semver.js";
 import { runtimeVersion } from "../shared/version.js";
-
-type PackageManifest = {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-};
+import { normalizePackageManifest, type PackageManifest } from "./package-manifest.js";
 
 export type ConfigVersionCompatibility =
   | {
@@ -40,7 +36,7 @@ export async function resolveConfigVersionCompatibility(options: {
   const packageJsonPath = path.join(options.configDirPath, "package.json");
   let manifest: PackageManifest;
   try {
-    manifest = (await Bun.file(packageJsonPath).json()) as PackageManifest;
+    manifest = normalizePackageManifest(await Bun.file(packageJsonPath).json());
   } catch (error) {
     const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
     if (code === "ENOENT") {

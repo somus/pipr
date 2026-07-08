@@ -130,6 +130,19 @@ export default definePipr((pipr) => {
     });
   });
 
+  it("treats non-object package manifests as unknown config versions", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await Bun.write(path.join(rootDir, ".pipr", "package.json"), "null\n");
+
+    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
+
+    expect(loaded.versionCompatibility).toEqual({
+      kind: "unknown",
+      runtimeVersion,
+    });
+  });
+
   it("fails before config execution when the config SDK pin is newer than the runtime", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
     await initOfficialMinimalProject({ rootDir, adapters: [] });
