@@ -5,6 +5,8 @@ description: "Configure change request triggers, `@pipr` commands, local review,
 
 Entrypoints decide how a Review Task starts. A task can be selected by a change request event or an `@pipr` command comment. Local review runs the configured change-request tasks without publishing.
 
+An Entrypoint only selects work. The selected Review Task still decides which Agents to run and which final output to emit.
+
 ## `pipr.review` entrypoints
 
 ### Default review entrypoints
@@ -13,15 +15,14 @@ The quickest setup sets a publication cap and uses `pipr.review(...)`:
 
 ```ts twoslash
 // @include: pipr-reviewer
+import { defaultReviewEntrypoints } from "@usepipr/sdk";
+
 pipr.config({ publication: { maxInlineComments: 5 } });
 
 pipr.review({
   id: "review",
   reviewer,
-  entrypoints: {
-    changeRequest: ["opened", "updated", "reopened", "ready"],
-    command: { pattern: "@pipr review", permission: "write" },
-  },
+  entrypoints: defaultReviewEntrypoints,
 });
 ```
 
@@ -109,6 +110,8 @@ pipr.command({
 ```
 
 Command responses are normal pull request issue comments keyed to the source command comment. They do not update the Main Review Comment and do not publish Inline Review Comments.
+
+Use `ctx.command?.reply(...)` only for command response workflows. Use `ctx.comment(...)` when the task should contribute review output to the Main Review Comment or Inline Review Comments.
 
 ## Command grammar
 

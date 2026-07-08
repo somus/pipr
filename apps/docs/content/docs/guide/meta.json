@@ -6,6 +6,7 @@
   "pages": [
     "---[Rocket]Start---",
     "index",
+    "concepts",
     "quickstart",
     "github-action",
     "local-runs",

@@ -15,11 +15,28 @@ Type and schema names are exported from the SDK root:
 import type { AgentTool, ReviewFinding, ReviewResult, ToolRunOptions } from "@usepipr/sdk";
 ```
 
+## Concept map
+
+The SDK maps directly to Pipr's runtime primitives. Use this table to choose the API surface before reading individual type details.
+
+| Primitive | SDK surface |
+| --- | --- |
+| Entrypoint | `pipr.review(...)`, `pipr.on.changeRequest(...)`, `pipr.command(...)`, `defaultReviewEntrypoints` |
+| Review Task | `pipr.task(...)`, `TaskContext` |
+| Diff Manifest | `ctx.change.diffManifest(...)`, `DiffManifest`, `ReviewFinding.rangeId` |
+| Agent | `pipr.reviewer(...)`, `pipr.agent(...)`, `ctx.pi.run(...)` |
+| Review Output | `ctx.comment(...)`, `ctx.command?.reply(...)`, `CommentValue` |
+| Publication | `pipr.config({ publication })`, Pipr runtime validation and code host adapters |
+
+For the narrative model, see [Concepts](/docs/guide/concepts).
+
 ## `definePipr`
 
 Every config must default-export a synchronous factory:
 
 ```ts
+import { definePipr } from "@usepipr/sdk";
+
 export default definePipr((pipr) => {
   // register models, reviewers, tasks, commands, limits, tools
 });
@@ -49,6 +66,8 @@ Use `id` only when you configure the same provider and model with different API 
 `pipr.reviewer(...)` creates the default structured pull request reviewer. `pipr.review(...)` wires that reviewer into change request and command entrypoints.
 
 ```ts
+import { defaultReviewEntrypoints } from "@usepipr/sdk";
+
 const reviewer = pipr.reviewer({
   name: "reviewer",
   model,
@@ -67,10 +86,9 @@ pipr.review({
     exclude: ["**/*.test.ts"],
   },
   entrypoints: {
-    changeRequest: ["opened", "updated", "reopened", "ready"],
+    ...defaultReviewEntrypoints,
     command: {
-      pattern: "@pipr review",
-      permission: "write",
+      ...defaultReviewEntrypoints.command,
       description: "Run the default pipr review.",
     },
   },
@@ -80,10 +98,14 @@ pipr.review({
 `entrypoints.changeRequest` accepts these actions:
 
 ```ts twoslash
-type ReviewEntrypoint = "opened" | "updated" | "reopened" | "ready" | "closed";
+import { defaultReviewActions, defaultReviewEntrypoints } from "@usepipr/sdk";
+import type { ChangeRequestAction } from "@usepipr/sdk";
 
-const actions: ReviewEntrypoint[] = ["opened", "updated"];
+const actions: readonly ChangeRequestAction[] = defaultReviewActions;
 actions;
+// ^?
+
+defaultReviewEntrypoints;
 // ^?
 ```
 

@@ -34,6 +34,7 @@ import type {
   ReviewRecipeOptions,
   Task,
 } from "./types/task.js";
+import { defaultReviewActions, defaultReviewEntrypoints } from "./types/task.js";
 
 /** Defines a synchronous pipr configuration factory. */
 export function definePipr(configure: (pipr: PiprBuilder) => void): {
@@ -91,7 +92,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
           throw new Error("pipr.on.changeRequest requires { actions, task }");
         }
         changeRequestTriggers.push({
-          actions: options.actions,
+          actions: [...options.actions],
           task: options.task as Task<unknown>,
         });
       },
@@ -514,9 +515,7 @@ function reviewChangeRequestEntrypoint(
   options: ReviewRecipeOptions,
 ): ChangeRequestAction[] | undefined {
   const entrypoint = options.entrypoints?.changeRequest;
-  return entrypoint === false
-    ? undefined
-    : (entrypoint ?? ["opened", "updated", "reopened", "ready"]);
+  return entrypoint === false ? undefined : [...(entrypoint ?? defaultReviewActions)];
 }
 
 function reviewCommandEntrypoint(options: ReviewRecipeOptions):
@@ -531,16 +530,16 @@ function reviewCommandEntrypoint(options: ReviewRecipeOptions):
   }
   if (typeof entrypoint === "object") {
     return {
-      pattern: entrypoint.pattern ?? "@pipr review",
+      pattern: entrypoint.pattern ?? defaultReviewEntrypoints.command.pattern,
       options: {
-        permission: entrypoint.permission ?? "write",
+        permission: entrypoint.permission ?? defaultReviewEntrypoints.command.permission,
         description: entrypoint.description,
       },
     };
   }
   return {
-    pattern: entrypoint ?? "@pipr review",
-    options: { permission: "write" as const },
+    pattern: entrypoint ?? defaultReviewEntrypoints.command.pattern,
+    options: { permission: defaultReviewEntrypoints.command.permission },
   };
 }
 

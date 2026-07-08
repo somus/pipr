@@ -140,6 +140,7 @@ The SDK also supports custom agents, tasks, `@pipr` commands, model fallback, lo
 
 | Goal | Page |
 | --- | --- |
+| Understand Pipr's core model | [Concepts](https://pipr.run/docs/guide/concepts) |
 | Add Pipr to a GitHub repository | [Quickstart](https://pipr.run/docs/guide/quickstart) |
 | Configure models, scopes, commands, and publication | [Configuration](https://pipr.run/docs/guide/configuration) |
 | Start from a generated review workflow | [Recipes](https://pipr.run/docs/recipes) |

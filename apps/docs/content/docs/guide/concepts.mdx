@@ -1,0 +1,57 @@
+---
+title: "Concepts"
+description: "The core Pipr primitives: Entrypoints, Review Tasks, Agents, Diff Manifests, Review Output, and Publication."
+---
+
+Pipr turns a code host change request into one validated review output. The runtime owns the safety-critical path, and `.pipr/config.ts` lets you compose the parts around it.
+
+## Runtime flow
+
+Every Pipr run follows the same core flow. You choose when the run starts and what agents do; Pipr builds the changed-code model and publishes only validated output.
+
+```text
+Entrypoint
+  -> Review Task
+  -> Diff Manifest
+  -> Agent
+  -> Review Output
+  -> Publication
+```
+
+| Primitive | What it does | Common API |
+| --- | --- | --- |
+| Entrypoint | Starts a task from a change request event, an `@pipr` command, or a local review run. | `pipr.review(...)`, `pipr.on.changeRequest(...)`, `pipr.command(...)` |
+| Review Task | Orchestrates one unit of review work and emits one final output. | `pipr.task(...)` |
+| Diff Manifest | Describes changed files, hunks, and valid inline comment ranges. | `ctx.change.diffManifest(...)` |
+| Agent | Runs a typed Pi call with stable instructions and a per-run prompt. | `pipr.agent(...)`, `pipr.reviewer(...)`, `ctx.pi.run(...)` |
+| Review Output | Carries a main comment body, optional Inline Review Comments, or a command reply. | `ctx.comment(...)`, `ctx.command?.reply(...)` |
+| Publication | Validates, caps, deduplicates, and writes comments through the active code host adapter. | Pipr runtime-owned |
+
+## Authoring model
+
+You author review policy in TypeScript. A config registers models, agents, tasks, entrypoints, limits, schemas, commands, and plugin tools through `@usepipr/sdk`.
+
+Use `pipr.review(...)` for the default path. It creates one Review Task, wires the default change request and `@pipr review` entrypoints, runs one reviewer, and sends the result through the standard publication pipeline.
+
+Use `pipr.task(...)` when you need custom orchestration. A task can build a Diff Manifest, call one or more Agents, read prior review state, emit a check, and return exactly one final output.
+
+## Boundaries
+
+Pipr keeps review automation scoped to change requests. It doesn't let config replace runtime-owned diff modeling, Pi execution policy, finding validation, stale-head checks, or code host publication.
+
+Review Tasks also don't publish comments directly. They emit output, and Pipr owns finding validation, stale-head checks, marker dedupe, inline caps, and code host writes.
+
+`.pipr/config.ts` is trusted planning code. It should register the runtime plan, not read the repository, call models, call platforms, or run git commands while the config loads.
+
+## Where to go next
+
+Use the concepts here as a map while you build.
+
+| Goal | Page |
+| --- | --- |
+| Install Pipr and run the first review | [Quickstart](/docs/guide/quickstart) |
+| Configure models, tasks, and entrypoints | [Configuration](/docs/guide/configuration) |
+| Choose triggers and commands | [Entrypoints](/docs/guide/entrypoints) |
+| Build custom orchestration | [Custom Tasks](/docs/guide/custom-tasks) |
+| Understand validated comments | [Comments and Findings](/docs/guide/comments) |
+| Look up public SDK types | [Pipr SDK Reference](/docs/reference/sdk-reference) |
