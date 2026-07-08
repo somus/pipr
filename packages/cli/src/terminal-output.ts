@@ -32,6 +32,9 @@ function skipTerminalControlSequence(message: string, index: number): number {
   if (next === csiIntroducer) {
     return skipCsiSequence(message, index + 2);
   }
+  if (isEscapeIntermediate(next)) {
+    return skipEscapeSequenceWithIntermediates(message, index + 1);
+  }
   if (isSingleEscapeSequenceFinal(next)) {
     return index + 1;
   }
@@ -61,8 +64,26 @@ function skipUntilTerminator(message: string, index: number, terminator?: number
   return message.length - 1;
 }
 
+function skipEscapeSequenceWithIntermediates(message: string, index: number): number {
+  for (let cursor = index; cursor < message.length; cursor += 1) {
+    const code = message.charCodeAt(cursor);
+    if (isEscapeIntermediate(code)) {
+      continue;
+    }
+    if (isSingleEscapeSequenceFinal(code)) {
+      return cursor;
+    }
+    return cursor - 1;
+  }
+  return message.length - 1;
+}
+
+function isEscapeIntermediate(code: number): boolean {
+  return code >= 0x20 && code <= 0x2f;
+}
+
 function isSingleEscapeSequenceFinal(code: number): boolean {
-  return code >= 0x40 && code <= 0x5f;
+  return code >= 0x30 && code <= 0x7e;
 }
 
 function isUnsafeTerminalControl(code: number): boolean {
