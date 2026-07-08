@@ -174,15 +174,21 @@ async function loadTypescriptForConfig(configDir: string): Promise<TypescriptFor
 
 function typescriptApi(module: unknown): TypescriptApi {
   const maybeModule = module as TypescriptApi & { default?: TypescriptApi };
-  return typeof maybeModule.createProgram === "function"
-    ? maybeModule
-    : (maybeModule.default ?? maybeModule);
+  if (typeof maybeModule.createProgram === "function") {
+    return maybeModule;
+  }
+  if (typeof maybeModule.default?.createProgram === "function") {
+    return maybeModule.default;
+  }
+  throw new Error("TypeScript module does not expose createProgram");
 }
 
 async function runtimeTypescriptPackageRoot(): Promise<string | undefined> {
   try {
     const require = createRequire(import.meta.url);
     const packageRoot = path.dirname(require.resolve("typescript/package.json"));
+    // packageRoot is only needed to pin lib file resolution to the same TypeScript package.
+    // The runtime TypeScript host can still resolve its own libs when the package root is opaque.
     return (await fileExists(path.join(packageRoot, "lib", "typescript.js")))
       ? packageRoot
       : undefined;

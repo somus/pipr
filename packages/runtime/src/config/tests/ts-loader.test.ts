@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { installConfigDependencies } from "../config-deps.js";
 import { initOfficialMinimalProject } from "../init.js";
+import { defaultTypescriptVersion } from "../scaffold-versions.js";
 import { loadTypescriptConfig, prepareConfigDirectory } from "../ts-loader.js";
 import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
 import {
@@ -230,6 +231,28 @@ export default definePipr((pipr) => {
     });
   });
 
+  it("rejects malformed local TypeScript packages", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    const configDir = path.join(rootDir, ".pipr");
+    const invalidPackageDir = path.join(configDir, "typescript-invalid");
+    await mkdir(path.join(invalidPackageDir, "lib"), { recursive: true });
+    await Bun.write(
+      path.join(invalidPackageDir, "package.json"),
+      `${JSON.stringify({ name: "typescript", version: "0.0.0-invalid" }, null, 2)}\n`,
+    );
+    await Bun.write(path.join(invalidPackageDir, "lib", "typescript.js"), "export default {};\n");
+    const packageJsonPath = path.join(configDir, "package.json");
+    const packageJson = JSON.parse(await Bun.file(packageJsonPath).text());
+    packageJson.devDependencies.typescript = "file:./typescript-invalid";
+    await Bun.write(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    await installPiprConfigDependencies(configDir);
+
+    await expect(loadTypescriptConfig({ rootDir, typecheck: true })).rejects.toThrow(
+      "TypeScript module does not expose createProgram",
+    );
+  });
+
   it("typechecks against the runtime SDK stub declaration", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
     await initOfficialMinimalProject({ rootDir, adapters: [] });
@@ -268,7 +291,7 @@ describe("prepareConfigDirectory", () => {
     }) as typeof Bun.spawn;
     try {
       const defaultConfigDir = await writePackageForInstallTest({
-        devDependencies: { typescript: "6.0.3" },
+        devDependencies: { typescript: defaultTypescriptVersion },
       });
       await installConfigDependencies(defaultConfigDir, { frozen: true });
 
@@ -283,7 +306,7 @@ describe("prepareConfigDirectory", () => {
     const installCommands = commands.filter((command) => command[1] === "install");
     expect(installCommands).toHaveLength(2);
     expect(installCommands[0]).toContain("--no-verify");
-    expect(installCommands[0]).toContain("typescript@6.0.3");
+    expect(installCommands[0]).toContain(`typescript@${defaultTypescriptVersion}`);
     expect(installCommands[1]).not.toContain("--no-verify");
     expect(installCommands[1]).toContain("typescript@file:./typescript-local");
   });

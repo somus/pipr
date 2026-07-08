@@ -1,7 +1,7 @@
 import path from "node:path";
+import { defaultScaffoldTypescriptSpec } from "./scaffold-versions.js";
 
 const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
-const defaultScaffoldTypescriptSpec = "typescript@6.0.3";
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -43,7 +43,7 @@ export async function installConfigDependencies(
     installablePackages[0]?.spec === defaultScaffoldTypescriptSpec
   ) {
     // Bun verifies the runtime-owned SDK tarball even though Pipr replaces it with a stub.
-    // Keep normal integrity checks for third-party config dependencies.
+    // --no-verify skips every integrity check, so keep this only on the pinned scaffold install.
     args.push("--no-verify");
   }
   args.push(...installablePackages.map((dependency) => dependency.spec));
