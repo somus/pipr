@@ -114,7 +114,7 @@ export type Reviewer = Agent<DefaultReviewInput, ReviewResult>;
 
 /** Entrypoints created by `pipr.review`. */
 export type ReviewEntrypoints = {
-  changeRequest?: ChangeRequestAction[] | false;
+  changeRequest?: readonly ChangeRequestAction[] | false;
   command?:
     | string
     | false
@@ -124,6 +124,20 @@ export type ReviewEntrypoints = {
         description?: string;
       };
 };
+
+/** Default change-request actions used by `pipr.review`. */
+export const defaultReviewActions = [
+  "opened",
+  "updated",
+  "reopened",
+  "ready",
+] as const satisfies readonly ChangeRequestAction[];
+
+/** Default change-request and command entrypoints used by `pipr.review`. */
+export const defaultReviewEntrypoints = {
+  changeRequest: defaultReviewActions,
+  command: { pattern: "@pipr review", permission: "write" },
+} as const satisfies ReviewEntrypoints;
 
 type ReviewRecipeEntrypointOptions = {
   id: string;
@@ -182,7 +196,7 @@ export type ToolRunOptions<Input> = {
 
 /** Definition used to register a task for pull request actions. */
 export type ChangeRequestRegistrationOptions<Input> = {
-  actions: ChangeRequestAction[];
+  actions: readonly ChangeRequestAction[];
   task: Task<Input>;
 };
 

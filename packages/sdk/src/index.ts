@@ -99,5 +99,6 @@ export type {
   TaskHandler,
   ToolRunOptions,
 } from "./types/task.js";
+export { defaultReviewActions, defaultReviewEntrypoints } from "./types/task.js";
 
 export { z };

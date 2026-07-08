@@ -9,6 +9,30 @@ GitHub pull requests are the only supported code host target today. GitLab, Bitb
 
 Use these docs to run the first review, start from a recipe, or build your own review workflows with the Pipr SDK.
 
+## Core concepts
+
+Pipr uses six primitives. Learn these first, then use the guide pages for setup and configuration details.
+
+```text
+Entrypoint
+  -> Review Task
+  -> Diff Manifest
+  -> Agent
+  -> Review Output
+  -> Publication
+```
+
+| Primitive | What it means |
+| --- | --- |
+| Entrypoint | A change request event, `@pipr` command, or local review command that starts a Review Task. |
+| Review Task | A typed function that gathers context, calls Agents, and emits one final output. |
+| Diff Manifest | Pipr's changed-code model with files, hunks, and valid inline ranges. |
+| Agent | A Pi call with model settings, instructions, tools, and typed output. |
+| Review Output | The main comment, Inline Review Comments, or command response emitted by a task. |
+| Publication | Pipr-owned validation, dedupe, caps, stale-head checks, and code host writes. |
+
+See [Concepts](/docs/guide/concepts) for the full model and the boundaries Pipr keeps out of userland.
+
 ## First review path
 
 Use this path when you want one successful GitHub pull request review before tuning prompts or recipes.
@@ -61,6 +85,7 @@ Pick the page that matches the next job you want Pipr to do.
 | Goal | Page |
 | --- | --- |
 | Add Pipr to a GitHub repository | [Quickstart](/docs/guide/quickstart) |
+| Understand Pipr's core model | [Concepts](/docs/guide/concepts) |
 | Review the generated workflow | [GitHub Action](/docs/guide/github-action) |
 | Run without publishing comments | [Local Runs](/docs/guide/local-runs) |
 | Change what Pipr reviews | [Configuration](/docs/guide/configuration) |
