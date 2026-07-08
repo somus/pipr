@@ -1,5 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { access, chmod, lstat, mkdir, mkdtemp, readdir, rm, symlink } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -52,6 +62,25 @@ describe("pipr CLI", () => {
     expect(events[2]).toEqual({ stream: "stderr", message: notice });
     expect(events[3]?.stream).toBe("stdout");
     expect(events[3]?.message).toContain("BEGIN SKILL FILE: SKILL.md");
+  });
+
+  it("does not check for update notices before update commands", async () => {
+    const requests: string[] = [];
+    const notices: string[] = [];
+
+    await expect(
+      runMain({
+        argv: ["bun", "pipr", "update"],
+        env: {},
+        updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
+        writeUpdateNotice(message) {
+          notices.push(message);
+        },
+      }),
+    ).rejects.toThrow("pipr update only supports compiled GitHub Release binaries");
+
+    expect(requests).toEqual([]);
+    expect(notices).toEqual([]);
   });
 
   it("skips update notices when disabled or running in CI by default", async () => {
@@ -142,11 +171,14 @@ describe("pipr CLI", () => {
     const result = await runCli(["update"]);
 
     expect(result.exitCode).toBe(1);
-    expect(`${result.stdout}\n${result.stderr}`).toContain(
-      "pipr update only supports compiled GitHub Release binaries",
-    );
-    expect(`${result.stdout}\n${result.stderr}`).toContain("npm install -g @usepipr/cli@latest");
-    expect(`${result.stdout}\n${result.stderr}`).toContain("bun install -g @usepipr/cli@latest");
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("pipr update only supports compiled GitHub Release binaries");
+    expect(result.stderr).toContain("npm install -g @usepipr/cli@latest");
+    expect(result.stderr).toContain("bun install -g @usepipr/cli@latest");
+    expect(result.stderr.startsWith("error: ")).toBe(true);
+    expect(result.stderr).toContain("\nIf you installed with npm");
+    expect(result.stderr).not.toContain("::error::");
+    expect(result.stderr).not.toContain("%0A");
   });
 
   it("prints and materializes the bundled setup skill", async () => {
@@ -301,7 +333,8 @@ describe("pipr CLI", () => {
     const result = await runCli(["review"]);
 
     expect(result.exitCode).toBe(1);
-    expect(`${result.stdout}\n${result.stderr}`).toContain("pipr review requires --base <sha>");
+    expect(result.stderr).toContain("error: required option '--base <sha>' not specified");
+    expect(result.stderr).not.toContain("::error::");
   });
 
   it("runs local review without GitHub publishing", async () => {
@@ -484,14 +517,64 @@ describe("pipr CLI", () => {
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).toContain(
         "Unsupported pipr init adapter 'gitlab'. Supported adapters: github",
       );
+      expect(`${unsupported.stdout}\n${unsupported.stderr}`).not.toContain("::error::");
       expect(mixedNone.exitCode).toBe(1);
       expect(`${mixedNone.stdout}\n${mixedNone.stderr}`).toContain(
         "Adapter 'none' cannot be mixed with other init adapters",
       );
+      expect(`${mixedNone.stdout}\n${mixedNone.stderr}`).not.toContain("::error::");
       expect(unsupportedRecipe.exitCode).toBe(1);
       expect(`${unsupportedRecipe.stdout}\n${unsupportedRecipe.stderr}`).toContain(
         "Unsupported pipr init recipe 'missing'. Supported recipes:",
       );
+      expect(`${unsupportedRecipe.stdout}\n${unsupportedRecipe.stderr}`).not.toContain("::error::");
+    } finally {
+      await removeWorkspace(workspace);
+    }
+  });
+
+  it("prints friendly missing config errors for local config commands outside a Pipr project", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
+    try {
+      const eventPath = path.join(workspace, "event.json");
+      await Bun.write(eventPath, "{}");
+      const resolvedWorkspace = await realpath(workspace);
+      const missingConfigMessage = `error: No Pipr config found at ${path.join(
+        resolvedWorkspace,
+        ".pipr",
+        "config.ts",
+      )}.`;
+
+      for (const args of [
+        ["check"],
+        ["inspect"],
+        ["dry-run", "--event", eventPath],
+        ["review", "--base", "HEAD"],
+      ]) {
+        const result = await runCli(args, {}, workspace);
+
+        expect(result.exitCode, args.join(" ")).toBe(1);
+        expect(result.stdout, args.join(" ")).toBe("");
+        expect(result.stderr, args.join(" ")).toContain(missingConfigMessage);
+        expect(result.stderr, args.join(" ")).toContain(
+          "Run `pipr init` to create one, or pass `--config-dir <dir>`.",
+        );
+        expect(result.stderr, args.join(" ")).not.toContain("::error::");
+        expect(result.stderr, args.join(" ")).not.toContain("%0A");
+        expect(result.stderr, args.join(" ")).not.toContain("Cannot find global type");
+      }
+    } finally {
+      await removeWorkspace(workspace);
+    }
+  });
+
+  it("keeps GitHub Actions error formatting for action runs", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
+    try {
+      const result = await runCli(["check"], { GITHUB_ACTIONS: "true" }, workspace);
+
+      expect(result.exitCode).toBe(1);
+      expect(`${result.stdout}\n${result.stderr}`).toContain("::error::");
     } finally {
       await removeWorkspace(workspace);
     }
@@ -547,7 +630,9 @@ describe("pipr CLI", () => {
     });
 
     expect(result.exitCode).toBe(1);
-    expect(`${result.stdout}\n${result.stderr}`).toContain("config.ts is required at base commit");
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      "No Pipr config found at .pipr/config.ts in base commit",
+    );
     expect(result.piCalled).toBe(false);
   });
 

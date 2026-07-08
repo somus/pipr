@@ -3,6 +3,7 @@ import type { RuntimePlan } from "@usepipr/sdk/internal";
 import type { AutoResolveConfig, ProviderConfig, RuntimeSettings } from "../types.js";
 import { parseProviderConfig, parseRuntimeSettings } from "../types.js";
 import { loadTypescriptConfig } from "./ts-loader.js";
+import type { ConfigVersionCompatibility } from "./version-compat.js";
 
 export type LoadRuntimeProjectOptions = {
   rootDir: string;
@@ -16,6 +17,7 @@ export type LoadedRuntimeProject = {
   kind: "typescript";
   plan: RuntimePlan;
   settings: RuntimeSettings;
+  versionCompatibility: ConfigVersionCompatibility;
 };
 
 export type ValidateProjectOptions = LoadRuntimeProjectOptions;
@@ -42,7 +44,11 @@ export async function loadRuntimeProject(
       source: loaded.source,
       env: options.env,
       requireProviderEnv: options.requireProviderEnv,
+      warnings: [loaded.versionCompatibility.warning].filter(
+        (warning): warning is string => warning !== undefined,
+      ),
     }),
+    versionCompatibility: loaded.versionCompatibility,
   };
 }
 
@@ -74,7 +80,12 @@ export function inspectRuntimePlan(plan: RuntimePlan, source: string): InspectRu
 
 function planToRuntimeSettings(
   plan: RuntimePlan,
-  options: { source: string; env?: NodeJS.ProcessEnv; requireProviderEnv?: boolean },
+  options: {
+    source: string;
+    env?: NodeJS.ProcessEnv;
+    requireProviderEnv?: boolean;
+    warnings?: string[];
+  },
 ): RuntimeSettings {
   const providers = plan.models.map(modelToProvider);
   const defaultProvider = providers[0];
@@ -94,7 +105,7 @@ function planToRuntimeSettings(
       },
       limits: plan.limits,
     },
-    warnings: [],
+    warnings: options.warnings ?? [],
   });
 }
 

@@ -18,9 +18,11 @@ export async function loadRuntimeProjectFromGitCommit(options: {
 }): Promise<LoadedRuntimeProject & { trustedConfigSha: string; trustedConfigHash: string }> {
   const configDir = resolveContainedConfigDir(options);
   const files = listConfigFilesAtCommit(options.rootDir, options.commitSha, configDir.gitPath);
-  if (files.length === 0) {
+  const configPath = configGitPath(configDir.gitPath, "config.ts");
+  if (files.length === 0 || !files.some((file) => file.path === configPath)) {
     throw new Error(
-      `${configDir.configDir}/config.ts is required at base commit ${options.commitSha}`,
+      `No Pipr config found at ${configPath} in base commit ${options.commitSha}. ` +
+        "Run `pipr init` and commit the generated config.",
     );
   }
 
@@ -100,6 +102,10 @@ function relativeGitPath(root: string, filePath: string): string {
   const relative = root === "." ? filePath : path.posix.relative(root, filePath);
   assertRelativeGitPath(root, filePath, relative);
   return relative;
+}
+
+function configGitPath(root: string, fileName: string): string {
+  return root === "." ? fileName : `${root}/${fileName}`;
 }
 
 function assertRelativeGitPath(root: string, filePath: string, relative: string): void {

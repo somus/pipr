@@ -2,6 +2,7 @@ import type { Agent, DiffManifestOptions, SecretRef, Task, TaskContext } from "@
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
 import { selectRuntimeTasks } from "../../action/entry-dispatch.js";
+import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/diff.js";
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
 import type { RuntimeActionLog } from "../../shared/logging.js";
@@ -50,6 +51,7 @@ export type RunTaskRuntimeOptions = {
   config: PiprConfig;
   event: ChangeRequestEventContext;
   plan: RuntimePlan;
+  versionCompatibility?: ConfigVersionCompatibility;
   env?: NodeJS.ProcessEnv;
   providerOverride?: ProviderConfig;
   taskName?: string;
@@ -156,6 +158,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
       taskName: options.taskName,
       trustedConfigSha: options.trustedConfigSha,
       trustedConfigHash: options.trustedConfigHash,
+      versionCompatibility: options.versionCompatibility,
     });
   }
   const selectedTasks = tasks.map((task) => task.name);
@@ -275,6 +278,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     threadActions: verifier.threadActions,
     metadata: {
       runtimeVersion,
+      configVersion: options.versionCompatibility?.configVersion,
       trustedConfigSha: options.trustedConfigSha,
       trustedConfigHash: options.trustedConfigHash,
       reviewedHeadSha: options.event.change.head.sha,
@@ -527,6 +531,7 @@ function skippedTaskRuntimeResult(options: {
   taskName?: string;
   trustedConfigSha?: string;
   trustedConfigHash?: string;
+  versionCompatibility?: ConfigVersionCompatibility;
 }): ReviewRuntimeResult {
   const reason =
     options.reason ??
@@ -543,6 +548,7 @@ function skippedTaskRuntimeResult(options: {
     maxInlineComments: options.config.publication.maxInlineComments,
     metadata: {
       runtimeVersion,
+      configVersion: options.versionCompatibility?.configVersion,
       trustedConfigSha: options.trustedConfigSha,
       trustedConfigHash: options.trustedConfigHash,
       reviewedHeadSha: options.event.change.head.sha,

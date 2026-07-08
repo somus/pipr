@@ -10,7 +10,7 @@ import { runTaskRuntime } from "../review/task/task-runtime.js";
 import { createRuntimeActionLog } from "../shared/logging.js";
 import { parseChangeRequestEventContext } from "../types.js";
 import { createActionHostAdapter } from "./action-host.js";
-import { logEventContext, logPhase } from "./action-logging.js";
+import { logConfigWarnings, logEventContext, logPhase } from "./action-logging.js";
 import { runIssueCommentActionCommand } from "./command-entry.js";
 import { selectLocalReviewTasks } from "./entry-dispatch.js";
 import { runPullRequestActionCommand } from "./pull-request-entry.js";
@@ -122,6 +122,9 @@ export async function runLocalReviewCommand(
     tasks: runtime.plan.tasks.length,
     commands: runtime.plan.commands.length,
   });
+  if (log) {
+    logConfigWarnings(log, runtime.settings.warnings);
+  }
   const selectedTasks = selectLocalReviewTasks(runtime.plan);
   const includeWorkingTree = options.headSha === undefined;
   const headSha = options.headSha ?? runGitCommand(["rev-parse", "HEAD"], options.rootDir).trim();
@@ -148,6 +151,7 @@ export async function runLocalReviewCommand(
     event,
     env: options.env,
     plan: runtime.plan,
+    versionCompatibility: runtime.versionCompatibility,
     selectedTasks,
     emptyTasksReason: "No change-request tasks are configured for local review",
     piExecutable: options.piExecutable,

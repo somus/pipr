@@ -48,7 +48,9 @@ type MainOptions = {
 
 export async function runMain(options: MainOptions = {}): Promise<void> {
   const argv = options.argv ?? process.argv;
-  await writeAvailableUpdateNotice(options);
+  if (!isUpdateCommand(argv)) {
+    await writeAvailableUpdateNotice(options);
+  }
   const program = createProgram();
   if (argv.length <= 2) {
     program.outputHelp();
@@ -104,7 +106,7 @@ function createProgram(): Command {
   program
     .command("review")
     .description("Run configured change-request review tasks locally without publishing")
-    .option("--base <sha>", "Base commit SHA")
+    .requiredOption("--base <sha>", "Base commit SHA")
     .option("--head <sha>", "Head commit SHA or ref; omitted reviews the working tree")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .option("--pi-executable <path>", "Pi executable path")
@@ -413,6 +415,11 @@ function formatUpdateNotice(notice: UpdateNotice): string {
     `pipr ${notice.latestVersion} is available (current ${notice.currentVersion}). ` +
     "Run `pipr update` for release binaries, or reinstall @usepipr/cli with npm/Bun."
   );
+}
+
+function isUpdateCommand(argv: string[]): boolean {
+  const args = argv.slice(2);
+  return args[0] === "update" || (args[0] === "help" && args[1] === "update");
 }
 
 async function runLocalReview(options: CliOptions): Promise<void> {

@@ -14,7 +14,7 @@ describe("loadRuntimeProject", () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-"));
 
     await expect(loadRuntimeProject({ rootDir })).rejects.toThrow(
-      ".pipr/config.ts is required. Run pipr init to create it.",
+      `No Pipr config found at ${path.join(rootDir, ".pipr", "config.ts")}.`,
     );
   });
 

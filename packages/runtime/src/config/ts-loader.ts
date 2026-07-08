@@ -9,6 +9,10 @@ import { installConfigDependencies } from "./config-deps.js";
 import { resolveContainedConfigDir } from "./paths.js";
 import { installTypedSdkStub } from "./sdk-stub.js";
 import { starterTsconfig } from "./starter-tsconfig.js";
+import {
+  type ConfigVersionCompatibility,
+  resolveConfigVersionCompatibility,
+} from "./version-compat.js";
 
 export type LoadTypescriptConfigOptions = {
   rootDir: string;
@@ -20,6 +24,7 @@ export type LoadedTypescriptConfig = {
   plan: RuntimePlan;
   source: string;
   tempRoot: string;
+  versionCompatibility: ConfigVersionCompatibility;
 };
 
 export async function loadTypescriptConfig(
@@ -28,8 +33,12 @@ export async function loadTypescriptConfig(
   const { projectDir, relativeConfigDir, configDir } = resolveContainedConfigDir(options);
   const sourceConfigPath = path.join(projectDir, "config.ts");
   if (!(await fileExists(sourceConfigPath))) {
-    throw new Error(`${configDir}/config.ts is required. Run pipr init to create it.`);
+    throw new Error(
+      `No Pipr config found at ${sourceConfigPath}.\n` +
+        "Run `pipr init` to create one, or pass `--config-dir <dir>`.",
+    );
   }
+  const versionCompatibility = await resolveConfigVersionCompatibility({ projectDir, configDir });
   if (options.typecheck) {
     await typecheckTypescriptConfig(path.resolve(options.rootDir), relativeConfigDir);
   }
@@ -50,6 +59,7 @@ export async function loadTypescriptConfig(
       plan: buildPiprPlan(factory),
       source: sourceConfigPath,
       tempRoot,
+      versionCompatibility,
     };
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

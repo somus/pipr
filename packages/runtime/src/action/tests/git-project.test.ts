@@ -67,6 +67,6 @@ describe("loadRuntimeProjectFromGitCommit", () => {
         rootDir,
         commitSha: baseSha,
       }),
-    ).rejects.toThrow(".pipr/config.ts is required at base commit");
+    ).rejects.toThrow("No Pipr config found at .pipr/config.ts in base commit");
   });
 });
