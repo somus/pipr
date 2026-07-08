@@ -1,4 +1,4 @@
-const stableSemverPattern = /^(\d+)\.(\d+)\.(\d+)$/;
+const stableSemverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export function isStableSemver(version: string): boolean {
   return stableSemverPattern.test(version);

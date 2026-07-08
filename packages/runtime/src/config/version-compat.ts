@@ -34,10 +34,10 @@ export type ConfigVersionCompatibility =
     };
 
 export async function resolveConfigVersionCompatibility(options: {
-  projectDir: string;
+  configDirPath: string;
   configDir: string;
 }): Promise<ConfigVersionCompatibility> {
-  const packageJsonPath = path.join(options.projectDir, "package.json");
+  const packageJsonPath = path.join(options.configDirPath, "package.json");
   if (!(await Bun.file(packageJsonPath).exists())) {
     return { kind: "unknown", runtimeVersion };
   }

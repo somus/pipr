@@ -436,7 +436,7 @@ function formatUpdateNotice(notice: UpdateNotice): string {
 
 function isUpdateCommand(argv: string[]): boolean {
   const args = argv.slice(2);
-  return args[0] === "update" || (args[0] === "help" && args[1] === "update");
+  return args[0] === "update" || (args.length >= 2 && args[0] === "help" && args[1] === "update");
 }
 
 async function runLocalReview(options: CliOptions): Promise<void> {

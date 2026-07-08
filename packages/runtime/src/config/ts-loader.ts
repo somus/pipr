@@ -39,7 +39,7 @@ export async function loadTypescriptConfig(
     );
   }
   const versionCompatibility = await resolveConfigVersionCompatibility({
-    projectDir,
+    configDirPath: projectDir,
     configDir: relativeConfigDir,
   });
   if (options.typecheck) {
