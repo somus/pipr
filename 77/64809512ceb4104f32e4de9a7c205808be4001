@@ -1,0 +1,73 @@
+packages/runtime/src/action/commands.ts
+  s_0437603dd8fd87::t_8dca8b568a03b8 127,154
+  s_0437603dd8fd87::t_902d38a4c30716 13,125-126
+packages/runtime/src/review/comment-branding.ts
+  s_0437603dd8fd87::t_2e76be32656277 11
+packages/runtime/src/action/action-logging.ts
+  s_0437603dd8fd87::t_763d29bf67b2eb 52-56
+  s_0437603dd8fd87::t_570862c0ea0ef6 57-58
+packages/runtime/src/review/comment.ts
+  s_0437603dd8fd87::t_93bb37b8eef107 4,91,151,296,309,314-332
+  s_0437603dd8fd87::t_98f3b24bd29402 28
+  s_0437603dd8fd87::t_f9700fb559f4e8 333
+packages/cli/src/main.ts
+  s_0437603dd8fd87::t_f2f77d4aed35e7 11,14,26-29
+  s_0437603dd8fd87::t_41c6f0625963c5 6-10,12-13,15-19,25
+packages/cli/src/tests/main.test.ts
+  s_0437603dd8fd87::t_90f362624beff3 536,539-540,542-565
+  s_0437603dd8fd87::t_2af51e196083a2 2-12,541
+  s_0437603dd8fd87::t_81a0828f25b7e7 175
+  s_0437603dd8fd87::t_d38e102f3ef6ec 178
+  s_0437603dd8fd87::t_6d4c65bd19ca94 67-85,174,176-177,179-181,336-337,520,525,530-535,537-538,566-577
+  s_0437603dd8fd87::t_d6e1f7dae00f25 633-635
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_0437603dd8fd87::t_330e72ab77f980 107
+  s_0437603dd8fd87::t_0033b524952d95 5,93-95,97-106,108-154,234-242
+  s_0437603dd8fd87::t_36374c37eb2a8b 243
+packages/runtime/src/config/project.ts
+  s_0437603dd8fd87::t_609eb7d3a8b1e4 6,20,47-49,51,83-88,108
+packages/cli/src/runner.ts
+  s_0437603dd8fd87::t_4f1186d2457f6e 51-53,109,420-422
+  s_0437603dd8fd87::t_a8ffa41ce5f95d 423-424
+packages/runtime/src/config/tests/config.test.ts
+  s_0437603dd8fd87::t_4da01fd9aae70e 17
+packages/runtime/src/config/version-compat.ts
+  s_0437603dd8fd87::t_9385b276961923 46-47
+  s_0437603dd8fd87::t_8bd25ecb4a21b3 1-45,48-84
+packages/runtime/src/action/git-project.ts
+  s_0437603dd8fd87::t_8f4f2175a20424 21-22,24-25,107-108
+  s_0437603dd8fd87::t_ab77d88f186665 109-110
+packages/runtime/src/shared/version.ts
+  s_0437603dd8fd87::t_d2793b1f378cd7 1-3
+packages/runtime/src/action/tests/git-project.test.ts
+  s_0437603dd8fd87::t_1c248c2b9e4f1f 70
+packages/runtime/src/review/tests/comment.test.ts
+  s_0437603dd8fd87::t_c8465701a1aeaf 10,115-138
+  s_0437603dd8fd87::t_68bcfc91062181 139
+packages/runtime/src/config/ts-loader.ts
+  s_0437603dd8fd87::t_f50e71004d16e7 12-15,27,36-39,41,62
+packages/runtime/src/shared/semver.ts
+  s_0437603dd8fd87::t_d2793b1f378cd7 3,5-7,12,18
+  s_0437603dd8fd87::t_023e88a8a21fa3 1-2,4,8-11,13-17
+packages/runtime/src/action/review-publishing.ts
+  s_0437603dd8fd87::t_6c58d529314daa 43
+packages/runtime/src/review/task/task-runtime.ts
+  s_0437603dd8fd87::t_528f541a9aa56f 161,281,534,551
+  s_0437603dd8fd87::t_0e22ee34691383 5,54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7764809512ceb4104f32e4de9a7c205808be4001",
+  "prompts": {},
+  "sessions": {
+    "s_0437603dd8fd87": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f42a6-6943-7f63-ba9d-7ed5c8e9d9fe",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
