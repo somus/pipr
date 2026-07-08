@@ -484,6 +484,24 @@ describe("comments", () => {
     });
   });
 
+  it("publishes suggested-change blocks when a structural edge keeps the same delimiter", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            suggestedFix: "};",
+          },
+        ],
+      },
+      manifest: manifestWithRange(10, 10, "}"),
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBe("};");
+    expect(item?.body).toContain("```suggestion\n};\n```");
+  });
+
   it("omits suggested-change blocks when a one-line selection includes surrounding context", () => {
     expectSuggestedChangeOmitted({
       finding: {

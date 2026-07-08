@@ -134,14 +134,16 @@ function changesStructuralSelectionEdge(
   originalLines: string[],
   suggestedLines: string[],
 ): boolean {
-  const firstOriginalLine = originalLines[0];
-  const lastOriginalLine = originalLines.at(-1);
+  const firstOriginalEdge = structuralSelectionEdge(originalLines[0]);
+  const lastOriginalEdge = structuralSelectionEdge(originalLines.at(-1));
   return (
-    (isStructuralSelectionEdge(firstOriginalLine) && firstOriginalLine !== suggestedLines[0]) ||
-    (isStructuralSelectionEdge(lastOriginalLine) && lastOriginalLine !== suggestedLines.at(-1))
+    (firstOriginalEdge !== undefined &&
+      firstOriginalEdge !== structuralSelectionEdge(suggestedLines[0])) ||
+    (lastOriginalEdge !== undefined &&
+      lastOriginalEdge !== structuralSelectionEdge(suggestedLines.at(-1)))
   );
 }
 
-function isStructuralSelectionEdge(line: string | undefined): line is string {
-  return line !== undefined && /^[})\]]+[;,]?$/.test(line.trim());
+function structuralSelectionEdge(line: string | undefined): string | undefined {
+  return line?.trim().match(/^([})\]]+)[;,]?$/)?.[1];
 }

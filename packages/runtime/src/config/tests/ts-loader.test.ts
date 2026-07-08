@@ -270,6 +270,25 @@ describe("prepareConfigDirectory", () => {
       await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
     ).toBe(true);
   });
+
+  it("ignores malformed dependency maps when deciding whether install is required", async () => {
+    const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
+    await Bun.write(
+      path.join(configDir, "package.json"),
+      `${JSON.stringify({
+        dependencies: "lodash-es",
+        devDependencies: {
+          "@usepipr/sdk": runtimeVersion,
+          "not-a-version": 1,
+        },
+      })}\n`,
+    );
+
+    await expect(prepareConfigDirectory(configDir, { frozen: true })).resolves.toBeUndefined();
+    expect(
+      await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
+    ).toBe(true);
+  });
 });
 
 async function writePiprConfig(rootDir: string, contents: string): Promise<void> {
