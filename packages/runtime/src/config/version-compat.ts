@@ -38,11 +38,17 @@ export async function resolveConfigVersionCompatibility(options: {
   configDir: string;
 }): Promise<ConfigVersionCompatibility> {
   const packageJsonPath = path.join(options.configDirPath, "package.json");
-  if (!(await Bun.file(packageJsonPath).exists())) {
-    return { kind: "unknown", runtimeVersion };
+  let manifest: PackageManifest;
+  try {
+    manifest = (await Bun.file(packageJsonPath).json()) as PackageManifest;
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (code === "ENOENT") {
+      return { kind: "unknown", runtimeVersion };
+    }
+    throw error;
   }
 
-  const manifest = (await Bun.file(packageJsonPath).json()) as PackageManifest;
   const sdkVersion =
     manifest.dependencies?.["@usepipr/sdk"] ?? manifest.devDependencies?.["@usepipr/sdk"];
   if (!sdkVersion) {
