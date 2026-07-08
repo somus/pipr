@@ -419,6 +419,29 @@ describe("runLocalReviewCommand", () => {
       await removeWorkspace(workspace.rootDir);
     }
   });
+
+  it("fails local reviews before Pi when the config SDK pin is newer than Pipr", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: localReviewSelectionConfigTs(),
+      headConfigTs: localReviewSelectionConfigTs(),
+      sdkVersion: "999.0.0",
+    });
+    try {
+      await expect(
+        runLocalReviewCommand({
+          rootDir: workspace.rootDir,
+          configDir: ".pipr",
+          env: { DEEPSEEK_API_KEY: "provider-key" },
+          baseSha: workspace.baseSha,
+          headSha: workspace.headSha,
+          piExecutable: workspace.piExecutable,
+        }),
+      ).rejects.toThrow("Upgrade Pipr before running this config");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
 });
 
 describe("runActionCommand pull_request dispatch", () => {
@@ -733,6 +756,21 @@ describe("runActionCommand pull_request dispatch", () => {
       expect(logs.messages.join("\n")).toContain(".pipr/package.json pins @usepipr/sdk 0.1.0");
       expect(result.review.publicationPlan.metadata.configVersion).toBe("0.1.0");
       expect(result.review.mainComment).toContain("Config SDK 0.1.0 is behind Pipr");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("fails pull request actions before Pi when the config SDK pin is newer than Pipr", async () => {
+    const workspace = await createCommandWorkspace({
+      checkoutBaseBeforeRun: true,
+      sdkVersion: "999.0.0",
+    });
+    try {
+      await expect(runPullRequestAction(workspace)).rejects.toThrow(
+        "Upgrade Pipr before running this config",
+      );
+      await expectPiNotCalled(workspace);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
