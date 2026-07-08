@@ -1,3 +1,5 @@
+import { redactPotentialSecrets } from "./redaction.js";
+
 export type ActionLogSink = {
   log(record: ActionLogRecord): void;
   group<T>(name: string, run: () => Promise<T>): Promise<T>;
@@ -140,7 +142,7 @@ function redact(message: string, secrets: Set<string>): string {
   for (const secret of secrets) {
     redacted = redacted.split(secret).join("***");
   }
-  return redacted;
+  return redactPotentialSecrets(redacted);
 }
 
 function compactFields(
