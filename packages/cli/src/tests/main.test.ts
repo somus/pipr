@@ -640,6 +640,12 @@ describe("pipr CLI", () => {
       const result = await runCli(["check"], { GITHUB_ACTIONS: "true" }, workspace);
       const review = await runCli(["review"], { GITHUB_ACTIONS: "true" }, workspace);
       const version = await runCli(["--version"], { GITHUB_ACTIONS: "true" }, workspace);
+      await mkdir(path.join(workspace, ".pipr"));
+      await Bun.write(
+        path.join(workspace, ".pipr", "config.ts"),
+        'throw new Error("bad \\u001b]0;evil\\u0007\\nnext \\u001b[31mred\\u001b[0m\\rline");\n',
+      );
+      const sanitized = await runCli(["check"], { GITHUB_ACTIONS: "true" }, workspace);
 
       expect(result.exitCode).toBe(1);
       expect(`${result.stdout}\n${result.stderr}`).toContain("::error::");
@@ -651,6 +657,11 @@ describe("pipr CLI", () => {
       expect(version.exitCode).toBe(0);
       expect(version.stdout.trim()).toBe(cliPackage.version);
       expect(`${version.stdout}\n${version.stderr}`).not.toContain("::error::");
+      expect(sanitized.exitCode).toBe(1);
+      expect(`${sanitized.stdout}\n${sanitized.stderr}`).toContain("::error::bad %0Anext redline");
+      expect(`${sanitized.stdout}\n${sanitized.stderr}`).not.toContain("\u001b");
+      expect(`${sanitized.stdout}\n${sanitized.stderr}`).not.toContain("\u0007");
+      expect(`${sanitized.stdout}\n${sanitized.stderr}`).not.toContain("\r");
     } finally {
       await removeWorkspace(workspace);
     }

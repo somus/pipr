@@ -54,7 +54,7 @@ function skipUntilTerminator(message: string, index: number, terminator?: number
     if (terminator !== undefined && code === terminator) {
       return cursor;
     }
-    if (code === 0x1b && message.charCodeAt(cursor + 1) === 0x5c) {
+    if (code === 0x1b && cursor + 1 < message.length && message.charCodeAt(cursor + 1) === 0x5c) {
       return cursor + 1;
     }
   }

@@ -8,12 +8,13 @@ runMain().catch(handleFatalError);
 
 function handleFatalError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
+  const sanitizedMessage = sanitizeTerminalMessage(message);
   if (!isGitHubActions()) {
-    console.error(`error: ${sanitizeTerminalMessage(message)}`);
+    console.error(`error: ${sanitizedMessage}`);
     process.exitCode = 1;
     return;
   }
-  writeGitHubActionsFailure(error, message);
+  writeGitHubActionsFailure(error, sanitizedMessage);
   process.exitCode = 1;
 }
 

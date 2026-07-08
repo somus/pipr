@@ -19,5 +19,6 @@ describe("terminal output", () => {
   it("drops unterminated terminal controls", () => {
     expect(sanitizeTerminalMessage("before \u001b]0;title")).toBe("before ");
     expect(sanitizeTerminalMessage("before \u001b[31")).toBe("before ");
+    expect(sanitizeTerminalMessage("before \u001bPprivate\u001b")).toBe("before ");
   });
 });
