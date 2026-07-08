@@ -105,15 +105,19 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(reviewer, { manifest });
-      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => ({
-        body: `**${findingLabel(finding)}:** ${finding.title}. ${finding.body}`,
-        path: finding.path,
-        rangeId: finding.rangeId,
-        side: finding.side,
-        startLine: finding.startLine,
-        endLine: finding.endLine,
-        ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
-      }));
+      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => {
+        const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
+        const category = finding.category.replaceAll("-", " ");
+        return {
+          body: `**${severity} ${category}:** ${finding.title}. ${finding.body}`,
+          path: finding.path,
+          rangeId: finding.rangeId,
+          side: finding.side,
+          startLine: finding.startLine,
+          endLine: finding.endLine,
+          ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
+        };
+      });
       await ctx.comment({
         main: [
           "## Rich Review",
@@ -140,10 +144,6 @@ export default definePipr((pipr) => {
   pipr.command({ pattern: "@pipr rich-review", permission: "write", task });
 });
 
-function findingLabel(finding: Pick<RichFinding, "severity" | "category">): string {
-  return `${capitalize(finding.severity)} ${finding.category.replaceAll("-", " ")}`;
-}
-
 function findingsTable(findings: RichFinding[]): string {
   if (findings.length === 0) {
     return [
@@ -155,12 +155,12 @@ function findingsTable(findings: RichFinding[]): string {
   return [
     "| Severity | Category | Title |",
     "| --- | --- | --- |",
-    ...findings.map(
-      (finding) =>
-        `| ${capitalize(finding.severity)} | ${escapeTableCell(
-          finding.category.replaceAll("-", " "),
-        )} | ${escapeTableCell(finding.title)} |`,
-    ),
+    ...findings.map((finding) => {
+      const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
+      const category = finding.category.replaceAll("-", " ").replaceAll("|", "\\|");
+      const title = finding.title.replaceAll("\n", " ").replaceAll("|", "\\|");
+      return `| ${severity} | ${category} | ${title} |`;
+    }),
   ].join("\n");
 }
 
@@ -173,21 +173,13 @@ function findingRationales(findings: RichFinding[]): string {
       [
         `### ${index + 1}. ${finding.title}`,
         "",
-        `**Severity:** ${capitalize(finding.severity)}`,
+        `**Severity:** ${finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1)}`,
         `**Category:** ${finding.category.replaceAll("-", " ")}`,
         "",
         finding.rationale,
       ].join("\n"),
     )
     .join("\n\n");
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function escapeTableCell(value: string): string {
-  return value.replaceAll("\n", " ").replaceAll("|", "\\|");
 }
 ```
 

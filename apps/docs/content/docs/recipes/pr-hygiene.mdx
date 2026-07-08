@@ -111,15 +111,20 @@ export default definePipr((pipr) => {
       ctx.log.info(`Checking PR hygiene for ${changedFiles.length} changed file(s).`);
       const manifest = await ctx.change.diffManifest({ compressed: true, maxPreviewLines: 80 });
       const result = await ctx.pi.run(hygiene, { manifest, changedFiles });
-      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => ({
-        body: `**${formatPolicy(finding.policy)}:** ${finding.title}. ${finding.body}`,
-        path: finding.path,
-        rangeId: finding.rangeId,
-        side: finding.side,
-        startLine: finding.startLine,
-        endLine: finding.endLine,
-        ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
-      }));
+      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => {
+        const policy = finding.policy
+          .replaceAll("-", " ")
+          .replace(/^./, (char) => char.toUpperCase());
+        return {
+          body: `**${policy}:** ${finding.title}. ${finding.body}`,
+          path: finding.path,
+          rangeId: finding.rangeId,
+          side: finding.side,
+          startLine: finding.startLine,
+          endLine: finding.endLine,
+          ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
+        };
+      });
       ctx.check.pass("PR hygiene review completed.");
       await ctx.comment({
         main: [
@@ -155,12 +160,16 @@ function policyTable(checks: PolicyCheck[]): string {
   return [
     "| Policy | Status | Evidence |",
     "| --- | --- | --- |",
-    ...checks.map(
-      (check) =>
-        `| ${formatPolicy(check.policy)} | ${formatStatus(
-          check.status,
-        )} | ${escapeTableCell(check.evidence)} |`,
-    ),
+    ...checks.map((check) => {
+      const policy = check.policy
+        .replaceAll("-", " ")
+        .replace(/^./, (char) => char.toUpperCase());
+      const status = check.status
+        .replaceAll("-", " ")
+        .replace(/^./, (char) => char.toUpperCase());
+      const evidence = check.evidence.replaceAll("\n", " ").replaceAll("|", "\\|");
+      return `| ${policy} | ${status} | ${evidence} |`;
+    }),
   ].join("\n");
 }
 
@@ -175,23 +184,14 @@ function findingsTable(findings: HygieneFinding[]): string {
   return [
     "| Policy | Finding |",
     "| --- | --- |",
-    ...findings.map(
-      (finding) =>
-        `| ${formatPolicy(finding.policy)} | ${escapeTableCell(finding.title)} |`,
-    ),
+    ...findings.map((finding) => {
+      const policy = finding.policy
+        .replaceAll("-", " ")
+        .replace(/^./, (char) => char.toUpperCase());
+      const title = finding.title.replaceAll("\n", " ").replaceAll("|", "\\|");
+      return `| ${policy} | ${title} |`;
+    }),
   ].join("\n");
-}
-
-function formatPolicy(policy: string): string {
-  return policy.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
-}
-
-function formatStatus(status: string): string {
-  return status.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
-}
-
-function escapeTableCell(value: string): string {
-  return value.replaceAll("\n", " ").replaceAll("|", "\\|");
 }
 ```
 

@@ -85,24 +85,27 @@ export default definePipr((pipr) => {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(reviewer, { manifest });
       const commentableBlockers = result.blockers.filter((blocker) =>
-        hasCommentableRange(blocker, manifest),
+        commentableRangeForFinding(blocker, manifest) !== undefined,
       );
       const droppedBlockerCount = result.blockers.length - commentableBlockers.length;
-      const inlineFindings: ReviewFinding[] = commentableBlockers.map((blocker) => ({
-        body: \`**\${formatCategory(blocker.category)} blocker:** \${blocker.title}. \${blocker.body}\`,
-        path: blocker.path,
-        rangeId: blocker.rangeId,
-        side: blocker.side,
-        startLine: blocker.startLine,
-        endLine: blocker.endLine,
-        ...(blocker.suggestedFix ? { suggestedFix: blocker.suggestedFix } : {}),
-      }));
+      const inlineFindings: ReviewFinding[] = commentableBlockers.map((blocker) => {
+        const category = blocker.category
+          .replaceAll("-", " ")
+          .replace(/^./, (char) => char.toUpperCase());
+        return {
+          body: \`**\${category} blocker:** \${blocker.title}. \${blocker.body}\`,
+          path: blocker.path,
+          rangeId: blocker.rangeId,
+          side: blocker.side,
+          startLine: blocker.startLine,
+          endLine: blocker.endLine,
+          ...(blocker.suggestedFix ? { suggestedFix: blocker.suggestedFix } : {}),
+        };
+      });
 
       if (commentableBlockers.length > 0) {
-        ctx.check.fail(\`\${commentableBlockers.length} blocking quality \${pluralize(
-          commentableBlockers.length,
-          "issue",
-        )} found.\`);
+        const issueNoun = commentableBlockers.length === 1 ? "issue" : "issues";
+        ctx.check.fail(\`\${commentableBlockers.length} blocking quality \${issueNoun} found.\`);
       } else {
         ctx.check.pass("No blocking quality issues found.");
       }
@@ -136,10 +139,6 @@ export default definePipr((pipr) => {
 
 type FindingAnchor = Pick<ReviewFinding, "path" | "rangeId" | "side" | "startLine" | "endLine">;
 
-function hasCommentableRange(finding: FindingAnchor, manifest: DiffManifest): boolean {
-  return Boolean(commentableRangeForFinding(finding, manifest));
-}
-
 function commentableRangeForFinding(
   finding: FindingAnchor,
   manifest: DiffManifest,
@@ -149,20 +148,16 @@ function commentableRangeForFinding(
     if (!range) {
       continue;
     }
-    return findingMatchesRange(finding, range) ? range : undefined;
+    return finding.rangeId === range.id &&
+      finding.path === range.path &&
+      finding.side === range.side &&
+      finding.startLine <= finding.endLine &&
+      finding.startLine >= range.startLine &&
+      finding.endLine <= range.endLine
+      ? range
+      : undefined;
   }
   return undefined;
-}
-
-function findingMatchesRange(finding: FindingAnchor, range: CommentableRange): boolean {
-  return (
-    finding.rangeId === range.id &&
-    finding.path === range.path &&
-    finding.side === range.side &&
-    finding.startLine <= finding.endLine &&
-    finding.startLine >= range.startLine &&
-    finding.endLine <= range.endLine
-  );
 }
 
 function statusTable(blockers: QualityBlocker[]): string {
@@ -186,12 +181,14 @@ function blockersTable(blockers: QualityBlocker[]): string {
   return [
     "| Category | Title | Impact |",
     "| --- | --- | --- |",
-    ...blockers.map(
-      (blocker) =>
-        \`| \${formatCategory(blocker.category)} | \${escapeTableCell(
-          blocker.title,
-        )} | \${escapeTableCell(blocker.impact)} |\`,
-    ),
+    ...blockers.map((blocker) => {
+      const category = blocker.category
+        .replaceAll("-", " ")
+        .replace(/^./, (char) => char.toUpperCase());
+      const title = blocker.title.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
+      const impact = blocker.impact.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
+      return \`| \${category} | \${title} | \${impact} |\`;
+    }),
   ].join("\\n");
 }
 
@@ -199,14 +196,18 @@ function droppedBlockersNote(count: number): string {
   if (count === 0) {
     return "";
   }
+  const blockerNoun = count === 1 ? "blocker" : "blockers";
+  const verb = count === 1 ? "was" : "were";
+  const pronoun = count === 1 ? "it does" : "they do";
   return [
     "<sub>",
     count,
     " model-reported ",
-    pluralize(count, "blocker"),
-    count === 1 ? " was" : " were",
+    blockerNoun,
+    " ",
+    verb,
     " ignored because ",
-    count === 1 ? "it does" : "they do",
+    pronoun,
     " not match a commentable diff range.",
     "</sub>",
   ].join("");
@@ -224,7 +225,12 @@ function categoryBreakdownTable(blockers: QualityBlocker[]): string {
   return [
     "| Category | Count |",
     "| --- | ---: |",
-    ...counts.map(([category, count]) => \`| \${formatCategory(category)} | \${count} |\`),
+    ...counts.map(([category, count]) => {
+      const categoryLabel = category
+        .replaceAll("-", " ")
+        .replace(/^./, (char) => char.toUpperCase());
+      return \`| \${categoryLabel} | \${count} |\`;
+    }),
   ].join("\\n");
 }
 
@@ -233,7 +239,14 @@ function categorySummary(blockers: QualityBlocker[]): string {
   if (counts.length === 0) {
     return "None";
   }
-  return counts.map(([category, count]) => \`\${formatCategory(category)} (\${count})\`).join(", ");
+  return counts
+    .map(([category, count]) => {
+      const categoryLabel = category
+        .replaceAll("-", " ")
+        .replace(/^./, (char) => char.toUpperCase());
+      return \`\${categoryLabel} (\${count})\`;
+    })
+    .join(", ");
 }
 
 function categoryCounts(blockers: QualityBlocker[]): Array<[string, number]> {
@@ -244,16 +257,5 @@ function categoryCounts(blockers: QualityBlocker[]): Array<[string, number]> {
   return [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
 }
 
-function pluralize(count: number, singular: string): string {
-  return count === 1 ? singular : \`\${singular}s\`;
-}
-
-function formatCategory(category: string): string {
-  return category.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
-}
-
-function escapeTableCell(value: string): string {
-  return value.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
-}
 `,
 } as const satisfies OfficialInitRecipe;

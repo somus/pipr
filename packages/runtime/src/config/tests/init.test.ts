@@ -41,7 +41,6 @@ describe("initOfficialMinimalProject", () => {
     expect(result.overwritten).toEqual([]);
     expect(configTs).toContain("pipr.review");
     expect(configTs).toContain("## Review Result");
-    expect(configTs).toContain("reviewResultTable");
     expect(configTs).toContain("See inline comments in the diff.");
     expect(await Bun.file(path.join(rootDir, ".pipr", "tsconfig.json")).text()).toContain(
       "moduleResolution",
@@ -218,7 +217,7 @@ describe("initOfficialMinimalProject", () => {
     const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
 
     expect(configTs).toContain("commentableBlockers");
-    expect(configTs).toContain("hasCommentableRange");
+    expect(configTs).toContain("commentableRangeForFinding");
     expect(configTs).toContain("droppedBlockersNote");
     expect(configTs).not.toContain("if (result.blockers.length > 0)");
   });

@@ -97,6 +97,14 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(briefing, { manifest, change: ctx.change });
+      const reviewerFocus =
+        result.reviewerFocus.length === 0
+          ? "No special reviewer focus called out."
+          : result.reviewerFocus.map((item) => `- ${item}`).join("\n");
+      const walkthrough =
+        result.walkthrough.length === 0
+          ? "No walkthrough notes."
+          : result.walkthrough.map((item) => `- ${item}`).join("\n");
       await ctx.comment([
         "## PR Briefing",
         "",
@@ -112,7 +120,7 @@ export default definePipr((pipr) => {
         "",
         "## Reviewer Focus",
         "",
-        bulletList(result.reviewerFocus, "No special reviewer focus called out."),
+        reviewerFocus,
         "",
         "## Notable Files",
         "",
@@ -120,7 +128,7 @@ export default definePipr((pipr) => {
         "",
         "## Walkthrough",
         "",
-        bulletList(result.walkthrough, "No walkthrough notes."),
+        walkthrough,
         "",
         diagramBlock(result.diagramMermaid),
       ].filter(Boolean).join("\n"));
@@ -137,12 +145,16 @@ export default definePipr((pipr) => {
 });
 
 function overviewTable(briefing: Briefing, title: string): string {
+  const titleCell = title.replaceAll("\n", " ").replaceAll("|", "\\|");
+  const prType = briefing.prType.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
+  const riskLevel = briefing.riskLevel
+    .replaceAll("-", " ")
+    .replace(/^./, (char) => char.toUpperCase());
+  const riskSummary = briefing.riskSummary.replaceAll("\n", " ").replaceAll("|", "\\|");
   return [
     "| Change | Type | Risk | Risk summary |",
     "| --- | --- | --- | --- |",
-    `| ${escapeTableCell(title)} | ${formatLabel(briefing.prType)} | ${formatLabel(
-      briefing.riskLevel,
-    )} | ${escapeTableCell(briefing.riskSummary)} |`,
+    `| ${titleCell} | ${prType} | ${riskLevel} | ${riskSummary} |`,
   ].join("\n");
 }
 
@@ -157,12 +169,12 @@ function changeMapTable(changeMap: Briefing["changeMap"]): string {
   return [
     "| Area | Files | Change |",
     "| --- | --- | --- |",
-    ...changeMap.map(
-      (item) =>
-        `| ${escapeTableCell(item.area)} | ${escapeTableCell(
-          item.files.join("<br>"),
-        )} | ${escapeTableCell(item.change)} |`,
-    ),
+    ...changeMap.map((item) => {
+      const area = item.area.replaceAll("\n", " ").replaceAll("|", "\\|");
+      const files = item.files.join("<br>").replaceAll("\n", " ").replaceAll("|", "\\|");
+      const change = item.change.replaceAll("\n", " ").replaceAll("|", "\\|");
+      return `| ${area} | ${files} | ${change} |`;
+    }),
   ].join("\n");
 }
 
@@ -177,15 +189,12 @@ function notableFilesTable(files: Briefing["notableFiles"]): string {
   return [
     "| File | Why it matters |",
     "| --- | --- |",
-    ...files.map((file) => `| ${escapeTableCell(file.path)} | ${escapeTableCell(file.reason)} |`),
+    ...files.map((file) => {
+      const filePath = file.path.replaceAll("\n", " ").replaceAll("|", "\\|");
+      const reason = file.reason.replaceAll("\n", " ").replaceAll("|", "\\|");
+      return `| ${filePath} | ${reason} |`;
+    }),
   ].join("\n");
-}
-
-function bulletList(items: string[], emptyText: string): string {
-  if (items.length === 0) {
-    return emptyText;
-  }
-  return items.map((item) => `- ${item}`).join("\n");
 }
 
 function diagramBlock(diagramMermaid: string | undefined): string {
@@ -212,14 +221,6 @@ function markdownFenceFor(value: string): string {
     ...[...value.matchAll(/`+/g)].map((match) => match[0].length),
   );
   return "`".repeat(Math.max(3, longestBacktickRun + 1));
-}
-
-function formatLabel(value: string): string {
-  return value.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
-}
-
-function escapeTableCell(value: string): string {
-  return value.replaceAll("\n", " ").replaceAll("|", "\\|");
 }
 ```
 

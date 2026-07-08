@@ -68,15 +68,20 @@ export default definePipr((pipr) => {
       const publishableSuggestions = result.suggestions.filter(
         (suggestion) => isPublishableSuggestion(suggestion, manifest),
       );
-      const inlineFindings: ReviewFinding[] = publishableSuggestions.map((suggestion) => ({
-        body: \`**\${formatCategory(suggestion.category)}:** \${suggestion.title}. \${suggestion.body}\`,
-        path: suggestion.path,
-        rangeId: suggestion.rangeId,
-        side: suggestion.side,
-        startLine: suggestion.startLine,
-        endLine: suggestion.endLine,
-        suggestedFix: suggestion.suggestedFix,
-      }));
+      const inlineFindings: ReviewFinding[] = publishableSuggestions.map((suggestion) => {
+        const category = suggestion.category
+          .replaceAll("-", " ")
+          .replace(/^./, (char) => char.toUpperCase());
+        return {
+          body: \`**\${category}:** \${suggestion.title}. \${suggestion.body}\`,
+          path: suggestion.path,
+          rangeId: suggestion.rangeId,
+          side: suggestion.side,
+          startLine: suggestion.startLine,
+          endLine: suggestion.endLine,
+          suggestedFix: suggestion.suggestedFix,
+        };
+      });
       await ctx.comment({
         main: [
           "## Fix Suggestions",
@@ -130,20 +135,16 @@ function commentableRangeForFinding(
     if (!range) {
       continue;
     }
-    return findingMatchesRange(finding, range) ? range : undefined;
+    return finding.rangeId === range.id &&
+      finding.path === range.path &&
+      finding.side === range.side &&
+      finding.startLine <= finding.endLine &&
+      finding.startLine >= range.startLine &&
+      finding.endLine <= range.endLine
+      ? range
+      : undefined;
   }
   return undefined;
-}
-
-function findingMatchesRange(finding: FindingAnchor, range: CommentableRange): boolean {
-  return (
-    finding.rangeId === range.id &&
-    finding.path === range.path &&
-    finding.side === range.side &&
-    finding.startLine <= finding.endLine &&
-    finding.startLine >= range.startLine &&
-    finding.endLine <= range.endLine
-  );
 }
 
 function isPublishableSuggestedFixSelection(selection: {
@@ -246,19 +247,14 @@ function suggestionsTable(suggestions: FixSuggestion[]): string {
   return [
     "| Category | Title |",
     "| --- | --- |",
-    ...suggestions.map(
-      (suggestion) =>
-        \`| \${formatCategory(suggestion.category)} | \${escapeTableCell(suggestion.title)} |\`,
-    ),
+    ...suggestions.map((suggestion) => {
+      const category = suggestion.category
+        .replaceAll("-", " ")
+        .replace(/^./, (char) => char.toUpperCase());
+      const title = suggestion.title.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
+      return \`| \${category} | \${title} |\`;
+    }),
   ].join("\\n");
-}
-
-function formatCategory(category: string): string {
-  return category.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
-}
-
-function escapeTableCell(value: string): string {
-  return value.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
 }
 `,
 } as const satisfies OfficialInitRecipe;
