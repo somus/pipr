@@ -1,0 +1,30 @@
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_a479f6688b5009::t_dba733d1d249d9 184-188
+packages/runtime/src/config/recipes/rich-review.ts
+  s_a479f6688b5009::t_aa0fcb3896aa42 149-150
+.pipr/config.ts
+  s_a479f6688b5009::t_aa0fcb3896aa42 142-143
+packages/runtime/src/config/tests/init.test.ts
+  s_a479f6688b5009::t_cb0b9e8beda4f5 250-252,352-354
+packages/runtime/src/config/recipes/security-sast.ts
+  s_a479f6688b5009::t_95e4a70449fb91 154
+  s_a479f6688b5009::t_aa0fcb3896aa42 153,155-157
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_a479f6688b5009::t_dba733d1d249d9 180-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a7a68f3e0c664176e7e69d8430da4378da5a0141",
+  "prompts": {},
+  "sessions": {
+    "s_a479f6688b5009": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4223-1416-7821-991f-9f68e3fd6799",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
