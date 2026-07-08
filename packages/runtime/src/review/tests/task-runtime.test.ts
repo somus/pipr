@@ -324,7 +324,25 @@ describe("runTaskRuntime", () => {
     });
 
     expect(result.mainComment).toContain("Review summary.");
+    expect(result.review.summary.body).toBe("Review summary.");
+    expect(result.validated.review.summary.body).toBe("Review summary.");
     expect(result.inlineCommentDrafts.map((item) => item.finding.body)).toEqual(["inline body"]);
+  });
+
+  it("uses string ctx.comment output as the review summary body", async () => {
+    const plan = singleTaskPlan({
+      async run(ctx) {
+        await ctx.comment("String review summary.");
+      },
+    });
+
+    const result = await runRuntime({
+      plan,
+    });
+
+    expect(result.mainComment).toContain("String review summary.");
+    expect(result.review.summary.body).toBe("String review summary.");
+    expect(result.validated.review.summary.body).toBe("String review summary.");
   });
 
   it("records command replies from command-triggered tasks", async () => {

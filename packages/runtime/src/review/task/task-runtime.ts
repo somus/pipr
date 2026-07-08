@@ -252,7 +252,11 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   }
   assertReviewCommentOutput(output, options.commandInvocation !== undefined);
 
-  const review = collectedReview(output);
+  const main =
+    typeof output.comment.value === "string"
+      ? output.comment.value
+      : (output.comment.value.main ?? "Review completed.");
+  const review = collectedReview(output, main);
   const validated = validateReviewResult(review, diffManifest, {
     expectedHeadSha: options.event.change.head.sha,
     pathScopeForFinding: (_finding, index) => output.findings[index]?.paths,
@@ -267,10 +271,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   });
   const publishing = buildCommentPublishingPlan({
     event: options.event,
-    main:
-      typeof output.comment.value === "string"
-        ? output.comment.value
-        : (output.comment.value.main ?? "Review completed."),
+    main,
     validated,
     manifest: diffManifest,
     maxInlineComments: config.publication.maxInlineComments,
