@@ -471,6 +471,19 @@ describe("comments", () => {
     });
   });
 
+  it("omits suggested-change blocks when a structural selection edge is replaced", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 60,
+        endLine: 61,
+        suggestedFix:
+          "    if (code === 0x1b && cursor + 1 < message.length && message.charCodeAt(cursor + 1) === 0x5c) {",
+      },
+      manifest: manifestWithRange(60, 61, ["  }", "  return message.length - 1;"].join("\n")),
+    });
+  });
+
   it("omits suggested-change blocks when a one-line selection includes surrounding context", () => {
     expectSuggestedChangeOmitted({
       finding: {

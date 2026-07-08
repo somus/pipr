@@ -55,6 +55,7 @@ export function isPublishableSuggestedFixSelection(
   const originalLines = selectedPreviewLines(selection, selectedLineCount);
   return Boolean(
     originalLines &&
+      !changesStructuralSelectionEdge(originalLines, suggestedLines) &&
       !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
       !suggestionIncludesUnselectedContext(selection, selectedLineCount, suggestedLines),
   );
@@ -127,4 +128,20 @@ function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: stri
     return firstLineUnchanged || lastLineUnchanged;
   }
   return firstLineUnchanged && lastLineUnchanged;
+}
+
+function changesStructuralSelectionEdge(
+  originalLines: string[],
+  suggestedLines: string[],
+): boolean {
+  const firstOriginalLine = originalLines[0];
+  const lastOriginalLine = originalLines.at(-1);
+  return (
+    (isStructuralSelectionEdge(firstOriginalLine) && firstOriginalLine !== suggestedLines[0]) ||
+    (isStructuralSelectionEdge(lastOriginalLine) && lastOriginalLine !== suggestedLines.at(-1))
+  );
+}
+
+function isStructuralSelectionEdge(line: string | undefined): line is string {
+  return line !== undefined && /^[})\]]+[;,]?$/.test(line.trim());
 }
