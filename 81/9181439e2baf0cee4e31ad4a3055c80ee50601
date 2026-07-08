@@ -1,0 +1,25 @@
+packages/runtime/src/review/tests/publish.test.ts
+  s_a479f6688b5009::t_3847b58aa1be2d 747
+packages/runtime/src/review/comment-branding.ts
+  s_a479f6688b5009::t_a1ccb723c9bd4c 1
+packages/runtime/src/review/tests/comment.test.ts
+  s_a479f6688b5009::t_93221dc2b6a66a 71
+packages/cli/src/tests/main.test.ts
+  s_a479f6688b5009::t_3847b58aa1be2d 318
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "819181439e2baf0cee4e31ad4a3055c80ee50601",
+  "prompts": {},
+  "sessions": {
+    "s_a479f6688b5009": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4223-1416-7821-991f-9f68e3fd6799",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
