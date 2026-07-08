@@ -1,0 +1,21 @@
+packages/cli/src/runner.ts
+  s_0437603dd8fd87::t_af0827b750c0b8 16,60-67
+packages/cli/src/tests/main.test.ts
+  s_0437603dd8fd87::t_2eccf4507cde58 576,585-587
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8ca6f509a998615586ea09e8a9904dff99479528",
+  "prompts": {},
+  "sessions": {
+    "s_0437603dd8fd87": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f42a6-6943-7f63-ba9d-7ed5c8e9d9fe",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
