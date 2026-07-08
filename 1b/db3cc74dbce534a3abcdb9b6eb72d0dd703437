@@ -1,0 +1,42 @@
+apps/docs/content/docs/index.mdx
+  s_cd6a178e45932c::t_4c88ac6c10ce4f 102
+packages/runtime/src/config/config-deps.ts
+  s_cd6a178e45932c::t_e9c690a30381b5 3
+  s_cd6a178e45932c::t_58e7e2855e35f5 10-14,40-45,61,67
+  s_cd6a178e45932c::t_0b6c42c427e19c 24-25,36,62-66
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_cd6a178e45932c::t_e9c690a30381b5 188-190,192-194,197-224,258
+  s_cd6a178e45932c::t_bd1f49bf06eb2c 2,125,128-136,143,170-187,195,281-295
+  s_cd6a178e45932c::t_da2c6e3b744f6c 137
+  s_cd6a178e45932c::t_82698f3e5871e9 191
+  s_cd6a178e45932c::t_cd850e96dce626 196
+  s_cd6a178e45932c::t_8ed7672ae8a34f 296
+apps/docs/content/docs/reference/architecture.mdx
+  s_cd6a178e45932c::t_4c88ac6c10ce4f 108
+apps/docs/content/docs/guide/configuration.mdx
+  s_cd6a178e45932c::t_4c88ac6c10ce4f 10
+apps/docs/content/docs/guide/quickstart.mdx
+  s_cd6a178e45932c::t_4c88ac6c10ce4f 90
+docs/adr/0006-installable-config-dependencies.md
+  s_cd6a178e45932c::t_4c88ac6c10ce4f 16-17
+packages/runtime/src/config/sdk-stub.ts
+  s_cd6a178e45932c::t_8342cddb11ea73 24-25
+packages/runtime/src/config/ts-loader.ts
+  s_cd6a178e45932c::t_bd1f49bf06eb2c 92-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1bdb3cc74dbce534a3abcdb9b6eb72d0dd703437",
+  "prompts": {},
+  "sessions": {
+    "s_cd6a178e45932c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4353-8152-7391-9974-2e9a70f45e1d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
