@@ -16,6 +16,13 @@ describe("terminal output", () => {
     expect(sanitizeTerminalMessage("a\u001bPprivate\u001b\\b\u001bXignored\u001b\\c")).toBe("abc");
   });
 
+  it("strips C1 terminal controls and ST-terminated strings", () => {
+    expect(sanitizeTerminalMessage("a\u001bPprivate\u009cb\u001b]0;title\u009cc")).toBe("abc");
+    expect(sanitizeTerminalMessage("a\u0090private\u009cb\u009d0;title\u009cc\u009b31md")).toBe(
+      "abcd",
+    );
+  });
+
   it("strips escape sequences with broad final-byte and intermediate ranges", () => {
     expect(sanitizeTerminalMessage("a\u001b7b\u001b8c\u001b=d\u001b>e\u001bcf")).toBe("abcdef");
     expect(sanitizeTerminalMessage("a\u001b#8b\u001b(Bc")).toBe("abc");

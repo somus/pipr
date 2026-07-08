@@ -6,6 +6,18 @@ export function sanitizeTerminalMessage(message: string): string {
       index = skipTerminalControlSequence(message, index);
       continue;
     }
+    if (code === c1OscIntroducer) {
+      index = skipUntilTerminator(message, index + 1, bellTerminator);
+      continue;
+    }
+    if (c1StringControlIntroducers.has(code)) {
+      index = skipUntilTerminator(message, index + 1);
+      continue;
+    }
+    if (code === c1CsiIntroducer) {
+      index = skipCsiSequence(message, index + 1);
+      continue;
+    }
     if (isUnsafeTerminalControl(code)) {
       continue;
     }
@@ -16,7 +28,12 @@ export function sanitizeTerminalMessage(message: string): string {
 
 const oscIntroducer = 0x5d;
 const csiIntroducer = 0x5b;
+const c1OscIntroducer = 0x9d;
+const c1CsiIntroducer = 0x9b;
+const bellTerminator = 0x07;
+const stringTerminator = 0x9c;
 const stringControlIntroducers = new Set([0x50, 0x58, 0x5e, 0x5f]);
+const c1StringControlIntroducers = new Set([0x90, 0x98, 0x9e, 0x9f]);
 
 function skipTerminalControlSequence(message: string, index: number): number {
   const next = message.charCodeAt(index + 1);
@@ -24,7 +41,7 @@ function skipTerminalControlSequence(message: string, index: number): number {
     return index;
   }
   if (next === oscIntroducer) {
-    return skipUntilTerminator(message, index + 2, 0x07);
+    return skipUntilTerminator(message, index + 2, bellTerminator);
   }
   if (stringControlIntroducers.has(next)) {
     return skipUntilTerminator(message, index + 2);
@@ -54,6 +71,9 @@ function skipCsiSequence(message: string, index: number): number {
 function skipUntilTerminator(message: string, index: number, terminator?: number): number {
   for (let cursor = index; cursor < message.length; cursor += 1) {
     const code = message.charCodeAt(cursor);
+    if (code === stringTerminator) {
+      return cursor;
+    }
     if (terminator !== undefined && code === terminator) {
       return cursor;
     }
