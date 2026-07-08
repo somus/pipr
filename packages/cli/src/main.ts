@@ -4,12 +4,14 @@ import { PublicationError } from "@usepipr/runtime";
 import { runMain } from "./runner.js";
 import { sanitizeTerminalMessage } from "./terminal-output.js";
 
-runMain().catch(handleFatalError);
+const env = process.env;
 
-function handleFatalError(error: unknown): void {
+runMain({ env }).catch((error) => handleFatalError(error, env));
+
+function handleFatalError(error: unknown, env: NodeJS.ProcessEnv): void {
   const message = error instanceof Error ? error.message : String(error);
   const sanitizedMessage = sanitizeTerminalMessage(message);
-  if (!isGitHubActions()) {
+  if (!isGitHubActions(env)) {
     console.error(`error: ${sanitizedMessage}`);
     process.exit(1);
   }
@@ -25,6 +27,6 @@ function writeGitHubActionsFailure(error: unknown, message: string): void {
   core.setFailed(message);
 }
 
-function isGitHubActions(): boolean {
-  return process.env.GITHUB_ACTIONS === "true";
+function isGitHubActions(env: NodeJS.ProcessEnv): boolean {
+  return env.GITHUB_ACTIONS === "true";
 }

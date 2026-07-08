@@ -437,7 +437,7 @@ function formatUpdateNotice(notice: UpdateNotice): string {
 function isUpdateCommand(argv: string[]): boolean {
   const args = argv.slice(2);
   if (args[0] === "--") {
-    args.shift();
+    return args[1] === "update";
   }
   return (
     args[0] === "update" ||

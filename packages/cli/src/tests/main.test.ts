@@ -123,6 +123,20 @@ describe("pipr CLI", () => {
 
     expect(requests).toEqual([]);
     expect(notices).toEqual([]);
+
+    await expect(
+      runMain({
+        argv: ["bun", "pipr", "--", "--help", "update"],
+        env: { GITHUB_ACTIONS: "true", PIPR_UPDATE_NOTICE: "1" },
+        updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
+        writeUpdateNotice(message) {
+          notices.push(message);
+        },
+      }),
+    ).rejects.toThrow("unknown command '--help'");
+
+    expect(requests).toEqual(["https://api.github.com/repos/somus/pipr/releases/latest"]);
+    expect(notices).toHaveLength(1);
   });
 
   it("skips update notices when disabled or running in CI by default", async () => {
