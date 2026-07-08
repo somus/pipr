@@ -7,7 +7,7 @@ Pipr uses `.pipr/config.ts` as the repository-local authoring surface. The confi
 
 This page shows common patterns. For triggers and commands, see [Entrypoints](/docs/guide/entrypoints). For task handlers, see [Custom Tasks](/docs/guide/custom-tasks). For the full public API, see [Pipr SDK Reference](/docs/reference/sdk-reference). For generated starter configs, see [Init Recipes](/docs/recipes).
 
-`pipr init` scaffolds a tier-2 Bun package under `.pipr/` with `@usepipr/sdk` and `@types/bun` pinned in `.pipr/package.json`. Run `bun install` in `.pipr/` (init does this automatically) to refresh types after bumping the SDK version. For a single-file config without install, use `pipr init --minimal` and install `@usepipr/sdk` at the repo root for editor types.
+`pipr init` scaffolds a tier-2 Bun package under `.pipr/` with `@usepipr/sdk`, `@types/bun`, and `typescript` pinned in `.pipr/package.json`. Run `bun install` in `.pipr/` (init does this automatically) to refresh types after bumping package versions. For a single-file config without install, use `pipr init --minimal` and install `@usepipr/sdk` at the repo root for editor types.
 
 ## Minimal review
 

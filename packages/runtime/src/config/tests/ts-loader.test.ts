@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { cp, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { initOfficialMinimalProject } from "../init.js";
@@ -122,22 +122,25 @@ export default definePipr((pipr) => {
     });
   });
 
-  it("resolves default lib files from the local .pipr TypeScript package", async () => {
+  it("resolves default lib files from the declared local .pipr TypeScript package", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
     await initOfficialMinimalProject({ rootDir, adapters: [] });
-    const localLibPath = path.join(
-      rootDir,
-      ".pipr",
-      "node_modules",
-      "typescript",
-      "lib",
-      "lib.es2022.full.d.ts",
-    );
+    const configDir = path.join(rootDir, ".pipr");
+    const localPackageDir = path.join(configDir, "typescript-local");
+    await cp(path.join(configDir, "node_modules", "typescript"), localPackageDir, {
+      recursive: true,
+    });
+    const packageJsonPath = path.join(configDir, "package.json");
+    const packageJson = JSON.parse(await Bun.file(packageJsonPath).text());
+    packageJson.devDependencies.typescript = "file:./typescript-local";
+    await Bun.write(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    const localLibPath = path.join(localPackageDir, "lib", "lib.es2022.full.d.ts");
     const localLib = await Bun.file(localLibPath).text();
     await Bun.write(
       localLibPath,
       `${localLib}\ndeclare const __piprLocalTypeScriptLibSentinel: string;\n`,
     );
+    await installPiprConfigDependencies(configDir);
     await writePiprConfig(
       rootDir,
       `import { definePipr } from "@usepipr/sdk";
@@ -154,6 +157,61 @@ export default definePipr((pipr) => {
     id: "review",
     model,
     instructions: \`Review this change. Local TS lib sentinel: \${sentinel}\`,
+  });
+});
+`,
+    );
+
+    await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
+      source: path.join(rootDir, ".pipr", "config.ts"),
+    });
+  });
+
+  it("does not execute stale TypeScript from original .pipr/node_modules", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await Bun.write(
+      path.join(rootDir, ".pipr", "node_modules", "typescript", "lib", "typescript.js"),
+      'throw new Error("stale local TypeScript executed");\n',
+    );
+    await writePiprConfig(
+      rootDir,
+      `import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+  pipr.review({ id: "review", model, instructions: "Review this change." });
+});
+`,
+    );
+
+    await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
+      source: path.join(rootDir, ".pipr", "config.ts"),
+    });
+  });
+
+  it("loads scaffold config that imports TypeScript from declared config deps", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await writePiprConfig(
+      rootDir,
+      `import { definePipr } from "@usepipr/sdk";
+import * as ts from "typescript";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+  pipr.review({
+    id: "review",
+    model,
+    instructions: \`Review this change. TS target: \${ts.ScriptTarget.Latest}\`,
   });
 });
 `,
@@ -197,7 +255,7 @@ describe("prepareConfigDirectory", () => {
         {
           private: true,
           dependencies: { "@usepipr/sdk": "0.3.3" },
-          devDependencies: { "@types/bun": "1.3.14", typescript: "6.0.3" },
+          devDependencies: { "@types/bun": "1.3.14" },
         },
         null,
         2,
@@ -219,4 +277,20 @@ describe("prepareConfigDirectory", () => {
 
 async function writePiprConfig(rootDir: string, contents: string): Promise<void> {
   await Bun.write(path.join(rootDir, ".pipr", "config.ts"), contents);
+}
+
+async function installPiprConfigDependencies(configDir: string): Promise<void> {
+  const install = Bun.spawn(["bun", "install", "--ignore-scripts"], {
+    cwd: configDir,
+    env: process.env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stderr] = await Promise.all([
+    install.exited,
+    new Response(install.stderr).text(),
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(stderr);
+  }
 }

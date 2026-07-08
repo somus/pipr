@@ -89,8 +89,13 @@ async function typecheckTypescriptConfig(
       force: true,
       filter: (source) => {
         const relative = path.relative(rootDir, source);
-        const first = relative.split(path.sep)[0] ?? "";
-        return !ignoredTypecheckRootEntries.has(first) && relative !== "bun.lock";
+        const parts = relative.split(path.sep);
+        const first = parts[0] ?? "";
+        return (
+          !ignoredTypecheckRootEntries.has(first) &&
+          !parts.includes("node_modules") &&
+          relative !== "bun.lock"
+        );
       },
     });
     await prepareConfigDirectory(tempConfigDir, { frozen: true });
