@@ -1,0 +1,19 @@
+packages/sdk/src/builder.ts
+  s_10e6cb78baf8e0::t_3b77160522b3ce 516,518
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ce416cb8a008ffeb7099406fea5b4d061d58a083",
+  "prompts": {},
+  "sessions": {
+    "s_10e6cb78baf8e0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f432e-982e-7c23-aff3-99c420181c20",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
