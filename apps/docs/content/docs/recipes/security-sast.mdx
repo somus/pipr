@@ -181,11 +181,11 @@ export default definePipr((pipr) => {
           "## Security Risks",
           "",
           securityRisksTable(result.risks),
-          "",
-          riskRationalesBlock(result.risks),
-          "",
-          attackPathDiagramBlock(result.diagramMermaid, hasConcreteHighOrCriticalRisk),
-        ].filter(Boolean).join("\n"),
+          ...(result.risks.length > 0 ? ["", riskRationalesBlock(result.risks)] : []),
+          ...(hasConcreteHighOrCriticalRisk && result.diagramMermaid?.trim()
+            ? ["", attackPathDiagramBlock(result.diagramMermaid, hasConcreteHighOrCriticalRisk)]
+            : []),
+        ].join("\n"),
         inlineFindings,
       });
     },

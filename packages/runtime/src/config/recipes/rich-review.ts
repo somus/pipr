@@ -146,9 +146,8 @@ export default definePipr((pipr) => {
           "## Findings",
           "",
           findingsTable(result.findings),
-          "",
-          findingRationalesBlock(result.findings),
-        ].filter(Boolean).join("\\n"),
+          ...(result.findings.length > 0 ? ["", findingRationalesBlock(result.findings)] : []),
+        ].join("\\n"),
         inlineFindings,
       });
     },

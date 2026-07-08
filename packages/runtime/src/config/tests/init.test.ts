@@ -247,6 +247,9 @@ describe("initOfficialMinimalProject", () => {
 
     assertReviewResult(result);
     expect(result.mainComment).toContain("## Summary");
+    expect(result.mainComment).toContain(
+      "## Summary\n\n**Release automation skip is preserved**\n\n| Outcome | Risk | Risk summary |",
+    );
     expect(result.mainComment).toContain("**Release automation skip is preserved**");
     expect(result.mainComment).toContain("| Outcome | Risk | Risk summary |");
     expect(result.mainComment).toContain(
@@ -346,6 +349,9 @@ describe("initOfficialMinimalProject", () => {
 
     assertReviewResult(result);
     expect(result.mainComment).toContain("## Summary");
+    expect(result.mainComment).toContain(
+      "## Summary\n\n**No exploitable security path found**\n\n| Status | Summary risk | Max severity | Risks |",
+    );
     expect(result.mainComment).toContain("**No exploitable security path found**");
     expect(result.mainComment).toContain("| Status | Summary risk | Max severity | Risks |");
     expect(result.mainComment).toContain("| Pass | Low | None | 0 |");
