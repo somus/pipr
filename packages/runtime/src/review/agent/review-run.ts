@@ -453,9 +453,13 @@ function parseAgentOutput(output: string, agent: Agent): ParseAgentResult {
 
 function jsonPayloadCandidates(output: string): string[] {
   const trimmed = output.trim();
-  const match = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i.exec(output.trim());
+  const match = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i.exec(trimmed);
   if (match?.[1]) {
     return [match[1].trim()];
+  }
+  const embeddedMatches = [...trimmed.matchAll(/```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```/gi)];
+  if (embeddedMatches.length === 1 && embeddedMatches[0]?.[1]) {
+    return [trimmed, embeddedMatches[0][1].trim()];
   }
   return [trimmed];
 }

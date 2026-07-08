@@ -39,6 +39,93 @@ const outputSchema: Schema<unknown> = {
 };
 
 describe("runReviewAgent", () => {
+  it("accepts a single fenced JSON value with surrounding prose", async () => {
+    const factory = definePipr((pipr) => {
+      pipr.agent({
+        name: "reviewer",
+        instructions: "Review.",
+        output: outputSchema,
+        prompt: () => "Review.",
+      });
+    });
+    const plan = buildPiprPlan(factory);
+    const agent = plan.agents[0];
+    if (!agent) {
+      throw new Error("test fixture missing agent");
+    }
+
+    const result = await runReviewAgent({
+      agent,
+      input: {},
+      runOptions: undefined,
+      toolMode: "none",
+      runtime: {
+        workspace: process.cwd(),
+        config,
+        event: eventContext(),
+        provider,
+        plan,
+        runId: "test-run",
+        piRunner: async () => ({
+          exitCode: 0,
+          stdout: ["Based on my review:", "", "```json", '{"summary":"ok"}', "```"].join("\n"),
+          stderr: "",
+          durationMs: 1,
+        }),
+      },
+    });
+
+    expect(result.value).toEqual({ summary: "ok" });
+    expect(result.repairAttempted).toBe(false);
+  });
+
+  it("does not choose among multiple fenced JSON values", async () => {
+    const factory = definePipr((pipr) => {
+      pipr.agent({
+        name: "reviewer",
+        instructions: "Review.",
+        output: outputSchema,
+        retry: { invalidOutput: 0 },
+        prompt: () => "Review.",
+      });
+    });
+    const plan = buildPiprPlan(factory);
+    const agent = plan.agents[0];
+    if (!agent) {
+      throw new Error("test fixture missing agent");
+    }
+
+    await expect(
+      runReviewAgent({
+        agent,
+        input: {},
+        runOptions: undefined,
+        toolMode: "none",
+        runtime: {
+          workspace: process.cwd(),
+          config,
+          event: eventContext(),
+          provider,
+          plan,
+          runId: "test-run",
+          piRunner: async () => ({
+            exitCode: 0,
+            stdout: [
+              "```json",
+              '{"summary":"first"}',
+              "```",
+              "```json",
+              '{"summary":"second"}',
+              "```",
+            ].join("\n"),
+            stderr: "",
+            durationMs: 1,
+          }),
+        },
+      }),
+    ).rejects.toThrow("Pi output failed schema validation");
+  });
+
   it("fails closed when no stable run id is supplied", async () => {
     let piInvoked = false;
     const factory = definePipr((pipr) => {

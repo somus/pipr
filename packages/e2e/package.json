@@ -10,7 +10,7 @@
     "pipr-e2e-run": "./run.ts"
   },
   "scripts": {
-    "test": "bun ./assertions.test.ts && bun ./prompt-evals.test.ts",
+    "test": "bun ./scenarios-cleanup.test.ts && bun ./assertions.test.ts && bun ./prompt-evals.test.ts",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
     "format:check": "biome format .",

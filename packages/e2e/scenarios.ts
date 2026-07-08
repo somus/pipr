@@ -581,9 +581,19 @@ function removePath(targetPath: string): void {
       return;
     }
     failure = result.stderr.toString().trim() || result.stdout.toString().trim();
+    makePathWritable(targetPath);
     sleepSync(50);
   }
   throw new Error(`rm -rf ${targetPath} failed${failure ? `: ${failure}` : ""}`);
+}
+
+function makePathWritable(targetPath: string): void {
+  Bun.spawnSync(["chmod", "-R", "u+rwX,a+rwX", targetPath], {
+    cwd: sourceRoot,
+    env: Bun.env,
+    stderr: "ignore",
+    stdout: "ignore",
+  });
 }
 
 function sleepSync(milliseconds: number): void {

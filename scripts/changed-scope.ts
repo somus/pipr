@@ -12,9 +12,8 @@ const changeRange = getChangeRange(eventName);
 
 let changed = true;
 if (changeRange && !/^0+$/.test(changeRange.base)) {
-  changed = gitChangedFiles(changeRange.base, changeRange.head).some((file) =>
-    matchesScope(scope, file),
-  );
+  const changedFiles = gitChangedFiles(changeRange.base, changeRange.head);
+  changed = changedFiles === undefined || changedFiles.some((file) => matchesScope(scope, file));
 }
 
 await writeOutput("changed", String(changed));
@@ -46,7 +45,10 @@ function requiredEnv(name: string, eventName: string): string {
   return value;
 }
 
-function gitChangedFiles(base: string, head: string): string[] {
+function gitChangedFiles(base: string, head: string): string[] | undefined {
+  if (!gitCommitExists(base) || !gitCommitExists(head)) {
+    return undefined;
+  }
   const result = Bun.spawnSync(["git", "diff", "--name-only", base, head], {
     stderr: "pipe",
     stdout: "pipe",
@@ -58,6 +60,15 @@ function gitChangedFiles(base: string, head: string): string[] {
     .toString()
     .split(/\r?\n/)
     .filter((line) => line.length > 0);
+}
+
+function gitCommitExists(sha: string): boolean {
+  return (
+    Bun.spawnSync(["git", "cat-file", "-e", `${sha}^{commit}`], {
+      stderr: "ignore",
+      stdout: "ignore",
+    }).exitCode === 0
+  );
 }
 
 function matchesScope(selectedScope: Scope, file: string): boolean {

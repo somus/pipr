@@ -107,6 +107,25 @@ describe("check-conventional-commit", () => {
 });
 
 describe("changed-scope", () => {
+  it("fails open when a push base commit is unavailable", () => {
+    const repository = changedScopeRepository("README.md");
+    const head = git(repository, "rev-parse", "HEAD");
+    const result = scriptResult(
+      path.join(repoRoot, "scripts/changed-scope.ts"),
+      ["docs"],
+      repository,
+      {
+        EVENT_NAME: "push",
+        GITHUB_OUTPUT: undefined,
+        HEAD_SHA: head,
+        PUSH_BEFORE_SHA: "f".repeat(40),
+      },
+    );
+
+    expect(result.exitCode, result.stderr || result.stdout).toBe(0);
+    expect(result.stdout.trim()).toBe("changed=true");
+  });
+
   it("limits docker scope to Docker image and container check inputs", () => {
     for (const file of [
       "packages/e2e/action-fixture.ts",
