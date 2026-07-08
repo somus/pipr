@@ -672,7 +672,7 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("prints config version warnings for inspect and dry-run", async () => {
+  it("prints config version warnings for check, inspect, and dry-run", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
     try {
       await initWorkspaceConfig(workspace);
@@ -680,16 +680,38 @@ describe("pipr CLI", () => {
       const eventPath = path.join(workspace, "event.json");
       await Bun.write(eventPath, JSON.stringify(pullRequestPayload()));
 
+      const check = await runCli(["check"], {}, workspace);
       const inspect = await runCli(["inspect"], {}, workspace);
       const dryRun = await runCli(["dry-run", "--event", eventPath], {}, workspace);
       const warning =
         `.pipr/package.json pins @usepipr/sdk 0.1.0, but this Pipr runtime is ${cliPackage.version}. ` +
         "Run `pipr init --force` or update .pipr/package.json and .pipr/bun.lock when ready.";
 
+      expect(check.exitCode, `${check.stdout}\n${check.stderr}`).toBe(0);
+      expect(check.stdout).toContain(`warning: ${warning}`);
       expect(inspect.exitCode, `${inspect.stdout}\n${inspect.stderr}`).toBe(0);
       expect(inspect.stdout).toContain(`warning: ${warning}`);
       expect(dryRun.exitCode, `${dryRun.stdout}\n${dryRun.stderr}`).toBe(0);
       expect(dryRun.stdout).toContain(`warning: ${warning}`);
+    } finally {
+      await removeWorkspace(workspace);
+    }
+  });
+
+  it("fails check before config execution when the config SDK pin is newer than Pipr", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
+    try {
+      await initWorkspaceConfig(workspace);
+      await writeSdkDependency(workspace, "999.0.0");
+
+      const check = await runCli(["check"], {}, workspace);
+
+      expect(check.exitCode).toBe(1);
+      expect(check.stderr).toContain(
+        `.pipr/package.json pins @usepipr/sdk 999.0.0, but this Pipr runtime is ${cliPackage.version}. Upgrade Pipr before running this config.`,
+      );
+      expect(check.stderr).not.toContain("::error::");
+      expect(check.stderr).not.toContain("%0A");
     } finally {
       await removeWorkspace(workspace);
     }
