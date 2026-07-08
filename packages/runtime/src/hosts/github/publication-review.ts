@@ -152,10 +152,11 @@ async function publishInlineCommentItem(options: {
   } catch (error) {
     return { status: "failed", error: error instanceof Error ? error.message : String(error) };
   }
+  const publicationLocation = inlinePublicationLocationFromGitHub(location);
   if (
     inlinePublicationDecision({
       marker: options.item.marker,
-      location: inlinePublicationLocationFromGitHub(location),
+      location: publicationLocation,
       existing: options.existing,
     }) === "skip"
   ) {
@@ -169,6 +170,7 @@ async function publishInlineCommentItem(options: {
       ...location,
     });
     options.existing.markers.add(options.item.marker);
+    options.existing.locations.push(publicationLocation);
     return { status: "posted" };
   } catch (error) {
     return { status: "failed", error: error instanceof Error ? error.message : String(error) };
