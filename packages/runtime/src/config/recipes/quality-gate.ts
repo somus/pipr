@@ -6,7 +6,7 @@ export const qualityGateRecipe = {
   description: "Required review check that fails on blocking correctness and test risks.",
   sourceTools: ["SonarQube", "Snyk"],
   configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { ReviewFinding } from "@usepipr/sdk";
+import type { CommentableRange, DiffManifest, ReviewFinding } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -84,7 +84,11 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(reviewer, { manifest });
-      const inlineFindings: ReviewFinding[] = result.blockers.map((blocker) => ({
+      const commentableBlockers = result.blockers.filter((blocker) =>
+        hasCommentableRange(blocker, manifest),
+      );
+      const droppedBlockerCount = result.blockers.length - commentableBlockers.length;
+      const inlineFindings: ReviewFinding[] = commentableBlockers.map((blocker) => ({
         body: \`**\${formatCategory(blocker.category)} blocker:** \${blocker.title}. \${blocker.body}\`,
         path: blocker.path,
         rangeId: blocker.rangeId,
@@ -94,9 +98,9 @@ export default definePipr((pipr) => {
         ...(blocker.suggestedFix ? { suggestedFix: blocker.suggestedFix } : {}),
       }));
 
-      if (result.blockers.length > 0) {
-        ctx.check.fail(\`\${result.blockers.length} blocking quality \${pluralize(
-          result.blockers.length,
+      if (commentableBlockers.length > 0) {
+        ctx.check.fail(\`\${commentableBlockers.length} blocking quality \${pluralize(
+          commentableBlockers.length,
           "issue",
         )} found.\`);
       } else {
@@ -107,17 +111,19 @@ export default definePipr((pipr) => {
         main: [
           "## Quality Gate",
           "",
-          statusTable(result.blockers),
+          statusTable(commentableBlockers),
+          "",
+          droppedBlockersNote(droppedBlockerCount),
           "",
           result.summary,
           "",
           "## Blocking Findings",
           "",
-          blockersTable(result.blockers),
+          blockersTable(commentableBlockers),
           "",
           "## Category Breakdown",
           "",
-          categoryBreakdownTable(result.blockers),
+          categoryBreakdownTable(commentableBlockers),
         ].join("\\n"),
         inlineFindings,
       });
@@ -127,6 +133,37 @@ export default definePipr((pipr) => {
   pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
   pipr.command({ pattern: "@pipr quality", permission: "write", task });
 });
+
+type FindingAnchor = Pick<ReviewFinding, "path" | "rangeId" | "side" | "startLine" | "endLine">;
+
+function hasCommentableRange(finding: FindingAnchor, manifest: DiffManifest): boolean {
+  return Boolean(commentableRangeForFinding(finding, manifest));
+}
+
+function commentableRangeForFinding(
+  finding: FindingAnchor,
+  manifest: DiffManifest,
+): CommentableRange | undefined {
+  for (const file of manifest.files) {
+    const range = file.commentableRanges.find((candidate) => candidate.id === finding.rangeId);
+    if (!range) {
+      continue;
+    }
+    return findingMatchesRange(finding, range) ? range : undefined;
+  }
+  return undefined;
+}
+
+function findingMatchesRange(finding: FindingAnchor, range: CommentableRange): boolean {
+  return (
+    finding.rangeId === range.id &&
+    finding.path === range.path &&
+    finding.side === range.side &&
+    finding.startLine <= finding.endLine &&
+    finding.startLine >= range.startLine &&
+    finding.endLine <= range.endLine
+  );
+}
 
 function statusTable(blockers: QualityBlocker[]): string {
   return [
@@ -156,6 +193,23 @@ function blockersTable(blockers: QualityBlocker[]): string {
         )} | \${escapeTableCell(blocker.impact)} |\`,
     ),
   ].join("\\n");
+}
+
+function droppedBlockersNote(count: number): string {
+  if (count === 0) {
+    return "";
+  }
+  return [
+    "<sub>",
+    count,
+    " model-reported ",
+    pluralize(count, "blocker"),
+    count === 1 ? " was" : " were",
+    " ignored because ",
+    count === 1 ? "it does" : "they do",
+    " not match a commentable diff range.",
+    "</sub>",
+  ].join("");
 }
 
 function categoryBreakdownTable(blockers: QualityBlocker[]): string {

@@ -35,7 +35,7 @@ The recipe writes the config, any supporting `.pipr` files, and the GitHub workf
 ]}>
 <RecipeFilePane path=".pipr/config.ts">
 
-````ts title=".pipr/config.ts"
+```ts title=".pipr/config.ts"
 import { definePipr, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
@@ -193,16 +193,25 @@ function diagramBlock(diagramMermaid: string | undefined): string {
   if (!diagram) {
     return "";
   }
+  const fence = markdownFenceFor(diagram);
   return [
     "<details>",
     "<summary>Flow diagram</summary>",
     "",
-    "```mermaid",
+    `${fence}mermaid`,
     diagram,
-    "```",
+    fence,
     "",
     "</details>",
   ].join("\n");
+}
+
+function markdownFenceFor(value: string): string {
+  const longestBacktickRun = Math.max(
+    0,
+    ...[...value.matchAll(/`+/g)].map((match) => match[0].length),
+  );
+  return "`".repeat(Math.max(3, longestBacktickRun + 1));
 }
 
 function formatLabel(value: string): string {
@@ -212,7 +221,7 @@ function formatLabel(value: string): string {
 function escapeTableCell(value: string): string {
   return value.replaceAll("\n", " ").replaceAll("|", "\\|");
 }
-````
+```
 
 </RecipeFilePane>
 <RecipeFilePane path=".github/workflows/pipr.yml">

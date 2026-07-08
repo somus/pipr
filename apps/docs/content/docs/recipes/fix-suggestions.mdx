@@ -37,7 +37,7 @@ The recipe writes the config, any supporting `.pipr` files, and the GitHub workf
 
 ```ts title=".pipr/config.ts"
 import { definePipr, z } from "@usepipr/sdk";
-import type { ReviewFinding } from "@usepipr/sdk";
+import type { CommentableRange, DiffManifest, ReviewFinding } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -97,7 +97,7 @@ export default definePipr((pipr) => {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(fixer, { manifest });
       const publishableSuggestions = result.suggestions.filter(
-        (suggestion) => suggestion.suggestedFix.trim().length > 0,
+        (suggestion) => isPublishableSuggestion(suggestion, manifest),
       );
       const inlineFindings: ReviewFinding[] = publishableSuggestions.map((suggestion) => ({
         body: `**${formatCategory(suggestion.category)}:** ${suggestion.title}. ${suggestion.body}`,
@@ -130,6 +130,141 @@ export default definePipr((pipr) => {
     task,
   });
 });
+
+type FindingAnchor = Pick<ReviewFinding, "path" | "rangeId" | "side" | "startLine" | "endLine">;
+
+function isPublishableSuggestion(suggestion: FixSuggestion, manifest: DiffManifest): boolean {
+  if (suggestion.suggestedFix.trim().length === 0) {
+    return false;
+  }
+  const range = commentableRangeForFinding(suggestion, manifest);
+  return Boolean(
+    range &&
+      isPublishableSuggestedFixSelection({
+        side: suggestion.side,
+        kind: range.kind,
+        rangeStartLine: range.startLine,
+        startLine: suggestion.startLine,
+        endLine: suggestion.endLine,
+        preview: range.preview,
+        suggestedFix: suggestion.suggestedFix,
+      }),
+  );
+}
+
+function commentableRangeForFinding(
+  finding: FindingAnchor,
+  manifest: DiffManifest,
+): CommentableRange | undefined {
+  for (const file of manifest.files) {
+    const range = file.commentableRanges.find((candidate) => candidate.id === finding.rangeId);
+    if (!range) {
+      continue;
+    }
+    return findingMatchesRange(finding, range) ? range : undefined;
+  }
+  return undefined;
+}
+
+function findingMatchesRange(finding: FindingAnchor, range: CommentableRange): boolean {
+  return (
+    finding.rangeId === range.id &&
+    finding.path === range.path &&
+    finding.side === range.side &&
+    finding.startLine <= finding.endLine &&
+    finding.startLine >= range.startLine &&
+    finding.endLine <= range.endLine
+  );
+}
+
+function isPublishableSuggestedFixSelection(selection: {
+  side: "RIGHT" | "LEFT";
+  kind: "added" | "deleted" | "context" | "mixed";
+  rangeStartLine: number;
+  startLine: number;
+  endLine: number;
+  preview?: string;
+  suggestedFix: string;
+}): boolean {
+  const suggestedLines = normalizedSuggestedFixLines(selection.suggestedFix);
+  const selectedLineCount = selection.endLine - selection.startLine + 1;
+  if (
+    selection.side !== "RIGHT" ||
+    selection.kind === "deleted" ||
+    selectedLineCount > 12 ||
+    suggestedLines.length > 20
+  ) {
+    return false;
+  }
+
+  const originalLines = selectedPreviewLines(selection, selectedLineCount);
+  return Boolean(
+    originalLines &&
+      !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
+      !suggestionIncludesUnselectedContext(selection, selectedLineCount, suggestedLines),
+  );
+}
+
+function normalizedSuggestedFixLines(value: string): string[] {
+  const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const withoutFinalNewline = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+  return withoutFinalNewline.length === 0 ? [] : withoutFinalNewline.split("\n");
+}
+
+function selectedPreviewLines(
+  selection: {
+    rangeStartLine: number;
+    startLine: number;
+    preview?: string;
+  },
+  selectedLineCount: number,
+): string[] | undefined {
+  if (!selection.preview) {
+    return undefined;
+  }
+  const offset = selection.startLine - selection.rangeStartLine;
+  if (offset < 0) {
+    return undefined;
+  }
+  const previewLines = selection.preview.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (offset + selectedLineCount > previewLines.length) {
+    return undefined;
+  }
+  return previewLines.slice(offset, offset + selectedLineCount);
+}
+
+function suggestionIncludesUnselectedContext(
+  selection: {
+    rangeStartLine: number;
+    startLine: number;
+    preview?: string;
+  },
+  selectedLineCount: number,
+  suggestedLines: string[],
+): boolean {
+  if (!selection.preview || suggestedLines.length <= selectedLineCount) {
+    return false;
+  }
+  const offset = selection.startLine - selection.rangeStartLine;
+  if (offset < 0) {
+    return false;
+  }
+  const previewLines = selection.preview.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const contextLines = [
+    offset > 0 ? previewLines[offset - 1] : undefined,
+    previewLines[offset + selectedLineCount],
+  ].filter((line): line is string => Boolean(line?.trim()));
+  return contextLines.some((line) => suggestedLines.includes(line));
+}
+
+function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {
+  const firstLineUnchanged = originalLines[0] === suggestedLines[0];
+  const lastLineUnchanged = originalLines.at(-1) === suggestedLines.at(-1);
+  if (originalLines.length === suggestedLines.length || originalLines.length === 1) {
+    return firstLineUnchanged || lastLineUnchanged;
+  }
+  return firstLineUnchanged && lastLineUnchanged;
+}
 
 function suggestionsTable(suggestions: FixSuggestion[]): string {
   if (suggestions.length === 0) {

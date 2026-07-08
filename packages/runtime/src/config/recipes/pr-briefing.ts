@@ -162,16 +162,25 @@ function diagramBlock(diagramMermaid: string | undefined): string {
   if (!diagram) {
     return "";
   }
+  const fence = markdownFenceFor(diagram);
   return [
     "<details>",
     "<summary>Flow diagram</summary>",
     "",
-    "\`\`\`mermaid",
+    \`\${fence}mermaid\`,
     diagram,
-    "\`\`\`",
+    fence,
     "",
     "</details>",
   ].join("\\n");
+}
+
+function markdownFenceFor(value: string): string {
+  const longestBacktickRun = Math.max(
+    0,
+    ...[...value.matchAll(/\`+/g)].map((match) => match[0].length),
+  );
+  return "\`".repeat(Math.max(3, longestBacktickRun + 1));
 }
 
 function formatLabel(value: string): string {

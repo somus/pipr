@@ -192,6 +192,9 @@ describe("initOfficialMinimalProject", () => {
     const inspected = inspectRuntimePlan(project.plan, ".pipr/config.ts");
 
     expect(configTs).toContain("suggestedFix: z.string().min(1)");
+    expect(configTs).toContain("isPublishableSuggestion");
+    expect(configTs).toContain("isPublishableSuggestedFixSelection");
+    expect(configTs).toContain("suggestionIncludesUnselectedContext");
     expect(configTs).toContain("@pipr improve");
     expect(configTs).toContain("maxInlineComments: 6");
     expect(inspected.agents).toContain("fix-suggestions");
@@ -201,6 +204,23 @@ describe("initOfficialMinimalProject", () => {
       task: "fix-suggestions",
       permission: "write",
     });
+  });
+
+  it("initializes the quality gate recipe with commentable blocker filtering", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-quality-gate-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "quality-gate",
+      minimal: true,
+    });
+    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
+
+    expect(configTs).toContain("commentableBlockers");
+    expect(configTs).toContain("hasCommentableRange");
+    expect(configTs).toContain("droppedBlockersNote");
+    expect(configTs).not.toContain("if (result.blockers.length > 0)");
   });
 
   it("initializes advanced recipes with inspectable agents, tools, and commands", async () => {
@@ -257,6 +277,22 @@ describe("initOfficialMinimalProject", () => {
         permission: "read",
       },
     ]);
+  });
+
+  it("initializes the PR briefing recipe with dynamic diagram fences", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-briefing-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "pr-briefing",
+      minimal: true,
+    });
+    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
+
+    expect(configTs).toContain("function markdownFenceFor");
+    expect(configTs).toContain("$" + "{fence}mermaid");
+    expect(configTs).not.toContain('"```mermaid",\n    diagram,\n    "```"');
   });
 
   it("adds R2 memory secrets to the plugin recipe workflow", async () => {
