@@ -1,0 +1,57 @@
+packages/runtime/src/config/recipes/security-sast.ts
+  s_c544cd1b12df93::t_27222795a90b24 102
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_c544cd1b12df93::t_71faeb3a5910c0 92
+packages/runtime/src/config/tests/init.test.ts
+  s_c544cd1b12df93::t_d3907a9081f8ed 162,176,179-181
+  s_c544cd1b12df93::t_220c155c49d571 177-178
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_c544cd1b12df93::t_71faeb3a5910c0 90,98,101
+packages/runtime/src/config/recipes/changelog-draft.ts
+  s_c544cd1b12df93::t_44b5771034f80a 49
+apps/docs/scripts/sync-recipes.ts
+  s_c544cd1b12df93::t_a5a31d493569a4 63,126,228,230,243
+  s_c544cd1b12df93::t_3e7e19cde225b4 466
+apps/docs/content/docs/recipes/index.mdx
+  s_c544cd1b12df93::t_6750a966a74734 26
+  s_c544cd1b12df93::t_873363d37e0e1e 78
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_c544cd1b12df93::t_873363d37e0e1e 337
+packages/runtime/src/config/recipes/rich-review.ts
+  s_c544cd1b12df93::t_5edba97a1eace6 3
+  s_c544cd1b12df93::t_b35d891876da7d 5-6,11-53,64-65,68,73,84,88,92,113,130,133,138,153,155
+packages/runtime/src/config/recipes/dependency-risk.ts
+  s_c544cd1b12df93::t_225cc8123a4168 59,67,70
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_c544cd1b12df93::t_71faeb3a5910c0 133
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_c544cd1b12df93::t_71faeb3a5910c0 80
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_c544cd1b12df93::t_873363d37e0e1e 2-3,8,12,42-84,95-96,99,104,115,119,123,144,161,164,169,184,186,242,246,248
+.pipr/config.ts
+  s_c544cd1b12df93::t_0d041cc7252d8b 122
+  s_c544cd1b12df93::t_d622a706e92d16 1,55,58-59,61-64,69-75,77-79,85-104,106-118,121,126-129,131-144,146,148-162
+  s_c544cd1b12df93::t_001bb858e8e00b 3,24,56-57,60,65,80-81,84,105,125,130,145,147
+  s_c544cd1b12df93::t_737e9135811e76 4-23,25-45
+  s_c544cd1b12df93::t_cef28165e0cfee 2,123
+packages/runtime/src/config/recipes/diff-diagnostics.ts
+  s_c544cd1b12df93::t_17bd0351e06305 61
+packages/runtime/src/config/recipes.ts
+  s_c544cd1b12df93::t_29d0efed6698fc 14,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8986e803e2335e4b6879845209cabaa3448bcddf",
+  "prompts": {},
+  "sessions": {
+    "s_c544cd1b12df93": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4115-15a8-7013-8b5f-4485e5e969e6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
