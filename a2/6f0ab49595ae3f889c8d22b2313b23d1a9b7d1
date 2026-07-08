@@ -1,0 +1,53 @@
+packages/runtime/src/config/recipes/quality-gate.ts
+  s_c544cd1b12df93::t_7e243907079110 88,91-104,107-108,151-158,184-191,199-201,206-208,210,228-233,242-249
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_c544cd1b12df93::t_483366cff62974 108-120,158-163,176
+packages/runtime/src/review/comment-branding.ts
+  s_c544cd1b12df93::t_e1491a09f0bd45 6,8
+  s_c544cd1b12df93::t_befa26f3de42e9 2
+packages/runtime/src/config/recipes/pr-briefing.ts
+  s_c544cd1b12df93::t_13de37b72bea9b 69-76,92,100,117-122,126,141-146,161-165
+packages/runtime/src/config/tests/init.test.ts
+  s_c544cd1b12df93::t_2fa95870251d1e 220
+apps/docs/content/docs/recipes/default-review.mdx
+  s_c544cd1b12df93::t_483366cff62974 60-66,68-89
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_c544cd1b12df93::t_fa957ce2e1b80c 71-84,138-145,250-256
+packages/runtime/src/config/recipes/rich-review.ts
+  s_c544cd1b12df93::t_3f6bd2167b6989 77-89,127-132,145
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_c544cd1b12df93::t_483366cff62974 102-115,169-176,281-287
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_c544cd1b12df93::t_483366cff62974 119,122-135,138-139,182-189,215-222,230-232,237-239,241,259-264,273-280
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_c544cd1b12df93::t_483366cff62974 114-127,163-172,187-193
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_c544cd1b12df93::t_483366cff62974 100-107,123,131,148-153,157,172-177,192-196
+packages/runtime/src/config/recipes/pr-hygiene.ts
+  s_c544cd1b12df93::t_3bfcc5b5654eaf 83-96,132-141,156-162
+packages/runtime/src/review/task/task-output.ts
+  s_c544cd1b12df93::t_7903c48b494b0e 10,229,235
+  s_c544cd1b12df93::t_f2d7e0f724f075 230
+packages/runtime/src/review/comment.ts
+  s_c544cd1b12df93::t_0b3fc073676f97 321-323,326,349-353
+  s_c544cd1b12df93::t_f62e57865f4ad9 327-329
+  s_c544cd1b12df93::t_d216b5fd479f3f 12,308-311
+packages/runtime/src/config/recipes/default-review.ts
+  s_c544cd1b12df93::t_08143d20ee7e5f 29-35,37-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a26f0ab49595ae3f889c8d22b2313b23d1a9b7d1",
+  "prompts": {},
+  "sessions": {
+    "s_c544cd1b12df93": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4115-15a8-7013-8b5f-4485e5e969e6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
