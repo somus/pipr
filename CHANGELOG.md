@@ -4,6 +4,18 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.3.3](https://github.com/somus/pipr/compare/v0.3.2...v0.3.3) (2026-07-08)
+
+
+### Features
+
+* **recipes:** improve review summary presentation ([#40](https://github.com/somus/pipr/issues/40)) ([3a73760](https://github.com/somus/pipr/commit/3a737604cd05cd93d5cb0aeeea0b5891a0b32c3a))
+
+
+### Bug Fixes
+
+* skip release-created pipr comments ([#38](https://github.com/somus/pipr/issues/38)) ([0c62cde](https://github.com/somus/pipr/commit/0c62cde0302084a022bb421e77b1ea9055e24e17))
+
 ## [0.3.2](https://github.com/somus/pipr/compare/v0.3.1...v0.3.2) (2026-07-08)
 
 
