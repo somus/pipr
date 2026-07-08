@@ -99,7 +99,7 @@ export default definePipr((pipr) => {
         ctx.check.pass("No high or critical security risks found.");
       }
       await ctx.comment({
-        main: \`## Security SAST\\n\\n\${result.summary}\`,
+        main: result.summary,
         inlineFindings,
       });
     },

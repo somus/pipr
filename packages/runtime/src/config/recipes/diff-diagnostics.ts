@@ -58,7 +58,7 @@ export default definePipr((pipr) => {
         ...(diagnostic.suggestedFix ? { suggestedFix: diagnostic.suggestedFix } : {}),
       }));
       await ctx.comment({
-        main: \`## Diff Diagnostics\\n\\n\${result.summary}\`,
+        main: result.summary,
         inlineFindings,
       });
     },

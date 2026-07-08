@@ -159,7 +159,7 @@ describe("initOfficialMinimalProject", () => {
     }
   });
 
-  it("initializes the rich review recipe with category and severity labels", async () => {
+  it("initializes the structured review recipe with category and severity metadata", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
 
     await initOfficialMinimalProject({
@@ -173,8 +173,12 @@ describe("initOfficialMinimalProject", () => {
 
     expect(configTs).toContain("severity");
     expect(configTs).toContain("category");
-    expect(configTs).toContain("@pipr rich-review");
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("rich-review");
+    expect(configTs).toContain("@pipr review");
+    expect(configTs).toContain('"## Findings"');
+    expect(configTs).not.toContain('"## Review"');
+    expect(configTs).not.toContain("rich-review");
+    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("reviewer");
+    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("review");
   });
 
   it("initializes the fix suggestions recipe as a command-first exact patch workflow", async () => {

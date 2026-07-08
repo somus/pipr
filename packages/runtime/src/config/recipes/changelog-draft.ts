@@ -42,13 +42,11 @@ export default definePipr((pipr) => {
       const result = await ctx.pi.run(changelog, { manifest });
       await ctx.comment(
         [
-          "## Changelog Draft",
-          "",
           \`**Category:** \${result.category}\`,
           "",
           result.entry,
           "",
-          "### Rationale",
+          "## Rationale",
           result.rationale,
         ].join("\\n"),
       );

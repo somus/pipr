@@ -87,20 +87,18 @@ export default definePipr((pipr) => {
       };
       const manifest = await ctx.change.diffManifest({ compressed: true, paths });
       if (manifest.files.length === 0) {
-        await ctx.comment("## Dependency Risk\n\nNo dependency files changed.");
+        await ctx.comment("No dependency files changed.");
         return;
       }
       const result = await ctx.pi.run(dependencyReviewer, { manifest }, { paths });
       await ctx.comment(
         [
-          "## Dependency Risk",
-          "",
           result.summary,
           "",
-          "### Risks",
+          "## Risks",
           ...result.risks.map((risk) => `- ${risk}`),
           "",
-          "### Follow-ups",
+          "## Follow-ups",
           ...result.followUps.map((followUp) => `- ${followUp}`),
         ].join("\n"),
       );

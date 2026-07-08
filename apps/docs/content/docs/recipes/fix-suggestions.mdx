@@ -115,8 +115,6 @@ export default definePipr((pipr) => {
       });
       await ctx.comment({
         main: [
-          "## Fix Suggestions",
-          "",
           result.summary,
           "",
           "## Exact Suggested Changes",
@@ -336,6 +334,6 @@ Fix Suggestions is command-first so maintainers can ask for exact patches only w
 
 - Keep `@pipr improve` manual until maintainers trust the patch quality.
 - Tune categories around your most common small fixes, such as tests, typing, or maintainability.
-- Do not broaden this into general review feedback; use Rich Review or Bug Hunter when a patch is not exact.
+- Do not broaden this into general review feedback; use Structured Review or Bug Hunter when a patch is not exact.
 
 Shared setup, local type support, and provider tuning notes live on the [Recipes](/docs/recipes#common-setup) page.

@@ -106,8 +106,6 @@ export default definePipr((pipr) => {
           ? "No walkthrough notes."
           : result.walkthrough.map((item) => `- ${item}`).join("\n");
       await ctx.comment([
-        "## PR Briefing",
-        "",
         overviewTable(result, ctx.change.title),
         "",
         "## Summary",

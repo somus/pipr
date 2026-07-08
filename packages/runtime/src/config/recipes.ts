@@ -11,7 +11,7 @@ import { pluginToolReviewRecipe } from "./recipes/plugin-tool-review.js";
 import { prBriefingRecipe } from "./recipes/pr-briefing.js";
 import { prHygieneRecipe } from "./recipes/pr-hygiene.js";
 import { qualityGateRecipe } from "./recipes/quality-gate.js";
-import { richReviewRecipe } from "./recipes/rich-review.js";
+import { structuredReviewRecipe } from "./recipes/rich-review.js";
 import { securitySastRecipe } from "./recipes/security-sast.js";
 import type {
   OfficialInitRecipe,
@@ -43,7 +43,7 @@ export type { OfficialInitRecipe, OfficialInitRecipeFile, OfficialInitRecipeWork
 const officialInitRecipeRegistry = {
   "default-review": defaultReviewRecipe,
   "bug-hunter": bugHunterRecipe,
-  "rich-review": richReviewRecipe,
+  "rich-review": structuredReviewRecipe,
   "fix-suggestions": fixSuggestionsRecipe,
   "security-sast": securitySastRecipe,
   "quality-gate": qualityGateRecipe,

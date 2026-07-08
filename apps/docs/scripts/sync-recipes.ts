@@ -60,7 +60,7 @@ const recipeDescriptions = new Map([
   ],
   [
     "rich-review",
-    "Run a general review that labels findings by severity and category before publishing validated inline comments.",
+    "Run a general review that captures severity and category metadata before publishing validated inline comments.",
   ],
   [
     "fix-suggestions",
@@ -123,7 +123,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "rich-review",
-    "Pipr publishes a labeled Main Review Comment with severity and category tables, then maps each labeled issue into a validated Inline Review Comment.",
+    "Pipr publishes a Main Review Comment with severity and category tables, then maps each issue into a validated Inline Review Comment.",
   ],
   [
     "fix-suggestions",
@@ -225,9 +225,9 @@ Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by 
     "rich-review",
     `## Recipe notes
 
-Rich Review keeps Pipr's core finding contract small while asking the reviewer for severity and category labels in a custom schema. The task renders those labels in the Main Review Comment and prefixes each Inline Review Comment body before publishing normal \`ReviewFinding[]\`.
+Structured Review keeps Pipr's core finding contract small while asking the reviewer for severity and category metadata in a custom schema. The task renders that metadata in the Main Review Comment and prefixes each Inline Review Comment body before publishing normal \`ReviewFinding[]\`.
 
-- Tune the severity definitions before using labels as merge policy.
+- Tune the severity definitions before using them as merge policy.
 - Add or remove categories to match the risks your maintainers already discuss in review.
 - Keep rationale in the collapsed main-comment details so inline comments stay short in the diff.
 `,
@@ -240,7 +240,7 @@ Fix Suggestions is command-first so maintainers can ask for exact patches only w
 
 - Keep \`@pipr improve\` manual until maintainers trust the patch quality.
 - Tune categories around your most common small fixes, such as tests, typing, or maintainability.
-- Do not broaden this into general review feedback; use Rich Review or Bug Hunter when a patch is not exact.
+- Do not broaden this into general review feedback; use Structured Review or Bug Hunter when a patch is not exact.
 `,
   ],
   [
@@ -463,7 +463,7 @@ Choose by the review job first, then tune noise after the first successful run.
 | Goal | Start with | Default noise level |
 | --- | --- | --- |
 | General pull request review | [Default Review](/docs/recipes/default-review) | Balanced inline comments |
-| Labeled general review | [Rich Review](/docs/recipes/rich-review) | Severity and category labels |
+| Structured general review | [Structured Review](/docs/recipes/rich-review) | Severity and category metadata |
 | Exact suggested fixes | [Fix Suggestions](/docs/recipes/fix-suggestions) | Command-triggered patch suggestions |
 | Real bug detection | [Bug Hunter](/docs/recipes/bug-hunter) | Focused inline comments |
 | Security risks with attack paths | [Security SAST](/docs/recipes/security-sast) | High-signal inline findings and a check |

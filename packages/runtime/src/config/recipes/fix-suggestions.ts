@@ -84,8 +84,6 @@ export default definePipr((pipr) => {
       });
       await ctx.comment({
         main: [
-          "## Fix Suggestions",
-          "",
           result.summary,
           "",
           "## Exact Suggested Changes",

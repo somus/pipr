@@ -97,8 +97,6 @@ export default definePipr((pipr) => {
       ctx.check.pass("PR hygiene review completed.");
       await ctx.comment({
         main: [
-          "## PR Hygiene",
-          "",
           result.summary,
           "",
           "## Policy Checks",

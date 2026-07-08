@@ -112,8 +112,6 @@ export default definePipr((pipr) => {
 
       await ctx.comment({
         main: [
-          "## Quality Gate",
-          "",
           statusTable(commentableBlockers),
           "",
           droppedBlockersNote(droppedBlockerCount),
