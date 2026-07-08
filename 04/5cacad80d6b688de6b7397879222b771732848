@@ -1,0 +1,60 @@
+apps/docs/src/routes/__root.tsx
+  s_45ca1fac073ab8::t_b06c5f421bfe2a 21
+apps/docs/content/docs/guide/index.mdx
+  s_45ca1fac073ab8::t_ad009678d0dcbb 23-38
+apps/docs/content/docs/guide/quickstart.mdx
+  s_45ca1fac073ab8::t_ad009678d0dcbb 10-15,17-22,29,225-238
+  s_45ca1fac073ab8::t_d30a4042296f80 16
+  s_79592a1bbcbc51::t_ef7df8e2e5d2c3 239
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_45ca1fac073ab8::t_ad009678d0dcbb 16-30
+action.yml
+  s_45ca1fac073ab8::t_1d03a9aa63d8a0 2,8,13,15,17
+apps/docs/content/docs/index.mdx
+  s_45ca1fac073ab8::t_ad009678d0dcbb 12-17,19-26
+  s_45ca1fac073ab8::t_d30a4042296f80 18
+apps/docs/content/docs/recipes/index.mdx
+  s_45ca1fac073ab8::t_d635dd1ae1da82 19-33,57-67
+  s_45ca1fac073ab8::t_458c6107da2f0c 68
+apps/docs/content/docs/guide/github-action.mdx
+  s_45ca1fac073ab8::t_ba315173553ce8 96-98
+  s_45ca1fac073ab8::t_ad009678d0dcbb 67-78
+apps/docs/content/docs/project/security.mdx
+  s_45ca1fac073ab8::t_ad009678d0dcbb 8-9
+apps/docs/scripts/sync-recipes.ts
+  s_45ca1fac073ab8::t_d48639b7619b8b 420-434,458-468
+  s_79592a1bbcbc51::t_99d36891def810 469
+apps/docs/content/docs/guide/comments.mdx
+  s_45ca1fac073ab8::t_ad009678d0dcbb 22-37
+apps/docs/content/docs/guide/trust-security.mdx
+  s_45ca1fac073ab8::t_ad009678d0dcbb 84-97,113-134
+  s_79592a1bbcbc51::t_6a392d35a06fbc 135
+package.json
+  s_45ca1fac073ab8::t_b06c5f421bfe2a 4
+apps/docs/content/docs/project/contributing.mdx
+  s_45ca1fac073ab8::t_ad009678d0dcbb 26-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "045cacad80d6b688de6b7397879222b771732848",
+  "prompts": {},
+  "sessions": {
+    "s_45ca1fac073ab8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4081-90a7-7c91-beff-c81a5bcb207d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_79592a1bbcbc51": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3d60-e15a-7181-9a00-e78ec5928f73",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
