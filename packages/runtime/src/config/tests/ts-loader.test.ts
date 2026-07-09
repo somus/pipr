@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runtimeVersion } from "../../shared/version.js";
@@ -383,6 +384,81 @@ export default definePipr((pipr) => {
 });
 
 describe("prepareConfigDirectory", () => {
+  it("hides runtime-provided deps from Bun installs while preserving copied config files", async () => {
+    const originalSpawn = Bun.spawn;
+    const observedInstalls: Array<{ command: string[]; packageJson: string; bunLock: string }> = [];
+    Bun.spawn = ((...args: Parameters<typeof Bun.spawn>): ReturnType<typeof Bun.spawn> => {
+      const command = commandFromSpawnArgs(args);
+      const cwd = cwdFromSpawnArgs(args);
+      if (command?.[0] === "bun" && command[1] === "install" && cwd) {
+        observedInstalls.push({
+          command,
+          packageJson: readFileSync(path.join(cwd, "package.json"), "utf8"),
+          bunLock: readFileSync(path.join(cwd, "bun.lock"), "utf8"),
+        });
+        return originalSpawn(["bun", "--version"], {
+          env: process.env,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+      }
+      return originalSpawn(...args);
+    }) as typeof Bun.spawn;
+    try {
+      const configDir = await writePackageForInstallTest({
+        dependencies: { "@usepipr/sdk": "999.0.0" },
+        devDependencies: {
+          "@types/bun": defaultTypesBunVersion,
+          typescript: defaultTypescriptVersion,
+        },
+      });
+      const originalPackageJson = await readFile(path.join(configDir, "package.json"), "utf8");
+      const bunLock = [
+        "{",
+        '  "lockfileVersion": 1,',
+        '  "configVersion": 1,',
+        '  "workspaces": {',
+        '    "": {',
+        '      "dependencies": {',
+        '        "@usepipr/sdk": "999.0.0",',
+        "      },",
+        '      "devDependencies": {',
+        '        "@types/bun": "1.3.14",',
+        '        "typescript": "6.0.3",',
+        "      },",
+        "    },",
+        "  },",
+        '  "packages": {',
+        '    "@types/bun": ["@types/bun@1.3.14", "", {}, "sha512-test"],',
+        "",
+        '    "@usepipr/sdk": ["@usepipr/sdk@999.0.0", "", {}, "sha512-test"],',
+        "",
+        '    "typescript": ["typescript@6.0.3", "", {}, "sha512-test"],',
+        "  }",
+        "}",
+        "",
+      ].join("\n");
+      await Bun.write(path.join(configDir, "bun.lock"), bunLock);
+
+      await installConfigDependencies(configDir, { frozen: true });
+
+      expect(observedInstalls).toHaveLength(1);
+      expect(observedInstalls[0]?.command).toContain(`typescript@${defaultTypescriptVersion}`);
+      expect(observedInstalls[0]?.packageJson).not.toContain("@usepipr/sdk");
+      expect(observedInstalls[0]?.packageJson).not.toContain("@types/bun");
+      expect(observedInstalls[0]?.packageJson).toContain('"typescript": "6.0.3"');
+      expect(observedInstalls[0]?.bunLock).not.toContain("@usepipr/sdk");
+      expect(observedInstalls[0]?.bunLock).not.toContain("@types/bun");
+      expect(observedInstalls[0]?.bunLock).toContain('"typescript": "6.0.3"');
+      expect(await readFile(path.join(configDir, "package.json"), "utf8")).toBe(
+        originalPackageJson,
+      );
+      expect(await readFile(path.join(configDir, "bun.lock"), "utf8")).toBe(bunLock);
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+
   it("uses no-verify only for default scaffold TypeScript installs", async () => {
     const originalSpawn = Bun.spawn;
     const commands: string[][] = [];
@@ -484,6 +560,15 @@ function commandFromSpawnArgs(args: Parameters<typeof Bun.spawn>): string[] | un
   if (firstArg !== null && typeof firstArg === "object" && "cmd" in firstArg) {
     const command = (firstArg as { cmd?: unknown }).cmd;
     return isStringArray(command) ? command : undefined;
+  }
+  return undefined;
+}
+
+function cwdFromSpawnArgs(args: Parameters<typeof Bun.spawn>): string | undefined {
+  const options = args[1];
+  if (options !== null && typeof options === "object" && "cwd" in options) {
+    const cwd = (options as { cwd?: unknown }).cwd;
+    return typeof cwd === "string" ? cwd : undefined;
   }
   return undefined;
 }
