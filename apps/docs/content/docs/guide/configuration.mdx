@@ -5,7 +5,7 @@ description: "Common Pipr config recipes and examples."
 
 Pipr uses `.pipr/config.ts` as the repository-local authoring surface. The config is TypeScript and must export `definePipr(...)`.
 
-This page shows common patterns. For triggers and commands, see [Entrypoints](/docs/guide/entrypoints). For task handlers, see [Custom Tasks](/docs/guide/custom-tasks). For the full public API, see [Pipr SDK Reference](/docs/reference/sdk-reference). For generated starter configs, see [Init Recipes](/docs/recipes).
+This page shows common patterns for the authoring blocks: models, agents, Review Tasks, and Entrypoints. For the core model, see [Concepts](/docs/guide/concepts). For triggers and commands, see [Entrypoints](/docs/guide/entrypoints). For task handlers, see [Custom Tasks](/docs/guide/custom-tasks). For the full public API, see [Pipr SDK Reference](/docs/reference/sdk-reference). For generated starter configs, see [Init Recipes](/docs/recipes).
 
 `pipr init` scaffolds a tier-2 Bun package under `.pipr/` with `@usepipr/sdk`, `@types/bun`, and `typescript` pinned in `.pipr/package.json`. Run `bun install` in `.pipr/` (init does this automatically) to refresh types after bumping package versions. For a single-file config without install, use `pipr init --minimal` and install `@usepipr/sdk` at the repo root for editor types.
 
@@ -14,7 +14,7 @@ This page shows common patterns. For triggers and commands, see [Entrypoints](/d
 ### Base config
 
 ```ts twoslash
-import { definePipr } from "@usepipr/sdk";
+import { defaultReviewEntrypoints, definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -39,16 +39,13 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     reviewer,
-    entrypoints: {
-      changeRequest: ["opened", "updated", "reopened", "ready"],
-      command: { pattern: "@pipr review", permission: "write" },
-    },
+    entrypoints: defaultReviewEntrypoints,
     timeout: "10m",
   });
 });
 ```
 
-`pipr.review` registers a change request review task and the `@pipr review` command unless `entrypoints` disables them.
+`pipr.review` registers a Review Task and the default Entrypoints unless `entrypoints` disables or replaces them.
 
 ### Review registration
 
@@ -88,6 +85,8 @@ const entrypoints = {
 Use [Entrypoints](/docs/guide/entrypoints) for command arguments, permissions, and local review task selection.
 
 ## Models
+
+Models define provider settings for Agents. They don't start work by themselves; a Review Task starts an Agent through `ctx.pi.run(...)`.
 
 ### Model profile
 
