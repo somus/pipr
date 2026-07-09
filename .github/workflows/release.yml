@@ -15,6 +15,7 @@ permissions:
   contents: write
   id-token: write
   packages: write
+  pull-requests: write
 
 env:
   PIPR_GHCR_ACTION_IMAGE: ghcr.io/somus/pipr
@@ -188,15 +189,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Update dogfood SDK on main
+      - name: Open dogfood SDK update PR
         env:
+          GH_TOKEN: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token }}
           PIPR_PUSH_TOKEN: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token }}
           PIPR_RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
 
           git fetch origin main
-          git switch -C main origin/main
+          branch="dogfood-sdk-${PIPR_RELEASE_VERSION//./-}"
+          git switch -C "$branch" origin/main
           main_version="$(bun -e "console.log((await import('./package.json')).default.version)")"
           if [[ "$main_version" != "$PIPR_RELEASE_VERSION" ]]; then
             echo "Skipping dogfood SDK update because main is ${main_version}, not ${PIPR_RELEASE_VERSION}."
@@ -233,9 +236,52 @@ jobs:
             exit 0
           fi
 
+          pr_state="$(gh pr list --head "$branch" --state all --limit 1 --json state --jq '.[0].state // ""')"
+          if [[ "$pr_state" == "MERGED" ]]; then
+            echo "Dogfood SDK update PR for ${branch} is already merged."
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .pipr/package.json .pipr/bun.lock
           git commit -m "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}"
-          git pull --rebase origin main
-          git -c core.hooksPath=/dev/null push "https://x-access-token:${PIPR_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:main"
+          git fetch origin main
+          git rebase origin/main
+          git -c core.hooksPath=/dev/null push --force-with-lease "https://x-access-token:${PIPR_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${branch}"
+
+          body_file="$(mktemp)"
+          cat > "$body_file" <<BODY
+          ## Summary
+
+          - Updates dogfood \`.pipr\` to the just-published \`@usepipr/sdk@${PIPR_RELEASE_VERSION}\`.
+          - Refreshes \`.pipr/bun.lock\` after npm publish.
+
+          ## Verification
+
+          - \`bun run check:release-metadata\`
+          BODY
+
+          pr_state="$(gh pr list --head "$branch" --state all --limit 1 --json state --jq '.[0].state // ""')"
+          if [[ "$pr_state" == "OPEN" ]]; then
+            gh pr edit "$branch" \
+              --title "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}" \
+              --body-file "$body_file"
+          elif [[ "$pr_state" == "MERGED" ]]; then
+            echo "Dogfood SDK update PR for ${branch} is already merged."
+            exit 0
+          elif [[ "$pr_state" == "CLOSED" ]]; then
+            gh pr reopen "$branch"
+            gh pr edit "$branch" \
+              --title "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}" \
+              --body-file "$body_file"
+          elif [[ -z "$pr_state" ]]; then
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}" \
+              --body-file "$body_file"
+          else
+            echo "Dogfood SDK update PR for ${branch} is ${pr_state}; not updating it." >&2
+            exit 1
+          fi

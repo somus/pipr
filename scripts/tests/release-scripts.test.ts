@@ -16,6 +16,11 @@ import path from "node:path";
 import { releaseAssetForPlatform, releaseTargets } from "../../packages/cli/src/release/targets.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
+const dogfoodPrStateLookup = [
+  'pr_state="$(gh pr list --head "$branch" --state all --limit 1 --json state --jq ',
+  "'.[0].state // \"\"'",
+  ')"',
+].join("");
 const excludedFixturePaths = new Set([
   ".cache",
   ".git",
@@ -403,9 +408,89 @@ describe("check-release-metadata", () => {
     write(
       workflowPath,
       readFileSync(workflowPath, "utf8").replace(
-        "      - name: Update dogfood SDK on main\n",
-        "      - name: Update dogfood SDK without main push\n",
+        "      - name: Open dogfood SDK update PR\n",
+        "      - name: Update dogfood SDK without PR\n",
       ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects protected main dogfood SDK pushes", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    const updateBranchPushRef = ['"HEAD:', "${", "branch", '}"'].join("");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace(updateBranchPushRef, '"HEAD:main"'),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects dogfood PR automation that leaves closed PRs closed", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace('            gh pr reopen "$branch"\n', ""),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects dogfood PR automation that fails already merged PRs", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    const mergedPrMessage = [
+      '            echo "Dogfood SDK update PR for ',
+      "${",
+      "branch",
+      '} is already merged."',
+    ].join("");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace(
+        [
+          '          if [[ "$pr_state" == "MERGED" ]]; then',
+          mergedPrMessage,
+          "            exit 0",
+          "          fi",
+          "",
+        ].join("\n"),
+        "",
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects dogfood PR automation that swallows PR lookup failures", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replaceAll(
+        dogfoodPrStateLookup,
+        'pr_state="$(gh pr view "$branch" --json state --jq .state 2>/dev/null || true)"',
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects dogfood PR automation that reuses stale PR state after pushing", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    const stateLookupLine = `          ${dogfoodPrStateLookup}\n`;
+    const workflow = readFileSync(workflowPath, "utf8");
+    const lastLookup = workflow.lastIndexOf(stateLookupLine);
+    if (lastLookup < 0) {
+      throw new Error("dogfood PR state lookup is required");
+    }
+    write(
+      workflowPath,
+      `${workflow.slice(0, lastLookup)}${workflow.slice(lastLookup + stateLookupLine.length)}`,
     );
 
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);

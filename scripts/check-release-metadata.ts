@@ -29,6 +29,14 @@ const releasePushTokenExpression = githubExpression(
   "secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token",
 );
 const releaseVersionShellVariable = ["${", "PIPR_RELEASE_VERSION", "}"].join("");
+const releaseVersionBranchVariable = ["${", "PIPR_RELEASE_VERSION//./-", "}"].join("");
+const releaseDogfoodBranchPushRef = ['"HEAD:', "${", "branch", '}"'].join("");
+const releaseDogfoodPrStateLookup = [
+  'pr_state="$(gh pr list --head "$branch" --state all --limit 1 --json state --jq ',
+  "'.[0].state // \"\"'",
+  ')"',
+].join("");
+const releaseDogfoodMergedPrGuard = '[[ "$pr_state" == "MERGED" ]]';
 const shaExpression = githubExpression("github.sha");
 const workflowSources = {
   ".github/workflows/ci.yml": ciWorkflow,
@@ -119,6 +127,10 @@ assert(
   releaseWorkflow.includes("id-token: write"),
   "release workflow must allow npm trusted publishing OIDC",
 );
+assert(
+  releaseWorkflow.includes("pull-requests: write"),
+  "release workflow must allow creating the post-publish dogfood update PR",
+);
 assert(!releaseWorkflow.includes("NPM_TOKEN"), "release workflow must not require an npm token");
 assert(
   !releaseWorkflow.includes("release:\n    types: [published]"),
@@ -192,18 +204,22 @@ assert(
   releaseWorkflow.includes("dist/release/SHA256SUMS"),
   "release workflow must upload SHA256SUMS",
 );
-const dogfoodUpdateStep = "name: Update dogfood SDK on main";
+const dogfoodUpdateStep = "name: Open dogfood SDK update PR";
 assert(
   releaseWorkflow.includes(dogfoodUpdateStep),
-  "release workflow must update dogfood SDK after publish",
+  "release workflow must open a dogfood SDK update PR after publish",
 );
 assert(
   releaseWorkflow.indexOf(dogfoodUpdateStep) > releaseWorkflow.indexOf("name: Publish GHCR image"),
-  "release workflow must update dogfood SDK only after all release artifacts publish",
+  "release workflow must open the dogfood SDK update PR only after all release artifacts publish",
+);
+assert(
+  releaseWorkflow.includes(`GH_TOKEN: ${releasePushTokenExpression}`),
+  "release workflow dogfood update must use the release token for PR creation",
 );
 assert(
   releaseWorkflow.includes(`PIPR_PUSH_TOKEN: ${releasePushTokenExpression}`),
-  "release workflow dogfood update must use the release push token fallback",
+  "release workflow dogfood update must use the release token for branch pushes",
 );
 assert(
   releaseWorkflow.includes(`npm view "@usepipr/sdk@${releaseVersionShellVariable}" version`),
@@ -232,8 +248,59 @@ assert(
   "release workflow must commit a non-release dogfood SDK bump",
 );
 assert(
-  releaseWorkflow.includes('"HEAD:main"'),
-  "release workflow must push the dogfood SDK bump directly to main",
+  releaseWorkflow.includes(`branch="dogfood-sdk-${releaseVersionBranchVariable}"`),
+  "release workflow must use a deterministic dogfood update branch",
+);
+assert(
+  releaseWorkflow.includes(releaseDogfoodBranchPushRef),
+  "release workflow must push the dogfood SDK bump to the update branch",
+);
+assert(
+  releaseWorkflow.includes(releaseDogfoodPrStateLookup),
+  "release workflow must inspect the existing dogfood SDK update PR state on rerun",
+);
+assert(
+  releaseWorkflow.indexOf(releaseDogfoodPrStateLookup) !==
+    releaseWorkflow.lastIndexOf(releaseDogfoodPrStateLookup),
+  "release workflow must refresh dogfood SDK update PR state after pushing",
+);
+assert(
+  !releaseWorkflow.includes('gh pr view "$branch" --json state --jq .state 2>/dev/null || true'),
+  "release workflow must not swallow unexpected dogfood SDK update PR lookup failures",
+);
+assert(
+  releaseWorkflow.includes(releaseDogfoodMergedPrGuard),
+  "release workflow must skip already merged dogfood SDK update PRs on rerun",
+);
+assert(
+  releaseWorkflow.indexOf(releaseDogfoodMergedPrGuard) <
+    releaseWorkflow.indexOf(releaseDogfoodBranchPushRef),
+  "release workflow must skip already merged dogfood SDK update PRs before pushing",
+);
+assert(
+  releaseWorkflow.lastIndexOf(releaseDogfoodPrStateLookup) >
+    releaseWorkflow.indexOf(releaseDogfoodBranchPushRef),
+  "release workflow must refresh dogfood SDK update PR state after pushing",
+);
+assert(
+  releaseWorkflow.includes("gh pr create"),
+  "release workflow must create a dogfood SDK update PR",
+);
+assert(
+  releaseWorkflow.includes("gh pr edit"),
+  "release workflow must update an existing dogfood SDK update PR on rerun",
+);
+assert(
+  releaseWorkflow.includes('gh pr reopen "$branch"'),
+  "release workflow must reopen a closed dogfood SDK update PR on rerun",
+);
+assert(
+  releaseWorkflow.includes("--base main"),
+  "release workflow dogfood update PR must target main",
+);
+assert(
+  !releaseWorkflow.includes('"HEAD:main"'),
+  "release workflow must not push the dogfood SDK bump directly to protected main",
 );
 assert(
   !releasePleaseConfig.includes('"path": "bun.lock"'),
