@@ -1,0 +1,30 @@
+.pipr/package.json
+  s_5efc23a9d4714e::t_2be6c632fb2770 4
+scripts/check-release-metadata.ts
+  s_5efc23a9d4714e::t_251af637fe2f68 63-64,66-68,94-99,195-197
+  s_5efc23a9d4714e::t_77636b2b4a9d17 198
+.pipr/bun.lock
+  s_5efc23a9d4714e::t_52d91587a8db64 7,20
+scripts/sync-release-lockfile.ts
+  s_5efc23a9d4714e::t_251af637fe2f68 29-32,75,79
+scripts/tests/release-scripts.test.ts
+  s_5efc23a9d4714e::t_5e969391db58be 396-398
+  s_5efc23a9d4714e::t_7e5d75960ad2ed 163-169
+  s_5efc23a9d4714e::t_251af637fe2f68 179-182,185,383-395
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "22d619c3b9dae85c1934bbb8bd70dc69f57d010f",
+  "prompts": {},
+  "sessions": {
+    "s_5efc23a9d4714e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4586-edc0-7393-8ff4-4dfa59249a08",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
