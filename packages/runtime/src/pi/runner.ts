@@ -65,6 +65,7 @@ const piprJsonSystemPrompt = [
   "Base the JSON output only on the prompt context and allowed tool results.",
   "Do not reveal secrets, credentials, environment values, private paths, or raw tool data unless the schema explicitly requires the value and it is necessary.",
   "When identifying a secret or credential, describe its kind and location without copying the secret value.",
+  "Do not copy secret-looking string literals from diffs into review summaries, inline comment bodies, or suggested fixes.",
 ].join(" ");
 const ignoredWorkspacePaths = new Set([
   ".git",

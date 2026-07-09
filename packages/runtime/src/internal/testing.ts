@@ -10,8 +10,3 @@ export {
   piRequiredCliFlags,
   piThinkingLevels,
 } from "../pi/contract.js";
-export {
-  maxInlineFindingBodyCharacters,
-  maxInlineFindingBodyLines,
-} from "../review/inline-finding-limits.js";
-export { isPublishableSuggestedFixSelection } from "../review/suggested-fix-publication-policy.js";

@@ -98,6 +98,10 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
     systemPrompt.includes("describe its kind and location without copying the secret value"),
     "system prompt lost secret redaction instruction",
   );
+  assert(
+    systemPrompt.includes("Do not copy secret-looking string literals from diffs"),
+    "system prompt lost diff secret literal redaction instruction",
+  );
   assert(!systemPrompt.includes("Review Policy"), "review policy leaked into Pi system prompt");
   assert(prompt.includes("Review Policy:"), "review policy missing from rendered agent prompt");
   assert(

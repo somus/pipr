@@ -15,7 +15,7 @@ Use the narrowest command that covers the change.
 | Command | Use | Gate |
 | --- | --- | --- |
 | `bun run --cwd packages/evals eval:deterministic` | Fake Pi prompt-contract smoke tests. No model API call. | Yes |
-| `bun run eval:prompts` or `bun run --cwd packages/evals eval` | Focused live gates for recall, suppression, safety, and suggested fixes. | Yes |
+| `bun run --cwd packages/evals eval` (root alias: `bun run eval:prompts`) | Focused live gates for recall, suppression, safety, and suggested fixes. | Yes |
 | `bun run --cwd packages/evals eval:suggested-fix` | Targeted live gate for suggested-fix behavior. | Yes |
 | `bun run --cwd packages/evals eval:dev` | Evalite watch mode for the focused live gates. | Yes |
 | `bun run --cwd packages/evals eval:full` | Broad live suite for trend checks and investigation. | Advisory |

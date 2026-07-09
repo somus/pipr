@@ -491,6 +491,110 @@ describe("comments", () => {
     });
   });
 
+  it("omits suggested-change blocks when the replacement is identical to the selected lines", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "return value;",
+      },
+      manifest: manifestWithRange(20, 20, "return value;"),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement only changes indentation", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "    return value;",
+      },
+      manifest: manifestWithRange(20, 20, "  return value;"),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement only changes internal whitespace", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "return  value;",
+      },
+      manifest: manifestWithRange(20, 20, "return value;"),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement invents an environment key", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "const apiKey = process.env.PIPR_NEW_API_KEY;",
+      },
+      manifest: manifestWithRange(20, 20, 'const apiKey = "";'),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement invents optional environment access", () => {
+    for (const suggestedFix of [
+      "const apiKey = process.env?.PIPR_NEW_API_KEY;",
+      'const apiKey = process.env?.["PIPR_NEW_API_KEY"];',
+      "const apiKey = Bun.env?.PIPR_NEW_API_KEY;",
+      "const apiKey = import.meta.env?.PIPR_NEW_API_KEY;",
+    ]) {
+      expectSuggestedChangeOmitted({
+        finding: {
+          ...finding,
+          startLine: 20,
+          endLine: 20,
+          suggestedFix,
+        },
+        manifest: manifestWithRange(20, 20, 'const apiKey = "";'),
+      });
+    }
+  });
+
+  it("omits suggested-change blocks when the replacement invents destructured environment access", () => {
+    for (const suggestedFix of [
+      "const { PIPR_NEW_API_KEY } = process.env;",
+      "const { PIPR_NEW_API_KEY: apiKey } = Bun.env;",
+      'const { PIPR_NEW_API_KEY = "" } = import.meta.env;',
+    ]) {
+      expectSuggestedChangeOmitted({
+        finding: {
+          ...finding,
+          startLine: 20,
+          endLine: 20,
+          suggestedFix,
+        },
+        manifest: manifestWithRange(20, 20, 'const apiKey = "";'),
+      });
+    }
+  });
+
+  it("publishes suggested-change blocks when the environment key already exists nearby", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            startLine: 20,
+            endLine: 20,
+            suggestedFix: "const apiKey = process.env.PIPR_API_KEY?.trim();",
+          },
+        ],
+      },
+      manifest: manifestWithRange(20, 20, "const apiKey = process.env.PIPR_API_KEY;"),
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBe("const apiKey = process.env.PIPR_API_KEY?.trim();");
+  });
+
   it("omits suggested-change blocks when a structural selection edge is replaced", () => {
     expectSuggestedChangeOmitted({
       finding: {

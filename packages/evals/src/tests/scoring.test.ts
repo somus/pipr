@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { livePromptGateCaseIds, suggestedFixGateScorers } from "../live-prompt-gates.js";
 import type { EvalInlineFinding, PiprEvalOutput } from "../runner.js";
 import {
   scoreExpectedSuggestedFixBehavior,
@@ -63,6 +64,121 @@ describe("prompt eval scoring", () => {
         publicationInlineFindings: output.inlineFindings,
       }),
     ).toBe(0);
+  });
+
+  it("fails whitespace-only suggested fixes in range-shape scoring", () => {
+    expect(
+      scoreSuggestedFixRangeShape({
+        ...output,
+        inlineFindings: [
+          {
+            ...finding,
+            suggestedFix: "    return adjusted;",
+          },
+        ],
+      }),
+    ).toBe(0);
+  });
+
+  it("fails internal-whitespace-only suggested fixes in range-shape scoring", () => {
+    expect(
+      scoreSuggestedFixRangeShape({
+        ...output,
+        inlineFindings: [
+          {
+            ...finding,
+            suggestedFix: "  return  adjusted;",
+          },
+        ],
+      }),
+    ).toBe(0);
+  });
+
+  it("fails suggested fixes that invent environment keys", () => {
+    const [range] = output.diffRanges;
+    if (!range) {
+      throw new Error("test output is missing its diff range");
+    }
+
+    expect(
+      scoreSuggestedFixRangeShape({
+        ...output,
+        inlineFindings: [
+          {
+            ...finding,
+            suggestedFix: "const apiKey = process.env.PIPR_NEW_API_KEY;",
+          },
+        ],
+        diffRanges: [
+          {
+            ...range,
+            preview: 'const apiKey = "";',
+          },
+        ],
+      }),
+    ).toBe(0);
+  });
+
+  it("fails optional environment access suggested fixes that invent keys", () => {
+    const [range] = output.diffRanges;
+    if (!range) {
+      throw new Error("test output is missing its diff range");
+    }
+
+    expect(
+      scoreSuggestedFixRangeShape({
+        ...output,
+        inlineFindings: [
+          {
+            ...finding,
+            suggestedFix: "const apiKey = process.env?.PIPR_NEW_API_KEY;",
+          },
+        ],
+        diffRanges: [
+          {
+            ...range,
+            preview: 'const apiKey = "";',
+          },
+        ],
+      }),
+    ).toBe(0);
+  });
+
+  it("fails destructured environment access suggested fixes that invent keys", () => {
+    const [range] = output.diffRanges;
+    if (!range) {
+      throw new Error("test output is missing its diff range");
+    }
+
+    expect(
+      scoreSuggestedFixRangeShape({
+        ...output,
+        inlineFindings: [
+          {
+            ...finding,
+            suggestedFix: "const { PIPR_NEW_API_KEY: apiKey } = process.env;",
+          },
+        ],
+        diffRanges: [
+          {
+            ...range,
+            preview: 'const apiKey = "";',
+          },
+        ],
+      }),
+    ).toBe(0);
+  });
+
+  it("hard-gates suggested-fix range shape and secret suppression", () => {
+    expect(livePromptGateCaseIds.defectRecall).not.toContain("suggested-fix-range-selection");
+    expect(livePromptGateCaseIds.suggestedFix).toContain("suggested-fix-range-selection");
+    expect(suggestedFixGateScorers.map((scorer) => scorer.name)).toEqual(
+      expect.arrayContaining([
+        "Forbidden output suppression",
+        "Suggested fix range shape",
+        "Expected suggested fix behavior",
+      ]),
+    );
   });
 
   it("checks raw review summary text before publication rendering", () => {

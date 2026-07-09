@@ -143,6 +143,7 @@ describe("buildPiArgs", () => {
     );
     expect(args[5]).toContain("Do not reveal secrets, credentials, environment values");
     expect(args[5]).toContain("describe its kind and location without copying the secret value");
+    expect(args[5]).toContain("Do not copy secret-looking string literals from diffs");
     expect(args[5]).not.toContain("Review Policy");
     expect(args[5]).not.toContain("Report only actionable defects");
     expect(args).not.toContain("--no-tools");

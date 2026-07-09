@@ -10,6 +10,11 @@ type SuggestedFixPublicationSelection = {
 
 const maxSuggestedFixSelectedLines = 12;
 const maxSuggestedFixReplacementLines = 20;
+const environmentKeyAccessPattern =
+  /\b(?:process|Bun|import\.meta)(?:\s*\.|\s*\?\.)\s*env(?:\s*(?:\.|\?\.)\s*([A-Za-z_][A-Za-z0-9_]*)|\s*\?\.\s*\[\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\s*\]|\s*\[\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\s*\])|\bDeno(?:\s*\.|\s*\?\.)\s*env(?:\s*\.|\s*\?\.)\s*get\s*\(\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\s*\)/g;
+const environmentDestructurePattern =
+  /\{([^{}]*)\}\s*=\s*(?:process|Bun|import\.meta)(?:\s*\.|\s*\?\.)\s*env\b/g;
+const environmentKeyNamePattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export function isPublishableSuggestedFixSelection(
   selection: SuggestedFixPublicationSelection,
@@ -42,11 +47,18 @@ export function isPublishableSuggestedFixSelection(
     0,
     lastNonBlankLineIndex(suggestedLines) + 1,
   );
+  const hasTextChange =
+    originalLinesWithoutTrailingBlanks.length !== suggestedLinesWithoutTrailingBlanks.length ||
+    originalLinesWithoutTrailingBlanks.some(
+      (line, index) => line !== suggestedLinesWithoutTrailingBlanks[index],
+    );
   return (
-    (originalLinesWithoutTrailingBlanks.length !== suggestedLinesWithoutTrailingBlanks.length ||
-      originalLinesWithoutTrailingBlanks.some(
-        (line, index) => line !== suggestedLinesWithoutTrailingBlanks[index],
-      )) &&
+    hasTextChange &&
+    !onlyChangesWhitespace(
+      originalLinesWithoutTrailingBlanks,
+      suggestedLinesWithoutTrailingBlanks,
+    ) &&
+    !suggestionIntroducesNewEnvironmentAccess(selection.preview, selection.suggestedFix) &&
     (firstOriginalEdge === undefined || firstOriginalEdge === firstSuggestedEdge) &&
     (lastOriginalEdge === undefined || lastOriginalEdge === lastSuggestedEdge) &&
     !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
@@ -114,4 +126,57 @@ function lastNonBlankLineIndex(lines: string[]): number {
     }
   }
   return -1;
+}
+
+function onlyChangesWhitespace(originalLines: string[], suggestedLines: string[]): boolean {
+  return (
+    originalLines.join("\n").replace(/\s/g, "") === suggestedLines.join("\n").replace(/\s/g, "")
+  );
+}
+
+function suggestionIntroducesNewEnvironmentAccess(
+  preview: string | undefined,
+  suggestedFix: string,
+): boolean {
+  const suggestedKeys = environmentAccessKeys(suggestedFix);
+  if (suggestedKeys.size === 0) {
+    return false;
+  }
+  const existingKeys = environmentAccessKeys(preview ?? "");
+  return Array.from(suggestedKeys).some((key) => !existingKeys.has(key));
+}
+
+function environmentAccessKeys(value: string): Set<string> {
+  const keys = new Set<string>();
+  for (const match of value.matchAll(environmentKeyAccessPattern)) {
+    addEnvironmentAccessMatchKey(keys, match);
+  }
+  for (const match of value.matchAll(environmentDestructurePattern)) {
+    addDestructuredEnvironmentKeys(keys, match[1] ?? "");
+  }
+  return keys;
+}
+
+function addEnvironmentAccessMatchKey(keys: Set<string>, match: RegExpExecArray): void {
+  const key = match[1] ?? match[2] ?? match[3] ?? match[4];
+  if (key) {
+    keys.add(key);
+  }
+}
+
+function addDestructuredEnvironmentKeys(keys: Set<string>, bindings: string): void {
+  for (const binding of bindings.split(",")) {
+    const key = destructuredEnvironmentKey(binding);
+    if (key) {
+      keys.add(key);
+    }
+  }
+}
+
+function destructuredEnvironmentKey(binding: string): string | undefined {
+  const key = binding
+    .split(/[:=]/, 1)[0]
+    ?.trim()
+    .replace(/^["']|["']$/g, "");
+  return key && !key.startsWith("...") && environmentKeyNamePattern.test(key) ? key : undefined;
 }

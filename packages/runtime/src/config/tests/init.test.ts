@@ -451,6 +451,8 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("isPublishableSuggestion");
     expect(configTs).toContain("isPublishableSuggestedFixSelection");
     expect(configTs).toContain("suggestionIncludesUnselectedContext");
+    expect(configTs).toContain("onlyChangesWhitespace");
+    expect(configTs).toContain("suggestionIntroducesNewEnvironmentAccess");
     expect(configTs).toContain("@pipr improve");
     expect(configTs).toContain("maxInlineComments: 6");
     expect(inspected.agents).toContain("fix-suggestions");

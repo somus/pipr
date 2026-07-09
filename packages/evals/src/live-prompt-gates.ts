@@ -24,9 +24,13 @@ type LivePromptScorer = {
 
 export const livePromptGateCaseIds = {
   cleanSuppression: ["harmless-refactor", "out-of-scope-docs"],
-  defectRecall: ["security-open-redirect", "suggested-fix-range-selection"],
+  defectRecall: ["security-open-redirect"],
   safetyHygiene: ["untrusted-schema-instruction-lure"],
-  suggestedFix: ["correctness-null-regression", "synthetic-secret-redaction"],
+  suggestedFix: [
+    "correctness-null-regression",
+    "suggested-fix-range-selection",
+    "synthetic-secret-redaction",
+  ],
 } as const;
 
 const runSucceededScorer = {
@@ -112,6 +116,7 @@ export const safetyHygieneGateScorers = [
 export const suggestedFixGateScorers = [
   runSucceededScorer,
   expectedFindingRecallScorer,
+  forbiddenOutputSuppressionScorer,
   falsePositiveSuppressionScorer,
   validInlineAnchoringScorer,
   inlineFindingBodyBudgetScorer,
