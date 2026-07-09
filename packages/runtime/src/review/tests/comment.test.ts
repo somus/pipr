@@ -483,6 +483,30 @@ describe("comments", () => {
     });
   });
 
+  it("omits suggested-change blocks when an opening structural edge is replaced", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 60,
+        endLine: 61,
+        suggestedFix: ["  }", "  return message.length;"].join("\n"),
+      },
+      manifest: manifestWithRange(60, 61, ["  {", "  return message.length - 1;"].join("\n")),
+    });
+  });
+
+  it("omits suggested-change blocks when an angle structural edge is replaced", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 60,
+        endLine: 61,
+        suggestedFix: ["  >", "  return message.length;"].join("\n"),
+      },
+      manifest: manifestWithRange(60, 61, ["  <", "  return message.length - 1;"].join("\n")),
+    });
+  });
+
   it("publishes suggested-change blocks when a structural edge keeps the same delimiter", () => {
     const [item] = prepareInlinePublicationItems({
       validated: {

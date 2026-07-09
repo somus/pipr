@@ -93,7 +93,7 @@ function skipEscapeSequenceWithIntermediates(message: string, index: number): nu
     if (isSingleEscapeSequenceFinal(code)) {
       return cursor;
     }
-    return cursor - 1;
+    return Math.max(cursor - 1, index);
   }
   return message.length - 1;
 }

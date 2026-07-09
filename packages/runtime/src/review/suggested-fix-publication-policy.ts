@@ -29,7 +29,7 @@ export function isPublishableSuggestedFixSelection(
   if (!originalLines) {
     return false;
   }
-  const structuralEdgePattern = /^([})\]]+)[;,]?$/;
+  const structuralEdgePattern = /^([{}[\]()<>]+)[;,]?$/;
   const firstOriginalEdge = originalLines[0]?.trim().match(structuralEdgePattern)?.[1];
   const firstSuggestedEdge = suggestedLines[0]?.trim().match(structuralEdgePattern)?.[1];
   const lastOriginalEdge = originalLines.at(-1)?.trim().match(structuralEdgePattern)?.[1];

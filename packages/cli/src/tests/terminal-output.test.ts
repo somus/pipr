@@ -28,6 +28,10 @@ describe("terminal output", () => {
     expect(sanitizeTerminalMessage("a\u001b#8b\u001b(Bc")).toBe("abc");
   });
 
+  it("keeps readable text after malformed escape sequences with intermediates", () => {
+    expect(sanitizeTerminalMessage("a\u001b \u00a0b")).toBe("a\u00a0b");
+  });
+
   it("drops unterminated terminal controls", () => {
     expect(sanitizeTerminalMessage("before \u001b]0;title")).toBe("before ");
     expect(sanitizeTerminalMessage("before \u001b[31")).toBe("before ");
