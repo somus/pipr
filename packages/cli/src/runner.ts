@@ -20,7 +20,6 @@ import {
   availablePiprUpdateNotice,
   resolveCurrentExecutablePath,
   runPiprUpdate,
-  type UpdateNotice,
 } from "./update.js";
 
 type ActionOptions = Parameters<typeof runActionCommand>[0];
@@ -405,7 +404,10 @@ async function writeAvailableUpdateNotice(options: MainOptions): Promise<void> {
       timeoutMs: 750,
     });
     if (notice) {
-      (options.writeUpdateNotice ?? console.error)(formatUpdateNotice(notice));
+      (options.writeUpdateNotice ?? console.error)(
+        `pipr ${notice.latestVersion} is available (current ${notice.currentVersion}). ` +
+          "Run `pipr update` for release binaries, or reinstall @usepipr/cli with npm/Bun.",
+      );
     }
   } catch {
     return;
@@ -424,13 +426,6 @@ function shouldSkipUpdateNotice(env: NodeJS.ProcessEnv): boolean {
   return (
     (ci !== undefined && ci !== "" && ci !== "0" && ci !== "false") ||
     env.GITHUB_ACTIONS !== undefined
-  );
-}
-
-function formatUpdateNotice(notice: UpdateNotice): string {
-  return (
-    `pipr ${notice.latestVersion} is available (current ${notice.currentVersion}). ` +
-    "Run `pipr update` for release binaries, or reinstall @usepipr/cli with npm/Bun."
   );
 }
 

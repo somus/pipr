@@ -11,7 +11,7 @@ runMain({ env }).catch((error) => handleFatalError(error, env));
 function handleFatalError(error: unknown, env: NodeJS.ProcessEnv): void {
   const message = error instanceof Error ? error.message : String(error);
   const sanitizedMessage = sanitizeTerminalMessage(message);
-  if (!isGitHubActions(env)) {
+  if (env.GITHUB_ACTIONS !== "true") {
     console.error(`error: ${sanitizedMessage}`);
     process.exit(1);
   }
@@ -25,8 +25,4 @@ function writeGitHubActionsFailure(error: unknown, message: string): void {
     core.error(`pipr publication metadata: ${JSON.stringify(error.result)}`);
   }
   core.setFailed(message);
-}
-
-function isGitHubActions(env: NodeJS.ProcessEnv): boolean {
-  return env.GITHUB_ACTIONS === "true";
 }

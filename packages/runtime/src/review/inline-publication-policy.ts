@@ -53,11 +53,19 @@ export function isPublishableSuggestedFixSelection(
   }
 
   const originalLines = selectedPreviewLines(selection, selectedLineCount);
-  return Boolean(
-    originalLines &&
-      !changesStructuralSelectionEdge(originalLines, suggestedLines) &&
-      !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
-      !suggestionIncludesUnselectedContext(selection, selectedLineCount, suggestedLines),
+  if (!originalLines) {
+    return false;
+  }
+  const structuralEdgePattern = /^([})\]]+)[;,]?$/;
+  const firstOriginalEdge = originalLines[0]?.trim().match(structuralEdgePattern)?.[1];
+  const firstSuggestedEdge = suggestedLines[0]?.trim().match(structuralEdgePattern)?.[1];
+  const lastOriginalEdge = originalLines.at(-1)?.trim().match(structuralEdgePattern)?.[1];
+  const lastSuggestedEdge = suggestedLines.at(-1)?.trim().match(structuralEdgePattern)?.[1];
+  return (
+    (firstOriginalEdge === undefined || firstOriginalEdge === firstSuggestedEdge) &&
+    (lastOriginalEdge === undefined || lastOriginalEdge === lastSuggestedEdge) &&
+    !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
+    !suggestionIncludesUnselectedContext(selection, selectedLineCount, suggestedLines)
   );
 }
 
@@ -128,22 +136,4 @@ function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: stri
     return firstLineUnchanged || lastLineUnchanged;
   }
   return firstLineUnchanged && lastLineUnchanged;
-}
-
-function changesStructuralSelectionEdge(
-  originalLines: string[],
-  suggestedLines: string[],
-): boolean {
-  const firstOriginalEdge = structuralSelectionEdge(originalLines[0]);
-  const lastOriginalEdge = structuralSelectionEdge(originalLines.at(-1));
-  return (
-    (firstOriginalEdge !== undefined &&
-      firstOriginalEdge !== structuralSelectionEdge(suggestedLines[0])) ||
-    (lastOriginalEdge !== undefined &&
-      lastOriginalEdge !== structuralSelectionEdge(suggestedLines.at(-1)))
-  );
-}
-
-function structuralSelectionEdge(line: string | undefined): string | undefined {
-  return line?.trim().match(/^([})\]]+)[;,]?$/)?.[1];
 }

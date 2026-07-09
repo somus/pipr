@@ -8,7 +8,7 @@ export async function installConfigDependencies(
   options: { frozen?: boolean } = {},
 ): Promise<void> {
   const packageJsonPath = path.join(configDir, "package.json");
-  if (!(await fileExists(packageJsonPath))) {
+  if (!(await Bun.file(packageJsonPath).exists())) {
     return;
   }
   const manifest = normalizePackageManifest(JSON.parse(await Bun.file(packageJsonPath).text()));
@@ -16,7 +16,7 @@ export async function installConfigDependencies(
     return;
   }
   const bunLockPath = path.join(configDir, "bun.lock");
-  if (options.frozen && !(await fileExists(bunLockPath))) {
+  if (options.frozen && !(await Bun.file(bunLockPath).exists())) {
     throw new Error(
       `${configDir}: bun.lock is required when .pipr/package.json declares dependencies. ` +
         "Run `bun install` in .pipr/ and commit bun.lock.",
@@ -68,8 +68,4 @@ export async function assertBunAvailable(): Promise<void> {
       "bun is required on PATH to install .pipr/package.json dependencies. Install Bun from https://bun.sh",
     );
   }
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  return await Bun.file(filePath).exists();
 }
