@@ -1,0 +1,83 @@
+packages/evals/src/suggested-fix-prompt.eval.ts
+  s_ee868d0249ce21::t_6aeda039fe0b18 4-5,10
+apps/docs/content/docs/reference/development.mdx
+  s_ee868d0249ce21::t_d44b0e9918b352 124
+packages/runtime/src/review/tests/comment.test.ts
+  s_ee868d0249ce21::t_423dbf985a7f99 533
+  s_ee868d0249ce21::t_eb7f546b9d7e8f 536
+  s_ee868d0249ce21::t_02fbac29823804 537-538
+  s_ee868d0249ce21::t_03a9d8b0ec80a6 530-532,534,539-556,569-570
+  s_ee868d0249ce21::t_835553bce59a41 535,557-568
+packages/evals/README.md
+  s_ee868d0249ce21::t_d44b0e9918b352 24-27
+packages/runtime/src/review/suggested-fix-publication-policy.ts
+  s_ee868d0249ce21::t_f7a0a9518e6359 242-243,262-264
+  s_ee868d0249ce21::t_220c8ad2d94656 142,282-289,311
+  s_ee868d0249ce21::t_0861eb5b7222a0 150,158,169-170,212,215-219,229-233,244-261,277,290-304,309
+  s_ee868d0249ce21::t_d44b0e9918b352 132-136,138-141,163-166,176-187,310
+  s_ee868d0249ce21::t_39784dcde2d736 144-145,152-157,159-162,167-168,172-175,330-333
+  s_ee868d0249ce21::t_b963e5b2ed393e 137,188-205
+  s_ee868d0249ce21::t_076a5bdc21e7b7 146-149,151,171,206-211,213-214,220-228,234-241,265-276,278-281,306-308
+  s_fa4677cb6b4d16::t_bb1855ab3d2e29 143
+packages/evals/package.json
+  s_ee868d0249ce21::t_d44b0e9918b352 8-12
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_ee868d0249ce21::t_1954aa20afe06e 450-457,479
+  s_ee868d0249ce21::t_0132e4f48dfbda 410-411,430-432
+  s_ee868d0249ce21::t_031d00249175f1 315-324,346-349,359-373,478
+  s_ee868d0249ce21::t_42538888890bbb 325-328,335-340,342-345,350-351,355-358
+  s_ee868d0249ce21::t_e02c6c0b8668cf 329-332,334,354,374-379,381-382,388-396,402-409,433-444,446-449,474-476
+  s_ee868d0249ce21::t_b287fbca6ae441 333,341,352-353,380,383-387,397-401,412-429,445,458-472,477
+packages/evals/src/prompt-gates.eval.ts
+  s_ee868d0249ce21::t_6aeda039fe0b18 4-8,13-20
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_ee868d0249ce21::t_f7a0a9518e6359 379-380,399-401
+  s_ee868d0249ce21::t_220c8ad2d94656 419-426,448
+  s_ee868d0249ce21::t_076a5bdc21e7b7 298-301,303,323,343-348,350-351,357-365,371-378,402-413,415-418,443-445
+  s_ee868d0249ce21::t_d44b0e9918b352 284-293,315-318,328-342,447
+  s_ee868d0249ce21::t_39784dcde2d736 294-297,304-309,311-314,319-320,324-327
+  s_ee868d0249ce21::t_0861eb5b7222a0 302,310,321-322,349,352-356,366-370,381-398,414,427-441,446
+packages/evals/src/live-prompt-gates.ts
+  s_ee868d0249ce21::t_ce46f625248a86 88,94,115,169
+  s_ee868d0249ce21::t_c5241649129b89 189
+  s_ee868d0249ce21::t_6aeda039fe0b18 25-31,135-161,181-188,190
+  s_adf55c018923eb::t_97b0252959893e 162,191
+packages/runtime/src/config/tests/init.test.ts
+  s_ee868d0249ce21::t_a59534b4c3f771 459-460,462
+  s_ee868d0249ce21::t_02fbac29823804 511-531,575-607,669-671
+  s_ee868d0249ce21::t_ce46f625248a86 457
+  s_ee868d0249ce21::t_03a9d8b0ec80a6 473-478,483-487,533-562,662-667,679
+  s_ee868d0249ce21::t_2f48046bd8cfff 479-482,488-510,532,563-574,608-661,668,672-678
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "afb2ce0c5ad84eb56daba84534b269fbd1f5d0d4",
+  "prompts": {},
+  "sessions": {
+    "s_adf55c018923eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f45a4-e828-7770-8bc6-cc9d3e7b6284",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_ee868d0249ce21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4653-c456-7120-aff5-4a2460382e8f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_fa4677cb6b4d16": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4838-6cb1-7852-b748-4c91e7ae02fd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
