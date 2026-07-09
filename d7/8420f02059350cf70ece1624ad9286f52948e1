@@ -1,0 +1,25 @@
+packages/runtime/src/config/scaffold-versions.ts
+  s_cd6a178e45932c::t_54573e760207ac 1
+packages/runtime/src/config/init.ts
+  s_cd6a178e45932c::t_54573e760207ac 11
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_cd6a178e45932c::t_54573e760207ac 7,315
+packages/runtime/src/config/tests/init.test.ts
+  s_cd6a178e45932c::t_54573e760207ac 19,61-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d78420f02059350cf70ece1624ad9286f52948e1",
+  "prompts": {},
+  "sessions": {
+    "s_cd6a178e45932c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4353-8152-7391-9974-2e9a70f45e1d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
