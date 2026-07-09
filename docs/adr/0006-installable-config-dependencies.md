@@ -13,8 +13,8 @@ The runtime always overrides `@usepipr/sdk` with the image or CLI built-in SDK v
 
 ## Installs
 
-- Bun only: when `.pipr/package.json` declares dependencies beyond runtime-provided packages (`@usepipr/sdk`, `@types/bun`), the loader runs `bun install --frozen-lockfile --ignore-scripts` in the temp config directory before loading.
-- Default tier-2 scaffolds skip install when deps are only `@usepipr/sdk` and `@types/bun`; real third-party deps install from the base-commit lockfile.
+- Bun only: when `.pipr/package.json` declares installable dependencies beyond runtime-provided packages (`@usepipr/sdk`, `@types/bun`), including the default scaffolded `typescript`, the loader runs `bun install --frozen-lockfile --ignore-scripts` in the temp config directory before loading.
+- Default tier-2 scaffolds install `typescript` from the committed lockfile while keeping `@usepipr/sdk` overridden by the runtime stub; real third-party deps install from the same base-commit lockfile.
 - Init runs non-frozen `bun install` in `.pipr/` to produce `bun.lock`. A `bun` binary on PATH is required for init and for configs with third-party deps.
 
 ## Security

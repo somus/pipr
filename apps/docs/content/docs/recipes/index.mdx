@@ -37,7 +37,7 @@ Choose by the review job first, then tune noise after the first successful run.
 
 Every recipe follows the same setup path.
 
-`pipr init` writes `.pipr/package.json`, `.pipr/bun.lock`, and `.pipr/tsconfig.json` with pinned `@usepipr/sdk` and `@types/bun` for editor IntelliSense. Use `pipr init --minimal` for a single `.pipr/config.ts` without install.
+`pipr init` writes `.pipr/package.json`, `.pipr/bun.lock`, and `.pipr/tsconfig.json` with pinned `@usepipr/sdk`, `@types/bun`, and `typescript` for editor IntelliSense. Use `pipr init --minimal` for a single `.pipr/config.ts` without install.
 
 ```bash
 pipr init --recipe security-sast --minimal

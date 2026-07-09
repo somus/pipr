@@ -21,6 +21,8 @@ export async function installTypedSdkStub(configDir: string): Promise<void> {
   await Bun.write(
     path.join(sdkRoot, "package.json"),
     JSON.stringify({
+      name: "@usepipr/sdk",
+      version: "0.0.0-pipr-runtime",
       type: "module",
       types: "./index.d.ts",
       exports: {

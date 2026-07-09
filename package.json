@@ -65,12 +65,12 @@
     "eval:prompts": "bun run --cwd packages/evals eval"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.2",
+    "@biomejs/biome": "2.5.3",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "fallow": "2.104.0",
-    "tsdown": "0.22.3",
-    "turbo": "2.10.2",
+    "tsdown": "0.22.4",
+    "turbo": "2.10.4",
     "typescript": "catalog:"
   }
 }

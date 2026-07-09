@@ -124,7 +124,7 @@ repo/
         └── pipr.yml           # GitHub Action delivery target
 ```
 
-The config is the public runtime authoring surface. Tier-2 `.pipr/package.json` installs `@usepipr/sdk` for editor types; the runtime overrides the SDK module at load time. Use `pipr init --minimal` for tier-1 (config file only).
+The config is the public runtime authoring surface. Tier-2 `.pipr/package.json` installs `@usepipr/sdk`, `@types/bun`, and `typescript` for editor types; the runtime overrides the SDK module at load time. Use `pipr init --minimal` for tier-1 (config file only).
 
 ## Minimal config
 

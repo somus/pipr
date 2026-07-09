@@ -39,16 +39,29 @@ Completion criterion: you know whether this is a new setup or an edit, which fil
 
 Completion criterion: a `pipr` command is available, and the user has approved any install command that changes their machine.
 
-## Short Interview
+## Interview Gate
 
-Ask only for missing choices. Combine questions so the interview stays short.
+Do not run `pipr init` until recipe, model, secrets, triggers, publication behavior, and existing-file handling are explicit.
+Defaults are allowed only when the user says to use Pipr defaults, accepts your proposed defaults, or provided equivalent intent.
+Combine questions so the interview stays short.
 
-- Setup surface: config directory, GitHub workflow generation, and whether existing Pipr files may be edited. Never use `pipr init --force` without explicit approval.
-- Review goal: general review, bugs, security, quality gate, dependency risk, PR hygiene, diagnostics, briefing, changelog, interactive ask, CI triage, multi-agent review, or durable memory tools.
-- Model policy: provider, model, secret env var names, fallback model, and whether local runs should require provider env vars.
+- Existing-file handling: config directory, GitHub workflow generation, and whether existing Pipr files may be edited. Never use `pipr init --force` without explicit approval.
+- Recipe or review goal: general review, bugs, security, quality gate, dependency risk, PR hygiene, diagnostics, briefing, changelog, interactive ask, CI triage, multi-agent review, or durable memory tools.
+- Provider policy: provider, model, secret env var names, fallback model, and whether local runs should require provider env vars.
 - Trigger policy: automatic change request actions, `@pipr` commands, command permissions, local review behavior, and command-only workflows.
 - Publication policy: inline comment cap, check runs, aggregate checks, required gates, auto-resolve behavior, and who may trigger verifier replies.
 - Repo policy: path include/exclude scopes, generated or lockfile rules, test and docs expectations, package manager quirks, security-sensitive areas, and release-note conventions.
+
+Example compact interview:
+
+```text
+Before I initialize Pipr, choose the setup policy:
+1. Recipe or goal: default-review, bug-hunter, security-sast, quality-gate,
+   pr-hygiene, dependency-risk, multi-agent-review, interactive-ask, or another recipe from pipr skill references.
+2. Model: use Pipr default DeepSeek, or specify provider/model/secret env var names.
+3. Triggers and publishing: automatic PR review plus @pipr review with capped inline comments, command-only, or merge-gate checks.
+4. Existing files: edit existing Pipr files, create new files only, or approve replacement.
+```
 
 Completion criterion: recipe, model, secrets, triggers, publication behavior, and repo-specific review policy are explicit enough to write `.pipr/config.ts`.
 

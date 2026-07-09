@@ -1,10 +1,16 @@
 import path from "node:path";
+import { defaultScaffoldTypescriptSpec } from "./scaffold-versions.js";
 
 const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+};
+
+type InstallableDependency = {
+  name: string;
+  spec: string;
 };
 
 export async function installConfigDependencies(
@@ -16,7 +22,8 @@ export async function installConfigDependencies(
     return;
   }
   const manifest = JSON.parse(await Bun.file(packageJsonPath).text()) as PackageManifest;
-  if (shouldSkipConfigInstall(manifest)) {
+  const installablePackages = installableDependencySpecs(manifest);
+  if (installablePackages.length === 0) {
     return;
   }
   const bunLockPath = path.join(configDir, "bun.lock");
@@ -27,10 +34,19 @@ export async function installConfigDependencies(
     );
   }
   await assertBunAvailable();
-  const args = ["install", "--ignore-scripts"];
+  const args = ["install", "--ignore-scripts", "--no-save"];
   if (options.frozen) {
     args.push("--frozen-lockfile");
   }
+  if (
+    installablePackages.length === 1 &&
+    installablePackages[0]?.spec === defaultScaffoldTypescriptSpec
+  ) {
+    // Bun verifies the runtime-owned SDK tarball even though Pipr replaces it with a stub.
+    // --no-verify skips every integrity check, so keep this only on the pinned scaffold install.
+    args.push("--no-verify");
+  }
+  args.push(...installablePackages.map((dependency) => dependency.spec));
   const proc = Bun.spawn(["bun", ...args], {
     cwd: configDir,
     env: process.env,
@@ -46,12 +62,13 @@ export async function installConfigDependencies(
   }
 }
 
-function shouldSkipConfigInstall(manifest: PackageManifest): boolean {
-  const packages = [
-    ...Object.keys(manifest.dependencies ?? {}),
-    ...Object.keys(manifest.devDependencies ?? {}),
-  ];
-  return packages.length === 0 || packages.every((name) => runtimeProvidedPackages.has(name));
+function installableDependencySpecs(manifest: PackageManifest): InstallableDependency[] {
+  return Object.entries({
+    ...(manifest.dependencies ?? {}),
+    ...(manifest.devDependencies ?? {}),
+  })
+    .filter(([name]) => !runtimeProvidedPackages.has(name))
+    .map(([name, version]) => ({ name, spec: `${name}@${version}` }));
 }
 
 export async function assertBunAvailable(): Promise<void> {
