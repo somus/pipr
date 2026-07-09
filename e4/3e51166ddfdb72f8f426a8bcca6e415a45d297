@@ -1,0 +1,28 @@
+scripts/check-release-metadata.ts
+  s_5efc23a9d4714e::t_13a5f374523314 216-222
+  s_5efc23a9d4714e::t_d7c0c086c80b6e 213-215
+  s_5efc23a9d4714e::t_6e99234024b2d7 28-31,205,209,231
+  s_5efc23a9d4714e::t_c5ba98ee371694 195-204,206-208,210-212,223-230,232-237
+scripts/tests/release-scripts.test.ts
+  s_5efc23a9d4714e::t_c5ba98ee371694 399-412
+.github/workflows/release.yml
+  s_5efc23a9d4714e::t_706517823354c4 217-227
+  s_5efc23a9d4714e::t_c5ba98ee371694 191-199,205-216,228-241
+  s_5efc23a9d4714e::t_13a5f374523314 200-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e43e51166ddfdb72f8f426a8bcca6e415a45d297",
+  "prompts": {},
+  "sessions": {
+    "s_5efc23a9d4714e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4586-edc0-7393-8ff4-4dfa59249a08",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
