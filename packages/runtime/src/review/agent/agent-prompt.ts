@@ -2,6 +2,7 @@ import type { Agent, AgentPromptContext, AgentTool, PathFilter, Schema } from "@
 import { renderPromptValue } from "@usepipr/sdk/internal";
 import { compact } from "lodash-es";
 import { piReadOnlyToolNames } from "../../pi/contract.js";
+import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
 import type { PriorReviewState } from "../prior-state.js";
 import { reviewResultSchemaId, reviewSchemaExample } from "../review.js";
 import type { PreparedDiffManifestContext } from "./diff-manifest-context.js";
@@ -111,34 +112,30 @@ function toolsPrompt(
 }
 
 function outputPrompt(schema: Schema<unknown>): string {
-  return compact([
+  const lines: string[] = compact([
     `Schema ID: ${schema.id}.`,
     schema.jsonSchema ? `JSON Schema:\n${JSON.stringify(schema.jsonSchema, null, 2)}` : undefined,
-    schema.id === reviewResultSchemaId
-      ? `Example:\n${JSON.stringify(reviewSchemaExample(), null, 2)}`
-      : undefined,
-    schema.id === reviewResultSchemaId
-      ? "`suggestedFix` is exact replacement code for the selected range. Do not include Markdown fences, prose, or labels in `suggestedFix`."
-      : undefined,
-    schema.id === reviewResultSchemaId
-      ? "GitHub applies `suggestedFix` to the selected `startLine` through `endLine`. Select the smallest contiguous line span that the replacement code should replace."
-      : undefined,
-    schema.id === reviewResultSchemaId
-      ? "If a fix changes only part of a line, select that whole line and put the full replacement line in `suggestedFix`. If a fix changes multiple lines, select exactly those original lines and put the full replacement block in `suggestedFix`."
-      : undefined,
-    schema.id === reviewResultSchemaId
-      ? "Do not select a larger enclosing block to replace a smaller statement, and do not select one line when the replacement is for a multi-line section. Omit `suggestedFix` if the exact replacement range is uncertain."
-      : undefined,
-    schema.id === reviewResultSchemaId
-      ? "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose."
-      : undefined,
     "Return exactly one JSON value matching the schema.",
     "The first non-whitespace character must be { or [ and the last non-whitespace character must be } or ].",
     "Do not include Markdown, code fences, prose, explanations, or leading/trailing text.",
-    schema.id === reviewResultSchemaId
-      ? "For inlineFindings, use only fields shown in the schema and only exact Diff Manifest commentable ranges. If no exact range applies, omit the finding."
-      : undefined,
-  ]).join("\n\n");
+  ]);
+  if (schema.id === reviewResultSchemaId) {
+    lines.splice(
+      2,
+      0,
+      `Example:\n${JSON.stringify(reviewSchemaExample(), null, 2)}`,
+      "`suggestedFix` is exact replacement code for the selected range. Do not include Markdown fences, prose, or labels in `suggestedFix`.",
+      "GitHub applies `suggestedFix` to the selected `startLine` through `endLine`. Select the smallest contiguous line span that the replacement code should replace.",
+      "If a fix changes only part of a line, select that whole line and put the full replacement line in `suggestedFix`. If a fix changes multiple lines, select exactly those original lines and put the full replacement block in `suggestedFix`.",
+      "Do not select a larger enclosing block to replace a smaller statement, and do not select one line when the replacement is for a multi-line section. Omit `suggestedFix` if the exact replacement range is uncertain.",
+      "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
+    );
+    lines.push(
+      "For inlineFindings, use only fields shown in the schema and only exact Diff Manifest commentable ranges. If no exact range applies, omit the finding.",
+      `For inlineFindings.body, write the exact inline comment body. Use one short paragraph, at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters. Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target; prefer 250-450 characters when possible.`,
+    );
+  }
+  return lines.join("\n\n");
 }
 
 function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
@@ -151,7 +148,9 @@ function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
       "Review only changed behavior.",
       "Report only actionable defects, security risks, regressions, or meaningful test gaps.",
       "Put each actionable issue in inlineFindings. Do not leave actionable defects or test gaps only in the summary.",
-      "Keep each inline finding body to one short paragraph, at most two sentences, and under 700 characters.",
+      "Inline finding bodies are final code-review comments, not analysis notes.",
+      `State the concrete defect and user-visible or runtime impact directly. Keep each body to one short paragraph, at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters.`,
+      "Do not include step-by-step reasoning, broad context, praise, restated diff, alternatives, or code snippets unless they are necessary to identify the defect.",
       "Omit speculative, style-only, broad refactor, external-fact, and out-of-diff findings.",
       "Use read tools when more context is needed. If evidence is insufficient, omit the finding.",
       "Emit one inline finding per issue, anchored to the exact Diff Manifest commentable range.",

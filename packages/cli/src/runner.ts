@@ -13,14 +13,13 @@ import {
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
-import { Command } from "commander";
+import { Command, CommanderError } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
 import {
   availablePiprUpdateNotice,
   resolveCurrentExecutablePath,
   runPiprUpdate,
-  type UpdateNotice,
 } from "./update.js";
 
 type ActionOptions = Parameters<typeof runActionCommand>[0];
@@ -48,18 +47,31 @@ type MainOptions = {
 
 export async function runMain(options: MainOptions = {}): Promise<void> {
   const argv = options.argv ?? process.argv;
-  await writeAvailableUpdateNotice(options);
-  const program = createProgram();
-  if (argv.length <= 2) {
-    program.outputHelp();
-    return;
+  const env = options.env ?? process.env;
+  if (!isUpdateCommand(argv)) {
+    await writeAvailableUpdateNotice(options);
   }
-  await program.parseAsync(argv);
+  const program = createProgram({ exitOverride: env.GITHUB_ACTIONS === "true" });
+  try {
+    if (argv.length <= 2) {
+      program.outputHelp();
+      return;
+    }
+    await program.parseAsync(argv);
+  } catch (error) {
+    if (error instanceof CommanderError && error.exitCode === 0) {
+      return;
+    }
+    throw error;
+  }
 }
 
-function createProgram(): Command {
+function createProgram(options: { exitOverride?: boolean } = {}): Command {
   const program = new Command();
   program.name("pipr").version(cliPackage.version).showHelpAfterError();
+  if (options.exitOverride) {
+    program.exitOverride();
+  }
   program.addHelpText("after", agentHelpText);
 
   program
@@ -104,7 +116,7 @@ function createProgram(): Command {
   program
     .command("review")
     .description("Run configured change-request review tasks locally without publishing")
-    .option("--base <sha>", "Base commit SHA")
+    .requiredOption("--base <sha>", "Base commit SHA")
     .option("--head <sha>", "Head commit SHA or ref; omitted reviews the working tree")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .option("--pi-executable <path>", "Pi executable path")
@@ -336,9 +348,7 @@ async function runCheck(options: CliOptions): Promise<void> {
     requireProviderEnv: options.requireEnv === true,
   });
   console.log(`valid: ${settings.source}`);
-  for (const warning of settings.warnings) {
-    console.log(`warning: ${warning}`);
-  }
+  writeConfigWarnings(settings.warnings);
 }
 
 async function runInspect(options: CliOptions): Promise<void> {
@@ -347,7 +357,15 @@ async function runInspect(options: CliOptions): Promise<void> {
     configDir: options.configDir,
     env: process.env,
   });
-  console.log(inspect(result, { depth: 8, colors: false }));
+  const { warnings, ...plan } = result;
+  writeConfigWarnings(warnings);
+  console.log(inspect(plan, { depth: 8, colors: false }));
+}
+
+function writeConfigWarnings(warnings: readonly string[]): void {
+  for (const warning of warnings) {
+    console.log(`warning: ${warning}`);
+  }
 }
 
 async function runSkillGet(): Promise<void> {
@@ -386,7 +404,10 @@ async function writeAvailableUpdateNotice(options: MainOptions): Promise<void> {
       timeoutMs: 750,
     });
     if (notice) {
-      (options.writeUpdateNotice ?? console.error)(formatUpdateNotice(notice));
+      (options.writeUpdateNotice ?? console.error)(
+        `pipr ${notice.latestVersion} is available (current ${notice.currentVersion}). ` +
+          "Run `pipr update` for release binaries, or reinstall @usepipr/cli with npm/Bun.",
+      );
     }
   } catch {
     return;
@@ -408,17 +429,19 @@ function shouldSkipUpdateNotice(env: NodeJS.ProcessEnv): boolean {
   );
 }
 
-function formatUpdateNotice(notice: UpdateNotice): string {
+function isUpdateCommand(argv: string[]): boolean {
+  const args = argv.slice(2);
+  if (args[0] === "--") {
+    return args[1] === "update";
+  }
   return (
-    `pipr ${notice.latestVersion} is available (current ${notice.currentVersion}). ` +
-    "Run `pipr update` for release binaries, or reinstall @usepipr/cli with npm/Bun."
+    args[0] === "update" ||
+    (args.length >= 2 && args[0] === "help" && args[1] === "update") ||
+    (args.length >= 2 && args[0] === "--help" && args[1] === "update")
   );
 }
 
-async function runLocalReview(options: CliOptions): Promise<void> {
-  if (!options.base) {
-    throw new Error("pipr review requires --base <sha>");
-  }
+async function runLocalReview(options: CliOptions & { base: string }): Promise<void> {
   const result = await runLocalReviewCommand({
     rootDir: process.cwd(),
     configDir: options.configDir,
@@ -577,6 +600,7 @@ async function runDryRun(options: CliOptions): Promise<void> {
     env: process.env,
     eventPath: options.event,
   });
+  writeConfigWarnings(result.warnings);
   console.log(
     inspect(
       {

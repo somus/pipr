@@ -11,6 +11,10 @@ export {
   piThinkingLevels,
 } from "../pi/contract.js";
 export {
+  maxInlineFindingBodyCharacters,
+  maxInlineFindingBodyLines,
+} from "../review/inline-finding-limits.js";
+export {
   isPublishableSuggestedFixSelection,
   type SuggestedFixPublicationSelection,
-} from "../review/inline-publication-policy.js";
+} from "../review/suggested-fix-publication-policy.js";

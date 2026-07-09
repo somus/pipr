@@ -1,4 +1,4 @@
-import type { LoadedRuntimeProject } from "../config/project.js";
+import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { GitHubCommandClient } from "../hosts/github/command.js";
 import type { GitHubPublicationClient } from "../hosts/github/publication.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
@@ -55,9 +55,12 @@ export type LocalReviewCommandOptions = RuntimeCommandOptions & {
 export type DryRunCommandResult = {
   configSource: string;
   event: ChangeRequestEventContext;
+  warnings: string[];
 };
 
-export type InspectCommandResult = import("../config/project.js").InspectRuntimePlan;
+export type InspectCommandResult = InspectRuntimePlan & {
+  warnings: string[];
+};
 
 export type LocalReviewCommandResult = ReviewRuntimeResult & {
   kind: "review" | "skipped";

@@ -13,6 +13,7 @@ import {
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
 } from "../../review/prior-state.js";
+import { runtimeVersion } from "../../shared/version.js";
 import { memoryActionLogSink } from "../../tests/helpers/action-log-sink.js";
 import {
   type ActionLogSink,
@@ -393,6 +394,55 @@ describe("runLocalReviewCommand", () => {
       await removeWorkspace(workspace.rootDir);
     }
   });
+
+  it("logs config version warnings for local reviews", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: localReviewSelectionConfigTs(),
+      headConfigTs: localReviewSelectionConfigTs(),
+      sdkVersion: "0.1.0",
+    });
+    const logs = memoryActionLogSink();
+    try {
+      const result = await runLocalReviewCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        env: { DEEPSEEK_API_KEY: "provider-key" },
+        baseSha: workspace.baseSha,
+        headSha: workspace.headSha,
+        piExecutable: workspace.piExecutable,
+        logSink: logs.logSink,
+      });
+
+      expect(result.kind).toBe("review");
+      expect(logs.messages.join("\n")).toContain('"event":"config warning"');
+      expect(logs.messages.join("\n")).toContain(".pipr/package.json pins @usepipr/sdk 0.1.0");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("fails local reviews before Pi when the config SDK pin is newer than Pipr", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: localReviewSelectionConfigTs(),
+      headConfigTs: localReviewSelectionConfigTs(),
+      sdkVersion: "999.0.0",
+    });
+    try {
+      await expect(
+        runLocalReviewCommand({
+          rootDir: workspace.rootDir,
+          configDir: ".pipr",
+          env: { DEEPSEEK_API_KEY: "provider-key" },
+          baseSha: workspace.baseSha,
+          headSha: workspace.headSha,
+          piExecutable: workspace.piExecutable,
+        }),
+      ).rejects.toThrow("Upgrade Pipr before running this config");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
 });
 
 describe("runActionCommand pull_request dispatch", () => {
@@ -685,6 +735,45 @@ describe("runActionCommand pull_request dispatch", () => {
       expect(logs.notices.join("\n")).toContain('"event":"publication result"');
       expect(logs.groups).toContain("pipr action");
       expect(logs.groups).toContain("publish review");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("logs config version warnings and publishes compatibility metadata for pull requests", async () => {
+    const workspace = await createCommandWorkspace({
+      checkoutBaseBeforeRun: true,
+      sdkVersion: "0.1.0",
+    });
+    const logs = memoryActionLogSink();
+    try {
+      const result = await runPullRequestAction(workspace, { logSink: logs.logSink });
+
+      expect(result).toMatchObject({ kind: "review" });
+      if (result.kind !== "review") {
+        throw new Error(`Expected review result, received ${result.kind}`);
+      }
+      expect(logs.messages.join("\n")).toContain('"event":"config warning"');
+      expect(logs.messages.join("\n")).toContain(".pipr/package.json pins @usepipr/sdk 0.1.0");
+      expect(result.review.publicationPlan.metadata.configVersion).toBe("0.1.0");
+      expect(result.review.mainComment).toContain(
+        `Config SDK 0.1.0 is behind [Pipr ${runtimeVersion}](https://github.com/somus/pipr/releases/tag/v${runtimeVersion}).`,
+      );
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("fails pull request actions before Pi when the config SDK pin is newer than Pipr", async () => {
+    const workspace = await createCommandWorkspace({
+      checkoutBaseBeforeRun: true,
+      sdkVersion: "999.0.0",
+    });
+    try {
+      await expect(runPullRequestAction(workspace)).rejects.toThrow(
+        "Upgrade Pipr before running this config",
+      );
+      await expectPiNotCalled(workspace);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -1016,7 +1105,12 @@ async function writeFailingPiExecutable(piExecutable: string): Promise<void> {
 }
 
 async function createCommandWorkspace(
-  options: { baseConfigTs?: string; checkoutBaseBeforeRun?: boolean; headConfigTs?: string } = {},
+  options: {
+    baseConfigTs?: string;
+    checkoutBaseBeforeRun?: boolean;
+    headConfigTs?: string;
+    sdkVersion?: string;
+  } = {},
 ): Promise<CommandWorkspace> {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-action-command-"));
   runGit(rootDir, ["init", "--initial-branch=main"]);
@@ -1029,6 +1123,20 @@ async function createCommandWorkspace(
     path.join(rootDir, ".pipr", "config.ts"),
     options.baseConfigTs ?? reviewConfigTs(),
   );
+  if (options.sdkVersion) {
+    await Bun.write(
+      path.join(rootDir, ".pipr", "package.json"),
+      `${JSON.stringify(
+        {
+          dependencies: {
+            "@usepipr/sdk": options.sdkVersion,
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
   await mkdir(path.join(rootDir, "src"));
   await Bun.write(path.join(rootDir, "src", "a.ts"), "export const value = 1;\n");
   runGit(rootDir, ["add", "."]);

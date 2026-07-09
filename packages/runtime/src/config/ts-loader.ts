@@ -9,6 +9,10 @@ import { installConfigDependencies } from "./config-deps.js";
 import { resolveContainedConfigDir } from "./paths.js";
 import { installTypedSdkStub } from "./sdk-stub.js";
 import { starterTsconfig } from "./starter-tsconfig.js";
+import {
+  type ConfigVersionCompatibility,
+  resolveConfigVersionCompatibility,
+} from "./version-compat.js";
 
 export type LoadTypescriptConfigOptions = {
   rootDir: string;
@@ -20,6 +24,7 @@ export type LoadedTypescriptConfig = {
   plan: RuntimePlan;
   source: string;
   tempRoot: string;
+  versionCompatibility: ConfigVersionCompatibility;
 };
 
 type TypescriptApi = typeof import("typescript");
@@ -36,11 +41,18 @@ type CompilerHostWithDefaultLibLocation = import("typescript").CompilerHost & {
 export async function loadTypescriptConfig(
   options: LoadTypescriptConfigOptions,
 ): Promise<LoadedTypescriptConfig> {
-  const { projectDir, relativeConfigDir, configDir } = resolveContainedConfigDir(options);
+  const { projectDir, relativeConfigDir } = resolveContainedConfigDir(options);
   const sourceConfigPath = path.join(projectDir, "config.ts");
-  if (!(await fileExists(sourceConfigPath))) {
-    throw new Error(`${configDir}/config.ts is required. Run pipr init to create it.`);
+  if (!(await Bun.file(sourceConfigPath).exists())) {
+    throw new Error(
+      `No Pipr config found at ${sourceConfigPath}.\n` +
+        "Run `pipr init` to create one, or pass `--config-dir <dir>`.",
+    );
   }
+  const versionCompatibility = await resolveConfigVersionCompatibility({
+    configDirPath: projectDir,
+    configDir: relativeConfigDir,
+  });
   if (options.typecheck) {
     await typecheckTypescriptConfig(path.resolve(options.rootDir), relativeConfigDir);
   }
@@ -48,7 +60,15 @@ export async function loadTypescriptConfig(
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-config-"));
   try {
     const tempConfigDir = path.join(tempRoot, relativeConfigDir);
-    await copyConfigDirectory(projectDir, tempConfigDir);
+    await cp(projectDir, tempConfigDir, {
+      recursive: true,
+      errorOnExist: false,
+      force: true,
+      filter: (source) => {
+        const relative = path.relative(projectDir, source);
+        return relative !== "node_modules" && !relative.startsWith(`node_modules${path.sep}`);
+      },
+    });
     await prepareConfigDirectory(tempConfigDir, { frozen: true });
 
     const configPath = path.join(tempConfigDir, "config.ts");
@@ -61,6 +81,7 @@ export async function loadTypescriptConfig(
       plan: buildPiprPlan(factory),
       source: sourceConfigPath,
       tempRoot,
+      versionCompatibility,
     };
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
@@ -100,7 +121,7 @@ async function typecheckTypescriptConfig(
     });
     await prepareConfigDirectory(tempConfigDir, { frozen: true });
     const tsconfigPath = path.join(tempConfigDir, "tsconfig.json");
-    if (!(await fileExists(tsconfigPath))) {
+    if (!(await Bun.file(tsconfigPath).exists())) {
       await mkdir(tempConfigDir, { recursive: true });
       await Bun.write(tsconfigPath, starterTsconfig);
     }
@@ -123,9 +144,9 @@ async function typecheckTypescriptConfigWithApi(
   }
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, configDir);
   const bundledTypeRoots: string[] = [];
-  const hasInstalledBunTypes = await fileExists(
+  const hasInstalledBunTypes = await Bun.file(
     path.join(configDir, "node_modules", "@types", "bun", "package.json"),
-  );
+  ).exists();
   if (!hasInstalledBunTypes) {
     try {
       const require = createRequire(import.meta.url);
@@ -228,20 +249,6 @@ function formatTypeScriptDiagnostics(
     getCurrentDirectory: () => configDir,
     getNewLine: () => "\n",
   });
-}
-
-async function copyConfigDirectory(sourceDir: string, targetDir: string): Promise<void> {
-  await cp(sourceDir, targetDir, {
-    recursive: true,
-    errorOnExist: false,
-    force: true,
-    filter: (source) => !isIgnoredConfigCopyPath(source, sourceDir),
-  });
-}
-
-function isIgnoredConfigCopyPath(source: string, configDir: string): boolean {
-  const relative = path.relative(configDir, source);
-  return relative === "node_modules" || relative.startsWith(`node_modules${path.sep}`);
 }
 
 const ignoredTypecheckRootEntries = new Set([

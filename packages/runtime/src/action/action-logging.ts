@@ -49,6 +49,13 @@ export function logTrustedRuntime(log: RuntimeActionLog, runtime: TrustedRuntime
     tasks: runtime.plan.tasks.length,
     commands: runtime.plan.commands.length,
   });
+  logConfigWarnings(log, runtime.settings.warnings);
+}
+
+export function logConfigWarnings(log: RuntimeActionLog, warnings: readonly string[]): void {
+  for (const warning of warnings) {
+    log.warning("config warning", { warning });
+  }
 }
 
 export function addProviderSecrets(

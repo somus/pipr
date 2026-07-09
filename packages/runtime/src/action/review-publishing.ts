@@ -40,6 +40,7 @@ export async function runTrustedReviewAndPublish(options: {
       event: options.event,
       env: options.options.env,
       plan: options.trustedRuntime.plan,
+      versionCompatibility: options.trustedRuntime.versionCompatibility,
       taskName: options.taskName,
       taskInput: options.taskInput,
       commandInvocation: options.commandInvocation,

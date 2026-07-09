@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { runtimeVersion } from "../../shared/version.js";
 import { installConfigDependencies } from "../config-deps.js";
 import { initOfficialMinimalProject } from "../init.js";
 import { defaultTypesBunVersion, defaultTypescriptVersion } from "../scaffold-versions.js";
@@ -91,8 +92,112 @@ export default definePipr((pipr) => {
 `,
     );
 
-    await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
+    const loaded = await loadTypescriptConfig({ rootDir, typecheck: true });
+
+    expect(loaded).toMatchObject({
       source: path.join(rootDir, ".pipr", "config.ts"),
+      versionCompatibility: {
+        kind: "unknown",
+        runtimeVersion,
+      },
+    });
+  });
+
+  it("captures a matching exact config SDK version without warning", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await writeSdkDependency(rootDir, runtimeVersion);
+
+    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
+
+    expect(loaded.versionCompatibility).toEqual({
+      kind: "matched",
+      runtimeVersion,
+      configVersion: runtimeVersion,
+    });
+  });
+
+  it("warns when the config SDK pin is behind the runtime", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await writeSdkDependency(rootDir, "0.1.0");
+
+    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
+
+    expect(loaded.versionCompatibility).toEqual({
+      kind: "runtime-newer",
+      runtimeVersion,
+      configVersion: "0.1.0",
+      warning: `.pipr/package.json pins @usepipr/sdk 0.1.0, but this Pipr runtime is ${runtimeVersion}. Run \`pipr init --force\` or update .pipr/package.json and .pipr/bun.lock when ready.`,
+    });
+  });
+
+  it("treats non-object package manifests as unknown config versions", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await Bun.write(path.join(rootDir, ".pipr", "package.json"), "null\n");
+
+    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
+
+    expect(loaded.versionCompatibility).toEqual({
+      kind: "unknown",
+      runtimeVersion,
+    });
+  });
+
+  it("fails before config execution when the config SDK pin is newer than the runtime", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await writeSdkDependency(rootDir, "999.0.0");
+
+    await expect(loadTypescriptConfig({ rootDir, typecheck: false })).rejects.toThrow(
+      `.pipr/package.json pins @usepipr/sdk 999.0.0, but this Pipr runtime is ${runtimeVersion}. Upgrade Pipr before running this config.`,
+    );
+  });
+
+  it("warns and skips comparison for non-exact config SDK specs", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await writeSdkDependency(rootDir, "^0.3.3");
+
+    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
+
+    expect(loaded.versionCompatibility).toEqual({
+      kind: "uncomparable",
+      runtimeVersion,
+      warning:
+        '.pipr/package.json declares @usepipr/sdk as "^0.3.3"; use an exact version to enable Pipr config version checks.',
+    });
+  });
+
+  it("escapes non-exact config SDK specs in version warnings", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [] });
+    await writeSdkDependency(rootDir, "^0.3.3\nerror: forged");
+
+    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
+
+    expect(loaded.versionCompatibility.warning).toBe(
+      '.pipr/package.json declares @usepipr/sdk as "^0.3.3\\nerror: forged"; use an exact version to enable Pipr config version checks.',
+    );
+  });
+
+  it("uses the selected config directory in version mismatch remediation", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
+    await initOfficialMinimalProject({ rootDir, adapters: [], configDir: "config/pipr" });
+    await writeSdkDependency(rootDir, "0.1.0", "config/pipr");
+
+    const loaded = await loadTypescriptConfig({
+      rootDir,
+      configDir: "config/pipr",
+      typecheck: false,
+    });
+
+    expect(loaded.versionCompatibility).toEqual({
+      kind: "runtime-newer",
+      runtimeVersion,
+      configVersion: "0.1.0",
+      warning: `config/pipr/package.json pins @usepipr/sdk 0.1.0, but this Pipr runtime is ${runtimeVersion}. Run \`pipr init --force\` or update config/pipr/package.json and config/pipr/bun.lock when ready.`,
     });
   });
 
@@ -330,6 +435,25 @@ describe("prepareConfigDirectory", () => {
       await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
     ).toBe(true);
   });
+
+  it("ignores malformed dependency maps when deciding whether install is required", async () => {
+    const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
+    await Bun.write(
+      path.join(configDir, "package.json"),
+      `${JSON.stringify({
+        dependencies: "lodash-es",
+        devDependencies: {
+          "@usepipr/sdk": runtimeVersion,
+          "not-a-version": 1,
+        },
+      })}\n`,
+    );
+
+    await expect(prepareConfigDirectory(configDir, { frozen: true })).resolves.toBeUndefined();
+    expect(
+      await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
+    ).toBe(true);
+  });
 });
 
 function interceptSpawnCommands(
@@ -370,6 +494,21 @@ function isStringArray(value: unknown): value is string[] {
 
 async function writePiprConfig(rootDir: string, contents: string): Promise<void> {
   await Bun.write(path.join(rootDir, ".pipr", "config.ts"), contents);
+}
+
+async function writeSdkDependency(
+  rootDir: string,
+  version: string,
+  configDir = ".pipr",
+): Promise<void> {
+  const packageJsonPath = path.join(rootDir, configDir, "package.json");
+  const manifest = (await Bun.file(packageJsonPath).json()) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  manifest.dependencies = { "@usepipr/sdk": version };
+  delete manifest.devDependencies;
+  await Bun.write(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 async function installPiprConfigDependencies(configDir: string): Promise<void> {

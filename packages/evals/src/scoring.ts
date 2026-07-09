@@ -1,4 +1,8 @@
-import { isPublishableSuggestedFixSelection } from "@usepipr/runtime/internal/testing";
+import {
+  isPublishableSuggestedFixSelection,
+  maxInlineFindingBodyCharacters,
+  maxInlineFindingBodyLines,
+} from "@usepipr/runtime/internal/testing";
 import type { PiprEvalExpected } from "./cases.js";
 import type { EvalDiffRange, EvalInlineFinding, PiprEvalOutput } from "./runner.js";
 import { piprEvalForbiddenOutputText } from "./runner.js";
@@ -7,9 +11,6 @@ export type PiprEvalScore = {
   name: string;
   score: number;
 };
-
-const maxInlineFindingBodyCharacters = 700;
-const maxInlineFindingBodyLines = 4;
 
 export function scorePiprEvalOutput(
   output: PiprEvalOutput,
@@ -207,6 +208,7 @@ function expectedFindingMatches(
 
 function hasReviewPolicyCall(call: PiprEvalOutput["piCalls"][number]): boolean {
   return [
+    call.inlineFindingBodyPolicy,
     call.reviewPolicy,
     call.schemaOnlySystemPrompt,
     call.strictJsonSystemPrompt,

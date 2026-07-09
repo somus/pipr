@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Agent, Schema } from "@usepipr/sdk";
 import { type AgentRunContext, renderAgentPrompt } from "../agent/agent-prompt.js";
+import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
 import { reviewResultSchemaId } from "../review.js";
 
 const unknownSchema: Schema<unknown> = {
@@ -27,7 +28,14 @@ describe("renderAgentPrompt", () => {
     expect(prompt).toContain("Review only changed behavior.");
     expect(prompt).toContain("Report only actionable defects");
     expect(prompt).toContain("Do not leave actionable defects or test gaps only in the summary.");
-    expect(prompt).toContain("Keep each inline finding body to one short paragraph");
+    expect(prompt).toContain("Inline finding bodies are final code-review comments");
+    expect(prompt).toContain(
+      `at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters.`,
+    );
+    expect(prompt).toContain(
+      `Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target`,
+    );
+    expect(prompt).toContain("Do not include step-by-step reasoning, broad context");
     expect(prompt).toContain("one inline finding");
     expect(prompt).toContain("exact Diff Manifest commentable range");
     expect(prompt).toContain("smallest contiguous `startLine` to `endLine` span");

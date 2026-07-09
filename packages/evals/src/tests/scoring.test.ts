@@ -4,6 +4,7 @@ import {
   scoreFindingCountBudget,
   scoreForbiddenOutputSuppression,
   scoreInlineFindingBodyBudget,
+  scorePiprEvalOutput,
   scoreSuggestedFixRangeShape,
 } from "../scoring.js";
 
@@ -91,5 +92,33 @@ describe("prompt eval scoring", () => {
 
   it("passes finding count budget when no expected budget is configured", () => {
     expect(scoreFindingCountBudget(output, undefined)).toBe(1);
+  });
+
+  it("requires the inline body budget policy to reach Pi", () => {
+    const scores = scorePiprEvalOutput(
+      {
+        ...output,
+        piCalls: [
+          {
+            inlineFindingBodyPolicy: false,
+            reviewPolicy: true,
+            schemaOnlySystemPrompt: true,
+            strictJsonSystemPrompt: true,
+            secretHygieneSystemPrompt: true,
+            systemPromptHasReviewPolicy: false,
+            untrustedDataSystemPrompt: true,
+            promptBytes: 1,
+          },
+        ],
+      },
+      {
+        findings: [],
+        maxInlineFindings: 0,
+        requirePiCall: true,
+      },
+      { includePromptPolicy: true },
+    );
+
+    expect(scores.find((score) => score.name === "Prompt contracts reached Pi")?.score).toBe(0);
   });
 });

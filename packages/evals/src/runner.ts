@@ -36,6 +36,7 @@ const evalDiffRangeSchema = z.object({
 });
 
 const evalPiCallSchema = z.object({
+  inlineFindingBodyPolicy: z.boolean(),
   reviewPolicy: z.boolean(),
   schemaOnlySystemPrompt: z.boolean(),
   strictJsonSystemPrompt: z.boolean(),
