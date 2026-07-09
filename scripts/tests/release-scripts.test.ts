@@ -396,6 +396,20 @@ describe("check-release-metadata", () => {
 
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
+
+  it("rejects missing post-publish dogfood SDK automation", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace(
+        "      - name: Update dogfood SDK on main\n",
+        "      - name: Update dogfood SDK without main push\n",
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
 });
 
 function runScript(script: string, args: string[], cwd = repoRoot): number {

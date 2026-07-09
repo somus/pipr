@@ -188,3 +188,54 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Update dogfood SDK on main
+        env:
+          PIPR_PUSH_TOKEN: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token }}
+          PIPR_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main
+          git switch -C main origin/main
+          main_version="$(bun -e "console.log((await import('./package.json')).default.version)")"
+          if [[ "$main_version" != "$PIPR_RELEASE_VERSION" ]]; then
+            echo "Skipping dogfood SDK update because main is ${main_version}, not ${PIPR_RELEASE_VERSION}."
+            exit 0
+          fi
+
+          for attempt in {1..30}; do
+            if npm view "@usepipr/sdk@${PIPR_RELEASE_VERSION}" version >/dev/null 2>&1; then
+              break
+            fi
+            if [[ "$attempt" == "30" ]]; then
+              echo "@usepipr/sdk@${PIPR_RELEASE_VERSION} was not visible on npm after waiting." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          bun -e '
+          const packagePath = ".pipr/package.json";
+          const version = Bun.env.PIPR_RELEASE_VERSION;
+          if (!version) {
+            throw new Error("PIPR_RELEASE_VERSION is required");
+          }
+          const pkg = await Bun.file(packagePath).json();
+          pkg.dependencies ??= {};
+          pkg.dependencies["@usepipr/sdk"] = version;
+          await Bun.write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+          '
+          bun install --cwd .pipr
+          bun run check:release-metadata
+
+          if git diff --quiet -- .pipr/package.json .pipr/bun.lock; then
+            echo "Dogfood SDK already matches ${PIPR_RELEASE_VERSION}."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .pipr/package.json .pipr/bun.lock
+          git commit -m "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}"
+          git pull --rebase origin main
+          git -c core.hooksPath=/dev/null push "https://x-access-token:${PIPR_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:main"
