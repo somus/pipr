@@ -1,0 +1,82 @@
+packages/runtime/src/review/suggested-fix-publication-policy.ts
+  s_ee868d0249ce21::t_7fa2edc69bd9e0 50-54,56
+  s_ee868d0249ce21::t_65f0fe065542b9 13-17,152,155,158-182
+  s_ee868d0249ce21::t_75b3a74873f63a 150-151,153,157
+  s_ee868d0249ce21::t_619bd35bdef4cf 130-132,134
+  s_ee868d0249ce21::t_c5357064140b24 57-60,133
+  s_ee868d0249ce21::t_8af681b454fe25 154,156
+  s_ee868d0249ce21::t_e455fad2c06a98 61,135-145,147-149
+  s_ee868d0249ce21::t_dd67dbcd26d28b 146
+packages/runtime/src/pi/runner.ts
+  s_ee868d0249ce21::t_34434fb7204682 68
+packages/evals/src/live-prompt-gates.ts
+  s_ee868d0249ce21::t_7fa2edc69bd9e0 27,29-33,119
+packages/runtime/src/pi/tests/pi.test.ts
+  s_ee868d0249ce21::t_34434fb7204682 146
+packages/evals/src/fake-pi.ts
+  s_ee868d0249ce21::t_34434fb7204682 101-104
+packages/runtime/README.md
+  s_ee868d0249ce21::t_e455fad2c06a98 18-19
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_ee868d0249ce21::t_dd67dbcd26d28b 286
+  s_ee868d0249ce21::t_75b3a74873f63a 292-293,295-298,310
+  s_ee868d0249ce21::t_e455fad2c06a98 194,275-285,287-290,311
+  s_ee868d0249ce21::t_8af681b454fe25 299-309
+  s_ee868d0249ce21::t_910b2778448cd2 291,294
+  s_ee868d0249ce21::t_7fa2edc69bd9e0 175-190,192,261-267
+  s_ee868d0249ce21::t_619bd35bdef4cf 193,268-274
+  s_adf55c018923eb::t_c338b60da5ac74 312
+packages/evals/README.md
+  s_ee868d0249ce21::t_7fa2edc69bd9e0 18
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_ee868d0249ce21::t_e455fad2c06a98 225,306-316,318-321,342
+  s_ee868d0249ce21::t_dd67dbcd26d28b 317
+  s_ee868d0249ce21::t_619bd35bdef4cf 224,299-305
+  s_ee868d0249ce21::t_75b3a74873f63a 323-324,326-329,341
+  s_ee868d0249ce21::t_910b2778448cd2 322,325
+  s_ee868d0249ce21::t_7fa2edc69bd9e0 206-221,223,292-298
+  s_ee868d0249ce21::t_8af681b454fe25 330-340
+  s_adf55c018923eb::t_d5b0b9c629a1ab 343
+packages/evals/src/tests/scoring.test.ts
+  s_ee868d0249ce21::t_619bd35bdef4cf 83-96
+  s_ee868d0249ce21::t_7fa2edc69bd9e0 69-82,172-181
+  s_ee868d0249ce21::t_910b2778448cd2 122-146
+  s_ee868d0249ce21::t_75b3a74873f63a 98-102,114
+  s_ee868d0249ce21::t_8af681b454fe25 147-171,182
+  s_ee868d0249ce21::t_e455fad2c06a98 97,103-113,115-121
+  s_ee868d0249ce21::t_f85d762a326d1a 2,183
+packages/runtime/src/config/tests/init.test.ts
+  s_ee868d0249ce21::t_e455fad2c06a98 455
+  s_ee868d0249ce21::t_619bd35bdef4cf 454
+packages/runtime/src/review/tests/comment.test.ts
+  s_ee868d0249ce21::t_910b2778448cd2 542-560
+  s_ee868d0249ce21::t_8af681b454fe25 561-564,566-578
+  s_ee868d0249ce21::t_e455fad2c06a98 530-541,579-597
+  s_ee868d0249ce21::t_619bd35bdef4cf 518-529
+  s_ee868d0249ce21::t_c5357064140b24 565
+  s_ee868d0249ce21::t_7fa2edc69bd9e0 494-517
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1e7aee80a5d548a39371e3189bba28a4476f47be",
+  "prompts": {},
+  "sessions": {
+    "s_adf55c018923eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f45a4-e828-7770-8bc6-cc9d3e7b6284",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_ee868d0249ce21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4653-c456-7120-aff5-4a2460382e8f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
