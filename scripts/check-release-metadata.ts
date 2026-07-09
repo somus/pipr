@@ -60,11 +60,12 @@ for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) 
 
 const cliPackage = await readJson<PackageJson>("packages/cli/package.json");
 const selfReviewPackage = await readJson<PackageJson>(".pipr/package.json");
+const selfReviewSdkVersion = selfReviewPackage.dependencies?.["@usepipr/sdk"];
+const selfReviewLock = await readText(".pipr/bun.lock");
 assert.equal(cliPackage.bin?.pipr, "./dist/main.mjs", "@usepipr/cli bin must point at dist");
-assert.equal(
-  selfReviewPackage.dependencies?.["@usepipr/sdk"],
-  rootPackage.version,
-  ".pipr/package.json @usepipr/sdk dependency must match root",
+assert(
+  selfReviewSdkVersion && /^\d+\.\d+\.\d+$/.test(selfReviewSdkVersion),
+  ".pipr/package.json @usepipr/sdk dependency must pin a published stable version",
 );
 assert.equal(
   rootPackage.scripts?.["sync:release-lockfile"],
@@ -90,8 +91,12 @@ assert(
   "bun.lock @usepipr/cli sdk dependency must match root",
 );
 assert(
-  (await readText(".pipr/bun.lock")).includes(`"@usepipr/sdk": "${rootPackage.version}"`),
-  ".pipr/bun.lock @usepipr/sdk dependency must match root",
+  selfReviewLock.includes(`"@usepipr/sdk": "${selfReviewSdkVersion}"`),
+  ".pipr/bun.lock @usepipr/sdk dependency must match .pipr/package.json",
+);
+assert(
+  selfReviewLock.includes(`"@usepipr/sdk@${selfReviewSdkVersion}"`),
+  ".pipr/bun.lock @usepipr/sdk package entry must match .pipr/package.json",
 );
 
 assert(
@@ -186,6 +191,10 @@ assert(
 assert(
   !releasePleaseConfig.includes('"path": "bun.lock"'),
   "Release Please must not use unsupported generic bun.lock updates",
+);
+assert(
+  !releasePleaseConfig.includes('"path": ".pipr/package.json"'),
+  "Release Please must not bump dogfood SDK before packages are published",
 );
 assert(
   !releasePleaseWorkflow.includes("bun install --lockfile-only"),

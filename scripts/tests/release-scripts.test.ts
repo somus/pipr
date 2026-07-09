@@ -160,6 +160,13 @@ describe("sync-release-lockfile", () => {
     run("bun", [path.join(repoRoot, "scripts/sync-release-lockfile.ts"), "--root", repository], {
       cwd: repoRoot,
     });
+    const dogfoodPackage = JSON.parse(
+      readFileSync(path.join(repository, ".pipr/package.json"), "utf8"),
+    ) as { dependencies?: Record<string, string> };
+    const dogfoodSdkVersion = dogfoodPackage.dependencies?.["@usepipr/sdk"];
+    if (!dogfoodSdkVersion) {
+      throw new Error(".pipr/package.json dependency @usepipr/sdk is required");
+    }
     const metadataCheck = scriptResult("scripts/check-release-metadata.ts", [], repository);
     if (metadataCheck.exitCode !== 0) {
       throw new Error(metadataCheck.stderr || metadataCheck.stdout || "metadata check failed");
@@ -169,10 +176,13 @@ describe("sync-release-lockfile", () => {
     expect(lockfile).toContain('"@usepipr/runtime": "0.1.1"');
     expect(lockfile).toContain('"@usepipr/sdk": "0.1.1"');
     expect(readFileSync(path.join(repository, ".pipr/package.json"), "utf8")).toContain(
-      '"@usepipr/sdk": "0.1.1"',
+      `"@usepipr/sdk": "${dogfoodSdkVersion}"`,
     );
     expect(readFileSync(path.join(repository, ".pipr/bun.lock"), "utf8")).toContain(
-      '"@usepipr/sdk": "0.1.1"',
+      `"@usepipr/sdk": "${dogfoodSdkVersion}"`,
+    );
+    expect(readFileSync(path.join(repository, ".pipr/bun.lock"), "utf8")).toContain(
+      `"@usepipr/sdk@${dogfoodSdkVersion}"`,
     );
     expect(readFileSync(path.join(repository, "action.yml"), "utf8")).toContain(
       "docker://ghcr.io/somus/pipr:v0.1.1",
@@ -370,6 +380,22 @@ describe("check-release-metadata", () => {
 
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
+
+  it("rejects Release Please dogfood SDK bumps", () => {
+    const repository = copyRepositoryFixture();
+    const configPath = path.join(repository, "release-please-config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+      packages: { ".": { "extra-files": unknown[] } };
+    };
+    config.packages["."]["extra-files"].push({
+      type: "json",
+      path: ".pipr/package.json",
+      jsonpath: "$.dependencies['@usepipr/sdk']",
+    });
+    write(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
 });
 
 function runScript(script: string, args: string[], cwd = repoRoot): number {
@@ -563,7 +589,6 @@ function bumpReleaseFixture(repository: string, version: string): void {
     "packages/sdk/package.json",
     "packages/runtime/package.json",
     "packages/cli/package.json",
-    ".pipr/package.json",
   ]) {
     const filePath = path.join(repository, relativePath);
     const pkg = JSON.parse(readFileSync(filePath, "utf8")) as {
