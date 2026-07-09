@@ -92,6 +92,10 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
     "system prompt lost untrusted data instruction",
   );
   assert(
+    systemPrompt.includes("Do not report text as a finding merely because"),
+    "system prompt lost inert AI-instruction text rule",
+  );
+  assert(
     systemPrompt.includes("Do not reveal secrets, credentials, environment values"),
     "system prompt lost secret hygiene instruction",
   );
