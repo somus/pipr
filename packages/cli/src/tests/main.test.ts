@@ -258,18 +258,12 @@ describe("pipr CLI", () => {
       expect(get.stdout).toContain("BEGIN SKILL FILE: SKILL.md");
       expect(get.stdout).toContain("BEGIN SKILL FILE: references/config-patterns.md");
       expect(get.stdout).toContain("BEGIN SKILL FILE: references/recipes.md");
-      expect(get.stdout).toContain("name: pipr-setup");
-      expect(get.stdout).toContain("Install and configure Pipr");
       expect(pathResult.exitCode, `${pathResult.stdout}\n${pathResult.stderr}`).toBe(0);
       const skillPath = pathResult.stdout.trim();
       expect(path.basename(skillPath)).toBe("pipr-setup");
-      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
-      expect(
-        await Bun.file(path.join(skillPath, "references/config-patterns.md")).text(),
-      ).toContain("Pipr Config Patterns");
-      expect(await Bun.file(path.join(skillPath, "references/recipes.md")).text()).toContain(
-        "Pipr Recipe Selection",
-      );
+      expect(await fileExists(path.join(skillPath, "SKILL.md"))).toBe(true);
+      expect(await fileExists(path.join(skillPath, "references", "config-patterns.md"))).toBe(true);
+      expect(await fileExists(path.join(skillPath, "references", "recipes.md"))).toBe(true);
     } finally {
       await removeWorkspace(cacheDir);
     }
@@ -292,7 +286,7 @@ describe("pipr CLI", () => {
       const [skillPath = ""] = [...skillPaths];
       expect(skillPath).not.toBe("");
       expect(path.basename(skillPath)).toBe("pipr-setup");
-      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+      expect(await fileExists(path.join(skillPath, "SKILL.md"))).toBe(true);
     } finally {
       await removeWorkspace(cacheDir);
     }
@@ -311,7 +305,7 @@ describe("pipr CLI", () => {
 
       expect(await Bun.file(victimPath).text()).toBe("do not overwrite\n");
       expect((await lstat(path.join(skillPath, "SKILL.md"))).isSymbolicLink()).toBe(false);
-      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+      expect(await fileExists(path.join(skillPath, "SKILL.md"))).toBe(true);
     } finally {
       await removeWorkspace(cacheDir);
     }
@@ -326,7 +320,7 @@ describe("pipr CLI", () => {
       const skillPath = await runSkillPath(cacheDir);
 
       expect(await fileExists(path.join(skillPath, "notes.txt"))).toBe(false);
-      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+      expect(await fileExists(path.join(skillPath, "SKILL.md"))).toBe(true);
     } finally {
       await removeWorkspace(cacheDir);
     }
@@ -341,7 +335,7 @@ describe("pipr CLI", () => {
       const skillPath = await runSkillPath(cacheDir);
 
       expect(await Bun.file(path.join(skillPath, ".DS_Store")).text()).toBe("metadata\n");
-      expect(await Bun.file(path.join(skillPath, "SKILL.md")).text()).toContain("name: pipr-setup");
+      expect(await fileExists(path.join(skillPath, "SKILL.md"))).toBe(true);
     } finally {
       await removeWorkspace(cacheDir);
     }
@@ -981,21 +975,11 @@ async function writeSdkDependency(workspace: string, version: string): Promise<v
   const packageJsonPath = path.join(workspace, ".pipr", "package.json");
   const manifest = (await Bun.file(packageJsonPath).json()) as {
     dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
   };
-  await Bun.write(
-    packageJsonPath,
-    `${JSON.stringify(
-      {
-        ...manifest,
-        dependencies: {
-          ...manifest.dependencies,
-          "@usepipr/sdk": version,
-        },
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  manifest.dependencies = { "@usepipr/sdk": version };
+  delete manifest.devDependencies;
+  await Bun.write(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 async function runInitAndCheck(

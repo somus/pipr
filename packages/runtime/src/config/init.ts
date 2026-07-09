@@ -8,6 +8,7 @@ import {
   officialInitRecipeFiles,
   officialInitRecipeWorkflowEnvSecrets,
 } from "./recipes.js";
+import { defaultTypesBunVersion, defaultTypescriptVersion } from "./scaffold-versions.js";
 import { starterTsconfig } from "./starter-tsconfig.js";
 
 export type InitOfficialMinimalProjectOptions = {
@@ -36,7 +37,6 @@ type StarterFile = {
 
 const defaultWorkflowActionRef = "somus/pipr@v0.3.3"; // x-release-please-version
 const defaultSdkVersion = "0.3.3"; // x-release-please-version
-const defaultTypesBunVersion = "1.3.14";
 
 function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInitAdapter[] {
   if (adapters === undefined) {
@@ -174,6 +174,7 @@ function starterPackageJson(): string {
       },
       devDependencies: {
         "@types/bun": defaultTypesBunVersion,
+        typescript: defaultTypescriptVersion,
       },
     },
     null,

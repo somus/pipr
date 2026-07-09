@@ -4,14 +4,13 @@
     "lib": ["ES2023"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "baseUrl": ".",
     "paths": {
-      "@usepipr/sdk": ["packages/sdk/src/index.ts"],
-      "@usepipr/sdk/internal": ["packages/sdk/src/internal.ts"],
-      "@usepipr/runtime": ["packages/runtime/src/index.ts"],
-      "@usepipr/runtime/internal/testing": ["packages/runtime/src/internal/testing.ts"],
+      "@usepipr/sdk": ["./packages/sdk/src/index.ts"],
+      "@usepipr/sdk/internal": ["./packages/sdk/src/internal.ts"],
+      "@usepipr/runtime": ["./packages/runtime/src/index.ts"],
+      "@usepipr/runtime/internal/testing": ["./packages/runtime/src/internal/testing.ts"],
       "@usepipr/runtime/runtime-tools-extension": [
-        "packages/runtime/src/pi/runtime-tools-extension.ts"
+        "./packages/runtime/src/pi/runtime-tools-extension.ts"
       ]
     },
     "strict": true,
