@@ -1,0 +1,28 @@
+.github/workflows/release.yml
+  s_5efc23a9d4714e::t_706517823354c4 217-227
+  s_5efc23a9d4714e::t_13a5f374523314 200-204
+  s_5efc23a9d4714e::t_c5ba98ee371694 191-199,205-216,228-241
+scripts/check-release-metadata.ts
+  s_5efc23a9d4714e::t_13a5f374523314 214-220
+  s_5efc23a9d4714e::t_c5ba98ee371694 191-200,204-210,221-235
+  s_5efc23a9d4714e::t_706517823354c4 201-203
+  s_5efc23a9d4714e::t_d7c0c086c80b6e 211-213
+scripts/tests/release-scripts.test.ts
+  s_5efc23a9d4714e::t_c5ba98ee371694 399-412
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8049107889ff7b9ddf3da86d980dc9ba2f2322f3",
+  "prompts": {},
+  "sessions": {
+    "s_5efc23a9d4714e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4586-edc0-7393-8ff4-4dfa59249a08",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
