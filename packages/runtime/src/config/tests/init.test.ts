@@ -16,6 +16,7 @@ import {
   officialInitRecipeFiles,
   supportedOfficialInitRecipes,
 } from "../recipes.js";
+import { defaultTypesBunVersion, defaultTypescriptVersion } from "../scaffold-versions.js";
 import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
 
 useLocalInitSdk();
@@ -57,8 +58,8 @@ describe("initOfficialMinimalProject", () => {
     );
     expect(packageJson.dependencies).toMatchObject({ "@usepipr/sdk": expect.any(String) });
     expect(packageJson.devDependencies).toMatchObject({
-      "@types/bun": "1.3.14",
-      typescript: "6.0.3",
+      "@types/bun": defaultTypesBunVersion,
+      typescript: defaultTypescriptVersion,
     });
     expect(await Bun.file(path.join(rootDir, ".pipr", "bun.lock")).text()).toContain(
       '"lockfileVersion"',

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { installConfigDependencies } from "../config-deps.js";
 import { initOfficialMinimalProject } from "../init.js";
-import { defaultTypescriptVersion } from "../scaffold-versions.js";
+import { defaultTypesBunVersion, defaultTypescriptVersion } from "../scaffold-versions.js";
 import { loadTypescriptConfig, prepareConfigDirectory } from "../ts-loader.js";
 import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
 import {
@@ -312,7 +312,7 @@ describe("prepareConfigDirectory", () => {
         {
           private: true,
           dependencies: { "@usepipr/sdk": "0.3.3" },
-          devDependencies: { "@types/bun": "1.3.14" },
+          devDependencies: { "@types/bun": defaultTypesBunVersion },
         },
         null,
         2,
