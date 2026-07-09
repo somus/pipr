@@ -206,7 +206,7 @@ function isTightSuggestedFixSelection(
   }
   return isPublishableSuggestedFixSelection({
     side: range.side,
-    kind: "added",
+    kind: range.kind,
     rangeStartLine: range.startLine,
     startLine: finding.startLine,
     endLine: finding.endLine,

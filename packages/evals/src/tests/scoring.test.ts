@@ -35,6 +35,7 @@ const output: PiprEvalOutput = {
       side: "RIGHT",
       startLine: 1,
       endLine: 3,
+      kind: "added",
       preview: [
         "export function finalPrice(priceCents: number): number {",
         "  const adjusted = priceCents - 100;",
@@ -62,6 +63,31 @@ describe("prompt eval scoring", () => {
           },
         ],
         publicationInlineFindings: output.inlineFindings,
+      }),
+    ).toBe(0);
+  });
+
+  it("uses the actual diff range kind for suggested-fix range-shape scoring", () => {
+    const [range] = output.diffRanges;
+    if (!range) {
+      throw new Error("test output is missing its diff range");
+    }
+
+    expect(
+      scoreSuggestedFixRangeShape({
+        ...output,
+        inlineFindings: [
+          {
+            ...finding,
+            suggestedFix: "  return Math.max(0, adjusted);",
+          },
+        ],
+        diffRanges: [
+          {
+            ...range,
+            kind: "deleted",
+          },
+        ],
       }),
     ).toBe(0);
   });

@@ -60,6 +60,7 @@ const diffManifestRangeSchema = z.object({
   side: z.enum(["RIGHT", "LEFT"]),
   startLine: z.number().int(),
   endLine: z.number().int(),
+  kind: z.enum(["added", "deleted", "context", "mixed"]),
   preview: z.string().optional(),
 });
 
