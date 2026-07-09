@@ -1,0 +1,146 @@
+packages/runtime/src/config/recipes/security-sast.ts
+  s_ee868d0249ce21::t_1d0d986e395929 107-108
+  s_ee868d0249ce21::t_8a65871ab6b442 110-113
+  s_ee868d0249ce21::t_cf3ecf113953bd 109
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_ee868d0249ce21::t_a4685327e2ee03 63-65,85-87
+  s_ee868d0249ce21::t_fbed28403856b0 84
+  s_ee868d0249ce21::t_4d6ec3fca6e777 94-95
+  s_ee868d0249ce21::t_71f63afdd42351 23-41,80-83,88-89,93
+  s_ee868d0249ce21::t_97da47b9c6a665 68-70,90-92
+  s_ee868d0249ce21::t_34e1df7ddb4c8f 62,66-67
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_ee868d0249ce21::t_aff3473b4f9682 105
+  s_ee868d0249ce21::t_85086c9c5a9a53 106-110
+  s_ee868d0249ce21::t_59a26d66d732af 103-104
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_ee868d0249ce21::t_85086c9c5a9a53 141-144
+  s_ee868d0249ce21::t_59a26d66d732af 138-139
+  s_ee868d0249ce21::t_aff3473b4f9682 140
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_ee868d0249ce21::t_b72107e01fd213 115,128,134-135,140-145,147,149-163
+  s_ee868d0249ce21::t_ecef94e4ce53d2 148,185
+  s_ee868d0249ce21::t_a926b635bed45a 146,183
+  s_ee868d0249ce21::t_a187755db6a01b 164
+  s_ee868d0249ce21::t_4c4812e942c3d9 184
+packages/evals/src/tests/scoring.test.ts
+  s_ee868d0249ce21::t_a3337c821e58dc 99-112
+  s_ee868d0249ce21::t_39ec35f90d9f88 4-5,199
+  s_ee868d0249ce21::t_b8f4d302b0209b 113-197
+  s_ee868d0249ce21::t_14269b88d7a669 198,200-216
+packages/runtime/src/review/tests/comment.test.ts
+  s_ee868d0249ce21::t_b11682f3d26d3a 473-493
+packages/runtime/src/config/recipes/diff-diagnostics.ts
+  s_ee868d0249ce21::t_3d0c47d78fc7ed 42
+  s_ee868d0249ce21::t_ae1a82fedc34e9 43
+  s_ee868d0249ce21::t_fe10f0390ecccc 41
+packages/evals/src/scoring.ts
+  s_ee868d0249ce21::t_ff3ae426abec6d 268
+  s_ee868d0249ce21::t_f7e571a85b3edb 259-261
+  s_ee868d0249ce21::t_35411cc960a3d7 153,155,157-163
+  s_ee868d0249ce21::t_2f2f3b2ffbf0a5 71,230-237
+  s_ee868d0249ce21::t_5d9fb9b06ea5ba 34-37,142-152,154,156,164-165,228,246-258,262-267
+  s_ee868d0249ce21::t_d771183c78b2fd 5
+  s_ee868d0249ce21::t_07c192bac51555 229
+packages/evals/README.md
+  s_ee868d0249ce21::t_a658be029679e3 1-17,19-38,41-109
+  s_ee868d0249ce21::t_6c58996f9b54d6 18,39-40
+packages/evals/package.json
+  s_ee868d0249ce21::t_7df96e435998f7 9,11-12
+  s_ee868d0249ce21::t_380f607e28f6e3 7-8,10
+packages/runtime/src/internal/review-testing.ts
+  s_ee868d0249ce21::t_e27b6fb8e8ebfd 1-5
+  s_ee868d0249ce21::t_33d04091f88c1a 6
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_ee868d0249ce21::t_cdc259d89b4752 1157-1158
+  s_ee868d0249ce21::t_2107ecc5aaa952 1153-1156
+tsconfig.base.json
+  s_ee868d0249ce21::t_46103ee695976b 11-13
+packages/evals/src/live-prompt-gates.ts
+  s_ee868d0249ce21::t_3b4dc6d0c927bc 1-19,21-27,30-140
+  s_ee868d0249ce21::t_0089d7617c59d6 20
+  s_ee868d0249ce21::t_cd2ca2f364a1af 28-29
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_ee868d0249ce21::t_85086c9c5a9a53 100-103
+  s_ee868d0249ce21::t_aff3473b4f9682 99
+  s_ee868d0249ce21::t_59a26d66d732af 97-98
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_ee868d0249ce21::t_59a26d66d732af 82-83
+  s_ee868d0249ce21::t_aff3473b4f9682 84
+  s_ee868d0249ce21::t_85086c9c5a9a53 85-88
+packages/runtime/src/internal/testing.ts
+  s_ee868d0249ce21::t_33d04091f88c1a 17
+packages/evals/src/prompt-gates.eval.ts
+  s_ee868d0249ce21::t_b89e7be54c99c7 1-57
+packages/runtime/package.json
+  s_ee868d0249ce21::t_2ece736a36b8cd 33-36,43
+packages/evals/src/prompt-evals.eval.ts
+  s_ee868d0249ce21::t_87cbb8163f79e9 4-7,11,16-17
+packages/runtime/src/review/suggested-fix-publication-policy.ts
+  s_ee868d0249ce21::t_815ed7b6276816 37-44,46-49,110-114,116
+  s_ee868d0249ce21::t_0089d7617c59d6 1
+  s_ee868d0249ce21::t_1e5916a5699381 109,115,117
+packages/runtime/src/config/recipes/quality-gate.ts
+  s_ee868d0249ce21::t_74005aa339d22d 72-73
+  s_ee868d0249ce21::t_80759882a87ca6 74
+  s_ee868d0249ce21::t_c873301f97a65d 75-79
+packages/runtime/src/config/recipes/pr-hygiene.ts
+  s_ee868d0249ce21::t_b86c6ec07a613c 68
+  s_ee868d0249ce21::t_8ab5b999bd986d 66-67
+  s_ee868d0249ce21::t_e0a7dbdc1b158d 69-72
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_ee868d0249ce21::t_59a26d66d732af 129-130
+  s_ee868d0249ce21::t_aff3473b4f9682 131
+  s_ee868d0249ce21::t_85086c9c5a9a53 132-135
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_ee868d0249ce21::t_88d68d6991d377 54-57
+  s_ee868d0249ce21::t_195e56583fffe5 51-52
+  s_ee868d0249ce21::t_13a99c5a558341 53
+packages/evals/src/cases.ts
+  s_ee868d0249ce21::t_688b6aec252360 488
+  s_ee868d0249ce21::t_86aced0d74681c 83
+  s_ee868d0249ce21::t_10f655724e6042 187
+  s_ee868d0249ce21::t_7c6ecc12c7740d 1-9,14,84-87,154
+apps/docs/content/docs/reference/development.mdx
+  s_ee868d0249ce21::t_a658be029679e3 124,127-129
+  s_ee868d0249ce21::t_479e17e9c0595a 132
+packages/e2e/README.md
+  s_ee868d0249ce21::t_b10c75b5599b59 47-48,51-53
+  s_ee868d0249ce21::t_9f4330098c4b46 56-58
+  s_ee868d0249ce21::t_a658be029679e3 61-62
+packages/runtime/src/config/recipes/rich-review.ts
+  s_ee868d0249ce21::t_b1057f7c19f790 98-99
+  s_ee868d0249ce21::t_1d455f5b62953a 100
+  s_ee868d0249ce21::t_7d1809ee9507fc 101-104
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_ee868d0249ce21::t_59a26d66d732af 72
+  s_ee868d0249ce21::t_aff3473b4f9682 73
+  s_ee868d0249ce21::t_85086c9c5a9a53 74
+packages/evals/src/suggested-fix-prompt.eval.ts
+  s_ee868d0249ce21::t_43d2682b7f29c8 13-18
+  s_ee868d0249ce21::t_62f43a4536a254 1-2,9-12,21
+  s_ee868d0249ce21::t_dbf1d43cf20d36 3-8,19-20
+.pipr/config.ts
+  s_ee868d0249ce21::t_5a4e2af575efd1 91-92
+  s_ee868d0249ce21::t_e087e99e246a25 94-97
+  s_ee868d0249ce21::t_0691a3b05b3021 93
+packages/evals/src/fake-pi.ts
+  s_ee868d0249ce21::t_e10c5dc9e27fe3 120-127
+  s_ee868d0249ce21::t_96e1dd04446aa3 128-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b8e433cf113a58dcea053de3ef792d1332e1d50e",
+  "prompts": {},
+  "sessions": {
+    "s_ee868d0249ce21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4653-c456-7120-aff5-4a2460382e8f",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
