@@ -281,14 +281,7 @@ describe("prepareConfigDirectory", () => {
   it("uses no-verify only for default scaffold TypeScript installs", async () => {
     const originalSpawn = Bun.spawn;
     const commands: string[][] = [];
-    Bun.spawn = ((command: string[]) => {
-      commands.push(command);
-      return {
-        exited: Promise.resolve(0),
-        stdout: new Response("").body,
-        stderr: new Response("").body,
-      } as unknown as ReturnType<typeof Bun.spawn>;
-    }) as typeof Bun.spawn;
+    Bun.spawn = interceptSpawnCommands(originalSpawn, commands);
     try {
       const defaultConfigDir = await writePackageForInstallTest({
         devDependencies: { typescript: defaultTypescriptVersion },
@@ -338,6 +331,42 @@ describe("prepareConfigDirectory", () => {
     ).toBe(true);
   });
 });
+
+function interceptSpawnCommands(
+  originalSpawn: typeof Bun.spawn,
+  commands: string[][],
+): typeof Bun.spawn {
+  return ((...args: Parameters<typeof Bun.spawn>): ReturnType<typeof Bun.spawn> => {
+    const command = commandFromSpawnArgs(args);
+    if (command !== undefined) {
+      commands.push(command);
+      if (command[0] === "bun" && command[1] === "install") {
+        return originalSpawn(["bun", "--version"], {
+          env: process.env,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+      }
+    }
+    return originalSpawn(...args);
+  }) as typeof Bun.spawn;
+}
+
+function commandFromSpawnArgs(args: Parameters<typeof Bun.spawn>): string[] | undefined {
+  const firstArg = args[0];
+  if (isStringArray(firstArg)) {
+    return firstArg;
+  }
+  if (firstArg !== null && typeof firstArg === "object" && "cmd" in firstArg) {
+    const command = (firstArg as { cmd?: unknown }).cmd;
+    return isStringArray(command) ? command : undefined;
+  }
+  return undefined;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((part) => typeof part === "string");
+}
 
 async function writePiprConfig(rootDir: string, contents: string): Promise<void> {
   await Bun.write(path.join(rootDir, ".pipr", "config.ts"), contents);
