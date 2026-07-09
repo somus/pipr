@@ -206,6 +206,10 @@ function isPublishableSuggestedFixSelection(selection: {
   if (!originalLines) {
     return false;
   }
+  const firstOriginalEdge = structuralEdgeToken(originalLines[0]);
+  const firstSuggestedEdge = structuralEdgeToken(suggestedLines[0]);
+  const lastOriginalEdge = structuralEdgeToken(originalLines.at(-1));
+  const lastSuggestedEdge = structuralEdgeToken(suggestedLines.at(-1));
   const originalLinesWithoutTrailingBlanks = originalLines.slice(
     0,
     lastNonBlankLineIndex(originalLines) + 1,
@@ -223,9 +227,18 @@ function isPublishableSuggestedFixSelection(selection: {
     hasTextChange &&
       !onlyChangesWhitespace(originalLinesWithoutTrailingBlanks, suggestedLinesWithoutTrailingBlanks) &&
       !suggestionIntroducesNewEnvironmentAccess(selection.preview, selection.suggestedFix) &&
+      (firstOriginalEdge === undefined || firstOriginalEdge === firstSuggestedEdge) &&
+      (lastOriginalEdge === undefined || lastOriginalEdge === lastSuggestedEdge) &&
       !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
       !suggestionIncludesUnselectedContext(selection, selectedLineCount, suggestedLines),
   );
+}
+
+function structuralEdgeToken(line: string | undefined): string | undefined {
+  const token = line?.trim().replace(/[;,]$/, "");
+  return token && Array.from(token).every((char) => "{}[]()<>".includes(char))
+    ? token
+    : undefined;
 }
 
 function normalizedSuggestedFixLines(value: string): string[] {

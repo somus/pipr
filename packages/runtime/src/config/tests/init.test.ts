@@ -453,6 +453,8 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("suggestionIncludesUnselectedContext");
     expect(configTs).toContain("onlyChangesWhitespace");
     expect(configTs).toContain("suggestionIntroducesNewEnvironmentAccess");
+    expect(configTs).toContain("structuralEdgeToken");
+    expect(configTs).toContain(String.raw`"{}[]()<>".includes(char)`);
     expect(configTs).toContain(String.raw`].join("\n")`);
     expect(configTs).toContain(String.raw`replace(/\s/g, "")`);
     expect(configTs).toContain(String.raw`/\b(?:process|Bun|import\.meta)`);
