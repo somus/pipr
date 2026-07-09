@@ -66,13 +66,7 @@ export default definePipr((pipr) => {
   const diagnostics = pipr.agent({
     name: "diff-diagnostics",
     model,
-    instructions: `
-      Produce diff-scoped diagnostics for actionable defects only.
-      Include suggestedFix only when there is an exact replacement for the selected range.
-      Omit suggestedFix when it is identical to the selected lines, only removes a trailing blank line, or only changes whitespace.
-      The diagnostic body must describe the defect that suggestedFix directly fixes.
-      Omit suggestedFix for secrets, credentials, API keys, tokens, or config wiring unless the replacement uses an existing secret, environment variable, or config key already present in the surrounding code.
-    `,
+    instructions: "Produce diff-scoped diagnostics for actionable defects only.",
     output: diagnosticOutput,
     prompt: () => "Summarize the diff-scoped diagnostics for this change.",
   });

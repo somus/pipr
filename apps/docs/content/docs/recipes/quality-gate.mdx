@@ -100,14 +100,7 @@ export default definePipr((pipr) => {
       Act as a merge quality gate. Report only blocking correctness, security,
       reliability, or test coverage issues that must prevent merge. A blocker
       must have a concrete changed-code range and an impact that maintainers can
-      verify. Include suggestedFix only for exact replacements that change the
-      selected lines; omit it for no-op, trailing-blank-line-only, or
-      whitespace-only changes. The blocker body must describe the issue that
-      suggestedFix directly fixes. Omit suggestedFix for secrets, credentials,
-      API keys, tokens, or config wiring unless the replacement uses an existing
-      secret, environment variable, or config key already present in the
-      surrounding code. If no blocking issue exists, return an empty blockers
-      array.
+      verify. If no blocking issue exists, return an empty blockers array.
     `,
     output: qualityGateOutput,
     tools: pipr.tools.readOnly,

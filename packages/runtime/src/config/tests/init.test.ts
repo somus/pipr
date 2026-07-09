@@ -169,6 +169,11 @@ describe("initOfficialMinimalProject", () => {
       expect(configTs).not.toContain('section("Diff Manifest"');
       expect(configTs).not.toContain("json(input.manifest");
       expect(configTs).not.toContain("input.manifest");
+      expect(configTs).not.toContain("Include suggestedFix only");
+      expect(configTs).not.toContain("Omit suggestedFix when");
+      expect(configTs).not.toContain("Omit suggestedFix for secrets");
+      expect(configTs).not.toContain("suggestedFix directly fixes");
+      expect(configTs).not.toContain("trailing-blank-line-only");
     }
   });
 
