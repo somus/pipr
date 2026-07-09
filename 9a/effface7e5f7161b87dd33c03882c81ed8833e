@@ -1,0 +1,37 @@
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_ee868d0249ce21::t_7182afbfe1d998 307
+  s_ee868d0249ce21::t_88812ce4bbb698 317,329,332,334,337,339,342
+  s_ee868d0249ce21::t_a076cc26bc2154 286-288,291,294-297,312-313,326
+  s_ee868d0249ce21::t_d12483af8ce2f5 314
+packages/runtime/src/review/suggested-fix-publication-policy.ts
+  s_ee868d0249ce21::t_7182afbfe1d998 155
+  s_ee868d0249ce21::t_88812ce4bbb698 165,177,180,182,185,187,205
+  s_ee868d0249ce21::t_a076cc26bc2154 134-136,139,142-145,160-161,174
+  s_ee868d0249ce21::t_84d8b40f74171e 162
+packages/runtime/src/config/tests/init.test.ts
+  s_ee868d0249ce21::t_a076cc26bc2154 459
+  s_ee868d0249ce21::t_66ae2376eb3f5a 532-545,621-642,713-714
+packages/runtime/src/review/tests/comment.test.ts
+  s_ee868d0249ce21::t_9c2dbdd77aa506 530-546
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_ee868d0249ce21::t_6e3c3aa051a1ef 317-319,322,325-328,343-344,357
+  s_ee868d0249ce21::t_6cbbc343e55423 338
+  s_ee868d0249ce21::t_0765a6a8396456 348,360,363,365,368,370,373
+  s_ee868d0249ce21::t_dea058b9738096 345
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9aeffface7e5f7161b87dd33c03882c81ed8833e",
+  "prompts": {},
+  "sessions": {
+    "s_ee868d0249ce21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4653-c456-7120-aff5-4a2460382e8f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
