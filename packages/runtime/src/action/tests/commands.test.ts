@@ -13,6 +13,7 @@ import {
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
 } from "../../review/prior-state.js";
+import { runtimeVersion } from "../../shared/version.js";
 import { memoryActionLogSink } from "../../tests/helpers/action-log-sink.js";
 import {
   type ActionLogSink,
@@ -755,7 +756,9 @@ describe("runActionCommand pull_request dispatch", () => {
       expect(logs.messages.join("\n")).toContain('"event":"config warning"');
       expect(logs.messages.join("\n")).toContain(".pipr/package.json pins @usepipr/sdk 0.1.0");
       expect(result.review.publicationPlan.metadata.configVersion).toBe("0.1.0");
-      expect(result.review.mainComment).toContain("Config SDK 0.1.0 is behind Pipr");
+      expect(result.review.mainComment).toContain(
+        `Config SDK 0.1.0 is behind [Pipr ${runtimeVersion}](https://github.com/somus/pipr/releases/tag/v${runtimeVersion}).`,
+      );
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

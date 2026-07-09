@@ -329,7 +329,8 @@ function configVersionNotice(metadata: PublicationMetadata): string {
   ) {
     return "";
   }
-  return ` Config SDK ${metadata.configVersion} is behind Pipr ${metadata.runtimeVersion}.`;
+  const releaseUrl = `${piprRepositoryUrl}/releases/tag/v${metadata.runtimeVersion}`;
+  return ` Config SDK ${metadata.configVersion} is behind [Pipr ${metadata.runtimeVersion}](${releaseUrl}).`;
 }
 
 function renderInlineBody(
