@@ -527,6 +527,23 @@ describe("comments", () => {
     });
   });
 
+  it("omits formatting-only suggestions when literals contain comment-like syntax", () => {
+    for (const [preview, suggestedFix] of [
+      ['const endpoint = "https://example.com";', 'const  endpoint = "https://example.com";'],
+      ["const pattern = /[/*]/;", "const  pattern = /[/*]/;"],
+    ]) {
+      expectSuggestedChangeOmitted({
+        finding: {
+          ...finding,
+          startLine: 20,
+          endLine: 20,
+          suggestedFix,
+        },
+        manifest: manifestWithRange(20, 20, preview),
+      });
+    }
+  });
+
   it("publishes suggested-change blocks when whitespace changes inside a literal", () => {
     for (const [preview, suggestedFix] of [
       ['const header = "Bearer" + token;', 'const header = "Bearer " + token;'],

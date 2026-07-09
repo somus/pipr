@@ -456,7 +456,7 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("structuralEdgeToken");
     expect(configTs).toContain('"{}[]()<>".includes(char)');
     expect(configTs).toContain(String.raw`].join("\n")`);
-    expect(configTs).toContain("stripCodeWhitespace");
+    expect(configTs).toContain("scanCodeWhitespace");
     expect(configTs).toContain(String.raw`/\s/.test(char)`);
     expect(configTs).toContain(String.raw`/\b(?:process|Bun|import\.meta)`);
     expect(configTs).not.toContain(String.raw`/\\s/.test(char)`);
@@ -528,6 +528,20 @@ describe("initOfficialMinimalProject", () => {
               startLine: 80,
               endLine: 80,
               preview: "// Join firstand last name",
+            },
+            {
+              ...sourceRange,
+              id: "range-url-literal",
+              startLine: 90,
+              endLine: 90,
+              preview: 'const endpoint = "https://example.com";',
+            },
+            {
+              ...sourceRange,
+              id: "range-regex-comment-like",
+              startLine: 100,
+              endLine: 100,
+              preview: "const pattern = /[/*]/;",
             },
           ],
         },
@@ -605,6 +619,28 @@ describe("initOfficialMinimalProject", () => {
             suggestedFix: "// Join first and last name",
           },
           {
+            title: "URL literal formatting only",
+            category: "maintainability",
+            body: "This changes only code whitespace around a URL literal.",
+            path: "src/a.ts",
+            rangeId: "range-url-literal",
+            side: "RIGHT",
+            startLine: 90,
+            endLine: 90,
+            suggestedFix: 'const  endpoint = "https://example.com";',
+          },
+          {
+            title: "Regex literal formatting only",
+            category: "maintainability",
+            body: "This changes only code whitespace around a regex literal.",
+            path: "src/a.ts",
+            rangeId: "range-regex-comment-like",
+            side: "RIGHT",
+            startLine: 100,
+            endLine: 100,
+            suggestedFix: "const  pattern = /[/*]/;",
+          },
+          {
             title: "Identical replacement",
             category: "maintainability",
             body: "This does not change the selected line.",
@@ -674,6 +710,8 @@ describe("initOfficialMinimalProject", () => {
     expect(result.mainComment).not.toContain("Invented environment key");
     expect(result.mainComment).not.toContain("Template expression formatting");
     expect(result.mainComment).not.toContain("Structural edge replacement");
+    expect(result.mainComment).not.toContain("URL literal formatting only");
+    expect(result.mainComment).not.toContain("Regex literal formatting only");
     expect(result.inlineCommentDrafts.map((draft) => draft.finding.suggestedFix)).toEqual(
       expect.arrayContaining(['const header = "Bearer " + token;', "return /a b/;"]),
     );

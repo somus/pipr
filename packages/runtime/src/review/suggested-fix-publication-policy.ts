@@ -131,17 +131,18 @@ function lastNonBlankLineIndex(lines: string[]): number {
 function onlyChangesWhitespace(originalLines: string[], suggestedLines: string[]): boolean {
   const original = originalLines.join("\n");
   const suggested = suggestedLines.join("\n");
-  if (containsCommentSyntax(original) || containsCommentSyntax(suggested)) {
+  const originalScan = scanCodeWhitespace(original);
+  const suggestedScan = scanCodeWhitespace(suggested);
+  if (originalScan.containsCommentSyntax || suggestedScan.containsCommentSyntax) {
     return false;
   }
-  return stripCodeWhitespace(original) === stripCodeWhitespace(suggested);
+  return originalScan.stripped === suggestedScan.stripped;
 }
 
-function containsCommentSyntax(value: string): boolean {
-  return value.includes("//") || value.includes("/*");
-}
-
-function stripCodeWhitespace(value: string): string {
+function scanCodeWhitespace(value: string): {
+  stripped: string;
+  containsCommentSyntax: boolean;
+} {
   let result = "";
   const state: CodeWhitespaceScanState = {
     literalDelimiter: undefined,
@@ -151,19 +152,17 @@ function stripCodeWhitespace(value: string): string {
   };
 
   for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (!char) {
-      continue;
-    }
+    const char = value.charAt(index);
     if (advanceCodeLiteralScan(state, char, value[index + 1])) {
       result += char;
       continue;
     }
+    if (char === "/" && ["/", "*"].includes(value[index + 1] ?? "")) {
+      return { stripped: result, containsCommentSyntax: true };
+    }
     if (/\s/.test(char)) {
       const nextNonWhitespace = value.slice(index + 1).match(/\S/)?.[0];
-      if (requiresCodeTokenSeparator(result.at(-1), nextNonWhitespace)) {
-        result += " ";
-      }
+      result += codeTokenSeparator(result.at(-1), nextNonWhitespace);
       continue;
     }
     advanceTemplateExpressionScan(state, char);
@@ -172,20 +171,20 @@ function stripCodeWhitespace(value: string): string {
     result += char;
   }
 
-  return result;
+  return { stripped: result, containsCommentSyntax: false };
 }
 
-function requiresCodeTokenSeparator(
+function codeTokenSeparator(
   previousChar: string | undefined,
   nextChar: string | undefined,
-): boolean {
+): string {
   if (!previousChar || !nextChar) {
-    return false;
+    return "";
   }
   if (/[A-Za-z0-9_$]/.test(previousChar) && /[A-Za-z0-9_$]/.test(nextChar)) {
-    return true;
+    return " ";
   }
-  return [
+  const requiresSeparator = [
     "++",
     "--",
     "//",
@@ -203,6 +202,7 @@ function requiresCodeTokenSeparator(
     "<<",
     ">>",
   ].includes(previousChar + nextChar);
+  return requiresSeparator ? " " : "";
 }
 
 type CodeWhitespaceScanState = {
