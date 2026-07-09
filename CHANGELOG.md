@@ -4,6 +4,20 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.3.4](https://github.com/somus/pipr/compare/v0.3.3...v0.3.4) (2026-07-09)
+
+
+### Features
+
+* **sdk:** expose default review entrypoints ([#44](https://github.com/somus/pipr/issues/44)) ([6c26186](https://github.com/somus/pipr/commit/6c2618624ee244d5b6e12796a2b72d4f58e97a1e))
+
+
+### Bug Fixes
+
+* handle pipr config version mismatches ([#41](https://github.com/somus/pipr/issues/41)) ([df48d2b](https://github.com/somus/pipr/commit/df48d2b343f2a6dc2291873a64e61942558ad1f2))
+* improve Pipr agent setup flow ([7f1daed](https://github.com/somus/pipr/commit/7f1daedcb220580d1b170f3abcdcb97112d8c765))
+* **runtime:** align review summaries and action e2e scope ([#42](https://github.com/somus/pipr/issues/42)) ([e7fa703](https://github.com/somus/pipr/commit/e7fa703e0be54ef7189c727df4d92241718d09e9))
+
 ## [0.3.3](https://github.com/somus/pipr/compare/v0.3.2...v0.3.3) (2026-07-08)
 
 
