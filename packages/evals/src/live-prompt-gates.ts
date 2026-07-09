@@ -22,6 +22,13 @@ type LivePromptScorer = {
   scorer: (input: LivePromptScoreInput) => number;
 };
 
+type LivePromptGateDefinition = {
+  name: string;
+  label: string;
+  caseIds: readonly string[];
+  scorers: readonly LivePromptScorer[];
+};
+
 export const livePromptGateCaseIds = {
   cleanSuppression: ["harmless-refactor", "out-of-scope-docs"],
   defectRecall: ["security-open-redirect"],
@@ -78,13 +85,13 @@ const findingCountBudgetScorer = {
   scorer: ({ output, expected }) => scoreFindingCountBudget(output, expected),
 } satisfies LivePromptScorer;
 
-export const cleanSuppressionGateScorers = [
+const cleanSuppressionGateScorers = [
   runSucceededScorer,
   falsePositiveSuppressionScorer,
   findingCountBudgetScorer,
 ] satisfies LivePromptScorer[];
 
-export const defectRecallGateScorers = [
+const defectRecallGateScorers = [
   runSucceededScorer,
   expectedFindingRecallScorer,
   falsePositiveSuppressionScorer,
@@ -105,7 +112,7 @@ export const fullAdvisoryScorers = [
   findingCountBudgetScorer,
 ] satisfies LivePromptScorer[];
 
-export const safetyHygieneGateScorers = [
+const safetyHygieneGateScorers = [
   runSucceededScorer,
   expectedFindingRecallScorer,
   forbiddenOutputSuppressionScorer,
@@ -125,13 +132,41 @@ export const suggestedFixGateScorers = [
   findingCountBudgetScorer,
 ] satisfies LivePromptScorer[];
 
+export const suggestedFixLivePromptGate = {
+  name: "Pipr suggested-fix live prompt gate",
+  label: "suggested-fix",
+  caseIds: livePromptGateCaseIds.suggestedFix,
+  scorers: suggestedFixGateScorers,
+} satisfies LivePromptGateDefinition;
+
+export const defectRecallLivePromptGate = {
+  name: "Pipr defect recall live prompt gate",
+  label: "defect-recall",
+  caseIds: livePromptGateCaseIds.defectRecall,
+  scorers: defectRecallGateScorers,
+} satisfies LivePromptGateDefinition;
+
+export const cleanSuppressionLivePromptGate = {
+  name: "Pipr clean suppression live prompt gate",
+  label: "clean-suppression",
+  caseIds: livePromptGateCaseIds.cleanSuppression,
+  scorers: cleanSuppressionGateScorers,
+} satisfies LivePromptGateDefinition;
+
+export const safetyHygieneLivePromptGate = {
+  name: "Pipr safety hygiene live prompt gate",
+  label: "safety-hygiene",
+  caseIds: livePromptGateCaseIds.safetyHygiene,
+  scorers: safetyHygieneGateScorers,
+} satisfies LivePromptGateDefinition;
+
 export function assertLiveEvalEnv(): void {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("DEEPSEEK_API_KEY is required for live prompt evals");
   }
 }
 
-export function livePromptEvalCases(ids: readonly string[], label: string): PiprEvalCase[] {
+function livePromptEvalCases(ids: readonly string[], label: string): PiprEvalCase[] {
   const idSet = new Set(ids);
   const cases = promptEvalCasesForMode("live").filter((testCase) => idSet.has(testCase.id));
   if (cases.length !== idSet.size) {
@@ -142,4 +177,15 @@ export function livePromptEvalCases(ids: readonly string[], label: string): Pipr
 
 export async function runLivePiprEvalCase(testCase: PiprEvalCase): Promise<PiprEvalOutput> {
   return await runPiprEvalCase(testCase, { mode: "live" });
+}
+
+export function livePromptGateEvalConfig(gate: LivePromptGateDefinition) {
+  return {
+    data: livePromptEvalCases(gate.caseIds, gate.label).map((testCase) => ({
+      input: testCase,
+      expected: testCase.expected,
+    })),
+    task: runLivePiprEvalCase,
+    scorers: [...gate.scorers],
+  };
 }

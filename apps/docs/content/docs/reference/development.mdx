@@ -121,7 +121,7 @@ To run only deterministic prompt eval smoke tests:
 bun run --cwd packages/evals eval:deterministic
 ```
 
-Live prompt evals run through Evalite and call DeepSeek through the local Pipr review path. The package scripts load `.pipr/.env`; you can also export `DEEPSEEK_API_KEY` in the shell. Run them explicitly when model credentials are available:
+Live prompt evals run through Evalite and call DeepSeek through the local Pipr review path. Keep the key in the untracked `.pipr/.env`, then explicitly export only `DEEPSEEK_API_KEY` in a trusted shell. The package scripts do not auto-load the file because they execute code from the checked-out branch. Run them explicitly when model credentials are available:
 
 ```bash
 bun run eval:prompts

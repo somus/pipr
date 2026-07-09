@@ -129,8 +129,186 @@ function lastNonBlankLineIndex(lines: string[]): number {
 }
 
 function onlyChangesWhitespace(originalLines: string[], suggestedLines: string[]): boolean {
+  const original = originalLines.join("\n");
+  const suggested = suggestedLines.join("\n");
+  if (containsCommentSyntax(original) || containsCommentSyntax(suggested)) {
+    return false;
+  }
+  return stripCodeWhitespace(original) === stripCodeWhitespace(suggested);
+}
+
+function containsCommentSyntax(value: string): boolean {
+  return value.includes("//") || value.includes("/*");
+}
+
+function stripCodeWhitespace(value: string): string {
+  let result = "";
+  const state: CodeWhitespaceScanState = {
+    literalDelimiter: undefined,
+    escaped: false,
+    regexCharacterClass: false,
+    templateExpressionDepths: [],
+  };
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (!char) {
+      continue;
+    }
+    if (advanceCodeLiteralScan(state, char, value[index + 1])) {
+      result += char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      const nextNonWhitespace = value.slice(index + 1).match(/\S/)?.[0];
+      if (requiresCodeTokenSeparator(result.at(-1), nextNonWhitespace)) {
+        result += " ";
+      }
+      continue;
+    }
+    advanceTemplateExpressionScan(state, char);
+    state.literalDelimiter ??= openingCodeLiteralDelimiter(char, value[index + 1], result);
+    state.regexCharacterClass = false;
+    result += char;
+  }
+
+  return result;
+}
+
+function requiresCodeTokenSeparator(
+  previousChar: string | undefined,
+  nextChar: string | undefined,
+): boolean {
+  if (!previousChar || !nextChar) {
+    return false;
+  }
+  if (/[A-Za-z0-9_$]/.test(previousChar) && /[A-Za-z0-9_$]/.test(nextChar)) {
+    return true;
+  }
+  return [
+    "++",
+    "--",
+    "//",
+    "/*",
+    "**",
+    "??",
+    "?.",
+    "=>",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "&&",
+    "||",
+    "<<",
+    ">>",
+  ].includes(previousChar + nextChar);
+}
+
+type CodeWhitespaceScanState = {
+  literalDelimiter: string | undefined;
+  escaped: boolean;
+  regexCharacterClass: boolean;
+  templateExpressionDepths: number[];
+};
+
+function advanceCodeLiteralScan(
+  state: CodeWhitespaceScanState,
+  char: string,
+  nextChar: string | undefined,
+): boolean {
+  if (!state.literalDelimiter) {
+    return false;
+  }
+  if (state.escaped) {
+    state.escaped = false;
+    return true;
+  }
+  if (char === "\\") {
+    state.escaped = true;
+    return true;
+  }
+  if (state.literalDelimiter.charCodeAt(0) === 96 && char === "$" && nextChar === "{") {
+    state.templateExpressionDepths.push(0);
+    state.literalDelimiter = undefined;
+    return true;
+  }
+  if (state.literalDelimiter !== "/") {
+    if (char === state.literalDelimiter) {
+      state.literalDelimiter = undefined;
+    }
+    return true;
+  }
+  advanceRegexLiteralScan(state, char);
+  return true;
+}
+
+function advanceTemplateExpressionScan(state: CodeWhitespaceScanState, char: string): void {
+  const depthIndex = state.templateExpressionDepths.length - 1;
+  const depth = state.templateExpressionDepths[depthIndex];
+  if (depth === undefined) {
+    return;
+  }
+  if (char === "{") {
+    state.templateExpressionDepths[depthIndex] = depth + 1;
+  } else if (char === "}") {
+    if (depth <= 1) {
+      state.templateExpressionDepths.pop();
+      state.literalDelimiter = "`";
+    } else {
+      state.templateExpressionDepths[depthIndex] = depth - 1;
+    }
+  }
+}
+
+function advanceRegexLiteralScan(state: CodeWhitespaceScanState, char: string): void {
+  if (char === "[") {
+    state.regexCharacterClass = true;
+  } else if (char === "]") {
+    state.regexCharacterClass = false;
+  } else if (char === "/" && !state.regexCharacterClass) {
+    state.literalDelimiter = undefined;
+  }
+}
+
+function openingCodeLiteralDelimiter(
+  char: string,
+  nextChar: string | undefined,
+  previousCode: string,
+): string | undefined {
+  if (char === '"' || char === "'" || char.charCodeAt(0) === 96) {
+    return char;
+  }
+  return startsRegexLiteral(char, nextChar, previousCode) ? "/" : undefined;
+}
+
+function startsRegexLiteral(
+  char: string,
+  nextChar: string | undefined,
+  previousCode: string,
+): boolean {
+  const previousChar = previousCode.at(-1);
+  const previousWord = previousCode.split(/[^A-Za-z]+/).at(-1);
+  const followsRegexKeyword = [
+    "return",
+    "throw",
+    "case",
+    "delete",
+    "void",
+    "typeof",
+    "instanceof",
+    "in",
+    "of",
+    "yield",
+    "await",
+  ].includes(previousWord ?? "");
   return (
-    originalLines.join("\n").replace(/\s/g, "") === suggestedLines.join("\n").replace(/\s/g, "")
+    char === "/" &&
+    nextChar !== "/" &&
+    nextChar !== "*" &&
+    (previousChar === undefined ||
+      "([{:;,=!?&|+-*%^~<>)".includes(previousChar) ||
+      followsRegexKeyword)
   );
 }
 
@@ -149,19 +327,15 @@ function suggestionIntroducesNewEnvironmentAccess(
 function environmentAccessKeys(value: string): Set<string> {
   const keys = new Set<string>();
   for (const match of value.matchAll(environmentKeyAccessPattern)) {
-    addEnvironmentAccessMatchKey(keys, match);
+    const key = match[1] ?? match[2] ?? match[3] ?? match[4];
+    if (key) {
+      keys.add(key);
+    }
   }
   for (const match of value.matchAll(environmentDestructurePattern)) {
     addDestructuredEnvironmentKeys(keys, match[1] ?? "");
   }
   return keys;
-}
-
-function addEnvironmentAccessMatchKey(keys: Set<string>, match: RegExpExecArray): void {
-  const key = match[1] ?? match[2] ?? match[3] ?? match[4];
-  if (key) {
-    keys.add(key);
-  }
 }
 
 function addDestructuredEnvironmentKeys(keys: Set<string>, bindings: string): void {

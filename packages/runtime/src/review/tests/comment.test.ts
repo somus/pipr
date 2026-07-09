@@ -527,6 +527,47 @@ describe("comments", () => {
     });
   });
 
+  it("publishes suggested-change blocks when whitespace changes inside a literal", () => {
+    for (const [preview, suggestedFix] of [
+      ['const header = "Bearer" + token;', 'const header = "Bearer " + token;'],
+      ["const label = `hello$" + "{name}`;", "const label = `hello $" + "{name}`;"],
+      ["const pattern = /ab/;", "const pattern = /a b/;"],
+      ["return /ab/;", "return /a b/;"],
+      ["returnvalue;", "return value;"],
+      ["if (ok) /ab/.test(value);", "if (ok) /a b/.test(value);"],
+      ["// Join firstand last name", "// Join first and last name"],
+    ]) {
+      const [item] = prepareInlinePublicationItems({
+        validated: {
+          validFindings: [
+            {
+              ...finding,
+              startLine: 20,
+              endLine: 20,
+              suggestedFix,
+            },
+          ],
+        },
+        manifest: manifestWithRange(20, 20, preview),
+        reviewedHeadSha: "head",
+      });
+
+      expect(item?.finding.suggestedFix).toBe(suggestedFix);
+    }
+  });
+
+  it("omits suggested-change blocks for whitespace-only template expression edits", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "const label = `$" + "{first+last}`;",
+      },
+      manifest: manifestWithRange(20, 20, "const label = `$" + "{first + last}`;"),
+    });
+  });
+
   it("omits suggested-change blocks when the replacement invents an environment key", () => {
     expectSuggestedChangeOmitted({
       finding: {

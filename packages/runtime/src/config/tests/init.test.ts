@@ -454,11 +454,12 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("onlyChangesWhitespace");
     expect(configTs).toContain("suggestionIntroducesNewEnvironmentAccess");
     expect(configTs).toContain("structuralEdgeToken");
-    expect(configTs).toContain(String.raw`"{}[]()<>".includes(char)`);
+    expect(configTs).toContain('"{}[]()<>".includes(char)');
     expect(configTs).toContain(String.raw`].join("\n")`);
-    expect(configTs).toContain(String.raw`replace(/\s/g, "")`);
+    expect(configTs).toContain("stripCodeWhitespace");
+    expect(configTs).toContain(String.raw`/\s/.test(char)`);
     expect(configTs).toContain(String.raw`/\b(?:process|Bun|import\.meta)`);
-    expect(configTs).not.toContain(String.raw`replace(/\\s/g, "")`);
+    expect(configTs).not.toContain(String.raw`/\\s/.test(char)`);
     expect(configTs).not.toContain(String.raw`/\\b(?:process|Bun|import\\.meta)`);
     expect(configTs).toContain("@pipr improve");
     expect(configTs).toContain("maxInlineComments: 6");
@@ -469,6 +470,213 @@ describe("initOfficialMinimalProject", () => {
       task: "fix-suggestions",
       permission: "write",
     });
+
+    const manifest = reviewTestManifest();
+    const sourceFile = manifest.files[0];
+    if (!sourceFile) {
+      throw new Error("fix-suggestions test fixture missing source file");
+    }
+    const sourceRange = sourceFile.commentableRanges[0];
+    if (!sourceRange) {
+      throw new Error("fix-suggestions test fixture missing source range");
+    }
+    const literalManifest = {
+      ...manifest,
+      files: [
+        {
+          ...sourceFile,
+          commentableRanges: [
+            { ...sourceRange, preview: 'const header = "Bearer" + token;' },
+            {
+              ...sourceRange,
+              id: "range-regex",
+              startLine: 30,
+              endLine: 30,
+              preview: "return /ab/;",
+            },
+            {
+              ...sourceRange,
+              id: "range-template",
+              startLine: 40,
+              endLine: 40,
+              preview: "const label = `$" + "{first + last}`;",
+            },
+            {
+              ...sourceRange,
+              id: "range-structural",
+              startLine: 50,
+              endLine: 51,
+              preview: ["{", "return value;"].join("\n"),
+            },
+            {
+              ...sourceRange,
+              id: "range-token-separator",
+              startLine: 60,
+              endLine: 60,
+              preview: "returnvalue;",
+            },
+            {
+              ...sourceRange,
+              id: "range-regex-statement",
+              startLine: 70,
+              endLine: 70,
+              preview: "if (ok) /ab/.test(value);",
+            },
+            {
+              ...sourceRange,
+              id: "range-comment",
+              startLine: 80,
+              endLine: 80,
+              preview: "// Join firstand last name",
+            },
+          ],
+        },
+      ],
+    };
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      taskName: "fix-suggestions",
+      commandInvocation: {
+        name: "improve",
+        line: "@pipr improve",
+        arguments: {},
+        sourceCommentId: 123,
+      },
+      diffManifestBuilder: () => literalManifest,
+      piRunner: jsonPiRunner({
+        summary: "One exact fix found.",
+        suggestions: [
+          {
+            title: "Bearer scheme is missing its separator",
+            category: "correctness",
+            body: "The token is concatenated directly onto the authentication scheme.",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 10,
+            endLine: 10,
+            suggestedFix: 'const header = "Bearer " + token;',
+          },
+          {
+            title: "Regex requires a literal separator",
+            category: "correctness",
+            body: "The pattern currently accepts only adjacent characters.",
+            path: "src/a.ts",
+            rangeId: "range-regex",
+            side: "RIGHT",
+            startLine: 30,
+            endLine: 30,
+            suggestedFix: "return /a b/;",
+          },
+          {
+            title: "Keyword requires a token separator",
+            category: "correctness",
+            body: "The merged token is not a return statement.",
+            path: "src/a.ts",
+            rangeId: "range-token-separator",
+            side: "RIGHT",
+            startLine: 60,
+            endLine: 60,
+            suggestedFix: "return value;",
+          },
+          {
+            title: "Regex statement requires a literal separator",
+            category: "correctness",
+            body: "The expression statement pattern currently matches adjacent characters.",
+            path: "src/a.ts",
+            rangeId: "range-regex-statement",
+            side: "RIGHT",
+            startLine: 70,
+            endLine: 70,
+            suggestedFix: "if (ok) /a b/.test(value);",
+          },
+          {
+            title: "Comment wording requires a separator",
+            category: "documentation",
+            body: "The comment currently merges two words.",
+            path: "src/a.ts",
+            rangeId: "range-comment",
+            side: "RIGHT",
+            startLine: 80,
+            endLine: 80,
+            suggestedFix: "// Join first and last name",
+          },
+          {
+            title: "Identical replacement",
+            category: "maintainability",
+            body: "This does not change the selected line.",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 10,
+            endLine: 10,
+            suggestedFix: 'const header = "Bearer" + token;',
+          },
+          {
+            title: "Formatting-only replacement",
+            category: "maintainability",
+            body: "This changes only code whitespace.",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 10,
+            endLine: 10,
+            suggestedFix: 'const  header = "Bearer" + token;',
+          },
+          {
+            title: "Invented environment key",
+            category: "correctness",
+            body: "This introduces configuration not present in the diff.",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 10,
+            endLine: 10,
+            suggestedFix: "const header = process.env.NEW_BEARER_TOKEN;",
+          },
+          {
+            title: "Template expression formatting",
+            category: "maintainability",
+            body: "This changes only expression whitespace.",
+            path: "src/a.ts",
+            rangeId: "range-template",
+            side: "RIGHT",
+            startLine: 40,
+            endLine: 40,
+            suggestedFix: "const label = `$" + "{first+last}`;",
+          },
+          {
+            title: "Structural edge replacement",
+            category: "correctness",
+            body: "This replaces the opening structural edge.",
+            path: "src/a.ts",
+            rangeId: "range-structural",
+            side: "RIGHT",
+            startLine: 50,
+            endLine: 51,
+            suggestedFix: ["}", "return nextValue;"].join("\n"),
+          },
+        ],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain("Bearer scheme is missing its separator");
+    expect(result.mainComment).toContain("Regex requires a literal separator");
+    expect(result.mainComment).toContain("Keyword requires a token separator");
+    expect(result.mainComment).toContain("Regex statement requires a literal separator");
+    expect(result.mainComment).toContain("Comment wording requires a separator");
+    expect(result.mainComment).not.toContain("Identical replacement");
+    expect(result.mainComment).not.toContain("Formatting-only replacement");
+    expect(result.mainComment).not.toContain("Invented environment key");
+    expect(result.mainComment).not.toContain("Template expression formatting");
+    expect(result.mainComment).not.toContain("Structural edge replacement");
+    expect(result.inlineCommentDrafts.map((draft) => draft.finding.suggestedFix)).toEqual(
+      expect.arrayContaining(['const header = "Bearer " + token;', "return /a b/;"]),
+    );
   });
 
   it("initializes the quality gate recipe with commentable blocker filtering", async () => {

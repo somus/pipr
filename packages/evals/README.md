@@ -21,9 +21,10 @@ Use the narrowest command that covers the change.
 | `bun run --cwd packages/evals eval:full` | Broad live suite for trend checks and investigation. | Advisory |
 | `bun run --cwd packages/evals eval:full:export` | Broad live suite with JSON results in `evalite-export/results.json`. | Advisory |
 
-Live scripts load `../../.pipr/.env` from the package script, so a local
-`.pipr/.env` with `DEEPSEEK_API_KEY` is enough. You can also export
-`DEEPSEEK_API_KEY` in the shell. Do not commit provider keys or Evalite output.
+Keep `DEEPSEEK_API_KEY` in the untracked `.pipr/.env`, but explicitly export only
+that variable in a trusted shell before running live evals. The committed scripts
+do not auto-load `.pipr/.env` because live eval code executes from the checked-out
+branch. Do not commit provider keys or Evalite output.
 
 ## Suite Layout
 
