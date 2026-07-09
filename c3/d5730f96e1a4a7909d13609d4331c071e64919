@@ -1,0 +1,47 @@
+packages/runtime/src/internal/testing.ts
+  s_0437603dd8fd87::t_1c06914f53ab1d 14-16
+  s_0437603dd8fd87::t_3f4d6112aa9b31 20
+  s_0437603dd8fd87::t_cf593d50241eed 13
+packages/evals/src/tests/scoring.test.ts
+  s_0437603dd8fd87::t_09038acff2bfe0 7,96-122
+  s_0437603dd8fd87::t_c92f4468ea3693 123
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_0437603dd8fd87::t_7c42c1815bca2d 1148-1149
+packages/runtime/src/review/suggested-fix-publication-policy.ts
+  s_0437603dd8fd87::t_3f4d6112aa9b31 1-96
+packages/runtime/src/review/comment.ts
+  s_0437603dd8fd87::t_1c06914f53ab1d 14-17
+  s_0437603dd8fd87::t_b910b9f41069d2 30
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_0437603dd8fd87::t_033a7a07eab74c 115
+  s_0437603dd8fd87::t_7c42c1815bca2d 5,151-153
+  s_0437603dd8fd87::t_e9ab96586641d7 121-138
+packages/evals/src/scoring.ts
+  s_0437603dd8fd87::t_09038acff2bfe0 211
+  s_0437603dd8fd87::t_1c06914f53ab1d 1-5
+packages/evals/src/fake-pi.ts
+  s_0437603dd8fd87::t_09038acff2bfe0 112-113,189-191
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_0437603dd8fd87::t_1c06914f53ab1d 4,32,34-35,37
+  s_0437603dd8fd87::t_7c42c1815bca2d 31,33,36,38
+packages/evals/src/runner.ts
+  s_0437603dd8fd87::t_09038acff2bfe0 39
+packages/runtime/src/review/inline-finding-limits.ts
+  s_0437603dd8fd87::t_1c06914f53ab1d 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c3d5730f96e1a4a7909d13609d4331c071e64919",
+  "prompts": {},
+  "sessions": {
+    "s_0437603dd8fd87": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f42a6-6943-7f63-ba9d-7ed5c8e9d9fe",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
