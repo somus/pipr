@@ -1,0 +1,25 @@
+packages/runtime/src/shared/tests/semver.test.ts
+  s_0437603dd8fd87::t_e565d57ec8007c 2,6-7,12
+packages/runtime/src/review/comment.ts
+  s_0437603dd8fd87::t_e565d57ec8007c 4,326-327
+packages/runtime/src/shared/semver.ts
+  s_0437603dd8fd87::t_e565d57ec8007c 1
+packages/runtime/src/config/version-compat.ts
+  s_0437603dd8fd87::t_e565d57ec8007c 2,57,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3844c34e8cdfd98270b4ea08d6d8836d0ffefbca",
+  "prompts": {},
+  "sessions": {
+    "s_0437603dd8fd87": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f42a6-6943-7f63-ba9d-7ed5c8e9d9fe",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
