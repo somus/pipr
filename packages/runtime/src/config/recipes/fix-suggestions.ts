@@ -48,7 +48,13 @@ export default definePipr((pipr) => {
       when suggestedFix is a precise replacement for the selected diff range and
       the reviewer can apply it directly. Prioritize correctness, missing tests,
       type safety, and small maintainability improvements. Do not report broad
-      refactors, style preferences, or issues without an exact patch.
+      refactors, style preferences, or issues without an exact patch. Do not
+      return suggestions that are identical to the selected lines, only remove a
+      trailing blank line, or only change whitespace. The suggestion body must
+      describe the defect that suggestedFix directly fixes. Omit suggestedFix
+      for secrets, credentials, API keys, tokens, or config wiring unless the
+      replacement uses an existing secret, environment variable, or config key
+      already present in the surrounding code.
     \`,
     output: fixSuggestionOutput,
     tools: pipr.tools.readOnly,

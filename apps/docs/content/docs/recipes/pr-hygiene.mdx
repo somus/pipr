@@ -94,7 +94,13 @@ export default definePipr((pipr) => {
       Review pull request hygiene, not code correctness. Evaluate tests, docs,
       lockfiles, generated files, and change size. Return one policy check per
       relevant policy. Return inline findings only for concrete hygiene gaps
-      that maintainers can act on in the changed lines.
+      that maintainers can act on in the changed lines. Include suggestedFix
+      only for exact replacements that change the selected lines; omit it for
+      no-op, trailing-blank-line-only, or whitespace-only changes. The finding
+      body must describe the hygiene gap that suggestedFix directly fixes. Omit
+      suggestedFix for secrets, credentials, API keys, tokens, or config wiring
+      unless the replacement uses an existing secret, environment variable, or
+      config key already present in the surrounding code.
     `,
     output: hygieneOutput,
     tools: pipr.tools.readOnly,

@@ -2,7 +2,7 @@ import {
   isPublishableSuggestedFixSelection,
   maxInlineFindingBodyCharacters,
   maxInlineFindingBodyLines,
-} from "@usepipr/runtime/internal/testing";
+} from "@usepipr/runtime/internal/review-testing";
 import type { PiprEvalExpected } from "./cases.js";
 import type { EvalDiffRange, EvalInlineFinding, PiprEvalOutput } from "./runner.js";
 import { piprEvalForbiddenOutputText } from "./runner.js";
@@ -31,6 +31,10 @@ export function scorePiprEvalOutput(
     { name: "Valid inline anchoring", score: scoreValidAnchoring(output) },
     { name: "Inline finding body budget", score: scoreInlineFindingBodyBudget(output) },
     { name: "Suggested fix range shape", score: scoreSuggestedFixRangeShape(output) },
+    {
+      name: "Expected suggested fix behavior",
+      score: scoreExpectedSuggestedFixBehavior(output, expected),
+    },
     { name: "Finding count budget", score: scoreFindingCountBudget(output, expected) },
     ...(options.includePromptPolicy
       ? [{ name: "Prompt contracts reached Pi", score: scorePromptPolicy(output, expected) }]
@@ -64,7 +68,7 @@ export function scoreFalsePositiveSuppression(
   if (expected.findings.length > 0) {
     return Number(
       output.inlineFindings.every((actual) =>
-        expected.findings.some((finding) => expectedFindingMatches(finding, actual)),
+        expected.findings.some((finding) => expectedFindingLocationMatches(finding, actual)),
       ),
     );
   }
@@ -135,6 +139,30 @@ export function scoreSuggestedFixRangeShape(output: PiprEvalOutput): number {
   return valid.length / suggestions.length;
 }
 
+export function scoreExpectedSuggestedFixBehavior(
+  output: PiprEvalOutput,
+  expected: PiprEvalExpected | undefined,
+): number {
+  if (!hasExpectedOutput(output, expected)) {
+    return 0;
+  }
+  const expectedFindings = expected.findings.filter((finding) => finding.suggestedFix);
+  if (expectedFindings.length === 0) {
+    return 1;
+  }
+  const recalled = expectedFindings.flatMap((finding) => {
+    const actual = output.inlineFindings.find((item) => expectedFindingMatches(finding, item));
+    return actual ? [{ finding, actual }] : [];
+  });
+  if (recalled.length === 0) {
+    return 1;
+  }
+  const matched = recalled.filter(({ finding, actual }) =>
+    expectedSuggestedFixMatches(finding, actual),
+  );
+  return matched.length / recalled.length;
+}
+
 export function scoreFindingCountBudget(
   output: PiprEvalOutput,
   expected: PiprEvalExpected | undefined,
@@ -199,11 +227,43 @@ function expectedFindingMatches(
   actual: EvalInlineFinding,
 ): boolean {
   return [
+    expectedFindingLocationMatches(finding, actual),
+    finding.keywords.every((keyword) => actual.body.toLowerCase().includes(keyword)),
+  ].every(Boolean);
+}
+
+function expectedFindingLocationMatches(
+  finding: PiprEvalExpected["findings"][number],
+  actual: EvalInlineFinding,
+): boolean {
+  return [
     actual.path === finding.path,
     finding.line >= actual.startLine,
     finding.line <= actual.endLine,
-    finding.keywords.every((keyword) => actual.body.toLowerCase().includes(keyword)),
   ].every(Boolean);
+}
+
+function expectedSuggestedFixMatches(
+  finding: PiprEvalExpected["findings"][number],
+  actual: EvalInlineFinding,
+): boolean {
+  if (!finding.suggestedFix) {
+    return true;
+  }
+  if (finding.suggestedFix.mode === "absent") {
+    return !actual.suggestedFix;
+  }
+  if (!actual.suggestedFix) {
+    return true;
+  }
+  return (
+    normalizeSuggestedFix(actual.suggestedFix) === normalizeSuggestedFix(finding.suggestedFix.value)
+  );
+}
+
+function normalizeSuggestedFix(value: string): string {
+  const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
 }
 
 function hasReviewPolicyCall(call: PiprEvalOutput["piCalls"][number]): boolean {

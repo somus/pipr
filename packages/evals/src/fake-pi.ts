@@ -117,6 +117,18 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
     prompt.includes("Do not select a larger enclosing block"),
     "output prompt is missing suggested fix selection rule",
   );
+  assert(
+    prompt.includes("the finding body must describe the defect that `suggestedFix` directly fixes"),
+    "output prompt is missing suggested fix body alignment rule",
+  );
+  assert(
+    prompt.includes("identical to the selected lines"),
+    "output prompt is missing no-op suggested fix rule",
+  );
+  assert(
+    prompt.includes("Omit `suggestedFix` for secrets, credentials, API keys, tokens"),
+    "output prompt is missing secret suggested fix omission rule",
+  );
 }
 
 function promptEvalReview() {

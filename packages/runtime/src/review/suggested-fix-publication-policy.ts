@@ -1,4 +1,4 @@
-export type SuggestedFixPublicationSelection = {
+type SuggestedFixPublicationSelection = {
   side: "RIGHT" | "LEFT";
   kind: "added" | "deleted" | "context" | "mixed";
   rangeStartLine: number;
@@ -34,7 +34,19 @@ export function isPublishableSuggestedFixSelection(
   const firstSuggestedEdge = suggestedLines[0]?.trim().match(structuralEdgePattern)?.[1];
   const lastOriginalEdge = originalLines.at(-1)?.trim().match(structuralEdgePattern)?.[1];
   const lastSuggestedEdge = suggestedLines.at(-1)?.trim().match(structuralEdgePattern)?.[1];
+  const originalLinesWithoutTrailingBlanks = originalLines.slice(
+    0,
+    lastNonBlankLineIndex(originalLines) + 1,
+  );
+  const suggestedLinesWithoutTrailingBlanks = suggestedLines.slice(
+    0,
+    lastNonBlankLineIndex(suggestedLines) + 1,
+  );
   return (
+    (originalLinesWithoutTrailingBlanks.length !== suggestedLinesWithoutTrailingBlanks.length ||
+      originalLinesWithoutTrailingBlanks.some(
+        (line, index) => line !== suggestedLinesWithoutTrailingBlanks[index],
+      )) &&
     (firstOriginalEdge === undefined || firstOriginalEdge === firstSuggestedEdge) &&
     (lastOriginalEdge === undefined || lastOriginalEdge === lastSuggestedEdge) &&
     !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
@@ -93,4 +105,13 @@ function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: stri
     return firstLineUnchanged || lastLineUnchanged;
   }
   return firstLineUnchanged && lastLineUnchanged;
+}
+
+function lastNonBlankLineIndex(lines: string[]): number {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (lines[index]?.trim() !== "") {
+      return index;
+    }
+  }
+  return -1;
 }

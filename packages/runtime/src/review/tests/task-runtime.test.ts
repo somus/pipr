@@ -1151,6 +1151,12 @@ describe("runTaskRuntime", () => {
       "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
     );
     expect(observedPrompt).toContain(
+      "Do not include `suggestedFix` when it would be identical to the selected lines",
+    );
+    expect(observedPrompt).toContain(
+      "Omit `suggestedFix` for secrets, credentials, API keys, tokens, or config wiring",
+    );
+    expect(observedPrompt).toContain(
       "Diff Manifest:\nUse this as the authoritative changed-code context",
     );
     expect(observedPrompt).toContain(

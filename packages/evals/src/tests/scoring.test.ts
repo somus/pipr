@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { EvalInlineFinding, PiprEvalOutput } from "../runner.js";
 import {
+  scoreExpectedSuggestedFixBehavior,
+  scoreFalsePositiveSuppression,
   scoreFindingCountBudget,
   scoreForbiddenOutputSuppression,
   scoreInlineFindingBodyBudget,
@@ -92,6 +94,124 @@ describe("prompt eval scoring", () => {
 
   it("passes finding count budget when no expected budget is configured", () => {
     expect(scoreFindingCountBudget(output, undefined)).toBe(1);
+  });
+
+  it("does not double-penalize false positives when an expected finding is at the right location with different wording", () => {
+    expect(
+      scoreFalsePositiveSuppression(output, {
+        findings: [
+          {
+            line: 3,
+            path: finding.path,
+            keywords: ["unmatched"],
+          },
+        ],
+        maxInlineFindings: 1,
+        requirePiCall: true,
+      }),
+    ).toBe(1);
+  });
+
+  it("fails when an expected finding requires no suggested fix but one is present", () => {
+    expect(
+      scoreExpectedSuggestedFixBehavior(
+        {
+          ...output,
+          inlineFindings: [{ ...finding, suggestedFix: "return adjusted;" }],
+        },
+        {
+          findings: [
+            {
+              line: 3,
+              path: finding.path,
+              keywords: ["negative", "clamping"],
+              suggestedFix: { mode: "absent" },
+            },
+          ],
+          maxInlineFindings: 1,
+          requirePiCall: true,
+        },
+      ),
+    ).toBe(0);
+  });
+
+  it("allows exact suggested fixes when they are present", () => {
+    expect(
+      scoreExpectedSuggestedFixBehavior(
+        {
+          ...output,
+          inlineFindings: [
+            {
+              ...finding,
+              suggestedFix: "  return Math.max(0, adjusted);\n",
+            },
+          ],
+        },
+        {
+          findings: [
+            {
+              line: 3,
+              path: finding.path,
+              keywords: ["negative", "clamping"],
+              suggestedFix: {
+                mode: "if-present-exact",
+                value: "  return Math.max(0, adjusted);",
+              },
+            },
+          ],
+          maxInlineFindings: 1,
+          requirePiCall: true,
+        },
+      ),
+    ).toBe(1);
+  });
+
+  it("fails when a present suggested fix does not match the expected replacement", () => {
+    expect(
+      scoreExpectedSuggestedFixBehavior(
+        {
+          ...output,
+          inlineFindings: [
+            {
+              ...finding,
+              suggestedFix: "  return adjusted;",
+            },
+          ],
+        },
+        {
+          findings: [
+            {
+              line: 3,
+              path: finding.path,
+              keywords: ["negative", "clamping"],
+              suggestedFix: {
+                mode: "if-present-exact",
+                value: "  return Math.max(0, adjusted);",
+              },
+            },
+          ],
+          maxInlineFindings: 1,
+          requirePiCall: true,
+        },
+      ),
+    ).toBe(0);
+  });
+
+  it("does not double-penalize suggested fix behavior when the expected finding is not recalled", () => {
+    expect(
+      scoreExpectedSuggestedFixBehavior(output, {
+        findings: [
+          {
+            line: 3,
+            path: finding.path,
+            keywords: ["unmatched"],
+            suggestedFix: { mode: "absent" },
+          },
+        ],
+        maxInlineFindings: 1,
+        requirePiCall: true,
+      }),
+    ).toBe(1);
   });
 
   it("requires the inline body budget policy to reach Pi", () => {

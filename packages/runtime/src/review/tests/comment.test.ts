@@ -470,6 +470,27 @@ describe("comments", () => {
     });
   });
 
+  it("omits suggested-change blocks when the replacement only drops a trailing blank line", () => {
+    const selectedLines = [
+      "const state = findState();",
+      'if (state === "MERGED") {',
+      '  console.log("already merged");',
+      "  return;",
+      "}",
+      "",
+    ];
+
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 25,
+        suggestedFix: selectedLines.slice(0, -1).join("\n"),
+      },
+      manifest: manifestWithRange(20, 25, selectedLines.join("\n")),
+    });
+  });
+
   it("omits suggested-change blocks when a structural selection edge is replaced", () => {
     expectSuggestedChangeOmitted({
       finding: {

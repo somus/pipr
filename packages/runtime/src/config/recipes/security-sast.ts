@@ -104,7 +104,13 @@ export default definePipr((pipr) => {
       Make summary maintainer-facing and scannable with a concrete headline,
       risk level, risk rationale, and only useful security follow-up. Set
       diagramMermaid only when a high or critical risk has a concrete source-to-sink
-      path and a small Mermaid flowchart clarifies it. Do not include Markdown
+      path and a small Mermaid flowchart clarifies it. Include suggestedFix only
+      for exact replacements that change the selected lines; omit it for no-op,
+      trailing-blank-line-only, or whitespace-only changes. The finding body
+      must describe the security issue that suggestedFix directly fixes. Omit
+      suggestedFix for secrets, credentials, API keys, tokens, or config wiring
+      unless the replacement uses an existing secret, environment variable, or
+      config key already present in the surrounding code. Do not include Markdown
       fences in diagramMermaid.
     \`,
     output: securityOutput,

@@ -14,7 +14,4 @@ export {
   maxInlineFindingBodyCharacters,
   maxInlineFindingBodyLines,
 } from "../review/inline-finding-limits.js";
-export {
-  isPublishableSuggestedFixSelection,
-  type SuggestedFixPublicationSelection,
-} from "../review/suggested-fix-publication-policy.js";
+export { isPublishableSuggestedFixSelection } from "../review/suggested-fix-publication-policy.js";
