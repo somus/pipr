@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createDiffRangeIndex } from "../diff/ranges.js";
 import { redactPotentialSecrets } from "../shared/redaction.js";
-import { compareStableSemver, isStableSemver } from "../shared/semver.js";
+import { compareStableSemver, stableSemverPattern } from "../shared/semver.js";
 import type {
   ChangeRequestEventContext,
   CommentableRange,
@@ -323,8 +323,8 @@ function renderMainCommentAttribution(metadata: PublicationMetadata): string {
 function configVersionNotice(metadata: PublicationMetadata): string {
   if (
     !metadata.configVersion ||
-    !isStableSemver(metadata.runtimeVersion) ||
-    !isStableSemver(metadata.configVersion) ||
+    !stableSemverPattern.test(metadata.runtimeVersion) ||
+    !stableSemverPattern.test(metadata.configVersion) ||
     compareStableSemver(metadata.runtimeVersion, metadata.configVersion) <= 0
   ) {
     return "";

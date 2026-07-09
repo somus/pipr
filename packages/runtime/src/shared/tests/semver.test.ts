@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { compareStableSemver, isStableSemver } from "../semver.js";
+import { compareStableSemver, stableSemverPattern } from "../semver.js";
 
 describe("stable semver", () => {
   it("accepts exact stable versions", () => {
-    expect(isStableSemver("0.3.3")).toBe(true);
-    expect(isStableSemver("10.20.30")).toBe(true);
+    expect(stableSemverPattern.test("0.3.3")).toBe(true);
+    expect(stableSemverPattern.test("10.20.30")).toBe(true);
   });
 
   it("rejects non-exact, prerelease, and leading-zero versions", () => {
     for (const version of ["^0.3.3", "0.3.3-beta.1", "01.0.0", "1.02.0", "1.0.03"]) {
-      expect(isStableSemver(version)).toBe(false);
+      expect(stableSemverPattern.test(version)).toBe(false);
     }
   });
 

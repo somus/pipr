@@ -1,5 +1,5 @@
 import path from "node:path";
-import { compareStableSemver, isStableSemver } from "../shared/semver.js";
+import { compareStableSemver, stableSemverPattern } from "../shared/semver.js";
 import { runtimeVersion } from "../shared/version.js";
 import { normalizePackageManifest, type PackageManifest } from "./package-manifest.js";
 
@@ -54,14 +54,14 @@ export async function resolveConfigVersionCompatibility(options: {
   const packageJsonLabel =
     options.configDir === "." ? "package.json" : `${options.configDir}/package.json`;
   const bunLockLabel = options.configDir === "." ? "bun.lock" : `${options.configDir}/bun.lock`;
-  if (!isStableSemver(sdkVersion)) {
+  if (!stableSemverPattern.test(sdkVersion)) {
     return {
       kind: "uncomparable",
       runtimeVersion,
       warning: `${packageJsonLabel} declares @usepipr/sdk as ${JSON.stringify(sdkVersion)}; use an exact version to enable Pipr config version checks.`,
     };
   }
-  if (!isStableSemver(runtimeVersion)) {
+  if (!stableSemverPattern.test(runtimeVersion)) {
     return {
       kind: "uncomparable",
       runtimeVersion,

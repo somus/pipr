@@ -1,8 +1,4 @@
-const stableSemverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-
-export function isStableSemver(version: string): boolean {
-  return stableSemverPattern.test(version);
-}
+export const stableSemverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export function compareStableSemver(left: string, right: string): number {
   const leftParts = stableSemverPattern.exec(left);
