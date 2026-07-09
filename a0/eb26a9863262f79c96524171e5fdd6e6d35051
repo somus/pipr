@@ -1,0 +1,33 @@
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_ee868d0249ce21::t_abc20e32414fcd 209-212,230-231,237-241
+  s_ee868d0249ce21::t_863d90987203cc 242-243
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_ee868d0249ce21::t_d2a9e9e3ef78e8 178-181,199-200,206-210
+  s_adf55c018923eb::t_b0a9b908d6789f 211-212
+packages/runtime/src/config/tests/init.test.ts
+  s_ee868d0249ce21::t_d2a9e9e3ef78e8 456-457
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a0eb26a9863262f79c96524171e5fdd6e6d35051",
+  "prompts": {},
+  "sessions": {
+    "s_adf55c018923eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f45a4-e828-7770-8bc6-cc9d3e7b6284",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_ee868d0249ce21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4653-c456-7120-aff5-4a2460382e8f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
