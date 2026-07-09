@@ -51,6 +51,7 @@ console.log(
         side: range.side,
         startLine: range.startLine,
         endLine: range.endLine,
+        kind: range.kind,
         preview: range.preview,
       })),
     ),

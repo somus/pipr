@@ -30,13 +30,17 @@
       "types": "./dist/internal/testing.d.mts",
       "default": "./dist/internal/testing.mjs"
     },
+    "./internal/review-testing": {
+      "types": "./dist/internal/review-testing.d.mts",
+      "default": "./dist/internal/review-testing.mjs"
+    },
     "./runtime-tools-extension": {
       "types": "./dist/pi/runtime-tools-extension.d.mts",
       "default": "./dist/pi/runtime-tools-extension.mjs"
     }
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/internal/testing.ts src/pi/runtime-tools-extension.ts --dts --format esm --out-dir dist",
+    "build": "tsdown src/index.ts src/internal/testing.ts src/internal/review-testing.ts src/pi/runtime-tools-extension.ts --dts --format esm --out-dir dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test --timeout 60000",
     "test:config-init": "bun test --timeout 60000 src/config/tests/init.test.ts",

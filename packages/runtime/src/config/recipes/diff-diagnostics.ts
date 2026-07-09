@@ -35,10 +35,7 @@ export default definePipr((pipr) => {
   const diagnostics = pipr.agent({
     name: "diff-diagnostics",
     model,
-    instructions: \`
-      Produce diff-scoped diagnostics for actionable defects only.
-      Include suggestedFix only when there is an exact replacement for the selected range.
-    \`,
+    instructions: "Produce diff-scoped diagnostics for actionable defects only.",
     output: diagnosticOutput,
     prompt: () => "Summarize the diff-scoped diagnostics for this change.",
   });

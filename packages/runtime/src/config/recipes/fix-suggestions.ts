@@ -44,11 +44,11 @@ export default definePipr((pipr) => {
     name: "fix-suggestions",
     model,
     instructions: \`
-      Find exact suggested changes for this pull request. Return a suggestion only
-      when suggestedFix is a precise replacement for the selected diff range and
-      the reviewer can apply it directly. Prioritize correctness, missing tests,
-      type safety, and small maintainability improvements. Do not report broad
-      refactors, style preferences, or issues without an exact patch.
+      Find directly applicable fixes for this pull request. Return an item only
+      when an exact patch can resolve the reported defect; otherwise omit the
+      entire item. Prioritize correctness, missing tests, type safety, and small
+      maintainability improvements. Do not report broad refactors, style
+      preferences, or issues without an exact patch.
     \`,
     output: fixSuggestionOutput,
     tools: pipr.tools.readOnly,
@@ -166,11 +166,42 @@ function isPublishableSuggestedFixSelection(selection: {
   }
 
   const originalLines = selectedPreviewLines(selection, selectedLineCount);
+  if (!originalLines) {
+    return false;
+  }
+  const firstOriginalEdge = structuralEdgeToken(originalLines[0]);
+  const firstSuggestedEdge = structuralEdgeToken(suggestedLines[0]);
+  const lastOriginalEdge = structuralEdgeToken(originalLines.at(-1));
+  const lastSuggestedEdge = structuralEdgeToken(suggestedLines.at(-1));
+  const originalLinesWithoutTrailingBlanks = originalLines.slice(
+    0,
+    lastNonBlankLineIndex(originalLines) + 1,
+  );
+  const suggestedLinesWithoutTrailingBlanks = suggestedLines.slice(
+    0,
+    lastNonBlankLineIndex(suggestedLines) + 1,
+  );
+  const hasTextChange =
+    originalLinesWithoutTrailingBlanks.length !== suggestedLinesWithoutTrailingBlanks.length ||
+    originalLinesWithoutTrailingBlanks.some(
+      (line, index) => line !== suggestedLinesWithoutTrailingBlanks[index],
+    );
   return Boolean(
-    originalLines &&
+    hasTextChange &&
+      !onlyChangesWhitespace(originalLinesWithoutTrailingBlanks, suggestedLinesWithoutTrailingBlanks) &&
+      !suggestionIntroducesNewEnvironmentAccess(selection.preview, selection.suggestedFix) &&
+      (firstOriginalEdge === undefined || firstOriginalEdge === firstSuggestedEdge) &&
+      (lastOriginalEdge === undefined || lastOriginalEdge === lastSuggestedEdge) &&
       !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
       !suggestionIncludesUnselectedContext(selection, selectedLineCount, suggestedLines),
   );
+}
+
+function structuralEdgeToken(line: string | undefined): string | undefined {
+  const token = line?.trim().replace(/[;,]$/, "");
+  return token && Array.from(token).every((char) => "{}[]()<>".includes(char))
+    ? token
+    : undefined;
 }
 
 function normalizedSuggestedFixLines(value: string): string[] {
@@ -232,6 +263,220 @@ function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: stri
     return firstLineUnchanged || lastLineUnchanged;
   }
   return firstLineUnchanged && lastLineUnchanged;
+}
+
+function lastNonBlankLineIndex(lines: string[]): number {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (lines[index]?.trim() !== "") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function onlyChangesWhitespace(originalLines: string[], suggestedLines: string[]): boolean {
+  const original = originalLines.join("\\n");
+  const suggested = suggestedLines.join("\\n");
+  const originalScan = scanCodeWhitespace(original);
+  const suggestedScan = scanCodeWhitespace(suggested);
+  if (originalScan.containsCommentSyntax || suggestedScan.containsCommentSyntax) {
+    return false;
+  }
+  return originalScan.stripped === suggestedScan.stripped;
+}
+
+function scanCodeWhitespace(value: string): {
+  stripped: string;
+  containsCommentSyntax: boolean;
+} {
+  let result = "";
+  const state: CodeWhitespaceScanState = {
+    literalDelimiter: undefined,
+    escaped: false,
+    regexCharacterClass: false,
+    templateExpressionDepths: [],
+  };
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value.charAt(index);
+    if (advanceCodeLiteralScan(state, char, value[index + 1])) {
+      result += char;
+      continue;
+    }
+    if (char === "/" && ["/", "*"].includes(value[index + 1] ?? "")) {
+      return { stripped: result, containsCommentSyntax: true };
+    }
+    if (/\\s/.test(char)) {
+      const nextNonWhitespace = value.slice(index + 1).match(/\\S/)?.[0];
+      result += codeTokenSeparator(result.at(-1), nextNonWhitespace);
+      continue;
+    }
+    advanceTemplateExpressionScan(state, char);
+    state.literalDelimiter ??= openingCodeLiteralDelimiter(char, value[index + 1], result);
+    state.regexCharacterClass = false;
+    result += char;
+  }
+
+  return { stripped: result, containsCommentSyntax: false };
+}
+
+function codeTokenSeparator(
+  previousChar: string | undefined,
+  nextChar: string | undefined,
+): string {
+  if (!previousChar || !nextChar) {
+    return "";
+  }
+  if (/[A-Za-z0-9_$]/.test(previousChar) && /[A-Za-z0-9_$]/.test(nextChar)) {
+    return " ";
+  }
+  const requiresSeparator = ["++", "--", "//", "/*", "**", "??", "?.", "=>", "==", "!=", "<=", ">=", "&&", "||", "<<", ">>"].includes(
+    previousChar + nextChar,
+  );
+  return requiresSeparator ? " " : "";
+}
+
+type CodeWhitespaceScanState = {
+  literalDelimiter: string | undefined;
+  escaped: boolean;
+  regexCharacterClass: boolean;
+  templateExpressionDepths: number[];
+};
+
+function advanceCodeLiteralScan(
+  state: CodeWhitespaceScanState,
+  char: string,
+  nextChar: string | undefined,
+): boolean {
+  if (!state.literalDelimiter) {
+    return false;
+  }
+  if (state.escaped) {
+    state.escaped = false;
+    return true;
+  }
+  if (char === "\\\\") {
+    state.escaped = true;
+    return true;
+  }
+  if (state.literalDelimiter.charCodeAt(0) === 96 && char === "$" && nextChar === "{") {
+    state.templateExpressionDepths.push(0);
+    state.literalDelimiter = undefined;
+    return true;
+  }
+  if (state.literalDelimiter !== "/") {
+    if (char === state.literalDelimiter) {
+      state.literalDelimiter = undefined;
+    }
+    return true;
+  }
+  advanceRegexLiteralScan(state, char);
+  return true;
+}
+
+function advanceTemplateExpressionScan(state: CodeWhitespaceScanState, char: string): void {
+  const depthIndex = state.templateExpressionDepths.length - 1;
+  const depth = state.templateExpressionDepths[depthIndex];
+  if (depth === undefined) {
+    return;
+  }
+  if (char === "{") {
+    state.templateExpressionDepths[depthIndex] = depth + 1;
+  } else if (char === "}") {
+    if (depth <= 1) {
+      state.templateExpressionDepths.pop();
+      state.literalDelimiter = "\`";
+    } else {
+      state.templateExpressionDepths[depthIndex] = depth - 1;
+    }
+  }
+}
+
+function advanceRegexLiteralScan(state: CodeWhitespaceScanState, char: string): void {
+  if (char === "[") {
+    state.regexCharacterClass = true;
+  } else if (char === "]") {
+    state.regexCharacterClass = false;
+  } else if (char === "/" && !state.regexCharacterClass) {
+    state.literalDelimiter = undefined;
+  }
+}
+
+function openingCodeLiteralDelimiter(
+  char: string,
+  nextChar: string | undefined,
+  previousCode: string,
+): string | undefined {
+  if (char === '"' || char === "'" || char.charCodeAt(0) === 96) {
+    return char;
+  }
+  return startsRegexLiteral(char, nextChar, previousCode) ? "/" : undefined;
+}
+
+function startsRegexLiteral(
+  char: string,
+  nextChar: string | undefined,
+  previousCode: string,
+): boolean {
+  const previousChar = previousCode.at(-1);
+  const previousWord = previousCode.split(/[^A-Za-z]+/).at(-1);
+  const followsRegexKeyword = [
+    "return",
+    "throw",
+    "case",
+    "delete",
+    "void",
+    "typeof",
+    "instanceof",
+    "in",
+    "of",
+    "yield",
+    "await",
+  ].includes(previousWord ?? "");
+  return (
+    char === "/" &&
+    nextChar !== "/" &&
+    nextChar !== "*" &&
+    (previousChar === undefined ||
+      "([{:;,=!?&|+-*%^~<>)".includes(previousChar) ||
+      followsRegexKeyword)
+  );
+}
+
+function suggestionIntroducesNewEnvironmentAccess(
+  preview: string | undefined,
+  suggestedFix: string,
+): boolean {
+  const suggestedKeys = environmentAccessKeys(suggestedFix);
+  if (suggestedKeys.size === 0) {
+    return false;
+  }
+  const existingKeys = environmentAccessKeys(preview ?? "");
+  return Array.from(suggestedKeys).some((key) => !existingKeys.has(key));
+}
+
+function environmentAccessKeys(value: string): Set<string> {
+  const environmentKeyAccessPattern =
+    /\\b(?:process|Bun|import\\.meta)(?:\\s*\\.|\\s*\\?\\.)\\s*env(?:\\s*(?:\\.|\\?\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)|\\s*\\?\\.\\s*\\[\\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\\s*\\]|\\s*\\[\\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\\s*\\])|\\bDeno(?:\\s*\\.|\\s*\\?\\.)\\s*env(?:\\s*\\.|\\s*\\?\\.)\\s*get\\s*\\(\\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\\s*\\)/g;
+  const keys = new Set<string>();
+  for (const match of value.matchAll(environmentKeyAccessPattern)) {
+    const key = match[1] ?? match[2] ?? match[3] ?? match[4];
+    if (key) {
+      keys.add(key);
+    }
+  }
+  const environmentDestructurePattern =
+    /\\{([^{}]*)\\}\\s*=\\s*(?:process|Bun|import\\.meta)(?:\\s*\\.|\\s*\\?\\.)\\s*env\\b/g;
+  for (const match of value.matchAll(environmentDestructurePattern)) {
+    const bindings = match[1]?.split(",") ?? [];
+    for (const binding of bindings) {
+      const key = binding.split(/[:=]/, 1)[0]?.trim().replace(/^["']|["']$/g, "");
+      if (key && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !key.startsWith("...")) {
+        keys.add(key);
+      }
+    }
+  }
+  return keys;
 }
 
 function suggestionsTable(suggestions: FixSuggestion[]): string {

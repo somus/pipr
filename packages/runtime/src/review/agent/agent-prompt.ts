@@ -112,6 +112,7 @@ function toolsPrompt(
 }
 
 function outputPrompt(schema: Schema<unknown>): string {
+  const suggestedFixRules = suggestedFixOutputPromptLines();
   const lines: string[] = compact([
     `Schema ID: ${schema.id}.`,
     schema.jsonSchema ? `JSON Schema:\n${JSON.stringify(schema.jsonSchema, null, 2)}` : undefined,
@@ -124,18 +125,41 @@ function outputPrompt(schema: Schema<unknown>): string {
       2,
       0,
       `Example:\n${JSON.stringify(reviewSchemaExample(), null, 2)}`,
-      "`suggestedFix` is exact replacement code for the selected range. Do not include Markdown fences, prose, or labels in `suggestedFix`.",
-      "GitHub applies `suggestedFix` to the selected `startLine` through `endLine`. Select the smallest contiguous line span that the replacement code should replace.",
-      "If a fix changes only part of a line, select that whole line and put the full replacement line in `suggestedFix`. If a fix changes multiple lines, select exactly those original lines and put the full replacement block in `suggestedFix`.",
-      "Do not select a larger enclosing block to replace a smaller statement, and do not select one line when the replacement is for a multi-line section. Omit `suggestedFix` if the exact replacement range is uncertain.",
-      "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
+      ...suggestedFixRules,
     );
     lines.push(
       "For inlineFindings, use only fields shown in the schema and only exact Diff Manifest commentable ranges. If no exact range applies, omit the finding.",
       `For inlineFindings.body, write the exact inline comment body. Use one short paragraph, at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters. Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target; prefer 250-450 characters when possible.`,
     );
+  } else if (schemaMentionsField(schema.jsonSchema, "suggestedFix")) {
+    lines.splice(2, 0, ...suggestedFixRules);
   }
   return lines.join("\n\n");
+}
+
+function suggestedFixOutputPromptLines(): string[] {
+  return [
+    "`suggestedFix` is exact replacement code for the selected range. Do not include Markdown fences, prose, or labels in `suggestedFix`.",
+    "GitHub applies `suggestedFix` to the selected `startLine` through `endLine`. Select the smallest contiguous line span that the replacement code should replace.",
+    "If a fix changes only part of a line, select that whole line and put the full replacement line in `suggestedFix`. If a fix changes multiple lines, select exactly those original lines and put the full replacement block in `suggestedFix`.",
+    "Do not select a larger enclosing block to replace a smaller statement, and do not select one line when the replacement is for a multi-line section. Omit `suggestedFix` if the exact replacement range is uncertain.",
+    "If you include `suggestedFix`, the finding body must describe the defect that `suggestedFix` directly fixes. Omit `suggestedFix` when the exact code change would not address the issue stated in the body.",
+    "Do not include `suggestedFix` when it would be identical to the selected lines, only remove a trailing blank line, or only change whitespace.",
+    "Omit `suggestedFix` for secrets, credentials, API keys, tokens, or config wiring unless the replacement uses an existing secret, environment variable, or config key already present in the surrounding code.",
+    "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
+  ];
+}
+
+function schemaMentionsField(value: unknown, fieldName: string): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => schemaMentionsField(item, fieldName));
+  }
+  return Object.entries(value).some(
+    ([key, child]) => key === fieldName || schemaMentionsField(child, fieldName),
+  );
 }
 
 function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
@@ -156,6 +180,9 @@ function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
       "Emit one inline finding per issue, anchored to the exact Diff Manifest commentable range.",
       "`suggestedFix` must be exact replacement code for the selected range.",
       "For `suggestedFix`, choose the smallest contiguous `startLine` to `endLine` span that should be replaced. Do not select an enclosing function, block, or single line unless that exact span is the replacement target.",
+      "If you include `suggestedFix`, the finding body must describe the defect that `suggestedFix` directly fixes. Omit `suggestedFix` when the exact code change would not address the issue stated in the body.",
+      "Do not include `suggestedFix` when it would be identical to the selected lines, only remove a trailing blank line, or only change whitespace.",
+      "Omit `suggestedFix` for secrets, credentials, API keys, tokens, or config wiring unless the replacement uses an existing secret, environment variable, or config key already present in the surrounding code.",
       "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
     ].join("\n"),
   );

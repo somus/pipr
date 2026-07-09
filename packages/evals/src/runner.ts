@@ -15,6 +15,7 @@ type PiprEvalRunOptions = {
 };
 
 const evalSideSchema = z.enum(["RIGHT", "LEFT"]);
+const evalRangeKindSchema = z.enum(["added", "deleted", "context", "mixed"]);
 
 const evalInlineFindingSchema = z.object({
   body: z.string(),
@@ -32,6 +33,7 @@ const evalDiffRangeSchema = z.object({
   side: evalSideSchema,
   startLine: z.number().int(),
   endLine: z.number().int(),
+  kind: evalRangeKindSchema,
   preview: z.string().optional(),
 });
 

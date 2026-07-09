@@ -20,6 +20,25 @@ const reviewSchema: Schema<unknown> = {
   id: reviewResultSchemaId,
 };
 
+const customSuggestedFixSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/custom-suggestions",
+  jsonSchema: {
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            suggestedFix: { type: "string" },
+          },
+        },
+      },
+    },
+  },
+};
+
 describe("renderAgentPrompt", () => {
   it("includes review policy for core review outputs", async () => {
     const prompt = await renderTestPrompt(reviewSchema);
@@ -40,6 +59,15 @@ describe("renderAgentPrompt", () => {
     expect(prompt).toContain("exact Diff Manifest commentable range");
     expect(prompt).toContain("smallest contiguous `startLine` to `endLine` span");
     expect(prompt).toContain("Do not select a larger enclosing block");
+    expect(prompt).toContain(
+      "the finding body must describe the defect that `suggestedFix` directly fixes",
+    );
+    expect(prompt).toContain(
+      "Do not include `suggestedFix` when it would be identical to the selected lines",
+    );
+    expect(prompt).toContain(
+      "Omit `suggestedFix` for secrets, credentials, API keys, tokens, or config wiring",
+    );
   });
 
   it("does not include review policy for non-review outputs", async () => {
@@ -47,6 +75,22 @@ describe("renderAgentPrompt", () => {
 
     expect(prompt).not.toContain("Review Policy:");
     expect(prompt).not.toContain("Report only actionable defects");
+  });
+
+  it("includes suggestedFix rules for custom schemas that can emit suggestions", async () => {
+    const prompt = await renderTestPrompt(customSuggestedFixSchema);
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).toContain("`suggestedFix` is exact replacement code for the selected range.");
+    expect(prompt).toContain(
+      "the finding body must describe the defect that `suggestedFix` directly fixes",
+    );
+    expect(prompt).toContain(
+      "Do not include `suggestedFix` when it would be identical to the selected lines",
+    );
+    expect(prompt).toContain(
+      "Omit `suggestedFix` for secrets, credentials, API keys, tokens, or config wiring",
+    );
   });
 
   it("isolates top-level prompt context mutations from the prepared run context", async () => {

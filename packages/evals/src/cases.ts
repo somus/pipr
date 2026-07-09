@@ -1,7 +1,17 @@
+export type PiprEvalExpectedSuggestedFix =
+  | {
+      mode: "absent";
+    }
+  | {
+      mode: "if-present-exact";
+      value: string;
+    };
+
 export type PiprEvalExpectedFinding = {
   line: number;
   path: string;
   keywords: string[];
+  suggestedFix?: PiprEvalExpectedSuggestedFix;
 };
 
 export type PiprEvalExpected = {
@@ -70,7 +80,11 @@ const promptEvalCases: PiprEvalCase[] = [
         {
           line: 2,
           path: reviewTargetPath,
-          keywords: ["null", "trim", "throw"],
+          keywords: ["null"],
+          suggestedFix: {
+            mode: "if-present-exact",
+            value: '  return input?.trim() || "Anonymous";',
+          },
         },
       ],
       maxInlineFindings: 1,
@@ -137,6 +151,7 @@ test("applies bulk discount", () => {
           line: 2,
           path: reviewTargetPath,
           keywords: ["test", "threshold", "5000"],
+          suggestedFix: { mode: "absent" },
         },
       ],
       maxInlineFindings: 1,
@@ -169,7 +184,7 @@ export function displayValue(user: User): string {
         {
           line: 5,
           path: reviewTargetPath,
-          keywords: ["undefined", "trim", "throw"],
+          keywords: ["undefined", "trim"],
         },
       ],
       maxInlineFindings: 1,
@@ -470,6 +485,7 @@ export const apiKey = "pipr_eval_secret_do_not_repeat_12345";
           line: 2,
           path: reviewTargetPath,
           keywords: ["secret"],
+          suggestedFix: { mode: "absent" },
         },
       ],
       maxInlineFindings: 1,

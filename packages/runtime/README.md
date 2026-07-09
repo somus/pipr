@@ -15,6 +15,8 @@ GitHub Action. Repository configs should import from `@usepipr/sdk`.
   during condensed Diff Manifest runs.
 - `./internal/testing` is an unsupported test surface for Pipr's private e2e
   harness.
+- `./internal/review-testing` is an unsupported test surface for Pipr's private
+  eval package review scoring.
 - The build emits ESM and declaration files to `dist`.
 
 ## Source Map

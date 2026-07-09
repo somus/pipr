@@ -44,16 +44,22 @@ harness. To run only those smoke tests:
 bun run --cwd packages/evals eval:deterministic
 ```
 
-Run live prompt evals explicitly when model credentials are available:
+Run live prompt evals explicitly when model credentials are available. The
+scripts load `.pipr/.env`, or you can export `DEEPSEEK_API_KEY`:
 
 ```bash
-DEEPSEEK_API_KEY=... bun run eval:prompts
-DEEPSEEK_API_KEY=... bun run --cwd packages/evals eval:export
+bun run eval:prompts
+bun run --cwd packages/evals eval:full
+bun run --cwd packages/evals eval:full:export
 ```
 
-`eval:export` writes reviewable results to
+`eval:prompts` runs focused live gates for recall, suppression, safety, and
+suggested-fix behavior. `eval:full` is the broader advisory suite, and
+`eval:full:export` writes reviewable results to
 `packages/evals/evalite-export/results.json`. Live evals call DeepSeek through
 the local Pipr review path and are intentionally not part of `mise run check`.
+For suite layout and scoring rationale, see
+[`@pipr/evals`](../evals/README.md).
 
 ## Docs
 

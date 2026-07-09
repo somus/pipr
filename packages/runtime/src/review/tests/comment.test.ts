@@ -470,6 +470,189 @@ describe("comments", () => {
     });
   });
 
+  it("omits suggested-change blocks when the replacement only drops a trailing blank line", () => {
+    const selectedLines = [
+      "const state = findState();",
+      'if (state === "MERGED") {',
+      '  console.log("already merged");',
+      "  return;",
+      "}",
+      "",
+    ];
+
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 25,
+        suggestedFix: selectedLines.slice(0, -1).join("\n"),
+      },
+      manifest: manifestWithRange(20, 25, selectedLines.join("\n")),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement is identical to the selected lines", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "return value;",
+      },
+      manifest: manifestWithRange(20, 20, "return value;"),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement only changes indentation", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "    return value;",
+      },
+      manifest: manifestWithRange(20, 20, "  return value;"),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement only changes internal whitespace", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "return  value;",
+      },
+      manifest: manifestWithRange(20, 20, "return value;"),
+    });
+  });
+
+  it("omits formatting-only suggestions when literals contain comment-like syntax", () => {
+    for (const [preview, suggestedFix] of [
+      ['const endpoint = "https://example.com";', 'const  endpoint = "https://example.com";'],
+      ["const pattern = /[/*]/;", "const  pattern = /[/*]/;"],
+    ]) {
+      expectSuggestedChangeOmitted({
+        finding: {
+          ...finding,
+          startLine: 20,
+          endLine: 20,
+          suggestedFix,
+        },
+        manifest: manifestWithRange(20, 20, preview),
+      });
+    }
+  });
+
+  it("publishes suggested-change blocks when whitespace changes inside a literal", () => {
+    for (const [preview, suggestedFix] of [
+      ['const header = "Bearer" + token;', 'const header = "Bearer " + token;'],
+      ["const label = `hello$" + "{name}`;", "const label = `hello $" + "{name}`;"],
+      ["const pattern = /ab/;", "const pattern = /a b/;"],
+      ["return /ab/;", "return /a b/;"],
+      ["returnvalue;", "return value;"],
+      ["if (ok) /ab/.test(value);", "if (ok) /a b/.test(value);"],
+      ["// Join firstand last name", "// Join first and last name"],
+    ]) {
+      const [item] = prepareInlinePublicationItems({
+        validated: {
+          validFindings: [
+            {
+              ...finding,
+              startLine: 20,
+              endLine: 20,
+              suggestedFix,
+            },
+          ],
+        },
+        manifest: manifestWithRange(20, 20, preview),
+        reviewedHeadSha: "head",
+      });
+
+      expect(item?.finding.suggestedFix).toBe(suggestedFix);
+    }
+  });
+
+  it("omits suggested-change blocks for whitespace-only template expression edits", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "const label = `$" + "{first+last}`;",
+      },
+      manifest: manifestWithRange(20, 20, "const label = `$" + "{first + last}`;"),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement invents an environment key", () => {
+    expectSuggestedChangeOmitted({
+      finding: {
+        ...finding,
+        startLine: 20,
+        endLine: 20,
+        suggestedFix: "const apiKey = process.env.PIPR_NEW_API_KEY;",
+      },
+      manifest: manifestWithRange(20, 20, 'const apiKey = "";'),
+    });
+  });
+
+  it("omits suggested-change blocks when the replacement invents optional environment access", () => {
+    for (const suggestedFix of [
+      "const apiKey = process.env?.PIPR_NEW_API_KEY;",
+      'const apiKey = process.env?.["PIPR_NEW_API_KEY"];',
+      "const apiKey = Bun.env?.PIPR_NEW_API_KEY;",
+      "const apiKey = import.meta.env?.PIPR_NEW_API_KEY;",
+    ]) {
+      expectSuggestedChangeOmitted({
+        finding: {
+          ...finding,
+          startLine: 20,
+          endLine: 20,
+          suggestedFix,
+        },
+        manifest: manifestWithRange(20, 20, 'const apiKey = "";'),
+      });
+    }
+  });
+
+  it("omits suggested-change blocks when the replacement invents destructured environment access", () => {
+    for (const suggestedFix of [
+      "const { PIPR_NEW_API_KEY } = process.env;",
+      "const { PIPR_NEW_API_KEY: apiKey } = Bun.env;",
+      'const { PIPR_NEW_API_KEY = "" } = import.meta.env;',
+    ]) {
+      expectSuggestedChangeOmitted({
+        finding: {
+          ...finding,
+          startLine: 20,
+          endLine: 20,
+          suggestedFix,
+        },
+        manifest: manifestWithRange(20, 20, 'const apiKey = "";'),
+      });
+    }
+  });
+
+  it("publishes suggested-change blocks when the environment key already exists nearby", () => {
+    const [item] = prepareInlinePublicationItems({
+      validated: {
+        validFindings: [
+          {
+            ...finding,
+            startLine: 20,
+            endLine: 20,
+            suggestedFix: "const apiKey = process.env.PIPR_API_KEY?.trim();",
+          },
+        ],
+      },
+      manifest: manifestWithRange(20, 20, "const apiKey = process.env.PIPR_API_KEY;"),
+      reviewedHeadSha: "head",
+    });
+
+    expect(item?.finding.suggestedFix).toBe("const apiKey = process.env.PIPR_API_KEY?.trim();");
+  });
+
   it("omits suggested-change blocks when a structural selection edge is replaced", () => {
     expectSuggestedChangeOmitted({
       finding: {
