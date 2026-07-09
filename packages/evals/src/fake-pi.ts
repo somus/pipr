@@ -109,7 +109,8 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
     "review policy is missing suggested fix range rule",
   );
   assert(
-    prompt.includes("Keep each inline finding body to one short paragraph"),
+    prompt.includes("Inline finding bodies are final code-review comments") &&
+      prompt.includes("Treat 700 as a hard ceiling, not a target"),
     "review policy is missing inline body budget rule",
   );
   assert(
@@ -185,6 +186,9 @@ async function recordPromptEvalCall(systemPrompt: string): Promise<void> {
     file,
     JSON.stringify(
       {
+        inlineFindingBodyPolicy:
+          prompt.includes("Inline finding bodies are final code-review comments") &&
+          prompt.includes("Treat 700 as a hard ceiling, not a target"),
         reviewPolicy: prompt.includes("Review Policy:"),
         schemaOnlySystemPrompt: systemPrompt.includes(
           "Use only properties defined by the requested schema.",

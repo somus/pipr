@@ -1145,6 +1145,8 @@ describe("runTaskRuntime", () => {
     expect(observedPrompt).toContain(
       "For inlineFindings, use only fields shown in the schema and only exact Diff Manifest commentable ranges.",
     );
+    expect(observedPrompt).toContain("Treat 700 as a hard ceiling, not a target");
+    expect(observedPrompt).toContain("Inline finding bodies are final code-review comments");
     expect(observedPrompt).toContain(
       "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
     );

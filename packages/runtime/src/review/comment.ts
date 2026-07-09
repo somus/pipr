@@ -11,7 +11,10 @@ import type {
 import { commentableRangeSchema, reviewSideSchema } from "../types.js";
 import { mainCommentTitle, piprRepositoryUrl } from "./comment-branding.js";
 import { reviewFindingSchema } from "./contract.js";
-import { isPublishableSuggestedFixSelection } from "./inline-publication-policy.js";
+import {
+  maxInlineFindingBodyCharacters,
+  maxInlineFindingBodyLines,
+} from "./inline-finding-limits.js";
 import {
   buildPriorReviewState,
   findingIdFor,
@@ -24,6 +27,7 @@ import {
   renderInlineFindingMarker,
   renderMainCommentMarker,
 } from "./prior-state.js";
+import { isPublishableSuggestedFixSelection } from "./suggested-fix-publication-policy.js";
 
 export { runtimeVersion } from "../shared/version.js";
 
@@ -123,9 +127,6 @@ export type BuildPublicationPlanOptions = {
   reviewState?: PriorReviewState;
   threadActions?: ThreadAction[];
 };
-
-const maxInlineFindingBodyCharacters = 700;
-const maxInlineFindingBodyLines = 4;
 
 export function buildPublicationPlan(options: BuildPublicationPlanOptions): PublicationPlan {
   const reviewState =
