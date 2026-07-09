@@ -66,7 +66,7 @@ describe("initOfficialMinimalProject", () => {
     );
     expect(await Bun.file(path.join(rootDir, ".pipr", ".gitignore")).text()).toBe("node_modules\n");
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
-    expect(workflow).toContain("uses: somus/pipr@v0.3.4"); // x-release-please-version
+    expect(workflow).toContain("uses: somus/pipr@v0.3.5"); // x-release-please-version
     expect(workflow).toContain("actions/cache@v4");
     expect(workflow).toContain("hashFiles('.pipr/bun.lock')");
     expect(workflow).toContain("checks: write");
@@ -655,7 +655,7 @@ export default definePipr((pipr) => {
 
     expect(result.overwritten).toEqual([path.join(".github", "workflows", "pipr.yml")]);
     expect(await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text()).toContain(
-      "uses: somus/pipr@v0.3.4", // x-release-please-version
+      "uses: somus/pipr@v0.3.5", // x-release-please-version
     );
   });
 

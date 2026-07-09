@@ -4,6 +4,13 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.3.5](https://github.com/somus/pipr/compare/v0.3.4...v0.3.5) (2026-07-09)
+
+
+### Bug Fixes
+
+* **runtime:** avoid resolving runtime config SDK pins ([#46](https://github.com/somus/pipr/issues/46)) ([7a7899a](https://github.com/somus/pipr/commit/7a7899a57278318ccbd55c8c9b7c534cfc76f1e3))
+
 ## [0.3.4](https://github.com/somus/pipr/compare/v0.3.3...v0.3.4) (2026-07-09)
 
 
