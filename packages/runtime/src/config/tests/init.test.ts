@@ -453,6 +453,11 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("suggestionIncludesUnselectedContext");
     expect(configTs).toContain("onlyChangesWhitespace");
     expect(configTs).toContain("suggestionIntroducesNewEnvironmentAccess");
+    expect(configTs).toContain(String.raw`].join("\n")`);
+    expect(configTs).toContain(String.raw`replace(/\s/g, "")`);
+    expect(configTs).toContain(String.raw`/\b(?:process|Bun|import\.meta)`);
+    expect(configTs).not.toContain(String.raw`replace(/\\s/g, "")`);
+    expect(configTs).not.toContain(String.raw`/\\b(?:process|Bun|import\\.meta)`);
     expect(configTs).toContain("@pipr improve");
     expect(configTs).toContain("maxInlineComments: 6");
     expect(inspected.agents).toContain("fix-suggestions");
