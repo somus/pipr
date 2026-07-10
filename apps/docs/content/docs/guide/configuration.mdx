@@ -211,7 +211,9 @@ The runtime includes schema details in the Pi prompt when they are available. Ta
 
 ### Publishing custom output
 
-To publish inline comments from a custom schema, map the custom output into `ReviewFinding[]` and pass it to `ctx.comment({ inlineFindings })`. Use `suggestedFix` only for exact replacement code, without Markdown fences or prose.
+To publish inline comments from a custom schema, map the custom output into `ReviewFinding[]` and pass it to `ctx.comment({ inlineFindings })`. Validate and deduplicate custom anchors against the task's Diff Manifest before using the same filtered collection in main-comment summaries, checks, and `ctx.comment(...)`.
+
+When an output schema contains `suggestedFix`, Core adds the generic exact-replacement, range-selection, and secret-safety rules to the agent prompt. Do not repeat them in `instructions`. Custom suggestion workflows may add stricter deterministic and semantic validation before publication.
 
 ### Model-visible metadata
 

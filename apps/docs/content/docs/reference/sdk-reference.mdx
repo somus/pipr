@@ -135,20 +135,17 @@ pipr.review({
 
 ## Custom reviewer prompt
 
-Pipr injects the Diff Manifest and tool contract into the Pi prompt. Override the reviewer prompt when the model needs a stricter review rubric:
+Pipr injects bounded change request metadata, the Diff Manifest, tool contract, review policy, and output contract into the Pi prompt. Override the reviewer prompt only when the model needs repository-specific policy:
 
 ```ts
 const reviewer = pipr.reviewer({
   model,
-  instructions: "Return JSON that matches the pipr review schema.",
-  prompt: (input, ctx) => pipr.prompt`
-    Repository: ${ctx.repository.owner}/${ctx.repository.name}
-    Change: ${input.change.title}
-
-    Only report actionable defects.
-  `,
+  instructions: "Prioritize broken public API contracts.",
+  prompt: () => "Review changed behavior for contract regressions.",
 });
 ```
+
+Do not repeat the change number, title, description, JSON output contract, or generic `suggestedFix` rules in agent instructions. Core supplies those sections once.
 
 ## Agents
 
@@ -187,7 +184,7 @@ const strictSecurity = security.extend({
 
 Use one task when multiple agents should produce one published review:
 
-Pass `{ manifest }` to specialists that need changed-code context. Pipr injects the authoritative Diff Manifest section from that reserved key. Omit `manifest` for aggregators that only merge specialist results.
+Pass `{ manifest }` to specialists and aggregators that need changed-code context. Pipr injects the authoritative Diff Manifest section from that reserved key. An aggregator that independently revalidates causality, impact, and anchors needs the manifest and read-only tools.
 
 ```ts
 const base = pipr.agent({
@@ -212,9 +209,10 @@ const tests = base.extend({
 const aggregator = pipr.agent({
   name: "review-aggregator",
   model,
-  instructions: "Deduplicate specialist results into one review.",
+  instructions: "Revalidate and deduplicate specialist results into one review.",
   output: pipr.schemas.review,
-  prompt: (input: { specialistResults: unknown; prior: unknown }) => pipr.prompt`
+  tools: pipr.tools.readOnly,
+  prompt: (input: { manifest: unknown; specialistResults: unknown; prior: unknown }) => pipr.prompt`
     ${pipr.section("Prior review", pipr.json(input.prior, { maxCharacters: 20000 }))}
     ${pipr.section("Specialist results", pipr.json(input.specialistResults))}
   `,
@@ -230,6 +228,7 @@ const task = pipr.task({
       ctx.pi.run(tests, { manifest, focus: "tests" }),
     ]);
     const result = await ctx.pi.run(aggregator, {
+      manifest,
       specialistResults: { securityResult, testResult },
       prior,
     });

@@ -35,7 +35,11 @@ export default definePipr((pipr) => {
   const diagnostics = pipr.agent({
     name: "diff-diagnostics",
     model,
-    instructions: "Produce diff-scoped diagnostics for actionable defects only.",
+    instructions: \`
+      Produce short compiler-style diagnostics for actionable defects only.
+      State the concrete defect and impact in at most two sentences. Suppress
+      style preferences, broad refactors, and diagnostics without exact changed-line anchors.
+    \`,
     output: diagnosticOutput,
     prompt: () => "Summarize the diff-scoped diagnostics for this change.",
   });

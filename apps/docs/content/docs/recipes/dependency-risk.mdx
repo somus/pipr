@@ -50,8 +50,8 @@ export default definePipr((pipr) => {
     id: "dependency/risk-summary",
     schema: z.strictObject({
       summary: z.string(),
-      risks: z.array(z.string()),
-      followUps: z.array(z.string()),
+      risks: z.array(z.string()).max(6),
+      followUps: z.array(z.string()).max(6),
     }),
   });
 
@@ -59,9 +59,12 @@ export default definePipr((pipr) => {
     name: "dependency-risk",
     model,
     instructions: `
-      Review dependency manifest and lockfile changes. Flag likely breaking upgrades,
-      suspicious package additions, install script risk, lockfile drift, and migration work.
-      Do not claim live CVEs unless they are visible in the diff.
+      Review dependency manifest and lockfile changes. Distinguish direct from
+      transitive changes, runtime from development scope, and manifest intent
+      from generated lockfile churn. Check manifest-lock consistency. Flag
+      evidenced breaking upgrades, suspicious additions, install script risk,
+      lockfile drift, and required migration work. Do not make external release,
+      compatibility, or CVE claims that are not evidenced in the change.
     `,
     output: dependencyOutput,
     prompt: () => "Review the dependency-related changes in this pull request.",
@@ -79,6 +82,21 @@ export default definePipr((pipr) => {
           "**/yarn.lock",
           "**/requirements*.txt",
           "**/pyproject.toml",
+          "**/deno.json",
+          "**/deno.jsonc",
+          "**/jsr.json",
+          "**/uv.lock",
+          "**/poetry.lock",
+          "**/Pipfile",
+          "**/Pipfile.lock",
+          "**/Gemfile",
+          "**/Gemfile.lock",
+          "**/composer.json",
+          "**/composer.lock",
+          "**/Package.swift",
+          "**/Package.resolved",
+          "**/Directory.Packages.props",
+          "**/packages.lock.json",
           "**/Cargo.toml",
           "**/Cargo.lock",
           "**/go.mod",

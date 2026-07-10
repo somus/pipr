@@ -50,8 +50,10 @@ export default definePipr((pipr) => {
     name: "interactive-ask",
     model,
     instructions: `
-      Answer reviewer questions about the pull request. Use diff context and prior
-      pipr findings. If the answer needs external systems or hidden state, say so.
+      Answer the reviewer question directly using the current diff, repository,
+      and prior Pipr findings. Cite relevant paths or symbols when available.
+      Distinguish evidence from inference. When external systems or hidden state
+      are required, state precisely which missing context prevents an answer.
     `,
     output: pipr.schemas.summary,
     prompt: (input: { question: string; manifest: unknown; prior: unknown }) => pipr.prompt`

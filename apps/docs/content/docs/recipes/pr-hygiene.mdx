@@ -63,6 +63,18 @@ export default definePipr((pipr) => {
     evidence: z.string(),
   });
 
+  const policyCheckFor = <const Policy extends z.infer<typeof hygienePolicySchema>>(
+    policy: Policy,
+  ) => policyCheckSchema.extend({ policy: z.literal(policy) });
+
+  const policyChecksSchema = z.tuple([
+    policyCheckFor("tests"),
+    policyCheckFor("docs"),
+    policyCheckFor("lockfiles"),
+    policyCheckFor("generated-files"),
+    policyCheckFor("change-size"),
+  ]);
+
   const hygieneFindingSchema = z.strictObject({
     title: z.string(),
     policy: hygienePolicySchema,
@@ -75,14 +87,13 @@ export default definePipr((pipr) => {
     suggestedFix: z.string().optional(),
   });
 
-  type PolicyCheck = z.infer<typeof policyCheckSchema>;
-  type HygieneFinding = z.infer<typeof hygieneFindingSchema>;
+  type PolicyCheck = z.infer<typeof policyChecksSchema>[number];
 
   const hygieneOutput = pipr.schema({
     id: "review/pr-hygiene",
     schema: z.strictObject({
       summary: z.string(),
-      checks: z.array(policyCheckSchema),
+      checks: policyChecksSchema,
       findings: z.array(hygieneFindingSchema),
     }),
   });
@@ -92,9 +103,10 @@ export default definePipr((pipr) => {
     model,
     instructions: `
       Review pull request hygiene, not code correctness. Evaluate tests, docs,
-      lockfiles, generated files, and change size. Return one policy check per
-      relevant policy. Return inline findings only for concrete hygiene gaps
-      that maintainers can act on in the changed lines.
+      lockfiles, generated files, and change size. Return exactly one policy
+      check for each policy, using not-applicable when it does not apply. Ground
+      evidence in changed files or counts. Use policy attention for file-level
+      gaps; return inline findings only for concrete gaps in exact changed lines.
     `,
     output: hygieneOutput,
     tools: pipr.tools.readOnly,
@@ -125,7 +137,14 @@ export default definePipr((pipr) => {
           ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
         };
       });
-      ctx.check.pass("PR hygiene review completed.");
+      const attentionCount = result.checks.filter((check) => check.status === "attention").length;
+      if (attentionCount > 0) {
+        const noun = attentionCount === 1 ? "check" : "checks";
+        const verb = attentionCount === 1 ? "needs" : "need";
+        ctx.check.neutral(attentionCount + " hygiene " + noun + " " + verb + " attention.");
+      } else {
+        ctx.check.pass("PR hygiene review completed.");
+      }
       await ctx.comment({
         main: [
           result.summary,
@@ -133,10 +152,6 @@ export default definePipr((pipr) => {
           "## Policy Checks",
           "",
           policyTable(result.checks),
-          "",
-          "## Selected Findings",
-          "",
-          findingsTable(result.findings),
         ].join("\n"),
         inlineFindings,
       });
@@ -167,27 +182,6 @@ function policyTable(checks: PolicyCheck[]): string {
         .replace(/^./, (char) => char.toUpperCase());
       const evidence = check.evidence.replaceAll("\n", " ").replaceAll("|", "\\|");
       return `| ${policy} | ${status} | ${evidence} |`;
-    }),
-  ].join("\n");
-}
-
-function findingsTable(findings: HygieneFinding[]): string {
-  if (findings.length === 0) {
-    return [
-      "| Policy | Finding |",
-      "| --- | --- |",
-      "| - | No selected hygiene findings. |",
-    ].join("\n");
-  }
-  return [
-    "| Policy | Finding |",
-    "| --- | --- |",
-    ...findings.map((finding) => {
-      const policy = finding.policy
-        .replaceAll("-", " ")
-        .replace(/^./, (char) => char.toUpperCase());
-      const title = finding.title.replaceAll("\n", " ").replaceAll("|", "\\|");
-      return `| ${policy} | ${title} |`;
     }),
   ].join("\n");
 }
@@ -232,7 +226,7 @@ Use `pipr init --recipe pr-hygiene --adapters none` when you only want the `.pip
 
 ## Expected output
 
-Pipr publishes pull-request hygiene feedback for tests, docs, lockfiles, generated files, and change size. Keep the check non-required until the policy is tuned.
+Pipr publishes file-level hygiene status plus exact-line findings and returns a neutral check when any policy needs attention.
 
 ## Sample output
 
@@ -248,5 +242,6 @@ PR Hygiene reviews the shape of the pull request: tests, docs, lockfiles, genera
 - Customize the instructions with your repository's release-note, migration, generated-code, and test expectations.
 - Keep the check non-required until maintainers agree which hygiene findings must block merge.
 - Add explicit allowlists for common mechanical changes, such as formatter-only PRs or dependency lockfile refreshes.
+- File-level gaps stay in policy status, while inline findings require exact changed-line anchors and are filtered before publication.
 
 Shared setup, local type support, and provider tuning notes live on the [Recipes](/docs/recipes#common-setup) page.

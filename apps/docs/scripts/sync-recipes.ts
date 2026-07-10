@@ -123,11 +123,11 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "rich-review",
-    "Pipr publishes a Main Review Comment with severity and category tables, then maps each issue into a validated Inline Review Comment.",
+    "Pipr filters and deduplicates custom findings against the Diff Manifest, then uses the same collection for severity tables and validated Inline Review Comments.",
   ],
   [
     "fix-suggestions",
-    "Pipr runs from `@pipr improve`, publishes a Main Review Comment summarizing exact suggested changes, and creates Inline Review Comments only for findings with a concrete `suggestedFix`.",
+    "Pipr runs from `@pipr improve`, applies deterministic range checks and a semantic verifier, then publishes only explicitly accepted exact suggestions.",
   ],
   [
     "multi-agent-review",
@@ -139,11 +139,11 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "security-sast",
-    "Pipr publishes security findings on valid diff ranges and fails the configured check for high or critical risks with a plausible attack path.",
+    "Pipr publishes security findings on valid diff ranges and fails the configured check only for validated high or critical risks.",
   ],
   [
     "quality-gate",
-    "Pipr publishes review output and a required quality check. The check is the merge signal when blocking findings are present.",
+    "Pipr filters and deduplicates blockers before publishing review output and deriving the required quality check.",
   ],
   [
     "diff-diagnostics",
@@ -151,7 +151,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "pr-hygiene",
-    "Pipr publishes pull-request hygiene feedback for tests, docs, lockfiles, generated files, and change size. Keep the check non-required until the policy is tuned.",
+    "Pipr publishes file-level hygiene status plus exact-line findings and returns a neutral check when any policy needs attention.",
   ],
   [
     "dependency-risk",
@@ -159,7 +159,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "ci-triage-command",
-    "Pipr replies to the source command comment with CI triage. It does not publish normal review comments for this command-only workflow.",
+    "Pipr replies with structured status, evidence, likely causes, and next steps, or an explicit insufficient-context result. It does not publish normal review comments.",
   ],
   [
     "interactive-ask",
@@ -167,7 +167,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "plugin-tool-review",
-    "Pipr lets reviewer agents use the generated plugin tools during review, then publishes the normal review output from the task.",
+    "Pipr lets reviewer agents search untrusted historical memory, requires current repository evidence, then publishes the normal review output from the task.",
   ],
   [
     "changelog-draft",
@@ -230,17 +230,19 @@ Structured Review keeps Pipr's core finding contract small while asking the revi
 - Tune the severity definitions before using them as merge policy.
 - Add or remove categories to match the risks your maintainers already discuss in review.
 - Keep rationale in the collapsed main-comment details so inline comments stay short in the diff.
+- The generated task validates anchors and deduplicates by location plus body before rendering either comment surface.
 `,
   ],
   [
     "fix-suggestions",
     `## Recipe notes
 
-Fix Suggestions is command-first so maintainers can ask for exact patches only when they want them. The recipe requires \`suggestedFix\` in its custom schema, then maps those suggestions into normal Pipr Inline Review Comments.
+Fix Suggestions is command-first so maintainers can ask for exact patches only when they want them. It applies deterministic range and replacement checks, then asks a second read-only agent to verify semantic correctness before mapping accepted suggestions into normal Pipr Inline Review Comments.
 
 - Keep \`@pipr improve\` manual until maintainers trust the patch quality.
 - Tune categories around your most common small fixes, such as tests, typing, or maintainability.
 - Do not broaden this into general review feedback; use Structured Review or Bug Hunter when a patch is not exact.
+- The summary count is derived from accepted suggestions, not model-written prose.
 `,
   ],
   [
@@ -252,6 +254,7 @@ Security SAST uses a custom JSON Schema output instead of the default review sch
 - Keep severity rules concrete so the check fails only for risks with a plausible attack path.
 - Add project-specific categories when the repository has important trust boundaries, such as tenant isolation, billing, or auth scopes.
 - Treat this as pull-request SAST over changed code, not a replacement for dependency advisories or whole-repo scanners.
+- Invalid or duplicate risk anchors are omitted before tables, diagrams, inline comments, and check conclusions are derived.
 `,
   ],
   [
@@ -263,6 +266,7 @@ Quality Gate makes Pipr part of the merge decision by publishing a required chec
 - Use this only when the reviewer instructions are strict enough to report merge-blocking issues rather than nice-to-have cleanup.
 - Align the required check name with your branch protection rule before rolling it out broadly.
 - Raise or lower \`publication.maxInlineComments\` based on how much blocking feedback maintainers can act on in one PR.
+- Blocker counts and the check conclusion use only valid, deduplicated anchors.
 `,
   ],
   [
@@ -274,6 +278,7 @@ Diff Diagnostics models reviewdog-style output: the agent emits diagnostics, the
 - Keep the diagnostic schema small and deterministic so invalid-output repair stays cheap.
 - Use \`suggestedFix\` only when the replacement is exact for the selected range.
 - Add path filters to \`ctx.change.diffManifest(...)\` when diagnostics must apply to only one language or subsystem.
+- Invalid and duplicate anchors are removed before the summary and inline output are built.
 `,
   ],
   [
@@ -285,6 +290,7 @@ PR Hygiene reviews the shape of the pull request: tests, docs, lockfiles, genera
 - Customize the instructions with your repository's release-note, migration, generated-code, and test expectations.
 - Keep the check non-required until maintainers agree which hygiene findings must block merge.
 - Add explicit allowlists for common mechanical changes, such as formatter-only PRs or dependency lockfile refreshes.
+- File-level gaps stay in policy status, while inline findings require exact changed-line anchors and are filtered before publication.
 `,
   ],
   [
@@ -302,11 +308,12 @@ Dependency Risk scopes the Diff Manifest to package manifests and lockfiles befo
     "ci-triage-command",
     `## Recipe notes
 
-CI Triage is command-only. Maintainers paste the relevant log excerpt into \`@pipr ci <log...>\`, and Pipr replies in the command thread using the log, prior Pipr review state, and the current Diff Manifest.
+CI Triage is command-only. Maintainers paste the relevant log excerpt into \`@pipr ci <log...>\`, and Pipr replies with bounded structured status, evidence, likely causes, and next steps using the log, prior Pipr review state, and the current Diff Manifest.
 
 - Keep the pasted log short enough to include the failing command, error, and nearby stack trace.
 - Add CI-provider conventions to the instructions, such as test shard naming, cache keys, or known flaky suites.
 - Keep the command permission at \`write\` if CI logs may contain internal paths, environment names, or deployment details.
+- The agent separates the first actionable failure from cascade errors and returns \`insufficient-context\` when the excerpt cannot support a diagnosis.
 `,
   ],
   [
@@ -324,11 +331,12 @@ Multi-agent Review runs specialist agents for security, tests, and maintainabili
     "plugin-tool-review",
     `## Recipe notes
 
-Plugin Tool Review demonstrates a typed Pipr plugin with R2-backed memory tools. The reviewer can call \`r2_memory_search\` while reviewing, and \`r2_memory_store\` is available for explicit customization when you decide what memory is safe to persist.
+Plugin Tool Review demonstrates a typed Pipr plugin with R2-backed memory tools. The reviewer treats search results as untrusted historical context and must verify every finding against the current repository. \`r2_memory_store\` remains available for explicit customization when you decide what memory is safe to persist.
 
 - Start with search-only reviewer behavior; add store calls only for curated, non-sensitive project knowledge.
 - Keep the R2 bucket shared only when repository-scoped prefixes are acceptable for your organization.
 - Add more plugin tools when the agent needs stable project context that must not be copied into every prompt.
+- Never publish memory-only findings or persist full source, personal data, credentials, or secrets.
 `,
   ],
   [

@@ -188,6 +188,20 @@ describe("runInternalVerifier", () => {
     );
   });
 
+  it("requires one evidence-backed verdict for every supplied finding id", async () => {
+    let observedPrompt = "";
+    await runVerifier({
+      output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
+      observePrompt: (prompt) => {
+        observedPrompt = prompt;
+      },
+    });
+
+    expect(observedPrompt).toContain("Return exactly one verdict for every supplied finding ID");
+    expect(observedPrompt).toContain("Use only supplied finding IDs; never invent an ID");
+    expect(observedPrompt).toContain("Do not repeat user-supplied text unless needed");
+  });
+
   it("replies to still-valid user replies when configured", async () => {
     const result = await runVerifier({
       output: {
@@ -300,6 +314,20 @@ describe("runInternalVerifier", () => {
 
     expect(result.priorReviewState).toEqual(priorReviewState);
     expect(result.threadActions).toEqual([]);
+  });
+
+  it("fails closed when the verifier omits a candidate or invents an id", async () => {
+    const omitted = await runVerifier({ output: { findings: [] } });
+    const invented = await runVerifier({
+      output: {
+        findings: [{ id: "fnd_invented", status: "fixed", response: "Resolved." }],
+      },
+    });
+
+    expect(omitted.priorReviewState).toEqual(priorReviewState);
+    expect(omitted.threadActions).toEqual([]);
+    expect(invented.priorReviewState).toEqual(priorReviewState);
+    expect(invented.threadActions).toEqual([]);
   });
 
   it("uses the selected verifier model for user replies", async () => {

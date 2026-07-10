@@ -22,7 +22,8 @@ export default definePipr((pipr) => {
       autoResolve: {
         enabled: true,
         model,
-        instructions: "Resolve only when the changed code addresses the finding directly.",
+        instructions:
+          "Resolve only when current-head evidence proves the original concrete risk no longer applies; otherwise return unknown.",
         synchronize: true,
         userReplies: { enabled: true, allowedActors: "write" },
       },
@@ -69,7 +70,8 @@ export default definePipr((pipr) => {
       Act as a merge quality gate. Report only blocking correctness, security,
       reliability, or test coverage issues that must prevent merge. A blocker
       must have a concrete changed-code range and an impact that maintainers can
-      verify. If no blocking issue exists, return an empty blockers array.
+      verify through the changed contract, relevant callers, or tests. If no
+      blocking issue exists, return an empty blockers array.
     \`,
     output: qualityGateOutput,
     tools: pipr.tools.readOnly,
@@ -84,9 +86,7 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(reviewer, { manifest });
-      const commentableBlockers = result.blockers.filter((blocker) =>
-        commentableRangeForFinding(blocker, manifest) !== undefined,
-      );
+      const commentableBlockers = filterCommentableBlockers(result.blockers, manifest);
       const droppedBlockerCount = result.blockers.length - commentableBlockers.length;
       const inlineFindings: ReviewFinding[] = commentableBlockers.map((blocker) => {
         const category = blocker.category
@@ -136,6 +136,31 @@ export default definePipr((pipr) => {
 });
 
 type FindingAnchor = Pick<ReviewFinding, "path" | "rangeId" | "side" | "startLine" | "endLine">;
+
+function filterCommentableBlockers(
+  blockers: QualityBlocker[],
+  manifest: DiffManifest,
+): QualityBlocker[] {
+  const seen = new Set<string>();
+  return blockers.filter((blocker) => {
+    if (!commentableRangeForFinding(blocker, manifest)) {
+      return false;
+    }
+    const key = [
+      blocker.path,
+      blocker.rangeId,
+      blocker.side,
+      blocker.startLine,
+      blocker.endLine,
+      blocker.body,
+    ].join("\\n");
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
 
 function commentableRangeForFinding(
   finding: FindingAnchor,
@@ -206,7 +231,7 @@ function droppedBlockersNote(count: number): string {
     verb,
     " ignored because ",
     pronoun,
-    " not match a commentable diff range.",
+    " not match a commentable diff range or duplicates another blocker.",
     "</sub>",
   ].join("");
 }

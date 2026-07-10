@@ -24,15 +24,15 @@ export default definePipr((pipr) => {
     riskSummary: z.string(),
     changeMap: z.array(z.strictObject({
       area: z.string(),
-      files: z.array(z.string()).max(6),
+      files: z.array(z.string()).max(4),
       change: z.string(),
-    })).max(8),
-    reviewerFocus: z.array(z.string()).max(6),
+    })).max(6),
+    reviewerFocus: z.array(z.string()).max(4),
     notableFiles: z.array(z.strictObject({
       path: z.string(),
       reason: z.string(),
-    })).max(8),
-    walkthrough: z.array(z.string()).max(8),
+    })).max(6),
+    walkthrough: z.array(z.string()).max(6),
     diagramMermaid: z.string().optional(),
   });
 
@@ -52,7 +52,10 @@ export default definePipr((pipr) => {
       a concise reviewer walkthrough. Use reviewerFocus for what humans should
       inspect first. Use diagramMermaid only when a small flowchart clarifies
       multi-step control flow, data flow, or package boundaries; omit it for
-      straightforward changes. Do not report inline findings.
+      straightforward changes. Ground every file and claim in the Diff Manifest
+      and change metadata. Walkthrough items must explain behavior flow rather
+      than repeat file lists. Return empty arrays for list sections with no useful content;
+      the renderer omits those empty sections. Do not report inline findings.
     \`,
     output: briefingOutput,
     tools: pipr.tools.readOnly,
@@ -65,40 +68,41 @@ export default definePipr((pipr) => {
     name: "pr-briefing",
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
-      const result = await ctx.pi.run(briefing, { manifest, change: ctx.change });
-      const reviewerFocus =
-        result.reviewerFocus.length === 0
-          ? "No special reviewer focus called out."
-          : result.reviewerFocus.map((item) => \`- \${item}\`).join("\\n");
-      const walkthrough =
-        result.walkthrough.length === 0
-          ? "No walkthrough notes."
-          : result.walkthrough.map((item) => \`- \${item}\`).join("\\n");
-      await ctx.comment([
+      const result = await ctx.pi.run(briefing, { manifest });
+      const sections = [
         overviewTable(result, ctx.change.title),
         "",
         "## Summary",
         "",
         result.summary,
-        "",
-        "## Change Map",
-        "",
-        changeMapTable(result.changeMap),
-        "",
-        "## Reviewer Focus",
-        "",
-        reviewerFocus,
-        "",
-        "## Notable Files",
-        "",
-        notableFilesTable(result.notableFiles),
-        "",
-        "## Walkthrough",
-        "",
-        walkthrough,
-        "",
-        diagramBlock(result.diagramMermaid),
-      ].filter(Boolean).join("\\n"));
+      ];
+      if (result.changeMap.length > 0) {
+        sections.push("", "## Change Map", "", changeMapTable(result.changeMap));
+      }
+      if (result.reviewerFocus.length > 0) {
+        sections.push(
+          "",
+          "## Reviewer Focus",
+          "",
+          result.reviewerFocus.map((item) => \`- \${item}\`).join("\\n"),
+        );
+      }
+      if (result.notableFiles.length > 0) {
+        sections.push("", "## Notable Files", "", notableFilesTable(result.notableFiles));
+      }
+      if (result.walkthrough.length > 0) {
+        sections.push(
+          "",
+          "## Walkthrough",
+          "",
+          result.walkthrough.map((item) => \`- \${item}\`).join("\\n"),
+        );
+      }
+      const diagram = diagramBlock(result.diagramMermaid);
+      if (diagram) {
+        sections.push("", diagram);
+      }
+      await ctx.comment(sections.join("\\n"));
     },
   });
 

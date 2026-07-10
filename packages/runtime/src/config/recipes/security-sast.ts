@@ -6,11 +6,10 @@ export const securitySastRecipe = {
   description: "Security review with custom severity and category output.",
   sourceTools: ["Semgrep", "Snyk", "GitHub CodeQL/code scanning"],
   configTs: `import { definePipr } from "@usepipr/sdk";
-import type { ReviewFinding } from "@usepipr/sdk";
+import type { DiffManifest, ReviewFinding } from "@usepipr/sdk";
 
 type SecuritySummary = {
   headline: string;
-  riskLevel: "low" | "medium" | "high";
   riskSummary: string;
   reviewerFocus: string[];
 };
@@ -20,7 +19,7 @@ type SecurityRisk = {
   category: "auth" | "injection" | "secret" | "crypto" | "data-exposure" | "other";
   severity: "low" | "medium" | "high" | "critical";
   rationale: string;
-  finding?: ReviewFinding;
+  finding: ReviewFinding;
 };
 
 type SecurityReview = {
@@ -47,10 +46,9 @@ export default definePipr((pipr) => {
         summary: {
           type: "object",
           additionalProperties: false,
-          required: ["headline", "riskLevel", "riskSummary", "reviewerFocus"],
+          required: ["headline", "riskSummary", "reviewerFocus"],
           properties: {
             headline: { type: "string" },
-            riskLevel: { type: "string", enum: ["low", "medium", "high"] },
             riskSummary: { type: "string" },
             reviewerFocus: {
               type: "array",
@@ -63,7 +61,7 @@ export default definePipr((pipr) => {
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["title", "category", "severity", "rationale"],
+            required: ["title", "category", "severity", "rationale", "finding"],
             properties: {
               title: { type: "string" },
               category: {
@@ -100,9 +98,11 @@ export default definePipr((pipr) => {
     instructions: \`
       Review for exploitable security issues only. Focus on auth bypasses,
       injection, unsafe deserialization, secret exposure, cryptography misuse,
-      authorization gaps, and data exposure. Do not report hypothetical style issues.
+      authorization gaps, and data exposure. Require a changed trust boundary or
+      source-to-sink path and anchor every risk to the exact changed range that
+      creates or weakens it. Do not report hypothetical or style-only issues.
       Make summary maintainer-facing and scannable with a concrete headline,
-      risk level, risk rationale, and only useful security follow-up. Set
+      risk rationale, and only useful security follow-up. Set
       diagramMermaid only when a high or critical risk has a concrete source-to-sink
       path and a small Mermaid flowchart clarifies it. Do not include Markdown
       fences in diagramMermaid.
@@ -121,13 +121,10 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(security, { manifest });
-      const inlineFindings: ReviewFinding[] = result.risks.flatMap((risk) =>
-        risk.finding ? [risk.finding] : [],
-      );
-      const hasHighOrCriticalRisk = result.risks.some(isHighOrCriticalRisk);
-      const hasConcreteHighOrCriticalRisk = result.risks.some(
-        (risk) => isHighOrCriticalRisk(risk) && risk.finding,
-      );
+      const risks = commentableSecurityRisks(result.risks, manifest);
+      const droppedRiskCount = result.risks.length - risks.length;
+      const inlineFindings: ReviewFinding[] = risks.map((risk) => risk.finding);
+      const hasHighOrCriticalRisk = risks.some(isHighOrCriticalRisk);
       if (hasHighOrCriticalRisk) {
         ctx.check.fail("High or critical security risk found.");
       } else {
@@ -139,7 +136,7 @@ export default definePipr((pipr) => {
           "",
           \`**\${result.summary.headline}**\`,
           "",
-          securityStatusTable(result.summary, result.risks),
+          securityStatusTable(risks),
           "",
           result.summary.riskSummary,
           "",
@@ -149,10 +146,11 @@ export default definePipr((pipr) => {
           "",
           "## Security Risks",
           "",
-          securityRisksTable(result.risks),
-          ...(result.risks.length > 0 ? ["", riskRationalesBlock(result.risks)] : []),
-          ...(hasConcreteHighOrCriticalRisk && result.diagramMermaid?.trim()
-            ? ["", attackPathDiagramBlock(result.diagramMermaid, hasConcreteHighOrCriticalRisk)]
+          securityRisksTable(risks),
+          ...(droppedRiskCount > 0 ? ["", omittedRisksNote(droppedRiskCount)] : []),
+          ...(risks.length > 0 ? ["", riskRationalesBlock(risks)] : []),
+          ...(hasHighOrCriticalRisk && result.diagramMermaid?.trim()
+            ? ["", attackPathDiagramBlock(result.diagramMermaid, hasHighOrCriticalRisk)]
             : []),
         ].join("\\n"),
         inlineFindings,
@@ -164,13 +162,55 @@ export default definePipr((pipr) => {
   pipr.command({ pattern: "@pipr security", permission: "write", task });
 });
 
-function securityStatusTable(summary: SecuritySummary, risks: SecurityRisk[]): string {
+function commentableSecurityRisks(
+  risks: SecurityRisk[],
+  manifest: DiffManifest,
+): SecurityRisk[] {
+  const risksByLocation = new Map<string, SecurityRisk>();
+  for (const risk of risks) {
+    const finding = risk.finding;
+    const validAnchor = manifest.files.some((file) =>
+      file.commentableRanges.some(
+        (range) =>
+          finding.rangeId === range.id &&
+          finding.path === range.path &&
+          finding.side === range.side &&
+          finding.startLine <= finding.endLine &&
+          finding.startLine >= range.startLine &&
+          finding.endLine <= range.endLine,
+      ),
+    );
+    const key = [
+      finding.path,
+      finding.rangeId,
+      finding.side,
+      finding.startLine,
+      finding.endLine,
+      finding.body,
+    ].join("\\n");
+    if (!validAnchor) {
+      continue;
+    }
+    const existing = risksByLocation.get(key);
+    if (!existing || securitySeverityRank(risk.severity) > securitySeverityRank(existing.severity)) {
+      risksByLocation.set(key, risk);
+    }
+  }
+  return [...risksByLocation.values()];
+}
+
+function omittedRisksNote(count: number): string {
+  const noun = count === 1 ? "risk" : "risks";
+  return \`Omitted \${count} \${noun} with an invalid or duplicate anchor.\`;
+}
+
+function securityStatusTable(risks: SecurityRisk[]): string {
   return [
-    "| Status | Summary risk | Max severity | Risks |",
-    "| --- | --- | --- | ---: |",
-    \`| \${risks.some(isHighOrCriticalRisk) ? "Fail" : "Pass"} | \${labelValue(
-      summary.riskLevel,
-    )} | \${maxSeverity(risks)} | \${risks.length} |\`,
+    "| Status | Max severity | Risks |",
+    "| --- | --- | ---: |",
+    \`| \${risks.some(isHighOrCriticalRisk) ? "Fail" : "Pass"} | \${maxSeverity(
+      risks,
+    )} | \${risks.length} |\`,
   ].join("\\n");
 }
 
@@ -239,14 +279,17 @@ function attackPathDiagramBlock(
 }
 
 function maxSeverity(risks: SecurityRisk[]): string {
-  const order: SecurityRisk["severity"][] = ["low", "medium", "high", "critical"];
   const severity = risks.reduce<SecurityRisk["severity"] | undefined>((current, risk) => {
-    if (!current || order.indexOf(risk.severity) > order.indexOf(current)) {
+    if (!current || securitySeverityRank(risk.severity) > securitySeverityRank(current)) {
       return risk.severity;
     }
     return current;
   }, undefined);
   return severity ? labelValue(severity) : "None";
+}
+
+function securitySeverityRank(severity: SecurityRisk["severity"]): number {
+  return ["low", "medium", "high", "critical"].indexOf(severity);
 }
 
 function isHighOrCriticalRisk(risk: SecurityRisk): boolean {

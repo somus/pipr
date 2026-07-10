@@ -66,7 +66,11 @@ export default definePipr((pipr) => {
   const diagnostics = pipr.agent({
     name: "diff-diagnostics",
     model,
-    instructions: "Produce diff-scoped diagnostics for actionable defects only.",
+    instructions: `
+      Produce short compiler-style diagnostics for actionable defects only.
+      State the concrete defect and impact in at most two sentences. Suppress
+      style preferences, broad refactors, and diagnostics without exact changed-line anchors.
+    `,
     output: diagnosticOutput,
     prompt: () => "Summarize the diff-scoped diagnostics for this change.",
   });
@@ -152,5 +156,6 @@ Diff Diagnostics models reviewdog-style output: the agent emits diagnostics, the
 - Keep the diagnostic schema small and deterministic so invalid-output repair stays cheap.
 - Use `suggestedFix` only when the replacement is exact for the selected range.
 - Add path filters to `ctx.change.diffManifest(...)` when diagnostics must apply to only one language or subsystem.
+- Invalid and duplicate anchors are removed before the summary and inline output are built.
 
 Shared setup, local type support, and provider tuning notes live on the [Recipes](/docs/recipes#common-setup) page.

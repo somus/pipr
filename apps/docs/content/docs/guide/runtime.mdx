@@ -163,13 +163,15 @@ Tasks call Pi through `ctx.pi.run(...)`:
 // @include: task-pi-review
 const result = await ctx.pi.run(
   reviewer,
-  { manifest, change: ctx.change },
+  { manifest },
   {
     timeout: "5m",
     fallbacks: [backupModel],
   },
 );
 ```
+
+Core adds the change request number and title, plus up to 4,000 characters of its description when nonblank, to every agent prompt as untrusted intent context. Pass only task-specific input here; do not repeat change metadata in the prompt.
 
 ### Model selection
 

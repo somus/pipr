@@ -20,6 +20,23 @@ const markerReviews: MarkerReview[] = [
     body: "The discount threshold changed to 5000 without a regression test covering the new behavior.",
   },
   {
+    preview: 'return value || "fallback";',
+    body: "An intentionally empty value now takes the fallback, violating the existing empty-string contract.",
+    side: "RIGHT",
+    select: "preview-line",
+  },
+  {
+    preview: "store.write(value);",
+    body: "Removing await lets this function return before the required write effect completes.",
+    side: "RIGHT",
+    select: "preview-line",
+  },
+  {
+    preview: "return rawSeconds * 1000;",
+    body: "The unchanged caller still multiplies this millisecond value by 1000, producing an incorrect delay.",
+    select: "preview-line",
+  },
+  {
     preview: "apiKey",
     body: "A hard-coded secret value was introduced and should be moved to a secret store.",
   },
@@ -108,14 +125,25 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
     "system prompt lost diff secret literal redaction instruction",
   );
   assert(!systemPrompt.includes("Review Policy"), "review policy leaked into Pi system prompt");
+  assert(prompt.includes("Change Request:"), "change request context missing from rendered prompt");
+  assert(
+    prompt.includes("untrusted intent context"),
+    "change request context lost its trust-boundary label",
+  );
   assert(prompt.includes("Review Policy:"), "review policy missing from rendered agent prompt");
   assert(
     prompt.includes("Review only changed behavior."),
     "review policy is missing changed-behavior rule",
   );
   assert(
-    prompt.includes("smallest contiguous `startLine` to `endLine` span"),
-    "review policy is missing suggested fix range rule",
+    prompt.includes("repository evidence supports it") &&
+      prompt.includes("inspect relevant callers, callees, and tests") &&
+      prompt.includes("Do not claim tests or checks ran"),
+    "review policy is missing candidate, contract, or summary grounding",
+  );
+  assert(
+    prompt.includes("smallest contiguous line span that the replacement code should replace"),
+    "output prompt is missing suggested fix range rule",
   );
   assert(
     prompt.includes("Inline finding bodies are final code-review comments") &&

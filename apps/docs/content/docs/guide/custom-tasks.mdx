@@ -120,7 +120,9 @@ const manifest = await ctx.change.diffManifest({
 
 ### Pass manifest to Pi
 
-Pass the manifest into Pi with the reserved `manifest` input key. Pipr injects full or condensed manifest content into the prompt and attaches bounded Diff Read Tools when the manifest is condensed. Do not also interpolate the manifest in the agent prompt. Omit `manifest` for aggregator or log-only agents that do not need changed-code context.
+Pass the manifest into Pi with the reserved `manifest` input key. Pipr injects full or condensed manifest content into the prompt and attaches bounded Diff Read Tools when the manifest is condensed. Do not also interpolate the manifest in the agent prompt. Pass it to aggregators that independently revalidate findings; omit it only when changed-code context is not needed.
+
+Every agent prompt already includes the change request number and title, plus up to 4,000 characters of its description when nonblank, as untrusted intent context. Do not copy `ctx.change` into the prompt just to repeat that metadata.
 
 ### Path scope
 
@@ -146,6 +148,8 @@ const securityAgent = pipr.agent({
   `,
 });
 ```
+
+Core adds the review candidate gate, contract tracing, summary grounding, and schema-aware `suggestedFix` rules for `pipr.schemas.review`. Keep only repository-specific review policy in agent instructions.
 
 ### Intermediate schemas
 

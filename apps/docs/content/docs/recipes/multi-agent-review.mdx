@@ -62,7 +62,8 @@ export default definePipr((pipr) => {
   const security = pipr.agent({
     name: "security-specialist",
     model: primary,
-    instructions: "Focus on exploitable security issues. Ignore non-security style feedback.",
+    instructions:
+      "Report only exploitable security paths introduced or weakened by the change. Ignore non-security and style feedback.",
     output: pipr.schemas.review,
     tools: pipr.tools.readOnly,
     prompt: specialistPrompt,
@@ -73,7 +74,8 @@ export default definePipr((pipr) => {
   const tests = pipr.agent({
     name: "test-specialist",
     model: fast,
-    instructions: "Focus on missing regression tests and untested behavior changes.",
+    instructions:
+      "Report only meaningful regression gaps where changed behavior lacks evidence that would catch a concrete failure.",
     output: pipr.schemas.review,
     tools: pipr.tools.readOnly,
     prompt: specialistPrompt,
@@ -81,7 +83,8 @@ export default definePipr((pipr) => {
   const maintainability = pipr.agent({
     name: "maintainability-specialist",
     model: primary,
-    instructions: "Focus on complexity, duplication, brittle APIs, and confusing control flow.",
+    instructions:
+      "Report only changed complexity, duplication, or brittle contracts that create a concrete correctness or reliability risk. Ignore cleanup preferences.",
     output: pipr.schemas.review,
     tools: pipr.tools.readOnly,
     prompt: specialistPrompt,
@@ -93,10 +96,13 @@ export default definePipr((pipr) => {
     fallbacks: [fast],
     instructions: `
       Merge specialist reviews into one concise review. Deduplicate findings,
-      keep only the highest confidence actionable items, and preserve valid inline ranges.
+      then independently revalidate changed-code causality, concrete impact,
+      relevant contract and test context, and exact inline anchoring. Drop
+      unsupported, conflicting, duplicate, speculative, or style-only items.
     `,
     output: pipr.schemas.review,
-    prompt: (input: { specialistResults: unknown; prior: unknown }) => pipr.prompt`
+    tools: pipr.tools.readOnly,
+    prompt: (input: { manifest: unknown; specialistResults: unknown; prior: unknown }) => pipr.prompt`
       ${pipr.section("Prior pipr review", pipr.json(input.prior, { maxCharacters: 20000 }))}
       ${pipr.section("Specialist results", pipr.json(input.specialistResults, { maxCharacters: 60000 }))}
     `,
@@ -116,6 +122,7 @@ export default definePipr((pipr) => {
         ctx.pi.run(maintainability, { manifest, focus: "maintainability" }),
       ]);
       const result = await ctx.pi.run(aggregator, {
+        manifest,
         specialistResults: { securityResult, testResult, maintainabilityResult },
         prior,
       });
