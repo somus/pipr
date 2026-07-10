@@ -15,7 +15,12 @@ import type {
   ValidatedReview,
 } from "../../types.js";
 import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../types.js";
-import { type PiRunner, resolveProvider, runReviewAgent } from "../agent/review-run.js";
+import {
+  type PiRunner,
+  type PiRunStats,
+  resolveProvider,
+  runReviewAgent,
+} from "../agent/review-run.js";
 import { type InlineCommentDraft, type PublicationPlan, runtimeVersion } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { type PriorReviewState, priorReviewStateForSelectedTasks } from "../prior-state.js";
@@ -35,6 +40,7 @@ import {
   priorReviewForTask,
   type RuntimeCheckSink,
   type RuntimeTaskCheckResult,
+  reviewStatsForRuns,
   runtimeTaskCheckResult,
   trackResultFindingScope,
 } from "./task-output.js";
@@ -117,6 +123,7 @@ export type ReviewRuntimeResult =
     });
 
 export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<ReviewRuntimeResult> {
+  const runtimeStarted = Date.now();
   const config = parsePiprConfig(options.config);
   const provider = options.providerOverride
     ? parseProviderConfig(options.providerOverride)
@@ -174,7 +181,16 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     options.priorReviewState ?? (await options.loadPriorReviewState?.());
   const priorMainComment = options.priorMainComment ?? (await options.loadPriorMainComment?.());
   const priorReviewState = priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks);
-  const runtimeOptions = { ...options, priorReviewState, priorMainComment, runId };
+  const piRuns: PiRunStats[] = [];
+  const runtimeOptions = {
+    ...options,
+    priorReviewState,
+    priorMainComment,
+    runId,
+    piRunSink(run: PiRunStats) {
+      piRuns.push(run);
+    },
+  };
 
   const manifestCache = new Map<string, DiffManifest>();
   const taskResults = await Promise.all(
@@ -268,7 +284,9 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     diffManifest,
     priorReviewState,
     runId,
+    piRunSink: runtimeOptions.piRunSink,
   });
+  const stats = reviewStatsForRuns(piRuns, Date.now() - runtimeStarted);
   const publishing = buildCommentPublishingPlan({
     event: options.event,
     main,
@@ -291,6 +309,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
       failedTasks: [],
       validFindings: validated.validFindings.length,
       droppedFindings: validated.droppedFindings.length,
+      ...(stats ? { stats } : {}),
     },
   });
   const publicationPlan = publishing.publicationPlan;
@@ -357,6 +376,7 @@ async function runSynchronizeVerifier(options: {
   diffManifest: DiffManifest;
   priorReviewState: PriorReviewState | undefined;
   runId: string;
+  piRunSink: (run: PiRunStats) => void;
 }): Promise<Awaited<ReturnType<typeof runInternalVerifier>>> {
   if (options.options.event.rawAction !== "synchronize") {
     return {
@@ -385,6 +405,7 @@ async function runSynchronizeVerifier(options: {
     threadContexts: (await options.options.loadInlineThreadContexts?.()) ?? [],
     mode: { kind: "synchronize" },
     runId: options.runId,
+    piRunSink: options.piRunSink,
   });
 }
 
@@ -398,6 +419,7 @@ function createTaskContext(
     taskName: string;
     taskOrder: number;
     runId: string;
+    piRunSink: (run: PiRunStats) => void;
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");
@@ -459,7 +481,12 @@ function createTaskContext(
           agent,
           input,
           runOptions,
-          runtime: { ...options, taskContext, runId: options.runId },
+          runtime: {
+            ...options,
+            taskContext,
+            runId: options.runId,
+            piRunSink: options.piRunSink,
+          },
         });
         options.output.providerModels.push(...result.providerModels);
         if (result.repairAttempted) {

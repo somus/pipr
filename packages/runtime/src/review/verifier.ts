@@ -8,7 +8,7 @@ import type {
   PiprConfig,
   ProviderConfig,
 } from "../types.js";
-import { type PiRunner, runReviewAgent } from "./agent/review-run.js";
+import { type PiRunner, type PiRunStats, runReviewAgent } from "./agent/review-run.js";
 import type { ThreadAction } from "./comment.js";
 import {
   type PriorFindingRecord,
@@ -45,6 +45,7 @@ export type RunVerifierOptions = {
   mode: VerifierMode;
   runId: string;
   log?: RuntimeActionLog;
+  piRunSink?: (run: PiRunStats) => void;
 };
 
 export type VerifierResult = {
@@ -116,6 +117,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         piRunner: options.piRunner,
         runId: options.runId,
         log: options.log,
+        ...(options.piRunSink ? { piRunSink: options.piRunSink } : {}),
       },
     });
     const output = verifierOutputSchema.parse(result.value);

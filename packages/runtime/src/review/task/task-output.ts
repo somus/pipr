@@ -7,9 +7,20 @@ import type {
 } from "@usepipr/sdk";
 import { z } from "zod";
 import type { ReviewResult } from "../../types.js";
-import { mainCommentAttributionPattern, mainCommentTitles } from "../comment-branding.js";
+import type { PiRunStats } from "../agent/review-run.js";
+import {
+  mainCommentAttributionPattern,
+  mainCommentTitles,
+  reviewStatsEndMarker,
+  reviewStatsStartMarker,
+} from "../comment-branding.js";
 import { reviewFindingSchema } from "../contract.js";
 import type { PriorReviewState } from "../prior-state.js";
+import {
+  maxReviewStatsModels,
+  type ReviewStats,
+  sanitizeReviewStatsModel,
+} from "../review-stats.js";
 
 export type RuntimeCheckConclusion = "success" | "failure" | "neutral";
 
@@ -69,6 +80,21 @@ const agentInlineFindingsOutputSchema = z.custom<{
       .safeParse(value).success,
 );
 
+const generatedReviewStatsShape = [
+  /^$/,
+  /^\| Metric \| Total \|$/,
+  /^\| --- \| ---: \|$/,
+  /^\| Models \| .+ \|$/,
+  /^\| Agent runs \| \d+ \|$/,
+  /^\| Elapsed \| .+ \|$/,
+  /^\| Input tokens \| (?:Unavailable|[\d,]+(?: \(reported\))?) \|$/,
+  /^\| Output tokens \| (?:Unavailable|[\d,]+(?: \(reported\))?) \|$/,
+  /^\| Cost \(USD\) \| (?:Unavailable|\$\d+(?:\.\d+)?(?:e[+-]?\d+)?(?: \(reported\))?) \|$/,
+  /^$/,
+  /^<\/details>$/,
+  /^<!-- pipr:stats:end -->$/,
+];
+
 export function createOutputState(): OutputState {
   return {
     findings: [],
@@ -88,6 +114,83 @@ export function mergeTaskOutputs(results: TaskRunResult[]): OutputState {
     merged.repairAttempted ||= output.repairAttempted;
   }
   return merged;
+}
+
+export function reviewStatsForRuns(
+  runs: PiRunStats[],
+  durationMs: number,
+): ReviewStats | undefined {
+  if (runs.length === 0) {
+    return undefined;
+  }
+  const usage = aggregateReviewUsage(runs);
+  return {
+    models: collectReviewModels(runs),
+    agentRuns: runs.length,
+    durationMs,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    costUsd: usage.costUsd,
+    usageStatus: usage.status,
+  };
+}
+
+function collectReviewModels(runs: PiRunStats[]): string[] {
+  const models: string[] = [];
+  for (const model of runs.flatMap((run) => run.models)) {
+    const sanitized = sanitizeReviewStatsModel(model);
+    if (sanitized && models.length < maxReviewStatsModels && !models.includes(sanitized)) {
+      models.push(sanitized);
+    }
+  }
+  return models.length > 0 ? models : ["[invalid model]"];
+}
+
+function aggregateReviewUsage(runs: PiRunStats[]): {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  status: ReviewStats["usageStatus"];
+} {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let costUsd = 0;
+  let reportedRuns = 0;
+  let partialUsage = false;
+  for (const run of runs) {
+    if (!run.usage) {
+      continue;
+    }
+    reportedRuns += 1;
+    const input = addReportedUsage(inputTokens, run.usage.inputTokens, Number.isSafeInteger);
+    const output = addReportedUsage(outputTokens, run.usage.outputTokens, Number.isSafeInteger);
+    const cost = addReportedUsage(costUsd, run.usage.costUsd, Number.isFinite);
+    inputTokens = input.total;
+    outputTokens = output.total;
+    costUsd = cost.total;
+    const sumsComplete = [input, output, cost].every((sum) => sum.complete);
+    partialUsage ||= run.usage.status === "partial" || !sumsComplete;
+  }
+  return {
+    inputTokens,
+    outputTokens,
+    costUsd,
+    status:
+      reportedRuns === 0
+        ? "unavailable"
+        : reportedRuns < runs.length || partialUsage
+          ? "partial"
+          : "complete",
+  };
+}
+
+function addReportedUsage(
+  current: number,
+  reported: number,
+  isValid: (value: number) => boolean,
+): { total: number; complete: boolean } {
+  const next = current + reported;
+  return isValid(next) ? { total: next, complete: true } : { total: current, complete: false };
 }
 
 function mergeCommentContribution(
@@ -223,12 +326,15 @@ export function priorReviewForTask(
 }
 
 function visibleMainComment(body: string): string {
-  const lines = body
-    .split("\n")
-    .filter(
-      (line) =>
-        !line.startsWith("<!-- pipr:main-comment ") && !mainCommentAttributionPattern.test(line),
+  const sourceLines = body.split("\n");
+  const statsRange = generatedReviewStatsRange(sourceLines);
+  const lines = sourceLines.filter((line, index) => {
+    return (
+      !(statsRange && index >= statsRange.start && index <= statsRange.end) &&
+      !line.startsWith("<!-- pipr:main-comment ") &&
+      !mainCommentAttributionPattern.test(line)
     );
+  });
   while (lines[0] === "") {
     lines.shift();
   }
@@ -239,6 +345,45 @@ function visibleMainComment(body: string): string {
     lines.shift();
   }
   return lines.join("\n").trim();
+}
+
+function generatedReviewStatsRange(lines: string[]): { start: number; end: number } | undefined {
+  const attributionIndex = lines.findLastIndex((line) => mainCommentAttributionPattern.test(line));
+  if (attributionIndex < 0) {
+    return undefined;
+  }
+  const end = lines.slice(0, attributionIndex).findLastIndex((line) => line !== "");
+  if (end < 0) {
+    return undefined;
+  }
+  if (lines[end] !== reviewStatsEndMarker) {
+    return undefined;
+  }
+  if (lines[end - 1] !== "</details>") {
+    return undefined;
+  }
+  const start = lines.lastIndexOf(reviewStatsStartMarker, end - 2);
+  if (start < 0) {
+    return undefined;
+  }
+  if (lines[start + 1] !== "<details>") {
+    return undefined;
+  }
+  if (lines[start + 2] !== "<summary>Review stats</summary>") {
+    return undefined;
+  }
+  if (!matchesGeneratedReviewStatsShape(lines, start, end)) {
+    return undefined;
+  }
+  return { start, end };
+}
+
+function matchesGeneratedReviewStatsShape(lines: string[], start: number, end: number): boolean {
+  const generatedShape = lines.slice(start + 3, end + 1);
+  return (
+    generatedShape.length === generatedReviewStatsShape.length &&
+    generatedReviewStatsShape.every((pattern, index) => pattern.test(generatedShape[index] ?? ""))
+  );
 }
 
 function collectInlineFindings(

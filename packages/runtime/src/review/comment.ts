@@ -9,7 +9,12 @@ import type {
   ReviewFinding,
 } from "../types.js";
 import { commentableRangeSchema, reviewSideSchema } from "../types.js";
-import { mainCommentTitle, piprRepositoryUrl } from "./comment-branding.js";
+import {
+  mainCommentTitle,
+  piprRepositoryUrl,
+  reviewStatsEndMarker,
+  reviewStatsStartMarker,
+} from "./comment-branding.js";
 import { reviewFindingSchema } from "./contract.js";
 import {
   maxInlineFindingBodyCharacters,
@@ -27,6 +32,7 @@ import {
   renderInlineFindingMarker,
   renderMainCommentMarker,
 } from "./prior-state.js";
+import { type ReviewStats, reviewStatsSchema } from "./review-stats.js";
 import { isPublishableSuggestedFixSelection } from "./suggested-fix-publication-policy.js";
 
 export { runtimeVersion } from "../shared/version.js";
@@ -102,6 +108,7 @@ const publicationMetadataSchema = z.strictObject({
   validFindings: z.number().int().min(0),
   droppedFindings: z.number().int().min(0),
   cappedInlineFindings: z.number().int().min(0),
+  stats: reviewStatsSchema.optional(),
 });
 
 export type PublicationMetadata = z.infer<typeof publicationMetadataSchema>;
@@ -310,9 +317,74 @@ function renderMainComment(options: {
       : []),
     redactPotentialSecrets(options.main),
     "",
+    ...(options.metadata.stats ? [renderReviewStats(options.metadata.stats), ""] : []),
     renderMainCommentAttribution(options.metadata),
     "",
   ].join("\n");
+}
+
+function renderReviewStats(stats: ReviewStats): string {
+  const usageSuffix = stats.usageStatus === "partial" ? " (reported)" : "";
+  const usageUnavailable = stats.usageStatus === "unavailable";
+  return [
+    reviewStatsStartMarker,
+    "<details>",
+    "<summary>Review stats</summary>",
+    "",
+    "| Metric | Total |",
+    "| --- | ---: |",
+    `| Models | ${stats.models.map(formatModel).join(", ")} |`,
+    `| Agent runs | ${stats.agentRuns} |`,
+    `| Elapsed | ${formatDuration(stats.durationMs)} |`,
+    `| Input tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.inputTokens)}${usageSuffix}`} |`,
+    `| Output tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.outputTokens)}${usageSuffix}`} |`,
+    `| Cost (USD) | ${usageUnavailable ? "Unavailable" : `${formatCost(stats.costUsd)}${usageSuffix}`} |`,
+    "",
+    "</details>",
+    reviewStatsEndMarker,
+  ].join("\n");
+}
+
+function formatModel(model: string): string {
+  const escaped = model
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\|/g, "&#124;");
+  return `<code>${escaped}</code>`;
+}
+
+function formatInteger(value: number): string {
+  return value.toLocaleString("en-US");
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1_000) {
+    return `${durationMs}ms`;
+  }
+  const totalSeconds = durationMs / 1_000;
+  if (totalSeconds < 60) {
+    return `${formatTenths(totalSeconds)}s`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  return `${minutes}m ${formatTenths(totalSeconds - minutes * 60)}s`;
+}
+
+function formatTenths(value: number): string {
+  return value.toFixed(1).replace(/\.0$/, "");
+}
+
+function formatCost(costUsd: number): string {
+  if (costUsd === 0) {
+    return "$0.00";
+  }
+  if (costUsd < 0.0001) {
+    return `$${costUsd.toFixed(6)}`;
+  }
+  if (costUsd < 0.01) {
+    return `$${costUsd.toFixed(4)}`;
+  }
+  return `$${costUsd.toFixed(2)}`;
 }
 
 function renderMainCommentAttribution(metadata: PublicationMetadata): string {

@@ -4,6 +4,8 @@ export const piprRepositoryUrl = "https://github.com/somus/pipr";
 export const mainCommentTitle = `# <img src="${piprLogoUrl}" width="22" height="22" alt=""> Pipr Review`;
 
 export const mainCommentTitles = new Set(["# pipr Review", "# Pipr Review", mainCommentTitle]);
+export const reviewStatsStartMarker = "<!-- pipr:stats:start -->";
+export const reviewStatsEndMarker = "<!-- pipr:stats:end -->";
 
 const escapedRepositoryUrl = piprRepositoryUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

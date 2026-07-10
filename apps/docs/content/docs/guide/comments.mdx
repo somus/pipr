@@ -64,6 +64,39 @@ The Main Review Comment is the single visible summary for a review task. Pipr up
   src="/images/pipr/main-review-comment.png"
 />
 
+### Review stats
+
+Expand **Review stats** at the bottom of a Main Review Comment to inspect the model work behind the review.
+
+| Metric | Meaning |
+| --- | --- |
+| Models | Up to 20 concrete response models reported by Pi, or the requested model when Pi doesn't report one, in first-observed order. Additional model ids are omitted. |
+| Agent runs | Every Pi process attempt, including retries, output repairs, fallbacks, and internal verifier runs. |
+| Elapsed | Wall-clock Review Task runtime through task and verifier execution, sampled immediately before Pipr builds the publication plan. Parallel runs don't increase this value independently. |
+| Input tokens | The sum of input tokens reported by completed Pi assistant messages. |
+| Output tokens | The sum of output tokens reported by completed Pi assistant messages. |
+| Cost (USD) | The sum of Pi's reported model costs. Pipr doesn't maintain a separate pricing table. |
+
+Pipr labels usage values as **reported** whenever it can't safely aggregate complete usage, including missing runs or messages, invalid values, and numeric overflow. It shows **Unavailable** instead of zero when no usable usage event is available.
+
+Command responses, skipped runs, and Main Review Comments that don't run Pi omit the section.
+
+#### Integration metadata
+
+Integrations can read the same data from `PublicationResult.metadata.stats`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `models` | `string[]` | Up to 20 unique concrete or requested model ids in first-observed order. Additional ids are omitted. |
+| `agentRuns` | `number` | Pi process attempt count. |
+| `durationMs` | `number` | Elapsed wall-clock time in milliseconds. |
+| `inputTokens` | `number` | Reported input-token total. |
+| `outputTokens` | `number` | Reported output-token total. |
+| `costUsd` | `number` | Reported cost total in US dollars. |
+| `usageStatus` | `"complete" \| "partial" \| "unavailable"` | Whether usage covers every agent run. |
+
+Use `usageStatus` when interpreting the numeric totals. `complete` covers every run and assistant message. `partial` contains only the safely aggregatable reported subset. `unavailable` means no usable usage event was available, so the token and cost fields are placeholders rather than observed zero usage.
+
 ### Main-only uses
 
 Use the Main Review Comment for:
