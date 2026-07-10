@@ -192,9 +192,10 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("reviewSummarySchema");
     expect(configTs).toContain("changeSummary: z.array(z.string()).min(1).max(4)");
     expect(configTs).toContain("reviewerFocus: z.array(z.string()).max(4)");
-    expect(configTs).toContain("summaryTable(result.summary, result.findings.length)");
+    expect(configTs).toContain("summaryTable(result.summary, findings.length)");
     expect(configTs).toContain("severity");
     expect(configTs).toContain("category");
+    expect(configTs).not.toContain('"nit"');
     expect(configTs).toContain("@pipr review");
     expect(configTs).toContain('"## Findings"');
     expect(configTs).not.toContain('"## Review"');
@@ -216,12 +217,10 @@ describe("initOfficialMinimalProject", () => {
     const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
 
     expect(configTs).toContain("type SecuritySummary");
-    expect(configTs).toContain(
-      'required: ["headline", "riskLevel", "riskSummary", "reviewerFocus"]',
-    );
+    expect(configTs).toContain('required: ["headline", "riskSummary", "reviewerFocus"]');
     expect(configTs).toContain("diagramMermaid");
     expect(configTs).toContain("attackPathDiagramBlock");
-    expect(configTs).toContain("hasConcreteHighOrCriticalRisk");
+    expect(configTs).toContain("commentableSecurityRisks");
     expect(configTs).toContain("$" + "{fence}mermaid");
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("security-sast");
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("security-sast");
@@ -330,6 +329,54 @@ describe("initOfficialMinimalProject", () => {
     );
   });
 
+  it("omits structured review findings with invalid diff anchors from all output", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "rich-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: {
+          headline: "Review completed",
+          changeSummary: ["Changes request handling."],
+          riskLevel: "medium",
+          riskSummary: "One reported item did not map to the diff.",
+          reviewerFocus: [],
+        },
+        findings: [
+          {
+            title: "Invented location",
+            severity: "medium",
+            category: "correctness",
+            rationale: "This location does not exist.",
+            body: "This should never be rendered.",
+            path: "src/missing.ts",
+            rangeId: "missing-range",
+            side: "RIGHT",
+            startLine: 99,
+            endLine: 99,
+          },
+        ],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).not.toContain("Invented location");
+    expect(result.mainComment).toContain("Omitted 1 finding with an invalid or duplicate anchor.");
+    expect(result.inlineCommentDrafts).toEqual([]);
+  });
+
   it("renders the security SAST recipe as a clean security summary without a diagram", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
 
@@ -350,7 +397,6 @@ describe("initOfficialMinimalProject", () => {
       piRunner: jsonPiRunner({
         summary: {
           headline: "No exploitable security path found",
-          riskLevel: "low",
           riskSummary: "The changed workflow guard does not expose a new privileged path.",
           reviewerFocus: [],
         },
@@ -361,11 +407,11 @@ describe("initOfficialMinimalProject", () => {
     assertReviewResult(result);
     expect(result.mainComment).toContain("## Summary");
     expect(result.mainComment).toContain(
-      "## Summary\n\n**No exploitable security path found**\n\n| Status | Summary risk | Max severity | Risks |",
+      "## Summary\n\n**No exploitable security path found**\n\n| Status | Max severity | Risks |",
     );
     expect(result.mainComment).toContain("**No exploitable security path found**");
-    expect(result.mainComment).toContain("| Status | Summary risk | Max severity | Risks |");
-    expect(result.mainComment).toContain("| Pass | Low | None | 0 |");
+    expect(result.mainComment).toContain("| Status | Max severity | Risks |");
+    expect(result.mainComment).toContain("| Pass | None | 0 |");
     expect(result.mainComment).toContain("No special security follow-up.");
     expect(result.mainComment).not.toContain("<summary>Attack path diagram</summary>");
     expect(result.taskChecks).toContainEqual({
@@ -395,7 +441,6 @@ describe("initOfficialMinimalProject", () => {
       piRunner: jsonPiRunner({
         summary: {
           headline: "Privileged issue-comment path needs review",
-          riskLevel: "high",
           riskSummary: "A changed issue-comment condition could reach a privileged workflow path.",
           reviewerFocus: ["Confirm only trusted release automation can trigger this path."],
         },
@@ -424,7 +469,7 @@ describe("initOfficialMinimalProject", () => {
     });
 
     assertReviewResult(result);
-    expect(result.mainComment).toContain("| Fail | High | High | 1 |");
+    expect(result.mainComment).toContain("| Fail | High | 1 |");
     expect(result.mainComment).toContain(
       "| High | auth | Issue comments can trigger privileged workflow |",
     );
@@ -432,6 +477,121 @@ describe("initOfficialMinimalProject", () => {
     expect(result.mainComment).toContain("<summary>Attack path diagram</summary>");
     expect(result.mainComment).toContain("```mermaid");
     expect(result.inlineCommentDrafts).toHaveLength(1);
+    expect(result.taskChecks).toContainEqual({
+      taskName: "security-sast",
+      conclusion: "failure",
+      summary: "High or critical security risk found.",
+    });
+  });
+
+  it("does not fail Security SAST for a high risk with an invalid diff anchor", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "security-sast",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: {
+          headline: "Security review completed",
+          riskSummary: "One model risk did not map to changed code.",
+          reviewerFocus: [],
+        },
+        risks: [
+          {
+            title: "Unanchored privileged path",
+            category: "auth",
+            severity: "high",
+            rationale: "The reported path is not present in the diff.",
+            finding: {
+              body: "This should not affect the required check.",
+              path: "src/missing.ts",
+              rangeId: "missing-range",
+              side: "RIGHT",
+              startLine: 99,
+              endLine: 99,
+            },
+          },
+        ],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).not.toContain("Unanchored privileged path");
+    expect(result.mainComment).toContain("Omitted 1 risk with an invalid or duplicate anchor.");
+    expect(result.inlineCommentDrafts).toEqual([]);
+    expect(result.taskChecks).toContainEqual({
+      taskName: "security-sast",
+      conclusion: "success",
+      summary: "No high or critical security risks found.",
+    });
+  });
+
+  it("keeps the highest-severity duplicate before deriving the Security SAST check", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "security-sast",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const finding = {
+      body: "This guard accepts issue comments without proving the actor is trusted.",
+      path: "src/a.ts",
+      rangeId: "range-1",
+      side: "RIGHT",
+      startLine: 10,
+      endLine: 10,
+    };
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: {
+          headline: "Privileged path needs review",
+          riskSummary: "Duplicate model risks disagree on severity.",
+          reviewerFocus: [],
+        },
+        risks: [
+          {
+            title: "Low-severity interpretation",
+            category: "auth",
+            severity: "low",
+            rationale: "The first duplicate understates the impact.",
+            finding,
+          },
+          {
+            title: "High-severity interpretation",
+            category: "auth",
+            severity: "high",
+            rationale: "The changed guard reaches a privileged workflow.",
+            finding,
+          },
+        ],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain("| Fail | High | 1 |");
+    expect(result.mainComment).toContain("High-severity interpretation");
+    expect(result.mainComment).not.toContain("Low-severity interpretation");
+    expect(result.mainComment).toContain("Omitted 1 risk with an invalid or duplicate anchor.");
     expect(result.taskChecks).toContainEqual({
       taskName: "security-sast",
       conclusion: "failure",
@@ -453,6 +613,7 @@ describe("initOfficialMinimalProject", () => {
     const inspected = inspectRuntimePlan(project.plan, ".pipr/config.ts");
 
     expect(configTs).toContain("suggestedFix: z.string().min(1)");
+    expect(configTs).toContain("fixVerificationOutput");
     expect(configTs).toContain("isPublishableSuggestion");
     expect(configTs).toContain("isPublishableSuggestedFixSelection");
     expect(configTs).toContain("suggestionIncludesUnselectedContext");
@@ -469,6 +630,7 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("@pipr improve");
     expect(configTs).toContain("maxInlineComments: 6");
     expect(inspected.agents).toContain("fix-suggestions");
+    expect(inspected.agents).toContain("fix-suggestion-verifier");
     expect(inspected.tasks).toContain("fix-suggestions");
     expect(inspected.commands).toContainEqual({
       pattern: "@pipr improve",
@@ -565,143 +727,151 @@ describe("initOfficialMinimalProject", () => {
         sourceCommentId: 123,
       },
       diffManifestBuilder: () => literalManifest,
-      piRunner: jsonPiRunner({
-        summary: "One exact fix found.",
-        suggestions: [
-          {
-            title: "Bearer scheme is missing its separator",
-            category: "correctness",
-            body: "The token is concatenated directly onto the authentication scheme.",
-            path: "src/a.ts",
-            rangeId: "range-1",
-            side: "RIGHT",
-            startLine: 10,
-            endLine: 10,
-            suggestedFix: 'const header = "Bearer " + token;',
-          },
-          {
-            title: "Regex requires a literal separator",
-            category: "correctness",
-            body: "The pattern currently accepts only adjacent characters.",
-            path: "src/a.ts",
-            rangeId: "range-regex",
-            side: "RIGHT",
-            startLine: 30,
-            endLine: 30,
-            suggestedFix: "return /a b/;",
-          },
-          {
-            title: "Keyword requires a token separator",
-            category: "correctness",
-            body: "The merged token is not a return statement.",
-            path: "src/a.ts",
-            rangeId: "range-token-separator",
-            side: "RIGHT",
-            startLine: 60,
-            endLine: 60,
-            suggestedFix: "return value;",
-          },
-          {
-            title: "Regex statement requires a literal separator",
-            category: "correctness",
-            body: "The expression statement pattern currently matches adjacent characters.",
-            path: "src/a.ts",
-            rangeId: "range-regex-statement",
-            side: "RIGHT",
-            startLine: 70,
-            endLine: 70,
-            suggestedFix: "if (ok) /a b/.test(value);",
-          },
-          {
-            title: "Comment wording requires a separator",
-            category: "documentation",
-            body: "The comment currently merges two words.",
-            path: "src/a.ts",
-            rangeId: "range-comment",
-            side: "RIGHT",
-            startLine: 80,
-            endLine: 80,
-            suggestedFix: "// Join first and last name",
-          },
-          {
-            title: "URL literal formatting only",
-            category: "maintainability",
-            body: "This changes only code whitespace around a URL literal.",
-            path: "src/a.ts",
-            rangeId: "range-url-literal",
-            side: "RIGHT",
-            startLine: 90,
-            endLine: 90,
-            suggestedFix: 'const  endpoint = "https://example.com";',
-          },
-          {
-            title: "Regex literal formatting only",
-            category: "maintainability",
-            body: "This changes only code whitespace around a regex literal.",
-            path: "src/a.ts",
-            rangeId: "range-regex-comment-like",
-            side: "RIGHT",
-            startLine: 100,
-            endLine: 100,
-            suggestedFix: "const  pattern = /[/*]/;",
-          },
-          {
-            title: "Identical replacement",
-            category: "maintainability",
-            body: "This does not change the selected line.",
-            path: "src/a.ts",
-            rangeId: "range-1",
-            side: "RIGHT",
-            startLine: 10,
-            endLine: 10,
-            suggestedFix: 'const header = "Bearer" + token;',
-          },
-          {
-            title: "Formatting-only replacement",
-            category: "maintainability",
-            body: "This changes only code whitespace.",
-            path: "src/a.ts",
-            rangeId: "range-1",
-            side: "RIGHT",
-            startLine: 10,
-            endLine: 10,
-            suggestedFix: 'const  header = "Bearer" + token;',
-          },
-          {
-            title: "Invented environment key",
-            category: "correctness",
-            body: "This introduces configuration not present in the diff.",
-            path: "src/a.ts",
-            rangeId: "range-1",
-            side: "RIGHT",
-            startLine: 10,
-            endLine: 10,
-            suggestedFix: "const header = process.env.NEW_BEARER_TOKEN;",
-          },
-          {
-            title: "Template expression formatting",
-            category: "maintainability",
-            body: "This changes only expression whitespace.",
-            path: "src/a.ts",
-            rangeId: "range-template",
-            side: "RIGHT",
-            startLine: 40,
-            endLine: 40,
-            suggestedFix: "const label = `$" + "{first+last}`;",
-          },
-          {
-            title: "Structural edge replacement",
-            category: "correctness",
-            body: "This replaces the opening structural edge.",
-            path: "src/a.ts",
-            rangeId: "range-structural",
-            side: "RIGHT",
-            startLine: 50,
-            endLine: 51,
-            suggestedFix: ["}", "return nextValue;"].join("\n"),
-          },
-        ],
-      }),
+      piRunner: sequentialJsonPiRunner([
+        {
+          suggestions: [
+            {
+              title: "Bearer scheme is missing its separator",
+              category: "correctness",
+              body: "The token is concatenated directly onto the authentication scheme.",
+              path: "src/a.ts",
+              rangeId: "range-1",
+              side: "RIGHT",
+              startLine: 10,
+              endLine: 10,
+              suggestedFix: 'const header = "Bearer " + token;',
+            },
+            {
+              title: "Regex requires a literal separator",
+              category: "correctness",
+              body: "The pattern currently accepts only adjacent characters.",
+              path: "src/a.ts",
+              rangeId: "range-regex",
+              side: "RIGHT",
+              startLine: 30,
+              endLine: 30,
+              suggestedFix: "return /a b/;",
+            },
+            {
+              title: "Keyword requires a token separator",
+              category: "correctness",
+              body: "The merged token is not a return statement.",
+              path: "src/a.ts",
+              rangeId: "range-token-separator",
+              side: "RIGHT",
+              startLine: 60,
+              endLine: 60,
+              suggestedFix: "return value;",
+            },
+            {
+              title: "Regex statement requires a literal separator",
+              category: "correctness",
+              body: "The expression statement pattern currently matches adjacent characters.",
+              path: "src/a.ts",
+              rangeId: "range-regex-statement",
+              side: "RIGHT",
+              startLine: 70,
+              endLine: 70,
+              suggestedFix: "if (ok) /a b/.test(value);",
+            },
+            {
+              title: "Comment wording requires a separator",
+              category: "documentation",
+              body: "The comment currently merges two words.",
+              path: "src/a.ts",
+              rangeId: "range-comment",
+              side: "RIGHT",
+              startLine: 80,
+              endLine: 80,
+              suggestedFix: "// Join first and last name",
+            },
+            {
+              title: "URL literal formatting only",
+              category: "maintainability",
+              body: "This changes only code whitespace around a URL literal.",
+              path: "src/a.ts",
+              rangeId: "range-url-literal",
+              side: "RIGHT",
+              startLine: 90,
+              endLine: 90,
+              suggestedFix: 'const  endpoint = "https://example.com";',
+            },
+            {
+              title: "Regex literal formatting only",
+              category: "maintainability",
+              body: "This changes only code whitespace around a regex literal.",
+              path: "src/a.ts",
+              rangeId: "range-regex-comment-like",
+              side: "RIGHT",
+              startLine: 100,
+              endLine: 100,
+              suggestedFix: "const  pattern = /[/*]/;",
+            },
+            {
+              title: "Identical replacement",
+              category: "maintainability",
+              body: "This does not change the selected line.",
+              path: "src/a.ts",
+              rangeId: "range-1",
+              side: "RIGHT",
+              startLine: 10,
+              endLine: 10,
+              suggestedFix: 'const header = "Bearer" + token;',
+            },
+            {
+              title: "Formatting-only replacement",
+              category: "maintainability",
+              body: "This changes only code whitespace.",
+              path: "src/a.ts",
+              rangeId: "range-1",
+              side: "RIGHT",
+              startLine: 10,
+              endLine: 10,
+              suggestedFix: 'const  header = "Bearer" + token;',
+            },
+            {
+              title: "Invented environment key",
+              category: "correctness",
+              body: "This introduces configuration not present in the diff.",
+              path: "src/a.ts",
+              rangeId: "range-1",
+              side: "RIGHT",
+              startLine: 10,
+              endLine: 10,
+              suggestedFix: "const header = process.env.NEW_BEARER_TOKEN;",
+            },
+            {
+              title: "Template expression formatting",
+              category: "maintainability",
+              body: "This changes only expression whitespace.",
+              path: "src/a.ts",
+              rangeId: "range-template",
+              side: "RIGHT",
+              startLine: 40,
+              endLine: 40,
+              suggestedFix: "const label = `$" + "{first+last}`;",
+            },
+            {
+              title: "Structural edge replacement",
+              category: "correctness",
+              body: "This replaces the opening structural edge.",
+              path: "src/a.ts",
+              rangeId: "range-structural",
+              side: "RIGHT",
+              startLine: 50,
+              endLine: 51,
+              suggestedFix: ["}", "return nextValue;"].join("\n"),
+            },
+          ],
+        },
+        {
+          verdicts: [0, 1, 2, 3, 4].map((index) => ({
+            index,
+            accepted: true,
+            reason: "The exact replacement matches the stated defect.",
+          })),
+        },
+      ]),
     });
 
     assertReviewResult(result);
@@ -722,6 +892,198 @@ describe("initOfficialMinimalProject", () => {
     );
   });
 
+  it("publishes only semantically accepted fix suggestions", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-fix-suggestions-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "fix-suggestions",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    let piCalls = 0;
+    const suggestion = (title: string, suggestedFix: string) => ({
+      title,
+      category: "correctness",
+      body: "This exact replacement addresses the changed defect.",
+      path: "src/a.ts",
+      rangeId: "range-1",
+      side: "RIGHT",
+      startLine: 10,
+      endLine: 10,
+      suggestedFix,
+    });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      taskName: "fix-suggestions",
+      commandInvocation: {
+        name: "improve",
+        line: "@pipr improve",
+        arguments: {},
+        sourceCommentId: 123,
+      },
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: sequentialJsonPiRunner(
+        [
+          {
+            suggestions: [
+              suggestion("Accepted fix", "return safeValue;"),
+              suggestion("Rejected fix", "throw new Error();"),
+            ],
+          },
+          {
+            verdicts: [
+              { index: 0, accepted: true, reason: "The replacement fixes the stated defect." },
+              { index: 1, accepted: false, reason: "The replacement changes unrelated behavior." },
+              { index: 1, accepted: true, reason: "Duplicate verdict." },
+              { index: 9, accepted: true, reason: "Invented index." },
+            ],
+          },
+        ],
+        () => {
+          piCalls += 1;
+        },
+      ),
+    });
+
+    assertReviewResult(result);
+    expect(piCalls).toBe(2);
+    expect(result.mainComment).toContain("1 exact suggested change passed validation.");
+    expect(result.mainComment).toContain("Accepted fix");
+    expect(result.mainComment).not.toContain("Rejected fix");
+    expect(result.inlineCommentDrafts).toHaveLength(1);
+  });
+
+  it("skips fix verification without deterministic candidates and handles all rejected output", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-fix-suggestions-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "fix-suggestions",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    let emptyCalls = 0;
+    const emptyResult = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      taskName: "fix-suggestions",
+      commandInvocation: {
+        name: "improve",
+        line: "@pipr improve",
+        arguments: {},
+        sourceCommentId: 123,
+      },
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: sequentialJsonPiRunner([{ suggestions: [] }], () => {
+        emptyCalls += 1;
+      }),
+    });
+
+    assertReviewResult(emptyResult);
+    expect(emptyCalls).toBe(1);
+    expect(emptyResult.mainComment).toContain("No exact suggested changes passed validation.");
+
+    const rejectedResult = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      taskName: "fix-suggestions",
+      commandInvocation: {
+        name: "improve",
+        line: "@pipr improve",
+        arguments: {},
+        sourceCommentId: 124,
+      },
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: sequentialJsonPiRunner([
+        {
+          suggestions: [
+            {
+              title: "Rejected fix",
+              category: "correctness",
+              body: "The candidate is semantically unsafe.",
+              path: "src/a.ts",
+              rangeId: "range-1",
+              side: "RIGHT",
+              startLine: 10,
+              endLine: 10,
+              suggestedFix: "return safeValue;",
+            },
+          ],
+        },
+        {
+          verdicts: [{ index: 0, accepted: false, reason: "The patch changes the contract." }],
+        },
+      ]),
+    });
+
+    assertReviewResult(rejectedResult);
+    expect(rejectedResult.mainComment).toContain("No exact suggested changes passed validation.");
+    expect(rejectedResult.mainComment).not.toContain("Rejected fix");
+    expect(rejectedResult.inlineCommentDrafts).toEqual([]);
+  });
+
+  it("fails closed on malformed fix suggestion verifier output", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-fix-suggestions-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "fix-suggestions",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const malformedVerifierOutput = {
+      verdicts: [{ index: "0", accepted: true, reason: "The index has the wrong type." }],
+    };
+
+    await expect(
+      runTaskRuntime({
+        workspace: rootDir,
+        config: project.settings.config,
+        event: eventContext(),
+        plan: project.plan,
+        taskName: "fix-suggestions",
+        commandInvocation: {
+          name: "improve",
+          line: "@pipr improve",
+          arguments: {},
+          sourceCommentId: 125,
+        },
+        diffManifestBuilder: () => reviewTestManifest(),
+        piRunner: sequentialJsonPiRunner([
+          {
+            suggestions: [
+              {
+                title: "Candidate fix",
+                category: "correctness",
+                body: "The exact replacement addresses the changed defect.",
+                path: "src/a.ts",
+                rangeId: "range-1",
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+                suggestedFix: "return safeValue;",
+              },
+            ],
+          },
+          malformedVerifierOutput,
+          malformedVerifierOutput,
+        ]),
+      }),
+    ).rejects.toThrow("schema validation");
+  });
+
   it("initializes the quality gate recipe with commentable blocker filtering", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-quality-gate-"));
 
@@ -737,6 +1099,182 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("commentableRangeForFinding");
     expect(configTs).toContain("droppedBlockersNote");
     expect(configTs).not.toContain("if (result.blockers.length > 0)");
+  });
+
+  it("deduplicates quality gate blockers before rendering and concluding the check", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-quality-gate-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "quality-gate",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const blocker = {
+      title: "Request fallback is skipped",
+      category: "correctness",
+      impact: "Requests can fail instead of using the fallback.",
+      body: "This returns before the fallback can run.",
+      path: "src/a.ts",
+      rangeId: "range-1",
+      side: "RIGHT",
+      startLine: 10,
+      endLine: 10,
+    };
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({ summary: "One blocker found.", blockers: [blocker, blocker] }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain("| Fail | 1 | Correctness (1) |");
+    expect(result.mainComment).toContain(
+      "1 model-reported blocker was ignored because it does not match a commentable diff range or duplicates another blocker.",
+    );
+    expect(result.inlineCommentDrafts).toHaveLength(1);
+    expect(result.taskChecks).toContainEqual({
+      taskName: "quality-gate",
+      conclusion: "failure",
+      summary: "1 blocking quality issue found.",
+    });
+  });
+
+  it("reports PR hygiene attention as neutral and omits invalid inline findings", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-hygiene-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "pr-hygiene",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: "Tests need attention.",
+        checks: [
+          { policy: "tests", status: "attention", evidence: "Behavior changed without a test." },
+          { policy: "docs", status: "not-applicable", evidence: "No public docs changed." },
+          { policy: "lockfiles", status: "not-applicable", evidence: "No lockfiles changed." },
+          {
+            policy: "generated-files",
+            status: "not-applicable",
+            evidence: "No generated files changed.",
+          },
+          { policy: "change-size", status: "pass", evidence: "One source file changed." },
+        ],
+        findings: [
+          {
+            title: "Invented hygiene anchor",
+            policy: "tests",
+            body: "This should not be rendered.",
+            path: "src/missing.ts",
+            rangeId: "missing-range",
+            side: "RIGHT",
+            startLine: 99,
+            endLine: 99,
+          },
+        ],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).not.toContain("Invented hygiene anchor");
+    expect(result.mainComment).toContain("Omitted 1 finding with an invalid or duplicate anchor.");
+    expect(result.inlineCommentDrafts).toEqual([]);
+    expect(result.taskChecks).toContainEqual({
+      taskName: "pr-hygiene",
+      conclusion: "neutral",
+      summary: "1 hygiene check needs attention.",
+    });
+  });
+
+  it("rejects duplicate or missing PR hygiene policy verdicts", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-hygiene-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "pr-hygiene",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    await expect(
+      runTaskRuntime({
+        workspace: rootDir,
+        config: project.settings.config,
+        event: eventContext(),
+        plan: project.plan,
+        diffManifestBuilder: () => reviewTestManifest(),
+        piRunner: jsonPiRunner({
+          summary: "Hygiene review completed.",
+          checks: [
+            { policy: "tests", status: "pass", evidence: "Tests changed." },
+            { policy: "tests", status: "pass", evidence: "Duplicate tests verdict." },
+            { policy: "lockfiles", status: "not-applicable", evidence: "No lockfiles." },
+            {
+              policy: "generated-files",
+              status: "not-applicable",
+              evidence: "No generated files.",
+            },
+            { policy: "change-size", status: "pass", evidence: "One source file." },
+          ],
+          findings: [],
+        }),
+      }),
+    ).rejects.toThrow("schema validation");
+  });
+
+  it("filters invalid diff diagnostics before publication", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-diff-diagnostics-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "diff-diagnostics",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: "Diagnostics completed.",
+        diagnostics: [
+          {
+            body: "This diagnostic has no changed-code anchor.",
+            path: "src/missing.ts",
+            rangeId: "missing-range",
+            side: "RIGHT",
+            startLine: 99,
+            endLine: 99,
+          },
+        ],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain(
+      "Omitted 1 diagnostic with an invalid or duplicate anchor.",
+    );
+    expect(result.inlineCommentDrafts).toEqual([]);
   });
 
   it("initializes advanced recipes with inspectable agents, tools, and commands", async () => {
@@ -795,6 +1333,112 @@ describe("initOfficialMinimalProject", () => {
     ]);
   });
 
+  it("gives the multi-agent aggregator diff context for independent revalidation", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-multi-agent-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "multi-agent-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    let aggregatorPrompt = "";
+    let aggregatorTools: unknown;
+    const reviewOutput = {
+      summary: { body: "No actionable findings." },
+      inlineFindings: [],
+    };
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: async (run) => {
+        if (run.prompt.includes("## Specialist results")) {
+          aggregatorPrompt = run.prompt;
+          aggregatorTools = run.builtinTools;
+        }
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify(reviewOutput),
+          stderr: "",
+          durationMs: 1,
+        };
+      },
+    });
+
+    assertReviewResult(result);
+    expect(aggregatorPrompt).toContain("Diff Manifest:");
+    expect(aggregatorPrompt).toContain("independently revalidate");
+    expect(aggregatorTools).toEqual(expect.arrayContaining(["read", "grep", "find", "ls"]));
+  });
+
+  it("renders diagnosed and insufficient-context CI triage responses", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-ci-triage-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "ci-triage-command",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const runTriage = (output: unknown, sourceCommentId: number) =>
+      runTaskRuntime({
+        workspace: rootDir,
+        config: project.settings.config,
+        event: eventContext(),
+        plan: project.plan,
+        taskName: "ci-triage",
+        taskInput: { log: "error: test process exited with code 1" },
+        commandInvocation: {
+          name: "ci",
+          line: "@pipr ci error: test process exited with code 1",
+          arguments: { log: "error: test process exited with code 1" },
+          sourceCommentId,
+        },
+        diffManifestBuilder: () => reviewTestManifest(),
+        piRunner: jsonPiRunner(output),
+      });
+
+    const diagnosed = await runTriage(
+      {
+        status: "diagnosed",
+        summary: "The first test command failed before later jobs were cancelled.",
+        evidence: ["The test process is the first command with a non-zero exit."],
+        likelyCauses: ["The changed request branch violates the asserted return contract."],
+        nextSteps: ["Run the failing test file locally."],
+      },
+      201,
+    );
+    if (diagnosed.kind !== "command-response") {
+      throw new Error("expected a CI triage command response");
+    }
+    expect(diagnosed.commandResponse.body).toContain("**Status:** Diagnosed");
+    expect(diagnosed.commandResponse.body).toContain("## Evidence");
+    expect(diagnosed.commandResponse.body).toContain("## Likely Causes");
+    expect(diagnosed.commandResponse.body).toContain("## Next Steps");
+
+    const insufficient = await runTriage(
+      {
+        status: "insufficient-context",
+        summary: "The excerpt contains only a final exit code.",
+        evidence: ["No failing command or stack trace is present."],
+        likelyCauses: [],
+        nextSteps: ["Provide the log beginning at the first failing command."],
+      },
+      202,
+    );
+    if (insufficient.kind !== "command-response") {
+      throw new Error("expected a CI triage command response");
+    }
+    expect(insufficient.commandResponse.body).toContain("**Status:** Insufficient context");
+    expect(insufficient.commandResponse.body).not.toContain("## Likely Causes");
+  });
+
   it("initializes the PR briefing recipe with dynamic diagram fences", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-briefing-"));
 
@@ -808,7 +1452,83 @@ describe("initOfficialMinimalProject", () => {
 
     expect(configTs).toContain("function markdownFenceFor");
     expect(configTs).toContain("$" + "{fence}mermaid");
+    expect(configTs).toContain("Return empty arrays for list sections with no useful content");
     expect(configTs).not.toContain('"```mermaid",\n    diagram,\n    "```"');
+  });
+
+  it("omits empty optional PR briefing sections", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-briefing-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "pr-briefing",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: jsonPiRunner({
+        summary: "Changes request handling without altering public behavior.",
+        prType: "refactor",
+        riskLevel: "low",
+        riskSummary: "The implementation and caller remain coordinated.",
+        changeMap: [],
+        reviewerFocus: [],
+        notableFiles: [],
+        walkthrough: [],
+      }),
+    });
+
+    assertReviewResult(result);
+    expect(result.mainComment).toContain("## Summary");
+    expect(result.mainComment).not.toContain("## Change Map");
+    expect(result.mainComment).not.toContain("## Reviewer Focus");
+    expect(result.mainComment).not.toContain("## Notable Files");
+    expect(result.mainComment).not.toContain("## Walkthrough");
+  });
+
+  it("generates grounded recipe policies and expanded dependency scopes", async () => {
+    const recipeConfigs = new Map<string, string>();
+    for (const recipe of [
+      "dependency-risk",
+      "plugin-tool-review",
+      "interactive-ask",
+      "changelog-draft",
+    ] as const) {
+      const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${recipe}-`));
+      await initOfficialMinimalProject({ rootDir, adapters: [], recipe, minimal: true });
+      recipeConfigs.set(recipe, await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text());
+    }
+
+    const dependencyConfig = recipeConfigs.get("dependency-risk") ?? "";
+    for (const dependencyFile of [
+      "deno.json",
+      "deno.jsonc",
+      "jsr.json",
+      "uv.lock",
+      "poetry.lock",
+      "Pipfile",
+      "Pipfile.lock",
+      "Gemfile",
+      "Gemfile.lock",
+      "composer.json",
+      "composer.lock",
+      "Package.swift",
+      "Package.resolved",
+      "Directory.Packages.props",
+      "packages.lock.json",
+    ]) {
+      expect(dependencyConfig).toContain(`**/${dependencyFile}`);
+    }
+    expect(dependencyConfig).toContain("z.array(z.string()).max(6)");
+    expect(recipeConfigs.get("plugin-tool-review")).toContain("based only on memory");
+    expect(recipeConfigs.get("interactive-ask")).toContain("Distinguish evidence from inference");
+    expect(recipeConfigs.get("changelog-draft")).toContain("Do not invent issue IDs");
   });
 
   it("adds R2 memory secrets to the plugin recipe workflow", async () => {
@@ -1049,6 +1769,21 @@ function jsonPiRunner(output: unknown): PiRunner {
     stderr: "",
     durationMs: 1,
   });
+}
+
+function sequentialJsonPiRunner(outputs: unknown[], onCall?: () => void): PiRunner {
+  let index = 0;
+  return async () => {
+    onCall?.();
+    const output = outputs[index];
+    index += 1;
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify(output ?? {}),
+      stderr: "",
+      durationMs: 1,
+    };
+  };
 }
 
 function assertReviewResult(

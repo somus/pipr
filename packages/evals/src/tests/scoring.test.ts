@@ -207,6 +207,19 @@ describe("prompt eval scoring", () => {
     );
   });
 
+  it("gates contract regressions and coordinated clean changes", () => {
+    expect(livePromptGateCaseIds.defectRecall).toEqual(
+      expect.arrayContaining([
+        "empty-value-contract-regression",
+        "removed-await-effect-regression",
+        "unchanged-caller-contract-regression",
+      ]),
+    );
+    expect(livePromptGateCaseIds.cleanSuppression).toContain(
+      "coordinated-cross-file-contract-clean",
+    );
+  });
+
   it("checks raw review summary text before publication rendering", () => {
     expect(
       scoreForbiddenOutputSuppression(

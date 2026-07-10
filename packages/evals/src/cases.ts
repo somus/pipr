@@ -159,6 +159,120 @@ test("applies bulk discount", () => {
     },
   },
   {
+    id: "empty-value-contract-regression",
+    description:
+      "Reports a nullish-to-falsy fallback change that violates the empty-string contract.",
+    baseFiles: {
+      [reviewTargetPath]: `export function displayLabel(value: string | undefined): string {
+  return value ?? "fallback";
+}
+`,
+      "src/review-target.test.ts": `import { displayLabel } from "./review-target";
+
+test("preserves an intentionally empty label", () => {
+  expect(displayLabel("")).toBe("");
+});
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `export function displayLabel(value: string | undefined): string {
+  return value || "fallback";
+}
+`,
+      "src/review-target.test.ts": `import { displayLabel } from "./review-target";
+
+test("preserves an intentionally empty label", () => {
+  expect(displayLabel("")).toBe("");
+});
+`,
+    },
+    expected: {
+      findings: [
+        {
+          line: 2,
+          path: reviewTargetPath,
+          keywords: ["empty", "fallback"],
+        },
+      ],
+      maxInlineFindings: 1,
+      requirePiCall: true,
+    },
+  },
+  {
+    id: "removed-await-effect-regression",
+    description: "Reports an async function that now returns before its required effect completes.",
+    baseFiles: {
+      [reviewTargetPath]: `export type Store = {
+  write(value: string): Promise<void>;
+};
+
+export async function persistValue(store: Store, value: string): Promise<void> {
+  await store.write(value);
+}
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `export type Store = {
+  write(value: string): Promise<void>;
+};
+
+export async function persistValue(store: Store, value: string): Promise<void> {
+  store.write(value);
+}
+`,
+    },
+    expected: {
+      findings: [
+        {
+          line: 6,
+          path: reviewTargetPath,
+          keywords: ["await", "write", "return"],
+        },
+      ],
+      maxInlineFindings: 1,
+      requirePiCall: true,
+    },
+  },
+  {
+    id: "unchanged-caller-contract-regression",
+    description: "Reports a changed unit contract that breaks an unchanged cross-file caller.",
+    baseFiles: {
+      [reviewTargetPath]: `export function timeoutMilliseconds(rawSeconds: number): number {
+  return rawSeconds;
+}
+`,
+      "src/request.ts": `import { timeoutMilliseconds } from "./review-target";
+
+export function scheduleRequest(rawSeconds: number, callback: () => void): void {
+  setTimeout(callback, timeoutMilliseconds(rawSeconds) * 1000);
+}
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `export function timeoutMilliseconds(rawSeconds: number): number {
+  return rawSeconds * 1000;
+}
+`,
+      "src/request.ts": `import { timeoutMilliseconds } from "./review-target";
+
+export function scheduleRequest(rawSeconds: number, callback: () => void): void {
+  setTimeout(callback, timeoutMilliseconds(rawSeconds) * 1000);
+}
+`,
+    },
+    expected: {
+      findings: [
+        {
+          line: 2,
+          path: reviewTargetPath,
+          keywords: ["caller", "1000", "millisecond"],
+        },
+      ],
+      maxInlineFindings: 1,
+      requirePiCall: true,
+    },
+  },
+  {
     id: "suggested-fix-range-selection",
     description: "Keeps a finding but suppresses an unsafe suggested fix range.",
     baseFiles: {
@@ -416,6 +530,51 @@ test("returns undefined for invalid ids", () => {
 
 test("rejects invalid ids", () => {
   expect(() => parseCustomerId("bad")).toThrow("customer id must start with cus_");
+});
+`,
+    },
+    expected: {
+      findings: [],
+      maxInlineFindings: 0,
+      requirePiCall: true,
+    },
+  },
+  {
+    id: "coordinated-cross-file-contract-clean",
+    description: "Keeps a coordinated implementation, caller, and test contract change clean.",
+    baseFiles: {
+      [reviewTargetPath]: `export function coordinatedTimeout(inputSeconds: number): number {
+  return inputSeconds;
+}
+`,
+      "src/request.ts": `import { coordinatedTimeout } from "./review-target";
+
+export function requestDelay(rawSeconds: number): number {
+  return coordinatedTimeout(rawSeconds) * 1000;
+}
+`,
+      "src/request.test.ts": `import { requestDelay } from "./request";
+
+test("converts seconds to milliseconds", () => {
+  expect(requestDelay(5)).toBe(5000);
+});
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `export function coordinatedTimeout(inputSeconds: number): number {
+  return inputSeconds * 1000;
+}
+`,
+      "src/request.ts": `import { coordinatedTimeout } from "./review-target";
+
+export function requestDelay(rawSeconds: number): number {
+  return coordinatedTimeout(rawSeconds);
+}
+`,
+      "src/request.test.ts": `import { requestDelay } from "./request";
+
+test("uses the millisecond timeout contract", () => {
+  expect(requestDelay(5)).toBe(5000);
 });
 `,
     },

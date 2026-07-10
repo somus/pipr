@@ -35,8 +35,18 @@ export default definePipr((pipr) => {
   const fixSuggestionOutput = pipr.schema({
     id: "review/fix-suggestions",
     schema: z.strictObject({
-      summary: z.string(),
       suggestions: z.array(fixSuggestionSchema),
+    }),
+  });
+
+  const fixVerificationOutput = pipr.schema({
+    id: "review/fix-suggestion-verification",
+    schema: z.strictObject({
+      verdicts: z.array(z.strictObject({
+        index: z.number().int().nonnegative(),
+        accepted: z.boolean(),
+        reason: z.string(),
+      })),
     }),
   });
 
@@ -57,6 +67,29 @@ export default definePipr((pipr) => {
     prompt: () => "Find exact suggested changes for this pull request.",
   });
 
+  const verifier = pipr.agent({
+    name: "fix-suggestion-verifier",
+    model,
+    instructions: \`
+      Semantically verify candidate fixes after deterministic range validation.
+      Accept a candidate only when the defect is real and introduced or exposed
+      by the change, the body and replacement address the same defect, the exact
+      replacement preserves surrounding contracts, and no secret or config
+      dependency is invented. Reject speculative, style-only, or broad changes.
+      Return one verdict for every supplied candidate index and never invent indexes.
+    \`,
+    output: fixVerificationOutput,
+    tools: pipr.tools.readOnly,
+    retry: { invalidOutput: 1, transientFailure: 1 },
+    timeout: "7m",
+    prompt: (input: { manifest: unknown; candidates: FixSuggestion[] }) => pipr.prompt\`
+      \${pipr.section(
+        "Candidate suggestions",
+        pipr.json(input.candidates, { maxCharacters: 60000 }),
+      )}
+    \`,
+  });
+
   const task = pipr.task({
     name: "fix-suggestions",
     async run(ctx) {
@@ -65,9 +98,21 @@ export default definePipr((pipr) => {
       }
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(fixer, { manifest });
-      const publishableSuggestions = result.suggestions.filter(
+      const deterministicCandidates = result.suggestions.filter(
         (suggestion) => isPublishableSuggestion(suggestion, manifest),
       );
+      const publishableSuggestions =
+        deterministicCandidates.length === 0
+          ? []
+          : acceptedSuggestions(
+              deterministicCandidates,
+              (
+                await ctx.pi.run(verifier, {
+                  manifest,
+                  candidates: deterministicCandidates,
+                })
+              ).verdicts,
+            );
       const inlineFindings: ReviewFinding[] = publishableSuggestions.map((suggestion) => {
         const category = suggestion.category
           .replaceAll("-", " ")
@@ -84,7 +129,7 @@ export default definePipr((pipr) => {
       });
       await ctx.comment({
         main: [
-          result.summary,
+          suggestionSummary(publishableSuggestions.length),
           "",
           "## Exact Suggested Changes",
           "",
@@ -102,6 +147,42 @@ export default definePipr((pipr) => {
     task,
   });
 });
+
+type FixSuggestionVerdict = {
+  index: number;
+  accepted: boolean;
+  reason: string;
+};
+
+function acceptedSuggestions(
+  candidates: FixSuggestion[],
+  verdicts: FixSuggestionVerdict[],
+): FixSuggestion[] {
+  const verdictByIndex = new Map<number, FixSuggestionVerdict>();
+  const duplicateIndexes = new Set<number>();
+  for (const verdict of verdicts) {
+    if (verdict.index < 0 || verdict.index >= candidates.length) {
+      continue;
+    }
+    if (verdictByIndex.has(verdict.index)) {
+      duplicateIndexes.add(verdict.index);
+      continue;
+    }
+    verdictByIndex.set(verdict.index, verdict);
+  }
+  return candidates.filter((_, index) => {
+    const verdict = verdictByIndex.get(index);
+    return !duplicateIndexes.has(index) && verdict?.accepted === true;
+  });
+}
+
+function suggestionSummary(count: number): string {
+  if (count === 0) {
+    return "No exact suggested changes passed validation.";
+  }
+  const noun = count === 1 ? "change" : "changes";
+  return count + " exact suggested " + noun + " passed validation.";
+}
 
 type FindingAnchor = Pick<ReviewFinding, "path" | "rangeId" | "side" | "startLine" | "endLine">;
 

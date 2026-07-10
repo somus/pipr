@@ -129,6 +129,7 @@ Task rules:
 - Keep config registration synchronous.
 - Let Pipr build the Diff Manifest and validate Inline Review Comments.
 - Pass the Diff Manifest through the reserved `manifest` input key.
+- Do not repeat change request metadata or generic `suggestedFix` policy in agent instructions; Core supplies both prompt contracts.
 - Emit exactly one final output per selected task.
 - Use `ctx.command.reply(...)` for command response workflows.
 - Use `local: false` only for tasks that should never run through `pipr review`.

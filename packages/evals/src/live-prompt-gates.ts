@@ -30,8 +30,17 @@ type LivePromptGateDefinition = {
 };
 
 export const livePromptGateCaseIds = {
-  cleanSuppression: ["harmless-refactor", "out-of-scope-docs"],
-  defectRecall: ["security-open-redirect"],
+  cleanSuppression: [
+    "harmless-refactor",
+    "out-of-scope-docs",
+    "coordinated-cross-file-contract-clean",
+  ],
+  defectRecall: [
+    "security-open-redirect",
+    "empty-value-contract-regression",
+    "removed-await-effect-regression",
+    "unchanged-caller-contract-regression",
+  ],
   safetyHygiene: ["untrusted-schema-instruction-lure"],
   suggestedFix: [
     "correctness-null-regression",

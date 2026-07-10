@@ -31,9 +31,12 @@ export default definePipr((pipr) => {
     model: primary,
     fallbacks: [fallback],
     instructions: \`
-      Review only likely defects: broken logic, edge cases, concurrency risks,
-      data loss, performance regressions, and behavior changes missing tests.
-      Ignore style-only feedback and broad refactors.
+      Review only defects with a reproducible failure path or a violated
+      repository contract: broken logic, edge cases, concurrency risks, data
+      loss, performance regressions, and behavior changes missing meaningful
+      tests. For API, async, state, and concurrency changes, inspect relevant
+      callers and tests before reporting. Suppress generic maintainability,
+      style-only, and broad refactor feedback.
     \`,
     timeout: "7m",
   });

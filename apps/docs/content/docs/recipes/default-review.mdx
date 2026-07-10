@@ -52,9 +52,10 @@ export default definePipr((pipr) => {
     id: "review",
     model,
     instructions: `
-      Review the pull request diff for correctness, security,
-      maintainability, and test coverage.
-      Return only actionable findings that target valid diff ranges.
+      Review changed behavior for correctness, security, maintainability, and
+      meaningful regression gaps. Focus on concrete impact and compatibility
+      with repository contracts. Return only actionable findings that target
+      valid diff ranges.
     `,
     timeout: "10m",
     comment: (result, context) => {

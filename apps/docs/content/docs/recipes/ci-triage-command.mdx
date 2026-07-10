@@ -36,7 +36,7 @@ The recipe writes the config, any supporting `.pipr` files, and the GitHub workf
 <RecipeFilePane path=".pipr/config.ts">
 
 ```ts title=".pipr/config.ts"
-import { definePipr } from "@usepipr/sdk";
+import { definePipr, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -46,15 +46,28 @@ export default definePipr((pipr) => {
     options: { thinking: "high" },
   });
 
+  const ciTriageOutput = pipr.schema({
+    id: "ci/triage",
+    schema: z.strictObject({
+      status: z.enum(["diagnosed", "insufficient-context"]),
+      summary: z.string(),
+      evidence: z.array(z.string()).max(4),
+      likelyCauses: z.array(z.string()).max(3),
+      nextSteps: z.array(z.string()).max(4),
+    }),
+  });
+
   const ciTriage = pipr.agent({
     name: "ci-triage",
     model,
     instructions: `
-      Explain likely causes for a CI failure using only the pasted log excerpt,
-      pull request metadata, prior review state, and diff context. Be explicit when
-      the log is insufficient.
+      Diagnose CI failures using only the pasted log excerpt, pull request
+      metadata, prior review state, and repository evidence. Identify the first
+      actionable failure and separate it from downstream cascade errors. Use
+      status "insufficient-context" when the excerpt cannot support a diagnosis.
+      Do not infer a cause from a final exit code alone.
     `,
-    output: pipr.schemas.summary,
+    output: ciTriageOutput,
     prompt: (input: { log: string; manifest: unknown; prior: unknown }) => pipr.prompt`
       ${pipr.section("CI log excerpt", input.log)}
       ${pipr.section("Prior pipr review", pipr.json(input.prior, { maxCharacters: 20000 }))}
@@ -70,7 +83,7 @@ export default definePipr((pipr) => {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const prior = await ctx.review.prior();
       const result = await ctx.pi.run(ciTriage, { log: input.log, manifest, prior });
-      await ctx.command.reply(`## CI Triage\n\n${result.body}`);
+      await ctx.command.reply(ciTriageComment(result));
     },
   });
 
@@ -82,6 +95,39 @@ export default definePipr((pipr) => {
     task,
   });
 });
+
+type CiTriageResult = {
+  status: "diagnosed" | "insufficient-context";
+  summary: string;
+  evidence: string[];
+  likelyCauses: string[];
+  nextSteps: string[];
+};
+
+function ciTriageComment(result: CiTriageResult): string {
+  const sections = [
+    "## CI Triage",
+    "",
+    "**Status:** " + labelValue(result.status),
+    "",
+    result.summary,
+  ];
+  appendList(sections, "Evidence", result.evidence);
+  appendList(sections, "Likely Causes", result.likelyCauses);
+  appendList(sections, "Next Steps", result.nextSteps);
+  return sections.join("\n");
+}
+
+function appendList(sections: string[], title: string, items: string[]): void {
+  if (items.length === 0) {
+    return;
+  }
+  sections.push("", "## " + title, "", ...items.map((item) => "- " + item));
+}
+
+function labelValue(value: string): string {
+  return value.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
+}
 ```
 
 </RecipeFilePane>
@@ -123,14 +169,15 @@ Use `pipr init --recipe ci-triage-command --adapters none` when you only want th
 
 ## Expected output
 
-Pipr replies to the source command comment with CI triage. It does not publish normal review comments for this command-only workflow.
+Pipr replies with structured status, evidence, likely causes, and next steps, or an explicit insufficient-context result. It does not publish normal review comments.
 
 ## Recipe notes
 
-CI Triage is command-only. Maintainers paste the relevant log excerpt into `@pipr ci <log...>`, and Pipr replies in the command thread using the log, prior Pipr review state, and the current Diff Manifest.
+CI Triage is command-only. Maintainers paste the relevant log excerpt into `@pipr ci <log...>`, and Pipr replies with bounded structured status, evidence, likely causes, and next steps using the log, prior Pipr review state, and the current Diff Manifest.
 
 - Keep the pasted log short enough to include the failing command, error, and nearby stack trace.
 - Add CI-provider conventions to the instructions, such as test shard naming, cache keys, or known flaky suites.
 - Keep the command permission at `write` if CI logs may contain internal paths, environment names, or deployment details.
+- The agent separates the first actionable failure from cascade errors and returns `insufficient-context` when the excerpt cannot support a diagnosis.
 
 Shared setup, local type support, and provider tuning notes live on the [Recipes](/docs/recipes#common-setup) page.

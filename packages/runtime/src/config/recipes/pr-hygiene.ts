@@ -6,7 +6,7 @@ export const prHygieneRecipe = {
   description: "Danger-style PR hygiene checks for tests, docs, lockfiles, and size.",
   sourceTools: ["Danger JS"],
   configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { ReviewFinding } from "@usepipr/sdk";
+import type { DiffManifest, ReviewFinding } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -32,6 +32,18 @@ export default definePipr((pipr) => {
     evidence: z.string(),
   });
 
+  const policyCheckFor = <const Policy extends z.infer<typeof hygienePolicySchema>>(
+    policy: Policy,
+  ) => policyCheckSchema.extend({ policy: z.literal(policy) });
+
+  const policyChecksSchema = z.tuple([
+    policyCheckFor("tests"),
+    policyCheckFor("docs"),
+    policyCheckFor("lockfiles"),
+    policyCheckFor("generated-files"),
+    policyCheckFor("change-size"),
+  ]);
+
   const hygieneFindingSchema = z.strictObject({
     title: z.string(),
     policy: hygienePolicySchema,
@@ -44,14 +56,14 @@ export default definePipr((pipr) => {
     suggestedFix: z.string().optional(),
   });
 
-  type PolicyCheck = z.infer<typeof policyCheckSchema>;
+  type PolicyCheck = z.infer<typeof policyChecksSchema>[number];
   type HygieneFinding = z.infer<typeof hygieneFindingSchema>;
 
   const hygieneOutput = pipr.schema({
     id: "review/pr-hygiene",
     schema: z.strictObject({
       summary: z.string(),
-      checks: z.array(policyCheckSchema),
+      checks: policyChecksSchema,
       findings: z.array(hygieneFindingSchema),
     }),
   });
@@ -61,9 +73,10 @@ export default definePipr((pipr) => {
     model,
     instructions: \`
       Review pull request hygiene, not code correctness. Evaluate tests, docs,
-      lockfiles, generated files, and change size. Return one policy check per
-      relevant policy. Return inline findings only for concrete hygiene gaps
-      that maintainers can act on in the changed lines.
+      lockfiles, generated files, and change size. Return exactly one policy
+      check for each policy, using not-applicable when it does not apply. Ground
+      evidence in changed files or counts. Use policy attention for file-level
+      gaps; return inline findings only for concrete gaps in exact changed lines.
     \`,
     output: hygieneOutput,
     tools: pipr.tools.readOnly,
@@ -80,7 +93,9 @@ export default definePipr((pipr) => {
       ctx.log.info(\`Checking PR hygiene for \${changedFiles.length} changed file(s).\`);
       const manifest = await ctx.change.diffManifest({ compressed: true, maxPreviewLines: 80 });
       const result = await ctx.pi.run(hygiene, { manifest, changedFiles });
-      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => {
+      const findings = commentableHygieneFindings(result.findings, manifest);
+      const droppedFindingCount = result.findings.length - findings.length;
+      const inlineFindings: ReviewFinding[] = findings.map((finding) => {
         const policy = finding.policy
           .replaceAll("-", " ")
           .replace(/^./, (char) => char.toUpperCase());
@@ -94,7 +109,14 @@ export default definePipr((pipr) => {
           ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
         };
       });
-      ctx.check.pass("PR hygiene review completed.");
+      const attentionCount = result.checks.filter((check) => check.status === "attention").length;
+      if (attentionCount > 0) {
+        const noun = attentionCount === 1 ? "check" : "checks";
+        const verb = attentionCount === 1 ? "needs" : "need";
+        ctx.check.neutral(attentionCount + " hygiene " + noun + " " + verb + " attention.");
+      } else {
+        ctx.check.pass("PR hygiene review completed.");
+      }
       await ctx.comment({
         main: [
           result.summary,
@@ -105,7 +127,10 @@ export default definePipr((pipr) => {
           "",
           "## Selected Findings",
           "",
-          findingsTable(result.findings),
+          findingsTable(findings),
+          ...(droppedFindingCount > 0
+            ? ["", omittedFindingsNote(droppedFindingCount)]
+            : []),
         ].join("\\n"),
         inlineFindings,
       });
@@ -115,6 +140,44 @@ export default definePipr((pipr) => {
   pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
   pipr.command({ pattern: "@pipr hygiene", permission: "write", task });
 });
+
+function commentableHygieneFindings(
+  findings: HygieneFinding[],
+  manifest: DiffManifest,
+): HygieneFinding[] {
+  const seen = new Set<string>();
+  return findings.filter((finding) => {
+    const validAnchor = manifest.files.some((file) =>
+      file.commentableRanges.some(
+        (range) =>
+          finding.rangeId === range.id &&
+          finding.path === range.path &&
+          finding.side === range.side &&
+          finding.startLine <= finding.endLine &&
+          finding.startLine >= range.startLine &&
+          finding.endLine <= range.endLine,
+      ),
+    );
+    const key = [
+      finding.path,
+      finding.rangeId,
+      finding.side,
+      finding.startLine,
+      finding.endLine,
+      finding.body,
+    ].join("\\n");
+    if (!validAnchor || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function omittedFindingsNote(count: number): string {
+  const noun = count === 1 ? "finding" : "findings";
+  return \`Omitted \${count} \${noun} with an invalid or duplicate anchor.\`;
+}
 
 function policyTable(checks: PolicyCheck[]): string {
   if (checks.length === 0) {

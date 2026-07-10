@@ -136,6 +136,8 @@ export default definePipr((pipr) => {
 
 The SDK also supports custom agents, tasks, `@pipr` commands, model fallback, local-disabled tasks, and retry settings. See [Configuration](https://pipr.run/docs/guide/configuration).
 
+Pipr adds bounded change request metadata, the tool contract, and the output schema to every agent prompt. Review-schema prompts also include Core's finding and `suggestedFix` rules. Keep repository-specific policy in `instructions`; do not repeat those Core contracts.
+
 ## Docs
 
 | Goal | Page |

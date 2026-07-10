@@ -6,11 +6,11 @@ export const structuredReviewRecipe = {
   description: "General pull request review with severity and category metadata.",
   sourceTools: ["CodeRabbit", "Qodo Merge", "Greptile"],
   configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { ReviewFinding } from "@usepipr/sdk";
+import type { DiffManifest, ReviewFinding } from "@usepipr/sdk";
 
 type CategorizedFinding = {
   title: string;
-  severity: "critical" | "high" | "medium" | "low" | "nit";
+  severity: "critical" | "high" | "medium" | "low";
   category:
     | "correctness"
     | "security"
@@ -39,7 +39,7 @@ type ReviewSummary = {
 
 const categorizedFindingSchema = z.strictObject({
   title: z.string(),
-  severity: z.enum(["critical", "high", "medium", "low", "nit"]),
+  severity: z.enum(["critical", "high", "medium", "low"]),
   category: z.enum([
     "correctness",
     "security",
@@ -92,9 +92,10 @@ export default definePipr((pipr) => {
       Review the pull request diff for correctness, security, reliability,
       performance, test coverage, maintainability, and documentation risks.
       Return only actionable findings that target valid diff ranges. Assign
-      severity by merge impact: critical and high for merge-blocking defects,
-      medium for important follow-up, low for minor actionable improvements,
-      and nit only for tiny but concrete issues.
+      severity by merge impact: critical for exploitable, data-loss, or widespread
+      outage risks; high for other merge-blocking defects; medium for concrete
+      non-blocking defects; and low for small but actionable issues. Each rationale
+      must connect repository evidence to the defect and its concrete impact.
 
       Make summary maintainer-facing and scannable: one concrete headline, one
       to four behavior-focused change bullets, a risk level with rationale, and
@@ -113,7 +114,9 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(reviewer, { manifest });
-      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => {
+      const findings = commentableFindings(result.findings, manifest);
+      const droppedFindingCount = result.findings.length - findings.length;
+      const inlineFindings: ReviewFinding[] = findings.map((finding) => {
         const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
         const category = finding.category.replaceAll("-", " ");
         return {
@@ -132,7 +135,7 @@ export default definePipr((pipr) => {
           "",
           \`**\${result.summary.headline}**\`,
           "",
-          summaryTable(result.summary, result.findings.length),
+          summaryTable(result.summary, findings.length),
           "",
           "## What Changed",
           "",
@@ -144,8 +147,11 @@ export default definePipr((pipr) => {
           "",
           "## Findings",
           "",
-          findingsTable(result.findings),
-          ...(result.findings.length > 0 ? ["", findingRationalesBlock(result.findings)] : []),
+          findingsTable(findings),
+          ...(droppedFindingCount > 0
+            ? ["", omittedFindingsNote(droppedFindingCount)]
+            : []),
+          ...(findings.length > 0 ? ["", findingRationalesBlock(findings)] : []),
         ].join("\\n"),
         inlineFindings,
       });
@@ -155,6 +161,44 @@ export default definePipr((pipr) => {
   pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
   pipr.command({ pattern: "@pipr review", permission: "write", task });
 });
+
+function commentableFindings(
+  findings: CategorizedFinding[],
+  manifest: DiffManifest,
+): CategorizedFinding[] {
+  const seen = new Set<string>();
+  return findings.filter((finding) => {
+    const validAnchor = manifest.files.some((file) =>
+      file.commentableRanges.some(
+        (range) =>
+          finding.rangeId === range.id &&
+          finding.path === range.path &&
+          finding.side === range.side &&
+          finding.startLine <= finding.endLine &&
+          finding.startLine >= range.startLine &&
+          finding.endLine <= range.endLine,
+      ),
+    );
+    const key = [
+      finding.path,
+      finding.rangeId,
+      finding.side,
+      finding.startLine,
+      finding.endLine,
+      finding.body,
+    ].join("\\n");
+    if (!validAnchor || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function omittedFindingsNote(count: number): string {
+  const noun = count === 1 ? "finding" : "findings";
+  return \`Omitted \${count} \${noun} with an invalid or duplicate anchor.\`;
+}
 
 function summaryTable(summary: ReviewSummary, findingCount: number): string {
   return [

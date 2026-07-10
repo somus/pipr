@@ -312,7 +312,10 @@ function internalVerifierAgent(
         "Return fixed when the issue is no longer valid, or when the user explains a deliberate contract, accepted risk, test-only change, equivalent behavior, or project-specific reason that makes the requested change unnecessary.",
         "Return still-valid only when the issue still applies after considering the user's explanation and you can identify a concrete remaining risk.",
         "Return unknown when evidence is insufficient.",
+        "Return exactly one verdict for every supplied finding ID.",
+        "Use only supplied finding IDs; never invent an ID.",
         "For user-reply mode, include a concise response for fixed and still-valid findings.",
+        "Do not repeat user-supplied text unless needed to explain the verdict.",
         config.publication.autoResolve.instructions,
       ]
         .filter(Boolean)
