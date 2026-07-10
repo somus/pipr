@@ -4,6 +4,18 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.3.6](https://github.com/somus/pipr/compare/v0.3.5...v0.3.6) (2026-07-10)
+
+
+### Features
+
+* harden review prompts and recipes ([#51](https://github.com/somus/pipr/issues/51)) ([59cf563](https://github.com/somus/pipr/commit/59cf563ada6ab0ba32148022c306a40684c068a3))
+
+
+### Bug Fixes
+
+* gate suggested fixes in prompt evals ([#49](https://github.com/somus/pipr/issues/49)) ([86daeca](https://github.com/somus/pipr/commit/86daeca516be64be99e41fb446927cd7119a3770))
+
 ## [0.3.5](https://github.com/somus/pipr/compare/v0.3.4...v0.3.5) (2026-07-09)
 
 
