@@ -305,6 +305,9 @@ function renderMainComment(options: {
     "",
     mainCommentTitle,
     "",
+    ...(options.metadata.validFindings > 0
+      ? [`**Findings:** ${options.metadata.validFindings}`, ""]
+      : []),
     redactPotentialSecrets(options.main),
     "",
     renderMainCommentAttribution(options.metadata),

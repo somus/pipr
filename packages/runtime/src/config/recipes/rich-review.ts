@@ -6,28 +6,7 @@ export const structuredReviewRecipe = {
   description: "General pull request review with severity and category metadata.",
   sourceTools: ["CodeRabbit", "Qodo Merge", "Greptile"],
   configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { DiffManifest, ReviewFinding } from "@usepipr/sdk";
-
-type CategorizedFinding = {
-  title: string;
-  severity: "critical" | "high" | "medium" | "low";
-  category:
-    | "correctness"
-    | "security"
-    | "reliability"
-    | "performance"
-    | "test-coverage"
-    | "maintainability"
-    | "documentation";
-  rationale: string;
-  body: string;
-  path: string;
-  rangeId: string;
-  side: "RIGHT" | "LEFT";
-  startLine: number;
-  endLine: number;
-  suggestedFix?: string;
-};
+import type { ReviewFinding } from "@usepipr/sdk";
 
 type ReviewSummary = {
   headline: string;
@@ -114,13 +93,11 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(reviewer, { manifest });
-      const findings = commentableFindings(result.findings, manifest);
-      const droppedFindingCount = result.findings.length - findings.length;
-      const inlineFindings: ReviewFinding[] = findings.map((finding) => {
+      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => {
         const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
         const category = finding.category.replaceAll("-", " ");
         return {
-          body: \`**\${severity} \${category}:** \${finding.title}. \${finding.body}\`,
+          body: \`**\${severity} \${category}:** \${finding.title}. \${finding.body} \${finding.rationale}\`,
           path: finding.path,
           rangeId: finding.rangeId,
           side: finding.side,
@@ -135,7 +112,7 @@ export default definePipr((pipr) => {
           "",
           \`**\${result.summary.headline}**\`,
           "",
-          summaryTable(result.summary, findings.length),
+          summaryTable(result.summary),
           "",
           "## What Changed",
           "",
@@ -145,13 +122,6 @@ export default definePipr((pipr) => {
           "",
           bulletList(result.summary.reviewerFocus, "No special reviewer focus."),
           "",
-          "## Findings",
-          "",
-          findingsTable(findings),
-          ...(droppedFindingCount > 0
-            ? ["", omittedFindingsNote(droppedFindingCount)]
-            : []),
-          ...(findings.length > 0 ? ["", findingRationalesBlock(findings)] : []),
         ].join("\\n"),
         inlineFindings,
       });
@@ -162,103 +132,13 @@ export default definePipr((pipr) => {
   pipr.command({ pattern: "@pipr review", permission: "write", task });
 });
 
-function commentableFindings(
-  findings: CategorizedFinding[],
-  manifest: DiffManifest,
-): CategorizedFinding[] {
-  const seen = new Set<string>();
-  return findings.filter((finding) => {
-    const validAnchor = manifest.files.some((file) =>
-      file.commentableRanges.some(
-        (range) =>
-          finding.rangeId === range.id &&
-          finding.path === range.path &&
-          finding.side === range.side &&
-          finding.startLine <= finding.endLine &&
-          finding.startLine >= range.startLine &&
-          finding.endLine <= range.endLine,
-      ),
-    );
-    const key = [
-      finding.path,
-      finding.rangeId,
-      finding.side,
-      finding.startLine,
-      finding.endLine,
-      finding.body,
-    ].join("\\n");
-    if (!validAnchor || seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-function omittedFindingsNote(count: number): string {
-  const noun = count === 1 ? "finding" : "findings";
-  return \`Omitted \${count} \${noun} with an invalid or duplicate anchor.\`;
-}
-
-function summaryTable(summary: ReviewSummary, findingCount: number): string {
+function summaryTable(summary: ReviewSummary): string {
   return [
-    "| Outcome | Risk | Risk summary |",
-    "| --- | --- | --- |",
-    \`| \${findingOutcome(findingCount)} | \${labelValue(summary.riskLevel)} | \${tableCell(
+    "| Risk | Risk summary |",
+    "| --- | --- |",
+    \`| \${labelValue(summary.riskLevel)} | \${tableCell(
       summary.riskSummary,
     )} |\`,
-  ].join("\\n");
-}
-
-function findingOutcome(findingCount: number): string {
-  if (findingCount === 0) {
-    return "No findings";
-  }
-  return findingCount === 1 ? "1 finding" : \`\${findingCount} findings\`;
-}
-
-function findingsTable(findings: CategorizedFinding[]): string {
-  if (findings.length === 0) {
-    return [
-      "| Severity | Category | Title |",
-      "| --- | --- | --- |",
-      "| - | - | No findings. |",
-    ].join("\\n");
-  }
-  return [
-    "| Severity | Category | Title |",
-    "| --- | --- | --- |",
-    ...findings.map((finding) => {
-      const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
-      const category = finding.category.replaceAll("-", " ").replaceAll("|", "\\\\|");
-      const title = finding.title.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
-      return \`| \${severity} | \${category} | \${title} |\`;
-    }),
-  ].join("\\n");
-}
-
-function findingRationalesBlock(findings: CategorizedFinding[]): string {
-  if (findings.length === 0) {
-    return "";
-  }
-  return [
-    "<details>",
-    "<summary>Finding rationales</summary>",
-    "",
-    findings
-      .map((finding, index) =>
-        [
-          \`### \${index + 1}. \${finding.title}\`,
-          "",
-          \`**Severity:** \${labelValue(finding.severity)}\`,
-          \`**Category:** \${labelValue(finding.category)}\`,
-          "",
-          finding.rationale,
-        ].join("\\n"),
-      )
-      .join("\\n\\n"),
-    "",
-    "</details>",
   ].join("\\n");
 }
 

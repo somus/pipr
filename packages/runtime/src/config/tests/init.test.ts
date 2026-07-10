@@ -192,12 +192,13 @@ describe("initOfficialMinimalProject", () => {
     expect(configTs).toContain("reviewSummarySchema");
     expect(configTs).toContain("changeSummary: z.array(z.string()).min(1).max(4)");
     expect(configTs).toContain("reviewerFocus: z.array(z.string()).max(4)");
-    expect(configTs).toContain("summaryTable(result.summary, findings.length)");
+    expect(configTs).toContain("summaryTable(result.summary)");
+    expect(configTs).not.toContain("commentableFindings");
     expect(configTs).toContain("severity");
     expect(configTs).toContain("category");
     expect(configTs).not.toContain('"nit"');
     expect(configTs).toContain("@pipr review");
-    expect(configTs).toContain('"## Findings"');
+    expect(configTs).not.toContain('"## Findings"');
     expect(configTs).not.toContain('"## Review"');
     expect(configTs).not.toContain("rich-review");
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("reviewer");
@@ -258,12 +259,12 @@ describe("initOfficialMinimalProject", () => {
     assertReviewResult(result);
     expect(result.mainComment).toContain("## Summary");
     expect(result.mainComment).toContain(
-      "## Summary\n\n**Release automation skip is preserved**\n\n| Outcome | Risk | Risk summary |",
+      "## Summary\n\n**Release automation skip is preserved**\n\n| Risk | Risk summary |",
     );
     expect(result.mainComment).toContain("**Release automation skip is preserved**");
-    expect(result.mainComment).toContain("| Outcome | Risk | Risk summary |");
+    expect(result.mainComment).not.toContain("| Outcome | Risk | Risk summary |");
     expect(result.mainComment).toContain(
-      "| No findings | Low | The event guard is narrow and leaves pull request behavior intact. |",
+      "| Low | The event guard is narrow and leaves pull request behavior intact. |",
     );
     expect(result.mainComment).toContain("## What Changed");
     expect(result.mainComment).toContain(
@@ -275,7 +276,7 @@ describe("initOfficialMinimalProject", () => {
     expect(result.inlineCommentDrafts).toEqual([]);
   });
 
-  it("renders structured review findings with rationales and inline comments", async () => {
+  it("renders the standard finding count and keeps rationale in inline comments", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
 
     await initOfficialMinimalProject({
@@ -318,14 +319,19 @@ describe("initOfficialMinimalProject", () => {
     });
 
     assertReviewResult(result);
-    expect(result.mainComment).toContain("| 1 finding | Medium |");
-    expect(result.mainComment).toContain("| Medium | correctness | Fallback value is skipped |");
+    expect(result.mainComment).toContain("**Findings:** 1");
+    expect(result.mainComment).toContain("| Medium | The changed path affects runtime behavior");
+    expect(result.mainComment).not.toContain(
+      "| Medium | correctness | Fallback value is skipped |",
+    );
     expect(result.mainComment).toContain("No special reviewer focus.");
-    expect(result.mainComment).toContain("<summary>Finding rationales</summary>");
-    expect(result.mainComment).toContain("The new branch returns before the fallback can run.");
+    expect(result.mainComment).not.toContain("<summary>Finding rationales</summary>");
     expect(result.inlineCommentDrafts).toHaveLength(1);
     expect(result.inlineCommentDrafts[0]?.body).toContain(
       "**Medium correctness:** Fallback value is skipped.",
+    );
+    expect(result.inlineCommentDrafts[0]?.body).toContain(
+      "The new branch returns before the fallback can run.",
     );
   });
 
@@ -373,7 +379,8 @@ describe("initOfficialMinimalProject", () => {
 
     assertReviewResult(result);
     expect(result.mainComment).not.toContain("Invented location");
-    expect(result.mainComment).toContain("Omitted 1 finding with an invalid or duplicate anchor.");
+    expect(result.mainComment).not.toContain("**Findings:**");
+    expect(result.mainComment).not.toContain("Omitted 1 finding");
     expect(result.inlineCommentDrafts).toEqual([]);
   });
 
