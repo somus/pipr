@@ -1,0 +1,104 @@
+packages/runtime/src/review/review-stats.ts
+  s_0ae8ad88c32d42::t_44590533b8e06d 5
+  s_0ae8ad88c32d42::t_d001e721e73afd 6,9-13,28,33-35
+  s_0ae8ad88c32d42::t_61aa0680e1facd 7-8
+  s_0ae8ad88c32d42::t_263a12895dad6e 1-4,14-15,17-27,36-37
+  s_0ae8ad88c32d42::t_eeaa1e95d4b4ad 29-32
+  s_0ae8ad88c32d42::t_20c015a5c1e236 16
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_0ae8ad88c32d42::t_68ae6b68460301 1423-1432,1434-1457,1596-1597
+  s_0ae8ad88c32d42::t_eeaa1e95d4b4ad 1511
+  s_0ae8ad88c32d42::t_88ffa536b2c718 1515-1524
+  s_0ae8ad88c32d42::t_1654039548d2ea 1460-1491
+  s_0ae8ad88c32d42::t_98e594d0383581 1493
+  s_0ae8ad88c32d42::t_42d080d038c5df 1500-1504
+  s_0ae8ad88c32d42::t_73cb547ec4079d 1492,1494-1495,1497-1499,1505-1510,1512-1514
+  s_0ae8ad88c32d42::t_263a12895dad6e 1496
+  s_0ae8ad88c32d42::t_589a331906046b 1545-1556,1559,1562-1594
+  s_0ae8ad88c32d42::t_349be17ce0607f 1433
+  s_0ae8ad88c32d42::t_75159496c5f92f 956-960,1458-1459,1525-1544,1557-1558,1560-1561,1595
+packages/runtime/src/review/verifier.ts
+  s_0ae8ad88c32d42::t_75159496c5f92f 120
+  s_0ae8ad88c32d42::t_1e637db9999059 11,48
+packages/runtime/src/pi/runner.ts
+  s_0ae8ad88c32d42::t_349be17ce0607f 37,97-101,104,142,305,330-337,340-341,345-347,349,355-370,372,391
+  s_0ae8ad88c32d42::t_3327b5a64e72c2 90,102-103,371,373-390,393
+  s_0ae8ad88c32d42::t_903659bb120762 6,38-45,89,93-96,105-106,139-141,143-145,303-304,313-314,317,326,328-329,338-339,343-344,348,350-353,392,394-397
+  s_0ae8ad88c32d42::t_3e8036bac13146 91-92,342
+apps/docs/content/docs/guide/comments.mdx
+  s_0ae8ad88c32d42::t_88ffa536b2c718 73,90
+  s_0ae8ad88c32d42::t_e9a4189e0cd084 67-72,74,76-79,81,99
+  s_0ae8ad88c32d42::t_263a12895dad6e 80,98
+  s_0ae8ad88c32d42::t_e31c5e8f50c051 75,82-89,91-97
+packages/runtime/src/review/tests/comment.test.ts
+  s_0ae8ad88c32d42::t_7ede4e320409a6 129-155,157-172
+  s_0ae8ad88c32d42::t_de3be93b216522 341-363,370-392,438-439
+  s_0ae8ad88c32d42::t_75159496c5f92f 173-214
+  s_0ae8ad88c32d42::t_98e594d0383581 156
+  s_0ae8ad88c32d42::t_88ffa536b2c718 369
+  s_0ae8ad88c32d42::t_b5bbf79f28ed95 309-340
+  s_0ae8ad88c32d42::t_127de6345802cc 364-368
+  s_0ae8ad88c32d42::t_562a2ffa60d825 215-222,230-239,243,245-246
+  s_0ae8ad88c32d42::t_589a331906046b 223-229,241,244
+  s_0ae8ad88c32d42::t_1bb21ef00b5613 286-308
+  s_0ae8ad88c32d42::t_429e60b9511bf1 240,242
+  s_0ae8ad88c32d42::t_dbf12882530a35 393-437
+packages/runtime/src/review/comment.ts
+  s_0ae8ad88c32d42::t_96c1a06ea48196 12-17,330,344
+  s_0ae8ad88c32d42::t_9e81e5bab87f23 111,320,326-329,331-335,337-343,355-388
+  s_0ae8ad88c32d42::t_c6ef387bb57d42 35,345,389
+  s_0ae8ad88c32d42::t_d001e721e73afd 349
+  s_0ae8ad88c32d42::t_263a12895dad6e 350-354
+  s_0ae8ad88c32d42::t_844c3c04cdd520 336,346-348
+packages/runtime/src/review/task/task-runtime.ts
+  s_0ae8ad88c32d42::t_1e637db9999059 18-23,43,126,312,379,408,484-487,489
+  s_0ae8ad88c32d42::t_263a12895dad6e 184-193,287,289,422,488
+packages/runtime/src/review/comment-branding.ts
+  s_0ae8ad88c32d42::t_96c1a06ea48196 7-8
+packages/runtime/src/pi/tests/pi.test.ts
+  s_0ae8ad88c32d42::t_903659bb120762 511
+  s_0ae8ad88c32d42::t_be6c79633b737c 451-454,521-575
+  s_0ae8ad88c32d42::t_08f1b99fc88689 450,516-520,576-598
+  s_0ae8ad88c32d42::t_dacc41d5dfe1de 433,449
+  s_0ae8ad88c32d42::t_0efa031ed3e518 455
+  s_0ae8ad88c32d42::t_1aa4e1b254f0b0 456-508,510,512-515
+  s_0ae8ad88c32d42::t_349be17ce0607f 509
+packages/runtime/src/review/agent/review-run.ts
+  s_0ae8ad88c32d42::t_61aa0680e1facd 311,313
+  s_0ae8ad88c32d42::t_1e637db9999059 24,26-28,48,312,314
+  s_0ae8ad88c32d42::t_349be17ce0607f 25
+  s_0ae8ad88c32d42::t_3e8036bac13146 9
+  s_0ae8ad88c32d42::t_d001e721e73afd 308
+  s_0ae8ad88c32d42::t_263a12895dad6e 294-307,309-310
+packages/runtime/src/review/task/task-output.ts
+  s_0ae8ad88c32d42::t_61aa0680e1facd 146
+  s_0ae8ad88c32d42::t_f22b58cff124c2 385
+  s_0ae8ad88c32d42::t_d001e721e73afd 83-91,93-97,373-374
+  s_0ae8ad88c32d42::t_1e637db9999059 10,119-125,139,155-164,173-177,179-184
+  s_0ae8ad88c32d42::t_20c015a5c1e236 92
+  s_0ae8ad88c32d42::t_c926ef1746d229 350
+  s_0ae8ad88c32d42::t_263a12895dad6e 19-23
+  s_0ae8ad88c32d42::t_2978ec58b148fb 329-331,333,354,368,370-371,376-378
+  s_0ae8ad88c32d42::t_96c1a06ea48196 11-16,332,334-335,337
+  s_0ae8ad88c32d42::t_50b21b69e6ed15 186
+  s_0ae8ad88c32d42::t_aa24f9ca8213ec 185,375,379-384,386-387
+  s_0ae8ad88c32d42::t_10c4c671a5dc9c 388
+  s_0ae8ad88c32d42::t_44590533b8e06d 126-138,140-145,147-154,165-170,178,187-195,351-353,355-367,369,372
+  s_0ae8ad88c32d42::t_5e59316486023f 171-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "0576267b1e08bb93b63e324db422a7462517a7ca",
+  "prompts": {},
+  "sessions": {
+    "s_0ae8ad88c32d42": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4c0b-d13e-78e1-8fdc-2d1e01faed84",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
