@@ -6,7 +6,7 @@ export const prHygieneRecipe = {
   description: "Danger-style PR hygiene checks for tests, docs, lockfiles, and size.",
   sourceTools: ["Danger JS"],
   configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { DiffManifest, ReviewFinding } from "@usepipr/sdk";
+import type { ReviewFinding } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -57,7 +57,6 @@ export default definePipr((pipr) => {
   });
 
   type PolicyCheck = z.infer<typeof policyChecksSchema>[number];
-  type HygieneFinding = z.infer<typeof hygieneFindingSchema>;
 
   const hygieneOutput = pipr.schema({
     id: "review/pr-hygiene",
@@ -93,9 +92,7 @@ export default definePipr((pipr) => {
       ctx.log.info(\`Checking PR hygiene for \${changedFiles.length} changed file(s).\`);
       const manifest = await ctx.change.diffManifest({ compressed: true, maxPreviewLines: 80 });
       const result = await ctx.pi.run(hygiene, { manifest, changedFiles });
-      const findings = commentableHygieneFindings(result.findings, manifest);
-      const droppedFindingCount = result.findings.length - findings.length;
-      const inlineFindings: ReviewFinding[] = findings.map((finding) => {
+      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => {
         const policy = finding.policy
           .replaceAll("-", " ")
           .replace(/^./, (char) => char.toUpperCase());
@@ -124,13 +121,6 @@ export default definePipr((pipr) => {
           "## Policy Checks",
           "",
           policyTable(result.checks),
-          "",
-          "## Selected Findings",
-          "",
-          findingsTable(findings),
-          ...(droppedFindingCount > 0
-            ? ["", omittedFindingsNote(droppedFindingCount)]
-            : []),
         ].join("\\n"),
         inlineFindings,
       });
@@ -140,44 +130,6 @@ export default definePipr((pipr) => {
   pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
   pipr.command({ pattern: "@pipr hygiene", permission: "write", task });
 });
-
-function commentableHygieneFindings(
-  findings: HygieneFinding[],
-  manifest: DiffManifest,
-): HygieneFinding[] {
-  const seen = new Set<string>();
-  return findings.filter((finding) => {
-    const validAnchor = manifest.files.some((file) =>
-      file.commentableRanges.some(
-        (range) =>
-          finding.rangeId === range.id &&
-          finding.path === range.path &&
-          finding.side === range.side &&
-          finding.startLine <= finding.endLine &&
-          finding.startLine >= range.startLine &&
-          finding.endLine <= range.endLine,
-      ),
-    );
-    const key = [
-      finding.path,
-      finding.rangeId,
-      finding.side,
-      finding.startLine,
-      finding.endLine,
-      finding.body,
-    ].join("\\n");
-    if (!validAnchor || seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-function omittedFindingsNote(count: number): string {
-  const noun = count === 1 ? "finding" : "findings";
-  return \`Omitted \${count} \${noun} with an invalid or duplicate anchor.\`;
-}
 
 function policyTable(checks: PolicyCheck[]): string {
   if (checks.length === 0) {
@@ -203,25 +155,5 @@ function policyTable(checks: PolicyCheck[]): string {
   ].join("\\n");
 }
 
-function findingsTable(findings: HygieneFinding[]): string {
-  if (findings.length === 0) {
-    return [
-      "| Policy | Finding |",
-      "| --- | --- |",
-      "| - | No selected hygiene findings. |",
-    ].join("\\n");
-  }
-  return [
-    "| Policy | Finding |",
-    "| --- | --- |",
-    ...findings.map((finding) => {
-      const policy = finding.policy
-        .replaceAll("-", " ")
-        .replace(/^./, (char) => char.toUpperCase());
-      const title = finding.title.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
-      return \`| \${policy} | \${title} |\`;
-    }),
-  ].join("\\n");
-}
 `,
 } as const satisfies OfficialInitRecipe;

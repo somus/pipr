@@ -1199,7 +1199,8 @@ describe("initOfficialMinimalProject", () => {
 
     assertReviewResult(result);
     expect(result.mainComment).not.toContain("Invented hygiene anchor");
-    expect(result.mainComment).toContain("Omitted 1 finding with an invalid or duplicate anchor.");
+    expect(result.mainComment).not.toContain("**Findings:**");
+    expect(result.mainComment).not.toContain("Omitted 1 finding");
     expect(result.inlineCommentDrafts).toEqual([]);
     expect(result.taskChecks).toContainEqual({
       taskName: "pr-hygiene",
@@ -1278,9 +1279,9 @@ describe("initOfficialMinimalProject", () => {
     });
 
     assertReviewResult(result);
-    expect(result.mainComment).toContain(
-      "Omitted 1 diagnostic with an invalid or duplicate anchor.",
-    );
+    expect(result.mainComment).toContain("Diagnostics completed.");
+    expect(result.mainComment).not.toContain("**Findings:**");
+    expect(result.mainComment).not.toContain("Omitted 1 diagnostic");
     expect(result.inlineCommentDrafts).toEqual([]);
   });
 
