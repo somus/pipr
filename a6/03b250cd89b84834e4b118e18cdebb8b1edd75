@@ -1,0 +1,38 @@
+packages/runtime/src/review/tests/comment.test.ts
+  s_ea36bf917e6eca::t_f0f8b8305e0b9e 109-110
+  s_ea36bf917e6eca::t_1616fb0c5a4e08 90-91,99-108
+  s_ea36bf917e6eca::t_0eaae8afc7c204 89
+packages/runtime/src/config/tests/init.test.ts
+  s_ea36bf917e6eca::t_e5612ec6faece3 201,265,267
+  s_ea36bf917e6eca::t_a50b55e3c37529 279,333-334
+  s_ea36bf917e6eca::t_27cf74773972ea 195-196,262
+  s_ea36bf917e6eca::t_c37af025dd93fd 324-326,335
+  s_ea36bf917e6eca::t_1616fb0c5a4e08 322-323,328,382-383
+.pipr/config.ts
+  s_ea36bf917e6eca::t_c37af025dd93fd 132
+  s_ea36bf917e6eca::t_27cf74773972ea 93
+  s_ea36bf917e6eca::t_a50b55e3c37529 1,89,108,128,130-131
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_ea36bf917e6eca::t_4918b382770f2c 40,127,131,146,166,168-170
+packages/runtime/src/review/comment.ts
+  s_ea36bf917e6eca::t_a50b55e3c37529 308-310
+packages/runtime/src/config/recipes/rich-review.ts
+  s_ea36bf917e6eca::t_27cf74773972ea 100
+  s_ea36bf917e6eca::t_eaacff4f145095 9,96,115,135,137-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a603b250cd89b84834e4b118e18cdebb8b1edd75",
+  "prompts": {},
+  "sessions": {
+    "s_ea36bf917e6eca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4591-aa71-7e60-9cd8-c875979af937",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
