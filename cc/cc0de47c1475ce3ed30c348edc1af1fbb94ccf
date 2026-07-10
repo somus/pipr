@@ -1,0 +1,38 @@
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_ea36bf917e6eca::t_4918b382770f2c 40,148,152,167,187,189-191
+packages/runtime/src/review/tests/comment.test.ts
+  s_ea36bf917e6eca::t_1616fb0c5a4e08 90-91,99-108
+  s_ea36bf917e6eca::t_0eaae8afc7c204 89
+  s_ea36bf917e6eca::t_f0f8b8305e0b9e 109-110
+.pipr/config.ts
+  s_ea36bf917e6eca::t_c37af025dd93fd 153
+  s_ea36bf917e6eca::t_a50b55e3c37529 1,110,129,149,151-152
+  s_ea36bf917e6eca::t_27cf74773972ea 114
+packages/runtime/src/config/tests/init.test.ts
+  s_ea36bf917e6eca::t_c37af025dd93fd 324-326,335
+  s_ea36bf917e6eca::t_1616fb0c5a4e08 322-323,328,382-383
+  s_ea36bf917e6eca::t_a50b55e3c37529 279,333-334
+  s_ea36bf917e6eca::t_e5612ec6faece3 201,265,267
+  s_ea36bf917e6eca::t_27cf74773972ea 195-196,262
+packages/runtime/src/review/comment.ts
+  s_ea36bf917e6eca::t_a50b55e3c37529 308-310
+packages/runtime/src/config/recipes/rich-review.ts
+  s_ea36bf917e6eca::t_eaacff4f145095 9,117,136,156,158-160
+  s_ea36bf917e6eca::t_27cf74773972ea 121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "cccc0de47c1475ce3ed30c348edc1af1fbb94ccf",
+  "prompts": {},
+  "sessions": {
+    "s_ea36bf917e6eca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4591-aa71-7e60-9cd8-c875979af937",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
