@@ -1658,6 +1658,35 @@ describe("runTaskRuntime", () => {
     expect(third.mainComment).toContain("<summary>Review stats</summary>");
   });
 
+  it("marks cumulative usage partial when an earlier rerun did not report usage", async () => {
+    const first = await runRuntime({
+      plan: defaultReviewPlan(),
+      piRunner: async () => ({ ...noFindingsPiResult(), models: ["unreported-model"] }),
+    });
+    const second = await runRuntime({
+      plan: defaultReviewPlan(),
+      priorReviewState: extractPriorReviewState(first.mainComment, 1),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["reported-model"],
+        usage: {
+          status: "complete" as const,
+          inputTokens: 200,
+          outputTokens: 20,
+          costUsd: 0.002,
+        },
+      }),
+    });
+
+    expect(second.publicationPlan.metadata.stats).toMatchObject({
+      agentRuns: 2,
+      inputTokens: 200,
+      outputTokens: 20,
+      costUsd: 0.002,
+      usageStatus: "partial",
+    });
+  });
+
   it("counts rejected Pi attempts as partial usage before retrying", async () => {
     let call = 0;
     const result = await runRuntime({
