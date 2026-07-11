@@ -4,6 +4,13 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.3.7](https://github.com/somus/pipr/compare/v0.3.6...v0.3.7) (2026-07-11)
+
+
+### Features
+
+* **runtime:** add collapsible review stats ([#53](https://github.com/somus/pipr/issues/53)) ([5bb8fa3](https://github.com/somus/pipr/commit/5bb8fa371f063cf07732abe522ef391accce1dbd))
+
 ## [0.3.6](https://github.com/somus/pipr/compare/v0.3.5...v0.3.6) (2026-07-10)
 
 

@@ -35,8 +35,8 @@ type StarterFile = {
   contents: string;
 };
 
-const defaultWorkflowActionRef = "somus/pipr@v0.3.6"; // x-release-please-version
-const defaultSdkVersion = "0.3.6"; // x-release-please-version
+const defaultWorkflowActionRef = "somus/pipr@v0.3.7"; // x-release-please-version
+const defaultSdkVersion = "0.3.7"; // x-release-please-version
 
 function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInitAdapter[] {
   if (adapters === undefined) {
