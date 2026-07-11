@@ -394,6 +394,22 @@ describe("comments", () => {
     expect(priorReviewForTask(main, undefined).main).toBe(main);
   });
 
+  it("recognizes the generated header marker after leading separator lines", () => {
+    const plan = buildPublicationPlan({
+      event,
+      main: "Prior summary.",
+      inlineItems: [],
+      showHeader: false,
+      metadata: { ...metadata(), validFindings: 0 },
+    });
+    const main = plan.mainComment.replace(
+      "\n\n<!-- pipr:header:hidden -->",
+      "\n\n\n<!-- pipr:header:hidden -->",
+    );
+
+    expect(priorReviewForTask(main, undefined).main).toBe("Prior summary.");
+  });
+
   it("preserves a task-authored main-comment marker", () => {
     const main = "Prior summary.\n\n<!-- pipr:main-comment task-owned -->";
     const plan = buildPublicationPlan({

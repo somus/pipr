@@ -366,10 +366,13 @@ type GeneratedMainCommentEnvelope = {
 
 function parseGeneratedMainCommentEnvelope(lines: string[]): GeneratedMainCommentEnvelope {
   const mainMarkerIndex = lines.findIndex((line) => line.startsWith("<!-- pipr:main-comment "));
-  const expectedHeaderMarkerIndex = mainMarkerIndex + 2;
+  const headerCandidateOffset = lines.slice(mainMarkerIndex + 1).findIndex((line) => line !== "");
+  const headerCandidateIndex = mainMarkerIndex + 1 + headerCandidateOffset;
   const headerMarkerIndex =
-    mainMarkerIndex >= 0 && lines[expectedHeaderMarkerIndex] === mainCommentHeaderHiddenMarker
-      ? expectedHeaderMarkerIndex
+    mainMarkerIndex >= 0 &&
+    headerCandidateOffset >= 0 &&
+    lines[headerCandidateIndex] === mainCommentHeaderHiddenMarker
+      ? headerCandidateIndex
       : -1;
   const lastLineIndex = lines.findLastIndex((line) => line !== "");
   const lastLine = lines[lastLineIndex] ?? "";
