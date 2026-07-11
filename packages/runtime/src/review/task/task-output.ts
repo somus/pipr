@@ -342,7 +342,7 @@ function visibleMainComment(body: string): string {
   const hiddenStatsMarkerIndex =
     sourceLines[lastContentIndex] === reviewStatsHiddenMarker ? lastContentIndex : -1;
   const statsRange = generatedReviewStatsRange(sourceLines, generatedFooterIndex);
-  const lines = sourceLines.filter((line, index) => {
+  const lines = sourceLines.filter((_line, index) => {
     return (
       !(statsRange && index >= statsRange.start && index <= statsRange.end) &&
       index !== mainMarkerIndex &&
