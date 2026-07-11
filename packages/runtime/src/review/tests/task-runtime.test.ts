@@ -953,6 +953,11 @@ describe("runTaskRuntime", () => {
       }),
     ]);
     expect(models).toEqual(["deepseek-v4-pro", "fallback-model"]);
+    expect(result.publicationPlan.metadata.stats).toMatchObject({
+      models: ["deepseek-v4-pro", "fallback-model"],
+      agentRuns: 2,
+      usageStatus: "unavailable",
+    });
   });
 
   it("keeps synchronize still-valid and unknown verifier results open without thread actions", async () => {
@@ -1413,6 +1418,181 @@ describe("runTaskRuntime", () => {
 
     expect(calls).toEqual(["deepseek-v4-pro", "deepseek-v4-pro", "fallback-model"]);
     expect(result.repairAttempted).toBe(true);
+  });
+
+  it("aggregates review stats across repair and fallback Pi runs", async () => {
+    let call = 0;
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async () => {
+        call += 1;
+        const common = {
+          stderr: "",
+          durationMs: 60_000,
+          models: [call < 3 ? "primary-response-model" : "fallback-response-model"],
+          usage: {
+            status: "complete" as const,
+            inputTokens: call * 100,
+            outputTokens: call * 10,
+            costUsd: call * 0.001,
+          },
+        };
+        return call < 3
+          ? { ...common, exitCode: 0, stdout: "{" }
+          : { ...common, ...noFindingsPiResult() };
+      },
+    });
+
+    expect(result.publicationPlan.metadata.stats).toEqual({
+      models: ["primary-response-model", "fallback-response-model"],
+      agentRuns: 3,
+      durationMs: expect.any(Number),
+      inputTokens: 600,
+      outputTokens: 60,
+      costUsd: 0.006,
+      usageStatus: "complete",
+    });
+    expect(result.publicationPlan.metadata.stats?.durationMs).toBeLessThan(60_000);
+    expect(result.mainComment).toContain("<summary>Review stats</summary>");
+  });
+
+  it("keeps aggregate usage safe when reported run totals overflow", async () => {
+    let call = 0;
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async () => {
+        call += 1;
+        const telemetry = {
+          stderr: "",
+          durationMs: 1,
+          models: ["reported-model"],
+          usage: {
+            status: "complete" as const,
+            inputTokens: Number.MAX_SAFE_INTEGER,
+            outputTokens: 1,
+            costUsd: 0.001,
+          },
+        };
+        return call < 3
+          ? { ...telemetry, exitCode: 0, stdout: "{" }
+          : { ...telemetry, ...noFindingsPiResult() };
+      },
+    });
+
+    expect(result.publicationPlan.metadata.stats).toMatchObject({
+      inputTokens: Number.MAX_SAFE_INTEGER,
+      outputTokens: 3,
+      costUsd: 0.003,
+      usageStatus: "partial",
+    });
+  });
+
+  it("bounds and redacts reported model telemetry before publication", async () => {
+    const secretModel = "model-api_key-abcdefghijklmnop";
+    const oversizedModel = "m".repeat(500);
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: [
+          secretModel,
+          oversizedModel,
+          ...Array.from({ length: 25 }, (_, index) => `model-${index}`),
+        ],
+      }),
+    });
+
+    const models = result.publicationPlan.metadata.stats?.models ?? [];
+    expect(models).toHaveLength(20);
+    expect(models[0]).toBe("[redacted secret]");
+    expect(models[1]).toBe("[redacted credential]");
+    expect(result.mainComment).not.toContain(secretModel);
+  });
+
+  it("falls back to the requested model when reported models are blank", async () => {
+    const result = await runRuntime({
+      plan: fallbackReviewPlan(),
+      config: fallbackConfig,
+      piRunner: async () => ({ ...noFindingsPiResult(), models: ["   "] }),
+    });
+
+    expect(result.publicationPlan.metadata.stats?.models).toEqual(["deepseek-v4-pro"]);
+  });
+
+  it("aggregates Pi runs from parallel Review Tasks", async () => {
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const first = pipr.task({
+        name: "first",
+        async run(ctx) {
+          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+        },
+      });
+      const second = pipr.task({
+        name: "second",
+        async run(ctx) {
+          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.comment("Parallel review complete.");
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task: first });
+      pipr.on.changeRequest({ actions: ["opened"], task: second });
+    });
+
+    let call = 0;
+    const result = await runRuntime({
+      plan,
+      piRunner: async () => {
+        call += 1;
+        if (call === 1) {
+          await Bun.sleep(20);
+          return { ...noFindingsPiResult(), models: ["first-task-model"] };
+        }
+        return { ...noFindingsPiResult(), models: ["second-task-model"] };
+      },
+    });
+
+    expect(result.publicationPlan.metadata.stats).toMatchObject({
+      models: ["second-task-model", "first-task-model"],
+      agentRuns: 2,
+      usageStatus: "unavailable",
+    });
+  });
+
+  it("counts rejected Pi attempts as partial usage before retrying", async () => {
+    let call = 0;
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan({ agentPatch: { retry: { transientFailure: 1 } } }),
+      piRunner: async () => {
+        call += 1;
+        if (call === 1) {
+          throw new Error("temporary failure");
+        }
+        return {
+          ...noFindingsPiResult(),
+          models: ["primary-response-model"],
+          usage: {
+            status: "complete" as const,
+            inputTokens: 100,
+            outputTokens: 10,
+            costUsd: 0.001,
+          },
+        };
+      },
+    });
+
+    expect(result.publicationPlan.metadata.stats).toMatchObject({
+      models: ["deepseek-v4-pro", "primary-response-model"],
+      agentRuns: 2,
+      inputTokens: 100,
+      outputTokens: 10,
+      costUsd: 0.001,
+      usageStatus: "partial",
+    });
   });
 
   it("retries transient failures per model before falling back", async () => {

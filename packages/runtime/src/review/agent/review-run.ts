@@ -6,7 +6,7 @@ import { uniqBy } from "lodash-es";
 import { z } from "zod";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
-import { type PiRunOptions, type PiRunResult, runPi } from "../../pi/runner.js";
+import { type PiRunOptions, type PiRunResult, type PiRunUsage, runPi } from "../../pi/runner.js";
 import { boundedLogSnippet, type RuntimeActionLog } from "../../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
@@ -20,6 +20,11 @@ import {
 import { prepareDiffManifestContext } from "./diff-manifest-context.js";
 
 export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
+
+export type PiRunStats = {
+  models: string[];
+  usage?: PiRunUsage;
+};
 
 export type RunReviewAgentOptions = {
   agent: Agent;
@@ -40,6 +45,7 @@ export type RunReviewAgentOptions = {
     priorReviewState?: PriorReviewState;
     runId?: string;
     log?: RuntimeActionLog;
+    piRunSink?: (run: PiRunStats) => void;
   };
 };
 
@@ -285,16 +291,27 @@ async function runPiForPrompt(
   const customTools = customToolsForRun(options);
   const timeoutSeconds = promptTimeoutSeconds(options);
   logPiStart(options, provider, prompt, builtinTools, runtimeTools, customTools);
-  const result = await (options.runtime.piRunner ?? runPi)({
-    workspace: options.runtime.workspace,
-    provider,
-    prompt,
-    env: options.runtime.env,
-    piExecutable: options.runtime.piExecutable,
-    builtinTools,
-    runtimeTools,
-    customTools,
-    timeoutSeconds,
+  let result: PiRunResult;
+  try {
+    result = await (options.runtime.piRunner ?? runPi)({
+      workspace: options.runtime.workspace,
+      provider,
+      prompt,
+      env: options.runtime.env,
+      piExecutable: options.runtime.piExecutable,
+      builtinTools,
+      runtimeTools,
+      customTools,
+      timeoutSeconds,
+    });
+  } catch (error) {
+    options.runtime.piRunSink?.({ models: [provider.model] });
+    throw error;
+  }
+  const reportedModels = result.models?.map((model) => model.trim()).filter(Boolean);
+  options.runtime.piRunSink?.({
+    models: reportedModels?.length ? reportedModels : [provider.model],
+    ...(result.usage ? { usage: result.usage } : {}),
   });
   logPiResult(options, provider, result, timeoutSeconds);
   assertSuccessfulPiResult(result, options.runtime.log);

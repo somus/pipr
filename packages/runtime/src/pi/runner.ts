@@ -3,6 +3,7 @@ import { chmod, cp, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import { compact, isPlainObject } from "lodash-es";
+import { z } from "zod";
 import type { DiffManifest, ProviderConfig } from "../types.js";
 import type { PiReadOnlyToolName } from "./contract.js";
 import {
@@ -33,6 +34,15 @@ export type PiRunResult = {
   stderr: string;
   exitCode: number;
   durationMs: number;
+  models?: string[];
+  usage?: PiRunUsage;
+};
+
+export type PiRunUsage = {
+  status: "complete" | "partial";
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
 };
 
 type PiRunSandbox = {
@@ -76,6 +86,24 @@ const ignoredWorkspacePaths = new Set([
   ".fallow",
   "coverage",
 ]);
+const eventRecordSchema = z.record(z.string(), z.unknown());
+const tokenCountSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+const assistantMessageEventSchema = z.looseObject({
+  type: z.literal("message_end"),
+  message: z.looseObject({
+    role: z.literal("assistant"),
+    model: z.string().min(1).optional(),
+    responseModel: z.string().min(1).optional(),
+  }),
+});
+const assistantUsageMessageSchema = z.looseObject({
+  role: z.literal("assistant"),
+  usage: z.looseObject({
+    input: tokenCountSchema,
+    output: tokenCountSchema,
+    cost: z.looseObject({ total: z.number().nonnegative() }),
+  }),
+});
 
 export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
   const started = Date.now();
@@ -108,9 +136,13 @@ export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
       started,
       timeoutSeconds: options.timeoutSeconds,
     });
-    return result.exitCode === 0
-      ? { ...result, stdout: extractAssistantTextFromJsonEvents(result.stdout) ?? result.stdout }
-      : result;
+    const events = parsePiJsonEvents(result.stdout);
+    return {
+      ...result,
+      ...(events?.models.length ? { models: events.models } : {}),
+      ...(events?.usage ? { usage: events.usage } : {}),
+      stdout: result.exitCode === 0 ? (events?.assistantText ?? result.stdout) : result.stdout,
+    };
   } finally {
     await preparedTools?.custom?.close();
     await chmodRecursive(sandbox.root, 0o755);
@@ -268,7 +300,9 @@ async function chmodRecursive(target: string, mode: number): Promise<void> {
   }
 }
 
-function extractAssistantTextFromJsonEvents(stdout: string): string | undefined {
+function parsePiJsonEvents(
+  stdout: string,
+): { assistantText?: string; models: string[]; usage?: PiRunUsage } | undefined {
   const events: Record<string, unknown>[] = [];
   for (const line of stdout
     .split(/\r?\n/)
@@ -276,10 +310,11 @@ function extractAssistantTextFromJsonEvents(stdout: string): string | undefined 
     .filter(Boolean)) {
     try {
       const value = JSON.parse(line) as unknown;
-      if (!isPlainObject(value)) {
+      const parsed = eventRecordSchema.safeParse(value);
+      if (!parsed.success) {
         return undefined;
       }
-      events.push(value as Record<string, unknown>);
+      events.push(parsed.data);
     } catch {
       return undefined;
     }
@@ -288,11 +323,78 @@ function extractAssistantTextFromJsonEvents(stdout: string): string | undefined 
   if (!hasTypedEvent) {
     return undefined;
   }
-  let text: string | undefined;
+  let assistantText: string | undefined;
   for (const event of events) {
-    text = assistantTextFromEvent(event) ?? text;
+    assistantText = assistantTextFromEvent(event) ?? assistantText;
   }
-  return text;
+  const assistantMessages = assistantMessagesFromEvents(events);
+  const models = assistantModels(assistantMessages);
+  const usage = assistantUsage(assistantMessages);
+  return {
+    ...(assistantText !== undefined ? { assistantText } : {}),
+    models,
+    ...(usage ? { usage } : {}),
+  };
+}
+
+function assistantMessagesFromEvents(events: Record<string, unknown>[]) {
+  return events.flatMap((event) => {
+    const parsed = assistantMessageEventSchema.safeParse(event);
+    return parsed.success ? [parsed.data.message] : [];
+  });
+}
+
+function assistantModels(messages: ReturnType<typeof assistantMessagesFromEvents>): string[] {
+  const models: string[] = [];
+  for (const message of messages) {
+    const model = message.responseModel ?? message.model;
+    if (model && !models.includes(model)) {
+      models.push(model);
+    }
+  }
+  return models;
+}
+
+function assistantUsage(
+  messages: ReturnType<typeof assistantMessagesFromEvents>,
+): PiRunUsage | undefined {
+  const usageMessages = messages.flatMap((message) => {
+    const parsed = assistantUsageMessageSchema.safeParse(message);
+    return parsed.success ? [parsed.data] : [];
+  });
+  if (usageMessages.length === 0) {
+    return undefined;
+  }
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let costUsd = 0;
+  let partial = usageMessages.length !== messages.length;
+  for (const message of usageMessages) {
+    const nextInputTokens = inputTokens + message.usage.input;
+    if (Number.isSafeInteger(nextInputTokens)) {
+      inputTokens = nextInputTokens;
+    } else {
+      partial = true;
+    }
+    const nextOutputTokens = outputTokens + message.usage.output;
+    if (Number.isSafeInteger(nextOutputTokens)) {
+      outputTokens = nextOutputTokens;
+    } else {
+      partial = true;
+    }
+    const nextCostUsd = costUsd + message.usage.cost.total;
+    if (Number.isFinite(nextCostUsd)) {
+      costUsd = nextCostUsd;
+    } else {
+      partial = true;
+    }
+  }
+  return {
+    status: partial ? "partial" : "complete",
+    inputTokens,
+    outputTokens,
+    costUsd,
+  };
 }
 
 function assistantTextFromEvent(event: Record<string, unknown>): string | undefined {

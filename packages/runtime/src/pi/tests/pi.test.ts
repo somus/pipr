@@ -430,7 +430,7 @@ describe("buildPiArgs", () => {
         [
           "#!/usr/bin/env bun",
           'console.log(JSON.stringify({ type: "session", version: 3 }));',
-          `console.log(JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: ${JSON.stringify(
+          `console.log(JSON.stringify({ type: "message_end", message: { role: "assistant", model: "router", responseModel: "concrete-model", content: [{ type: "text", text: ${JSON.stringify(
             reviewJson,
           )} }] } }));`,
         ].join("\n"),
@@ -446,6 +446,156 @@ describe("buildPiArgs", () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe(reviewJson);
+      expect(result.models).toEqual(["concrete-model"]);
+      expect(result.usage).toBeUndefined();
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("reports assistant usage once per completed message from Pi JSON event streams", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi");
+    const reviewJson = '{"summary":{"body":"No findings."},"inlineFindings":[]}';
+    const firstMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: "Inspecting." }],
+      model: "router",
+      responseModel: "concrete-model-a",
+      usage: {
+        input: 1_200,
+        output: 120,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 1_320,
+        cost: { input: 0.0012, output: 0.0006, cacheRead: 0, cacheWrite: 0, total: 0.0018 },
+      },
+    };
+    const finalMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: reviewJson }],
+      model: "concrete-model-b",
+      usage: {
+        input: 800,
+        output: 80,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 880,
+        cost: { input: 0.0008, output: 0.0004, cacheRead: 0, cacheWrite: 0, total: 0.0012 },
+      },
+    };
+    try {
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/usr/bin/env bun",
+          'console.log(JSON.stringify({ type: "session", version: 3 }));',
+          `console.log(${JSON.stringify(JSON.stringify({ type: "message_end", message: firstMessage }))});`,
+          `console.log(${JSON.stringify(JSON.stringify({ type: "turn_end", message: firstMessage, toolResults: [] }))});`,
+          `console.log(${JSON.stringify(JSON.stringify({ type: "message_end", message: finalMessage }))});`,
+          `console.log(${JSON.stringify(JSON.stringify({ type: "agent_end", messages: [firstMessage, finalMessage] }))});`,
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        prompt: "Review this diff.",
+        ...deepseekRunOptions(),
+      });
+
+      expect(result.stdout).toBe(reviewJson);
+      expect(result.models).toEqual(["concrete-model-a", "concrete-model-b"]);
+      expect(result.usage).toEqual({
+        status: "complete",
+        inputTokens: 2_000,
+        outputTokens: 200,
+        costUsd: 0.003,
+      });
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("marks malformed and overflowing Pi usage as partial without failing the run", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi");
+    const messages = [
+      {
+        role: "assistant",
+        model: "fractional-model",
+        content: [],
+        usage: { input: 1.5, output: 1, cost: { total: 0.001 } },
+      },
+      {
+        role: "assistant",
+        model: "large-model",
+        content: [],
+        usage: { input: Number.MAX_SAFE_INTEGER, output: 10, cost: { total: 0.001 } },
+      },
+      {
+        role: "assistant",
+        model: "final-model",
+        content: [{ type: "text", text: "{}" }],
+        usage: { input: 1, output: 5, cost: { total: 0.001 } },
+      },
+    ];
+    try {
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/usr/bin/env bun",
+          ...messages.map(
+            (message) =>
+              `console.log(${JSON.stringify(JSON.stringify({ type: "message_end", message }))});`,
+          ),
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        prompt: "Review this diff.",
+        ...deepseekRunOptions(),
+      });
+
+      expect(result.models).toEqual(["fractional-model", "large-model", "final-model"]);
+      expect(result.usage).toEqual({
+        status: "partial",
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 15,
+        costUsd: 0.002,
+      });
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("does not report partial usage from malformed Pi JSON event streams", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi");
+    try {
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/usr/bin/env bun",
+          'console.log(JSON.stringify({ type: "message_end", message: { role: "assistant", model: "model", content: [{ type: "text", text: "{}" }], usage: { input: 10, output: 2, cost: { total: 0.001 } } } }));',
+          'console.log("not-json");',
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        prompt: "Review this diff.",
+        ...deepseekRunOptions(),
+      });
+
+      expect(result.stdout).toContain("not-json");
+      expect(result.usage).toBeUndefined();
     } finally {
       await rm(workspace, { recursive: true, force: true });
     }
