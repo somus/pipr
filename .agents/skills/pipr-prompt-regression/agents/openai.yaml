@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pipr Prompt Regression"
+  short_description: "Diagnose and prevent review-output regressions"
+  default_prompt: "Use $pipr-prompt-regression to turn this bad Pipr review output into a verified regression case and minimal fix."
