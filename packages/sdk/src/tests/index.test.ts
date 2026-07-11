@@ -527,6 +527,46 @@ describe("definePipr", () => {
     expect(plan.publication).toEqual({ maxInlineComments: 3 });
   });
 
+  it("registers matching main comment presentation settings", () => {
+    const plan = buildPiprPlan(
+      definePipr((pipr) => {
+        pipr.config({
+          publication: { showHeader: false, showFooter: false, showStats: false },
+        });
+        pipr.config({
+          publication: { showHeader: false, showFooter: false, showStats: false },
+        });
+      }),
+    );
+
+    expect(plan.publication).toEqual({
+      showHeader: false,
+      showFooter: false,
+      showStats: false,
+    });
+  });
+
+  it("rejects conflicting main comment presentation settings", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({ publication: { showHeader: true } });
+          pipr.config({ publication: { showHeader: false } });
+        }),
+      ),
+    ).toThrow("publication.showHeader conflicts");
+  });
+
+  it("rejects non-boolean main comment presentation settings", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({ publication: { showStats: "yes" } } as never);
+        }),
+      ),
+    ).toThrow("pipr.config received invalid option value");
+  });
+
   it("registers typed global config", () => {
     const factory = definePipr((pipr) => {
       const model = pipr.model({

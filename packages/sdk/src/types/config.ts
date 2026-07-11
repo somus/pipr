@@ -77,6 +77,9 @@ export type AutoResolveOptions =
 export type PublicationOptions = {
   maxInlineComments?: number;
   autoResolve?: AutoResolveOptions;
+  showHeader?: boolean;
+  showFooter?: boolean;
+  showStats?: boolean;
 };
 
 /** Top-level pipr config settings. */

@@ -312,6 +312,9 @@ const autoResolveOptionsSchema: z.ZodType<AutoResolveOptions> = z.union([
 const publicationOptionsSchema: z.ZodType<PublicationOptions> = z.strictObject({
   maxInlineComments: z.number().int().min(0).max(50).optional(),
   autoResolve: autoResolveOptionsSchema.optional(),
+  showHeader: z.boolean().optional(),
+  showFooter: z.boolean().optional(),
+  showStats: z.boolean().optional(),
 });
 
 const aggregateCheckOptionsSchema: z.ZodType<AggregateCheckOptions> = z.union([
@@ -568,6 +571,17 @@ function mergePublicationConfig(
     }
     target.autoResolve = next.autoResolve;
   }
+  target.showHeader = mergeConfigField(
+    "publication.showHeader",
+    target.showHeader,
+    next.showHeader,
+  );
+  target.showFooter = mergeConfigField(
+    "publication.showFooter",
+    target.showFooter,
+    next.showFooter,
+  );
+  target.showStats = mergeConfigField("publication.showStats", target.showStats, next.showStats);
 }
 
 function mergeConfigField<T>(

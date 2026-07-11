@@ -60,6 +60,9 @@ const piprConfigSchema = z.strictObject({
   publication: z.strictObject({
     maxInlineComments: z.number().int().min(0).max(50).optional(),
     autoResolve: autoResolveConfigSchema,
+    showHeader: z.boolean().default(true),
+    showFooter: z.boolean().default(true),
+    showStats: z.boolean().default(true),
   }),
   limits: z
     .strictObject({

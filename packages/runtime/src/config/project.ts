@@ -102,6 +102,9 @@ function planToRuntimeSettings(
       publication: {
         maxInlineComments: plan.publication.maxInlineComments,
         autoResolve: normalizeAutoResolveConfig(plan.publication.autoResolve, defaultProvider.id),
+        showHeader: plan.publication.showHeader ?? true,
+        showFooter: plan.publication.showFooter ?? true,
+        showStats: plan.publication.showStats ?? true,
       },
       limits: plan.limits,
     },

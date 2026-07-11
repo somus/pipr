@@ -10,8 +10,11 @@ import type { ReviewResult } from "../../types.js";
 import type { PiRunStats } from "../agent/review-run.js";
 import {
   mainCommentAttributionPattern,
+  mainCommentFooterHiddenMarker,
+  mainCommentHeaderHiddenMarker,
   mainCommentTitles,
   reviewStatsEndMarker,
+  reviewStatsHiddenMarker,
   reviewStatsStartMarker,
 } from "../comment-branding.js";
 import { reviewFindingSchema } from "../contract.js";
@@ -327,18 +330,31 @@ export function priorReviewForTask(
 
 function visibleMainComment(body: string): string {
   const sourceLines = body.split("\n");
-  const statsRange = generatedReviewStatsRange(sourceLines);
+  const mainMarkerIndex = sourceLines.findIndex((line) =>
+    line.startsWith("<!-- pipr:main-comment "),
+  );
+  const hiddenHeaderMarkerIndex =
+    sourceLines[mainMarkerIndex + 2] === mainCommentHeaderHiddenMarker ? mainMarkerIndex + 2 : -1;
+  const generatedFooterIndex = findGeneratedFooterIndex(sourceLines);
+  const lastContentIndex = sourceLines
+    .slice(0, generatedFooterIndex < 0 ? sourceLines.length : generatedFooterIndex)
+    .findLastIndex((line) => line !== "");
+  const hiddenStatsMarkerIndex =
+    sourceLines[lastContentIndex] === reviewStatsHiddenMarker ? lastContentIndex : -1;
+  const statsRange = generatedReviewStatsRange(sourceLines, generatedFooterIndex);
   const lines = sourceLines.filter((line, index) => {
     return (
       !(statsRange && index >= statsRange.start && index <= statsRange.end) &&
-      !line.startsWith("<!-- pipr:main-comment ") &&
-      !mainCommentAttributionPattern.test(line)
+      index !== mainMarkerIndex &&
+      index !== hiddenHeaderMarkerIndex &&
+      index !== hiddenStatsMarkerIndex &&
+      index !== generatedFooterIndex
     );
   });
   while (lines[0] === "") {
     lines.shift();
   }
-  if (lines[0] && mainCommentTitles.has(lines[0])) {
+  if (hiddenHeaderMarkerIndex < 0 && lines[0] && mainCommentTitles.has(lines[0])) {
     lines.shift();
   }
   while (lines[0] === "") {
@@ -347,12 +363,21 @@ function visibleMainComment(body: string): string {
   return lines.join("\n").trim();
 }
 
-function generatedReviewStatsRange(lines: string[]): { start: number; end: number } | undefined {
-  const attributionIndex = lines.findLastIndex((line) => mainCommentAttributionPattern.test(line));
-  if (attributionIndex < 0) {
-    return undefined;
-  }
-  const end = lines.slice(0, attributionIndex).findLastIndex((line) => line !== "");
+function findGeneratedFooterIndex(lines: string[]): number {
+  const index = lines.findLastIndex((line) => line !== "");
+  const footer = lines[index] ?? "";
+  return footer === mainCommentFooterHiddenMarker || mainCommentAttributionPattern.test(footer)
+    ? index
+    : -1;
+}
+
+function generatedReviewStatsRange(
+  lines: string[],
+  generatedFooterIndex: number,
+): { start: number; end: number } | undefined {
+  const end = lines
+    .slice(0, generatedFooterIndex < 0 ? lines.length : generatedFooterIndex)
+    .findLastIndex((line) => line !== "");
   if (end < 0) {
     return undefined;
   }

@@ -15,6 +15,9 @@ const config: PiprConfig = {
   defaultProvider: provider.id,
   providers: [provider],
   publication: {
+    showHeader: true,
+    showFooter: true,
+    showStats: true,
     autoResolve: {
       enabled: false,
       synchronize: false,

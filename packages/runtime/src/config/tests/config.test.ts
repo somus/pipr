@@ -43,6 +43,27 @@ describe("loadRuntimeProject", () => {
       thinking: "high",
     });
     expect(settings.config.publication.maxInlineComments).toBe(5);
+    expect(settings.config.publication).toMatchObject({
+      showHeader: true,
+      showFooter: true,
+      showStats: true,
+    });
+  });
+
+  it("normalizes disabled main comment presentation settings", async () => {
+    const rootDir = await newInitializedProject();
+    await writePiprConfig(
+      rootDir,
+      configWithPresentation("{ showHeader: false, showFooter: false, showStats: false }"),
+    );
+
+    const settings = (await loadRuntimeProject({ rootDir })).settings;
+
+    expect(settings.config.publication).toMatchObject({
+      showHeader: false,
+      showFooter: false,
+      showStats: false,
+    });
   });
 
   it("defaults publication autoResolve to verifier-enabled defaults", async () => {
@@ -416,6 +437,21 @@ export default definePipr((pipr) => {
     instructions: "Review this change.",
   });
   void fastModel;
+});
+`;
+}
+
+function configWithPresentation(publication: string): string {
+  return `import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+  pipr.config({ publication: ${publication} });
+  pipr.review({ id: "review", model, instructions: "Review this change." });
 });
 `;
 }

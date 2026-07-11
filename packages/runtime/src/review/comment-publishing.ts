@@ -17,6 +17,9 @@ export type BuildCommentPublishingPlanOptions = {
   manifest: DiffManifest;
   metadata: Omit<PublicationMetadata, "cappedInlineFindings">;
   maxInlineComments?: number;
+  showHeader?: boolean;
+  showFooter?: boolean;
+  showStats?: boolean;
   priorReviewState?: PriorReviewState;
   threadActions?: ThreadAction[];
 };
@@ -49,6 +52,9 @@ export function buildCommentPublishingPlan(
     main: options.main,
     inlineItems: inlineCommentDrafts,
     maxInlineComments: options.maxInlineComments,
+    showHeader: options.showHeader,
+    showFooter: options.showFooter,
+    showStats: options.showStats,
     metadata: options.metadata,
     reviewState,
     threadActions: options.threadActions,

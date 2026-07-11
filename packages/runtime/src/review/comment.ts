@@ -10,9 +10,12 @@ import type {
 } from "../types.js";
 import { commentableRangeSchema, reviewSideSchema } from "../types.js";
 import {
+  mainCommentFooterHiddenMarker,
+  mainCommentHeaderHiddenMarker,
   mainCommentTitle,
   piprRepositoryUrl,
   reviewStatsEndMarker,
+  reviewStatsHiddenMarker,
   reviewStatsStartMarker,
 } from "./comment-branding.js";
 import { reviewFindingSchema } from "./contract.js";
@@ -131,6 +134,9 @@ export type BuildPublicationPlanOptions = {
   inlineItems: InlinePublicationItem[];
   metadata: Omit<PublicationMetadata, "cappedInlineFindings">;
   maxInlineComments?: number;
+  showHeader?: boolean;
+  showFooter?: boolean;
+  showStats?: boolean;
   reviewState?: PriorReviewState;
   threadActions?: ThreadAction[];
 };
@@ -157,6 +163,9 @@ export function buildPublicationPlan(options: BuildPublicationPlanOptions): Publ
       reviewState,
       main: options.main,
       metadata,
+      showHeader: options.showHeader ?? true,
+      showFooter: options.showFooter ?? true,
+      showStats: options.showStats ?? true,
     }),
     mainMarker: mainCommentMarker,
     changeNumber: options.event.change.number,
@@ -302,6 +311,9 @@ function renderMainComment(options: {
   reviewState: PriorReviewState;
   main: string;
   metadata: PublicationMetadata;
+  showHeader: boolean;
+  showFooter: boolean;
+  showStats: boolean;
 }): string {
   return [
     renderMainCommentMarker({
@@ -310,16 +322,20 @@ function renderMainComment(options: {
       reviewState: options.reviewState,
     }),
     "",
-    mainCommentTitle,
-    "",
+    ...(!options.showHeader ? [mainCommentHeaderHiddenMarker, ""] : []),
+    ...(options.showHeader ? [mainCommentTitle, ""] : []),
     ...(options.metadata.validFindings > 0
       ? [`**Findings:** ${options.metadata.validFindings}`, ""]
       : []),
     redactPotentialSecrets(options.main),
     "",
-    ...(options.metadata.stats ? [renderReviewStats(options.metadata.stats), ""] : []),
-    renderMainCommentAttribution(options.metadata),
-    "",
+    ...(!options.showStats || !options.metadata.stats ? [reviewStatsHiddenMarker, ""] : []),
+    ...(options.showStats && options.metadata.stats
+      ? [renderReviewStats(options.metadata.stats), ""]
+      : []),
+    ...(options.showFooter
+      ? [renderMainCommentAttribution(options.metadata), ""]
+      : [mainCommentFooterHiddenMarker, ""]),
   ].join("\n");
 }
 

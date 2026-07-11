@@ -81,6 +81,8 @@ Pipr labels usage values as **reported** whenever it can't safely aggregate comp
 
 Command responses, skipped runs, and Main Review Comments that don't run Pi omit the section.
 
+Set `publication.showStats` to `false` to hide this section. `publication.showHeader` and `publication.showFooter` similarly hide the generated Pipr title and attribution. Each option defaults to `true`, and hiding stats does not remove `PublicationResult.metadata.stats`.
+
 #### Integration metadata
 
 Integrations can read the same data from `PublicationResult.metadata.stats`:

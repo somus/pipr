@@ -34,7 +34,14 @@ export default definePipr((pipr) => {
     `,
   });
 
-  pipr.config({ publication: { maxInlineComments: 5 } });
+  pipr.config({
+    publication: {
+      maxInlineComments: 5,
+      showHeader: true,
+      showFooter: true,
+      showStats: true,
+    },
+  });
 
   pipr.review({
     id: "review",
@@ -46,6 +53,8 @@ export default definePipr((pipr) => {
 ```
 
 `pipr.review` registers a Review Task and the default Entrypoints unless `entrypoints` disables or replaces them.
+
+The three `show*` publication options default to `true`. Set one to `false` to hide only Pipr's generated title, attribution footer, or collapsed review statistics; the task-authored Main Review Comment body is unchanged.
 
 ### Review registration
 

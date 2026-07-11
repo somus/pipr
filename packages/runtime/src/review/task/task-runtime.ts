@@ -293,6 +293,9 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     validated,
     manifest: diffManifest,
     maxInlineComments: config.publication.maxInlineComments,
+    showHeader: config.publication.showHeader,
+    showFooter: config.publication.showFooter,
+    showStats: config.publication.showStats,
     priorReviewState: verifier.priorReviewState,
     threadActions: verifier.threadActions,
     metadata: {
@@ -574,6 +577,9 @@ function skippedTaskRuntimeResult(options: {
     validated,
     manifest: options.diffManifest,
     maxInlineComments: options.config.publication.maxInlineComments,
+    showHeader: options.config.publication.showHeader,
+    showFooter: options.config.publication.showFooter,
+    showStats: options.config.publication.showStats,
     metadata: {
       runtimeVersion,
       configVersion: options.versionCompatibility?.configVersion,

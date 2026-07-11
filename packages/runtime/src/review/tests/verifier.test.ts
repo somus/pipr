@@ -23,6 +23,9 @@ const config: PiprConfig = {
   providers: [provider],
   publication: {
     maxInlineComments: 5,
+    showHeader: true,
+    showFooter: true,
+    showStats: true,
     autoResolve: {
       enabled: true,
       model: "default",
