@@ -1,0 +1,95 @@
+packages/runtime/src/review/tests/comment.test.ts
+  s_488a512c198320::t_80fb704e7b13e9 188
+  s_488a512c198320::t_c281e9496116cf 174,176-187,189-190,195,204-205
+  s_488a512c198320::t_4b72d7d7f21ee8 391-402
+  s_488a512c198320::t_bb5efe90d8750d 342-365
+  s_488a512c198320::t_e13ca69baef826 144
+  s_488a512c198320::t_77ad58634f505c 403,423-430,432-433
+  s_488a512c198320::t_3e869fcdb98eb6 4
+  s_488a512c198320::t_9eb82cc6523d0c 379-390,404-422,431,434-435
+  s_488a512c198320::t_9134ef801665d8 436-470
+  s_488a512c198320::t_c5e845662f95f8 191
+  s_488a512c198320::t_c1d7b60e35fee7 366-378
+  s_488a512c198320::t_78224aef607490 175,192-194,196-203
+packages/runtime/src/config/tests/config.test.ts
+  s_488a512c198320::t_c281e9496116cf 46-56,58-66
+  s_488a512c198320::t_3e869fcdb98eb6 57,443-454
+  s_488a512c198320::t_c97a754d158458 455-457
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_488a512c198320::t_78224aef607490 337-339,360
+  s_488a512c198320::t_ccb0fd80989f4b 361
+packages/runtime/src/review/comment-branding.ts
+  s_488a512c198320::t_21d1dd764c9f39 11
+  s_488a512c198320::t_1b278eb0603d0f 8
+  s_488a512c198320::t_286bbfc06fb0f0 7
+packages/runtime/src/types.ts
+  s_488a512c198320::t_c73510d95e5108 63-65
+apps/docs/content/docs/guide/comments.mdx
+  s_488a512c198320::t_78224aef607490 84-85
+packages/runtime/src/review/comment.ts
+  s_488a512c198320::t_2129ee40830d47 137-139,166-168,314-316,326,333-335
+  s_488a512c198320::t_1b278eb0603d0f 13,336-338
+  s_488a512c198320::t_68ed56e0c1bfdb 332
+  s_488a512c198320::t_286bbfc06fb0f0 14,325
+  s_488a512c198320::t_21d1dd764c9f39 18
+packages/runtime/src/review/tests/verifier.test.ts
+  s_488a512c198320::t_c5e845662f95f8 26-28
+packages/runtime/src/review/task/task-output.ts
+  s_488a512c198320::t_1b278eb0603d0f 13,340,344,351,374-377,379
+  s_488a512c198320::t_21d1dd764c9f39 17,336-337,349,357
+  s_488a512c198320::t_119ae35782939f 348
+  s_488a512c198320::t_a938ef3fd6e89c 339,341-343,350
+  s_488a512c198320::t_383bbfb9202d61 338,366-371
+  s_488a512c198320::t_660c3d94f71a44 378,380
+  s_488a512c198320::t_286bbfc06fb0f0 14
+  s_488a512c198320::t_227b3f4ca80572 333-335
+  s_5c20559f32f569::t_f72a79804ef7bc 372-373
+packages/runtime/src/review/comment-publishing.ts
+  s_488a512c198320::t_2129ee40830d47 20-22,55-57
+packages/sdk/src/tests/index.test.ts
+  s_488a512c198320::t_78224aef607490 560-569
+  s_488a512c198320::t_c281e9496116cf 530-559
+packages/sdk/src/types/config.ts
+  s_488a512c198320::t_2129ee40830d47 80-82
+packages/sdk/src/builder.ts
+  s_488a512c198320::t_7e94e568a81ff6 574-584
+  s_488a512c198320::t_2129ee40830d47 315-317
+packages/runtime/src/review/task/task-runtime.ts
+  s_488a512c198320::t_2129ee40830d47 296-298,580-582
+apps/docs/content/docs/guide/configuration.mdx
+  s_488a512c198320::t_78224aef607490 37-44,57
+  s_488a512c198320::t_87559531b52f86 58
+packages/runtime/src/config/project.ts
+  s_488a512c198320::t_2129ee40830d47 105-107
+packages/runtime/src/review/tests/review-run.test.ts
+  s_488a512c198320::t_c5e845662f95f8 18-20
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_488a512c198320::t_c4bc6cefb9ea1d 2160-2162,2164
+  s_488a512c198320::t_c0e57a99257c19 7
+  s_488a512c198320::t_c5e845662f95f8 42-44
+  s_488a512c198320::t_cd2e138b17a5b4 316-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "ef57476c06cc19a30c7b5f245f1a2948e4a072e0",
+  "prompts": {},
+  "sessions": {
+    "s_488a512c198320": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5094-429c-7731-a92f-c1598093b77e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_5c20559f32f569": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f48c4-1c30-7932-bec6-7a14bb05d22a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
