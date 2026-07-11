@@ -333,8 +333,7 @@ function visibleMainComment(body: string): string {
   const mainMarkerIndex = sourceLines.findIndex((line) =>
     line.startsWith("<!-- pipr:main-comment "),
   );
-  const hiddenHeaderMarkerIndex =
-    sourceLines[mainMarkerIndex + 2] === mainCommentHeaderHiddenMarker ? mainMarkerIndex + 2 : -1;
+  const hiddenHeaderMarkerIndex = findGeneratedHeaderMarkerIndex(sourceLines, mainMarkerIndex);
   const generatedFooterIndex = findGeneratedFooterIndex(sourceLines);
   const lastContentIndex = sourceLines
     .slice(0, generatedFooterIndex < 0 ? sourceLines.length : generatedFooterIndex)
@@ -361,6 +360,14 @@ function visibleMainComment(body: string): string {
     lines.shift();
   }
   return lines.join("\n").trim();
+}
+
+function findGeneratedHeaderMarkerIndex(sourceLines: string[], mainMarkerIndex: number): number {
+  if (mainMarkerIndex < 0) {
+    return -1;
+  }
+  const headerMarkerIndex = mainMarkerIndex + 2;
+  return sourceLines[headerMarkerIndex] === mainCommentHeaderHiddenMarker ? headerMarkerIndex : -1;
 }
 
 function findGeneratedFooterIndex(lines: string[]): number {

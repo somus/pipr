@@ -388,6 +388,12 @@ describe("comments", () => {
     expect(priorReviewForTask(plan.mainComment, undefined).main).toBe(main);
   });
 
+  it("preserves a hidden-header marker in a markerless prior comment", () => {
+    const main = "Task-authored summary.\n<!-- pipr:header:hidden -->\nMore detail.";
+
+    expect(priorReviewForTask(main, undefined).main).toBe(main);
+  });
+
   it("preserves a task-authored main-comment marker", () => {
     const main = "Prior summary.\n\n<!-- pipr:main-comment task-owned -->";
     const plan = buildPublicationPlan({
