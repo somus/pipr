@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pipr Action E2E"
+  short_description: "Validate Pipr Action locally and on GitHub"
+  default_prompt: "Use $pipr-action-e2e to validate this Pipr GitHub Action change through the narrowest safe E2E lane."
