@@ -4,6 +4,13 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.3.8](https://github.com/somus/pipr/compare/v0.3.7...v0.3.8) (2026-07-11)
+
+
+### Features
+
+* **config:** configure main comment presentation ([#56](https://github.com/somus/pipr/issues/56)) ([3c9de80](https://github.com/somus/pipr/commit/3c9de807d3095cba19ac102bc006703addc0b68e))
+
 ## [0.3.7](https://github.com/somus/pipr/compare/v0.3.6...v0.3.7) (2026-07-11)
 
 
