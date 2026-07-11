@@ -1,0 +1,19 @@
+.github/CODEOWNERS
+  s_e8168e73c48b46::t_4b7af0c4fef02c 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "96f4653b286d3462a06dfac0f982022d05ce22f6",
+  "prompts": {},
+  "sessions": {
+    "s_e8168e73c48b46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5156-6fa1-70e3-b4bc-f82c58fc077e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
