@@ -3,6 +3,7 @@ import { z } from "zod";
 import { firstNonEmptyLine } from "../commands/grammar.js";
 import type { ReviewFinding } from "../types.js";
 import { reviewSideSchema } from "../types.js";
+import { accumulateReviewStats, type ReviewStats, reviewStatsSchema } from "./review-stats.js";
 
 export const mainCommentMarker = "pipr:main-comment";
 const inlineFindingMarkerPrefix = "pipr:finding";
@@ -35,6 +36,7 @@ export const priorReviewStateSchema = z.strictObject({
   reviewedHeadSha: z.string().min(1),
   selectedTasks: z.array(z.string().min(1)),
   findings: z.array(priorFindingRecordSchema),
+  stats: reviewStatsSchema.optional(),
 });
 
 export type PriorFindingRecord = z.infer<typeof priorFindingRecordSchema>;
@@ -50,6 +52,7 @@ export function buildPriorReviewState(options: {
   findings: ReviewFinding[];
   reviewedHeadSha: string;
   selectedTasks: string[];
+  stats?: ReviewStats;
 }): PriorReviewState {
   const scopedPriorState = priorReviewStateForSelectedTasks(
     options.priorState,
@@ -61,6 +64,7 @@ export function buildPriorReviewState(options: {
   const nextFindings = new Map<string, PriorFindingRecord>();
   const currentFindingIds = new Set<string>();
   const usedPriorIds = new Set<string>();
+  const stats = accumulateReviewStats(scopedPriorState?.stats, options.stats);
 
   for (const finding of options.findings) {
     const id = selectFindingId({
@@ -101,6 +105,7 @@ export function buildPriorReviewState(options: {
     reviewedHeadSha: options.reviewedHeadSha,
     selectedTasks: options.selectedTasks,
     findings: cappedFindings([...nextFindings.values()], currentFindingIds),
+    ...(stats ? { stats } : {}),
   };
 }
 

@@ -4,6 +4,7 @@ import { buildPiprPlan } from "@usepipr/sdk/internal";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest, PiprConfig, ProviderConfig, ReviewFinding } from "../../types.js";
 import { mainCommentTitle, piprRepositoryUrl } from "../comment-branding.js";
+import { extractPriorReviewState } from "../prior-state.js";
 import { priorReviewForTask } from "../task/task-output.js";
 import {
   type PiRunner,
@@ -1585,6 +1586,76 @@ describe("runTaskRuntime", () => {
       agentRuns: 2,
       usageStatus: "unavailable",
     });
+  });
+
+  it("accumulates review stats across reruns of the same Review Tasks", async () => {
+    const first = await runRuntime({
+      plan: defaultReviewPlan(),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["first-run-model"],
+        usage: {
+          status: "complete" as const,
+          inputTokens: 100,
+          outputTokens: 10,
+          costUsd: 0.001,
+        },
+      }),
+    });
+    const second = await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...fallbackConfig,
+        publication: { ...fallbackConfig.publication, showStats: false },
+      },
+      priorReviewState: extractPriorReviewState(first.mainComment, 1),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["second-run-model"],
+        usage: {
+          status: "complete" as const,
+          inputTokens: 200,
+          outputTokens: 20,
+          costUsd: 0.002,
+        },
+      }),
+    });
+
+    expect(second.publicationPlan.metadata.stats).toMatchObject({
+      models: ["first-run-model", "second-run-model"],
+      agentRuns: 2,
+      inputTokens: 300,
+      outputTokens: 30,
+      costUsd: 0.003,
+      usageStatus: "complete",
+    });
+    expect(second.publicationPlan.reviewState.stats).toEqual(second.publicationPlan.metadata.stats);
+    expect(second.mainComment).not.toContain("<summary>Review stats</summary>");
+
+    const third = await runRuntime({
+      plan: defaultReviewPlan(),
+      priorReviewState: extractPriorReviewState(second.mainComment, 1),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["third-run-model"],
+        usage: {
+          status: "complete" as const,
+          inputTokens: 300,
+          outputTokens: 30,
+          costUsd: 0.003,
+        },
+      }),
+    });
+
+    expect(third.publicationPlan.metadata.stats).toMatchObject({
+      models: ["first-run-model", "second-run-model", "third-run-model"],
+      agentRuns: 3,
+      inputTokens: 600,
+      outputTokens: 60,
+      costUsd: 0.006,
+      usageStatus: "complete",
+    });
+    expect(third.mainComment).toContain("<summary>Review stats</summary>");
   });
 
   it("counts rejected Pi attempts as partial usage before retrying", async () => {

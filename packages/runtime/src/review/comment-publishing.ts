@@ -41,6 +41,7 @@ export function buildCommentPublishingPlan(
     findings: publishableInlineFindings.map((item) => item.finding),
     reviewedHeadSha: options.event.change.head.sha,
     selectedTasks: options.metadata.selectedTasks,
+    stats: options.metadata.stats,
   });
   const inlineCommentDrafts = prepareInlinePublicationItemsForPublishableFindings({
     publishableFindings: publishableInlineFindings,
@@ -55,7 +56,10 @@ export function buildCommentPublishingPlan(
     showHeader: options.showHeader,
     showFooter: options.showFooter,
     showStats: options.showStats,
-    metadata: options.metadata,
+    metadata: {
+      ...options.metadata,
+      ...(reviewState.stats ? { stats: reviewState.stats } : {}),
+    },
     reviewState,
     threadActions: options.threadActions,
   });
