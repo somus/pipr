@@ -1,0 +1,19 @@
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_488a512c198320::t_63de5944496b2d 1661-1689
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.11",
+  "base_commit_sha": "fd18215a9300c6ac844883c0f346c7a52acff958",
+  "prompts": {},
+  "sessions": {
+    "s_488a512c198320": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5094-429c-7731-a92f-c1598093b77e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
