@@ -5,7 +5,7 @@ description: "Provider-neutral adapter boundary for code host integrations."
 
 Code host adapters are an internal runtime seam. They are not part of `.pipr/config.ts`.
 
-GitHub is the first adapter. GitLab, Bitbucket, and Azure DevOps support is coming soon.
+GitHub and GitLab.com are supported. Bitbucket Cloud and Azure DevOps Services follow in stacked adapter releases.
 
 The public config stays provider-neutral:
 
@@ -42,6 +42,11 @@ type ChangeRequestEventContext = {
   rawAction?: string;
   platform: { id: string; host?: string };
   repository: { slug: string; url?: string };
+  coordinates?:
+    | { provider: "github"; owner: string; repository: string }
+    | { provider: "gitlab"; projectId: string; projectPath: string }
+    | { provider: "bitbucket"; workspace: string; repository: string; repositoryUuid?: string }
+    | { provider: "azure-devops"; organization: string; project: string; projectId?: string; repositoryId: string };
   change: {
     number: number;
     title: string;
@@ -94,6 +99,12 @@ The GitHub adapter handles:
 
 GitHub-specific setup stays in [GitHub Action](/docs/guide/github-action).
 
+### GitLab.com
+
+The GitLab adapter maps merge requests, notes, discussions, member access levels, and external commit statuses into the same runtime contract. It accepts merge-request pipelines and validated webhook payloads, uses merge-request diff refs for inline positions, and checks the current head before writes.
+
+See [GitLab](/docs/guide/gitlab) for CI and trusted webhook setup.
+
 ### Local
 
 The local adapter handles local CLI runs:
@@ -112,7 +123,6 @@ pipr review --base origin/main
 
 Provider support planned next:
 
-- GitLab
 - Bitbucket
 - Azure DevOps
 
@@ -125,22 +135,13 @@ The internal runtime interface is intentionally not exported from the package ro
 ```ts
 type CodeHostAdapter = {
   id: string;
-  parseEvent(options): Promise<ChangeRequestEventContext>;
-  loadChangeRequest(ref): Promise<LoadedChangeRequest>;
-  resolveCommandComment(options): Promise<CommandCommentEvent>;
-  resolveReviewCommentReply?(options): Promise<ReviewCommentReplyEvent>;
-  getRepositoryPermission(options): Promise<RepositoryPermission>;
-  ensureHeadCheckout(options): void;
-  publish(options): Promise<PublicationResult>;
-  publishCommandResponse?(options): Promise<CommandResponsePublicationResult>;
-  publishThreadActions?(options): Promise<{ errors: string[] }>;
-  loadPriorReviewState?(options): Promise<PriorReviewState | undefined>;
-  loadPriorMainComment?(options): Promise<string | undefined>;
-  loadInlineThreadContexts?(options): Promise<InlineThreadContext[]>;
-  createCheckRun?(options): Promise<CodeHostCheckRun>;
-  updateCheckRun?(options): Promise<void>;
-  mapInlineLocation(item, change): unknown;
-  ensureWorkspaceSafeDirectory?(options): void;
+  capabilities: CodeHostCapabilities;
+  events: CodeHostEvents;
+  workspace: CodeHostWorkspace;
+  permissions: CodeHostPermissions;
+  publication?: CodeHostPublication;
+  comments?: CodeHostComments;
+  statuses?: CodeHostStatuses;
 };
 ```
 
