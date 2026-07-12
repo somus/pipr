@@ -38,6 +38,23 @@ describe("Bitbucket Cloud client", () => {
     expect(requests[1]).toContain("page=2");
   });
 
+  it("accepts outdated inline comments with null native anchors", async () => {
+    const client = createBitbucketClient(env, async () =>
+      Response.json({
+        values: [
+          {
+            id: 1,
+            content: { raw: "outdated" },
+            inline: { path: "a.ts", from: null, to: null, start_from: null, start_to: null },
+          },
+        ],
+      }),
+    );
+    await expect(client.listComments(7)).resolves.toMatchObject([
+      { inline: { from: null, to: null, start_from: null, start_to: null } },
+    ]);
+  });
+
   it("uses native comment and status contracts", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = [];
     const client = createBitbucketClient(env, async (input, init) => {

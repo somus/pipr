@@ -24,10 +24,10 @@ const pullRequestSchema = z.looseObject({
 });
 const inlineSchema = z.looseObject({
   path: z.string().optional(),
-  from: z.number().int().optional(),
-  to: z.number().int().optional(),
-  start_from: z.number().int().optional(),
-  start_to: z.number().int().optional(),
+  from: z.number().int().nullable().optional(),
+  to: z.number().int().nullable().optional(),
+  start_from: z.number().int().nullable().optional(),
+  start_to: z.number().int().nullable().optional(),
 });
 const commentSchema = z.looseObject({
   id: z.union([z.number(), z.string()]).transform(String),
