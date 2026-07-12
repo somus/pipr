@@ -588,7 +588,7 @@ describe("pipr CLI", () => {
   it("rejects unsupported init adapters", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
     try {
-      const unsupported = await runCli(["init", "--adapters", "bitbucket"], {}, workspace);
+      const unsupported = await runCli(["init", "--adapters", "unknown"], {}, workspace);
       const mixedNone = await runCli(["init", "--adapters", "none,github"], {}, workspace);
       const unsupportedRecipe = await runCli(
         ["init", "--adapters", "none", "--recipe", "missing"],
@@ -598,7 +598,7 @@ describe("pipr CLI", () => {
 
       expect(unsupported.exitCode).toBe(1);
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).toContain(
-        "Unsupported pipr init adapter 'bitbucket'. Supported adapters: github, gitlab, azure-devops",
+        "Unsupported pipr init adapter 'unknown'. Supported adapters: github, gitlab, azure-devops, bitbucket",
       );
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).not.toContain("::error::");
       expect(mixedNone.exitCode).toBe(1);

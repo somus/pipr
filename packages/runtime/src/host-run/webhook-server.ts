@@ -15,6 +15,7 @@ export type WebhookDelivery = {
   id: string;
   host: WebhookHost;
   payload: string;
+  eventName?: string;
 };
 
 export type WebhookDeliveryStore = {
@@ -34,16 +35,14 @@ export function createWebhookIngress(options: {
   const maxPayloadBytes = options.maxPayloadBytes ?? MAX_WEBHOOK_PAYLOAD_BYTES;
   const protocol = createCodeHostWebhookProtocol(options.host);
   return async (request: Request): Promise<Response> => {
-    if (request.method !== "POST") {
-      return new Response("Method Not Allowed", { status: 405 });
-    }
-    if (!protocol.verifySecret(request.headers, options.secret)) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-    const payload = await request.text();
-    if (new TextEncoder().encode(payload).byteLength > maxPayloadBytes) {
-      return new Response("Payload Too Large", { status: 413 });
-    }
+    const authenticated = await readAuthenticatedWebhookPayload(
+      request,
+      maxPayloadBytes,
+      options.secret,
+      protocol.verifySecret,
+    );
+    if (authenticated instanceof Response) return authenticated;
+    const payload = authenticated;
     if (!protocol.matchesExpectedRepository(payload, options.expectedRepository)) {
       return new Response("Repository mismatch", { status: 403 });
     }
@@ -51,7 +50,12 @@ export function createWebhookIngress(options: {
     if (!id) {
       return new Response("Missing delivery id", { status: 400 });
     }
-    const result = options.store.enqueue({ id, host: options.host, payload });
+    const result = options.store.enqueue({
+      id,
+      host: options.host,
+      payload,
+      eventName: protocol.eventName?.(request.headers),
+    });
     if (result === "full") {
       return new Response("Queue Full", { status: 503, headers: { "Retry-After": "30" } });
     }
@@ -59,6 +63,21 @@ export function createWebhookIngress(options: {
       status: result === "created" ? 202 : 200,
     });
   };
+}
+
+async function readAuthenticatedWebhookPayload(
+  request: Request,
+  maxPayloadBytes: number,
+  secret: string,
+  verify: (headers: Headers, secret: string, payload: string) => boolean,
+): Promise<string | Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  const payload = await request.text();
+  if (new TextEncoder().encode(payload).byteLength > maxPayloadBytes)
+    return new Response("Payload Too Large", { status: 413 });
+  return verify(request.headers, secret, payload)
+    ? payload
+    : new Response("Unauthorized", { status: 401 });
 }
 
 export async function processNextWebhookDelivery(options: {
@@ -198,6 +217,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           id TEXT PRIMARY KEY,
           host TEXT NOT NULL,
           payload TEXT,
+          event_name TEXT,
           status TEXT NOT NULL,
           attempts INTEGER NOT NULL DEFAULT 0,
           error TEXT,
@@ -205,6 +225,11 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      try {
+        this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN event_name TEXT");
+      } catch {
+        // Existing databases already have the additive column.
+      }
       this.database
         .query(
           "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = CASE WHEN attempts < 3 THEN error ELSE COALESCE(error, 'delivery interrupted during final attempt') END, updated_at = CURRENT_TIMESTAMP WHERE status = 'processing'",
@@ -234,9 +259,9 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
       }
       this.database
         .query(
-          "INSERT INTO webhook_deliveries (id, host, payload, status) VALUES (?, ?, ?, 'pending')",
+          "INSERT INTO webhook_deliveries (id, host, payload, event_name, status) VALUES (?, ?, ?, ?, 'pending')",
         )
-        .run(delivery.id, delivery.host, delivery.payload);
+        .run(delivery.id, delivery.host, delivery.payload, delivery.eventName ?? null);
       return "created";
     })();
   }
@@ -244,8 +269,8 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
   next(): WebhookDelivery | undefined {
     return this.database.transaction(() => {
       const row = this.database
-        .query<{ id: string; host: WebhookHost; payload: string }, []>(
-          "SELECT id, host, payload FROM webhook_deliveries WHERE status = 'pending' AND attempts < 3 ORDER BY created_at, id LIMIT 1",
+        .query<{ id: string; host: WebhookHost; payload: string; eventName?: string }, []>(
+          "SELECT id, host, payload, event_name AS eventName FROM webhook_deliveries WHERE status = 'pending' AND attempts < 3 ORDER BY created_at, id LIMIT 1",
         )
         .get();
       if (!row) return undefined;
@@ -254,7 +279,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           "UPDATE webhook_deliveries SET status = 'processing', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .run(row.id);
-      return row;
+      return row.eventName ? row : { id: row.id, host: row.host, payload: row.payload };
     })();
   }
 
@@ -312,7 +337,12 @@ export async function runWebhookDelivery(
       configDir: options.configDir,
       host: delivery.host,
       eventPath,
-      env: { ...process.env, ...options.env, PIPR_CODE_HOST: delivery.host },
+      env: {
+        ...process.env,
+        ...options.env,
+        PIPR_CODE_HOST: delivery.host,
+        ...(delivery.eventName ? { BITBUCKET_EVENT_KEY: delivery.eventName } : {}),
+      },
       dryRun: false,
       logSink: consoleRuntimeLogSink,
     });

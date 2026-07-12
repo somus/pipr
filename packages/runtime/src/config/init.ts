@@ -26,7 +26,12 @@ export type InitOfficialMinimalProjectResult = {
   overwritten: string[];
 };
 
-export const supportedOfficialInitAdapters = ["github", "gitlab", "azure-devops"] as const;
+export const supportedOfficialInitAdapters = [
+  "github",
+  "gitlab",
+  "azure-devops",
+  "bitbucket",
+] as const;
 
 export type OfficialInitAdapter = (typeof supportedOfficialInitAdapters)[number];
 
@@ -175,6 +180,12 @@ async function starterFiles(
       contents: starterAzureDevOpsWebhookEnvironment(recipe),
     });
   }
+  if (adapters.includes("bitbucket")) {
+    files.push({
+      relativePath: "bitbucket.pipr.env.example",
+      contents: starterBitbucketWebhookEnvironment(recipe),
+    });
+  }
   return files;
 }
 
@@ -211,6 +222,20 @@ function starterAzureDevOpsWebhookEnvironment(recipe?: string): string {
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
     lines.push(`${secret.env}=`);
   }
+  lines.push("");
+  return lines.join("\n");
+}
+
+function starterBitbucketWebhookEnvironment(recipe?: string): string {
+  const lines = [
+    "# Copy these names into the trusted webhook runner's secret store.",
+    "BITBUCKET_WORKSPACE=",
+    "BITBUCKET_REPO_SLUG=",
+    "BITBUCKET_TOKEN=",
+    "BITBUCKET_PERMISSION_TOKEN=",
+    "PIPR_WEBHOOK_SECRET=",
+  ];
+  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);
   lines.push("");
   return lines.join("\n");
 }

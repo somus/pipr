@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
+import { createHmac } from "node:crypto";
 import { access, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -264,6 +265,40 @@ describe("webhook runner", () => {
         )
       ).status,
     ).toBe(403);
+  });
+
+  it("validates Bitbucket HMAC signatures and repository binding", async () => {
+    const store = new MemoryDeliveryStore();
+    const ingress = createWebhookIngress({
+      host: "bitbucket",
+      secret: "webhook-secret",
+      expectedRepository: { uuid: "{repo}", fullName: "workspace/repository" },
+      store,
+    });
+    const payload = JSON.stringify({
+      repository: { uuid: "{repo}", full_name: "workspace/repository" },
+      pullrequest: { id: 7 },
+    });
+    const request = (body: string, secret = "webhook-secret") =>
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "X-Hub-Signature": `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`,
+          "X-Hook-UUID": "hook-1",
+          "X-Request-UUID": "request-1",
+          "X-Attempt-Number": "1",
+          "X-Event-Key": "pullrequest:updated",
+        },
+        body,
+      });
+
+    expect((await ingress(request(payload))).status).toBe(202);
+    expect((await ingress(request(payload))).status).toBe(200);
+    expect(store.deliveries[0]?.id).toStartWith("bitbucket:hook-1:request-1:1:");
+    expect(store.deliveries[0]?.eventName).toBe("pullrequest:updated");
+    expect((await ingress(request(payload, "wrong"))).status).toBe(401);
+    const wrongRepository = payload.replace("{repo}", "{other}");
+    expect((await ingress(request(wrongRepository))).status).toBe(403);
   });
 
   it("rejects deliveries when the durable pending queue reaches its byte or count budget", async () => {
