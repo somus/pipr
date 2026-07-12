@@ -1,0 +1,111 @@
+apps/docs/content/docs/reference/architecture.mdx
+  s_4ebdfc62030aaf::t_f0850840a6ffd7 62
+packages/runtime/src/action/webhook-server.ts
+  s_4ebdfc62030aaf::t_55ad2319e9865a 38-45,68-80
+  s_4ebdfc62030aaf::t_3990525e2388c9 250
+  s_4ebdfc62030aaf::t_bef99a5bff6e71 18,53-58,193,202-206,230,232,240-241,307-312
+  s_4ebdfc62030aaf::t_55925f8f6a55f9 81-82
+packages/runtime/src/action/action-host.ts
+  s_4ebdfc62030aaf::t_2edc8ff9209a3f 2,50-51
+  s_4ebdfc62030aaf::t_cac5d5262b7fa9 52
+packages/runtime/src/hosts/bitbucket/event.ts
+  s_4ebdfc62030aaf::t_9e8a0d3241b1be 3
+  s_4ebdfc62030aaf::t_1c82686afc6975 4,7
+  s_4ebdfc62030aaf::t_f8a6c3c26bc2a0 1,5-6,8-30,34-49,51-88
+  s_4ebdfc62030aaf::t_5f24a8a30f84a0 2,31-33,50
+apps/docs/content/docs/guide/bitbucket.mdx
+  s_4ebdfc62030aaf::t_43275bd1a6b379 1-59
+packages/runtime/src/hosts/bitbucket/webhook.ts
+  s_4ebdfc62030aaf::t_bef99a5bff6e71 43-45
+  s_4ebdfc62030aaf::t_6a1b2e9747057c 20-21
+  s_4ebdfc62030aaf::t_85c4d1461663b0 1-3,5-19,22-42,46-48,50-54
+  s_4ebdfc62030aaf::t_40ee39523c5489 49
+  s_4ebdfc62030aaf::t_9e8a0d3241b1be 4
+packages/runtime/src/hosts/bitbucket/adapter.ts
+  s_4ebdfc62030aaf::t_9e8a0d3241b1be 2,78-79,95-97
+  s_4ebdfc62030aaf::t_85c4d1461663b0 1,3-77,80-94,98-101
+packages/runtime/src/action/tests/action-host.test.ts
+  s_4ebdfc62030aaf::t_f94e90fa15b297 35-46
+packages/cli/src/tests/main.test.ts
+  s_4ebdfc62030aaf::t_2e9fefb1cda753 578,588
+apps/docs/content/docs/guide/quickstart.mdx
+  s_4ebdfc62030aaf::t_43275bd1a6b379 8
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_512e6b29f39b9c 1-24,31-32,52-53,57-61,66,70,79-85,100-104,132,151-159,166-167,174-175,181-183,193,210-212,224
+  s_4ebdfc62030aaf::t_0dadadaa984aca 25-30,33-51,54-56,62-65,67-69,71-78,86-99,105-131,133-150,160-165,168-173,176-180,184-192,194-209,213-223
+apps/docs/content/docs/reference/index.mdx
+  s_4ebdfc62030aaf::t_43275bd1a6b379 12
+apps/docs/content/docs/guide/runtime.mdx
+  s_4ebdfc62030aaf::t_f0850840a6ffd7 65
+packages/runtime/src/hosts/bitbucket/client.ts
+  s_4ebdfc62030aaf::t_95e9a9c9850770 1-3,5-13,15-51,57-58,69-74,79-87,91-100,106-116,124-125,129-130,134-222,224-232
+  s_4ebdfc62030aaf::t_1c82686afc6975 4,14,117
+  s_4ebdfc62030aaf::t_9e8a0d3241b1be 52-56,59-68,75-78,88-90,101-105,118-123,126-128,131-133
+  s_4ebdfc62030aaf::t_5f24a8a30f84a0 223
+packages/runtime/src/hosts/bitbucket/tests/client.test.ts
+  s_4ebdfc62030aaf::t_40ee39523c5489 51-55
+  s_4ebdfc62030aaf::t_13d88fb04843f4 25-41
+  s_4ebdfc62030aaf::t_ebb771eec81ba1 1-24,42-50,56-67,71-115
+  s_4ebdfc62030aaf::t_13ee9644da916f 68-70
+packages/runtime/src/hosts/webhook.ts
+  s_4ebdfc62030aaf::t_6a1b2e9747057c 2,5,10,17-19
+  s_4ebdfc62030aaf::t_bef99a5bff6e71 13
+apps/docs/content/docs/guide/meta.json
+  s_4ebdfc62030aaf::t_43275bd1a6b379 14
+apps/docs/content/docs/index.mdx
+  s_4ebdfc62030aaf::t_43275bd1a6b379 3,8
+packages/runtime/src/hosts/bitbucket/workspace.ts
+  s_4ebdfc62030aaf::t_f8a6c3c26bc2a0 1-16
+packages/runtime/src/config/init.ts
+  s_4ebdfc62030aaf::t_9e8a0d3241b1be 29-34
+  s_4ebdfc62030aaf::t_2edc8ff9209a3f 182-187,228-237
+  s_4ebdfc62030aaf::t_53b64ab72bed69 238-241
+packages/runtime/src/hosts/bitbucket/publication.ts
+  s_4ebdfc62030aaf::t_9e8a0d3241b1be 11-15,128-142,155-156
+  s_4ebdfc62030aaf::t_5a23f4df955706 79-80
+  s_4ebdfc62030aaf::t_b9a6da2acea8cb 1-10,16-78,81-127,143-154,157-209
+packages/cli/src/runner.ts
+  s_4ebdfc62030aaf::t_2edc8ff9209a3f 227-229
+packages/runtime/src/config/tests/init.test.ts
+  s_4ebdfc62030aaf::t_38bc78b7e1ba72 1698-1711,1715-1716
+apps/docs/content/docs/reference/cli.mdx
+  s_4ebdfc62030aaf::t_f0850840a6ffd7 106,124
+packages/runtime/package.json
+  s_4ebdfc62030aaf::t_2edc8ff9209a3f 48
+packages/runtime/src/hosts/bitbucket/tests/event.test.ts
+  s_4ebdfc62030aaf::t_ebb771eec81ba1 1-10,17-26,61-66
+  s_4ebdfc62030aaf::t_13ee9644da916f 11-16,27-60,67-68,70-89
+  s_4ebdfc62030aaf::t_b14c9b1abb7f68 69
+docs/CONTEXT.md
+  s_4ebdfc62030aaf::t_f0850840a6ffd7 25
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_4ebdfc62030aaf::t_f0850840a6ffd7 8,118
+  s_4ebdfc62030aaf::t_db514ebf13e270 114-117
+  s_4ebdfc62030aaf::t_b44edde10a359b 119
+apps/docs/content/docs/guide/index.mdx
+  s_4ebdfc62030aaf::t_f0850840a6ffd7 8
+packages/runtime/src/action/tests/webhook-server.test.ts
+  s_4ebdfc62030aaf::t_f94e90fa15b297 3,170-189,191-197,199-201
+  s_4ebdfc62030aaf::t_9e47a4d92d2e69 190,198
+  s_4ebdfc62030aaf::t_e16c673ef179e5 202-203
+packages/runtime/src/hosts/bitbucket/schema.ts
+  s_4ebdfc62030aaf::t_1c82686afc6975 1-9
+README.md
+  s_4ebdfc62030aaf::t_f0850840a6ffd7 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "97b5ad50adb5da174ed2e0c2567c994338761588",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
