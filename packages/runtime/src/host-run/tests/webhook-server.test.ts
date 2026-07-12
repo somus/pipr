@@ -279,22 +279,22 @@ describe("webhook runner", () => {
       repository: { uuid: "{repo}", full_name: "workspace/repository" },
       pullrequest: { id: 7 },
     });
-    const request = (body: string, secret = "webhook-secret") =>
+    const request = (body: string, secret = "webhook-secret", attempt = "1") =>
       new Request("http://localhost/webhook", {
         method: "POST",
         headers: {
           "X-Hub-Signature": `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`,
           "X-Hook-UUID": "hook-1",
           "X-Request-UUID": "request-1",
-          "X-Attempt-Number": "1",
+          "X-Attempt-Number": attempt,
           "X-Event-Key": "pullrequest:updated",
         },
         body,
       });
 
     expect((await ingress(request(payload))).status).toBe(202);
-    expect((await ingress(request(payload))).status).toBe(200);
-    expect(store.deliveries[0]?.id).toStartWith("bitbucket:hook-1:request-1:1:");
+    expect((await ingress(request(payload, "webhook-secret", "2"))).status).toBe(200);
+    expect(store.deliveries[0]?.id).toStartWith("bitbucket:hook-1:request-1:");
     expect(store.deliveries[0]?.eventName).toBe("pullrequest:updated");
     expect((await ingress(request(payload, "wrong"))).status).toBe(401);
     const wrongRepository = payload.replace("{repo}", "{other}");
@@ -394,6 +394,22 @@ describe("webhook runner", () => {
     }
   });
 
+  it("translates persisted Bitbucket event names through the host protocol", async () => {
+    await runWebhookDelivery(
+      {
+        id: "delivery-1",
+        host: "bitbucket",
+        payload: "{}",
+        eventName: "pullrequest:updated",
+      },
+      { workspace: "/workspace", configDir: ".pipr", env: {} },
+      async (options) => {
+        expect(options.env?.BITBUCKET_EVENT_KEY).toBe("pullrequest:updated");
+        return { kind: "ignored", reason: "test" } as const;
+      },
+    );
+  });
+
   it("persists delivery dedupe and pending work across SQLite restarts", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
     const databasePath = path.join(root, "deliveries.sqlite");
@@ -437,6 +453,50 @@ describe("webhook runner", () => {
       const recovered = new SqliteWebhookDeliveryStore(databasePath, { maxPendingDeliveries: 1 });
       expect(recovered.enqueue({ id: "next", host: "gitlab", payload: "{}" })).toBe("created");
       recovered.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates legacy queues and preserves provider event names", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      const legacy = new Database(databasePath, { create: true, strict: true });
+      legacy.exec(`
+        CREATE TABLE webhook_deliveries (
+          id TEXT PRIMARY KEY,
+          host TEXT NOT NULL,
+          payload TEXT,
+          status TEXT NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          error TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO webhook_deliveries (id, host, payload, status)
+        VALUES ('legacy', 'gitlab', '{}', 'pending');
+      `);
+      legacy.close();
+
+      const store = new SqliteWebhookDeliveryStore(databasePath);
+      expect(store.next()).toEqual({ id: "legacy", host: "gitlab", payload: "{}" });
+      store.complete("legacy");
+      expect(
+        store.enqueue({
+          id: "bitbucket",
+          host: "bitbucket",
+          payload: "{}",
+          eventName: "pullrequest:updated",
+        }),
+      ).toBe("created");
+      expect(store.next()).toEqual({
+        id: "bitbucket",
+        host: "bitbucket",
+        payload: "{}",
+        eventName: "pullrequest:updated",
+      });
+      store.close();
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -67,6 +67,17 @@ export async function parseBitbucketEvent(options: {
         }
       : { kind: "command-comment", comment: { ...common, isChangeRequest: true } };
   }
+  const action =
+    eventKey === "pullrequest:created"
+      ? "opened"
+      : eventKey === "pullrequest:updated"
+        ? "updated"
+        : ["pullrequest:fulfilled", "pullrequest:rejected", "pullrequest:superseded"].includes(
+              eventKey,
+            )
+          ? "closed"
+          : undefined;
+  if (!action) throw new Error(`Unsupported Bitbucket event: ${eventKey}`);
   const loaded = await options.loadChangeRequest({
     workspace: hook.repository.full_name.split("/")[0] ?? "",
     repository: hook.repository.slug,
@@ -76,7 +87,7 @@ export async function parseBitbucketEvent(options: {
     kind: "change-request",
     change: {
       eventName: eventKey,
-      action: eventKey === "pullrequest:created" ? "opened" : "updated",
+      action,
       rawAction: eventKey,
       platform: { id: "bitbucket", host: "https://bitbucket.org" },
       repository: loaded.repository,

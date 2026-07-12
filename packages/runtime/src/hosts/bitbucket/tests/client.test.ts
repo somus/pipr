@@ -70,6 +70,21 @@ describe("Bitbucket Cloud client", () => {
     );
   });
 
+  it("uses scoped API-token Basic authentication and native resolution objects", async () => {
+    const authorizations: string[] = [];
+    const client = createBitbucketClient(env, async (_input, init) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "");
+      return Response.json({
+        values: [{ id: 1, content: { raw: "resolved" }, resolution: { type: "resolution" } }],
+      });
+    });
+    const comments = await client.listComments(7);
+    expect(authorizations).toEqual([
+      `Basic ${Buffer.from("pipr@example.com:token").toString("base64")}`,
+    ]);
+    expect(comments[0]?.resolution).toEqual({ type: "resolution" });
+  });
+
   it("maps effective workspace repository permissions", async () => {
     const client = createBitbucketClient(env, async (input) =>
       String(input).includes("permissions/repositories")
@@ -80,12 +95,32 @@ describe("Bitbucket Cloud client", () => {
       "admin",
     );
   });
+
+  it("uses the separate workspace-admin credential for permission queries", async () => {
+    const authorizations: string[] = [];
+    const client = createBitbucketClient(
+      {
+        ...env,
+        BITBUCKET_PERMISSION_EMAIL: "admin@example.com",
+        BITBUCKET_PERMISSION_API_TOKEN: "admin-token",
+      },
+      async (_input, init) => {
+        authorizations.push(new Headers(init?.headers).get("Authorization") ?? "");
+        return Response.json({ values: [] });
+      },
+    );
+    await client.getRepositoryPermission("maintainer", "{target-repo}");
+    expect(authorizations).toEqual([
+      `Basic ${Buffer.from("admin@example.com:admin-token").toString("base64")}`,
+    ]);
+  });
 });
 
 const env = {
   BITBUCKET_WORKSPACE: "workspace",
   BITBUCKET_REPO_SLUG: "repository",
-  BITBUCKET_TOKEN: "token",
+  BITBUCKET_EMAIL: "pipr@example.com",
+  BITBUCKET_API_TOKEN: "token",
 };
 
 const repository = (uuid: string, fullName: string) => ({

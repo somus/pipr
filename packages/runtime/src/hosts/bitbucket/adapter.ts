@@ -48,7 +48,9 @@ export function createBitbucketHostAdapter(
           }));
       },
     },
-    workspace: { ensureHeadCheckout: ensureBitbucketHeadCheckout },
+    workspace: {
+      ensureHeadCheckout: (args) => ensureBitbucketHeadCheckout({ ...args, env: options.env }),
+    },
     permissions: {
       getRepositoryPermission({ change, actor }) {
         const coordinates = bitbucketCoordinates(change);

@@ -231,8 +231,10 @@ function starterBitbucketWebhookEnvironment(recipe?: string): string {
     "# Copy these names into the trusted webhook runner's secret store.",
     "BITBUCKET_WORKSPACE=",
     "BITBUCKET_REPO_SLUG=",
-    "BITBUCKET_TOKEN=",
-    "BITBUCKET_PERMISSION_TOKEN=",
+    "BITBUCKET_EMAIL=",
+    "BITBUCKET_API_TOKEN=",
+    "BITBUCKET_PERMISSION_EMAIL=",
+    "BITBUCKET_PERMISSION_API_TOKEN=",
     "PIPR_WEBHOOK_SECRET=",
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);

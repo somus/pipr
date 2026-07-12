@@ -18,8 +18,10 @@ The command creates `bitbucket.pipr.env.example`. Copy its variable names into t
 ```bash
 export BITBUCKET_WORKSPACE="your-workspace"
 export BITBUCKET_REPO_SLUG="your-repository"
-export BITBUCKET_TOKEN="..."
-export BITBUCKET_PERMISSION_TOKEN="..."
+export BITBUCKET_EMAIL="pipr-bot@example.com"
+export BITBUCKET_API_TOKEN="..."
+export BITBUCKET_PERMISSION_EMAIL="workspace-admin@example.com"
+export BITBUCKET_PERMISSION_API_TOKEN="..."
 export PIPR_WEBHOOK_SECRET="..."
 export DEEPSEEK_API_KEY="..."
 
@@ -32,17 +34,17 @@ pipr webhook serve \
   --port 8787
 ```
 
-Prefer a repository access token for review reads and writes. `BITBUCKET_PERMISSION_TOKEN` must belong to a workspace administrator because Bitbucket's effective repository-permission endpoint is admin-only; keep it separate from the narrower review token.
+Use a scoped user API token for the Pipr bot. Grant `read:user:bitbucket`, repository read, pull-request read/write, and commit-status write scopes. A user token lets Pipr identify its own comments and fetch a private source fork when that bot has access; repository access tokens cannot provide those contracts. `BITBUCKET_PERMISSION_API_TOKEN` must belong to a workspace administrator because Bitbucket's effective repository-permission endpoint is admin-only; keep it separate from the review token and set its account email through `BITBUCKET_PERMISSION_EMAIL`.
 
-Create repository webhooks for `pullrequest:created`, `pullrequest:updated`, and `pullrequest:comment_created`. Configure the same secret as `PIPR_WEBHOOK_SECRET`. Pipr verifies `X-Hub-Signature` with HMAC-SHA256, binds every delivery to the configured repository UUID and full name, and deduplicates the hook, request, attempt, and payload digest.
+Create repository webhooks for `pullrequest:created`, `pullrequest:updated`, `pullrequest:fulfilled`, `pullrequest:rejected`, `pullrequest:superseded`, and `pullrequest:comment_created`. Configure the same secret as `PIPR_WEBHOOK_SECRET`. Pipr verifies `X-Hub-Signature` with HMAC-SHA256, binds every delivery to the configured repository UUID and full name, and deduplicates retries by hook UUID, request UUID, and payload digest.
 
-The review token needs pull-request read/write and repository read/status scopes. The permission token needs workspace administration access to read effective repository permissions. Pipr maps Bitbucket `read`, `write`, and `admin` to the same provider-neutral levels and fails closed when no effective permission is returned.
+The review token must be an Atlassian API token created with Bitbucket scopes. The permission token needs workspace administration access to read effective repository permissions. Pipr maps Bitbucket `read`, `write`, and `admin` to the same provider-neutral levels and fails closed when no effective permission is returned.
 
 ## Supported behavior
 
 The Bitbucket Cloud adapter supports:
 
-- pull-request created and updated events;
+- pull-request created and updated reviews, with terminal events normalized as closed;
 - Main Review Comment upsert and marker deduplication;
 - left-side, right-side, and multiline Inline Review Comments;
 - prior-state loading, replies, and thread resolution;

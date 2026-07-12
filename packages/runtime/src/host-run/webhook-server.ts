@@ -225,10 +225,11 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
       `);
-      try {
+      const columns = this.database
+        .query<{ name: string }, []>("PRAGMA table_info(webhook_deliveries)")
+        .all();
+      if (!columns.some((column) => column.name === "event_name")) {
         this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN event_name TEXT");
-      } catch {
-        // Existing databases already have the additive column.
       }
       this.database
         .query(
@@ -330,6 +331,7 @@ export async function runWebhookDelivery(
 ): Promise<void> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-"));
   const eventPath = path.join(directory, "event.json");
+  const protocol = createCodeHostWebhookProtocol(delivery.host);
   try {
     await Bun.write(eventPath, delivery.payload);
     await runHostRun({
@@ -341,7 +343,7 @@ export async function runWebhookDelivery(
         ...process.env,
         ...options.env,
         PIPR_CODE_HOST: delivery.host,
-        ...(delivery.eventName ? { BITBUCKET_EVENT_KEY: delivery.eventName } : {}),
+        ...protocol.runtimeEnv?.(delivery.eventName),
       },
       dryRun: false,
       logSink: consoleRuntimeLogSink,

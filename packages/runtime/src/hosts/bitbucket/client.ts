@@ -36,7 +36,7 @@ const commentSchema = z.looseObject({
   parent: z.looseObject({ id: z.union([z.number(), z.string()]).transform(String) }).optional(),
   inline: inlineSchema.optional(),
   deleted: z.boolean().optional(),
-  resolved: z.boolean().optional(),
+  resolution: z.looseObject({}).optional(),
 });
 
 export type BitbucketPullRequest = z.infer<typeof pullRequestSchema>;
@@ -79,18 +79,12 @@ export function createBitbucketClient(
 ): BitbucketClient {
   const workspace = env.BITBUCKET_WORKSPACE;
   const repository = env.BITBUCKET_REPO_SLUG;
-  const token = env.BITBUCKET_TOKEN;
-  const username = env.BITBUCKET_USERNAME;
-  const appPassword = env.BITBUCKET_APP_PASSWORD;
+  const token = env.BITBUCKET_API_TOKEN;
+  const email = env.BITBUCKET_EMAIL;
   if (!workspace) throw new Error("BITBUCKET_WORKSPACE is required for Bitbucket Cloud API calls");
   if (!repository) throw new Error("BITBUCKET_REPO_SLUG is required for Bitbucket Cloud API calls");
-  if (!token && !(username && appPassword))
-    throw new Error(
-      "BITBUCKET_TOKEN or BITBUCKET_USERNAME and BITBUCKET_APP_PASSWORD are required",
-    );
-  const authorization = token
-    ? `Bearer ${token}`
-    : `Basic ${Buffer.from(`${username}:${appPassword}`).toString("base64")}`;
+  if (!token || !email) throw new Error("BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required");
+  const authorization = `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`;
   const api = createCodeHostHttpClient({
     baseUrl: `https://api.bitbucket.org/2.0/repositories/${encodeURIComponent(workspace)}/${encodeURIComponent(repository)}/`,
     headers: { Authorization: authorization },
@@ -99,8 +93,8 @@ export function createBitbucketClient(
   const rootApi = createCodeHostHttpClient({
     baseUrl: "https://api.bitbucket.org/2.0/",
     headers: {
-      Authorization: env.BITBUCKET_PERMISSION_TOKEN
-        ? `Bearer ${env.BITBUCKET_PERMISSION_TOKEN}`
+      Authorization: env.BITBUCKET_PERMISSION_API_TOKEN
+        ? `Basic ${Buffer.from(`${env.BITBUCKET_PERMISSION_EMAIL ?? email}:${env.BITBUCKET_PERMISSION_API_TOKEN}`).toString("base64")}`
         : authorization,
     },
     fetch,

@@ -37,7 +37,8 @@ describe("host-run adapter selection", () => {
     const env = {
       BITBUCKET_WORKSPACE: "workspace",
       BITBUCKET_REPO_SLUG: "repository",
-      BITBUCKET_TOKEN: "token",
+      BITBUCKET_EMAIL: "pipr@example.com",
+      BITBUCKET_API_TOKEN: "token",
     };
     expect(createHostRunAdapter({ host: "bitbucket", env }).id).toBe("bitbucket");
     expect(createHostRunAdapter({ env: { ...env, BITBUCKET_BUILD_NUMBER: "1" } }).id).toBe(

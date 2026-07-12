@@ -1705,7 +1705,9 @@ export default definePipr((pipr) => {
     const environment = await Bun.file(path.join(rootDir, "bitbucket.pipr.env.example")).text();
     expect(result.created).toContain("bitbucket.pipr.env.example");
     expect(environment).toContain("BITBUCKET_WORKSPACE=");
-    expect(environment).toContain("BITBUCKET_PERMISSION_TOKEN=");
+    expect(environment).toContain("BITBUCKET_EMAIL=");
+    expect(environment).toContain("BITBUCKET_API_TOKEN=");
+    expect(environment).toContain("BITBUCKET_PERMISSION_API_TOKEN=");
     expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
   });
 

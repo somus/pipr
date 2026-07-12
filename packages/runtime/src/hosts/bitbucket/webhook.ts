@@ -36,12 +36,14 @@ export function createBitbucketWebhookProtocol(): CodeHostWebhookProtocol {
       const request = headers.get("X-Request-UUID");
       const hook = headers.get("X-Hook-UUID");
       if (!request || !hook) return undefined;
-      const attempt = headers.get("X-Attempt-Number") ?? "1";
       const digest = createHmac("sha256", hook).update(payload).digest("hex").slice(0, 16);
-      return `bitbucket:${hook}:${request}:${attempt}:${digest}`;
+      return `bitbucket:${hook}:${request}:${digest}`;
     },
     eventName(headers) {
       return headers.get("X-Event-Key") ?? undefined;
+    },
+    runtimeEnv(eventName) {
+      return eventName ? { BITBUCKET_EVENT_KEY: eventName } : {};
     },
   };
 }

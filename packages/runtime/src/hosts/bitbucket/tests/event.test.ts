@@ -62,6 +62,33 @@ describe("Bitbucket Cloud events", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("maps terminal pull request events to closed and rejects unknown events", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-event-"));
+    try {
+      const eventPath = path.join(directory, "event.json");
+      await Bun.write(eventPath, JSON.stringify({ repository, pullrequest: { id: 7 } }));
+      const options = {
+        eventPath,
+        workspace: "/workspace",
+        loadChangeRequest: async () => loaded,
+      };
+      await expect(
+        parseBitbucketEvent({
+          ...options,
+          env: { BITBUCKET_EVENT_KEY: "pullrequest:fulfilled" },
+        }),
+      ).resolves.toMatchObject({ kind: "change-request", change: { action: "closed" } });
+      await expect(
+        parseBitbucketEvent({
+          ...options,
+          env: { BITBUCKET_EVENT_KEY: "pullrequest:approved" },
+        }),
+      ).rejects.toThrow("Unsupported Bitbucket event");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 const repository = {

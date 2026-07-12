@@ -11,6 +11,7 @@ export type CodeHostWebhookProtocol = {
   matchesExpectedRepository(payload: string, expected: unknown): boolean;
   deliveryId(headers: Headers, payload: string): string | undefined;
   eventName?(headers: Headers): string | undefined;
+  runtimeEnv?(eventName: string | undefined): NodeJS.ProcessEnv;
 };
 
 export function createCodeHostWebhookProtocol(host: WebhookHost): CodeHostWebhookProtocol {

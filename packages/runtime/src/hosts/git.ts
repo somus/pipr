@@ -3,13 +3,14 @@ export async function ensureCodeHostHeadCheckout(options: {
   headSha: string;
   fetchRef: string;
   fetchRemote?: string;
+  fetchEnv?: NodeJS.ProcessEnv;
 }): Promise<void> {
   if (!(await hasGitCommit(options.rootDir, options.headSha))) {
     const remote = options.fetchRemote ?? "origin";
     try {
-      await fetchGit(options.rootDir, remote, options.headSha);
+      await fetchGit(options.rootDir, remote, options.headSha, options.fetchEnv);
     } catch {
-      await fetchGit(options.rootDir, remote, options.fetchRef);
+      await fetchGit(options.rootDir, remote, options.fetchRef, options.fetchEnv);
     }
     if (!(await hasGitCommit(options.rootDir, options.headSha))) {
       throw new Error(
@@ -22,8 +23,13 @@ export async function ensureCodeHostHeadCheckout(options: {
   }
 }
 
-async function fetchGit(rootDir: string, remote: string, ref: string): Promise<void> {
-  await runGit(rootDir, ["fetch", "--no-tags", "--depth=1", remote, ref]);
+async function fetchGit(
+  rootDir: string,
+  remote: string,
+  ref: string,
+  env?: NodeJS.ProcessEnv,
+): Promise<void> {
+  await runGit(rootDir, ["fetch", "--no-tags", "--depth=1", remote, ref], env);
 }
 
 async function hasGitCommit(rootDir: string, sha: string): Promise<boolean> {
@@ -35,10 +41,10 @@ async function hasGitCommit(rootDir: string, sha: string): Promise<boolean> {
   }
 }
 
-async function runGit(rootDir: string, args: string[]): Promise<string> {
+async function runGit(rootDir: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
   const child = Bun.spawn(["git", ...args], {
     cwd: rootDir,
-    env: process.env,
+    env: { ...process.env, ...env },
     stderr: "pipe",
     stdout: "pipe",
   });

@@ -132,7 +132,7 @@ export async function loadBitbucketInlineThreadContexts(options: {
         parentCommentId: root.id,
         parentBody: root.content.raw,
         threadId: root.id,
-        threadResolved: root.resolved ?? false,
+        threadResolved: root.resolution !== undefined,
         comments: [root, ...replies].map((comment) => ({
           id: comment.id,
           body: comment.content.raw,
@@ -167,7 +167,7 @@ export async function publishBitbucketThreadActions(options: {
       const replies = comments.filter((comment) => comment.parent?.id === root.id);
       if (!replies.some((comment) => comment.content.raw.includes(action.responseKey)))
         await options.client.replyToComment(options.change.change.number, root.id, action.body);
-      if (action.kind === "resolve" && !root.resolved)
+      if (action.kind === "resolve" && root.resolution === undefined)
         await options.client.resolveComment(options.change.change.number, root.id);
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));

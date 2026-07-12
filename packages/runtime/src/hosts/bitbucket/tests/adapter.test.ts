@@ -50,7 +50,7 @@ describe("Bitbucket Cloud adapter", () => {
       reviewedHeadSha: "head",
     });
     expect(client.comments.filter((comment) => comment.parent?.id === inline.id)).toHaveLength(1);
-    expect(inline.resolved).toBe(true);
+    expect(inline.resolution).toBeDefined();
     await expect(
       adapter.statuses?.upsert({ change, name: "review", state: "success" }),
     ).resolves.toEqual({ id: "pipr-review", name: "review" });
@@ -201,7 +201,7 @@ class FakeBitbucketClient implements BitbucketClient {
     this.createComment(id, { content: { raw: content }, parent: { id: commentId } });
   resolveComment = async (_id: number, commentId: string) => {
     const comment = this.comments.find((item) => item.id === commentId);
-    if (comment) comment.resolved = true;
+    if (comment) comment.resolution = { type: "resolution" };
   };
   setStatus = async (_sha: string, key: string, body: Record<string, unknown>) => {
     this.statusBodies.push(body);
