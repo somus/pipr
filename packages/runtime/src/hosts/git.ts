@@ -2,12 +2,14 @@ export async function ensureCodeHostHeadCheckout(options: {
   rootDir: string;
   headSha: string;
   fetchRef: string;
+  fetchRemote?: string;
 }): Promise<void> {
   if (!(await hasGitCommit(options.rootDir, options.headSha))) {
+    const remote = options.fetchRemote ?? "origin";
     try {
-      await fetchGit(options.rootDir, options.headSha);
+      await fetchGit(options.rootDir, remote, options.headSha);
     } catch {
-      await fetchGit(options.rootDir, options.fetchRef);
+      await fetchGit(options.rootDir, remote, options.fetchRef);
     }
     if (!(await hasGitCommit(options.rootDir, options.headSha))) {
       throw new Error(
@@ -20,8 +22,8 @@ export async function ensureCodeHostHeadCheckout(options: {
   }
 }
 
-async function fetchGit(rootDir: string, ref: string): Promise<void> {
-  await runGit(rootDir, ["fetch", "--no-tags", "--depth=1", "origin", ref]);
+async function fetchGit(rootDir: string, remote: string, ref: string): Promise<void> {
+  await runGit(rootDir, ["fetch", "--no-tags", "--depth=1", remote, ref]);
 }
 
 async function hasGitCommit(rootDir: string, sha: string): Promise<boolean> {

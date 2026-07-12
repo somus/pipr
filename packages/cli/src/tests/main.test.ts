@@ -231,7 +231,7 @@ describe("pipr CLI", () => {
     expect(init.stdout).toContain("multi-agent-review");
     expect(action.stderr).toContain("unknown command 'action'");
     expect(webhook.stdout).toContain("--database <path>");
-    expect(webhook.stdout).toContain("--repository <project>");
+    expect(webhook.stdout).toContain("--repository <repository>");
     expect(hostRun.stdout).toContain("--host <host>");
     expect(hostRun.stdout).toContain("--event <path>");
     expect(dryRun.stdout).toContain("--host <host>");
@@ -588,7 +588,7 @@ describe("pipr CLI", () => {
   it("rejects unsupported init adapters", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
     try {
-      const unsupported = await runCli(["init", "--adapters", "azure-devops"], {}, workspace);
+      const unsupported = await runCli(["init", "--adapters", "bitbucket"], {}, workspace);
       const mixedNone = await runCli(["init", "--adapters", "none,github"], {}, workspace);
       const unsupportedRecipe = await runCli(
         ["init", "--adapters", "none", "--recipe", "missing"],
@@ -598,7 +598,7 @@ describe("pipr CLI", () => {
 
       expect(unsupported.exitCode).toBe(1);
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).toContain(
-        "Unsupported pipr init adapter 'azure-devops'. Supported adapters: github, gitlab",
+        "Unsupported pipr init adapter 'bitbucket'. Supported adapters: github, gitlab, azure-devops",
       );
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).not.toContain("::error::");
       expect(mixedNone.exitCode).toBe(1);

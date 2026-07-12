@@ -105,7 +105,7 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .description("Serve one repository with a durable webhook queue")
     .requiredOption("--host <host>", "Code host adapter")
     .requiredOption("--workspace <path>", "Trusted repository workspace")
-    .requiredOption("--repository <project>", "Expected GitLab project ID or path")
+    .requiredOption("--repository <repository>", "Expected provider repository ID or path")
     .option("--database <path>", "SQLite delivery database", ".pipr/webhooks.sqlite")
     .option("--hostname <hostname>", "Listen hostname", "127.0.0.1")
     .option("--port <port>", "Listen port", "8787")
@@ -208,15 +208,10 @@ async function runWebhookServe(options: CliOptions): Promise<void> {
   const { runWebhookServer } = await import("@usepipr/runtime");
   const secret = process.env.PIPR_WEBHOOK_SECRET;
   if (!secret) throw new Error("PIPR_WEBHOOK_SECRET is required");
-  if (options.host !== "gitlab") {
-    throw new Error("webhook serve currently supports only --host gitlab");
-  }
-  const port = Number(options.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error("--port must be an integer from 1 to 65535");
-  }
+  const host = webhookHost(options.host);
+  const port = webhookPort(options.port);
   await runWebhookServer({
-    host: options.host,
+    host,
     workspace: options.workspace ?? process.cwd(),
     configDir: options.configDir,
     databasePath: options.database ?? ".pipr/webhooks.sqlite",
@@ -226,6 +221,19 @@ async function runWebhookServe(options: CliOptions): Promise<void> {
     port,
     env: process.env,
   });
+}
+
+function webhookHost(value: string | undefined): "gitlab" | "azure-devops" {
+  if (value === "gitlab" || value === "azure-devops") return value;
+  throw new Error("webhook serve supports --host gitlab or --host azure-devops");
+}
+
+function webhookPort(value: string | undefined): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("--port must be an integer from 1 to 65535");
+  }
+  return port;
 }
 
 const githubActionsLogSink: RuntimeLogSink = {

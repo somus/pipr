@@ -5,7 +5,7 @@ description: "Provider-neutral adapter boundary for code host integrations."
 
 Code host adapters are an internal runtime seam. They are not part of `.pipr/config.ts`.
 
-GitHub and GitLab.com are supported. Bitbucket Cloud and Azure DevOps Services follow in stacked adapter releases.
+GitHub, GitLab.com, and Azure DevOps Services are supported. Bitbucket Cloud follows in the next stacked adapter release.
 
 The public config stays provider-neutral:
 
@@ -105,6 +105,12 @@ The GitLab adapter maps merge requests, notes, discussions, member access levels
 
 See [GitLab](/docs/guide/gitlab) for CI and trusted webhook setup.
 
+### Azure DevOps Services
+
+The Azure DevOps adapter maps branch-policy builds and service-hook events into the same runtime contract. It uses pull request iterations and `changeTrackingId` values for native inline positions, evaluates inherited Git repository ACLs for commands, and publishes PR thread comments and statuses.
+
+See [Azure DevOps](/docs/guide/azure-devops) for branch-policy and trusted service-hook setup.
+
 ### Local
 
 The local adapter handles local CLI runs:
@@ -123,8 +129,7 @@ pipr review --base origin/main
 
 Provider support planned next:
 
-- Bitbucket
-- Azure DevOps
+- Bitbucket Cloud
 
 The public config should remain provider-neutral as these adapters land.
 

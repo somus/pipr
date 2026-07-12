@@ -26,7 +26,7 @@ export type InitOfficialMinimalProjectResult = {
   overwritten: string[];
 };
 
-export const supportedOfficialInitAdapters = ["github", "gitlab"] as const;
+export const supportedOfficialInitAdapters = ["github", "gitlab", "azure-devops"] as const;
 
 export type OfficialInitAdapter = (typeof supportedOfficialInitAdapters)[number];
 
@@ -57,10 +57,10 @@ function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInit
       }
       return [];
     }
-    if (adapter !== "github" && adapter !== "gitlab") {
+    if (!supportedOfficialInitAdapters.includes(adapter as OfficialInitAdapter)) {
       throw unsupportedAdapterError(adapter);
     }
-    selected.add(adapter);
+    selected.add(adapter as OfficialInitAdapter);
   }
   return [...selected];
 }
@@ -169,6 +169,12 @@ async function starterFiles(
       contents: starterGitLabPipeline(relativeConfigDir.split(path.sep).join("/"), recipe),
     });
   }
+  if (adapters.includes("azure-devops")) {
+    files.push({
+      relativePath: "azure-pipelines.pipr.yml",
+      contents: starterAzureDevOpsPipeline(relativeConfigDir.split(path.sep).join("/"), recipe),
+    });
+  }
   return files;
 }
 
@@ -188,6 +194,31 @@ function starterGitLabPipeline(relativeConfigDir: string, recipe?: string): stri
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
     lines.push(`    # Configure ${secret.env} as a masked GitLab CI/CD variable.`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
+function starterAzureDevOpsPipeline(relativeConfigDir: string, recipe?: string): string {
+  const lines = [
+    "trigger: none",
+    "pr: none",
+    "",
+    "jobs:",
+    "  - job: pipr",
+    "    container: ghcr.io/somus/pipr:v0.3.8", // x-release-please-version
+    "    steps:",
+    "      - checkout: self",
+    "        fetchDepth: 0",
+    "        persistCredentials: false",
+    "      - script: |",
+    `          pipr host-run --host azure-devops --config-dir ${relativeConfigDir}`,
+    "        env:",
+    "          SYSTEM_ACCESSTOKEN: $(System.AccessToken)",
+    "          PIPR_CODE_HOST: azure-devops",
+  ];
+  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
+    lines.push(`          ${secret.env}: $(${secret.env})`);
   }
   lines.push("");
   return lines.join("\n");

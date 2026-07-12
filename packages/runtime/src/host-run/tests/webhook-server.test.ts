@@ -184,6 +184,67 @@ describe("webhook runner", () => {
     expect(response.headers.get("Retry-After")).toBe("30");
   });
 
+  it("authenticates and binds Azure service-hook deliveries to one subscription and repository", async () => {
+    const store = new MemoryDeliveryStore();
+    const ingress = createWebhookIngress({
+      host: "azure-devops",
+      secret: "webhook-secret",
+      expectedRepository: {
+        organization: "org",
+        projectId: "project-id",
+        repositoryId: "repo-id",
+        subscriptionId: "subscription-1",
+      },
+      store,
+    });
+    const payload = (overrides: Record<string, unknown> = {}) =>
+      JSON.stringify({
+        id: "event-1",
+        eventType: "git.pullrequest.updated",
+        subscriptionId: "subscription-1",
+        notificationId: 4,
+        resource: {
+          pullRequestId: 7,
+          repository: { id: "repo-id", project: { id: "project-id" } },
+        },
+        resourceContainers: {
+          account: { baseUrl: "https://dev.azure.com/org/" },
+          project: { id: "project-id" },
+        },
+        ...overrides,
+      });
+    const request = (body: string, secret = "webhook-secret") =>
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "X-Pipr-Webhook-Secret": secret },
+        body,
+      });
+
+    expect((await ingress(request(payload()))).status).toBe(202);
+    expect((await ingress(request(payload()))).status).toBe(200);
+    expect(store.deliveries[0]?.id).toBe("azure-devops:subscription-1:event-1:4");
+    expect((await ingress(request(payload(), "wrong"))).status).toBe(401);
+    expect(
+      (await ingress(request(payload({ subscriptionId: "other-subscription", id: "event-2" }))))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await ingress(
+          request(
+            payload({
+              id: "event-3",
+              resource: {
+                pullRequestId: 7,
+                repository: { id: "other-repo", project: { id: "project-id" } },
+              },
+            }),
+          ),
+        )
+      ).status,
+    ).toBe(403);
+  });
+
   it("rejects deliveries when the durable pending queue reaches its byte or count budget", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
     try {

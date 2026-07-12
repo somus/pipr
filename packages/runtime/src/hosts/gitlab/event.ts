@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseChangeRequestEventContext } from "../../types.js";
+import { positiveIntegerHostEnv, requiredHostEnv } from "../env.js";
 import type { CodeHostEvent, HostEventParseOptions, LoadedChangeRequest } from "../types.js";
 
 const projectSchema = z.looseObject({
@@ -66,9 +67,13 @@ export async function parseGitLabEvent(options: GitLabEventParseOptions): Promis
 }
 
 async function pipelineEvent(options: GitLabEventParseOptions): Promise<CodeHostEvent> {
-  const projectId = requiredEnv(options.env, "CI_PROJECT_ID");
-  const projectPath = requiredEnv(options.env, "CI_PROJECT_PATH");
-  const changeNumber = positiveIntegerEnv(options.env, "CI_MERGE_REQUEST_IID");
+  const projectId = requiredHostEnv(options.env, "CI_PROJECT_ID", "GitLab pipeline");
+  const projectPath = requiredHostEnv(options.env, "CI_PROJECT_PATH", "GitLab pipeline");
+  const changeNumber = positiveIntegerHostEnv(
+    options.env,
+    "CI_MERGE_REQUEST_IID",
+    "GitLab pipeline",
+  );
   const loaded = await loadChange(options, { projectId, projectPath, changeNumber });
   if (loaded.change.isDraft) {
     return { kind: "ignored", reason: "merge request is a draft" };
@@ -185,22 +190,6 @@ function isObjectKind(value: unknown, kind: string): boolean {
     "object_kind" in value &&
     value.object_kind === kind
   );
-}
-
-function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
-  const value = env[name];
-  if (!value) {
-    throw new Error(`${name} is required for GitLab pipeline events`);
-  }
-  return value;
-}
-
-function positiveIntegerEnv(env: NodeJS.ProcessEnv, name: string): number {
-  const value = Number(requiredEnv(env, name));
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${name} must be a positive integer`);
-  }
-  return value;
 }
 
 function gitLabHost(projectUrl: string | undefined): string {

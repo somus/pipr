@@ -45,7 +45,7 @@
     "test": "bun test --timeout 60000",
     "test:config-init": "bun test --timeout 60000 src/config/tests/init.test.ts",
     "test:config-loader": "bun test --timeout 60000 src/config/tests/config.test.ts src/config/tests/sdk-module.test.ts src/config/tests/ts-loader.test.ts",
-    "test:core": "bun test --timeout 60000 src/host-run/tests src/commands/tests src/diff/tests src/hosts/tests src/hosts/github/tests src/hosts/gitlab/tests src/pi/tests src/review/tests src/shared/tests src/tests",
+    "test:core": "bun test --timeout 60000 src/host-run/tests src/commands/tests src/diff/tests src/hosts/tests src/hosts/azure-devops/tests src/hosts/github/tests src/hosts/gitlab/tests src/pi/tests src/review/tests src/shared/tests src/tests",
     "lint": "biome lint src",
     "format:check": "biome format src",
     "prepack": "bun run build",

@@ -2,12 +2,16 @@ import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../..
 import {
   applyInlineFindingMarkers,
   applyResolvedFindingMarkers,
-  extractInlineFindingMarkerRecords,
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
-import { PublicationError, type PublicationResult } from "../../review/publication-result.js";
+import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
+import {
+  commandResponseBody,
+  completeHostPublication,
+  publishUnseenInlineItems,
+} from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
 import type {
   GitLabClient,
@@ -30,9 +34,6 @@ export async function publishGitLabPlan(options: {
   const ownedBodies = discussionNotes(discussions)
     .filter((note) => note.author?.username === owner.username)
     .map((note) => note.body);
-  const existingMarkers = new Set(
-    extractInlineFindingMarkerRecords(ownedBodies).map((record) => `${record.id}:${record.head}`),
-  );
   const mergeRequest = await assertCurrentHead(options.client, projectId, options.change);
   const main = existingMain
     ? await options.client.updateNote(
@@ -46,26 +47,18 @@ export async function publishGitLabPlan(options: {
         options.change.change.number,
         options.plan.mainComment,
       );
-  const errors: string[] = [];
-  let posted = 0;
-  let skipped = 0;
-  for (const item of options.plan.inlineItems) {
-    if (existingMarkers.has(`${item.findingId}:${item.reviewedHeadSha}`)) {
-      skipped += 1;
-      continue;
-    }
-    try {
+  const inline = await publishUnseenInlineItems({
+    items: options.plan.inlineItems,
+    existingBodies: ownedBodies,
+    publish: async (item) => {
       await options.client.createDiscussion(
         projectId,
         options.change.change.number,
         gitLabInlineBody(item),
         gitLabPosition(item, mergeRequest.diff_refs),
       );
-      posted += 1;
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
+    },
+  });
   const resolution = await publishGitLabThreadActions({
     client: options.client,
     change: options.change,
@@ -73,21 +66,14 @@ export async function publishGitLabPlan(options: {
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     discussions,
   });
-  const partial = {
-    inlineComments: { posted, skipped, failed: errors.length },
-    metadata: {
-      ...options.plan.metadata,
-      inlinePublicationErrors: errors,
-      inlineResolutionErrors: resolution.errors,
-    },
-  };
-  if (errors.length > 0) {
-    throw new PublicationError("GitLab inline comment publication failed", partial);
-  }
-  return {
-    mainComment: { action: existingMain ? "updated" : "created", id: main.id },
-    ...partial,
-  };
+  return completeHostPublication({
+    provider: "GitLab",
+    mainAction: existingMain ? "updated" : "created",
+    mainId: main.id,
+    inline,
+    resolutionErrors: resolution.errors,
+    metadata: options.plan.metadata,
+  });
 }
 
 export async function publishGitLabCommandResponse(options: {
@@ -99,12 +85,16 @@ export async function publishGitLabCommandResponse(options: {
 }) {
   const { projectId } = gitLabCoordinates(options.change);
   const owner = await options.client.currentUser();
-  const marker = `<!-- pipr:command-response change=${options.change.change.number} source=${options.sourceCommentId} command=${options.commandName} -->`;
-  const responseBody = [marker, "", options.body, ""].join("\n");
+  const response = commandResponseBody({
+    changeNumber: options.change.change.number,
+    sourceCommentId: options.sourceCommentId,
+    commandName: options.commandName,
+    body: options.body,
+  });
   const existing = ownedNote(
     await options.client.listNotes(projectId, options.change.change.number),
     owner.username,
-    marker,
+    response.marker,
   );
   await assertCurrentHead(options.client, projectId, options.change);
   const note = existing
@@ -112,9 +102,9 @@ export async function publishGitLabCommandResponse(options: {
         projectId,
         options.change.change.number,
         existing.id,
-        responseBody,
+        response.body,
       )
-    : await options.client.createNote(projectId, options.change.change.number, responseBody);
+    : await options.client.createNote(projectId, options.change.change.number, response.body);
   return { action: existing ? ("updated" as const) : ("created" as const), id: note.id };
 }
 

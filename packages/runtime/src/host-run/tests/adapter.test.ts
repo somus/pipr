@@ -16,4 +16,20 @@ describe("host-run adapter selection", () => {
       "GITLAB_TOKEN or CI_JOB_TOKEN is required",
     );
   });
+
+  it("registers Azure DevOps for explicit and native pipeline selection", () => {
+    const env = {
+      AZURE_DEVOPS_TOKEN: "test-token",
+      AZURE_DEVOPS_ORGANIZATION: "org",
+      AZURE_DEVOPS_PROJECT: "project",
+    };
+    expect(createHostRunAdapter({ host: "azure-devops", env }).id).toBe("azure-devops");
+    expect(createHostRunAdapter({ env: { ...env, TF_BUILD: "True" } }).id).toBe("azure-devops");
+  });
+
+  it("fails Azure DevOps selection before execution when coordinates are missing", () => {
+    expect(() =>
+      createHostRunAdapter({ host: "azure-devops", env: { AZURE_DEVOPS_TOKEN: "token" } }),
+    ).toThrow("AZURE_DEVOPS_ORGANIZATION is required");
+  });
 });

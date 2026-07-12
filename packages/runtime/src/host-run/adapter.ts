@@ -1,3 +1,4 @@
+import { createAzureDevOpsHostAdapter } from "../hosts/azure-devops/adapter.js";
 import { createGitHubHostAdapter } from "../hosts/github/adapter.js";
 import { createGitLabHostAdapter } from "../hosts/gitlab/adapter.js";
 import { resolveCodeHostId } from "../hosts/selection.js";
@@ -34,6 +35,9 @@ export function createHostRunAdapter(options: {
     env: options.env ?? process.env,
   });
   if (host !== "github") {
+    if (host === "azure-devops") {
+      return createAzureDevOpsHostAdapter({ env: options.env });
+    }
     if (host === "gitlab") {
       return createGitLabHostAdapter({ env: options.env });
     }
