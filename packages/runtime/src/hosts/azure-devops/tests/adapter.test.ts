@@ -267,7 +267,13 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
   getPullRequest = async () => this.pullRequest;
   loadChange = async () => ({
     repository: change.repository,
-    coordinates: change.coordinates!,
+    coordinates: {
+      provider: "azure-devops" as const,
+      organization: "org",
+      project: "project",
+      projectId: "project-id",
+      repositoryId: "repo-id",
+    },
     change: change.change,
     iterationId: 2,
   });
