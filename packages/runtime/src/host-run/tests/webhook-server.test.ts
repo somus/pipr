@@ -4,6 +4,7 @@ import { createHmac } from "node:crypto";
 import { access, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createCodeHostWebhookProtocol } from "../../hosts/webhook.js";
 import {
   createWebhookIngress,
   createWebhookQueueProcessor,
@@ -299,6 +300,21 @@ describe("webhook runner", () => {
     expect((await ingress(request(payload, "wrong"))).status).toBe(401);
     const wrongRepository = payload.replace("{repo}", "{other}");
     expect((await ingress(request(wrongRepository))).status).toBe(403);
+  });
+
+  it("rejects a Bitbucket webhook repository argument that disagrees with the environment", async () => {
+    const protocol = createCodeHostWebhookProtocol("bitbucket");
+    await expect(
+      protocol.resolveExpectedRepository(
+        {
+          BITBUCKET_WORKSPACE: "workspace",
+          BITBUCKET_REPO_SLUG: "repository",
+          BITBUCKET_EMAIL: "pipr@example.com",
+          BITBUCKET_API_TOKEN: "token",
+        },
+        "other-repository",
+      ),
+    ).rejects.toThrow("does not match BITBUCKET_REPO_SLUG");
   });
 
   it("rejects deliveries when the durable pending queue reaches its byte or count budget", async () => {

@@ -92,11 +92,7 @@ export function createBitbucketClient(
   });
   const rootApi = createCodeHostHttpClient({
     baseUrl: "https://api.bitbucket.org/2.0/",
-    headers: {
-      Authorization: env.BITBUCKET_PERMISSION_API_TOKEN
-        ? `Basic ${Buffer.from(`${env.BITBUCKET_PERMISSION_EMAIL ?? email}:${env.BITBUCKET_PERMISSION_API_TOKEN}`).toString("base64")}`
-        : authorization,
-    },
+    headers: { Authorization: authorization },
     fetch,
   });
   const prPath = (id: number) => `pullrequests/${id}`;
@@ -117,10 +113,23 @@ export function createBitbucketClient(
       };
     },
     async getRepositoryPermission(actor, repositoryUuid) {
+      const permissionEmail = env.BITBUCKET_PERMISSION_EMAIL;
+      const permissionToken = env.BITBUCKET_PERMISSION_API_TOKEN;
+      if (!permissionEmail || !permissionToken)
+        throw new Error(
+          "BITBUCKET_PERMISSION_EMAIL and BITBUCKET_PERMISSION_API_TOKEN are required for Bitbucket permission checks",
+        );
+      const permissionApi = createCodeHostHttpClient({
+        baseUrl: "https://api.bitbucket.org/2.0/",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${permissionEmail}:${permissionToken}`).toString("base64")}`,
+        },
+        fetch,
+      });
       const query = encodeURIComponent(
         `repository.uuid="${repositoryUuid}" AND user.nickname="${actor.replaceAll('"', '\\"')}"`,
       );
-      const page = await rootApi.json(
+      const page = await permissionApi.json(
         `workspaces/${encodeURIComponent(workspace)}/permissions/repositories?q=${query}&pagelen=100`,
         pagedSchema(
           z.looseObject({ permission: z.enum(["read", "write", "admin"]), user: userSchema }),
@@ -189,9 +198,9 @@ export function createBitbucketClient(
     },
     async setStatus(sha, key, body) {
       const value = await api.json(
-        `commit/${encodeURIComponent(sha)}/statuses/build/${encodeURIComponent(key)}`,
+        `commit/${encodeURIComponent(sha)}/statuses/build`,
         z.looseObject({ key: z.string().default(key) }),
-        jsonRequest("POST", body),
+        jsonRequest("POST", { ...body, key }),
       );
       return value.key;
     },

@@ -12,8 +12,12 @@ const eventSchema = z.looseObject({
 export function createBitbucketWebhookProtocol(): CodeHostWebhookProtocol {
   return {
     host: "bitbucket",
-    async resolveExpectedRepository(env) {
+    async resolveExpectedRepository(env, expectedRepository) {
       const client = createBitbucketClient(env);
+      if (expectedRepository !== client.repository)
+        throw new Error(
+          `Bitbucket --repository '${expectedRepository}' does not match BITBUCKET_REPO_SLUG '${client.repository}'`,
+        );
       const repository = await client.getRepository();
       return { uuid: repository.uuid, fullName: repository.fullName };
     },

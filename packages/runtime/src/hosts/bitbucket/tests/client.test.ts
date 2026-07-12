@@ -53,7 +53,7 @@ describe("Bitbucket Cloud client", () => {
           content: { raw: "inline" },
           inline: { path: "a.ts", to: 2 },
         });
-      if (url.includes("/statuses/build/")) return Response.json({ key: "pipr-review" });
+      if (url.endsWith("/statuses/build")) return Response.json({ key: "pipr-review" });
       return Response.json({ id: 1, content: { raw: "updated" } });
     });
 
@@ -65,9 +65,11 @@ describe("Bitbucket Cloud client", () => {
 
     expect(requests.map((request) => request.method)).toContain("PUT");
     expect(requests.some((request) => request.url.endsWith("/resolve"))).toBe(true);
-    expect(requests.some((request) => request.url.includes("/statuses/build/pipr-review"))).toBe(
-      true,
-    );
+    expect(requests).toContainEqual({
+      url: "https://api.bitbucket.org/2.0/repositories/workspace/repository/commit/head/statuses/build",
+      method: "POST",
+      body: { state: "SUCCESSFUL", key: "pipr-review" },
+    });
   });
 
   it("uses scoped API-token Basic authentication and native resolution objects", async () => {
@@ -86,13 +88,26 @@ describe("Bitbucket Cloud client", () => {
   });
 
   it("maps effective workspace repository permissions", async () => {
-    const client = createBitbucketClient(env, async (input) =>
-      String(input).includes("permissions/repositories")
-        ? Response.json({ values: [{ permission: "admin", user: { nickname: "maintainer" } }] })
-        : Response.json({}),
+    const client = createBitbucketClient(
+      {
+        ...env,
+        BITBUCKET_PERMISSION_EMAIL: "admin@example.com",
+        BITBUCKET_PERMISSION_API_TOKEN: "admin-token",
+      },
+      async (input) =>
+        String(input).includes("permissions/repositories")
+          ? Response.json({ values: [{ permission: "admin", user: { nickname: "maintainer" } }] })
+          : Response.json({}),
     );
     await expect(client.getRepositoryPermission("maintainer", "{target-repo}")).resolves.toBe(
       "admin",
+    );
+  });
+
+  it("fails closed when the separate permission credential is missing", async () => {
+    const client = createBitbucketClient(env, async () => Response.json({ values: [] }));
+    await expect(client.getRepositoryPermission("maintainer", "{target-repo}")).rejects.toThrow(
+      "BITBUCKET_PERMISSION_EMAIL and BITBUCKET_PERMISSION_API_TOKEN are required",
     );
   });
 
