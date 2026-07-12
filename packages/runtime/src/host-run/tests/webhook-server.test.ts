@@ -220,8 +220,29 @@ describe("webhook runner", () => {
         body,
       });
 
+    const basicRequest = (authorization: string) =>
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { Authorization: authorization },
+        body: payload({ id: `basic-${authorization.length}` }),
+      });
+
     expect((await ingress(request(payload()))).status).toBe(202);
     expect((await ingress(request(payload()))).status).toBe(200);
+    expect(
+      (
+        await ingress(
+          basicRequest(`Basic ${Buffer.from("azure:webhook-secret").toString("base64")}`),
+        )
+      ).status,
+    ).toBe(202);
+    for (const authorization of [
+      `Basic ${Buffer.from("azure:wrong").toString("base64")}`,
+      `Basic ${Buffer.from("azure").toString("base64")}`,
+      "Basic %%%",
+    ]) {
+      expect((await ingress(basicRequest(authorization))).status).toBe(401);
+    }
     expect(store.deliveries[0]?.id).toBe("azure-devops:subscription-1:event-1:4");
     expect((await ingress(request(payload(), "wrong"))).status).toBe(401);
     expect(

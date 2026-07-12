@@ -3,28 +3,28 @@ title: "Azure DevOps"
 description: "Run Pipr reviews, commands, and reply verification on Azure DevOps Services."
 ---
 
-You can run Pipr on Azure DevOps Services through a branch-policy validation pipeline or a trusted service-hook runner. Use the trusted runner when contributors can edit pipeline YAML, when you review forks, or when you need `@pipr` commands and reply verification.
+Run Pipr on Azure DevOps Services through a trusted service-hook runner. Pipeline events are supported for installations whose pipeline definition is immutable and cannot be changed by pull requests.
 
-## Automatic pull request reviews
+## Initialize the adapter
 
-Generate the pipeline alongside `.pipr/config.ts`:
+Generate the trusted-runner environment template alongside `.pipr/config.ts`:
 
 ```bash
 pipr init --adapters azure-devops
 ```
 
-The command creates `azure-pipelines.pipr.yml`. Import that file as an Azure Pipeline, then add the pipeline as a build-validation policy on each protected target branch. Azure Repos doesn't run YAML `pr:` triggers, so the branch policy is required.
+The command creates `azure-devops.pipr.env.example`. Copy its variable names into the trusted runner's secret store, then delete or leave the example values empty.
 
-Configure these pipeline variables:
+Do not put a write-capable Azure token or model-provider key in pull-request-controlled pipeline YAML. Azure build validation can execute the proposed YAML, so a contributor could replace the review step and read those credentials before Pipr starts.
+
+Configure these runner variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `System.AccessToken` | Short-lived Azure Pipelines token used to read the PR and publish threads and statuses. The generated step maps it to `SYSTEM_ACCESSTOKEN`. |
+| `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` | Entra bearer token for a hosted identity, or a narrowly scoped PAT for local testing. |
 | Your model provider key | The `apiKeyEnv` configured in `.pipr/config.ts`, such as `DEEPSEEK_API_KEY`. Mark it secret. |
 
-Grant the project Build Service identity only the repository permissions it needs: read code, contribute to pull requests, manage PR threads, and create PR statuses. The generated checkout uses `fetchDepth: 0` and `persistCredentials: false` so Trusted Base Config and the Diff Manifest can read the full history without leaving Git credentials in the workspace.
-
-Pipeline YAML comes from source control. Don't expose write or model credentials to a pipeline that executes untrusted changes. Use the trusted service-hook runner for fork reviews or repositories where contributors can change `azure-pipelines.pipr.yml`.
+Grant the runner identity only the repository permissions it needs: read code, contribute to pull requests, manage PR threads, and create PR statuses.
 
 ## Commands and reply verification
 

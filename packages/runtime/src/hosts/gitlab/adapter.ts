@@ -53,9 +53,9 @@ export function createGitLabHostAdapter(
     },
     workspace: { ensureHeadCheckout: ensureGitLabHeadCheckout },
     permissions: {
-      getRepositoryPermission({ repository, actor }) {
+      getRepositoryPermission({ change, actor }) {
         return client.getRepositoryPermission(
-          gitLabCoordinates(repository.slug, repository.url).projectId,
+          gitLabCoordinates(change.repository.slug, change.repository.url).projectId,
           actor,
         );
       },

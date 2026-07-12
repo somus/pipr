@@ -1,19 +1,15 @@
 import { Database } from "bun:sqlite";
-import { timingSafeEqual } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { z } from "zod";
-import { createAzureDevOpsClient } from "../hosts/azure-devops/client.js";
-import { azureOrganizationFromUrl } from "../hosts/azure-devops/coordinates.js";
-import { createGitLabClient } from "../hosts/gitlab/client.js";
+import { createCodeHostWebhookProtocol, type WebhookHost } from "../hosts/webhook.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
 import { redactPotentialSecrets } from "../shared/redaction.js";
 import { runHostRunCommand } from "./commands.js";
 
 const MAX_WEBHOOK_PAYLOAD_BYTES = 2 * 1024 * 1024;
 
-export type WebhookHost = "gitlab" | "azure-devops";
+export type { WebhookHost } from "../hosts/webhook.js";
 
 export type WebhookDelivery = {
   id: string;
@@ -28,38 +24,30 @@ export type WebhookDeliveryStore = {
   fail(id: string, error: string): void;
 };
 
-type ExpectedGitLabRepository = { id: string; path: string };
-type ExpectedAzureDevOpsRepository = {
-  organization: string;
-  projectId: string;
-  repositoryId: string;
-  subscriptionId: string;
-};
-type ExpectedWebhookRepository = ExpectedGitLabRepository | ExpectedAzureDevOpsRepository;
-
 export function createWebhookIngress(options: {
   host: WebhookHost;
   secret: string;
-  expectedRepository: ExpectedWebhookRepository;
+  expectedRepository: unknown;
   store: WebhookDeliveryStore;
   maxPayloadBytes?: number;
 }) {
   const maxPayloadBytes = options.maxPayloadBytes ?? MAX_WEBHOOK_PAYLOAD_BYTES;
+  const protocol = createCodeHostWebhookProtocol(options.host);
   return async (request: Request): Promise<Response> => {
     if (request.method !== "POST") {
       return new Response("Method Not Allowed", { status: 405 });
     }
-    if (!verifyWebhookSecret(request.headers, options.host, options.secret)) {
+    if (!protocol.verifySecret(request.headers, options.secret)) {
       return new Response("Unauthorized", { status: 401 });
     }
     const payload = await request.text();
     if (new TextEncoder().encode(payload).byteLength > maxPayloadBytes) {
       return new Response("Payload Too Large", { status: 413 });
     }
-    if (!matchesExpectedRepository(payload, options.host, options.expectedRepository)) {
+    if (!protocol.matchesExpectedRepository(payload, options.expectedRepository)) {
       return new Response("Repository mismatch", { status: 403 });
     }
-    const id = deliveryId(request.headers, options.host, payload);
+    const id = protocol.deliveryId(request.headers, payload);
     if (!id) {
       return new Response("Missing delivery id", { status: 400 });
     }
@@ -138,10 +126,11 @@ export async function runWebhookServer(options: {
 }): Promise<void> {
   await mkdir(path.dirname(path.resolve(options.databasePath)), { recursive: true });
   const env = { ...process.env, ...options.env };
-  const expectedRepository =
-    options.host === "gitlab"
-      ? await createGitLabClient(env).getProject(options.expectedRepository)
-      : await resolveAzureDevOpsRepository(env, options.expectedRepository);
+  const protocol = createCodeHostWebhookProtocol(options.host);
+  const expectedRepository = await protocol.resolveExpectedRepository(
+    env,
+    options.expectedRepository,
+  );
   const store = new SqliteWebhookDeliveryStore(options.databasePath);
   const ingress = createWebhookIngress({
     host: options.host,
@@ -340,146 +329,3 @@ const consoleRuntimeLogSink: RuntimeLogSink = {
     return await run();
   },
 };
-
-function verifyWebhookSecret(headers: Headers, host: WebhookHost, secret: string): boolean {
-  const authorization = headers.get("Authorization");
-  const supplied =
-    host === "gitlab"
-      ? headers.get("X-Gitlab-Token")
-      : (headers.get("X-Pipr-Webhook-Secret") ?? basicPassword(authorization));
-  if (!supplied) return false;
-  const expectedBytes = Buffer.from(secret);
-  const suppliedBytes = Buffer.from(supplied);
-  return (
-    expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes)
-  );
-}
-
-function deliveryId(headers: Headers, host: WebhookHost, payload: string): string | undefined {
-  if (host === "gitlab") {
-    const id = headers.get("X-Gitlab-Webhook-UUID") ?? headers.get("X-Gitlab-Event-UUID");
-    return id ? `${host}:${id}` : undefined;
-  }
-  const event = azureWebhookSchema.safeParse(parseJson(payload));
-  return event.success
-    ? `${host}:${event.data.subscriptionId}:${event.data.id}:${event.data.notificationId ?? "initial"}`
-    : undefined;
-}
-
-const gitLabWebhookProjectSchema = z.looseObject({
-  project: z.looseObject({
-    id: z.union([z.number(), z.string()]).transform(String),
-    path_with_namespace: z.string().min(1),
-  }),
-});
-
-function matchesExpectedGitLabRepository(
-  payload: string,
-  expectedRepository: ExpectedGitLabRepository,
-): boolean {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    return false;
-  }
-  const event = gitLabWebhookProjectSchema.safeParse(parsed);
-  return (
-    event.success &&
-    event.data.project.id === expectedRepository.id &&
-    event.data.project.path_with_namespace === expectedRepository.path
-  );
-}
-
-const azureWebhookSchema = z.looseObject({
-  id: z.string().min(1),
-  eventType: z.enum([
-    "git.pullrequest.created",
-    "git.pullrequest.updated",
-    "ms.vss-code.git-pullrequest-comment-event",
-  ]),
-  subscriptionId: z.string().min(1),
-  notificationId: z.union([z.number(), z.string()]).transform(String).optional(),
-  resource: z.looseObject({
-    repository: z
-      .looseObject({ id: z.string().min(1), project: z.looseObject({ id: z.string().min(1) }) })
-      .optional(),
-    pullRequest: z
-      .looseObject({
-        repository: z.looseObject({
-          id: z.string().min(1),
-          project: z.looseObject({ id: z.string().min(1) }),
-        }),
-      })
-      .optional(),
-  }),
-  resourceContainers: z.looseObject({
-    account: z.looseObject({ baseUrl: z.string().url() }),
-    project: z.looseObject({ id: z.string().min(1) }),
-  }),
-});
-
-function matchesExpectedRepository(
-  payload: string,
-  host: WebhookHost,
-  expected: ExpectedWebhookRepository,
-): boolean {
-  if (host === "gitlab" && "path" in expected) {
-    return matchesExpectedGitLabRepository(payload, expected);
-  }
-  return host === "azure-devops" && "subscriptionId" in expected
-    ? matchesExpectedAzureDevOpsRepository(payload, expected)
-    : false;
-}
-
-function matchesExpectedAzureDevOpsRepository(
-  payload: string,
-  expected: ExpectedAzureDevOpsRepository,
-): boolean {
-  const event = azureWebhookSchema.safeParse(parseJson(payload));
-  if (!event.success) return false;
-  const repository = event.data.resource.repository ?? event.data.resource.pullRequest?.repository;
-  return (
-    azureOrganizationFromUrl(event.data.resourceContainers.account.baseUrl) ===
-      expected.organization &&
-    event.data.resourceContainers.project.id === expected.projectId &&
-    repository?.project.id === expected.projectId &&
-    repository.id === expected.repositoryId &&
-    event.data.subscriptionId === expected.subscriptionId
-  );
-}
-
-async function resolveAzureDevOpsRepository(
-  env: NodeJS.ProcessEnv,
-  repository: string,
-): Promise<ExpectedAzureDevOpsRepository> {
-  const client = createAzureDevOpsClient(env);
-  const resolved = await client.getRepository(repository);
-  const subscriptionId = env.PIPR_AZURE_SUBSCRIPTION_ID;
-  if (!subscriptionId) {
-    throw new Error("PIPR_AZURE_SUBSCRIPTION_ID is required for Azure DevOps webhooks");
-  }
-  return {
-    organization: client.organization,
-    projectId: resolved.projectId,
-    repositoryId: resolved.id,
-    subscriptionId,
-  };
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return undefined;
-  }
-}
-
-function basicPassword(value: string | null): string | null {
-  if (!value?.startsWith("Basic ")) return null;
-  try {
-    return Buffer.from(value.slice(6), "base64").toString().split(":").slice(1).join(":") || null;
-  } catch {
-    return null;
-  }
-}

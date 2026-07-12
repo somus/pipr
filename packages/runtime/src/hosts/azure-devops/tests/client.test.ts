@@ -2,6 +2,38 @@ import { describe, expect, it } from "bun:test";
 import { azureRepositoryPermission, createAzureDevOpsClient } from "../client.js";
 
 describe("Azure DevOps API client", () => {
+  it.each([
+    ["SYSTEM_ACCESSTOKEN", "pipeline-token"],
+    ["AZURE_DEVOPS_BEARER_TOKEN", "entra-token"],
+  ] as const)("uses Bearer authentication for %s", async (variable, token) => {
+    const authorizations: Array<string | null> = [];
+    const client = createAzureDevOpsClient(
+      {
+        AZURE_DEVOPS_ORGANIZATION: "org",
+        AZURE_DEVOPS_PROJECT: "project",
+        [variable]: token,
+      },
+      async (_input, init) => {
+        authorizations.push(new Headers(init?.headers).get("Authorization"));
+        return Response.json({ authenticatedUser: {} });
+      },
+    );
+
+    await client.currentUser();
+    expect(authorizations).toEqual([`Bearer ${token}`]);
+  });
+
+  it("uses Basic authentication for PATs", async () => {
+    const authorizations: Array<string | null> = [];
+    const client = createAzureDevOpsClient(azureEnv, async (_input, init) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization"));
+      return Response.json({ authenticatedUser: {} });
+    });
+
+    await client.currentUser();
+    expect(authorizations).toEqual([`Basic ${Buffer.from(":test-token").toString("base64")}`]);
+  });
+
   it("loads a pull request and selects the iteration for the reviewed head", async () => {
     const requests: string[] = [];
     const client = createAzureDevOpsClient(azureEnv, async (input) => {
@@ -170,6 +202,7 @@ describe("Azure DevOps API client", () => {
   });
 
   it("evaluates effective user and inherited group permissions with deny precedence", async () => {
+    const aclTokens: string[] = [];
     const client = createAzureDevOpsClient(azureEnv, async (input) => {
       const url = String(input);
       if (url.includes("/_apis/identities?")) {
@@ -185,18 +218,22 @@ describe("Azure DevOps API client", () => {
           ],
         });
       }
-      expect(url).toContain("token=repoV2%2Fproject-id%2Frepo-id");
       expect(url).toContain("descriptors=user-descriptor%2Ccontributors-group");
+      const token = new URL(url).searchParams.get("token") ?? "";
+      aclTokens.push(token);
       return Response.json({
         count: 1,
         value: [
           {
+            inheritPermissions: true,
             acesDictionary: {
-              user: { allow: 1, deny: 0, extendedInfo: { effectiveAllow: 1, effectiveDeny: 0 } },
+              user: {
+                allow: token === "repoV2/project-id" ? 16387 : 0,
+                deny: 0,
+              },
               group: {
-                allow: 16387,
-                deny: 2,
-                extendedInfo: { effectiveAllow: 16387, effectiveDeny: 2 },
+                allow: 0,
+                deny: token.endsWith("/repo-id") ? 2 : 0,
               },
             },
           },
@@ -207,6 +244,7 @@ describe("Azure DevOps API client", () => {
     await expect(
       client.getRepositoryPermission("developer@example.com", "project-id", "repo-id"),
     ).resolves.toBe("triage");
+    expect(aclTokens).toEqual(["repoV2/project-id", "repoV2/project-id/repo-id"]);
     expect(azureRepositoryPermission(1 | 2 | 16384)).toBe("write");
     expect(azureRepositoryPermission(1 | 2048)).toBe("maintain");
     expect(azureRepositoryPermission(1 | 8192)).toBe("admin");

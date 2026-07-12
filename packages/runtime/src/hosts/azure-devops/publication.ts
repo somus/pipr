@@ -267,14 +267,15 @@ async function inlineThread(
   changes: AzureDevOpsIterationChange[],
   iterationId: number,
 ): Promise<Record<string, unknown>> {
-  const nativeChange = changes.find(
-    (candidate) =>
-      candidate.path === item.path ||
-      candidate.originalPath === item.previousPath ||
-      candidate.path === item.previousPath,
-  );
-  if (!nativeChange) throw new Error(`Azure DevOps changeTrackingId not found for ${item.path}`);
   const selectedPath = item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path;
+  const nativeChange = changes.find((candidate) => {
+    const candidatePath =
+      candidate.path === selectedPath || candidate.originalPath === selectedPath;
+    if (!candidatePath) return false;
+    const changeType = candidate.changeType.toLowerCase();
+    return item.side === "LEFT" ? changeType !== "add" : changeType !== "delete";
+  });
+  if (!nativeChange) throw new Error(`Azure DevOps changeTrackingId not found for ${selectedPath}`);
   const start = { line: item.startLine, offset: 1 };
   const end = {
     line: item.endLine,
@@ -284,7 +285,7 @@ async function inlineThread(
     comments: [{ parentCommentId: 0, content: item.body, commentType: 1 }],
     status: "active",
     threadContext: {
-      filePath: `/${item.path.replace(/^\/+/, "")}`,
+      filePath: `/${selectedPath.replace(/^\/+/, "")}`,
       ...(item.side === "RIGHT"
         ? { rightFileStart: start, rightFileEnd: end }
         : { leftFileStart: start, leftFileEnd: end }),
@@ -324,6 +325,11 @@ async function currentNativeChange(
   if (pullRequest.lastMergeSourceCommit.commitId !== reviewedHeadSha) {
     throw new Error(
       `Azure DevOps pull request head changed from ${reviewedHeadSha} to ${pullRequest.lastMergeSourceCommit.commitId}`,
+    );
+  }
+  if (pullRequest.lastMergeTargetCommit.commitId !== change.change.base.sha) {
+    throw new Error(
+      `Azure DevOps pull request base changed from ${change.change.base.sha} to ${pullRequest.lastMergeTargetCommit.commitId}`,
     );
   }
   const iterations = await client.listIterations(coordinates.repositoryId, change.change.number);
@@ -366,7 +372,12 @@ function unpositionedThread(content: string) {
 }
 
 function isResolved(thread: AzureDevOpsThread): boolean {
-  return thread.status === "fixed" || thread.status === "closed" || thread.status === "wontFix";
+  return (
+    thread.status === "fixed" ||
+    thread.status === "closed" ||
+    thread.status === "wontFix" ||
+    thread.status === "byDesign"
+  );
 }
 
 function mainMarker(changeNumber: number): string {

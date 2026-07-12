@@ -84,6 +84,24 @@ const threadSchema = z.looseObject({
 });
 
 const statusSchema = z.looseObject({ id: z.union([z.number(), z.string()]).transform(String) });
+const aclSchema = collectionSchema(
+  z.looseObject({
+    inheritPermissions: z.boolean().default(true),
+    acesDictionary: z.record(
+      z.string(),
+      z.looseObject({
+        allow: z.number().int().default(0),
+        deny: z.number().int().default(0),
+        extendedInfo: z
+          .looseObject({
+            effectiveAllow: z.number().int().default(0),
+            effectiveDeny: z.number().int().default(0),
+          })
+          .optional(),
+      }),
+    ),
+  }),
+);
 
 export type AzureDevOpsPullRequest = z.infer<typeof pullRequestSchema>;
 export type AzureDevOpsThread = z.infer<typeof threadSchema>;
@@ -249,42 +267,30 @@ export function createAzureDevOpsClient(
         identity.descriptor,
         ...identity.memberOf.map((group) => group.descriptor),
       ];
-      const query = new URLSearchParams({
-        token: `repoV2/${projectId}/${repositoryId}`,
-        descriptors: descriptors.join(","),
-        includeExtendedInfo: "true",
-        recurse: "false",
-        "api-version": "7.1",
-      });
-      const acls = await organizationApi.json(
-        `accesscontrollists/2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87?${query}`,
-        collectionSchema(
-          z.looseObject({
-            acesDictionary: z.record(
-              z.string(),
-              z.looseObject({
-                allow: z.number().int().default(0),
-                deny: z.number().int().default(0),
-                extendedInfo: z
-                  .looseObject({
-                    effectiveAllow: z.number().int().default(0),
-                    effectiveDeny: z.number().int().default(0),
-                  })
-                  .optional(),
-              }),
-            ),
-          }),
-        ),
+      const loadAcls = (token: string) => {
+        const query = new URLSearchParams({
+          token,
+          descriptors: descriptors.join(","),
+          includeExtendedInfo: "true",
+          recurse: "false",
+          "api-version": "7.1",
+        });
+        return organizationApi.json(
+          `accesscontrollists/2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87?${query}`,
+          aclSchema,
+        );
+      };
+      const [projectAcls, repositoryAcls] = await Promise.all([
+        loadAcls(`repoV2/${projectId}`),
+        loadAcls(`repoV2/${projectId}/${repositoryId}`),
+      ]);
+      const inheritsProjectPermissions = repositoryAcls.value.every(
+        (acl) => acl.inheritPermissions,
       );
-      let allow = 0;
-      let deny = 0;
-      for (const acl of acls.value) {
-        for (const ace of Object.values(acl.acesDictionary)) {
-          allow |= ace.extendedInfo?.effectiveAllow ?? ace.allow;
-          deny |= ace.extendedInfo?.effectiveDeny ?? ace.deny;
-        }
-      }
-      return azureRepositoryPermission(allow & ~deny);
+      const acls = inheritsProjectPermissions
+        ? [...projectAcls.value, ...repositoryAcls.value]
+        : repositoryAcls.value;
+      return azurePermissionFromAcls(acls);
     },
     getPullRequest: (repositoryId, changeNumber) =>
       api.json(withApiVersion(pullRequestPath(repositoryId, changeNumber)), pullRequestSchema),
@@ -315,11 +321,11 @@ export function createAzureDevOpsClient(
       return {
         repository: {
           slug: `${organization}/${pullRequest.repository.project.name}/${pullRequest.repository.name}`,
-          url: `${repositoryWebUrl(
+          url: repositoryWebUrl(
             organization,
             pullRequest.repository.project.name,
             pullRequest.repository.name,
-          )}?projectId=${encodeURIComponent(pullRequest.repository.project.id)}&repositoryId=${encodeURIComponent(pullRequest.repository.id)}`,
+          ),
         },
         coordinates: {
           provider: "azure-devops",
@@ -445,6 +451,18 @@ export function azureRepositoryPermission(bits: number): RepositoryPermission {
   if ((bits & 2) !== 0 && (bits & 16384) !== 0) return "write";
   if ((bits & 16384) !== 0) return "triage";
   return "read";
+}
+
+function azurePermissionFromAcls(acls: Array<z.infer<typeof aclSchema>["value"][number]>) {
+  let allow = 0;
+  let deny = 0;
+  for (const acl of acls) {
+    for (const ace of Object.values(acl.acesDictionary)) {
+      allow |= ace.extendedInfo?.effectiveAllow ?? ace.allow;
+      deny |= ace.extendedInfo?.effectiveDeny ?? ace.deny;
+    }
+  }
+  return azureRepositoryPermission(allow & ~deny);
 }
 
 function collectionSchema<T extends z.ZodType>(item: T) {

@@ -1678,7 +1678,7 @@ export default definePipr((pipr) => {
     expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
   });
 
-  it("creates an Azure branch-policy validation pipeline", async () => {
+  it("creates an Azure trusted-runner environment template without a credentialed PR pipeline", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
 
     const result = await initOfficialMinimalProject({
@@ -1686,14 +1686,13 @@ export default definePipr((pipr) => {
       configDir: "config/pipr",
       adapters: ["azure-devops"],
     });
-    const pipeline = await Bun.file(path.join(rootDir, "azure-pipelines.pipr.yml")).text();
+    const environment = await Bun.file(path.join(rootDir, "azure-devops.pipr.env.example")).text();
 
-    expect(result.created).toContain("azure-pipelines.pipr.yml");
-    expect(pipeline).toContain("ghcr.io/somus/pipr:v0.3.8");
-    expect(pipeline).toContain("pipr host-run --host azure-devops --config-dir config/pipr");
-    expect(pipeline).toContain("fetchDepth: 0");
-    expect(pipeline).toContain("persistCredentials: false");
-    expect(pipeline).toContain("SYSTEM_ACCESSTOKEN: $(System.AccessToken)");
+    expect(result.created).toContain("azure-devops.pipr.env.example");
+    expect(environment).toContain("AZURE_DEVOPS_BEARER_TOKEN=");
+    expect(environment).toContain("PIPR_AZURE_SUBSCRIPTION_ID=");
+    expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
+    expect(await fileExists(path.join(rootDir, "azure-pipelines.pipr.yml"))).toBe(false);
   });
 
   it("rejects unsupported init adapters", async () => {

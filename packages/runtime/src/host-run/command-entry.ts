@@ -121,7 +121,7 @@ async function dispatchIssueCommentCommand(
       : prepared.resolution.requiredPermission;
   const permission = await logPhase(log, "check command permission", async () =>
     adapter.permissions.getRepositoryPermission({
-      repository: prepared.comment.repository,
+      change: prepared.event,
       actor: prepared.comment.actor,
     }),
   );

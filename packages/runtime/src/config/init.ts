@@ -171,8 +171,8 @@ async function starterFiles(
   }
   if (adapters.includes("azure-devops")) {
     files.push({
-      relativePath: "azure-pipelines.pipr.yml",
-      contents: starterAzureDevOpsPipeline(relativeConfigDir.split(path.sep).join("/"), recipe),
+      relativePath: "azure-devops.pipr.env.example",
+      contents: starterAzureDevOpsWebhookEnvironment(recipe),
     });
   }
   return files;
@@ -199,26 +199,17 @@ function starterGitLabPipeline(relativeConfigDir: string, recipe?: string): stri
   return lines.join("\n");
 }
 
-function starterAzureDevOpsPipeline(relativeConfigDir: string, recipe?: string): string {
+function starterAzureDevOpsWebhookEnvironment(recipe?: string): string {
   const lines = [
-    "trigger: none",
-    "pr: none",
-    "",
-    "jobs:",
-    "  - job: pipr",
-    "    container: ghcr.io/somus/pipr:v0.3.8", // x-release-please-version
-    "    steps:",
-    "      - checkout: self",
-    "        fetchDepth: 0",
-    "        persistCredentials: false",
-    "      - script: |",
-    `          pipr host-run --host azure-devops --config-dir ${relativeConfigDir}`,
-    "        env:",
-    "          SYSTEM_ACCESSTOKEN: $(System.AccessToken)",
-    "          PIPR_CODE_HOST: azure-devops",
+    "# Copy these names into the trusted webhook runner's secret store.",
+    "AZURE_DEVOPS_ORGANIZATION=",
+    "AZURE_DEVOPS_PROJECT=",
+    "AZURE_DEVOPS_BEARER_TOKEN=",
+    "PIPR_AZURE_SUBSCRIPTION_ID=",
+    "PIPR_WEBHOOK_SECRET=",
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
-    lines.push(`          ${secret.env}: $(${secret.env})`);
+    lines.push(`${secret.env}=`);
   }
   lines.push("");
   return lines.join("\n");

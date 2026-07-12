@@ -83,8 +83,8 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
       ensureWorkspaceSafeDirectory: ensureGitHubWorkspaceSafeDirectory,
     },
     permissions: {
-      getRepositoryPermission(options) {
-        return commandClient.getRepositoryPermission(options);
+      getRepositoryPermission({ change, actor }) {
+        return commandClient.getRepositoryPermission({ repository: change.repository, actor });
       },
     },
     publication: {

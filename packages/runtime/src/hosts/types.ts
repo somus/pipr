@@ -101,7 +101,7 @@ export type CodeHostEvents = {
 
 export type CodeHostPermissions = {
   getRepositoryPermission(options: {
-    repository: RepositoryRef;
+    change: ChangeRequestEventContext;
     actor: string;
   }): Promise<RepositoryPermission>;
 };

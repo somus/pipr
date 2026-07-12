@@ -64,20 +64,49 @@ describe("Azure DevOps host adapter", () => {
     expect(client.threads).toEqual([]);
   });
 
-  it("loads prior state, contexts, and resolves threads idempotently", async () => {
+  it("fails publication and statuses when only the target commit changed", async () => {
+    const client = new FakeAzureDevOpsClient();
+    client.pullRequest = {
+      ...client.pullRequest,
+      lastMergeTargetCommit: { commitId: "new-base" },
+    };
+    const adapter = createAzureDevOpsHostAdapter({ client });
+
+    await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
+      "base changed",
+    );
+    await expect(
+      adapter.statuses?.upsert({ change, name: "review", state: "success" }),
+    ).rejects.toThrow("endpoints changed");
+    expect(client.threads).toEqual([]);
+    expect(client.statusBodies).toEqual([]);
+  });
+
+  it("loads prior state and inline contexts", async () => {
     const client = new FakeAzureDevOpsClient();
     const adapter = createAzureDevOpsHostAdapter({ client });
-    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const publication = adapter.publication;
+    const comments = adapter.comments;
+    if (!publication || !comments) throw new Error("Expected Azure publication surfaces");
+    await publication.publish({ change, plan: publicationPlan() });
 
-    await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toMatchObject({
+    await expect(comments.loadPriorReviewState?.({ change })).resolves.toMatchObject({
       reviewedHeadSha: "head",
     });
-    await expect(adapter.comments?.loadInlineThreadContexts?.({ change })).resolves.toMatchObject([
+    await expect(comments.loadInlineThreadContexts?.({ change })).resolves.toMatchObject([
       { findingId: "finding-1", findingHeadSha: "head", threadResolved: false },
     ]);
+  });
+
+  it("resolves threads idempotently", async () => {
+    const client = new FakeAzureDevOpsClient();
+    const publication = createAzureDevOpsHostAdapter({ client }).publication;
+    if (!publication?.publishThreadActions)
+      throw new Error("Expected Azure thread-action publication");
+    await publication.publish({ change, plan: publicationPlan() });
     const inline = client.threads.find((thread) => thread.threadContext?.filePath);
     if (!inline) throw new Error("Expected inline thread");
-    await adapter.publication?.publishThreadActions?.({
+    await publication.publishThreadActions({
       change,
       reviewedHeadSha: "head",
       actions: [
@@ -87,13 +116,106 @@ describe("Azure DevOps host adapter", () => {
           findingHeadSha: "head",
           commentId: inline.comments[0]?.id ?? "",
           threadId: inline.id,
-          body: "Resolved.",
+          body: "Resolved.\nhead:fixed:finding-1",
+          responseKey: "head:fixed:finding-1",
+        },
+      ],
+    });
+    await publication.publishThreadActions({
+      change,
+      reviewedHeadSha: "head",
+      actions: [
+        {
+          kind: "resolve",
+          findingId: "finding-1",
+          findingHeadSha: "head",
+          commentId: inline.comments[0]?.id ?? "",
+          threadId: inline.id,
+          body: "Resolved.\nhead:fixed:finding-1",
           responseKey: "head:fixed:finding-1",
         },
       ],
     });
     expect(inline.comments).toHaveLength(2);
     expect(inline.status).toBe("fixed");
+  });
+
+  it.each([
+    "fixed",
+    "closed",
+    "wontFix",
+    "byDesign",
+  ])("loads %s threads as resolved", async (status) => {
+    const client = new FakeAzureDevOpsClient();
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const inline = client.threads.find((thread) => thread.threadContext?.filePath);
+    if (!inline) throw new Error("Expected inline thread");
+    inline.status = status;
+
+    await expect(adapter.comments?.loadInlineThreadContexts?.({ change })).resolves.toMatchObject([
+      { threadResolved: true },
+    ]);
+  });
+
+  it("creates and updates one command response thread", async () => {
+    const client = new FakeAzureDevOpsClient();
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    const options = {
+      change,
+      sourceCommentId: "command-1",
+      commandName: "ask",
+      body: "First response",
+    };
+
+    await expect(adapter.publication?.publishCommandResponse?.(options)).resolves.toMatchObject({
+      action: "created",
+    });
+    await expect(
+      adapter.publication?.publishCommandResponse?.({ ...options, body: "Updated response" }),
+    ).resolves.toMatchObject({ action: "updated" });
+    expect(client.threads).toHaveLength(1);
+    expect(client.threads[0]?.comments[0]?.content).toContain("Updated response");
+  });
+
+  it("anchors multiline renamed-file findings on the selected diff side", async () => {
+    const client = new FakeAzureDevOpsClient();
+    client.iterationChanges = [
+      { changeTrackingId: 20, changeType: "delete", path: "src/old.ts" },
+      { changeTrackingId: 21, changeType: "add", path: "src/new.ts" },
+    ];
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    const plan = publicationPlan();
+    const item = plan.inlineItems[0];
+    if (!item) throw new Error("Expected inline fixture");
+    plan.inlineItems = [
+      {
+        ...item,
+        finding: {
+          ...item.finding,
+          path: "src/new.ts",
+          side: "LEFT",
+          startLine: 3,
+          endLine: 5,
+        },
+        range: { ...item.range, path: "src/new.ts", side: "LEFT", startLine: 3, endLine: 5 },
+        path: "src/new.ts",
+        previousPath: "src/old.ts",
+        side: "LEFT",
+        startLine: 3,
+        endLine: 5,
+      },
+    ];
+
+    await adapter.publication?.publish({ change, plan });
+    expect(client.createdThreadBodies[1]).toMatchObject({
+      threadContext: {
+        filePath: "/src/old.ts",
+        leftFileStart: { line: 3, offset: 1 },
+        leftFileEnd: { line: 5, offset: 1 },
+      },
+      pullRequestThreadContext: { changeTrackingId: 20 },
+    });
   });
 
   it("declares Azure-native capability limits", () => {

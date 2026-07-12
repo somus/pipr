@@ -88,8 +88,6 @@ async function serviceHookEvent(options: AzureDevOpsEventParseOptions): Promise<
           organization,
           repository.project.name,
           repository.name ?? repository.id,
-        ).concat(
-          `?projectId=${encodeURIComponent(repository.project.id)}&repositoryId=${encodeURIComponent(repository.id)}`,
         ),
       },
       changeNumber: resource.pullRequest.pullRequestId,

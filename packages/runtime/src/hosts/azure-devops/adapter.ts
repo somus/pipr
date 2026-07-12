@@ -37,11 +37,7 @@ export function createAzureDevOpsHostAdapter(
         });
       },
       loadChangeRequest(ref) {
-        const coordinates = azureCoordinatesFromRepository(
-          client,
-          ref.repository.slug,
-          ref.repository.url,
-        );
+        const coordinates = azureCoordinatesFromRepository(client, ref.repository.slug);
         return client
           .loadChange({ ...coordinates, changeNumber: ref.changeNumber })
           .then((loaded) => ({
@@ -55,17 +51,13 @@ export function createAzureDevOpsHostAdapter(
     },
     workspace: { ensureHeadCheckout: ensureAzureDevOpsHeadCheckout },
     permissions: {
-      getRepositoryPermission({ repository, actor }) {
-        const coordinates = azureCoordinatesFromRepository(client, repository.slug, repository.url);
-        const projectId = repository.url?.match(/[?&]projectId=([^&]+)/)?.[1];
-        if (!projectId) {
-          throw new Error(
-            "Azure DevOps repository URL must include projectId for permission checks",
-          );
-        }
+      getRepositoryPermission({ change, actor }) {
+        const coordinates = azureCoordinates(change);
+        if (!coordinates.projectId)
+          throw new Error("Azure DevOps projectId is required for permission checks");
         return client.getRepositoryPermission(
           actor,
-          decodeURIComponent(projectId),
+          coordinates.projectId,
           coordinates.repositoryId,
         );
       },
@@ -85,6 +77,16 @@ export function createAzureDevOpsHostAdapter(
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {
         const coordinates = azureCoordinates(change);
+        const pullRequest = await client.getPullRequest(
+          coordinates.repositoryId,
+          change.change.number,
+        );
+        if (
+          pullRequest.lastMergeSourceCommit.commitId !== change.change.head.sha ||
+          pullRequest.lastMergeTargetCommit.commitId !== change.change.base.sha
+        ) {
+          throw new Error("Azure DevOps pull request endpoints changed before status publication");
+        }
         const iterations = await client.listIterations(
           coordinates.repositoryId,
           change.change.number,
@@ -118,17 +120,13 @@ function azureCoordinates(
   return change.coordinates;
 }
 
-function azureCoordinatesFromRepository(
-  client: AzureDevOpsClient,
-  slug: string,
-  url: string | undefined,
-) {
+function azureCoordinatesFromRepository(client: AzureDevOpsClient, slug: string) {
   const parts = slug.split("/");
-  const repositoryId = url?.match(/[?&]repositoryId=([^&]+)/)?.[1] ?? parts.at(-1);
+  const repositoryId = parts.at(-1);
   if (!repositoryId) throw new Error("Azure DevOps repository slug must identify a repository");
   return {
     organization: client.organization,
     project: client.project,
-    repositoryId: decodeURIComponent(repositoryId),
+    repositoryId,
   };
 }
