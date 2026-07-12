@@ -1,0 +1,64 @@
+packages/runtime/src/review/tests/comment.test.ts
+  s_4ebdfc62030aaf::t_11e3739b42c41a 3-8,81-114
+apps/docs/content/docs/reference/cli.mdx
+  s_4ebdfc62030aaf::t_1c64cedd7140b3 3,89-105
+  s_4ebdfc62030aaf::t_7460da904b717a 106
+packages/runtime/src/review/comment.ts
+  s_4ebdfc62030aaf::t_b54739b57d5e32 131-137,139-152
+  s_4ebdfc62030aaf::t_dd6db230bc7b8a 138
+packages/runtime/src/hosts/github/event.ts
+  s_4ebdfc62030aaf::t_a0fa8ad37dc204 2
+packages/runtime/src/hosts/types.ts
+  s_4ebdfc62030aaf::t_a0fa8ad37dc204 7,72,144
+packages/runtime/src/action/verifier-entry.ts
+  s_4ebdfc62030aaf::t_c540fa995777fb 71-73
+  s_4ebdfc62030aaf::t_a0fa8ad37dc204 120
+packages/cli/src/tests/main.test.ts
+  s_4ebdfc62030aaf::t_13f185acc1e223 734-750,847,883-889
+packages/runtime/src/action/review-publishing.ts
+  s_4ebdfc62030aaf::t_b54739b57d5e32 3,85-88,90-91,95
+packages/runtime/src/action/command-entry.ts
+  s_4ebdfc62030aaf::t_c540fa995777fb 41-45
+  s_4ebdfc62030aaf::t_a0fa8ad37dc204 80
+packages/runtime/src/hosts/tests/http.test.ts
+  s_4ebdfc62030aaf::t_53317f79663035 32-74
+packages/runtime/src/hosts/github/adapter.ts
+  s_4ebdfc62030aaf::t_a0fa8ad37dc204 73,137-139
+  s_4ebdfc62030aaf::t_f766e52c8abbae 1
+docs/research/code-host-adapter-guideline.md
+  s_4ebdfc62030aaf::t_1c64cedd7140b3 17,108
+packages/runtime/src/types.ts
+  s_4ebdfc62030aaf::t_a0fa8ad37dc204 221
+packages/runtime/src/action/runtime-checks.ts
+  s_4ebdfc62030aaf::t_a0fa8ad37dc204 104-108
+packages/runtime/src/action/tests/commands.test.ts
+  s_4ebdfc62030aaf::t_d30857810b619c 626,1399,2081-2091
+  s_4ebdfc62030aaf::t_8ca1ba0ca0b03a 1289-1292
+  s_4ebdfc62030aaf::t_ba4f06c31657dd 900
+  s_4ebdfc62030aaf::t_51f7a7c3ba5640 901-909,911-915
+  s_4ebdfc62030aaf::t_4f6ab66c2fe1ac 265-267,610-622,1277,1395-1398
+  s_4ebdfc62030aaf::t_2584a51fe07296 8,11,26-47,623-625,895-899,910,916-921
+  s_4ebdfc62030aaf::t_2ed9306e3ffc17 627
+apps/docs/content/docs/reference/index.mdx
+  s_4ebdfc62030aaf::t_1c64cedd7140b3 10
+packages/cli/README.md
+  s_4ebdfc62030aaf::t_1c64cedd7140b3 15
+packages/runtime/src/shared/github.ts
+  s_4ebdfc62030aaf::t_a0fa8ad37dc204 14-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "ad9fa590b4e4d54ee9687b33bec11284bce487ce",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
