@@ -11,3 +11,8 @@ export function parseRepoSlug(value: string): { owner: string; repo: string } {
   }
   return { owner, repo };
 }
+
+export function githubCoordinates(value: string) {
+  const { owner, repo } = parseRepoSlug(value);
+  return { provider: "github" as const, owner, repository: repo };
+}

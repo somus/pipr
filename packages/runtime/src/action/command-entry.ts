@@ -38,6 +38,11 @@ export async function runIssueCommentActionCommand(
   log: RuntimeActionLog,
   comment: CommandCommentEvent,
 ): Promise<ActionCommandResult> {
+  if (!adapter.capabilities.commandComments) {
+    const ignored = { kind: "ignored" as const, reason: "host adapter does not support commands" };
+    log.notice("action ignored", { reason: ignored.reason });
+    return ignored;
+  }
   const prepared = await prepareIssueCommentCommand(options, adapter, log, comment);
   if (prepared.kind === "ignored") {
     log.notice("action ignored", { reason: prepared.reason });
@@ -72,6 +77,7 @@ async function prepareIssueCommentCommand(
     rawAction: loaded.rawAction ?? comment.rawAction,
     platform: { id: adapter.id },
     repository: loaded.repository,
+    coordinates: loaded.coordinates,
     change: loaded.change,
     workspace: loaded.workspace ?? comment.workspace,
   });

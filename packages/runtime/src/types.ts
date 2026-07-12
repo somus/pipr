@@ -218,6 +218,7 @@ export type PiprConfig = z.infer<typeof piprConfigSchema>;
 export type RuntimeSettings = z.infer<typeof runtimeSettingsSchema>;
 export type PlatformInfo = z.infer<typeof platformInfoSchema>;
 export type RepositoryRef = z.infer<typeof repositoryRefSchema>;
+export type CodeHostCoordinates = z.infer<typeof codeHostCoordinatesSchema>;
 export type ChangeRequestRef = z.infer<typeof changeRequestRefSchema>;
 export type ChangeRequestEventContext = z.infer<typeof changeRequestEventContextSchema>;
 export type DiffManifestPromptMetrics = z.infer<typeof diffManifestPromptMetricsSchema>;

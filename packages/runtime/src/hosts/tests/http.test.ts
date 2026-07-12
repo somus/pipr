@@ -29,6 +29,49 @@ describe("code host HTTP client", () => {
     expect(waits).toEqual([2_000]);
   });
 
+  it("retries transient server failures and stops at the retry limit", async () => {
+    let recoveringCalls = 0;
+    const recovering = createCodeHostHttpClient({
+      baseUrl: "https://example.test/",
+      fetch: async () =>
+        ++recoveringCalls === 1
+          ? new Response("unavailable", { status: 503 })
+          : Response.json({ value: "ok" }),
+      sleep: async () => {},
+    });
+    await expect(recovering.json("items", z.object({ value: z.string() }))).resolves.toEqual({
+      value: "ok",
+    });
+
+    let exhaustedCalls = 0;
+    const exhausted = createCodeHostHttpClient({
+      baseUrl: "https://example.test/",
+      fetch: async () => {
+        exhaustedCalls += 1;
+        return new Response("unavailable", { status: 503 });
+      },
+      sleep: async () => {},
+      maxRetries: 2,
+    });
+    await expect(exhausted.json("items", z.unknown())).rejects.toThrow("503");
+    expect(exhaustedCalls).toBe(3);
+  });
+
+  it("does not retry unsafe writes", async () => {
+    let calls = 0;
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://example.test/",
+      fetch: async () => {
+        calls += 1;
+        return new Response("busy", { status: 429, headers: { "Retry-After": "1" } });
+      },
+      sleep: async () => {},
+    });
+
+    await expect(client.json("items", z.unknown(), { method: "POST" })).rejects.toThrow("429");
+    expect(calls).toBe(1);
+  });
+
   it("delays the request after a successful response carrying Retry-After", async () => {
     const waits: number[] = [];
     const client = createCodeHostHttpClient({

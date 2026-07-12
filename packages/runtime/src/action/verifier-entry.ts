@@ -68,6 +68,9 @@ function reviewCommentReplyDispatchCapabilities(
         NonNullable<CodeHostAdapter["publication"]>["publishThreadActions"]
       >;
     } {
+  if (!adapter.capabilities.reviewCommentReplies || !adapter.capabilities.threadResolution) {
+    return { kind: "ignored", reason: "host adapter does not support verifier replies" };
+  }
   if (!adapter.publication?.publishThreadActions) {
     return { kind: "ignored", reason: "host adapter does not support verifier thread actions" };
   }
@@ -114,6 +117,7 @@ async function prepareReviewCommentVerifier(
     rawAction: loaded.rawAction ?? reply.rawAction,
     platform: { id: adapter.id },
     repository: loaded.repository,
+    coordinates: loaded.coordinates,
     change: loaded.change,
     workspace: loaded.workspace ?? reply.workspace,
   });

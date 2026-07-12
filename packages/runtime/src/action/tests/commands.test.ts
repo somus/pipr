@@ -5,9 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { runGit as runGitCommand } from "../../diff/git.js";
+import { createGitHubHostAdapter } from "../../hosts/github/adapter.js";
 import type { GitHubCommandClient } from "../../hosts/github/command.js";
 import type { GitHubPublicationClient } from "../../hosts/github/publication.js";
-import type { RepositoryPermission } from "../../hosts/types.js";
+import type { CodeHostCapabilities, RepositoryPermission } from "../../hosts/types.js";
 import {
   renderInlineFindingMarker,
   renderResolvedFindingMarker,
@@ -22,6 +23,28 @@ import {
 } from "../commands.js";
 
 describe("runActionCommand issue_comment dispatch", () => {
+  it("ignores command events when the adapter disables command comments", async () => {
+    const workspace = await createCommandWorkspace();
+    const eventPath = path.join(workspace.rootDir, "event.json");
+    await writeIssueCommentEvent(eventPath, "@pipr review", "created", 123);
+    try {
+      const result = await runActionCommandWithDependencies({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: issueCommentEnv(workspace.rootDir, eventPath),
+        hostAdapter: githubAdapterWithCapabilities(workspace, { commandComments: false }),
+        piExecutable: workspace.piExecutable,
+      });
+
+      expect(result).toEqual({ kind: "ignored", reason: "host adapter does not support commands" });
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("ignores issue comments that are not pull request comments", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-action-command-"));
     try {
@@ -239,6 +262,9 @@ describe("runActionCommand issue_comment dispatch", () => {
 
       expect(result).toMatchObject({
         kind: "command-response",
+        event: {
+          coordinates: { provider: "github", owner: "local", repository: "pipr" },
+        },
         command: "ask",
         response: {
           body: "The change updates command output.",
@@ -581,6 +607,24 @@ describe("runActionCommand pull_request dispatch", () => {
     }
   });
 
+  it("does not publish GitHub statuses for non-pull_request change events", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const checks: FakeCheckRuns = { created: [], updated: [] };
+    try {
+      await runPullRequestAction(workspace, {
+        eventName: "pull_request_target",
+        githubPublicationClient: fakeGitHubPublicationClient(workspace, [], checks),
+      });
+
+      expect(checks).toEqual({ created: [], updated: [] });
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("fails before Pi when code host status publication lacks permission", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: reviewConfigTs({ checks: true }),
@@ -848,6 +892,33 @@ describe("runActionCommand pull_request dispatch", () => {
 });
 
 describe("runActionCommand pull_request_review_comment dispatch", () => {
+  it("ignores reply events when the adapter disables reply verification", async () => {
+    const workspace = await createCommandWorkspace();
+    const eventPath = path.join(workspace.rootDir, "event.json");
+    await writeReviewCommentEvent(eventPath);
+    try {
+      for (const capabilities of [{ reviewCommentReplies: false }, { threadResolution: false }]) {
+        const result = await runActionCommandWithDependencies({
+          rootDir: workspace.rootDir,
+          configDir: ".pipr",
+          eventPath,
+          dryRun: false,
+          env: reviewCommentEnv(workspace.rootDir, eventPath),
+          hostAdapter: githubAdapterWithCapabilities(workspace, capabilities),
+          piExecutable: workspace.piExecutable,
+        });
+
+        expect(result).toEqual({
+          kind: "ignored",
+          reason: "host adapter does not support verifier replies",
+        });
+      }
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("skips review comment verifier dispatch in dry-run mode without calling GitHub", async () => {
     const workspace = await createCommandWorkspace();
     try {
@@ -1203,6 +1274,7 @@ async function runIssueCommentCommand(
 async function runPullRequestAction(
   workspace: CommandWorkspace,
   options: {
+    eventName?: string;
     githubPublicationClient?: GitHubPublicationClient;
     logSink?: ActionLogSink;
   } = {},
@@ -1214,7 +1286,10 @@ async function runPullRequestAction(
     configDir: ".pipr",
     eventPath,
     dryRun: false,
-    env: pullRequestEnv(workspace.rootDir, eventPath),
+    env: {
+      ...pullRequestEnv(workspace.rootDir, eventPath),
+      GITHUB_EVENT_NAME: options.eventName ?? "pull_request",
+    },
     githubPublicationClient:
       options.githubPublicationClient ?? fakeGitHubPublicationClient(workspace),
     piExecutable: workspace.piExecutable,
@@ -1317,7 +1392,11 @@ async function expectVerifierReplyPublished(
     githubPublicationClient: publication,
     logSink: options.logSink,
   });
-  expect(result).toMatchObject({ kind: "verifier", errors: [] });
+  expect(result).toMatchObject({
+    kind: "verifier",
+    errors: [],
+    event: { coordinates: { provider: "github", owner: "local", repository: "pipr" } },
+  });
   expect(publication.reviewReplies).toHaveLength(1);
   await expectPiCalled(workspace);
 }
@@ -1997,6 +2076,17 @@ function reviewCommentEnv(rootDir: string, eventPath: string): NodeJS.ProcessEnv
     GITHUB_EVENT_PATH: eventPath,
     GITHUB_WORKSPACE: rootDir,
   };
+}
+
+function githubAdapterWithCapabilities(
+  workspace: CommandWorkspace,
+  overrides: Partial<CodeHostCapabilities>,
+) {
+  const adapter = createGitHubHostAdapter({
+    commandClient: fakeGitHubClient(workspace, "write"),
+    publicationClient: fakeGitHubPublicationClient(workspace),
+  });
+  return { ...adapter, capabilities: { ...adapter.capabilities, ...overrides } };
 }
 
 function restoreEnv(key: string, value: string | undefined): void {

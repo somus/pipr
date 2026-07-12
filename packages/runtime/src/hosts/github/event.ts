@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { githubActor } from "../../shared/github.js";
+import { githubActor, githubCoordinates } from "../../shared/github.js";
 import type { ChangeRequestEventContext, RepositoryRef } from "../../types.js";
 import { parseChangeRequestEventContext } from "../../types.js";
 
@@ -189,14 +189,6 @@ function githubPullRequestEventInput(
     change: githubEventChange(payload, repository.slug),
     workspace: options.workspace,
   };
-}
-
-function githubCoordinates(slug: string) {
-  const [owner, repository, extra] = slug.split("/");
-  if (!owner || !repository || extra) {
-    throw new Error(`Invalid GitHub repository slug: ${slug}`);
-  }
-  return { provider: "github" as const, owner, repository };
 }
 
 function githubEventRepository(

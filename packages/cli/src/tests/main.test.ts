@@ -731,6 +731,23 @@ describe("pipr CLI", () => {
     expect(result.piCalled).toBe(false);
   });
 
+  it("runs host-run with explicit and environment-selected GitHub adapters", async () => {
+    const explicit = await runActionWithGitWorkspace({
+      command: "host-run-explicit",
+      env: { PIPR_DRY_RUN: "1" },
+    });
+    const detected = await runActionWithGitWorkspace({
+      command: "host-run-detected",
+      env: { PIPR_DRY_RUN: "1", PIPR_CODE_HOST: "github" },
+    });
+
+    for (const result of [explicit, detected]) {
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(result.stdout).toContain("pipr dry-run completed for change #1");
+      expect(result.piCalled).toBe(false);
+    }
+  });
+
   it("fails action dry-run before model work when config is missing", async () => {
     const result = await runActionWithGitWorkspace({
       initConfig: false,
@@ -827,6 +844,7 @@ describe("pipr CLI", () => {
 });
 
 async function runActionWithGitWorkspace(options: {
+  command?: "action" | "host-run-explicit" | "host-run-detected";
   env?: NodeJS.ProcessEnv;
   initConfig?: boolean;
 }): Promise<{
@@ -862,7 +880,13 @@ async function runActionWithGitWorkspace(options: {
     await Bun.write(eventPath, JSON.stringify(pullRequestPayload(baseSha, headSha)));
     await Bun.write(githubOutputPath, "");
 
-    const result = await runCli(["action"], {
+    const args =
+      options.command === "host-run-explicit"
+        ? ["host-run", "--host", "github", "--event", eventPath]
+        : options.command === "host-run-detected"
+          ? ["host-run", "--event", eventPath]
+          : ["action"];
+    const result = await runCli(args, {
       DEEPSEEK_API_KEY: "provider-key",
       ...options.env,
       GITHUB_EVENT_PATH: eventPath,

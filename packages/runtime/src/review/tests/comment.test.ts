@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { DiffManifest, ReviewFinding } from "../../types.js";
-import { buildPublicationPlan, prepareInlinePublicationItems, runtimeVersion } from "../comment.js";
+import {
+  buildPublicationPlan,
+  prepareInlinePublicationItems,
+  publicationPlanForHostCapabilities,
+  runtimeVersion,
+} from "../comment.js";
 import { mainCommentTitle } from "../comment-branding.js";
 import {
   applyInlineFindingMarkers,
@@ -73,6 +78,40 @@ const brandedTitle =
   '# <img src="https://pipr.run/images/pipr/pipr-mark.svg" width="22" height="22" alt=""> Pipr Review';
 
 describe("comments", () => {
+  it("adapts inline publication to host capabilities", () => {
+    const singleLine = prepareInlinePublicationItems({
+      validated: { validFindings: [finding] },
+      manifest,
+      reviewedHeadSha: "head",
+    });
+    const multilineFinding = { ...finding, startLine: 10, endLine: 11 };
+    const multiline = prepareInlinePublicationItems({
+      validated: { validFindings: [multilineFinding] },
+      manifest: manifestWithRange(10, 11, "fail()\nrecover()"),
+      reviewedHeadSha: "head",
+    });
+    const plan = buildPublicationPlan({
+      event,
+      main: "Summary.",
+      inlineItems: [...singleLine, ...multiline],
+      reviewState: buildPriorReviewState({
+        findings: [finding, multilineFinding],
+        reviewedHeadSha: "head",
+        selectedTasks: ["review"],
+      }),
+      metadata: metadata(),
+    });
+
+    const adapted = publicationPlanForHostCapabilities(plan, {
+      multilineInlineComments: false,
+      suggestedChanges: false,
+    });
+
+    expect(adapted.inlineItems).toHaveLength(1);
+    expect(adapted.inlineItems[0]?.finding.suggestedFix).toBeUndefined();
+    expect(adapted.inlineItems[0]?.body).not.toContain("```suggestion");
+  });
+
   it("renders one whole main comment body with review state", () => {
     const plan = buildPublicationPlan({
       event,

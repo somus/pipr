@@ -1,5 +1,6 @@
 import type { Task } from "@usepipr/sdk";
 import type { CodeHostAdapter } from "../hosts/types.js";
+import { publicationPlanForHostCapabilities } from "../review/comment.js";
 import { type RuntimeCommandInvocation, runTaskRuntime } from "../review/task/task-runtime.js";
 import type { RuntimeActionLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
@@ -81,13 +82,17 @@ export async function runTrustedReviewAndPublish(options: {
       throw new Error("review publication is not available for this code host");
     }
     const publication = await options.log.group("publish review", async () => {
+      const publicationPlan = publicationPlanForHostCapabilities(
+        review.publicationPlan,
+        options.adapter.capabilities,
+      );
       options.log.info("publication plan", {
-        inlineItems: review.publicationPlan.inlineItems.length,
-        threadActions: review.publicationPlan.threadActions.length,
+        inlineItems: publicationPlan.inlineItems.length,
+        threadActions: publicationPlan.threadActions.length,
       });
       const result = await publish({
         change: options.event,
-        plan: review.publicationPlan,
+        plan: publicationPlan,
       });
       options.log.notice("publication result", {
         main: result.mainComment.action,

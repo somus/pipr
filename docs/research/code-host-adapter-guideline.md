@@ -14,7 +14,7 @@ The APIs can support the core review path on all three providers. GitLab has the
 
 This guideline targets:
 
-- GitLab.com, GitLab Dedicated, and current GitLab Self-Managed instances using REST API v4.
+- GitLab.com REST API v4. GitLab Dedicated and Self-Managed are future compatibility work.
 - Bitbucket Cloud REST API 2.0. Bitbucket Data Center is a separate adapter because its REST paths, authentication, permission model, webhook payloads, and inline comment payloads are different.
 - Azure DevOps Services REST API 7.1. Azure DevOps Server can be considered later behind the same adapter only after compatibility tests against the minimum supported server version.
 
@@ -105,7 +105,7 @@ Pipr already has the right high-level ownership rule in [ADR 0001](../adr/0001-p
 
 The implementation is partially ready:
 
-- `packages/runtime/src/hosts/types.ts` defines `CodeHostAdapter`, `CodeHostEvents`, `CodeHostWorkspace`, `CodeHostPermissions`, `CodeHostPublication`, `CodeHostComments`, and `CodeHostChecks`.
+- `packages/runtime/src/hosts/types.ts` defines `CodeHostAdapter`, `CodeHostEvents`, `CodeHostWorkspace`, `CodeHostPermissions`, `CodeHostPublication`, `CodeHostComments`, and `CodeHostStatuses`.
 - `packages/runtime/src/hosts/github/adapter.ts` is a useful composition reference.
 - `packages/runtime/src/review/*` is mostly provider-neutral and should remain shared.
 - `packages/runtime/src/hosts/github/*` cleanly contains most GitHub REST and GraphQL behavior.

@@ -128,6 +128,28 @@ const publicationPlanSchema = z.strictObject({
 
 export type PublicationPlan = z.infer<typeof publicationPlanSchema>;
 
+export function publicationPlanForHostCapabilities(
+  plan: PublicationPlan,
+  capabilities: { multilineInlineComments: boolean; suggestedChanges: boolean },
+): PublicationPlan {
+  return {
+    ...plan,
+    inlineItems: plan.inlineItems
+      .filter((item) => capabilities.multilineInlineComments || item.startLine === item.endLine)
+      .map((item) => {
+        if (capabilities.suggestedChanges || !item.finding.suggestedFix) {
+          return item;
+        }
+        const finding = withoutSuggestedFix(item.finding);
+        return {
+          ...item,
+          finding,
+          body: renderInlineBody(finding, item.findingId, item.reviewedHeadSha),
+        };
+      }),
+  };
+}
+
 export type BuildPublicationPlanOptions = {
   event: Pick<ChangeRequestEventContext, "change">;
   main: string;

@@ -101,7 +101,11 @@ function canStartRuntimeChecks(options: {
   event: ChangeRequestEventContext;
   taskName?: string;
 }): boolean {
-  return options.taskName === undefined && Boolean(options.adapter.statuses);
+  return (
+    options.taskName === undefined &&
+    options.adapter.capabilities.statuses &&
+    Boolean(options.adapter.statuses?.isAvailable(options.event))
+  );
 }
 
 async function startTaskCheckRuns(started: StartedRuntimeChecks): Promise<void> {

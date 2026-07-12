@@ -1,3 +1,4 @@
+import { githubCoordinates } from "../../shared/github.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGitHubCommandClient, type GitHubCommandClient } from "./command.js";
 import {
@@ -69,6 +70,7 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
         });
         return {
           ...loaded,
+          coordinates: githubCoordinates(loaded.repository.slug),
           eventName: ref.eventName,
           action: ref.action,
           rawAction: ref.rawAction,
@@ -132,6 +134,9 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
       },
     },
     statuses: {
+      isAvailable(change) {
+        return change.eventName === "pull_request";
+      },
       async upsert(options) {
         if (!options.status) {
           const checkRun = await publicationClient.createCheckRun({

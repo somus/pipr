@@ -4,6 +4,7 @@ import type { PublicationResult } from "../review/publication-result.js";
 import type {
   ChangeRequestEventContext,
   ChangeRequestRef,
+  CodeHostCoordinates,
   CommandPermissionLevel,
   RepositoryRef,
 } from "../types.js";
@@ -68,6 +69,7 @@ export type CodeHostEvent =
 
 export type LoadedChangeRequest = {
   repository: RepositoryRef;
+  coordinates: CodeHostCoordinates;
   change: ChangeRequestRef;
   eventName?: string;
   action?: string;
@@ -139,6 +141,7 @@ export type CodeHostComments = {
 };
 
 export type CodeHostStatuses = {
+  isAvailable(change: ChangeRequestEventContext): boolean;
   upsert(options: {
     change: ChangeRequestEventContext;
     name: string;
