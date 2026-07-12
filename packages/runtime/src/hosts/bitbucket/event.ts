@@ -4,13 +4,13 @@ import type { CodeHostEvent, LoadedChangeRequest } from "../types.js";
 import { bitbucketRepositorySchema } from "./schema.js";
 
 const webhookSchema = z.looseObject({
+  actor: z.looseObject({ nickname: z.string().min(1) }),
   repository: bitbucketRepositorySchema,
   pullrequest: z.looseObject({ id: z.number().int().positive() }),
   comment: z
     .looseObject({
       id: z.union([z.number(), z.string()]).transform(String),
       content: z.looseObject({ raw: z.string().default("") }),
-      user: z.looseObject({ nickname: z.string().min(1) }),
       parent: z.looseObject({ id: z.union([z.number(), z.string()]).transform(String) }).optional(),
       inline: z.unknown().optional(),
     })
@@ -57,7 +57,7 @@ export async function parseBitbucketEvent(options: {
       changeNumber: hook.pullrequest.id,
       commentId: hook.comment.id,
       body: hook.comment.content.raw,
-      actor: hook.comment.user.nickname,
+      actor: hook.actor.nickname,
       workspace: options.workspace,
     };
     return hook.comment.parent || hook.comment.inline

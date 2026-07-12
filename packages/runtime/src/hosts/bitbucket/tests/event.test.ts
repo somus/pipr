@@ -27,9 +27,10 @@ describe("Bitbucket Cloud events", () => {
       await Bun.write(
         eventPath,
         JSON.stringify({
+          actor: { nickname: "developer" },
           repository: repository,
           pullrequest: { id: 7 },
-          comment: { id: 4, content: { raw: "@pipr ask" }, user: { nickname: "developer" } },
+          comment: { id: 4, content: { raw: "@pipr ask" } },
         }),
       );
       const options = {
@@ -44,13 +45,13 @@ describe("Bitbucket Cloud events", () => {
       await Bun.write(
         eventPath,
         JSON.stringify({
+          actor: { nickname: "developer" },
           repository,
           pullrequest: { id: 7 },
           comment: {
             id: 5,
             parent: { id: 4 },
             content: { raw: "fixed" },
-            user: { nickname: "developer" },
           },
         }),
       );
@@ -67,7 +68,10 @@ describe("Bitbucket Cloud events", () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-event-"));
     try {
       const eventPath = path.join(directory, "event.json");
-      await Bun.write(eventPath, JSON.stringify({ repository, pullrequest: { id: 7 } }));
+      await Bun.write(
+        eventPath,
+        JSON.stringify({ actor: { nickname: "developer" }, repository, pullrequest: { id: 7 } }),
+      );
       const options = {
         eventPath,
         workspace: "/workspace",

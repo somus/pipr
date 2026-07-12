@@ -85,8 +85,9 @@ export function createBitbucketClient(
   if (!repository) throw new Error("BITBUCKET_REPO_SLUG is required for Bitbucket Cloud API calls");
   if (!token || !email) throw new Error("BITBUCKET_EMAIL and BITBUCKET_API_TOKEN are required");
   const authorization = `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`;
+  const repositoryApiPath = `/2.0/repositories/${encodeURIComponent(workspace)}/${encodeURIComponent(repository)}/`;
   const api = createCodeHostHttpClient({
-    baseUrl: `https://api.bitbucket.org/2.0/repositories/${encodeURIComponent(workspace)}/${encodeURIComponent(repository)}/`,
+    baseUrl: `https://api.bitbucket.org${repositoryApiPath}`,
     headers: { Authorization: authorization },
     fetch,
   });
@@ -174,7 +175,7 @@ export function createBitbucketClient(
         },
       };
     },
-    listComments: (id) => listAll(api, `${prPath(id)}/comments`, commentSchema),
+    listComments: (id) => listAll(api, `${prPath(id)}/comments`, commentSchema, repositoryApiPath),
     createComment: (id, body) =>
       api.json(`${prPath(id)}/comments`, commentSchema, jsonRequest("POST", body)),
     updateComment: (id, commentId, content) =>
@@ -219,12 +220,18 @@ async function listAll<T>(
   api: ReturnType<typeof createCodeHostHttpClient>,
   path: string,
   schema: z.ZodType<T>,
+  allowedPathPrefix: string,
 ): Promise<T[]> {
   const values: T[] = [];
   let next: string | undefined = path;
   while (next) {
     const page: { values: T[]; next?: string } = await api.json(next, pagedSchema(schema));
     values.push(...page.values);
+    if (page.next) {
+      const url = new URL(page.next);
+      if (url.origin !== "https://api.bitbucket.org" || !url.pathname.startsWith(allowedPathPrefix))
+        throw new Error("Bitbucket pagination URL must stay inside the configured repository API");
+    }
     next = page.next;
   }
   return values;

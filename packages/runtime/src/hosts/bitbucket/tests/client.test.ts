@@ -38,6 +38,33 @@ describe("Bitbucket Cloud client", () => {
     expect(requests[1]).toContain("page=2");
   });
 
+  it("rejects cross-origin pagination before sending credentials", async () => {
+    const requests: string[] = [];
+    const client = createBitbucketClient(env, async (input) => {
+      requests.push(String(input));
+      return Response.json({ values: [], next: "https://example.com/steal" });
+    });
+    await expect(client.listComments(7)).rejects.toThrow(
+      "Bitbucket pagination URL must stay inside the configured repository API",
+    );
+    expect(requests).toHaveLength(1);
+  });
+
+  it("rejects same-origin pagination outside the configured repository", async () => {
+    const requests: string[] = [];
+    const client = createBitbucketClient(env, async (input) => {
+      requests.push(String(input));
+      return Response.json({
+        values: [],
+        next: "https://api.bitbucket.org/2.0/repositories/other/repository/pullrequests/7/comments",
+      });
+    });
+    await expect(client.listComments(7)).rejects.toThrow(
+      "Bitbucket pagination URL must stay inside the configured repository API",
+    );
+    expect(requests).toHaveLength(1);
+  });
+
   it("accepts outdated inline comments with null native anchors", async () => {
     const client = createBitbucketClient(env, async () =>
       Response.json({
