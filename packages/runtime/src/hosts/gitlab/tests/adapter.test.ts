@@ -133,7 +133,7 @@ describe("GitLab host adapter", () => {
         endLine: 4,
         findingId: "finding-right",
         reviewedHeadSha: "head",
-        body: `${renderInlineFindingMarker("finding-right", "head")}\nFix both.\n\n\`\`\`suggestion\nreplacement\n\`\`\``,
+        body: `${renderInlineFindingMarker("finding-right", "head")}\nFix both.\n\n\`\`\`suggestion\nfirst replacement\n\`\`\`\n\n\`\`\`suggestion\nsecond replacement\n\`\`\``,
       },
       {
         ...baseItem,
@@ -172,6 +172,7 @@ describe("GitLab host adapter", () => {
       },
     ]);
     expect(client.discussions[0]?.notes[0]?.body).toContain("```suggestion:-1+0");
+    expect(client.discussions[0]?.notes[0]?.body.match(/```suggestion:-1\+0/g)).toHaveLength(2);
 
     await adapter.publication?.publishThreadActions?.({
       change,

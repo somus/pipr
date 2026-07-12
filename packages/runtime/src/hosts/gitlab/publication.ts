@@ -275,7 +275,7 @@ function lineRangePoint(path: string, type: "old" | "new", line: number) {
 
 function gitLabInlineBody(item: InlinePublicationItem): string {
   const offset = item.endLine - item.startLine;
-  return item.body.replace(/(`{3,})suggestion\n/, `$1suggestion:-${offset}+0\n`);
+  return item.body.replaceAll(/(`{3,})suggestion\n/g, `$1suggestion:-${offset}+0\n`);
 }
 
 async function assertCurrentHead(
