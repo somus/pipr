@@ -2,7 +2,7 @@ import type { CommandContext } from "@usepipr/sdk";
 import type { ChangeRequestEventContext } from "../types.js";
 
 export type RuntimeCommandInvocation = Pick<CommandContext, "name" | "line" | "arguments"> & {
-  sourceCommentId?: number;
+  sourceCommentId?: string;
 };
 
 export function stableReviewRunId(options: {
@@ -11,7 +11,7 @@ export function stableReviewRunId(options: {
   trustedConfigSha?: string;
   trustedConfigHash?: string;
   commandInvocation?: RuntimeCommandInvocation;
-  verifierInvocation?: { mode: "user-reply"; commentId: number; parentCommentId: number };
+  verifierInvocation?: { mode: "user-reply"; commentId: string; parentCommentId: string };
 }): string {
   const hash = new Bun.CryptoHasher("sha256")
     .update(

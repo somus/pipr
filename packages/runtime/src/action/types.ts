@@ -22,11 +22,13 @@ export type InitCommandOptions = RuntimeCommandOptions & {
 };
 
 export type DryRunCommandOptions = RuntimeCommandOptions & {
+  host?: string;
   eventPath: string;
 };
 
 export type ActionCommandOptions = RuntimeCommandOptions & {
-  eventPath: string;
+  host?: string;
+  eventPath?: string;
   dryRun: boolean;
   logSink?: ActionLogSink;
 };

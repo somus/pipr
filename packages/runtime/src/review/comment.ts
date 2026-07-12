@@ -89,7 +89,7 @@ const threadActionSchema = z.strictObject({
   kind: z.enum(["resolve", "reply"]),
   findingId: findingIdSchema,
   findingHeadSha: z.string().min(1),
-  commentId: z.number().int().positive(),
+  commentId: z.string().min(1),
   threadId: z.string().min(1).optional(),
   body: z.string().min(1),
   responseKey: z.string().min(1),

@@ -96,13 +96,13 @@ const priorReviewState: PriorReviewState = {
 const threadContext: InlineThreadContext = {
   findingId: "fnd_existing",
   findingHeadSha: "old-head",
-  parentCommentId: 10,
+  parentCommentId: "10",
   parentBody: "<!-- pipr:finding id=fnd_existing head=old-head -->\nThis can fail.",
   threadId: "thread-1",
   threadResolved: false,
   comments: [
-    { id: 10, body: "This can fail.", authorLogin: "github-actions[bot]" },
-    { id: 11, body: "private reviewer context that should not leak", authorLogin: "octo-dev" },
+    { id: "10", body: "This can fail.", authorLogin: "github-actions[bot]" },
+    { id: "11", body: "private reviewer context that should not leak", authorLogin: "octo-dev" },
   ],
 };
 
@@ -130,7 +130,7 @@ describe("runInternalVerifier", () => {
         kind: "resolve",
         findingId: "fnd_existing",
         findingHeadSha: "old-head",
-        commentId: 10,
+        commentId: "10",
         threadId: "thread-1",
         body:
           "Agreed, this is resolved by the current change.\n\n" +
@@ -224,7 +224,7 @@ describe("runInternalVerifier", () => {
         kind: "reply",
         findingId: "fnd_existing",
         findingHeadSha: "old-head",
-        commentId: 10,
+        commentId: "10",
         threadId: "thread-1",
         body: "This still applies because the unsafe path remains.",
         responseKey: "reply-11:still-valid:fnd_existing",
@@ -428,10 +428,10 @@ describe("runInternalVerifier", () => {
         {
           ...threadContext,
           findingHeadSha: "new-thread-head",
-          parentCommentId: 12,
+          parentCommentId: "12",
           parentBody: "<!-- pipr:finding id=fnd_existing head=new-thread-head -->\nNew thread.",
           threadId: "thread-2",
-          comments: [{ id: 12, body: "New thread.", authorLogin: "github-actions[bot]" }],
+          comments: [{ id: "12", body: "New thread.", authorLogin: "github-actions[bot]" }],
         },
       ],
       output: { findings: [{ id: "fnd_existing", status: "fixed" }] },
@@ -441,7 +441,7 @@ describe("runInternalVerifier", () => {
       expect.objectContaining({
         kind: "resolve",
         findingHeadSha: "new-thread-head",
-        commentId: 12,
+        commentId: "12",
         threadId: "thread-2",
       }),
     ]);
@@ -467,7 +467,7 @@ describe("runInternalVerifier", () => {
       output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
     });
     const wrongParent = await runVerifier({
-      parentCommentId: 999,
+      parentCommentId: "999",
       output: {
         findings: [
           {
@@ -490,7 +490,7 @@ async function runVerifier(options: {
   mode?: { kind: "synchronize" };
   priorReviewState?: PriorReviewState;
   threadContexts?: InlineThreadContext[];
-  parentCommentId?: number;
+  parentCommentId?: string;
   respondWhenStillValid?: boolean;
   parentBody?: string;
   replyBody?: string;
@@ -557,7 +557,7 @@ function verifierThreadContexts(options: {
 
 function verifierMode(options: {
   mode?: { kind: "synchronize" };
-  parentCommentId?: number;
+  parentCommentId?: string;
   replyBody?: string;
   respondWhenStillValid?: boolean;
 }) {
@@ -565,8 +565,8 @@ function verifierMode(options: {
     options.mode ?? {
       kind: "user-reply",
       reply: {
-        commentId: 11,
-        parentCommentId: options.parentCommentId ?? 10,
+        commentId: "11",
+        parentCommentId: options.parentCommentId ?? "10",
         body: options.replyBody ?? "The caller validates this earlier.",
         actor: "octo-dev",
       },

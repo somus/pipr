@@ -12,6 +12,14 @@ describe("GitHub host adapter", () => {
     });
 
     expect(adapter.id).toBe("github");
+    expect(adapter.capabilities).toEqual({
+      commandComments: true,
+      reviewCommentReplies: true,
+      threadResolution: true,
+      multilineInlineComments: true,
+      suggestedChanges: true,
+      statuses: true,
+    });
     expect(typeof adapter.events.parseEvent).toBe("function");
     expect(typeof adapter.events.loadChangeRequest).toBe("function");
     expect(typeof adapter.permissions.getRepositoryPermission).toBe("function");
@@ -19,7 +27,7 @@ describe("GitHub host adapter", () => {
     expect(typeof adapter.publication?.publish).toBe("function");
     expect(typeof adapter.publication?.publishCommandResponse).toBe("function");
     expect(typeof adapter.comments?.loadPriorReviewState).toBe("function");
-    expect(typeof adapter.checks?.createCheckRun).toBe("function");
+    expect(typeof adapter.statuses?.upsert).toBe("function");
     expect("parseEvent" in adapter).toBe(false);
     expect("publish" in adapter).toBe(false);
   });

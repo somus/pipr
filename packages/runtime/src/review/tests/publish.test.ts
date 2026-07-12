@@ -539,7 +539,7 @@ describe("publishGitHubPublicationPlan", () => {
       kind: "resolve",
       findingId: finding.id,
       findingHeadSha: "new-head",
-      commentId: 12,
+      commentId: "12",
       threadId: "thread-2",
       body: "Resolved in https://github.com/local/pipr/commit/head.",
       responseKey: "head:fixed:fnd_existing",
@@ -568,7 +568,7 @@ describe("publishGitHubPublicationPlan", () => {
       kind: "reply" as const,
       findingId: "fnd_existing",
       findingHeadSha: "old-head",
-      commentId: 10,
+      commentId: "10",
       body: "The finding still applies because the unsafe path remains.",
       responseKey: "reply-99:still-valid:fnd_existing",
     };
@@ -621,7 +621,7 @@ describe("publishGitHubPublicationPlan", () => {
           kind: "reply",
           findingId: "fnd_existing",
           findingHeadSha: "old-head",
-          commentId: 10,
+          commentId: "10",
           body: [
             "Still valid.",
             renderResolvedFindingMarker("fnd_other", "head"),
@@ -653,7 +653,7 @@ describe("publishGitHubPublicationPlan", () => {
           kind: "reply",
           findingId: "fnd_existing",
           findingHeadSha: "old-head",
-          commentId: 10,
+          commentId: "10",
           body: "Still valid.",
           responseKey: "reply-99:still-valid:fnd_existing",
         },
@@ -741,7 +741,7 @@ describe("publishGitHubPublicationPlan", () => {
 
     const result = await publishGitHubPublicationPlan({ client, change: event, plan: plan() });
 
-    expect(result.mainComment).toEqual({ action: "updated", id: 10 });
+    expect(result.mainComment).toEqual({ action: "updated", id: "10" });
     expect(client.issueComments).toHaveLength(1);
     expect(client.issueComments[0]?.body).toContain(
       '# <img src="https://pipr.run/images/pipr/pipr-mark.svg" width="22" height="22" alt=""> Pipr Review',
@@ -1194,7 +1194,7 @@ function resolvedPriorPlan() {
         kind: "resolve",
         findingId: "fnd_existing",
         findingHeadSha: "old-head",
-        commentId: 10,
+        commentId: "10",
         threadId: "thread-1",
         body: "Resolved in https://github.com/local/pipr/commit/head.",
         responseKey: "head:fixed:fnd_existing",

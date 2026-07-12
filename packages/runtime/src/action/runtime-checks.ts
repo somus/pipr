@@ -1,6 +1,6 @@
 import type { Task } from "@usepipr/sdk";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
-import type { CodeHostAdapter, CodeHostCheckConclusion, CodeHostCheckRun } from "../hosts/types.js";
+import type { CodeHostAdapter, CodeHostStatus, CodeHostStatusState } from "../hosts/types.js";
 import type { RuntimeCheckSink, RuntimeTaskCheckResult } from "../review/task/task-runtime.js";
 import type { RuntimeActionLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
@@ -12,8 +12,8 @@ export type StartedRuntimeChecks = {
   adapter: CodeHostAdapter;
   tasks: Task<unknown>[];
   outcomes: Map<string, RuntimeTaskCheckResult>;
-  taskRuns: Map<string, CodeHostCheckRun>;
-  aggregate?: CodeHostCheckRun;
+  taskRuns: Map<string, CodeHostStatus>;
+  aggregate?: CodeHostStatus;
   sink: RuntimeCheckSink;
   log?: RuntimeActionLog;
 };
@@ -41,7 +41,7 @@ export async function startRuntimeChecks(options: {
     aggregate === undefined || aggregate === false || aggregate.enabled === false
       ? undefined
       : (aggregate.name ?? "all");
-  const taskRuns = new Map<string, CodeHostCheckRun>();
+  const taskRuns = new Map<string, CodeHostStatus>();
   if (!aggregateName && !tasks.some((task) => taskCheckSettings(task).individual)) {
     return undefined;
   }
@@ -62,12 +62,12 @@ export async function startRuntimeChecks(options: {
   try {
     await startTaskCheckRuns(started);
     if (aggregateName) {
-      started.aggregate = await createCheckRunOrThrow(
+      started.aggregate = await createStatusOrThrow(
         started,
         aggregateName,
         "pipr review is running.",
       );
-      started.log?.info("check run created", { name: aggregateName, kind: "aggregate" });
+      started.log?.info("status created", { name: aggregateName, kind: "aggregate" });
     }
   } catch (error) {
     await finalizeRuntimeChecks(started, {
@@ -82,7 +82,7 @@ export async function finalizeRuntimeChecks(
   checks: StartedRuntimeChecks | undefined,
   options: FinalizeRuntimeCheckOptions,
 ): Promise<void> {
-  if (!checks?.adapter.checks?.updateCheckRun) {
+  if (!checks?.adapter.statuses) {
     return;
   }
   const taskResults = checks.tasks.map((task) =>
@@ -101,12 +101,7 @@ function canStartRuntimeChecks(options: {
   event: ChangeRequestEventContext;
   taskName?: string;
 }): boolean {
-  return (
-    options.event.eventName === "pull_request" &&
-    options.taskName === undefined &&
-    Boolean(options.adapter.checks?.createCheckRun) &&
-    Boolean(options.adapter.checks?.updateCheckRun)
-  );
+  return options.taskName === undefined && Boolean(options.adapter.statuses);
 }
 
 async function startTaskCheckRuns(started: StartedRuntimeChecks): Promise<void> {
@@ -115,9 +110,9 @@ async function startTaskCheckRuns(started: StartedRuntimeChecks): Promise<void> 
     if (!settings.individual) {
       continue;
     }
-    const run = await createCheckRunOrThrow(started, settings.name, "pipr task is running.");
+    const run = await createStatusOrThrow(started, settings.name, "pipr task is running.");
     started.taskRuns.set(task.name, run);
-    started.log?.info("check run created", {
+    started.log?.info("status created", {
       name: settings.name,
       kind: "task",
       task: task.name,
@@ -125,26 +120,26 @@ async function startTaskCheckRuns(started: StartedRuntimeChecks): Promise<void> 
   }
 }
 
-async function createCheckRunOrThrow(
+async function createStatusOrThrow(
   checks: StartedRuntimeChecks,
   name: string,
   summary: string,
-): Promise<CodeHostCheckRun> {
+): Promise<CodeHostStatus> {
   try {
-    const createCheckRun = checks.adapter.checks?.createCheckRun;
-    if (!createCheckRun) {
-      throw new Error("check run creation is not available");
+    const statuses = checks.adapter.statuses;
+    if (!statuses) {
+      throw new Error("status publication is not available");
     }
-    return await createCheckRun({ change: checks.event, name, summary });
+    return await statuses.upsert({ change: checks.event, name, state: "pending", summary });
   } catch (error) {
-    throw checkRunPermissionError(error);
+    throw statusPermissionError(error);
   }
 }
 
-function checkRunPermissionError(error: unknown): Error {
+function statusPermissionError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   return new Error(
-    `Unable to create GitHub check run. Ensure the workflow grants 'checks: write'. ${message}`,
+    `Unable to publish code host status. Check the adapter credential scopes. ${message}`,
   );
 }
 
@@ -184,24 +179,25 @@ async function updateAggregateCheckRun(
 
 async function updateCheckRunOrError(
   checks: StartedRuntimeChecks,
-  checkRun: CodeHostCheckRun,
-  result: { conclusion: CodeHostCheckConclusion; summary?: string },
+  checkRun: CodeHostStatus,
+  result: { conclusion: Exclude<CodeHostStatusState, "pending">; summary?: string },
 ): Promise<unknown> {
   try {
-    await checks.adapter.checks?.updateCheckRun?.({
+    await checks.adapter.statuses?.upsert({
       change: checks.event,
-      checkRun,
-      conclusion: result.conclusion,
+      name: checkRun.name,
+      status: checkRun,
+      state: result.conclusion,
       summary: result.summary,
     });
-    checks.log?.info("check run finalized", {
+    checks.log?.info("status finalized", {
       name: checkRun.name,
       conclusion: result.conclusion,
       summary: result.summary,
     });
     return undefined;
   } catch (error) {
-    checks.log?.warning("check run finalize failed", {
+    checks.log?.warning("status finalize failed", {
       name: checkRun.name,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -230,7 +226,7 @@ function aggregateCheckConclusion(
   tasks: Task<unknown>[],
   results: RuntimeTaskCheckResult[],
   options: { skipped?: boolean; forceFailureSummary?: string },
-): { conclusion: CodeHostCheckConclusion; summary: string } {
+): { conclusion: Exclude<CodeHostStatusState, "pending">; summary: string } {
   if (options.skipped || tasks.length === 0) {
     return { conclusion: "neutral", summary: "No pipr tasks matched this run." };
   }

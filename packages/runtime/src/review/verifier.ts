@@ -21,8 +21,8 @@ export type VerifierMode =
   | {
       kind: "user-reply";
       reply: {
-        commentId: number;
-        parentCommentId: number;
+        commentId: string;
+        parentCommentId: string;
         body: string;
         actor: string;
       };

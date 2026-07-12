@@ -59,7 +59,7 @@ export async function loadGitHubInlineThreadContexts(options: {
       {
         findingId: marker.id,
         findingHeadSha: marker.head,
-        parentCommentId: comment.id,
+        parentCommentId: String(comment.id),
         parentBody: comment.body ?? "",
         threadId: thread?.id,
         threadResolved: thread?.isResolved ?? false,
@@ -69,7 +69,7 @@ export async function loadGitHubInlineThreadContexts(options: {
             return item
               ? [
                   {
-                    id: item.id,
+                    id: String(item.id),
                     body: item.body ?? "",
                     authorLogin: item.authorLogin,
                   },

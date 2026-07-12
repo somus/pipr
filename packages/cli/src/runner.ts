@@ -26,6 +26,7 @@ type ActionOptions = Parameters<typeof runActionCommand>[0];
 
 type CliOptions = {
   configDir: string;
+  host?: string;
   event?: string;
   force?: boolean;
   adapters?: string;
@@ -94,6 +95,14 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .action(runAction);
 
   program
+    .command("host-run")
+    .description("Run a change request event through a Code Host Adapter")
+    .option("--host <host>", "Code host adapter")
+    .option("--event <path>", "Native event payload path")
+    .option("--config-dir <dir>", "Config directory", ".pipr")
+    .action(runHostRun);
+
+  program
     .command("check")
     .description("Type-load config and validate the runtime plan")
     .option("--config-dir <dir>", "Config directory", ".pipr")
@@ -155,6 +164,29 @@ async function runAction(options: CliOptions): Promise<void> {
   writeActionResult(await runActionCommand(actionOptions(options)));
 }
 
+async function runHostRun(options: CliOptions): Promise<void> {
+  const env = process.env;
+  const result = await runActionCommand({
+    rootDir:
+      env.GITHUB_WORKSPACE ??
+      env.CI_PROJECT_DIR ??
+      env.BITBUCKET_CLONE_DIR ??
+      env.BUILD_SOURCESDIRECTORY ??
+      process.cwd(),
+    configDir: options.configDir,
+    host: options.host,
+    eventPath: options.event ?? env.PIPR_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
+    env,
+    dryRun: env.PIPR_DRY_RUN === "1",
+    logSink: localConsoleLogSink,
+  });
+  if (result.kind === "ignored") {
+    console.log(`ignored: ${result.reason}`);
+    return;
+  }
+  console.log(`pipr ${result.kind} completed for change #${result.event.change.number}`);
+}
+
 function actionOptions(options: CliOptions): ActionOptions {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) {
@@ -163,6 +195,7 @@ function actionOptions(options: CliOptions): ActionOptions {
   return {
     rootDir: process.env.GITHUB_WORKSPACE ?? process.cwd(),
     configDir: process.env["INPUT_CONFIG-DIR"] || options.configDir,
+    host: "github",
     env: process.env,
     eventPath,
     dryRun: process.env.PIPR_DRY_RUN === "1",
@@ -597,6 +630,7 @@ async function runDryRun(options: CliOptions): Promise<void> {
   const result = await runDryRunCommand({
     rootDir: process.cwd(),
     configDir: options.configDir,
+    host: "github",
     env: process.env,
     eventPath: options.event,
   });

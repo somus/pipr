@@ -24,10 +24,13 @@ describe("GitHub host adapter contract", () => {
           workspace: rootDir,
         }),
       ).resolves.toMatchObject({
-        action: "opened",
-        platform: { id: "github" },
-        repository: { slug: "local/pipr" },
-        change: { number: 7, base: { sha: "base" }, head: { sha: "head" } },
+        kind: "change-request",
+        change: {
+          action: "opened",
+          platform: { id: "github" },
+          repository: { slug: "local/pipr" },
+          change: { number: 7, base: { sha: "base" }, head: { sha: "head" } },
+        },
       });
     });
 
@@ -39,18 +42,21 @@ describe("GitHub host adapter contract", () => {
       });
 
       await expect(
-        adapter.events.resolveCommandComment({
+        adapter.events.parseEvent({
           eventPath,
           env: githubEnv("issue_comment", rootDir),
           workspace: rootDir,
         }),
       ).resolves.toMatchObject({
-        eventName: "issue_comment",
-        changeNumber: 7,
-        commentId: 123,
-        isChangeRequest: true,
-        body: "@pipr review",
-        actor: "octo-dev",
+        kind: "command-comment",
+        comment: {
+          eventName: "issue_comment",
+          changeNumber: 7,
+          commentId: "123",
+          isChangeRequest: true,
+          body: "@pipr review",
+          actor: "octo-dev",
+        },
       });
     });
 
@@ -65,18 +71,21 @@ describe("GitHub host adapter contract", () => {
         });
 
         await expect(
-          adapter.events.resolveReviewCommentReply?.({
+          adapter.events.parseEvent({
             eventPath,
             env: githubEnv("pull_request_review_comment", rootDir),
             workspace: rootDir,
           }),
         ).resolves.toMatchObject({
-          eventName: "pull_request_review_comment",
-          changeNumber: 7,
-          commentId: 456,
-          parentCommentId: 123,
-          body: "Still applies.",
-          actor: "octo-dev",
+          kind: "review-comment-reply",
+          reply: {
+            eventName: "pull_request_review_comment",
+            changeNumber: 7,
+            commentId: "456",
+            parentCommentId: "123",
+            body: "Still applies.",
+            actor: "octo-dev",
+          },
         });
       },
     );
@@ -111,21 +120,23 @@ describe("GitHub host adapter contract", () => {
     await expect(
       adapter.publication?.publishCommandResponse?.({
         change,
-        sourceCommentId: 123,
+        sourceCommentId: "123",
         commandName: "review",
         body: "Queued.",
       }),
-    ).resolves.toEqual({ action: "created", id: 1 });
-    const checkRun = await adapter.checks?.createCheckRun?.({
+    ).resolves.toEqual({ action: "created", id: "1" });
+    const checkRun = await adapter.statuses?.upsert({
       change,
       name: "pipr",
+      state: "pending",
       summary: "Running.",
     });
-    expect(checkRun).toEqual({ id: 9, name: "pipr" });
-    await adapter.checks?.updateCheckRun?.({
+    expect(checkRun).toEqual({ id: "9", name: "pipr" });
+    await adapter.statuses?.upsert({
       change,
-      checkRun: { id: 9, name: "pipr" },
-      conclusion: "success",
+      name: "pipr",
+      status: { id: "9", name: "pipr" },
+      state: "success",
       summary: "Done.",
     });
 

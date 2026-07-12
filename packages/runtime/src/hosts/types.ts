@@ -9,10 +9,12 @@ import type {
 } from "../types.js";
 
 export type HostEventParseOptions = {
-  eventPath: string;
+  eventPath?: string;
   env: NodeJS.ProcessEnv;
   workspace: string;
 };
+
+export type NativeId = string;
 
 export type CommandCommentEvent = {
   eventName: string;
@@ -20,7 +22,7 @@ export type CommandCommentEvent = {
   rawAction?: string;
   repository: RepositoryRef;
   changeNumber: number;
-  commentId: number;
+  commentId: NativeId;
   isChangeRequest: boolean;
   body: string;
   actor: string;
@@ -29,18 +31,18 @@ export type CommandCommentEvent = {
 
 export type CommandResponsePublicationResult = {
   action: "created" | "updated";
-  id: number;
+  id: NativeId;
 };
 
 export type InlineThreadContext = {
   findingId: string;
   findingHeadSha: string;
-  parentCommentId: number;
+  parentCommentId: NativeId;
   parentBody: string;
   threadId?: string;
   threadResolved: boolean;
   comments: Array<{
-    id: number;
+    id: NativeId;
     body: string;
     authorLogin?: string;
   }>;
@@ -52,12 +54,17 @@ export type ReviewCommentReplyEvent = {
   rawAction?: string;
   repository: RepositoryRef;
   changeNumber: number;
-  commentId: number;
-  parentCommentId?: number;
+  commentId: NativeId;
+  parentCommentId?: NativeId;
   body: string;
   actor: string;
   workspace: string;
 };
+
+export type CodeHostEvent =
+  | { kind: "change-request"; change: ChangeRequestEventContext }
+  | { kind: "command-comment"; comment: CommandCommentEvent }
+  | { kind: "review-comment-reply"; reply: ReviewCommentReplyEvent };
 
 export type LoadedChangeRequest = {
   repository: RepositoryRef;
@@ -70,15 +77,15 @@ export type LoadedChangeRequest = {
 
 export type RepositoryPermission = CommandPermissionLevel | "none";
 
-export type CodeHostCheckConclusion = "success" | "failure" | "neutral";
+export type CodeHostStatusState = "pending" | "success" | "failure" | "neutral";
 
-export type CodeHostCheckRun = {
-  id: number | string;
+export type CodeHostStatus = {
+  id: NativeId;
   name: string;
 };
 
 export type CodeHostEvents = {
-  parseEvent(options: HostEventParseOptions): Promise<ChangeRequestEventContext>;
+  parseEvent(options: HostEventParseOptions): Promise<CodeHostEvent>;
   loadChangeRequest(ref: {
     repository: RepositoryRef;
     changeNumber: number;
@@ -87,8 +94,6 @@ export type CodeHostEvents = {
     action?: string;
     rawAction?: string;
   }): Promise<LoadedChangeRequest>;
-  resolveCommandComment(options: HostEventParseOptions): Promise<CommandCommentEvent>;
-  resolveReviewCommentReply?(options: HostEventParseOptions): Promise<ReviewCommentReplyEvent>;
 };
 
 export type CodeHostPermissions = {
@@ -110,7 +115,7 @@ export type CodeHostPublication = {
   }): Promise<PublicationResult>;
   publishCommandResponse?(options: {
     change: ChangeRequestEventContext;
-    sourceCommentId: number;
+    sourceCommentId: NativeId;
     commandName: string;
     body: string;
   }): Promise<CommandResponsePublicationResult>;
@@ -133,26 +138,32 @@ export type CodeHostComments = {
   }): Promise<InlineThreadContext[]>;
 };
 
-export type CodeHostChecks = {
-  createCheckRun?(options: {
+export type CodeHostStatuses = {
+  upsert(options: {
     change: ChangeRequestEventContext;
     name: string;
+    state: CodeHostStatusState;
     summary?: string;
-  }): Promise<CodeHostCheckRun>;
-  updateCheckRun?(options: {
-    change: ChangeRequestEventContext;
-    checkRun: CodeHostCheckRun;
-    conclusion: CodeHostCheckConclusion;
-    summary?: string;
-  }): Promise<void>;
+    status?: CodeHostStatus;
+  }): Promise<CodeHostStatus>;
+};
+
+export type CodeHostCapabilities = {
+  commandComments: boolean;
+  reviewCommentReplies: boolean;
+  threadResolution: boolean;
+  multilineInlineComments: boolean;
+  suggestedChanges: boolean;
+  statuses: boolean;
 };
 
 export type CodeHostAdapter = {
   id: string;
+  capabilities: CodeHostCapabilities;
   events: CodeHostEvents;
   workspace: CodeHostWorkspace;
   permissions: CodeHostPermissions;
   publication?: CodeHostPublication;
   comments?: CodeHostComments;
-  checks?: CodeHostChecks;
+  statuses?: CodeHostStatuses;
 };

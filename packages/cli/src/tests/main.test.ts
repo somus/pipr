@@ -199,15 +199,18 @@ describe("pipr CLI", () => {
   it("prints TS-first subcommands", async () => {
     const result = await runCli(["--help"]);
     const action = await runCli(["action", "--help"]);
+    const hostRun = await runCli(["host-run", "--help"]);
 
     expect(result.exitCode).toBe(0);
     expect(action.exitCode).toBe(0);
+    expect(hostRun.exitCode).toBe(0);
     expect(result.stdout).toContain("Start here (for AI agents):");
     expect(result.stdout).toContain("pipr skill");
     expect(result.stdout).toContain("init [options]");
     expect(result.stdout).toContain("check [options]");
     expect(result.stdout).toContain("inspect [options]");
     expect(result.stdout).toContain("review [options]");
+    expect(result.stdout).toContain("host-run [options]");
     expect(result.stdout).toContain("skill");
     expect(result.stdout).toContain("update");
     expect(result.stdout).toContain("version");
@@ -221,6 +224,8 @@ describe("pipr CLI", () => {
     expect(init.stdout).toContain("multi-agent-review");
     expect(action.stdout).toContain("--config-dir <dir>");
     expect(action.stdout).not.toContain("--provider <name>");
+    expect(hostRun.stdout).toContain("--host <host>");
+    expect(hostRun.stdout).toContain("--event <path>");
   });
 
   it("prints no-args help without failing inside GitHub Actions", async () => {

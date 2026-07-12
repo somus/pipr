@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { githubActor } from "../../shared/github.js";
-import type { ChangeRequestEventContext } from "../../types.js";
+import type { ChangeRequestEventContext, RepositoryRef } from "../../types.js";
 import { parseChangeRequestEventContext } from "../../types.js";
 
 const githubPullRequestPayloadSchema = z.looseObject({
@@ -127,7 +127,8 @@ const githubIssueCommentEventContextSchema = z.strictObject({
   commentId: z
     .number({ error: "GitHub issue comment event is missing comment id" })
     .int()
-    .positive(),
+    .positive()
+    .transform(String),
   isChangeRequest: z.boolean(),
   body: z.string(),
   actor: z.string({ error: "GitHub issue comment event is missing comment user" }).min(1),
@@ -151,8 +152,9 @@ const githubReviewCommentReplyEventSchema = z.strictObject({
   commentId: z
     .number({ error: "GitHub review comment event is missing comment id" })
     .int()
-    .positive(),
-  parentCommentId: z.number().int().positive().optional(),
+    .positive()
+    .transform(String),
+  parentCommentId: z.number().int().positive().transform(String).optional(),
   body: z.string(),
   actor: z.string({ error: "GitHub review comment event is missing comment user" }).min(1),
   workspace: z.string().min(1),
@@ -183,20 +185,33 @@ function githubPullRequestEventInput(
     rawAction: payload.action,
     platform: { id: "github", host: options.env.GITHUB_SERVER_URL },
     repository,
+    coordinates: githubCoordinates(repository.slug),
     change: githubEventChange(payload, repository.slug),
     workspace: options.workspace,
   };
 }
 
+function githubCoordinates(slug: string) {
+  const [owner, repository, extra] = slug.split("/");
+  if (!owner || !repository || extra) {
+    throw new Error(`Invalid GitHub repository slug: ${slug}`);
+  }
+  return { provider: "github" as const, owner, repository };
+}
+
 function githubEventRepository(
   payload: z.infer<typeof githubPullRequestPayloadSchema>,
   env: NodeJS.ProcessEnv,
-) {
+): RepositoryRef {
   const baseRepo = payload.pull_request.base?.repo;
+  const slug = [payload.repository?.full_name, baseRepo?.full_name, env.GITHUB_REPOSITORY].find(
+    (value) => value !== undefined && value.length > 0,
+  );
+  if (!slug) {
+    throw new Error("GitHub pull request event is missing repository coordinates");
+  }
   return {
-    slug: [payload.repository?.full_name, baseRepo?.full_name, env.GITHUB_REPOSITORY].find(
-      (value) => value !== undefined && value.length > 0,
-    ),
+    slug,
     url: payload.repository?.html_url ?? baseRepo?.html_url,
   };
 }

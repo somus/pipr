@@ -85,7 +85,7 @@ export async function runDryRunCommand(
 ): Promise<DryRunCommandResult> {
   const runtime = await loadRuntimeProject({ ...options, requireProviderEnv: false });
   const adapter = createActionHostAdapter(options);
-  const event = await adapter.events.parseEvent({
+  const hostEvent = await adapter.events.parseEvent({
     eventPath: options.eventPath,
     env: {
       ...options.env,
@@ -94,6 +94,10 @@ export async function runDryRunCommand(
     },
     workspace: options.rootDir,
   });
+  if (hostEvent.kind !== "change-request") {
+    throw new Error(`dry-run requires a change-request event, received ${hostEvent.kind}`);
+  }
+  const event = hostEvent.change;
   return {
     configSource: runtime.settings.source,
     event,
@@ -190,9 +194,7 @@ export async function runActionCommandWithDependencies(
 ): Promise<ActionCommandResult> {
   const log = createRuntimeActionLog({ logSink: options.logSink, env: options.env });
   return await log.group("pipr action", async () => {
-    const eventName = (options.env ?? process.env).GITHUB_EVENT_NAME ?? "pull_request";
     log.notice("action start", {
-      eventName,
       dryRun: options.dryRun,
       root: options.rootDir,
       configDir: options.configDir,
@@ -204,12 +206,21 @@ export async function runActionCommandWithDependencies(
         env: options.env,
       });
     });
-    if (eventName === "issue_comment") {
-      return await runIssueCommentActionCommand(options, adapter, log);
+    const event = await logPhase(log, "parse event", async () =>
+      adapter.events.parseEvent({
+        eventPath: options.eventPath,
+        env: options.env ?? process.env,
+        workspace: options.rootDir,
+      }),
+    );
+    log.notice("event dispatch", { kind: event.kind });
+    switch (event.kind) {
+      case "command-comment":
+        return await runIssueCommentActionCommand(options, adapter, log, event.comment);
+      case "review-comment-reply":
+        return await runReviewCommentReplyActionCommand(options, adapter, log, event.reply);
+      case "change-request":
+        return await runPullRequestActionCommand(options, adapter, log, event.change);
     }
-    if (eventName === "pull_request_review_comment") {
-      return await runReviewCommentReplyActionCommand(options, adapter, log);
-    }
-    return await runPullRequestActionCommand(options, adapter, log);
   });
 }

@@ -3,7 +3,7 @@ import type { PublicationMetadata } from "./comment.js";
 export type PublicationResult = {
   mainComment: {
     action: "created" | "updated";
-    id: number;
+    id: string;
   };
   inlineComments: {
     posted: number;

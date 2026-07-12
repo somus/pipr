@@ -36,8 +36,9 @@ export async function runIssueCommentActionCommand(
   options: ActionCommandDependencyOptions,
   adapter: CodeHostAdapter,
   log: RuntimeActionLog,
+  comment: CommandCommentEvent,
 ): Promise<ActionCommandResult> {
-  const prepared = await prepareIssueCommentCommand(options, adapter, log);
+  const prepared = await prepareIssueCommentCommand(options, adapter, log, comment);
   if (prepared.kind === "ignored") {
     log.notice("action ignored", { reason: prepared.reason });
     return prepared;
@@ -49,14 +50,8 @@ async function prepareIssueCommentCommand(
   options: ActionCommandDependencyOptions,
   adapter: CodeHostAdapter,
   log: RuntimeActionLog,
+  comment: CommandCommentEvent,
 ): Promise<PreparedIssueCommentCommand> {
-  const comment = await logPhase(log, "parse issue comment", async () =>
-    adapter.events.resolveCommandComment({
-      eventPath: options.eventPath,
-      env: options.env ?? process.env,
-      workspace: options.rootDir,
-    }),
-  );
   const runnable = runnableIssueCommentCommand(comment, options.dryRun);
   if (runnable.kind === "ignored") {
     return runnable;
@@ -209,7 +204,7 @@ async function issueCommentCommandResult(options: {
   completed: TrustedReviewAndPublishResult;
   event: ChangeRequestEventContext;
   commandName: string;
-  sourceCommentId: number;
+  sourceCommentId: string;
   configSource: string;
 }): Promise<ActionCommandResult> {
   if (options.completed.kind === "skipped") {
@@ -238,7 +233,7 @@ async function publishCommandResponseActionResult(options: {
   adapter: CodeHostAdapter;
   completed: Extract<TrustedReviewAndPublishResult, { kind: "command-response" }>;
   event: ChangeRequestEventContext;
-  sourceCommentId: number;
+  sourceCommentId: string;
   configSource: string;
 }): Promise<ActionCommandResult> {
   const publishCommandResponse = options.adapter.publication?.publishCommandResponse;

@@ -88,6 +88,32 @@ const repositoryRefSchema = z.strictObject({
   url: nonEmptyStringSchema.optional(),
 });
 
+const codeHostCoordinatesSchema = z.discriminatedUnion("provider", [
+  z.strictObject({
+    provider: z.literal("github"),
+    owner: nonEmptyStringSchema,
+    repository: nonEmptyStringSchema,
+  }),
+  z.strictObject({
+    provider: z.literal("gitlab"),
+    projectId: nonEmptyStringSchema,
+    projectPath: nonEmptyStringSchema,
+  }),
+  z.strictObject({
+    provider: z.literal("bitbucket"),
+    workspace: nonEmptyStringSchema,
+    repository: nonEmptyStringSchema,
+    repositoryUuid: nonEmptyStringSchema.optional(),
+  }),
+  z.strictObject({
+    provider: z.literal("azure-devops"),
+    organization: nonEmptyStringSchema,
+    project: nonEmptyStringSchema,
+    projectId: nonEmptyStringSchema.optional(),
+    repositoryId: nonEmptyStringSchema,
+  }),
+]);
+
 const changeEndpointSchema = z.strictObject({
   sha: nonEmptyStringSchema,
   ref: nonEmptyStringSchema.optional(),
@@ -113,6 +139,7 @@ const changeRequestEventContextSchema = z.strictObject({
   rawAction: nonEmptyStringSchema.optional(),
   platform: platformInfoSchema,
   repository: repositoryRefSchema,
+  coordinates: codeHostCoordinatesSchema.optional(),
   change: changeRequestRefSchema,
   workspace: nonEmptyStringSchema,
 });

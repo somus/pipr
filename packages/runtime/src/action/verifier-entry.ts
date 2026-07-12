@@ -20,19 +20,13 @@ export async function runReviewCommentReplyActionCommand(
   options: ActionCommandDependencyOptions,
   adapter: CodeHostAdapter,
   log: RuntimeActionLog,
+  reply: ReviewCommentReplyEvent,
 ): Promise<ActionCommandResult> {
   const capabilities = reviewCommentReplyDispatchCapabilities(options, adapter);
   if (capabilities.kind === "ignored") {
     log.notice("action ignored", { reason: capabilities.reason });
     return capabilities;
   }
-  const reply = await logPhase(log, "parse review comment reply", async () =>
-    capabilities.resolveReviewCommentReply({
-      eventPath: options.eventPath,
-      env: options.env ?? process.env,
-      workspace: options.rootDir,
-    }),
-  );
   const runnable = runnableReviewCommentReply(reply);
   if (runnable.kind === "ignored") {
     log.notice("action ignored", { reason: runnable.reason });
@@ -70,16 +64,10 @@ function reviewCommentReplyDispatchCapabilities(
   | { kind: "ignored"; reason: string }
   | {
       kind: "ready";
-      resolveReviewCommentReply: NonNullable<
-        CodeHostAdapter["events"]["resolveReviewCommentReply"]
-      >;
       publishThreadActions: NonNullable<
         NonNullable<CodeHostAdapter["publication"]>["publishThreadActions"]
       >;
     } {
-  if (!adapter.events.resolveReviewCommentReply) {
-    return { kind: "ignored", reason: "host adapter does not support review comment replies" };
-  }
   if (!adapter.publication?.publishThreadActions) {
     return { kind: "ignored", reason: "host adapter does not support verifier thread actions" };
   }
@@ -88,7 +76,6 @@ function reviewCommentReplyDispatchCapabilities(
   }
   return {
     kind: "ready",
-    resolveReviewCommentReply: adapter.events.resolveReviewCommentReply,
     publishThreadActions: adapter.publication.publishThreadActions,
   };
 }
@@ -97,7 +84,7 @@ type PreparedReviewCommentVerifier =
   | { kind: "ignored"; reason: string }
   | {
       kind: "prepared";
-      reply: ReviewCommentReplyEvent & { parentCommentId: number };
+      reply: ReviewCommentReplyEvent & { parentCommentId: string };
       event: ChangeRequestEventContext;
       trustedRuntime: TrustedRuntimeProject;
     };

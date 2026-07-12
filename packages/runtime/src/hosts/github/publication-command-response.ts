@@ -10,7 +10,7 @@ export async function publishGitHubCommandResponse(options: {
   sourceCommentId: number;
   commandName: string;
   body: string;
-}): Promise<{ action: "created" | "updated"; id: number }> {
+}): Promise<{ action: "created" | "updated"; id: string }> {
   await assertCurrentHeadSha(options.client, options.change, options.change.change.head.sha);
 
   const ownerLogin = await options.client.getAuthenticatedUserLogin();
@@ -34,14 +34,14 @@ export async function publishGitHubCommandResponse(options: {
       commentId: existing.id,
       body,
     });
-    return { action: "updated", id: updated.id };
+    return { action: "updated", id: String(updated.id) };
   }
   const created = await options.client.createIssueComment({
     repo: options.change.repository.slug,
     issueNumber: options.change.change.number,
     body,
   });
-  return { action: "created", id: created.id };
+  return { action: "created", id: String(created.id) };
 }
 
 function findCommandResponseComment(

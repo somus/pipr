@@ -1,6 +1,7 @@
 import type { CodeHostAdapter } from "../hosts/types.js";
 import type { RuntimeActionLog } from "../shared/logging.js";
-import { logEventContext, logPhase } from "./action-logging.js";
+import type { ChangeRequestEventContext } from "../types.js";
+import { logEventContext } from "./action-logging.js";
 import { dispatchRuntimeEntry } from "./entry-dispatch.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
@@ -10,14 +11,8 @@ export async function runPullRequestActionCommand(
   options: ActionCommandDependencyOptions,
   adapter: CodeHostAdapter,
   log: RuntimeActionLog,
+  event: ChangeRequestEventContext,
 ): Promise<ActionCommandResult> {
-  const event = await logPhase(log, "parse event", async () =>
-    adapter.events.parseEvent({
-      eventPath: options.eventPath,
-      env: options.env ?? process.env,
-      workspace: options.rootDir,
-    }),
-  );
   logEventContext(log, event);
   const trustedRuntime = await loadTrustedRuntimeForEvent(options, event, log);
   if (options.dryRun) {

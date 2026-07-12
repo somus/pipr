@@ -248,7 +248,7 @@ describe("runTaskRuntime", () => {
     const changedCommandSource = await observeRunId({
       plan: commandPlan,
       taskName: "ask",
-      commandInvocation: { ...askCommandInvocation(), sourceCommentId: 456 },
+      commandInvocation: { ...askCommandInvocation(), sourceCommentId: "456" },
     });
 
     expect(first).toBe(second);
@@ -946,11 +946,11 @@ describe("runTaskRuntime", () => {
         {
           findingId: "fnd_existing",
           findingHeadSha: "head",
-          parentCommentId: 10,
+          parentCommentId: "10",
           parentBody: "<!-- pipr:finding id=fnd_existing head=head -->\nExisting body",
           threadId: "thread-1",
           threadResolved: false,
-          comments: [{ id: 10, body: "Existing body", authorLogin: "github-actions[bot]" }],
+          comments: [{ id: "10", body: "Existing body", authorLogin: "github-actions[bot]" }],
         },
       ],
       piRunner: async (options) => {
@@ -974,7 +974,7 @@ describe("runTaskRuntime", () => {
       expect.objectContaining({
         kind: "resolve",
         findingId: "fnd_existing",
-        commentId: 10,
+        commentId: "10",
         threadId: "thread-1",
       }),
     ]);
@@ -998,11 +998,11 @@ describe("runTaskRuntime", () => {
           {
             findingId: "fnd_existing",
             findingHeadSha: "head",
-            parentCommentId: 10,
+            parentCommentId: "10",
             parentBody: "<!-- pipr:finding id=fnd_existing head=head -->\nExisting body",
             threadId: "thread-1",
             threadResolved: false,
-            comments: [{ id: 10, body: "Existing body", authorLogin: "github-actions[bot]" }],
+            comments: [{ id: "10", body: "Existing body", authorLogin: "github-actions[bot]" }],
           },
         ],
         piRunner: async () => {
@@ -1046,11 +1046,11 @@ describe("runTaskRuntime", () => {
         {
           findingId: "fnd_existing",
           findingHeadSha: "head",
-          parentCommentId: 10,
+          parentCommentId: "10",
           parentBody: "<!-- pipr:finding id=fnd_existing head=head -->\nExisting body",
           threadId: "thread-1",
           threadResolved: false,
-          comments: [{ id: 10, body: "Existing body", authorLogin: "github-actions[bot]" }],
+          comments: [{ id: "10", body: "Existing body", authorLogin: "github-actions[bot]" }],
         },
       ],
       piRunner: async () => {
@@ -2269,7 +2269,7 @@ function askCommandInvocation(): NonNullable<RunTaskRuntimeOptions["commandInvoc
     name: "ask",
     line: "@pipr ask what changed?",
     arguments: { question: "what changed?" },
-    sourceCommentId: 123,
+    sourceCommentId: "123",
   };
 }
 

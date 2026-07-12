@@ -15,6 +15,7 @@ describe("GitHub event parser", () => {
         rawAction: "synchronize",
         platform: { id: "github" },
         repository: { slug: "local/pipr" },
+        coordinates: { provider: "github", owner: "local", repository: "pipr" },
         change: {
           number: 1,
           base: { sha: "base" },
@@ -43,8 +44,8 @@ describe("GitHub event parser", () => {
         rawAction: "created",
         repository: { slug: "local/pipr" },
         changeNumber: 7,
-        commentId: 456,
-        parentCommentId: 123,
+        commentId: "456",
+        parentCommentId: "123",
         body: "This finding is unnecessary because the caller validates it.",
         actor: "octo-dev",
       });

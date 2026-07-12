@@ -30,9 +30,37 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
 
   return {
     id: "github",
+    capabilities: {
+      commandComments: true,
+      reviewCommentReplies: true,
+      threadResolution: true,
+      multilineInlineComments: true,
+      suggestedChanges: true,
+      statuses: true,
+    },
     events: {
-      parseEvent(parseOptions) {
-        return loadGitHubPullRequestEventContext(parseOptions);
+      async parseEvent(parseOptions) {
+        const eventPath = parseOptions.eventPath;
+        if (!eventPath) {
+          throw new Error("GITHUB_EVENT_PATH is required for GitHub events");
+        }
+        const eventOptions = { ...parseOptions, eventPath };
+        if (parseOptions.env.GITHUB_EVENT_NAME === "issue_comment") {
+          return {
+            kind: "command-comment",
+            comment: await loadGitHubIssueCommentEventContext(eventOptions),
+          };
+        }
+        if (parseOptions.env.GITHUB_EVENT_NAME === "pull_request_review_comment") {
+          return {
+            kind: "review-comment-reply",
+            reply: await loadGitHubReviewCommentReplyEvent(eventOptions),
+          };
+        }
+        return {
+          kind: "change-request",
+          change: await loadGitHubPullRequestEventContext(eventOptions),
+        };
       },
       async loadChangeRequest(ref) {
         const loaded = await commandClient.getPullRequest({
@@ -46,12 +74,6 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
           rawAction: ref.rawAction,
           workspace: ref.workspace,
         };
-      },
-      resolveCommandComment(parseOptions) {
-        return loadGitHubIssueCommentEventContext(parseOptions);
-      },
-      resolveReviewCommentReply(parseOptions) {
-        return loadGitHubReviewCommentReplyEvent(parseOptions);
       },
     },
     workspace: {
@@ -75,7 +97,7 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
         return publishGitHubCommandResponse({
           client: publicationClient,
           change: options.change,
-          sourceCommentId: options.sourceCommentId,
+          sourceCommentId: Number(options.sourceCommentId),
           commandName: options.commandName,
           body: options.body,
         });
@@ -109,23 +131,28 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
         });
       },
     },
-    checks: {
-      createCheckRun(options) {
-        return publicationClient.createCheckRun({
+    statuses: {
+      async upsert(options) {
+        if (!options.status) {
+          const checkRun = await publicationClient.createCheckRun({
+            repo: options.change.repository.slug,
+            name: options.name,
+            headSha: options.change.change.head.sha,
+            summary: options.summary,
+          });
+          return { id: String(checkRun.id), name: checkRun.name };
+        }
+        if (options.state === "pending") {
+          return options.status;
+        }
+        await publicationClient.updateCheckRun({
           repo: options.change.repository.slug,
-          name: options.name,
-          headSha: options.change.change.head.sha,
+          checkRunId: Number(options.status.id),
+          name: options.status.name,
+          conclusion: options.state,
           summary: options.summary,
         });
-      },
-      updateCheckRun(options) {
-        return publicationClient.updateCheckRun({
-          repo: options.change.repository.slug,
-          checkRunId: Number(options.checkRun.id),
-          name: options.checkRun.name,
-          conclusion: options.conclusion,
-          summary: options.summary,
-        });
+        return options.status;
       },
     },
   };

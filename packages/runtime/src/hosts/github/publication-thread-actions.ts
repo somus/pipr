@@ -141,7 +141,7 @@ async function postThreadActionReplyIfNeeded(
     await context.client.createReviewCommentReply({
       repo: context.change.repository.slug,
       pullRequestNumber: context.change.change.number,
-      commentId: action.commentId,
+      commentId: Number(action.commentId),
       body: [marker.body, "", action.body.replaceAll("<!--", "&lt;!--")].join("\n"),
     });
     recordThreadActionReply(context, action, marker.key);
@@ -250,6 +250,6 @@ function threadForAction(
   }
   return (
     (action.threadId ? context.threadById.get(action.threadId) : undefined) ??
-    context.threadByCommentId.get(action.commentId)
+    context.threadByCommentId.get(Number(action.commentId))
   );
 }

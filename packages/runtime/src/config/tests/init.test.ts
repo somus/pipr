@@ -731,7 +731,7 @@ describe("initOfficialMinimalProject", () => {
         name: "improve",
         line: "@pipr improve",
         arguments: {},
-        sourceCommentId: 123,
+        sourceCommentId: "123",
       },
       diffManifestBuilder: () => literalManifest,
       piRunner: sequentialJsonPiRunner([
@@ -932,7 +932,7 @@ describe("initOfficialMinimalProject", () => {
         name: "improve",
         line: "@pipr improve",
         arguments: {},
-        sourceCommentId: 123,
+        sourceCommentId: "123",
       },
       diffManifestBuilder: () => reviewTestManifest(),
       piRunner: sequentialJsonPiRunner(
@@ -987,7 +987,7 @@ describe("initOfficialMinimalProject", () => {
         name: "improve",
         line: "@pipr improve",
         arguments: {},
-        sourceCommentId: 123,
+        sourceCommentId: "123",
       },
       diffManifestBuilder: () => reviewTestManifest(),
       piRunner: sequentialJsonPiRunner([{ suggestions: [] }], () => {
@@ -1009,7 +1009,7 @@ describe("initOfficialMinimalProject", () => {
         name: "improve",
         line: "@pipr improve",
         arguments: {},
-        sourceCommentId: 124,
+        sourceCommentId: "124",
       },
       diffManifestBuilder: () => reviewTestManifest(),
       piRunner: sequentialJsonPiRunner([
@@ -1065,7 +1065,7 @@ describe("initOfficialMinimalProject", () => {
           name: "improve",
           line: "@pipr improve",
           arguments: {},
-          sourceCommentId: 125,
+          sourceCommentId: "125",
         },
         diffManifestBuilder: () => reviewTestManifest(),
         piRunner: sequentialJsonPiRunner([
@@ -1406,7 +1406,7 @@ describe("initOfficialMinimalProject", () => {
           name: "ci",
           line: "@pipr ci error: test process exited with code 1",
           arguments: { log: "error: test process exited with code 1" },
-          sourceCommentId,
+          sourceCommentId: String(sourceCommentId),
         },
         diffManifestBuilder: () => reviewTestManifest(),
         piRunner: jsonPiRunner(output),

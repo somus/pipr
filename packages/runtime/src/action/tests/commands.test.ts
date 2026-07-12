@@ -207,7 +207,8 @@ describe("runActionCommand issue_comment dispatch", () => {
       expect(result.kind === "review" ? result.review.validated.validFindings : []).toEqual([]);
       const output = logs.messages.join("\n");
       expect(output).toContain('"eventName":"issue_comment"');
-      expect(output).toContain('"event":"parse issue comment start"');
+      expect(output).toContain('"event":"parse event start"');
+      expect(output).toContain('"event":"event dispatch","kind":"command-comment"');
       expect(output).toContain('"event":"command dispatch"');
       expect(output).toContain('"event":"publication result"');
       await expectReviewRanAtHead(result, workspace);
@@ -242,7 +243,7 @@ describe("runActionCommand issue_comment dispatch", () => {
         response: {
           body: "The change updates command output.",
         },
-        publication: { action: "created", id: 10 },
+        publication: { action: "created", id: "10" },
       });
       expect(publication.writes.created).toHaveLength(1);
       expect(publication.writes.created[0]).toContain(
@@ -330,7 +331,7 @@ describe("runActionCommand issue_comment dispatch", () => {
 
       expect(result).toMatchObject({
         kind: "command-response",
-        publication: { action: "updated", id: 88 },
+        publication: { action: "updated", id: "88" },
       });
       expect(publication.writes.created).toEqual([]);
       expect(publication.writes.updated).toHaveLength(1);
@@ -580,7 +581,7 @@ describe("runActionCommand pull_request dispatch", () => {
     }
   });
 
-  it("fails before Pi when GitHub check creation lacks checks write permission", async () => {
+  it("fails before Pi when code host status publication lacks permission", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: reviewConfigTs({ checks: true }),
       checkoutBaseBeforeRun: true,
@@ -593,7 +594,7 @@ describe("runActionCommand pull_request dispatch", () => {
 
       await expect(
         runPullRequestAction(workspace, { githubPublicationClient: client }),
-      ).rejects.toThrow("checks: write");
+      ).rejects.toThrow("Check the adapter credential scopes");
       await expectPiNotCalled(workspace);
     } finally {
       await removeWorkspace(workspace.rootDir);
@@ -655,7 +656,7 @@ describe("runActionCommand pull_request dispatch", () => {
 
       await expect(
         runPullRequestAction(workspace, { githubPublicationClient: client }),
-      ).rejects.toThrow("checks: write");
+      ).rejects.toThrow("Check the adapter credential scopes");
 
       expect(checks.created.map((check) => check.name)).toEqual(["review"]);
       expect(checks.updated).toEqual([
@@ -1038,7 +1039,8 @@ describe("runActionCommand pull_request_review_comment dispatch", () => {
       });
       const output = logs.messages.join("\n");
       expect(output).toContain('"eventName":"pull_request_review_comment"');
-      expect(output).toContain('"event":"parse review comment reply start"');
+      expect(output).toContain('"event":"parse event start"');
+      expect(output).toContain('"event":"event dispatch","kind":"review-comment-reply"');
       expect(output).toContain('"event":"verifier start"');
       expect(output).toContain('"event":"verifier publication"');
       expect(publication.reviewReplies[0]?.body).toContain(

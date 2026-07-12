@@ -73,14 +73,14 @@ async function upsertMainComment(options: {
       commentId: existing.id,
       body: options.plan.mainComment,
     });
-    return { action: "updated", id: updated.id };
+    return { action: "updated", id: String(updated.id) };
   }
   const created = await options.client.createIssueComment({
     repo: options.change.repository.slug,
     issueNumber: options.change.change.number,
     body: options.plan.mainComment,
   });
-  return { action: "created", id: created.id };
+  return { action: "created", id: String(created.id) };
 }
 
 async function publishInlineComments(options: {
