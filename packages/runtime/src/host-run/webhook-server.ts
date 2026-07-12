@@ -3,12 +3,15 @@ import { timingSafeEqual } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { z } from "zod";
+import { createGitLabClient } from "../hosts/gitlab/client.js";
+import type { RuntimeLogSink } from "../shared/logging.js";
 import { redactPotentialSecrets } from "../shared/redaction.js";
 import { runHostRunCommand } from "./commands.js";
 
 const MAX_WEBHOOK_PAYLOAD_BYTES = 2 * 1024 * 1024;
 
-export type WebhookHost = "gitlab" | "azure-devops" | "bitbucket";
+export type WebhookHost = "gitlab";
 
 export type WebhookDelivery = {
   id: string;
@@ -17,15 +20,18 @@ export type WebhookDelivery = {
 };
 
 export type WebhookDeliveryStore = {
-  enqueue(delivery: WebhookDelivery): "created" | "duplicate";
+  enqueue(delivery: WebhookDelivery): "created" | "duplicate" | "full";
   next(): WebhookDelivery | undefined;
   complete(id: string): void;
   fail(id: string, error: string): void;
 };
 
+type ExpectedGitLabRepository = { id: string; path: string };
+
 export function createWebhookIngress(options: {
   host: WebhookHost;
   secret: string;
+  expectedRepository: ExpectedGitLabRepository;
   store: WebhookDeliveryStore;
   maxPayloadBytes?: number;
 }) {
@@ -34,7 +40,7 @@ export function createWebhookIngress(options: {
     if (request.method !== "POST") {
       return new Response("Method Not Allowed", { status: 405 });
     }
-    if (!verifyWebhookSecret(request.headers, options.host, options.secret)) {
+    if (!verifyWebhookSecret(request.headers, options.secret)) {
       return new Response("Unauthorized", { status: 401 });
     }
     const id = deliveryId(request.headers, options.host);
@@ -45,7 +51,13 @@ export function createWebhookIngress(options: {
     if (new TextEncoder().encode(payload).byteLength > maxPayloadBytes) {
       return new Response("Payload Too Large", { status: 413 });
     }
+    if (!matchesExpectedGitLabRepository(payload, options.expectedRepository)) {
+      return new Response("Repository mismatch", { status: 403 });
+    }
     const result = options.store.enqueue({ id, host: options.host, payload });
+    if (result === "full") {
+      return new Response("Queue Full", { status: 503, headers: { "Retry-After": "30" } });
+    }
     return new Response(result === "created" ? "Accepted" : "Duplicate", {
       status: result === "created" ? 202 : 200,
     });
@@ -55,15 +67,20 @@ export function createWebhookIngress(options: {
 export async function processNextWebhookDelivery(options: {
   store: WebhookDeliveryStore;
   run: (delivery: WebhookDelivery) => Promise<unknown>;
+  log?: (message: string) => void;
 }): Promise<boolean> {
   const delivery = options.store.next();
   if (!delivery) return false;
   try {
     await options.run(delivery);
     options.store.complete(delivery.id);
+    options.log?.(`webhook delivery completed: ${delivery.id.slice(0, 200)}`);
   } catch (error) {
     const message = redactPotentialSecrets(error instanceof Error ? error.message : String(error));
     options.store.fail(delivery.id, message.slice(0, 1_000));
+    options.log?.(
+      `webhook delivery failed and was retained for retry or inspection: ${delivery.id.slice(0, 200)}`,
+    );
   }
   return true;
 }
@@ -73,14 +90,22 @@ export async function runWebhookServer(options: {
   workspace: string;
   configDir: string;
   databasePath: string;
+  expectedRepository: string;
   secret: string;
   port: number;
   hostname?: string;
   env?: NodeJS.ProcessEnv;
 }): Promise<never> {
   await mkdir(path.dirname(path.resolve(options.databasePath)), { recursive: true });
+  const env = { ...process.env, ...options.env };
+  const expectedRepository = await createGitLabClient(env).getProject(options.expectedRepository);
   const store = new SqliteWebhookDeliveryStore(options.databasePath);
-  const ingress = createWebhookIngress({ host: options.host, secret: options.secret, store });
+  const ingress = createWebhookIngress({
+    host: options.host,
+    secret: options.secret,
+    expectedRepository,
+    store,
+  });
   let processing = false;
   const processQueue = async () => {
     if (processing) return;
@@ -89,7 +114,8 @@ export async function runWebhookServer(options: {
       while (
         await processNextWebhookDelivery({
           store,
-          run: (delivery) => runWebhookDelivery(delivery, options),
+          run: (delivery) => runWebhookDelivery(delivery, { ...options, env }),
+          log: console.error,
         })
       ) {
         // Drain one installation's durable queue serially because checkout mutates the workspace.
@@ -122,9 +148,22 @@ export async function runWebhookServer(options: {
 
 export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
   private readonly database: Database;
+  private readonly maxPendingDeliveries: number;
+  private readonly maxRetainedPayloadBytes: number;
+  private readonly maxRetainedDeliveries: number;
 
-  constructor(databasePath: string) {
+  constructor(
+    databasePath: string,
+    options: {
+      maxPendingDeliveries?: number;
+      maxRetainedPayloadBytes?: number;
+      maxRetainedDeliveries?: number;
+    } = {},
+  ) {
     this.database = new Database(databasePath, { create: true, strict: true });
+    this.maxPendingDeliveries = options.maxPendingDeliveries ?? 1_000;
+    this.maxRetainedPayloadBytes = options.maxRetainedPayloadBytes ?? 32 * 1024 * 1024;
+    this.maxRetainedDeliveries = options.maxRetainedDeliveries ?? 10_000;
     this.database.exec("PRAGMA journal_mode = WAL");
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS webhook_deliveries (
@@ -141,13 +180,32 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
     `);
   }
 
-  enqueue(delivery: WebhookDelivery): "created" | "duplicate" {
-    const result = this.database
-      .query(
-        "INSERT OR IGNORE INTO webhook_deliveries (id, host, payload, status) VALUES (?, ?, ?, 'pending')",
-      )
-      .run(delivery.id, delivery.host, delivery.payload);
-    return result.changes === 1 ? "created" : "duplicate";
+  enqueue(delivery: WebhookDelivery): "created" | "duplicate" | "full" {
+    return this.database.transaction(() => {
+      const existing = this.database
+        .query<{ id: string }, [string]>("SELECT id FROM webhook_deliveries WHERE id = ?")
+        .get(delivery.id);
+      if (existing) return "duplicate";
+      const retained = this.database
+        .query<{ count: number; bytes: number }, []>(
+          "SELECT COUNT(*) AS count, COALESCE(SUM(length(CAST(payload AS BLOB))), 0) AS bytes FROM webhook_deliveries WHERE payload IS NOT NULL",
+        )
+        .get();
+      const payloadBytes = Buffer.byteLength(delivery.payload);
+      if (
+        !retained ||
+        retained.count >= this.maxPendingDeliveries ||
+        retained.bytes + payloadBytes > this.maxRetainedPayloadBytes
+      ) {
+        return "full";
+      }
+      this.database
+        .query(
+          "INSERT INTO webhook_deliveries (id, host, payload, status) VALUES (?, ?, ?, 'pending')",
+        )
+        .run(delivery.id, delivery.host, delivery.payload);
+      return "created";
+    })();
   }
 
   next(): WebhookDelivery | undefined {
@@ -168,53 +226,77 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
   }
 
   complete(id: string): void {
-    this.database
-      .query(
-        "UPDATE webhook_deliveries SET status = 'completed', payload = NULL, error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      )
-      .run(id);
+    this.database.transaction(() => {
+      this.database
+        .query(
+          "UPDATE webhook_deliveries SET status = 'completed', payload = NULL, error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .run(id);
+      this.pruneTerminalDeliveries();
+    })();
   }
 
   fail(id: string, error: string): void {
-    this.database
-      .query(
-        "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      )
-      .run(error, id);
+    this.database.transaction(() => {
+      this.database
+        .query(
+          "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .run(error, id);
+      this.pruneTerminalDeliveries();
+    })();
   }
 
   close(): void {
     this.database.close();
   }
+
+  private pruneTerminalDeliveries(): void {
+    this.database
+      .query(
+        "DELETE FROM webhook_deliveries WHERE id IN (SELECT id FROM webhook_deliveries WHERE status IN ('completed', 'failed') ORDER BY updated_at DESC, id DESC LIMIT -1 OFFSET ?)",
+      )
+      .run(this.maxRetainedDeliveries);
+  }
 }
 
-async function runWebhookDelivery(
+export async function runWebhookDelivery(
   delivery: WebhookDelivery,
   options: {
     workspace: string;
     configDir: string;
     env?: NodeJS.ProcessEnv;
   },
+  runHostRun: typeof runHostRunCommand = runHostRunCommand,
 ): Promise<void> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-"));
   const eventPath = path.join(directory, "event.json");
   try {
     await Bun.write(eventPath, delivery.payload);
-    await runHostRunCommand({
+    await runHostRun({
       rootDir: options.workspace,
       configDir: options.configDir,
       host: delivery.host,
       eventPath,
-      env: { ...options.env, PIPR_CODE_HOST: delivery.host },
+      env: { ...process.env, ...options.env, PIPR_CODE_HOST: delivery.host },
       dryRun: false,
+      logSink: consoleRuntimeLogSink,
     });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }
 
-function verifyWebhookSecret(headers: Headers, host: WebhookHost, secret: string): boolean {
-  if (host !== "gitlab") return false;
+const consoleRuntimeLogSink: RuntimeLogSink = {
+  log(record) {
+    console.log(JSON.stringify(record));
+  },
+  async group(_name, run) {
+    return await run();
+  },
+};
+
+function verifyWebhookSecret(headers: Headers, secret: string): boolean {
   const supplied = headers.get("X-Gitlab-Token");
   if (!supplied) return false;
   const expectedBytes = Buffer.from(secret);
@@ -225,9 +307,31 @@ function verifyWebhookSecret(headers: Headers, host: WebhookHost, secret: string
 }
 
 function deliveryId(headers: Headers, host: WebhookHost): string | undefined {
-  if (host === "gitlab") {
-    const id = headers.get("X-Gitlab-Webhook-UUID") ?? headers.get("X-Gitlab-Event-UUID");
-    return id ? `${host}:${id}` : undefined;
+  const id = headers.get("X-Gitlab-Webhook-UUID") ?? headers.get("X-Gitlab-Event-UUID");
+  return id ? `${host}:${id}` : undefined;
+}
+
+const gitLabWebhookProjectSchema = z.looseObject({
+  project: z.looseObject({
+    id: z.union([z.number(), z.string()]).transform(String),
+    path_with_namespace: z.string().min(1),
+  }),
+});
+
+function matchesExpectedGitLabRepository(
+  payload: string,
+  expectedRepository: ExpectedGitLabRepository,
+): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return false;
   }
-  return undefined;
+  const event = gitLabWebhookProjectSchema.safeParse(parsed);
+  return (
+    event.success &&
+    event.data.project.id === expectedRepository.id &&
+    event.data.project.path_with_namespace === expectedRepository.path
+  );
 }

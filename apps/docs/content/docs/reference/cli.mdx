@@ -96,6 +96,7 @@ Run a trusted, single-repository webhook worker with a durable SQLite queue:
 ```bash
 PIPR_WEBHOOK_SECRET="..." pipr webhook serve \
   --host gitlab \
+  --repository group/project \
   --workspace /srv/pipr/project \
   --database /var/lib/pipr/webhooks.sqlite
 ```
@@ -104,14 +105,15 @@ Options:
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `--host <host>` | required | Webhook provider: `gitlab`, `azure-devops`, or `bitbucket`. |
+| `--host <host>` | required | Webhook provider. This release accepts `gitlab`. |
+| `--repository <project>` | required | Expected GitLab project ID or `group/project` path. Mismatched payloads are rejected. |
 | `--workspace <path>` | required | Dedicated trusted repository checkout. |
 | `--database <path>` | `.pipr/webhooks.sqlite` | Durable delivery and deduplication database. |
 | `--hostname <hostname>` | `127.0.0.1` | Listen hostname. Keep loopback when using a reverse proxy. |
 | `--port <port>` | `8787` | Listen port. |
 | `--config-dir <dir>` | `.pipr` | Config directory to load from Trusted Base Config. |
 
-`PIPR_WEBHOOK_SECRET` is required. Provider credentials and model keys remain in the runner environment. The current webhook verifier supports GitLab; Azure DevOps and Bitbucket verification land with their adapters.
+`PIPR_WEBHOOK_SECRET` is required. Provider credentials and model keys remain in the runner environment. Azure DevOps and Bitbucket webhook support lands with their adapters.
 
 ## `pipr check`
 

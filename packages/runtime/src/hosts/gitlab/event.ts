@@ -15,6 +15,11 @@ const mergeRequestHookSchema = z.looseObject({
     iid: z.number().int().positive(),
     action: z.string().optional(),
   }),
+  changes: z
+    .looseObject({
+      draft: z.looseObject({ previous: z.boolean(), current: z.boolean() }).optional(),
+    })
+    .optional(),
 });
 
 const noteHookSchema = z.looseObject({
@@ -93,7 +98,7 @@ async function mergeRequestEvent(
     kind: "change-request",
     change: parseChangeRequestEventContext({
       eventName: "merge_request",
-      action: normalizeMergeRequestAction(hook.object_attributes.action),
+      action: normalizeMergeRequestAction(hook.object_attributes.action, hook.changes?.draft),
       rawAction: hook.object_attributes.action,
       platform: { id: "gitlab", host: gitLabHost(hook.project.web_url) },
       repository: loaded.repository,
@@ -144,23 +149,25 @@ async function loadChange(
   return await options.loadChangeRequest(ref);
 }
 
-function normalizeMergeRequestAction(action: string | undefined): string | undefined {
-  switch (action) {
-    case "open":
-      return "opened";
-    case "reopen":
-      return "reopened";
-    case "update":
-    case "approved":
-    case "unapproved":
-      return "updated";
-    case "close":
-    case "merge":
-      return "closed";
-    default:
-      return action;
+function normalizeMergeRequestAction(
+  action: string | undefined,
+  draftChange?: { previous: boolean; current: boolean },
+): string | undefined {
+  if (action === "update" && draftChange?.previous === true && draftChange.current === false) {
+    return "ready";
   }
+  return action ? (gitLabMergeRequestActions[action] ?? action) : undefined;
 }
+
+const gitLabMergeRequestActions: Readonly<Record<string, string>> = {
+  open: "opened",
+  reopen: "reopened",
+  update: "updated",
+  approved: "updated",
+  unapproved: "updated",
+  close: "closed",
+  merge: "closed",
+};
 
 function isObjectKind(value: unknown, kind: string): boolean {
   return (

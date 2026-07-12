@@ -180,6 +180,7 @@ function starterGitLabPipeline(relativeConfigDir: string, recipe?: string): stri
     "  rules:",
     "    - if: '$CI_PIPELINE_SOURCE == \"merge_request_event\"'",
     "  variables:",
+    '    GIT_DEPTH: "0"',
     '    PIPR_CODE_HOST: "gitlab"',
     "  script:",
     `    - pipr host-run --host gitlab --config-dir ${relativeConfigDir}`,

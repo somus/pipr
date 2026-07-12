@@ -231,7 +231,7 @@ describe("pipr CLI", () => {
     expect(init.stdout).toContain("multi-agent-review");
     expect(action.stderr).toContain("unknown command 'action'");
     expect(webhook.stdout).toContain("--database <path>");
-    expect(action.stderr).toContain("unknown command 'action'");
+    expect(webhook.stdout).toContain("--repository <project>");
     expect(hostRun.stdout).toContain("--host <host>");
     expect(hostRun.stdout).toContain("--event <path>");
     expect(dryRun.stdout).toContain("--host <host>");

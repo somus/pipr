@@ -100,15 +100,46 @@ describe("GitLab event parser", () => {
           eventPath: reply.path,
           env: {},
           workspace: reply.root,
-          resolveReplyParent: async ({ noteId }) => (noteId === "102" ? "discussion-1" : undefined),
+          resolveReplyParent: async ({ noteId }) => (noteId === "102" ? "101" : undefined),
         }),
       ).resolves.toMatchObject({
         kind: "review-comment-reply",
-        reply: { commentId: "102", parentCommentId: "discussion-1", changeNumber: 7 },
+        reply: { commentId: "102", parentCommentId: "101", changeNumber: 7 },
       });
     } finally {
       await rm(command.root, { recursive: true, force: true });
       await rm(reply.root, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes draft-to-ready merge request updates", async () => {
+    const fixture = await eventFixture({
+      object_kind: "merge_request",
+      project: { id: 42, path_with_namespace: "group/project" },
+      object_attributes: { iid: 7, action: "update" },
+      changes: { draft: { previous: true, current: false } },
+    });
+    try {
+      await expect(
+        parseGitLabEvent({
+          eventPath: fixture.path,
+          env: {},
+          workspace: fixture.root,
+          loadChangeRequest: async () => ({
+            repository: { slug: "group/project" },
+            coordinates: { provider: "gitlab", projectId: "42", projectPath: "group/project" },
+            change: {
+              number: 7,
+              title: "Ready MR",
+              description: "",
+              base: { sha: "base", ref: "main" },
+              head: { sha: "head", ref: "feature" },
+            },
+          }),
+        }),
+      ).resolves.toMatchObject({ kind: "change-request", change: { action: "ready" } });
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
     }
   });
 

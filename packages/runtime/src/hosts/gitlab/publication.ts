@@ -62,7 +62,7 @@ export async function publishGitLabPlan(options: {
       await options.client.createDiscussion(
         projectId,
         options.change.change.number,
-        item.body,
+        gitLabInlineBody(item),
         gitLabPosition(item, mergeRequest.diff_refs),
       );
       posted += 1;
@@ -255,9 +255,10 @@ function gitLabPosition(item: InlinePublicationItem, refs: GitLabDiffRefs): GitL
   };
   if (item.startLine !== item.endLine) {
     const type = item.side === "RIGHT" ? "new" : "old";
+    const linePath = type === "old" ? oldPath : item.path;
     position.line_range = {
-      start: lineRangePoint(item.path, type, item.startLine),
-      end: lineRangePoint(item.path, type, item.endLine),
+      start: lineRangePoint(linePath, type, item.startLine),
+      end: lineRangePoint(linePath, type, item.endLine),
     };
   }
   return position;
@@ -266,10 +267,15 @@ function gitLabPosition(item: InlinePublicationItem, refs: GitLabDiffRefs): GitL
 function lineRangePoint(path: string, type: "old" | "new", line: number) {
   const hash = new Bun.CryptoHasher("sha1").update(path).digest("hex");
   return {
-    line_code: `${hash}_${type === "old" ? line : ""}_${type === "new" ? line : ""}`,
+    line_code: `${hash}_${type === "old" ? line : 0}_${type === "new" ? line : 0}`,
     type,
     ...(type === "old" ? { old_line: line } : { new_line: line }),
   };
+}
+
+function gitLabInlineBody(item: InlinePublicationItem): string {
+  const offset = item.endLine - item.startLine;
+  return item.body.replace(/(`{3,})suggestion\n/, `$1suggestion:-${offset}+0\n`);
 }
 
 async function assertCurrentHead(

@@ -71,6 +71,126 @@ describe("GitLab host adapter", () => {
       { findingId: "finding-1", findingHeadSha: "head", threadResolved: false },
     ]);
   });
+
+  it("exposes full capabilities and upserts command responses", async () => {
+    const client = new FakeGitLabClient();
+    const adapter = createGitLabHostAdapter({ client });
+    expect(adapter.capabilities).toEqual({
+      commandComments: true,
+      reviewCommentReplies: true,
+      threadResolution: true,
+      multilineInlineComments: true,
+      suggestedChanges: true,
+      statuses: true,
+    });
+
+    await expect(
+      adapter.publication?.publishCommandResponse?.({
+        change,
+        sourceCommentId: "source-1",
+        commandName: "review",
+        body: "First.",
+      }),
+    ).resolves.toMatchObject({ action: "created" });
+    await expect(
+      adapter.publication?.publishCommandResponse?.({
+        change,
+        sourceCommentId: "source-1",
+        commandName: "review",
+        body: "Updated.",
+      }),
+    ).resolves.toMatchObject({ action: "updated" });
+    expect(client.notes).toHaveLength(1);
+    expect(client.notes[0]?.body).toContain("Updated.");
+  });
+
+  it("reports native inline failures without losing partial publication state", async () => {
+    const client = new FakeGitLabClient();
+    client.createDiscussionError = new Error("GitLab rejected the position");
+    const adapter = createGitLabHostAdapter({ client });
+
+    const error = await adapter.publication
+      ?.publish({ change, plan: publicationPlan() })
+      .catch((caught) => caught);
+    expect(error).toMatchObject({
+      message: "GitLab inline comment publication failed",
+      result: { inlineComments: { posted: 0, skipped: 0, failed: 1 } },
+    });
+  });
+
+  it("renders native multiline anchors, renamed paths, suggestions, and thread actions", async () => {
+    const client = new FakeGitLabClient();
+    const adapter = createGitLabHostAdapter({ client });
+    const baseItem = publicationPlan().inlineItems[0];
+    if (!baseItem) throw new Error("Expected inline fixture");
+    const plan = publicationPlan();
+    plan.inlineItems = [
+      {
+        ...baseItem,
+        path: "src/new.ts",
+        previousPath: "src/old.ts",
+        startLine: 3,
+        endLine: 4,
+        findingId: "finding-right",
+        reviewedHeadSha: "head",
+        body: `${renderInlineFindingMarker("finding-right", "head")}\nFix both.\n\n\`\`\`suggestion\nreplacement\n\`\`\``,
+      },
+      {
+        ...baseItem,
+        path: "src/new.ts",
+        previousPath: "src/old.ts",
+        side: "LEFT",
+        startLine: 5,
+        endLine: 6,
+        findingId: "finding-left",
+        reviewedHeadSha: "head",
+        body: renderInlineFindingMarker("finding-left", "head"),
+      },
+    ];
+
+    await adapter.publication?.publish({ change, plan });
+    const newHash = new Bun.CryptoHasher("sha1").update("src/new.ts").digest("hex");
+    const oldHash = new Bun.CryptoHasher("sha1").update("src/old.ts").digest("hex");
+    expect(client.positions).toMatchObject([
+      {
+        old_path: "src/old.ts",
+        new_path: "src/new.ts",
+        new_line: 4,
+        line_range: {
+          start: { line_code: `${newHash}_0_3`, type: "new", new_line: 3 },
+          end: { line_code: `${newHash}_0_4`, type: "new", new_line: 4 },
+        },
+      },
+      {
+        old_path: "src/old.ts",
+        new_path: "src/new.ts",
+        old_line: 6,
+        line_range: {
+          start: { line_code: `${oldHash}_5_0`, type: "old", old_line: 5 },
+          end: { line_code: `${oldHash}_6_0`, type: "old", old_line: 6 },
+        },
+      },
+    ]);
+    expect(client.discussions[0]?.notes[0]?.body).toContain("```suggestion:-1+0");
+
+    await adapter.publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [
+        {
+          kind: "resolve",
+          findingId: "finding-right",
+          findingHeadSha: "head",
+          commentId: "inline-1",
+          threadId: "discussion-1",
+          body: "Resolved.",
+          responseKey: "head:fixed:finding-right",
+        },
+      ],
+    });
+    expect(client.discussions[0]?.notes).toHaveLength(2);
+    expect(client.discussions[0]?.notes[0]?.resolved).toBe(true);
+  });
 });
 
 const change: ChangeRequestEventContext = {
@@ -144,6 +264,7 @@ class FakeGitLabClient implements GitLabClient {
   notes: GitLabNote[] = [];
   discussions: GitLabDiscussion[] = [];
   positions: GitLabPosition[] = [];
+  createDiscussionError?: Error;
   mergeRequest: GitLabMergeRequest = {
     iid: 7,
     title: "Test MR",
@@ -155,6 +276,7 @@ class FakeGitLabClient implements GitLabClient {
     sha: "head",
     diff_refs: { base_sha: "base", start_sha: "start", head_sha: "head" },
   };
+  getProject = async () => ({ id: "42", path: "group/project" });
   currentUser = async () => ({ id: 1, username: "pipr-bot" });
   loadChange = async () => ({
     repository: { slug: "group/project" },
@@ -180,6 +302,11 @@ class FakeGitLabClient implements GitLabClient {
     return note;
   };
   listDiscussions = async () => this.discussions;
+  getDiscussion = async (_projectId: string, _changeNumber: number, discussionId: string) => {
+    const discussion = this.discussions.find((candidate) => candidate.id === discussionId);
+    if (!discussion) throw new Error(`Unknown discussion ${discussionId}`);
+    return discussion;
+  };
   findReplyParent = async (
     _projectId: string,
     _changeNumber: number,
@@ -191,7 +318,7 @@ class FakeGitLabClient implements GitLabClient {
         (!discussionId || candidate.id === discussionId) &&
         candidate.notes.some((note) => note.id === noteId),
     );
-    return discussion && discussion.notes[0]?.id !== noteId ? discussion.id : undefined;
+    return discussion && discussion.notes[0]?.id !== noteId ? discussion.notes[0]?.id : undefined;
   };
   createDiscussion = async (
     _projectId: string,
@@ -199,6 +326,7 @@ class FakeGitLabClient implements GitLabClient {
     body: string,
     position: GitLabPosition,
   ) => {
+    if (this.createDiscussionError) throw this.createDiscussionError;
     const discussion = {
       id: `discussion-${this.discussions.length + 1}`,
       notes: [

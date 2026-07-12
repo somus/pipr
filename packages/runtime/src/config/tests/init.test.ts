@@ -1674,6 +1674,7 @@ export default definePipr((pipr) => {
     expect(pipeline).toContain("ghcr.io/somus/pipr:v0.3.8");
     expect(pipeline).toContain("pipr host-run --host gitlab --config-dir config/pipr");
     expect(pipeline).toContain('PIPR_CODE_HOST: "gitlab"');
+    expect(pipeline).toContain('GIT_DEPTH: "0"');
     expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
   });
 

@@ -10,6 +10,7 @@ export type CodeHostHttpClientOptions = {
   sleep?: (milliseconds: number) => Promise<void>;
   maxRetries?: number;
   requestTimeoutMilliseconds?: number;
+  retryNonIdempotentStatuses?: readonly number[];
 };
 
 export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
@@ -32,7 +33,6 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
       }
 
       const method = init.method?.toUpperCase() ?? "GET";
-      const canRetry = method === "GET" || method === "HEAD";
       for (let attempt = 0; ; attempt += 1) {
         const timeoutSignal = AbortSignal.timeout(requestTimeoutMilliseconds);
         const response = await fetchRequest(new URL(path, options.baseUrl), {
@@ -48,7 +48,15 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
           delayBeforeNextRequest = retryAfter;
           return schema.parse(await response.json());
         }
-        if (shouldRetryCodeHostRequest({ canRetry, attempt, maxRetries, response })) {
+        if (
+          shouldRetryCodeHostRequest({
+            method,
+            attempt,
+            maxRetries,
+            response,
+            retryStatuses: options.retryNonIdempotentStatuses,
+          })
+        ) {
           await sleep(retryAfter || 250 * 2 ** attempt);
           continue;
         }
@@ -65,15 +73,20 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
 }
 
 function shouldRetryCodeHostRequest(options: {
-  canRetry: boolean;
+  method: string;
   attempt: number;
   maxRetries: number;
   response: Response;
+  retryStatuses?: readonly number[];
 }): boolean {
   return (
-    options.canRetry &&
+    (options.method === "GET" ||
+      options.method === "HEAD" ||
+      options.retryStatuses?.includes(options.response.status) === true) &&
     options.attempt < options.maxRetries &&
-    (options.response.status === 429 || options.response.status >= 500)
+    (options.response.status === 429 ||
+      options.response.status >= 500 ||
+      options.retryStatuses?.includes(options.response.status) === true)
   );
 }
 

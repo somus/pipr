@@ -37,13 +37,14 @@ export DEEPSEEK_API_KEY="..."
 
 pipr webhook serve \
   --host gitlab \
+  --repository group/project \
   --workspace /srv/pipr/project \
   --database /var/lib/pipr/webhooks.sqlite \
   --hostname 127.0.0.1 \
   --port 8787
 ```
 
-The runner validates `X-Gitlab-Token`, deduplicates GitLab delivery UUIDs in SQLite, acknowledges accepted deliveries before model work, and drains the durable queue serially. Mount the SQLite directory on persistent storage and keep the repository workspace dedicated to this runner because each review checks out the exact merge-request head.
+The runner resolves `--repository` to one GitLab project, validates `X-Gitlab-Token`, requires every payload's project ID and path to match that project, deduplicates GitLab delivery UUIDs in SQLite, acknowledges accepted deliveries before model work, and drains the durable queue serially. Mount the SQLite directory on persistent storage and keep the repository workspace dedicated to this runner because each review checks out the exact merge-request head.
 
 Create a project webhook in GitLab with:
 
@@ -52,7 +53,7 @@ Create a project webhook in GitLab with:
 - Merge request events;
 - Comments.
 
-The reverse proxy should restrict request size and access before forwarding to the loopback listener. Pipr also rejects payloads larger than 2 MiB and retries failed queued work up to three times.
+The reverse proxy should restrict request size and access before forwarding to the loopback listener. Pipr also rejects payloads larger than 2 MiB, bounds pending queue data to 1,000 deliveries and 32 MiB, retains only the newest 10,000 terminal delivery records for deduplication, and retries failed queued work up to three times. Completion and redacted failure records are written to the server log.
 
 ## Supported behavior
 

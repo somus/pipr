@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createCodeHostHttpClient } from "../http.js";
+import { type CodeHostHttpClientOptions, createCodeHostHttpClient } from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
 
 const userSchema = z.looseObject({ id: z.number().int().positive(), username: z.string().min(1) });
@@ -24,7 +24,12 @@ const discussionSchema = z.looseObject({
   individual_note: z.boolean().optional(),
   notes: z.array(discussionNoteSchema),
 });
-const mergeRequestSchema = z.looseObject({
+const diffRefsSchema = z.looseObject({
+  base_sha: z.string().min(1),
+  start_sha: z.string().min(1),
+  head_sha: z.string().min(1),
+});
+const mergeRequestResponseSchema = z.looseObject({
   iid: z.number().int().positive(),
   title: z.string().default(""),
   description: z.string().nullable().optional(),
@@ -36,12 +41,9 @@ const mergeRequestSchema = z.looseObject({
   sha: z.string().min(1),
   author: userSchema.optional(),
   references: z.looseObject({ full: z.string().optional() }).optional(),
-  diff_refs: z.looseObject({
-    base_sha: z.string().min(1),
-    start_sha: z.string().min(1),
-    head_sha: z.string().min(1),
-  }),
+  diff_refs: diffRefsSchema.nullable().optional(),
 });
+const mergeRequestSchema = mergeRequestResponseSchema.extend({ diff_refs: diffRefsSchema });
 const memberSchema = z.looseObject({ access_level: z.number().int().min(0) });
 const statusSchema = z.looseObject({ id: z.union([z.number(), z.string()]).optional() });
 
@@ -66,6 +68,7 @@ export type GitLabPosition = {
 };
 
 export type GitLabClient = {
+  getProject(project: string): Promise<{ id: string; path: string }>;
   currentUser(): Promise<{ id: number; username: string }>;
   loadChange(options: {
     projectId: string;
@@ -83,6 +86,11 @@ export type GitLabClient = {
     body: string,
   ): Promise<GitLabNote>;
   listDiscussions(projectId: string, changeNumber: number): Promise<GitLabDiscussion[]>;
+  getDiscussion(
+    projectId: string,
+    changeNumber: number,
+    discussionId: string,
+  ): Promise<GitLabDiscussion>;
   findReplyParent(
     projectId: string,
     changeNumber: number,
@@ -117,18 +125,38 @@ export function createGitLabClient(
     input: string | URL | Request,
     init?: RequestInit,
   ) => Promise<Response> = globalThis.fetch,
+  sleep: (milliseconds: number) => Promise<unknown> = (milliseconds) => Bun.sleep(milliseconds),
 ): GitLabClient {
   const token = env.GITLAB_TOKEN ?? env.CI_JOB_TOKEN;
   if (!token) {
     throw new Error("GITLAB_TOKEN or CI_JOB_TOKEN is required for GitLab API calls");
   }
-  const api = createCodeHostHttpClient({
+  const headers: Record<string, string> = env.GITLAB_TOKEN
+    ? { "PRIVATE-TOKEN": token }
+    : { "JOB-TOKEN": token };
+  const clientOptions: CodeHostHttpClientOptions = {
     baseUrl: `${(env.CI_API_V4_URL ?? "https://gitlab.com/api/v4").replace(/\/$/, "")}/`,
-    headers: env.GITLAB_TOKEN ? { "PRIVATE-TOKEN": token } : { "JOB-TOKEN": token },
+    headers,
     fetch,
+    sleep: async (milliseconds: number) => void (await sleep(milliseconds)),
+  };
+  const api = createCodeHostHttpClient(clientOptions);
+  const statusApi = createCodeHostHttpClient({
+    ...clientOptions,
+    retryNonIdempotentStatuses: [409],
   });
 
   return {
+    async getProject(project) {
+      const value = await api.json(
+        `projects/${encodeURIComponent(project)}`,
+        z.looseObject({
+          id: z.union([z.number(), z.string()]).transform(String),
+          path_with_namespace: z.string().min(1),
+        }),
+      );
+      return { id: value.id, path: value.path_with_namespace };
+    },
     currentUser: () => api.json("user", userSchema),
     async loadChange(options) {
       const mergeRequest = await this.getMergeRequest(options.projectId, options.changeNumber);
@@ -154,11 +182,17 @@ export function createGitLabClient(
         },
       };
     },
-    getMergeRequest(projectId, changeNumber) {
-      return api.json(
-        `projects/${encodeURIComponent(projectId)}/merge_requests/${changeNumber}`,
-        mergeRequestSchema,
-      );
+    async getMergeRequest(projectId, changeNumber) {
+      const requestPath = `projects/${encodeURIComponent(projectId)}/merge_requests/${changeNumber}`;
+      for (let attempt = 0; ; attempt += 1) {
+        const response = await api.json(requestPath, mergeRequestResponseSchema);
+        const prepared = mergeRequestSchema.safeParse(response);
+        if (prepared.success) return prepared.data;
+        if (attempt >= 4) {
+          throw new Error("GitLab merge request diff refs were not prepared after 5 attempts");
+        }
+        await sleep(250 * 2 ** attempt);
+      }
     },
     async getRepositoryPermission(projectId, username) {
       const users = await api.json(
@@ -206,17 +240,19 @@ export function createGitLabClient(
         `projects/${encodeURIComponent(projectId)}/merge_requests/${changeNumber}/discussions`,
         discussionSchema,
       ),
+    getDiscussion: (projectId, changeNumber, discussionId) =>
+      api.json(
+        `projects/${encodeURIComponent(projectId)}/merge_requests/${changeNumber}/discussions/${encodeURIComponent(discussionId)}`,
+        discussionSchema,
+      ),
     async findReplyParent(projectId, changeNumber, noteId, discussionId) {
-      const discussions = await this.listDiscussions(projectId, changeNumber);
-      const discussion = discussions.find(
-        (candidate) =>
-          (!discussionId || candidate.id === discussionId) &&
-          candidate.notes.some((note) => note.id === noteId),
-      );
-      if (!discussion || discussion.notes[0]?.id === noteId) {
+      if (!discussionId) return undefined;
+      const discussion = await this.getDiscussion(projectId, changeNumber, discussionId);
+      const containsReply = discussion.notes.some((note) => note.id === noteId);
+      if (!containsReply || discussion.notes[0]?.id === noteId) {
         return undefined;
       }
-      return discussion.id;
+      return discussion.notes[0]?.id;
     },
     createDiscussion: (projectId, changeNumber, body, position) =>
       api.json(
@@ -238,13 +274,13 @@ export function createGitLabClient(
       );
     },
     async setStatus(projectId, sha, name, state, description) {
-      const status = await api.json(
+      const status = await statusApi.json(
         `projects/${encodeURIComponent(projectId)}/statuses/${encodeURIComponent(sha)}`,
         statusSchema,
         jsonRequest("POST", {
           state: gitLabStatusState(state),
           name,
-          description,
+          description: boundedStatusDescription(description),
         }),
       );
       return String(status.id ?? name);
@@ -277,8 +313,15 @@ function accessLevelPermission(level: number): RepositoryPermission {
   if (level >= 50) return "admin";
   if (level >= 40) return "maintain";
   if (level >= 30) return "write";
+  if (level >= 15) return "triage";
   if (level >= 10) return "read";
   return "none";
+}
+
+function boundedStatusDescription(description: string | undefined): string | undefined {
+  return description && description.length > 255
+    ? `${description.slice(0, 252).trimEnd()}...`
+    : description;
 }
 
 function gitLabStatusState(state: CodeHostStatusState): string {
