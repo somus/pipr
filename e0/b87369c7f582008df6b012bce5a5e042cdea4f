@@ -1,0 +1,148 @@
+packages/runtime/src/action/tests/webhook-server.test.ts
+  s_4ebdfc62030aaf::t_c3c393dcbf5d60 87-127,130-147
+  s_4ebdfc62030aaf::t_0a3394d5ddf394 128-129
+packages/runtime/src/config/tests/init.test.ts
+  s_4ebdfc62030aaf::t_e7d7477b463e06 1702
+  s_4ebdfc62030aaf::t_a739e823c5264b 1681-1698,1703,1709
+packages/runtime/src/hosts/azure-devops/adapter.ts
+  s_4ebdfc62030aaf::t_9a244ca9ee6084 57,59-60,64
+  s_4ebdfc62030aaf::t_b81b037d6eee09 61-63,65-69
+  s_4ebdfc62030aaf::t_735bd4b904744a 1-38,44-56,70-94,98-119,125,127-130,132-134
+  s_4ebdfc62030aaf::t_97c90e39a34398 39-43,58,120-124,126,131
+  s_4ebdfc62030aaf::t_8b051581ab965f 95-97
+packages/runtime/src/hosts/azure-devops/event.ts
+  s_4ebdfc62030aaf::t_dc0c823419aa73 4,54,56-62,165
+  s_4ebdfc62030aaf::t_a9b2d3a2d05100 53,55,107-110
+  s_4ebdfc62030aaf::t_97c90e39a34398 90-92
+  s_4ebdfc62030aaf::t_bacc0fe3c3d78d 1-3,5-52,63-89,93-106,111-164,166-173
+apps/docs/content/docs/guide/github-action.mdx
+  s_4ebdfc62030aaf::t_ff73c9101a142f 6
+apps/docs/content/docs/guide/azure-devops.mdx
+  s_4ebdfc62030aaf::t_aa95f384634b1e 1-49,51-91
+  s_4ebdfc62030aaf::t_9c9b3d070133f4 50
+docs/CONTEXT.md
+  s_4ebdfc62030aaf::t_ff73c9101a142f 25
+apps/docs/content/docs/reference/cli.mdx
+  s_4ebdfc62030aaf::t_aa95f384634b1e 106,124-125,132
+packages/runtime/src/hosts/env.ts
+  s_4ebdfc62030aaf::t_1ec4f560e9d44f 1-6,8-11
+  s_4ebdfc62030aaf::t_2adff9b6c46f1f 7
+packages/runtime/src/action/webhook-server.ts
+  s_4ebdfc62030aaf::t_589a5b5828c465 7,16,32-38,43,52,59,62-65,110-113,311-316,325-333,360-370,374-375,380-396,406-409,412-452
+  s_4ebdfc62030aaf::t_75468413c781d4 397-405
+  s_4ebdfc62030aaf::t_0a3394d5ddf394 371-373,376-379,411
+  s_4ebdfc62030aaf::t_027c7739957a11 8,410
+packages/runtime/src/hosts/gitlab/event.ts
+  s_4ebdfc62030aaf::t_5817115d0437d3 69-70
+  s_4ebdfc62030aaf::t_2adff9b6c46f1f 71-75
+  s_4ebdfc62030aaf::t_32e8dd02f00764 3
+packages/runtime/src/action/action-host.ts
+  s_4ebdfc62030aaf::t_ea38ae1699115e 43-45
+  s_4ebdfc62030aaf::t_4acf80d53bfeb4 1
+packages/runtime/src/hosts/azure-devops/workspace.ts
+  s_4ebdfc62030aaf::t_735bd4b904744a 1-13,15-16
+  s_4ebdfc62030aaf::t_fe62d4d4e2a1ce 14
+packages/runtime/src/hosts/azure-devops/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_ce68fcb57176f0 2-4,110-127,129-162,243-244,276,278,351-361
+  s_4ebdfc62030aaf::t_cebeea752adda0 204-206,214,217-219,221-233
+  s_4ebdfc62030aaf::t_984dee15c6822a 1,5-8,10-109,163-203,207-213,215-216,220,234-242,245-259,267-269,271-275,277,279-350,362
+  s_4ebdfc62030aaf::t_9be36dc9d1a0a8 260-265
+  s_4ebdfc62030aaf::t_8b051581ab965f 9
+  s_4ebdfc62030aaf::t_f0664befac9357 128
+  s_4ebdfc62030aaf::t_656ec1ee46d909 266
+  s_4ebdfc62030aaf::t_97ae5f1a525685 270
+packages/runtime/src/hosts/azure-devops/client.ts
+  s_4ebdfc62030aaf::t_9c9b3d070133f4 174-175,182,184,186-188
+  s_4ebdfc62030aaf::t_ed6165efda8e1f 123-126,166-169,171-172,176-181,183,185,303-305,311-312,319-321
+  s_4ebdfc62030aaf::t_b2181fa020f780 206
+  s_4ebdfc62030aaf::t_9be36dc9d1a0a8 34-39,105-110,217-228
+  s_4ebdfc62030aaf::t_c88ad06f5471b4 261,281
+  s_4ebdfc62030aaf::t_fa44d3b2c2b4d8 318
+  s_4ebdfc62030aaf::t_97c90e39a34398 322
+  s_4ebdfc62030aaf::t_9a244ca9ee6084 441-449
+  s_4ebdfc62030aaf::t_b81b037d6eee09 3,248-251
+  s_4ebdfc62030aaf::t_f3567a59b5593d 1-2,5-12,14-24,26-33,40-103,116-122,127-165,170,173,189-193,204-205,207-210,289-302,306-310,313-317,323-339,348-440,450-462,464-476
+  s_4ebdfc62030aaf::t_b07dc1c6b53289 4,463
+  s_4ebdfc62030aaf::t_3dc493264703fe 13,25,340-347
+  s_4ebdfc62030aaf::t_8cc544d121578f 111-115,196-200,229-247,252-260,262-280,282-287
+  s_4ebdfc62030aaf::t_9cd0b7b6a3dae9 104,194-195,201-203,211-216,288
+packages/cli/src/runner.ts
+  s_4ebdfc62030aaf::t_deaf6f00699a66 212-213,215,227-238
+  s_4ebdfc62030aaf::t_0c20dda3bb45b4 116
+  s_4ebdfc62030aaf::t_51ee968b8c887f 239
+packages/runtime/src/hosts/azure-devops/tests/client.test.ts
+  s_4ebdfc62030aaf::t_c88ad06f5471b4 190-200,203-204
+  s_4ebdfc62030aaf::t_656ec1ee46d909 2,170-189,201-202,205-212
+  s_4ebdfc62030aaf::t_ed6165efda8e1f 96,140-143,148-152
+  s_4ebdfc62030aaf::t_147669a6db3210 1,3-47,78-95,97-139,144-147,153-169,213-238
+  s_4ebdfc62030aaf::t_3e65ede599e673 48-77
+packages/runtime/src/hosts/git.ts
+  s_4ebdfc62030aaf::t_fe62d4d4e2a1ce 5,8-14
+packages/runtime/src/action/tests/action-host.test.ts
+  s_4ebdfc62030aaf::t_ea38ae1699115e 19-26,28-34
+  s_4ebdfc62030aaf::t_44dd3d44a82e01 27
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_4ebdfc62030aaf::t_aa95f384634b1e 8,108-113,132
+packages/runtime/src/hosts/publication.ts
+  s_4ebdfc62030aaf::t_08309e8000a93e 3,41-69
+  s_4ebdfc62030aaf::t_562c038a093ece 1-2,4-40,70
+packages/runtime/src/hosts/azure-devops/coordinates.ts
+  s_4ebdfc62030aaf::t_1ec4f560e9d44f 1-6
+apps/docs/content/docs/index.mdx
+  s_4ebdfc62030aaf::t_ff73c9101a142f 8
+packages/runtime/src/config/init.ts
+  s_4ebdfc62030aaf::t_d6602768dc1848 62
+  s_4ebdfc62030aaf::t_deaf6f00699a66 59
+  s_4ebdfc62030aaf::t_78eab0231d63bf 29,171-176,201-221
+  s_4ebdfc62030aaf::t_fc4d108024c326 222-224
+  s_4ebdfc62030aaf::t_101495758121a4 225
+apps/docs/content/docs/guide/index.mdx
+  s_4ebdfc62030aaf::t_ff73c9101a142f 8
+apps/docs/content/docs/guide/runtime.mdx
+  s_4ebdfc62030aaf::t_ff73c9101a142f 65
+apps/docs/content/docs/guide/meta.json
+  s_4ebdfc62030aaf::t_aa95f384634b1e 13
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_4ebdfc62030aaf::t_2693b627563108 17,155-156,330-331
+  s_4ebdfc62030aaf::t_65f2f38aa87942 211-229,232,238-247,249-255,257-258,260
+  s_4ebdfc62030aaf::t_2125cb22668d9c 1-9,11,18-59,64-68,71-77,86-95,104-106,108-114,116-120,122-154,157-210,248,256,259,261-305,314-329,332-374
+  s_4ebdfc62030aaf::t_08309e8000a93e 10,12-16,78-85,102-103
+  s_4ebdfc62030aaf::t_165a9ea090f92f 60-63,69-70,96-101,107,115,121
+  s_4ebdfc62030aaf::t_e403fb4d3cf74c 306-313
+  s_4ebdfc62030aaf::t_2adff9b6c46f1f 230-231,233-237
+README.md
+  s_4ebdfc62030aaf::t_ff73c9101a142f 23
+packages/cli/src/tests/main.test.ts
+  s_4ebdfc62030aaf::t_a739e823c5264b 578,588
+  s_4ebdfc62030aaf::t_131b7518528529 231
+packages/runtime/src/hosts/azure-devops/tests/workspace.test.ts
+  s_4ebdfc62030aaf::t_fe62d4d4e2a1ce 43-78,81-84,94-95
+  s_4ebdfc62030aaf::t_507eafaeef13ee 1-42,79-80,85-93,96-110
+apps/docs/content/docs/reference/architecture.mdx
+  s_4ebdfc62030aaf::t_ff73c9101a142f 62
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_4ebdfc62030aaf::t_08309e8000a93e 9,74-81
+  s_4ebdfc62030aaf::t_17f228a67e559c 55-58,65-66,94-99,103,106-112
+  s_4ebdfc62030aaf::t_c43124aaa32927 11-15
+packages/runtime/src/hosts/azure-devops/tests/event.test.ts
+  s_4ebdfc62030aaf::t_a9b2d3a2d05100 85-89
+  s_4ebdfc62030aaf::t_3e5678702314ab 1-84,90-135
+packages/runtime/package.json
+  s_4ebdfc62030aaf::t_ea38ae1699115e 48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "e0b87369c7f582008df6b012bce5a5e042cdea4f",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
