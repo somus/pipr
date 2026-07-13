@@ -93,13 +93,13 @@ export async function loadBitbucketPriorReviewState(options: {
   client: BitbucketClient;
   change: ChangeRequestEventContext;
 }): Promise<PriorReviewState | undefined> {
-  const body = await loadBitbucketPriorMainComment(options);
+  const comments = await loadBitbucketOwnedComments(options);
+  const body = comments.find((comment) =>
+    comment.content.raw.includes(mainMarker(options.change.change.number)),
+  )?.content.raw;
   const state = extractPriorReviewState(body, options.change.change.number);
   if (!state) return undefined;
-  const owner = await options.client.currentUser();
-  const bodies = (await options.client.listComments(options.change.change.number))
-    .filter((comment) => comment.user?.uuid === owner.uuid)
-    .map((comment) => comment.content.raw);
+  const bodies = comments.map((comment) => comment.content.raw);
   return applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
 }
 
@@ -107,12 +107,19 @@ export async function loadBitbucketPriorMainComment(options: {
   client: BitbucketClient;
   change: ChangeRequestEventContext;
 }) {
-  const owner = await options.client.currentUser();
-  return (await options.client.listComments(options.change.change.number)).find(
-    (comment) =>
-      comment.user?.uuid === owner.uuid &&
-      comment.content.raw.includes(mainMarker(options.change.change.number)),
+  return (await loadBitbucketOwnedComments(options)).find((comment) =>
+    comment.content.raw.includes(mainMarker(options.change.change.number)),
   )?.content.raw;
+}
+
+async function loadBitbucketOwnedComments(options: {
+  client: BitbucketClient;
+  change: ChangeRequestEventContext;
+}) {
+  const owner = await options.client.currentUser();
+  return (await options.client.listComments(options.change.change.number)).filter(
+    (comment) => comment.user?.uuid === owner.uuid,
+  );
 }
 
 export async function loadBitbucketInlineThreadContexts(options: {

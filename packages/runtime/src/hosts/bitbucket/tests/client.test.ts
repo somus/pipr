@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createBitbucketClient } from "../client.js";
+import { bitbucketStatusState, createBitbucketClient } from "../client.js";
 
 describe("Bitbucket Cloud client", () => {
   it("loads exact pull request coordinates and fork metadata", async () => {
@@ -99,6 +99,21 @@ describe("Bitbucket Cloud client", () => {
     ]);
   });
 
+  it("omits soft-deleted comments", async () => {
+    const client = createBitbucketClient(env, async () =>
+      Response.json({
+        values: [
+          { id: 1, content: { raw: "active" } },
+          { id: 2, content: { raw: "deleted" }, deleted: true },
+        ],
+      }),
+    );
+
+    await expect(client.listComments(7)).resolves.toMatchObject([
+      { id: "1", content: { raw: "active" } },
+    ]);
+  });
+
   it("uses native comment and status contracts", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = [];
     const client = createBitbucketClient(env, async (input, init) => {
@@ -131,6 +146,23 @@ describe("Bitbucket Cloud client", () => {
       method: "POST",
       body: { state: "SUCCESSFUL", key: "pipr-review" },
     });
+  });
+
+  it("rejects nonnumeric reply parent IDs before sending a request", async () => {
+    let requested = false;
+    const client = createBitbucketClient(env, async () => {
+      requested = true;
+      return Response.json({});
+    });
+
+    await expect(client.replyToComment(7, "not-a-number", "reply")).rejects.toThrow(
+      "Bitbucket comment ID must be a positive integer",
+    );
+    expect(requested).toBe(false);
+  });
+
+  it("maps neutral statuses to stopped", () => {
+    expect(bitbucketStatusState("neutral")).toBe("STOPPED");
   });
 
   it("uses scoped API-token Basic authentication and native resolution objects", async () => {
@@ -189,6 +221,24 @@ describe("Bitbucket Cloud client", () => {
     expect(authorizations).toEqual([
       `Basic ${Buffer.from("admin@example.com:admin-token").toString("base64")}`,
     ]);
+  });
+
+  it("escapes backslashes and quotes in permission filter values", async () => {
+    let query = "";
+    const client = createBitbucketClient(
+      {
+        ...env,
+        BITBUCKET_PERMISSION_EMAIL: "admin@example.com",
+        BITBUCKET_PERMISSION_API_TOKEN: "admin-token",
+      },
+      async (input) => {
+        query = new URL(String(input)).searchParams.get("q") ?? "";
+        return Response.json({ values: [] });
+      },
+    );
+
+    await client.getRepositoryPermission('dev\\"name', "{target-repo}");
+    expect(query).toBe('repository.uuid="{target-repo}" AND user.nickname="dev\\\\\\"name"');
   });
 });
 

@@ -129,7 +129,7 @@ export function createBitbucketClient(
         fetch,
       });
       const query = encodeURIComponent(
-        `repository.uuid="${repositoryUuid}" AND user.nickname="${actor.replaceAll('"', '\\"')}"`,
+        `repository.uuid="${escapeBitbucketQueryValue(repositoryUuid)}" AND user.nickname="${escapeBitbucketQueryValue(actor)}"`,
       );
       const page = await permissionApi.json(
         `workspaces/${encodeURIComponent(workspace)}/permissions/repositories?q=${query}&pagelen=100`,
@@ -177,7 +177,11 @@ export function createBitbucketClient(
         },
       };
     },
-    listComments: (id) => listAll(api, `${prPath(id)}/comments`, commentSchema, repositoryApiPath),
+    async listComments(id) {
+      return (
+        await listAll(api, `${prPath(id)}/comments`, commentSchema, repositoryApiPath)
+      ).filter((comment) => !comment.deleted);
+    },
     createComment: (id, body) =>
       api.json(`${prPath(id)}/comments`, commentSchema, jsonRequest("POST", body)),
     updateComment: (id, commentId, content) =>
@@ -186,12 +190,16 @@ export function createBitbucketClient(
         commentSchema,
         jsonRequest("PUT", { content: { raw: content } }),
       ),
-    replyToComment: (id, commentId, content) =>
-      api.json(
+    async replyToComment(id, commentId, content) {
+      const parentId = Number(commentId);
+      if (!Number.isSafeInteger(parentId) || parentId <= 0)
+        throw new Error("Bitbucket comment ID must be a positive integer");
+      return await api.json(
         `${prPath(id)}/comments`,
         commentSchema,
-        jsonRequest("POST", { content: { raw: content }, parent: { id: Number(commentId) } }),
-      ),
+        jsonRequest("POST", { content: { raw: content }, parent: { id: parentId } }),
+      );
+    },
     async resolveComment(id, commentId) {
       await api.json(
         `${prPath(id)}/comments/${encodeURIComponent(commentId)}/resolve`,
@@ -211,7 +219,14 @@ export function createBitbucketClient(
 }
 
 export function bitbucketStatusState(state: CodeHostStatusState): string {
-  return state === "pending" ? "INPROGRESS" : state === "failure" ? "FAILED" : "SUCCESSFUL";
+  if (state === "pending") return "INPROGRESS";
+  if (state === "failure") return "FAILED";
+  if (state === "neutral") return "STOPPED";
+  return "SUCCESSFUL";
+}
+
+function escapeBitbucketQueryValue(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
 function pagedSchema<T extends z.ZodType>(item: T) {

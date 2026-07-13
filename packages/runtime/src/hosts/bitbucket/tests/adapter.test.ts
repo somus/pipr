@@ -77,6 +77,42 @@ describe("Bitbucket Cloud adapter", () => {
       statuses: true,
     });
   });
+
+  it("publishes multiline LEFT-side comments against the previous path", async () => {
+    const client = new FakeBitbucketClient();
+    const adapter = createBitbucketHostAdapter({ client });
+    const plan = publicationPlan();
+    const item = plan.inlineItems[0];
+    if (!item) throw new Error("Expected inline fixture");
+    plan.inlineItems = [
+      {
+        ...item,
+        finding: { ...item.finding, path: "src/old.ts", side: "LEFT" },
+        range: { ...item.range, path: "src/old.ts", side: "LEFT", kind: "deleted" },
+        path: "src/new.ts",
+        previousPath: "src/old.ts",
+        side: "LEFT",
+      },
+    ];
+
+    await adapter.publication?.publish({ change, plan });
+
+    expect(client.createdBodies[1]).toMatchObject({
+      inline: { path: "src/old.ts", from: 4, start_from: 2 },
+    });
+  });
+
+  it("loads prior review state with one user and comment request", async () => {
+    const client = new FakeBitbucketClient();
+    const adapter = createBitbucketHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    client.currentUserCalls = 0;
+    client.listCommentsCalls = 0;
+
+    await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toBeDefined();
+    expect(client.currentUserCalls).toBe(1);
+    expect(client.listCommentsCalls).toBe(1);
+  });
 });
 
 const change: ChangeRequestEventContext = {
@@ -156,6 +192,8 @@ class FakeBitbucketClient implements BitbucketClient {
   comments: BitbucketComment[] = [];
   createdBodies: Array<Record<string, unknown>> = [];
   statusBodies: Array<Record<string, unknown>> = [];
+  currentUserCalls = 0;
+  listCommentsCalls = 0;
   pullRequest: BitbucketPullRequest = {
     id: 7,
     title: "PR",
@@ -164,7 +202,10 @@ class FakeBitbucketClient implements BitbucketClient {
     destination: endpoint("base", "main"),
     links: { html: { href: "https://bitbucket.org/workspace/repository/pull-requests/7" } },
   };
-  currentUser = async () => ({ uuid: "{bot}", nickname: "pipr" });
+  currentUser = async () => {
+    this.currentUserCalls += 1;
+    return { uuid: "{bot}", nickname: "pipr" };
+  };
   getRepository = async () => ({
     uuid: "{repo}",
     slug: "repository",
@@ -178,7 +219,10 @@ class FakeBitbucketClient implements BitbucketClient {
     coordinates: change.coordinates as NonNullable<typeof change.coordinates>,
     change: change.change,
   });
-  listComments = async () => this.comments;
+  listComments = async () => {
+    this.listCommentsCalls += 1;
+    return this.comments;
+  };
   createComment = async (_id: number, body: Record<string, unknown>) => {
     this.createdBodies.push(body);
     const comment: BitbucketComment = {

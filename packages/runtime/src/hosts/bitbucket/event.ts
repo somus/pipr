@@ -64,7 +64,7 @@ async function webhookEvent(options: BitbucketEventParseOptions): Promise<CodeHo
   const hook = webhookSchema.parse(await Bun.file(options.eventPath ?? "").json());
   const eventKey = requiredHostEnv(options.env, "BITBUCKET_EVENT_KEY", "Bitbucket");
   if (eventKey === "pullrequest:comment_created") {
-    if (!hook.comment) throw new Error(`Unsupported Bitbucket event: ${eventKey}`);
+    if (!hook.comment) throw new Error("Bitbucket comment event payload is missing comment");
     return commentEvent(hook, hook.comment, eventKey, options.workspace);
   }
   return await pullRequestEvent(options, hook, eventKey);
@@ -87,7 +87,7 @@ function commentEvent(
     actor: hook.actor.nickname,
     workspace,
   };
-  return comment.parent || comment.inline
+  return comment.parent
     ? {
         kind: "review-comment-reply",
         reply: { ...common, parentCommentId: comment.parent?.id },

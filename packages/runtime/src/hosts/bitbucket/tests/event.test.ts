@@ -95,6 +95,18 @@ describe("Bitbucket Cloud events", () => {
           actor: { nickname: "developer" },
           repository,
           pullrequest: { id: 7 },
+          comment: { id: 5, content: { raw: "@pipr ask inline" }, inline: { to: 3 } },
+        }),
+      );
+      await expect(parseBitbucketEvent(options)).resolves.toMatchObject({
+        kind: "command-comment",
+      });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          actor: { nickname: "developer" },
+          repository,
+          pullrequest: { id: 7 },
           comment: {
             id: 5,
             parent: { id: 4 },
@@ -106,6 +118,27 @@ describe("Bitbucket Cloud events", () => {
         kind: "review-comment-reply",
         reply: { parentCommentId: "4" },
       });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a missing comment payload for comment events", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-event-"));
+    try {
+      const eventPath = path.join(directory, "event.json");
+      await Bun.write(
+        eventPath,
+        JSON.stringify({ actor: { nickname: "developer" }, repository, pullrequest: { id: 7 } }),
+      );
+      await expect(
+        parseBitbucketEvent({
+          eventPath,
+          env: { BITBUCKET_EVENT_KEY: "pullrequest:comment_created" },
+          workspace: "/workspace",
+          loadChangeRequest: async () => loaded,
+        }),
+      ).rejects.toThrow("Bitbucket comment event payload is missing comment");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
