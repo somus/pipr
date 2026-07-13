@@ -317,6 +317,12 @@ describe("webhook runner", () => {
     ).rejects.toThrow("does not match BITBUCKET_REPO_SLUG");
   });
 
+  it("rejects unsupported webhook hosts at the runtime boundary", () => {
+    expect(() => createCodeHostWebhookProtocol("unknown" as never)).toThrow(
+      "Unsupported webhook host: unknown",
+    );
+  });
+
   it("rejects deliveries when the durable pending queue reaches its byte or count budget", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
     try {

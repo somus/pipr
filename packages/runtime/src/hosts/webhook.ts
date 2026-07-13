@@ -17,5 +17,6 @@ export type CodeHostWebhookProtocol = {
 export function createCodeHostWebhookProtocol(host: WebhookHost): CodeHostWebhookProtocol {
   if (host === "gitlab") return createGitLabWebhookProtocol();
   if (host === "azure-devops") return createAzureDevOpsWebhookProtocol();
-  return createBitbucketWebhookProtocol();
+  if (host === "bitbucket") return createBitbucketWebhookProtocol();
+  throw new Error(`Unsupported webhook host: ${host}`);
 }
