@@ -161,8 +161,13 @@ describe("Bitbucket Cloud client", () => {
     expect(requested).toBe(false);
   });
 
-  it("maps neutral statuses to stopped", () => {
-    expect(bitbucketStatusState("neutral")).toBe("STOPPED");
+  it.each([
+    ["pending", "INPROGRESS"],
+    ["success", "SUCCESSFUL"],
+    ["failure", "FAILED"],
+    ["neutral", "STOPPED"],
+  ] as const)("maps %s statuses to %s", (state, expected) => {
+    expect(bitbucketStatusState(state)).toBe(expected);
   });
 
   it("uses scoped API-token Basic authentication and native resolution objects", async () => {
