@@ -14,6 +14,7 @@ import {
   commandResponseBody,
   completeHostPublication,
   publishUnseenInlineItems,
+  threadActionReplyBody,
 } from "../publication.js";
 import { retryCodeHostOperation } from "../retry.js";
 import type { InlineThreadContext } from "../types.js";
@@ -242,6 +243,7 @@ export async function publishAzureDevOpsThreadActions(options: {
   if (options.actions.length === 0) return { errors: [] };
   const coordinates = azureCoordinates(options.change);
   await currentNativeChange(options.client, options.change, options.reviewedHeadSha);
+  const owner = await options.client.currentUser();
   const threads =
     options.threads ??
     (await options.client.listThreads(coordinates.repositoryId, options.change.change.number));
@@ -257,6 +259,7 @@ export async function publishAzureDevOpsThreadActions(options: {
       client: options.client,
       repositoryId: coordinates.repositoryId,
       changeNumber: options.change.change.number,
+      ownerUniqueName: owner.uniqueName,
       action,
       thread,
     });
@@ -269,6 +272,7 @@ async function publishAzureDevOpsThreadAction(options: {
   client: AzureDevOpsClient;
   repositoryId: string;
   changeNumber: number;
+  ownerUniqueName: string | undefined;
   action: ThreadAction;
   thread?: AzureDevOpsThread;
 }): Promise<string | undefined> {
@@ -276,8 +280,10 @@ async function publishAzureDevOpsThreadAction(options: {
     return `Azure DevOps thread not found for comment ${options.action.commentId}`;
   try {
     if (
-      !options.thread.comments.some((comment) =>
-        comment.content.includes(options.action.responseKey),
+      !options.thread.comments.some(
+        (comment) =>
+          comment.author?.uniqueName === options.ownerUniqueName &&
+          comment.content.includes(options.action.responseKey),
       )
     ) {
       await retryCodeHostOperation({
@@ -288,7 +294,7 @@ async function publishAzureDevOpsThreadAction(options: {
             options.thread?.id ?? "",
             {
               parentCommentId: Number(options.thread?.comments[0]?.id ?? 0),
-              content: options.action.body,
+              content: threadActionReplyBody(options.action),
               commentType: 1,
             },
           ),
@@ -296,8 +302,10 @@ async function publishAzureDevOpsThreadAction(options: {
           const thread = (
             await options.client.listThreads(options.repositoryId, options.changeNumber)
           ).find((candidate) => candidate.id === options.thread?.id);
-          return thread?.comments.find((comment) =>
-            comment.content.includes(options.action.responseKey),
+          return thread?.comments.find(
+            (comment) =>
+              comment.author?.uniqueName === options.ownerUniqueName &&
+              comment.content.includes(options.action.responseKey),
           );
         },
       });

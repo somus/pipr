@@ -13,6 +13,7 @@ import {
   commandResponseBody,
   completeHostPublication,
   publishUnseenInlineItems,
+  threadActionReplyBody,
 } from "../publication.js";
 import { retryCodeHostOperation } from "../retry.js";
 import type { InlineThreadContext } from "../types.js";
@@ -195,6 +196,7 @@ export async function publishBitbucketThreadActions(options: {
 }) {
   if (options.actions.length === 0) return { errors: [] };
   await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
+  const owner = await options.client.currentUser();
   const comments =
     options.comments ?? (await options.client.listComments(options.change.change.number));
   const errors: string[] = [];
@@ -208,14 +210,25 @@ export async function publishBitbucketThreadActions(options: {
     }
     try {
       const replies = comments.filter((comment) => comment.parent?.id === root.id);
-      if (!replies.some((comment) => comment.content.raw.includes(action.responseKey)))
+      if (
+        !replies.some(
+          (comment) =>
+            comment.user?.uuid === owner.uuid && comment.content.raw.includes(action.responseKey),
+        )
+      )
         await retryCodeHostOperation({
           operation: () =>
-            options.client.replyToComment(options.change.change.number, root.id, action.body),
+            options.client.replyToComment(
+              options.change.change.number,
+              root.id,
+              threadActionReplyBody(action),
+            ),
           reconcile: async () =>
             (await options.client.listComments(options.change.change.number)).find(
               (comment) =>
-                comment.parent?.id === root.id && comment.content.raw.includes(action.responseKey),
+                comment.parent?.id === root.id &&
+                comment.user?.uuid === owner.uuid &&
+                comment.content.raw.includes(action.responseKey),
             ),
         });
       if (action.kind === "resolve" && root.resolution === undefined)

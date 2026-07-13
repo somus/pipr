@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
-import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
+import {
+  buildPriorReviewState,
+  renderInlineFindingMarker,
+  renderVerifierResponseMarker,
+} from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import { runCodeHostAdapterContract } from "../../tests/adapter-contract.js";
 import { createGitLabHostAdapter } from "../adapter.js";
@@ -274,6 +278,12 @@ runCodeHostAdapterContract("GitLab", {
     const publication = createGitLabHostAdapter({ client }).publication;
     await publication?.publish({ change, plan: publicationPlan() });
     const action = gitLabResolveAction();
+    client.discussions[0]?.notes.push({
+      id: "foreign-reply",
+      body: renderVerifierResponseMarker(action.findingId, action.responseKey),
+      author: { id: 2, username: "someone-else" },
+    });
+    client.loseNextReplyResponse = true;
     await publication?.publishThreadActions?.({
       change,
       reviewedHeadSha: "head",
@@ -285,7 +295,11 @@ runCodeHostAdapterContract("GitLab", {
       actions: [action],
     });
     return {
-      replies: client.discussions[0]?.notes.length === 2 ? 1 : 0,
+      replies:
+        client.discussions[0]?.notes.filter((note) => note.author?.username === "pipr-bot")
+          .length === 2
+          ? 1
+          : 0,
       resolutions: client.resolveCalls,
     };
   },
@@ -379,7 +393,7 @@ function gitLabResolveAction() {
     findingHeadSha: "head",
     commentId: "inline-1",
     threadId: "discussion-1",
-    body: "Resolved. response-key",
+    body: "Resolved.",
     responseKey: "response-key",
   };
 }
@@ -390,6 +404,7 @@ class FakeGitLabClient implements GitLabClient {
   positions: GitLabPosition[] = [];
   createDiscussionError?: Error;
   loseNextDiscussionResponse = false;
+  loseNextReplyResponse = false;
   loseNextNoteUpdate = false;
   noteUpdateAttempts = 0;
   statusKeys = new Set<string>();
@@ -500,6 +515,10 @@ class FakeGitLabClient implements GitLabClient {
       author: { id: 1, username: "pipr-bot" },
     };
     discussion.notes.push(note);
+    if (this.loseNextReplyResponse) {
+      this.loseNextReplyResponse = false;
+      throw Object.assign(new Error("response lost"), { status: 503 });
+    }
     return note;
   };
   resolveDiscussion = async (_projectId: string, _changeNumber: number, discussionId: string) => {

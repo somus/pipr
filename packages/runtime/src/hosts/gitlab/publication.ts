@@ -13,6 +13,7 @@ import {
   commandResponseBody,
   completeHostPublication,
   publishUnseenInlineItems,
+  threadActionReplyBody,
 } from "../publication.js";
 import { retryCodeHostOperation } from "../retry.js";
 import type { InlineThreadContext } from "../types.js";
@@ -217,6 +218,7 @@ export async function publishGitLabThreadActions(options: {
   if (options.actions.length === 0) return { errors: [] };
   const { projectId } = gitLabCoordinates(options.change);
   await assertCurrentHead(options.client, projectId, options.change, options.reviewedHeadSha);
+  const owner = await options.client.currentUser();
   const discussions =
     options.discussions ??
     (await options.client.listDiscussions(projectId, options.change.change.number));
@@ -229,6 +231,7 @@ export async function publishGitLabThreadActions(options: {
       client: options.client,
       projectId,
       changeNumber: options.change.change.number,
+      ownerUsername: owner.username,
       action,
       discussion: action.threadId
         ? discussions.find((candidate) => candidate.id === action.threadId)
@@ -243,6 +246,7 @@ async function publishGitLabThreadAction(options: {
   client: GitLabClient;
   projectId: string;
   changeNumber: number;
+  ownerUsername: string;
   action: ThreadAction;
   discussion?: GitLabDiscussion;
 }): Promise<string | undefined> {
@@ -250,14 +254,20 @@ async function publishGitLabThreadAction(options: {
     return `GitLab discussion not found for comment ${options.action.commentId}`;
   }
   try {
-    if (!options.discussion.notes.some((note) => note.body.includes(options.action.responseKey))) {
+    if (
+      !options.discussion.notes.some(
+        (note) =>
+          note.author?.username === options.ownerUsername &&
+          note.body.includes(options.action.responseKey),
+      )
+    ) {
       await retryCodeHostOperation({
         operation: () =>
           options.client.replyDiscussion(
             options.projectId,
             options.changeNumber,
             options.discussion?.id ?? "",
-            options.action.body,
+            threadActionReplyBody(options.action),
           ),
         reconcile: async () => {
           const discussion = await options.client.getDiscussion(
@@ -265,7 +275,11 @@ async function publishGitLabThreadAction(options: {
             options.changeNumber,
             options.discussion?.id ?? "",
           );
-          return discussion.notes.find((note) => note.body.includes(options.action.responseKey));
+          return discussion.notes.find(
+            (note) =>
+              note.author?.username === options.ownerUsername &&
+              note.body.includes(options.action.responseKey),
+          );
         },
       });
     }

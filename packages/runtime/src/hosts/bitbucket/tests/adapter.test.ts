@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
-import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
+import {
+  buildPriorReviewState,
+  renderInlineFindingMarker,
+  renderVerifierResponseMarker,
+} from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import { runCodeHostAdapterContract } from "../../tests/adapter-contract.js";
 import { createBitbucketHostAdapter } from "../adapter.js";
@@ -182,6 +186,13 @@ runCodeHostAdapterContract("Bitbucket Cloud", {
     const inline = client.comments.find((comment) => comment.inline);
     if (!inline) throw new Error("Expected inline comment");
     const action = bitbucketResolveAction(inline);
+    client.comments.push({
+      id: "foreign-reply",
+      content: { raw: renderVerifierResponseMarker(action.findingId, action.responseKey) },
+      user: { uuid: "{someone-else}" },
+      parent: { id: inline.id },
+    });
+    client.loseNextReplyResponse = true;
     await publication?.publishThreadActions?.({
       change,
       reviewedHeadSha: "head",
@@ -193,7 +204,9 @@ runCodeHostAdapterContract("Bitbucket Cloud", {
       actions: [action],
     });
     return {
-      replies: client.comments.filter((comment) => comment.parent?.id === inline.id).length,
+      replies: client.comments.filter(
+        (comment) => comment.parent?.id === inline.id && comment.user?.uuid === "{bot}",
+      ).length,
       resolutions: client.resolveCalls,
     };
   },
@@ -286,7 +299,7 @@ function bitbucketResolveAction(inline: BitbucketComment) {
     findingHeadSha: "head",
     commentId: inline.id,
     threadId: inline.id,
-    body: "Resolved. response-key",
+    body: "Resolved.",
     responseKey: "response-key",
   };
 }
@@ -299,6 +312,7 @@ class FakeBitbucketClient implements BitbucketClient {
   statusBodies: Array<Record<string, unknown>> = [];
   statusKeys = new Set<string>();
   loseNextInlineResponse = false;
+  loseNextReplyResponse = false;
   loseNextCommentUpdate = false;
   commentUpdateAttempts = 0;
   resolveCalls = 0;
@@ -360,8 +374,17 @@ class FakeBitbucketClient implements BitbucketClient {
     comment.content.raw = content;
     return comment;
   };
-  replyToComment = async (id: number, commentId: string, content: string) =>
-    this.createComment(id, { content: { raw: content }, parent: { id: commentId } });
+  replyToComment = async (id: number, commentId: string, content: string) => {
+    const comment = await this.createComment(id, {
+      content: { raw: content },
+      parent: { id: commentId },
+    });
+    if (this.loseNextReplyResponse) {
+      this.loseNextReplyResponse = false;
+      throw Object.assign(new Error("response lost"), { status: 503 });
+    }
+    return comment;
+  };
   resolveComment = async (_id: number, commentId: string) => {
     this.resolveCalls += 1;
     const comment = this.comments.find((item) => item.id === commentId);

@@ -1,5 +1,12 @@
-import type { InlinePublicationItem, PublicationMetadata } from "../review/comment.js";
-import { extractInlineFindingMarkerRecords } from "../review/prior-state.js";
+import type {
+  InlinePublicationItem,
+  PublicationMetadata,
+  ThreadAction,
+} from "../review/comment.js";
+import {
+  extractInlineFindingMarkerRecords,
+  renderVerifierResponseMarker,
+} from "../review/prior-state.js";
 import { PublicationError, type PublicationResult } from "../review/publication-result.js";
 import { retryCodeHostOperation } from "./retry.js";
 
@@ -78,6 +85,10 @@ export function commandResponseBody(options: {
 }): { marker: string; body: string } {
   const marker = `<!-- pipr:command-response change=${options.changeNumber} source=${options.sourceCommentId} command=${options.commandName} -->`;
   return { marker, body: [marker, "", options.body, ""].join("\n") };
+}
+
+export function threadActionReplyBody(action: ThreadAction): string {
+  return `${action.body}\n\n${renderVerifierResponseMarker(action.findingId, action.responseKey)}`;
 }
 
 export function completeHostPublication(options: {

@@ -3,7 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
-import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
+import {
+  buildPriorReviewState,
+  renderInlineFindingMarker,
+  renderVerifierResponseMarker,
+} from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import { runCodeHostAdapterContract } from "../../tests/adapter-contract.js";
 import { createAzureDevOpsHostAdapter } from "../adapter.js";
@@ -383,6 +387,12 @@ runCodeHostAdapterContract("Azure DevOps", {
     const inline = client.threads.find((thread) => thread.threadContext?.filePath);
     if (!inline) throw new Error("Expected inline thread");
     const action = azureResolveAction(inline);
+    inline.comments.push({
+      id: "foreign-reply",
+      content: renderVerifierResponseMarker(action.findingId, action.responseKey),
+      author: { uniqueName: "someone@example.com" },
+    });
+    client.loseNextReplyResponse = true;
     await publication?.publishThreadActions?.({
       change,
       reviewedHeadSha: "head",
@@ -393,7 +403,14 @@ runCodeHostAdapterContract("Azure DevOps", {
       reviewedHeadSha: "head",
       actions: [action],
     });
-    return { replies: inline.comments.length === 2 ? 1 : 0, resolutions: client.resolveCalls };
+    return {
+      replies:
+        inline.comments.filter((comment) => comment.author?.uniqueName === "pipr@example.com")
+          .length === 2
+          ? 1
+          : 0,
+      resolutions: client.resolveCalls,
+    };
   },
 });
 
@@ -491,7 +508,7 @@ function azureResolveAction(inline: AzureDevOpsThread) {
     findingHeadSha: "head",
     commentId: inline.comments[0]?.id ?? "",
     threadId: inline.id,
-    body: "Resolved. response-key",
+    body: "Resolved.",
     responseKey: "response-key",
   };
 }
@@ -504,6 +521,7 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
   statusBodies: Array<Record<string, unknown>> = [];
   statusKeys = new Set<string>();
   loseNextPositionedThreadResponse = false;
+  loseNextReplyResponse = false;
   loseNextCommentUpdate = false;
   commentUpdateAttempts = 0;
   resolveCalls = 0;
@@ -614,6 +632,10 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
       author: { uniqueName: "pipr@example.com" },
     };
     thread.comments.push(comment);
+    if (this.loseNextReplyResponse) {
+      this.loseNextReplyResponse = false;
+      throw Object.assign(new Error("response lost"), { status: 503 });
+    }
     return comment;
   };
   updateThreadStatus = async (
