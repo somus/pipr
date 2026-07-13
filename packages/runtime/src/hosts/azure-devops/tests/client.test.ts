@@ -87,6 +87,7 @@ describe("Azure DevOps API client", () => {
       },
       change: {
         number: 7,
+        isDraft: true,
         base: { sha: "target", ref: "main" },
         head: { sha: "head", ref: "feature" },
       },
@@ -279,6 +280,7 @@ const azureEnv = {
 
 const pullRequest = {
   pullRequestId: 7,
+  isDraft: true,
   title: "Update fixture",
   description: "Body",
   url: "https://dev.azure.com/org/project/_git/repository/pullrequest/7",

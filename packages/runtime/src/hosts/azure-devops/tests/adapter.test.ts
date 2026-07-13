@@ -218,6 +218,35 @@ describe("Azure DevOps host adapter", () => {
     });
   });
 
+  it("publishes native suggestions in a positioned thread", async () => {
+    const client = new FakeAzureDevOpsClient();
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    const plan = publicationPlan();
+    const item = plan.inlineItems[0];
+    if (!item) throw new Error("Expected inline fixture");
+    plan.inlineItems = [
+      {
+        ...item,
+        finding: { ...item.finding, suggestedFix: "const value = 2;" },
+        body: `${item.body}\n**Suggested change**\n\n\`\`\`suggestion\nconst value = 2;\n\`\`\``,
+      },
+    ];
+
+    await adapter.publication?.publish({ change, plan });
+
+    expect(client.createdThreadBodies[1]).toMatchObject({
+      threadContext: {
+        filePath: "/src/a.ts",
+        rightFileStart: { line: 2, offset: 1 },
+        rightFileEnd: { line: 2, offset: 1 },
+      },
+    });
+    const comments = client.createdThreadBodies[1]?.comments as
+      | Array<{ content: string }>
+      | undefined;
+    expect(comments?.[0]?.content).toContain("```suggestion\nconst value = 2;\n```");
+  });
+
   it("declares Azure-native capability limits", () => {
     const adapter = createAzureDevOpsHostAdapter({ client: new FakeAzureDevOpsClient() });
     expect(adapter.capabilities).toEqual({
@@ -225,7 +254,7 @@ describe("Azure DevOps host adapter", () => {
       reviewCommentReplies: true,
       threadResolution: true,
       multilineInlineComments: true,
-      suggestedChanges: false,
+      suggestedChanges: true,
       statuses: true,
     });
   });

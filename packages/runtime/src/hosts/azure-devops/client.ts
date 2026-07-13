@@ -30,6 +30,7 @@ const forkRepositorySchema = z.looseObject({ remoteUrl: z.string().min(1) });
 
 const pullRequestSchema = z.looseObject({
   pullRequestId: z.number().int().positive(),
+  isDraft: z.boolean().optional(),
   title: z.string(),
   description: z.string().nullish(),
   url: z.string().optional(),
@@ -354,6 +355,7 @@ export function createAzureDevOpsClient(
         },
         change: {
           number: pullRequest.pullRequestId,
+          isDraft: pullRequest.isDraft,
           title: pullRequest.title,
           description: pullRequest.description ?? "",
           url: `${repositoryWebUrl(organization, pullRequest.repository.project.name, pullRequest.repository.name)}/pullrequest/${pullRequest.pullRequestId}`,

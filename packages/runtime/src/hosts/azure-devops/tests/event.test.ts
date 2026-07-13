@@ -30,6 +30,24 @@ describe("Azure DevOps event parser", () => {
     });
   });
 
+  it("ignores draft branch-policy pull requests", async () => {
+    await expect(
+      parseAzureDevOpsEvent({
+        env: {
+          SYSTEM_PULLREQUEST_PULLREQUESTID: "7",
+          SYSTEM_TEAMPROJECT: "project",
+          BUILD_REPOSITORY_ID: "repo-id",
+          SYSTEM_COLLECTIONURI: "https://dev.azure.com/org/",
+        },
+        workspace: "/workspace",
+        loadChangeRequest: async () => ({
+          ...loaded,
+          change: { ...loaded.change, isDraft: true },
+        }),
+      }),
+    ).resolves.toEqual({ kind: "ignored", reason: "pull request is a draft" });
+  });
+
   it("normalizes service-hook PR creation and update events", async () => {
     for (const [eventType, expectedAction] of [
       ["git.pullrequest.created", "opened"],
@@ -62,6 +80,36 @@ describe("Azure DevOps event parser", () => {
       } finally {
         await rm(fixture.root, { recursive: true, force: true });
       }
+    }
+  });
+
+  it("ignores draft service-hook pull requests without loading them", async () => {
+    const fixture = await eventFixture({
+      id: "event-draft",
+      eventType: "git.pullrequest.updated",
+      resource: {
+        pullRequestId: 7,
+        isDraft: true,
+        repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
+      },
+      resourceContainers: { account: { baseUrl: "https://dev.azure.com/org/" } },
+    });
+    let loadedChange = false;
+    try {
+      await expect(
+        parseAzureDevOpsEvent({
+          eventPath: fixture.path,
+          env: {},
+          workspace: fixture.root,
+          loadChangeRequest: async () => {
+            loadedChange = true;
+            return loaded;
+          },
+        }),
+      ).resolves.toEqual({ kind: "ignored", reason: "pull request is a draft" });
+      expect(loadedChange).toBe(false);
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
     }
   });
 

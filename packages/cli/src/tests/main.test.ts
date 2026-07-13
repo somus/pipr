@@ -243,7 +243,7 @@ describe("pipr CLI", () => {
     });
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("required option '--repository <project>' not specified");
+    expect(result.stderr).toContain("required option '--repository <repository>' not specified");
     expect(result.stderr).not.toContain("Code host request failed");
   });
 

@@ -22,6 +22,7 @@ const serviceHookSchema = z.looseObject({
 
 const pullRequestResourceSchema = z.looseObject({
   pullRequestId: z.number().int().positive(),
+  isDraft: z.boolean().optional(),
   repository: repositorySchema,
 });
 
@@ -62,6 +63,7 @@ async function pipelineEvent(options: AzureDevOpsEventParseOptions): Promise<Cod
     "Azure DevOps pipeline",
   );
   const loaded = await loadChange(options, { organization, project, repositoryId, changeNumber });
+  if (loaded.change.isDraft) return draftEvent();
   return changeRequestEvent(loaded, {
     eventName: "azure_pipeline",
     action: options.env.PIPR_CHANGE_ACTION ?? "updated",
@@ -108,21 +110,35 @@ async function serviceHookEvent(options: AzureDevOpsEventParseOptions): Promise<
     hook.eventType === "git.pullrequest.updated"
   ) {
     const resource = pullRequestResourceSchema.parse(hook.resource);
-    const loaded = await loadChange(options, {
-      organization,
-      project: resource.repository.project.name,
-      repositoryId: resource.repository.id,
-      changeNumber: resource.pullRequestId,
-    });
-    return changeRequestEvent(loaded, {
-      eventName: hook.eventType,
-      action: hook.eventType === "git.pullrequest.created" ? "opened" : "updated",
-      rawAction: hook.eventType,
-      host: `https://dev.azure.com/${organization}`,
-      workspace: options.workspace,
-    });
+    return pullRequestHookEvent(options, organization, hook.eventType, resource);
   }
   throw new Error(`Unsupported Azure DevOps event '${hook.eventType}'`);
+}
+
+async function pullRequestHookEvent(
+  options: AzureDevOpsEventParseOptions,
+  organization: string,
+  eventType: "git.pullrequest.created" | "git.pullrequest.updated",
+  resource: z.infer<typeof pullRequestResourceSchema>,
+): Promise<CodeHostEvent> {
+  if (resource.isDraft) return draftEvent();
+  const loaded = await loadChange(options, {
+    organization,
+    project: resource.repository.project.name,
+    repositoryId: resource.repository.id,
+    changeNumber: resource.pullRequestId,
+  });
+  return changeRequestEvent(loaded, {
+    eventName: eventType,
+    action: eventType === "git.pullrequest.created" ? "opened" : "updated",
+    rawAction: eventType,
+    host: `https://dev.azure.com/${organization}`,
+    workspace: options.workspace,
+  });
+}
+
+function draftEvent(): CodeHostEvent {
+  return { kind: "ignored", reason: "pull request is a draft" };
 }
 
 function changeRequestEvent(

@@ -2,6 +2,7 @@ import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../..
 import {
   applyInlineFindingMarkers,
   applyResolvedFindingMarkers,
+  extractInlineFindingMarkerRecords,
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
