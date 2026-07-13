@@ -82,10 +82,15 @@ packages/runtime/src/host-run/webhook-server.ts
   s_4ebdfc62030aaf::t_52abbc25d6407c 6,14,23,54-56,58-60,93,103-105,107-108,151-152,155-156,162,164-165,183-208,310-320,325-329,331-333,336
   s_4ebdfc62030aaf::t_c93c6cc603e73f 263
   s_4ebdfc62030aaf::t_8fda1502c19f0e 260,298
+  s_4ebdfc62030aaf::t_c2a22ac623d432 8,270,276,283,290
 apps/docs/content/docs/guide/index.mdx
   s_4ebdfc62030aaf::t_9c6d2aa3a1fd43 8
 apps/docs/content/docs/reference/cli.mdx
   s_4ebdfc62030aaf::t_9e5028a4a137c5 99,108-109,116
+apps/docs/content/docs/guide/github-action.mdx
+  s_4ebdfc62030aaf::t_c2a22ac623d432 6
+packages/runtime/src/host-run/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_c2a22ac623d432 1-19
 ---
 {
   "schema_version": "authorship/3.0.0",
