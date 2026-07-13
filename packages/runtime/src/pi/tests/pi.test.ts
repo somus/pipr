@@ -317,6 +317,30 @@ describe("buildPiArgs", () => {
     }
   });
 
+  it("rejects incomplete or root Pi sandbox identities", async () => {
+    const base = deepseekRunOptions();
+    await expect(
+      runPi({
+        workspace: "/not-used",
+        prompt: "Review this diff.",
+        ...base,
+        env: { ...base.env, PIPR_PI_SANDBOX_UID: "1000" },
+      }),
+    ).rejects.toThrow("PIPR_PI_SANDBOX_UID and PIPR_PI_SANDBOX_GID must be configured together");
+    await expect(
+      runPi({
+        workspace: "/not-used",
+        prompt: "Review this diff.",
+        ...base,
+        env: {
+          ...base.env,
+          PIPR_PI_SANDBOX_UID: "0",
+          PIPR_PI_SANDBOX_GID: "1000",
+        },
+      }),
+    ).rejects.toThrow("PIPR_PI_SANDBOX_UID must be a positive integer");
+  });
+
   it("passes runtime tool data env only when condensed runtime tools are enabled", async () => {
     const result = await runFakePiWithToolOptions({
       runtimeTools: {
