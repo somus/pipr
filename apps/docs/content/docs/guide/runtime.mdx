@@ -209,7 +209,7 @@ Command response output publishes a normal pull request issue comment keyed by t
 
 ### Comment updates and state
 
-Before publishing, Pipr checks the current head SHA. It publishes Inline Review Comments and thread actions first, then upserts the Main Review Comment only after inline publication succeeds. The main comment is the publication watermark: a partial inline failure leaves its prior body and state unchanged. A rerun reconciles Pipr-owned markers, skips inline comments the earlier attempt already published, and advances the main comment after the remaining work succeeds.
+Before publishing, Pipr checks the current head SHA. It publishes required Inline Review Comments first, then upserts the Main Review Comment only after inline publication succeeds. The main comment is the review-state watermark: a partial inline failure leaves its prior body and state unchanged. Thread-action errors are recorded separately. A rerun reconciles Pipr-owned markers, skips inline comments the earlier attempt already published, and advances the main comment after the remaining work succeeds.
 
 Pipr bounds retries for rate limits and transient provider failures. Before retrying a create operation whose response may have been lost, it reloads provider state and checks the Pipr marker so the retry doesn't duplicate the comment.
 
