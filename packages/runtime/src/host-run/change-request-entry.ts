@@ -42,7 +42,7 @@ export async function runChangeRequestHostRunCommand(
     log,
   });
   if (completed.kind === "skipped") {
-    log.notice("action ignored", { reason: completed.reason });
+    log.notice("event ignored", { reason: completed.reason });
     return { kind: "ignored", reason: completed.reason };
   }
   if (completed.kind === "command-response") {

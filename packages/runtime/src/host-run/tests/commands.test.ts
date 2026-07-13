@@ -71,7 +71,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
   });
 
   it("ignores issue comments that are not pull request comments", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-action-command-"));
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-host-run-command-"));
     try {
       const eventPath = path.join(rootDir, "event.json");
       await Bun.write(
@@ -500,7 +500,7 @@ describe("runLocalReviewCommand", () => {
 describe("runHostRunCommand pull_request dispatch", () => {
   it("marks the GitHub Action workspace as a git safe directory before trusted config reads", async () => {
     const workspace = await createCommandWorkspace();
-    const gitConfigDir = await mkdtemp(path.join(os.tmpdir(), "pipr-action-gitconfig-"));
+    const gitConfigDir = await mkdtemp(path.join(os.tmpdir(), "pipr-host-run-gitconfig-"));
     const previousHome = process.env.HOME;
     const previousGitConfigEnv = snapshotGitConfigEnv();
     try {
@@ -700,7 +700,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           checkRunId: 6,
           name: "all",
           conclusion: "failure",
-          summary: "pipr failed; see Action logs for details.",
+          summary: "pipr failed; see runner logs for details.",
         },
       ]);
     } finally {
@@ -733,7 +733,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           checkRunId: 4,
           name: "review",
           conclusion: "failure",
-          summary: "pipr failed; see Action logs for details.",
+          summary: "pipr failed; see runner logs for details.",
         },
       ]);
       await expectPiNotCalled(workspace);
@@ -1210,7 +1210,7 @@ async function createCommandWorkspace(
     sdkVersion?: string;
   } = {},
 ): Promise<CommandWorkspace> {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-action-command-"));
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-host-run-command-"));
   runGit(rootDir, ["init", "--initial-branch=main"]);
   runGit(rootDir, ["config", "user.name", "pipr test"]);
   runGit(rootDir, ["config", "user.email", "pipr@example.test"]);

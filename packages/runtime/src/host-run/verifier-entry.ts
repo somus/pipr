@@ -24,17 +24,17 @@ export async function runReviewCommentReplyHostRunCommand(
 ): Promise<HostRunCommandResult> {
   const capabilities = reviewCommentReplyDispatchCapabilities(options, adapter);
   if (capabilities.kind === "ignored") {
-    log.notice("action ignored", { reason: capabilities.reason });
+    log.notice("event ignored", { reason: capabilities.reason });
     return capabilities;
   }
   const runnable = runnableReviewCommentReply(reply);
   if (runnable.kind === "ignored") {
-    log.notice("action ignored", { reason: runnable.reason });
+    log.notice("event ignored", { reason: runnable.reason });
     return runnable;
   }
   const prepared = await prepareReviewCommentVerifier(options, adapter, reply, log);
   if (prepared.kind === "ignored") {
-    log.notice("action ignored", { reason: prepared.reason });
+    log.notice("event ignored", { reason: prepared.reason });
     return prepared;
   }
   const result = await runReviewCommentVerifier(options, adapter, prepared, log);

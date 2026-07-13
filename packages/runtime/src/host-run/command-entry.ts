@@ -40,12 +40,12 @@ export async function runIssueCommentHostRunCommand(
 ): Promise<HostRunCommandResult> {
   if (!adapter.capabilities.commandComments) {
     const ignored = { kind: "ignored" as const, reason: "host adapter does not support commands" };
-    log.notice("action ignored", { reason: ignored.reason });
+    log.notice("event ignored", { reason: ignored.reason });
     return ignored;
   }
   const prepared = await prepareIssueCommentCommand(options, adapter, log, comment);
   if (prepared.kind === "ignored") {
-    log.notice("action ignored", { reason: prepared.reason });
+    log.notice("event ignored", { reason: prepared.reason });
     return prepared;
   }
   return await dispatchIssueCommentCommand(options, adapter, prepared, log);

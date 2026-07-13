@@ -5,7 +5,7 @@ import type { RuntimeCheckSink, RuntimeTaskCheckResult } from "../review/task/ta
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 
-export const genericCheckFailureSummary = "pipr failed; see Action logs for details.";
+export const genericCheckFailureSummary = "pipr failed; see runner logs for details.";
 
 export type StartedRuntimeChecks = {
   event: ChangeRequestEventContext;
