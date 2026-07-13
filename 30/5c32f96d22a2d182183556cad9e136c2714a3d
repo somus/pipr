@@ -1,0 +1,70 @@
+scripts/sync-release-lockfile.ts
+  s_4ebdfc62030aaf::t_a467228ece2365 22,91-96
+  s_4ebdfc62030aaf::t_9f1d62eec8fdfd 97
+Dockerfile
+  s_4ebdfc62030aaf::t_8cff481216298c 60
+  s_4ebdfc62030aaf::t_9dc1a85de511c1 61-62
+packages/runtime/src/host-run/webhook-server.ts
+  s_4ebdfc62030aaf::t_bf1e121ee0886b 38-39,70-72
+  s_4ebdfc62030aaf::t_6545a8f69b80d4 73-74
+.github/workflows/release-please.yml
+  s_4ebdfc62030aaf::t_442cf6c7aef7c7 44,50
+deploy/webhook/compose.yml
+  s_4ebdfc62030aaf::t_9dc1a85de511c1 1-41
+scripts/changed-scope.ts
+  s_4ebdfc62030aaf::t_8bb25d21e2b0c3 108
+apps/docs/content/docs/guide/gitlab.mdx
+  s_4ebdfc62030aaf::t_508501149d3d46 58-59
+release-please-config.json
+  s_4ebdfc62030aaf::t_9dc1a85de511c1 47-48
+  s_4ebdfc62030aaf::t_c1cf3cdd617d5a 45-46
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_4ebdfc62030aaf::t_78ed4209262a27 19-34
+scripts/docker-e2e.ts
+  s_4ebdfc62030aaf::t_8d2c623364d738 6-21
+  s_4ebdfc62030aaf::t_9dc1a85de511c1 5
+packages/e2e/container-check.ts
+  s_4ebdfc62030aaf::t_9dc1a85de511c1 39,199-201,203-208
+  s_4ebdfc62030aaf::t_8cff481216298c 202
+  s_4ebdfc62030aaf::t_fdace13bea48eb 209-210
+apps/docs/content/docs/guide/meta.json
+  s_4ebdfc62030aaf::t_508501149d3d46 15
+apps/docs/content/docs/guide/index.mdx
+  s_4ebdfc62030aaf::t_508501149d3d46 47-48,50
+scripts/check-release-metadata.ts
+  s_4ebdfc62030aaf::t_442cf6c7aef7c7 347,353
+  s_4ebdfc62030aaf::t_1761e49ee84225 26,123-130
+deploy/webhook/.env.example
+  s_4ebdfc62030aaf::t_9dc1a85de511c1 1-26
+apps/docs/content/docs/guide/azure-devops.mdx
+  s_4ebdfc62030aaf::t_508501149d3d46 66-67
+apps/docs/content/docs/guide/webhook-docker.mdx
+  s_4ebdfc62030aaf::t_508501149d3d46 1-126
+apps/docs/content/docs/guide/bitbucket.mdx
+  s_4ebdfc62030aaf::t_508501149d3d46 43-44
+apps/docs/content/docs/reference/cli.mdx
+  s_4ebdfc62030aaf::t_508501149d3d46 118-119
+scripts/tests/release-scripts.test.ts
+  s_4ebdfc62030aaf::t_508eb5dac75355 362-366,371-375
+  s_4ebdfc62030aaf::t_8d2c623364d738 367-370
+  s_4ebdfc62030aaf::t_a467228ece2365 197-199
+  s_4ebdfc62030aaf::t_af5f9877abdb43 147
+package.json
+  s_4ebdfc62030aaf::t_da9a2dc1da9774 38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "305c32f96d22a2d182183556cad9e136c2714a3d",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
