@@ -45,6 +45,7 @@ const inlinePublicationItemSchema = z
     finding: reviewFindingSchema,
     range: commentableRangeSchema,
     path: z.string().min(1),
+    previousPath: z.string().min(1).optional(),
     side: reviewSideSchema,
     startLine: z.number().int().positive(),
     endLine: z.number().int().positive(),
@@ -83,6 +84,7 @@ export type InlineCommentDraft = InlinePublicationItem;
 export type PublishableInlineFinding = {
   finding: ReviewFinding;
   range: CommentableRange;
+  previousPath?: string;
 };
 
 const threadActionSchema = z.strictObject({
@@ -224,15 +226,22 @@ export function preparePublishableInlineFindings(options: {
 }): PublishableInlineFinding[] {
   const ranges = createDiffRangeIndex(options.manifest);
   return options.validated.validFindings.flatMap((finding) => {
-    const range = ranges.rangeById(finding.rangeId);
-    if (!range) {
+    const match = ranges.findRange(finding.rangeId);
+    if (!match) {
       throw new Error(`Validated finding range '${finding.rangeId}' is missing from Diff Manifest`);
     }
+    const { file, range } = match;
     const findingWithBody = findingWithPublishableBody(finding);
     if (!findingWithBody) {
       return [];
     }
-    return [{ finding: findingWithPublishableSuggestedFix(findingWithBody, range), range }];
+    return [
+      {
+        finding: findingWithPublishableSuggestedFix(findingWithBody, range),
+        range,
+        previousPath: file.previousPath,
+      },
+    ];
   });
 }
 
@@ -243,7 +252,7 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
 }): InlinePublicationItem[] {
   const seenFindingIds = new Set<string>();
   return inlinePublicationItemsSchema.parse(
-    options.publishableFindings.flatMap(({ finding: publishableFinding, range }) => {
+    options.publishableFindings.flatMap(({ finding: publishableFinding, range, previousPath }) => {
       const findingId = findingIdFor(publishableFinding, options.reviewState);
       const stateRecord = options.reviewState
         ? matchFindingRecord(options.reviewState, publishableFinding)
@@ -261,6 +270,7 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
           finding: publishableFinding,
           range,
           path: publishableFinding.path,
+          previousPath,
           side: publishableFinding.side,
           startLine: publishableFinding.startLine,
           endLine: publishableFinding.endLine,

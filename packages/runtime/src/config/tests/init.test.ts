@@ -1660,17 +1660,37 @@ export default definePipr((pipr) => {
     );
   });
 
+  it("creates an opt-in GitLab merge request pipeline", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+
+    const result = await initOfficialMinimalProject({
+      rootDir,
+      configDir: "config/pipr",
+      adapters: ["gitlab"],
+    });
+    const pipeline = await Bun.file(path.join(rootDir, ".gitlab-ci.yml")).text();
+
+    expect(result.created).toContain(".gitlab-ci.yml");
+    expect(pipeline).toContain("ghcr.io/somus/pipr:v0.3.8");
+    expect(pipeline).toContain("pipr host-run --host gitlab --config-dir config/pipr");
+    expect(pipeline).toContain('PIPR_CODE_HOST: "gitlab"');
+    expect(pipeline).toContain('GIT_DEPTH: "0"');
+    expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
+  });
+
   it("rejects unsupported init adapters", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
 
-    await expect(initOfficialMinimalProject({ rootDir, adapters: ["gitlab"] })).rejects.toThrow(
-      "Unsupported pipr init adapter 'gitlab'. Supported adapters: github",
+    await expect(
+      initOfficialMinimalProject({ rootDir, adapters: ["azure-devops"] }),
+    ).rejects.toThrow(
+      "Unsupported pipr init adapter 'azure-devops'. Supported adapters: github, gitlab",
     );
     await expect(
       initOfficialMinimalProject({ rootDir, adapters: ["none", "github"] }),
     ).rejects.toThrow("Adapter 'none' cannot be mixed with other init adapters");
     await expect(initOfficialMinimalProject({ rootDir, adapters: [""] })).rejects.toThrow(
-      "Unsupported pipr init adapter ''. Supported adapters: github",
+      "Unsupported pipr init adapter ''. Supported adapters: github, gitlab",
     );
   });
 

@@ -62,7 +62,7 @@ type TaskContext = {
 };
 ```
 
-`change.number` means GitHub pull request number today. Future adapters can map it to a provider-native change id, such as a GitLab merge request IID. GitLab, Bitbucket, and Azure DevOps support is coming soon.
+`change.number` is provider-relative: a GitHub pull request number or GitLab merge request IID. Bitbucket Cloud and Azure DevOps Services follow the same provider-neutral contract in their stacked releases.
 
 ## Trust model
 

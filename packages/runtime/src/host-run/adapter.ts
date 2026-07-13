@@ -1,4 +1,5 @@
 import { createGitHubHostAdapter } from "../hosts/github/adapter.js";
+import { createGitLabHostAdapter } from "../hosts/gitlab/adapter.js";
 import { resolveCodeHostId } from "../hosts/selection.js";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import type { PiprConfig } from "../types.js";
@@ -33,6 +34,9 @@ export function createHostRunAdapter(options: {
     env: options.env ?? process.env,
   });
   if (host !== "github") {
+    if (host === "gitlab") {
+      return createGitLabHostAdapter({ env: options.env });
+    }
     throw new Error(`Code host adapter '${host}' is not available in this build`);
   }
   return createGitHubHostAdapter({ env: options.env });

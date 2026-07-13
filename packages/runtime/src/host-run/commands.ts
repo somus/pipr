@@ -211,6 +211,8 @@ export async function runHostRunCommandWithDependencies(
     );
     log.notice("event dispatch", { kind: event.kind });
     switch (event.kind) {
+      case "ignored":
+        return event;
       case "command-comment":
         return await runIssueCommentHostRunCommand(options, adapter, log, event.comment);
       case "review-comment-reply":

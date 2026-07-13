@@ -131,6 +131,7 @@ const changeRequestRefSchema = z.strictObject({
   base: changeEndpointSchema,
   head: changeEndpointSchema,
   isFork: z.boolean().optional(),
+  isDraft: z.boolean().optional(),
 });
 
 const changeRequestEventContextSchema = z.strictObject({

@@ -24,7 +24,12 @@ import {
 
 type CliOptions = {
   configDir: string;
+  database?: string;
   host?: string;
+  hostname?: string;
+  port?: string;
+  repository?: string;
+  workspace?: string;
   event?: string;
   force?: boolean;
   adapters?: string;
@@ -93,6 +98,19 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .option("--event <path>", "Native event payload path")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .action(runHostRun);
+
+  const webhook = program.command("webhook").description("Run trusted webhook ingress");
+  webhook
+    .command("serve")
+    .description("Serve one repository with a durable webhook queue")
+    .requiredOption("--host <host>", "Code host adapter")
+    .requiredOption("--workspace <path>", "Trusted repository workspace")
+    .requiredOption("--repository <project>", "Expected GitLab project ID or path")
+    .option("--database <path>", "SQLite delivery database", ".pipr/webhooks.sqlite")
+    .option("--hostname <hostname>", "Listen hostname", "127.0.0.1")
+    .option("--port <port>", "Listen port", "8787")
+    .option("--config-dir <dir>", "Config directory", ".pipr")
+    .action(runWebhookServe);
 
   program
     .command("check")
@@ -184,6 +202,30 @@ function hostRunRootDir(env: NodeJS.ProcessEnv): string {
     env.BUILD_SOURCESDIRECTORY ??
     process.cwd()
   );
+}
+
+async function runWebhookServe(options: CliOptions): Promise<void> {
+  const { runWebhookServer } = await import("@usepipr/runtime");
+  const secret = process.env.PIPR_WEBHOOK_SECRET;
+  if (!secret) throw new Error("PIPR_WEBHOOK_SECRET is required");
+  if (options.host !== "gitlab") {
+    throw new Error("webhook serve currently supports only --host gitlab");
+  }
+  const port = Number(options.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("--port must be an integer from 1 to 65535");
+  }
+  await runWebhookServer({
+    host: options.host,
+    workspace: options.workspace ?? process.cwd(),
+    configDir: options.configDir,
+    databasePath: options.database ?? ".pipr/webhooks.sqlite",
+    expectedRepository: options.repository ?? "",
+    secret,
+    hostname: options.hostname,
+    port,
+    env: process.env,
+  });
 }
 
 const githubActionsLogSink: RuntimeLogSink = {

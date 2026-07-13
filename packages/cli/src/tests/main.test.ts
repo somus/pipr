@@ -201,11 +201,13 @@ describe("pipr CLI", () => {
     const action = await runCli(["action"]);
     const hostRun = await runCli(["host-run", "--help"]);
     const dryRun = await runCli(["dry-run", "--help"]);
+    const webhook = await runCli(["webhook", "serve", "--help"]);
 
     expect(result.exitCode).toBe(0);
     expect(action.exitCode).toBe(1);
     expect(hostRun.exitCode).toBe(0);
     expect(dryRun.exitCode).toBe(0);
+    expect(webhook.exitCode).toBe(0);
     expect(result.stdout).toContain("Start here (for AI agents):");
     expect(result.stdout).toContain("pipr skill");
     expect(result.stdout).toContain("init [options]");
@@ -214,6 +216,7 @@ describe("pipr CLI", () => {
     expect(result.stdout).toContain("review [options]");
     expect(result.stdout).toContain("host-run [options]");
     expect(result.stdout).not.toContain("action [options]");
+    expect(result.stdout).toContain("webhook");
     expect(result.stdout).toContain("skill");
     expect(result.stdout).toContain("update");
     expect(result.stdout).toContain("version");
@@ -223,12 +226,25 @@ describe("pipr CLI", () => {
     expect(init.stdout).toContain("--recipe <recipe>");
     expect(init.stdout).toContain("--minimal");
     expect(init.stdout).toContain("github");
+    expect(init.stdout).toContain("gitlab");
     expect(init.stdout).toContain("none");
     expect(init.stdout).toContain("multi-agent-review");
     expect(action.stderr).toContain("unknown command 'action'");
+    expect(webhook.stdout).toContain("--database <path>");
+    expect(webhook.stdout).toContain("--repository <project>");
     expect(hostRun.stdout).toContain("--host <host>");
     expect(hostRun.stdout).toContain("--event <path>");
     expect(dryRun.stdout).toContain("--host <host>");
+  });
+
+  it("requires a repository before starting the webhook server", async () => {
+    const result = await runCli(["webhook", "serve", "--host", "gitlab", "--workspace", "."], {
+      PIPR_WEBHOOK_SECRET: "test-secret",
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("required option '--repository <project>' not specified");
+    expect(result.stderr).not.toContain("Code host request failed");
   });
 
   it("prints no-args help without failing inside GitHub Actions", async () => {
@@ -572,7 +588,7 @@ describe("pipr CLI", () => {
   it("rejects unsupported init adapters", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
     try {
-      const unsupported = await runCli(["init", "--adapters", "gitlab"], {}, workspace);
+      const unsupported = await runCli(["init", "--adapters", "azure-devops"], {}, workspace);
       const mixedNone = await runCli(["init", "--adapters", "none,github"], {}, workspace);
       const unsupportedRecipe = await runCli(
         ["init", "--adapters", "none", "--recipe", "missing"],
@@ -582,7 +598,7 @@ describe("pipr CLI", () => {
 
       expect(unsupported.exitCode).toBe(1);
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).toContain(
-        "Unsupported pipr init adapter 'gitlab'. Supported adapters: github",
+        "Unsupported pipr init adapter 'azure-devops'. Supported adapters: github, gitlab",
       );
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).not.toContain("::error::");
       expect(mixedNone.exitCode).toBe(1);

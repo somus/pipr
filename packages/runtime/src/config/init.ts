@@ -26,7 +26,7 @@ export type InitOfficialMinimalProjectResult = {
   overwritten: string[];
 };
 
-export const supportedOfficialInitAdapters = ["github"] as const;
+export const supportedOfficialInitAdapters = ["github", "gitlab"] as const;
 
 export type OfficialInitAdapter = (typeof supportedOfficialInitAdapters)[number];
 
@@ -36,11 +36,12 @@ type StarterFile = {
 };
 
 const defaultWorkflowActionRef = "somus/pipr@v0.3.8"; // x-release-please-version
+const defaultGitLabImageRef = "ghcr.io/somus/pipr:v0.3.8"; // x-release-please-version
 const defaultSdkVersion = "0.3.8"; // x-release-please-version
 
 function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInitAdapter[] {
   if (adapters === undefined) {
-    return [...supportedOfficialInitAdapters];
+    return ["github"];
   }
   if (adapters.length === 0) {
     return [];
@@ -56,7 +57,7 @@ function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInit
       }
       return [];
     }
-    if (adapter !== "github") {
+    if (adapter !== "github" && adapter !== "gitlab") {
       throw unsupportedAdapterError(adapter);
     }
     selected.add(adapter);
@@ -162,7 +163,34 @@ async function starterFiles(
       contents: starterWorkflow(relativeConfigDir.split(path.sep).join("/"), recipe, minimal),
     });
   }
+  if (adapters.includes("gitlab")) {
+    files.push({
+      relativePath: ".gitlab-ci.yml",
+      contents: starterGitLabPipeline(relativeConfigDir.split(path.sep).join("/"), recipe),
+    });
+  }
   return files;
+}
+
+function starterGitLabPipeline(relativeConfigDir: string, recipe?: string): string {
+  const lines = [
+    "pipr:",
+    "  image:",
+    `    name: ${defaultGitLabImageRef}`,
+    '    entrypoint: [""]',
+    "  rules:",
+    "    - if: '$CI_PIPELINE_SOURCE == \"merge_request_event\"'",
+    "  variables:",
+    '    GIT_DEPTH: "0"',
+    '    PIPR_CODE_HOST: "gitlab"',
+    "  script:",
+    `    - pipr host-run --host gitlab --config-dir ${relativeConfigDir}`,
+  ];
+  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
+    lines.push(`    # Configure ${secret.env} as a masked GitLab CI/CD variable.`);
+  }
+  lines.push("");
+  return lines.join("\n");
 }
 
 function starterPackageJson(): string {

@@ -1272,6 +1272,29 @@ describe("comments", () => {
     expect(item?.body).toContain('````suggestion\nconst fence = "```";\n````');
   });
 
+  it("preserves a renamed file's previous path through publication assembly", () => {
+    const renamed: DiffManifest = {
+      ...manifest,
+      files: manifest.files.map((file) => ({
+        ...file,
+        path: "src/new.ts",
+        previousPath: "src/old.ts",
+        status: "renamed",
+        commentableRanges: file.commentableRanges.map((range) => ({
+          ...range,
+          path: "src/new.ts",
+        })),
+      })),
+    };
+    const [item] = prepareInlinePublicationItems({
+      validated: { validFindings: [{ ...finding, path: "src/new.ts" }] },
+      manifest: renamed,
+      reviewedHeadSha: "head",
+    });
+
+    expect(item).toMatchObject({ path: "src/new.ts", previousPath: "src/old.ts" });
+  });
+
   it("republishes inline drafts when the same-head inline comment was deleted", () => {
     const first = prepareInlinePublicationItems({
       validated: { validFindings: [finding] },

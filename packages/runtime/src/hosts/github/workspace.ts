@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import type { ChangeRequestEventContext } from "../../types.js";
+import { ensureCodeHostHeadCheckout } from "../git.js";
 
 export function ensureGitHubWorkspaceSafeDirectory(options: {
   rootDir: string;
@@ -78,40 +79,10 @@ function gitGlobalConfigHome(env: NodeJS.ProcessEnv): string {
 export function ensureGitHubHeadCheckout(options: {
   rootDir: string;
   change: ChangeRequestEventContext;
-}): void {
-  const headSha = options.change.change.head.sha;
-  if (!hasGitCommit(options.rootDir, headSha)) {
-    runGit(options.rootDir, [
-      "fetch",
-      "--no-tags",
-      "--depth=1",
-      "origin",
-      `refs/pull/${options.change.change.number}/head`,
-    ]);
-  }
-  if (runGit(options.rootDir, ["rev-parse", "HEAD"]).trim() !== headSha) {
-    runGit(options.rootDir, ["checkout", "--detach", headSha]);
-  }
-}
-
-function hasGitCommit(rootDir: string, sha: string): boolean {
-  try {
-    runGit(rootDir, ["cat-file", "-e", `${sha}^{commit}`]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function runGit(rootDir: string, args: string[]): string {
-  const result = Bun.spawnSync(["git", ...args], {
-    cwd: rootDir,
-    env: process.env,
-    stderr: "pipe",
-    stdout: "pipe",
+}): Promise<void> {
+  return ensureCodeHostHeadCheckout({
+    rootDir: options.rootDir,
+    headSha: options.change.change.head.sha,
+    fetchRef: `refs/pull/${options.change.change.number}/head`,
   });
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr.toString().trim() || `git ${args.join(" ")} failed`);
-  }
-  return result.stdout.toString();
 }
