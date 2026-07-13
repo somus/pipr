@@ -33,6 +33,7 @@ packages/runtime/src/shared/betterleaks-redactor.ts
   s_4ebdfc62030aaf::t_7014689d202d17 175-179,182-201
 packages/runtime/src/host-run/commands.ts
   s_5eca1d7251411e::t_518133aa1110be 10,187-189
+  s_5eca1d7251411e::t_81393cc529c581 186
 packages/runtime/src/shared/secret-redactor.ts
   s_5eca1d7251411e::t_0adb727fd94973 1-9
   s_5eca1d7251411e::t_5edb61915e36d6 10-17
