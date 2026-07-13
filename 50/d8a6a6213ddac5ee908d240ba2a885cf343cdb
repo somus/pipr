@@ -1,0 +1,21 @@
+scripts/tests/release-scripts.test.ts
+  s_4ebdfc62030aaf::t_8f682a506f6a29 147
+scripts/changed-scope.ts
+  s_4ebdfc62030aaf::t_e0527bc4791920 121-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "50d8a6a6213ddac5ee908d240ba2a885cf343cdb",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
