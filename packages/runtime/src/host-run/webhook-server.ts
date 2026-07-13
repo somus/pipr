@@ -205,7 +205,9 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
         );
       `);
       this.database
-        .query("UPDATE webhook_deliveries SET status = 'pending' WHERE status = 'processing'")
+        .query(
+          "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = CASE WHEN attempts < 3 THEN error ELSE COALESCE(error, 'delivery interrupted during final attempt') END, updated_at = CURRENT_TIMESTAMP WHERE status = 'processing'",
+        )
         .run();
     })();
   }

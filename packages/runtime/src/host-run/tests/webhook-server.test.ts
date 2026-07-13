@@ -303,6 +303,28 @@ describe("webhook runner", () => {
     }
   });
 
+  it("releases queue capacity after recovering an interrupted final attempt", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const store = new SqliteWebhookDeliveryStore(databasePath, { maxPendingDeliveries: 1 });
+        if (attempt === 0)
+          expect(store.enqueue({ id: "interrupted", host: "gitlab", payload: "{}" })).toBe(
+            "created",
+          );
+        expect(store.next()?.id).toBe("interrupted");
+        store.close();
+      }
+
+      const recovered = new SqliteWebhookDeliveryStore(databasePath, { maxPendingDeliveries: 1 });
+      expect(recovered.enqueue({ id: "next", host: "gitlab", payload: "{}" })).toBe("created");
+      recovered.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("drops retained payload content after the final retry", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
     const databasePath = path.join(root, "deliveries.sqlite");

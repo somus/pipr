@@ -4,11 +4,24 @@ export async function ensureCodeHostHeadCheckout(options: {
   fetchRef: string;
 }): Promise<void> {
   if (!(await hasGitCommit(options.rootDir, options.headSha))) {
-    await runGit(options.rootDir, ["fetch", "--no-tags", "--depth=1", "origin", options.fetchRef]);
+    try {
+      await fetchGit(options.rootDir, options.headSha);
+    } catch {
+      await fetchGit(options.rootDir, options.fetchRef);
+    }
+    if (!(await hasGitCommit(options.rootDir, options.headSha))) {
+      throw new Error(
+        `Code host did not provide reviewed commit ${options.headSha} from ${options.fetchRef}`,
+      );
+    }
   }
   if ((await runGit(options.rootDir, ["rev-parse", "HEAD"])).trim() !== options.headSha) {
     await runGit(options.rootDir, ["checkout", "--detach", options.headSha]);
   }
+}
+
+async function fetchGit(rootDir: string, ref: string): Promise<void> {
+  await runGit(rootDir, ["fetch", "--no-tags", "--depth=1", "origin", ref]);
 }
 
 async function hasGitCommit(rootDir: string, sha: string): Promise<boolean> {

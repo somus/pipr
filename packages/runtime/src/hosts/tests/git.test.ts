@@ -35,4 +35,48 @@ describe("code host checkout", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("checks out the reviewed SHA when the remote ref has advanced", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-code-host-git-"));
+    const remote = path.join(root, "remote.git");
+    const seed = path.join(root, "seed");
+    const workspace = path.join(root, "workspace");
+    try {
+      git(root, ["init", "--bare", remote]);
+      git(root, ["init", seed]);
+      git(seed, ["config", "user.name", "Pipr Test"]);
+      git(seed, ["config", "user.email", "pipr@example.test"]);
+      await Bun.write(path.join(seed, "fixture.ts"), "export const value = 1;\n");
+      git(seed, ["add", "fixture.ts"]);
+      git(seed, ["commit", "-m", "reviewed head"]);
+      const reviewedSha = git(seed, ["rev-parse", "HEAD"]).trim();
+      git(seed, ["push", remote, "HEAD:refs/heads/feature"]);
+      await Bun.write(path.join(seed, "fixture.ts"), "export const value = 2;\n");
+      git(seed, ["commit", "-am", "advanced head"]);
+      git(seed, ["push", remote, "HEAD:refs/heads/feature"]);
+      git(root, ["init", workspace]);
+      git(workspace, ["config", "user.name", "Pipr Test"]);
+      git(workspace, ["config", "user.email", "pipr@example.test"]);
+      await Bun.write(path.join(workspace, "base.ts"), "export const base = true;\n");
+      git(workspace, ["add", "base.ts"]);
+      git(workspace, ["commit", "-m", "base"]);
+      git(workspace, ["remote", "add", "origin", remote]);
+
+      await ensureCodeHostHeadCheckout({
+        rootDir: workspace,
+        headSha: reviewedSha,
+        fetchRef: "refs/heads/feature",
+      });
+
+      expect(git(workspace, ["rev-parse", "HEAD"]).trim()).toBe(reviewedSha);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
+
+function git(cwd: string, args: string[]): string {
+  const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+  return result.stdout.toString();
+}
