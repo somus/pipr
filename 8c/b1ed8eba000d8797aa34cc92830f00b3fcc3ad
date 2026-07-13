@@ -1,0 +1,21 @@
+packages/runtime/src/hosts/bitbucket/tests/client.test.ts
+  s_4ebdfc62030aaf::t_377e524e1657d6 164-170
+packages/runtime/src/hosts/bitbucket/tests/workspace.test.ts
+  s_4ebdfc62030aaf::t_412c691228d42f 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "8cb1ed8eba000d8797aa34cc92830f00b3fcc3ad",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
