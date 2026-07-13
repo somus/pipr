@@ -1,0 +1,24 @@
+docs/adr/0005-pipr-owned-comment-publishing.md
+  s_e687529015e9e5::t_2b4ef20f0838ae 14,32
+packages/runtime/src/hosts/tests/publication.test.ts
+  s_e687529015e9e5::t_148bcccd9b5e66 4,62-77
+  s_e687529015e9e5::t_b8ecad12f58bc5 78
+packages/runtime/src/hosts/publication.ts
+  s_e687529015e9e5::t_221518f46343ad 91-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "4a3f25c67aaa4a8c666b29fed17d59b813ae9d74",
+  "prompts": {},
+  "sessions": {
+    "s_e687529015e9e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5c9c-d84f-7ac1-9051-e67aa92f922b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
