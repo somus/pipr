@@ -7,6 +7,7 @@ import { buildDiffManifest } from "../diff/diff.js";
 import { runGit as runGitCommand } from "../diff/git.js";
 import { createLocalChangeRequestEvent } from "../hosts/local/adapter.js";
 import { runTaskRuntime } from "../review/task/task-runtime.js";
+import { createBetterleaksSecretRedactor } from "../shared/betterleaks-redactor.js";
 import { createRuntimeLog } from "../shared/logging.js";
 import { parseChangeRequestEventContext } from "../types.js";
 import { createHostRunAdapter } from "./adapter.js";
@@ -182,7 +183,10 @@ export async function runLocalReviewCommand(
 export async function runHostRunCommand(
   options: HostRunCommandOptions,
 ): Promise<HostRunCommandResult> {
-  return await runHostRunCommandWithDependencies(options);
+  return await runHostRunCommandWithDependencies({
+    ...options,
+    secretRedactor: createBetterleaksSecretRedactor({ env: options.env ?? process.env }),
+  });
 }
 
 export async function runHostRunCommandWithDependencies(

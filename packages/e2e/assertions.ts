@@ -51,9 +51,18 @@ export async function assertActFullFixture(
   assertFullFixtureDropReasons(fixture);
   assertNoOutOfScopeFinding(fixture);
   assertInlinePayload(readOnlyInlinePayload(fixture), expectedHeadSha);
+  assertBetterleaksRedaction(fixture);
   if (telemetryPath) {
     await assertParallelPiCalls(telemetryPath);
   }
+}
+
+function assertBetterleaksRedaction(fixture: PublicationFixture): void {
+  const secret = ["xoxb", "111111111111", "222222222222", "abcdefghijklmnopqrstuvwx"].join("-");
+  const published = JSON.stringify(fixture);
+  assert(!published.includes(secret), "Betterleaks fixture secret was published");
+  assert(published.includes("[redacted secret]"), "Betterleaks fixture secret was not replaced");
+  assert(!published.includes("const leaked"), "secret-bearing suggested fix was published");
 }
 
 export function assertActCondensedFixture(fixture: PublicationFixture): void {

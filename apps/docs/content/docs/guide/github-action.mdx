@@ -77,6 +77,12 @@ Use the generated permission block unless you have intentionally disabled the ma
 
 Command help is exposed through the `main-comment` output. If GitHub denies verifier cleanup or the API fails, the review still succeeds and records the issue in `publication.metadata.inlineResolutionErrors`.
 
+### Secret redaction
+
+Before it publishes, the Action scans review comments, suggested fixes, verifier replies, command responses, dropped-finding records, and Check Run summaries for credentials. Known runtime secrets are masked first, then the bundled offline Betterleaks scanner and Pipr's heuristic redaction run over the publication payload. Suggested fixes containing a detected credential are dropped instead of rewritten.
+
+If the scanner is missing, times out, or returns an invalid report, the Action fails before publishing the payload. Local `pipr review` output does not invoke Betterleaks and retains heuristic masking. Synchronous Action logs retain exact-value and heuristic masking.
+
 ## Pinning
 
 ### Release tag

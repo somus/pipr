@@ -6,6 +6,7 @@ import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/dif
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
 import { selectRuntimeTasks } from "../../host-run/entry-dispatch.js";
 import type { RuntimeLog } from "../../shared/logging.js";
+import type { SecretRedactor } from "../../shared/secret-redactor.js";
 import type {
   ChangeRequestEventContext,
   DiffManifest,
@@ -24,6 +25,7 @@ import {
 import { type InlineCommentDraft, type PublicationPlan, runtimeVersion } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { type PriorReviewState, priorReviewStateForSelectedTasks } from "../prior-state.js";
+import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
 import { validateReviewResult } from "../review.js";
 import { type RuntimeCommandInvocation, stableReviewRunId } from "../run-identity.js";
 import { runInternalVerifier } from "../verifier.js";
@@ -78,6 +80,7 @@ export type RunTaskRuntimeOptions = {
   commandInvocation?: RuntimeCommandInvocation;
   log?: RuntimeLog;
   taskLog?: TaskContext["log"];
+  secretRedactor?: SecretRedactor;
 };
 
 type ReviewRuntimeBaseResult = {
@@ -212,9 +215,6 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
           }),
           task.name === options.taskName ? options.taskInput : undefined,
         );
-        options.checkSink?.setTaskResult(
-          runtimeTaskCheckResult(task.name, output.check ?? { conclusion: "success" }),
-        );
         options.log?.info("task ok", {
           task: task.name,
           durationMs: Date.now() - started,
@@ -228,7 +228,6 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
           conclusion: "failure" as const,
           summary: genericTaskFailureSummary,
         };
-        options.checkSink?.setTaskResult(runtimeTaskCheckResult(task.name, check));
         options.log?.error("task failed", {
           task: task.name,
           durationMs: Date.now() - started,
@@ -241,8 +240,12 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
       }
     }),
   );
+  const taskChecks = taskResults.map((result) =>
+    runtimeTaskCheckResult(result.taskName, result.output.check ?? { conclusion: "success" }),
+  );
   const failedTask = taskResults.find((result) => result.error !== undefined);
   if (failedTask) {
+    await publishFailedRunTaskChecks(options, taskChecks);
     throw failedTask.error instanceof Error
       ? failedTask.error
       : new Error(String(failedTask.error));
@@ -253,17 +256,17 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     providerModels: output.providerModels,
     repairAttempted: output.repairAttempted,
   });
-  const taskChecks = taskResults.map((result) =>
-    runtimeTaskCheckResult(result.taskName, result.output.check ?? { conclusion: "success" }),
-  );
-  const commandResponse = commandResponseResultFromOutput({
+  const commandResponse = await commandResponseResultFailClosed({
     provider,
     diffManifest,
     output,
     taskChecks,
     commandInvocation: options.commandInvocation,
+    secretRedactor: options.secretRedactor,
+    checkSink: options.checkSink,
   });
   if (commandResponse) {
+    publishTaskChecks(options.checkSink, commandResponse.taskChecks);
     return commandResponse;
   }
   assertReviewCommentOutput(output, options.commandInvocation !== undefined);
@@ -287,17 +290,30 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     piRunSink: runtimeOptions.piRunSink,
   });
   const stats = reviewStatsForRuns(piRuns, Date.now() - runtimeStarted);
+  let redactedPublication: Awaited<ReturnType<typeof redactReviewPublication>>;
+  try {
+    redactedPublication = await redactReviewPublication({
+      main,
+      validated,
+      threadActions: verifier.threadActions,
+      taskChecks,
+      redactor: options.secretRedactor,
+    });
+  } catch (error) {
+    failClosedTaskChecks(options.checkSink, taskChecks);
+    throw error;
+  }
   const publishing = buildCommentPublishingPlan({
     event: options.event,
-    main,
-    validated,
+    main: redactedPublication.main,
+    validated: redactedPublication.validated,
     manifest: diffManifest,
     maxInlineComments: config.publication.maxInlineComments,
     showHeader: config.publication.showHeader,
     showFooter: config.publication.showFooter,
     showStats: config.publication.showStats,
     priorReviewState: verifier.priorReviewState,
-    threadActions: verifier.threadActions,
+    threadActions: redactedPublication.threadActions,
     metadata: {
       runtimeVersion,
       configVersion: options.versionCompatibility?.configVersion,
@@ -316,6 +332,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     },
   });
   const publicationPlan = publishing.publicationPlan;
+  publishTaskChecks(options.checkSink, redactedPublication.taskChecks);
   options.log?.info("review validated", {
     validFindings: validated.validFindings.length,
     droppedFindings: validated.droppedFindings.length,
@@ -327,23 +344,41 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     kind: "review",
     provider,
     diffManifest,
-    review: validated.review,
-    validated,
+    review: redactedPublication.validated.review,
+    validated: redactedPublication.validated,
     publicationPlan,
     mainComment: publicationPlan.mainComment,
     inlineCommentDrafts: publishing.inlineCommentDrafts,
-    taskChecks,
+    taskChecks: redactedPublication.taskChecks,
     repairAttempted: output.repairAttempted,
   };
 }
 
-function commandResponseResultFromOutput(options: {
+async function publishFailedRunTaskChecks(
+  options: Pick<RunTaskRuntimeOptions, "checkSink" | "secretRedactor">,
+  taskChecks: RuntimeTaskCheckResult[],
+): Promise<void> {
+  try {
+    const redacted = await redactCommandPublication({
+      body: "",
+      taskChecks,
+      redactor: options.secretRedactor,
+    });
+    publishTaskChecks(options.checkSink, redacted.taskChecks);
+  } catch (error) {
+    failClosedTaskChecks(options.checkSink, taskChecks);
+    throw error;
+  }
+}
+
+async function commandResponseResultFromOutput(options: {
   provider: ProviderConfig;
   diffManifest: DiffManifest;
   output: OutputState;
   taskChecks: RuntimeTaskCheckResult[];
   commandInvocation?: RuntimeCommandInvocation;
-}): ReviewRuntimeResult | undefined {
+  secretRedactor?: SecretRedactor;
+}): Promise<ReviewRuntimeResult | undefined> {
   const commandResponse = options.output.commandResponse;
   if (!commandResponse) {
     return undefined;
@@ -351,11 +386,24 @@ function commandResponseResultFromOutput(options: {
   if (!options.commandInvocation) {
     throw new Error("ctx.command.reply(...) is only available for command-triggered tasks");
   }
-  return commandResponseRuntimeResult({
+  return await commandResponseRuntimeResult({
     ...options,
     commandResponse,
     commandInvocation: options.commandInvocation,
   });
+}
+
+async function commandResponseResultFailClosed(
+  options: Parameters<typeof commandResponseResultFromOutput>[0] & {
+    checkSink?: RuntimeCheckSink;
+  },
+): Promise<ReviewRuntimeResult | undefined> {
+  try {
+    return await commandResponseResultFromOutput(options);
+  } catch (error) {
+    failClosedTaskChecks(options.checkSink, options.taskChecks);
+    throw error;
+  }
 }
 
 function assertReviewCommentOutput(
@@ -527,30 +575,60 @@ function resolveTaskSecret(secret: SecretRef, options: RunTaskRuntimeOptions): s
     throw new Error(`Missing secret env var: ${secret.name}`);
   }
   options.log?.addSecret(value);
+  options.secretRedactor?.addSecret(value);
   return value;
 }
 
-function commandResponseRuntimeResult(options: {
+async function commandResponseRuntimeResult(options: {
   provider: ProviderConfig;
   diffManifest: DiffManifest;
   output: OutputState;
   commandResponse: CommandResponseContribution;
   taskChecks: RuntimeTaskCheckResult[];
   commandInvocation: RuntimeCommandInvocation;
-}): ReviewRuntimeResult {
+  secretRedactor?: SecretRedactor;
+}): Promise<ReviewRuntimeResult> {
+  const redacted = await redactCommandPublication({
+    body: options.commandResponse.value,
+    taskChecks: options.taskChecks,
+    redactor: options.secretRedactor,
+  });
   return {
     kind: "command-response",
     provider: options.provider,
     diffManifest: options.diffManifest,
-    taskChecks: options.taskChecks,
+    taskChecks: redacted.taskChecks,
     repairAttempted: options.output.repairAttempted,
     commandResponse: {
       commandName: options.commandInvocation.name,
       line: options.commandInvocation.line,
       arguments: options.commandInvocation.arguments,
-      body: options.commandResponse.value,
+      body: redacted.body,
     },
   };
+}
+
+function publishTaskChecks(
+  sink: RuntimeCheckSink | undefined,
+  checks: readonly RuntimeTaskCheckResult[],
+): void {
+  for (const check of checks) {
+    sink?.setTaskResult(check);
+  }
+}
+
+function failClosedTaskChecks(
+  sink: RuntimeCheckSink | undefined,
+  checks: readonly RuntimeTaskCheckResult[],
+): void {
+  publishTaskChecks(
+    sink,
+    checks.map((check) => ({
+      taskName: check.taskName,
+      conclusion: "failure",
+      summary: genericTaskFailureSummary,
+    })),
+  );
 }
 
 function skippedTaskRuntimeResult(options: {

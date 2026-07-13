@@ -2,6 +2,7 @@ import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
 import { resolveProvider } from "../review/agent/review-run.js";
 import { isPiprThreadActionReplyBody } from "../review/prior-state.js";
+import { redactThreadActions } from "../review/publication-redaction.js";
 import { stableReviewRunId } from "../review/run-identity.js";
 import { runInternalVerifier } from "../review/verifier.js";
 import type { RuntimeLog } from "../shared/logging.js";
@@ -202,7 +203,13 @@ async function runReviewCommentVerifier(
       },
     }),
   });
-  return result;
+  return {
+    ...result,
+    threadActions: await redactThreadActions({
+      threadActions: result.threadActions,
+      redactor: options.secretRedactor,
+    }),
+  };
 }
 
 function runnableReviewCommentReply(

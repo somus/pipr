@@ -50,6 +50,7 @@ export async function runTrustedReviewAndPublish(options: {
       piExecutable: options.options.piExecutable,
       log: options.log,
       checkSink: checks?.sink,
+      secretRedactor: options.options.secretRedactor,
       loadPriorReviewState: () =>
         options.adapter.comments?.loadPriorReviewState?.({ change: options.event }) ??
         Promise.resolve(undefined),

@@ -3,6 +3,7 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PublicationError } from "@usepipr/runtime";
 import {
+  createBetterleaksSecretRedactor,
   createGitHubHostAdapter,
   type GitHubPublicationClient,
   type HostRunCommandResult,
@@ -69,6 +70,7 @@ async function actionFixtureContext(): Promise<ActionFixtureContext> {
       hostAdapter: createGitHubHostAdapter({
         publicationClient: fixturePublicationClient(fixturePath),
       }),
+      secretRedactor: createBetterleaksSecretRedactor({ env: Bun.env }),
     },
   };
 }

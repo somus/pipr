@@ -1,0 +1,4 @@
+# Pipr's Betterleaks rules are pinned by the Betterleaks binary version and digest in Dockerfile.
+# This explicit trusted config prevents change request worktrees from supplying scanner settings.
+[extend]
+useDefault = true

@@ -100,8 +100,10 @@ type PublicationFixture = {
 
 function validFullFixture(): PublicationFixture {
   return {
-    issueComments: [{ body: fullMainCommentBody() }],
-    reviewCommentPayloads: [validInlinePayload()],
+    issueComments: [{ body: `${fullMainCommentBody()}\n[redacted secret]` }],
+    reviewCommentPayloads: [
+      { ...validInlinePayload(), body: `${validInlinePayload().body}\n[redacted secret]` },
+    ],
     droppedFindings: [
       droppedFinding(),
       droppedFinding(),

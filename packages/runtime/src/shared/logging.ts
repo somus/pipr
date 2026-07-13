@@ -1,4 +1,5 @@
 import { redactPotentialSecrets } from "./redaction.js";
+import { sensitiveEnvironmentValues } from "./secret-redactor.js";
 
 export type RuntimeLogSink = {
   log(record: RuntimeLogRecord): void;
@@ -48,10 +49,8 @@ export function createRuntimeLog(options: {
   env?: NodeJS.ProcessEnv;
 }): RuntimeLog {
   const secrets = new Set<string>();
-  for (const [key, value] of Object.entries(options.env ?? process.env)) {
-    if (sensitiveEnvNamePattern.test(key)) {
-      addSecret(secrets, value);
-    }
+  for (const value of sensitiveEnvironmentValues(options.env ?? process.env)) {
+    addSecret(secrets, value);
   }
   const debugEnabled =
     (options.env ?? process.env).ACTIONS_STEP_DEBUG === "true" ||

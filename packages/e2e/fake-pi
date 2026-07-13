@@ -69,23 +69,30 @@ async function fullFixtureReview() {
     return review("Fixture review", "Fake Pi found no commentable ranges.");
   }
 
+  const secret = betterleaksFixtureSecret();
+
   return {
     summary: {
       title: "Fixture review",
-      body: "Fake Pi reviewed the act full-flow fixture.",
+      body: `Fake Pi reviewed the act full-flow fixture with ${secret}.`,
     },
     inlineFindings: [
       {
-        body: "Full-flow act reached inline publication.",
+        body: `Full-flow act reached inline publication with ${secret}.`,
         path: range.path,
         rangeId: range.id,
         side: range.side,
         startLine: range.startLine,
         endLine: range.startLine,
+        suggestedFix: `const leaked = "${secret}";`,
       },
       ...outOfScopeFindings(range),
     ],
   };
+}
+
+function betterleaksFixtureSecret() {
+  return ["xoxb", "111111111111", "222222222222", "abcdefghijklmnopqrstuvwx"].join("-");
 }
 
 function outOfScopeFindings(range) {
