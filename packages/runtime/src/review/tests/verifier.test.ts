@@ -411,6 +411,26 @@ describe("runInternalVerifier", () => {
     expect(observedPrompt).toContain('"runId": "pipr-stable-verifier-run"');
   });
 
+  it("projects the Diff Manifest once and caps every verifier attempt at two minutes", async () => {
+    const sentinel = "verifier-manifest-sentinel";
+    let observedPrompt = "";
+    let observedTimeout: number | undefined;
+
+    await runVerifier({
+      diffManifest: { ...diffManifest, baseSha: sentinel },
+      output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
+      observePrompt: (prompt) => {
+        observedPrompt = prompt;
+      },
+      observeRun: (run) => {
+        observedTimeout = run.timeoutSeconds;
+      },
+    });
+
+    expect(observedPrompt.split(sentinel)).toHaveLength(2);
+    expect(observedTimeout).toBe(120);
+  });
+
   it("matches verifier candidates to the currently commented finding head", async () => {
     const result = await runVerifier({
       mode: { kind: "synchronize" },
@@ -499,6 +519,7 @@ async function runVerifier(options: {
   observeModel?: (model: string) => void;
   observePrompt?: (prompt: string) => void;
   runId?: string;
+  diffManifest?: DiffManifest;
 }) {
   const piRunner: PiRunner = async (run) => {
     options.observeRun?.(run);
@@ -518,7 +539,7 @@ async function runVerifier(options: {
     provider,
     verifierProvider: options.verifierProvider ?? provider,
     plan,
-    diffManifest,
+    diffManifest: options.diffManifest ?? diffManifest,
     priorReviewState: options.priorReviewState ?? priorReviewState,
     threadContexts: verifierThreadContexts(options),
     piRunner,

@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { chmod, cp, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
@@ -27,6 +28,7 @@ export type PiRunOptions = {
     toolResponseMaxBytes: number;
   };
   customTools?: PiCustomToolRequest;
+  streamLimits?: Partial<PiStreamLimits>;
 };
 
 export type PiRunResult = {
@@ -36,6 +38,20 @@ export type PiRunResult = {
   durationMs: number;
   models?: string[];
   usage?: PiRunUsage;
+  stream?: PiRunStreamStats;
+};
+
+export type PiRunStreamStats = {
+  rawStdoutBytes: number;
+  jsonEventCount: number;
+  largestEventBytes: number;
+  peakBufferedBytes: number;
+};
+
+type PiStreamLimits = {
+  maxJsonEventBytes: number;
+  maxRawStdoutBytes: number;
+  maxStderrBytes: number;
 };
 
 export type PiRunUsage = {
@@ -104,6 +120,11 @@ const assistantUsageMessageSchema = z.looseObject({
     cost: z.looseObject({ total: z.number().nonnegative() }),
   }),
 });
+const defaultPiStreamLimits: PiStreamLimits = {
+  maxJsonEventBytes: 16 * 1024 * 1024,
+  maxRawStdoutBytes: 16 * 1024 * 1024,
+  maxStderrBytes: 16 * 1024 * 1024,
+};
 
 export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
   const started = Date.now();
@@ -130,19 +151,13 @@ export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
       preparedTools,
       options.builtinTools,
     );
-    const result = await runProcess(options.piExecutable ?? "pi", args, {
+    return await runProcess(options.piExecutable ?? "pi", args, {
       cwd: sandbox.workspace,
       env: buildPiEnv(options.provider, sandbox, options.env, preparedTools),
       started,
       timeoutSeconds: options.timeoutSeconds,
+      streamLimits: { ...defaultPiStreamLimits, ...options.streamLimits },
     });
-    const events = parsePiJsonEvents(result.stdout);
-    return {
-      ...result,
-      ...(events?.models.length ? { models: events.models } : {}),
-      ...(events?.usage ? { usage: events.usage } : {}),
-      stdout: result.exitCode === 0 ? (events?.assistantText ?? result.stdout) : result.stdout,
-    };
   } finally {
     await preparedTools?.custom?.close();
     await chmodRecursive(sandbox.root, 0o755);
@@ -300,121 +315,223 @@ async function chmodRecursive(target: string, mode: number): Promise<void> {
   }
 }
 
-function parsePiJsonEvents(
-  stdout: string,
-): { assistantText?: string; models: string[]; usage?: PiRunUsage } | undefined {
-  const events: Record<string, unknown>[] = [];
-  for (const line of stdout
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean)) {
-    try {
-      const value = JSON.parse(line) as unknown;
-      const parsed = eventRecordSchema.safeParse(value);
-      if (!parsed.success) {
-        return undefined;
+type PiOutputMode = "undetermined" | "json" | "raw";
+
+class PiOutputCollector {
+  private mode: PiOutputMode = "undetermined";
+  private pending = "";
+  private pendingBytes = 0;
+  private rawOutput = "";
+  private rawOutputBytes = 0;
+  private failureReason: string | undefined;
+  private assistantText: string | undefined;
+  private readonly models: string[] = [];
+  private assistantMessageCount = 0;
+  private usageMessageCount = 0;
+  private inputTokens = 0;
+  private outputTokens = 0;
+  private costUsd = 0;
+  private usagePartial = false;
+  private readonly stream: PiRunStreamStats = {
+    rawStdoutBytes: 0,
+    jsonEventCount: 0,
+    largestEventBytes: 0,
+    peakBufferedBytes: 0,
+  };
+
+  constructor(private readonly limits: PiStreamLimits) {}
+
+  push(chunk: string): string | undefined {
+    this.stream.rawStdoutBytes += Buffer.byteLength(chunk, "utf8");
+    if (this.failureReason) {
+      return this.failureReason;
+    }
+    let offset = 0;
+    while (offset < chunk.length && !this.failureReason) {
+      if (this.mode === "raw") {
+        this.appendRaw(chunk.slice(offset));
+        break;
       }
-      events.push(parsed.data);
-    } catch {
+      const newline = chunk.indexOf("\n", offset);
+      const end = newline < 0 ? chunk.length : newline;
+      this.appendPending(chunk.slice(offset, end));
+      if (newline < 0 || this.failureReason) {
+        break;
+      }
+      this.consumePending(true);
+      offset = newline + 1;
+    }
+    return this.failureReason;
+  }
+
+  finish(): Pick<PiRunResult, "stdout" | "models" | "usage" | "stream"> {
+    if (!this.failureReason && this.pending.length > 0) {
+      this.consumePending(false);
+    }
+    if (this.failureReason) {
+      return { stdout: "", stream: this.stream };
+    }
+    if (this.mode !== "json") {
+      return { stdout: this.rawOutput, stream: this.stream };
+    }
+    return {
+      stdout: this.assistantText ?? "",
+      ...(this.models.length > 0 ? { models: this.models } : {}),
+      ...(this.usageMessageCount > 0 ? { usage: this.usage() } : {}),
+      stream: this.stream,
+    };
+  }
+
+  failure(): string | undefined {
+    return this.failureReason;
+  }
+
+  private appendPending(fragment: string): void {
+    const fragmentBytes = Buffer.byteLength(fragment, "utf8");
+    const nextBytes = this.pendingBytes + fragmentBytes;
+    const limit =
+      this.mode === "json"
+        ? this.limits.maxJsonEventBytes
+        : Math.max(this.limits.maxJsonEventBytes, this.limits.maxRawStdoutBytes);
+    if (nextBytes > limit) {
+      this.fail(
+        this.mode === "json"
+          ? "Pi JSON event exceeded the output limit"
+          : "Pi stdout exceeded the output limit",
+      );
+      return;
+    }
+    this.pending += fragment;
+    this.pendingBytes = nextBytes;
+    this.recordPeak(this.pendingBytes);
+  }
+
+  private consumePending(terminated: boolean): void {
+    const source = `${this.pending}${terminated ? "\n" : ""}`;
+    const line = this.pending.trim();
+    const eventBytes = Buffer.byteLength(line, "utf8");
+    this.pending = "";
+    this.pendingBytes = 0;
+    if (!line) {
+      if (this.mode === "undetermined") {
+        this.appendRaw(source);
+      }
+      return;
+    }
+    const event = parsePiEvent(line);
+    if (this.mode === "undetermined") {
+      if (!event) {
+        this.mode = "raw";
+        this.appendRaw(source);
+        return;
+      }
+      this.mode = "json";
+      this.rawOutput = "";
+      this.rawOutputBytes = 0;
+    }
+    if (!event) {
+      this.fail("Pi JSON output was malformed");
+      return;
+    }
+    if (eventBytes > this.limits.maxJsonEventBytes) {
+      this.fail("Pi JSON event exceeded the output limit");
+      return;
+    }
+    this.stream.jsonEventCount += 1;
+    this.stream.largestEventBytes = Math.max(this.stream.largestEventBytes, eventBytes);
+    this.consumeEvent(event);
+  }
+
+  private appendRaw(value: string): void {
+    const valueBytes = Buffer.byteLength(value, "utf8");
+    const nextBytes = this.rawOutputBytes + valueBytes;
+    if (nextBytes > this.limits.maxRawStdoutBytes) {
+      this.fail("Pi raw stdout exceeded the output limit");
+      return;
+    }
+    this.rawOutput += value;
+    this.rawOutputBytes = nextBytes;
+    this.recordPeak(this.rawOutputBytes);
+  }
+
+  private fail(reason: string): void {
+    this.failureReason = reason;
+    this.pending = "";
+    this.pendingBytes = 0;
+    this.rawOutput = "";
+    this.rawOutputBytes = 0;
+    this.assistantText = undefined;
+    this.models.length = 0;
+  }
+
+  private consumeEvent(event: Record<string, unknown>): void {
+    const parsed = assistantMessageEventSchema.safeParse(event);
+    if (!parsed.success) {
+      return;
+    }
+    const message = parsed.data.message;
+    this.assistantMessageCount += 1;
+    this.assistantText = assistantMessageText(message) ?? this.assistantText;
+    const model = message.responseModel ?? message.model;
+    if (model && !this.models.includes(model)) {
+      this.models.push(model);
+    }
+    const usage = assistantUsageMessageSchema.safeParse(message);
+    if (!usage.success) {
+      return;
+    }
+    this.usageMessageCount += 1;
+    this.addUsage(usage.data);
+  }
+
+  private addUsage(message: z.infer<typeof assistantUsageMessageSchema>): void {
+    const nextInputTokens = this.inputTokens + message.usage.input;
+    if (Number.isSafeInteger(nextInputTokens)) {
+      this.inputTokens = nextInputTokens;
+    } else {
+      this.usagePartial = true;
+    }
+    const nextOutputTokens = this.outputTokens + message.usage.output;
+    if (Number.isSafeInteger(nextOutputTokens)) {
+      this.outputTokens = nextOutputTokens;
+    } else {
+      this.usagePartial = true;
+    }
+    const nextCostUsd = this.costUsd + message.usage.cost.total;
+    if (Number.isFinite(nextCostUsd)) {
+      this.costUsd = nextCostUsd;
+    } else {
+      this.usagePartial = true;
+    }
+  }
+
+  private usage(): PiRunUsage {
+    return {
+      status:
+        this.usagePartial || this.usageMessageCount !== this.assistantMessageCount
+          ? "partial"
+          : "complete",
+      inputTokens: this.inputTokens,
+      outputTokens: this.outputTokens,
+      costUsd: this.costUsd,
+    };
+  }
+
+  private recordPeak(bytes: number): void {
+    this.stream.peakBufferedBytes = Math.max(this.stream.peakBufferedBytes, bytes);
+  }
+}
+
+function parsePiEvent(line: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = eventRecordSchema.safeParse(JSON.parse(line) as unknown);
+    if (!parsed.success || typeof parsed.data.type !== "string") {
       return undefined;
     }
-  }
-  const hasTypedEvent = events.some((event) => typeof event.type === "string");
-  if (!hasTypedEvent) {
+    return parsed.data;
+  } catch {
     return undefined;
   }
-  let assistantText: string | undefined;
-  for (const event of events) {
-    assistantText = assistantTextFromEvent(event) ?? assistantText;
-  }
-  const assistantMessages = assistantMessagesFromEvents(events);
-  const models = assistantModels(assistantMessages);
-  const usage = assistantUsage(assistantMessages);
-  return {
-    ...(assistantText !== undefined ? { assistantText } : {}),
-    models,
-    ...(usage ? { usage } : {}),
-  };
-}
-
-function assistantMessagesFromEvents(events: Record<string, unknown>[]) {
-  return events.flatMap((event) => {
-    const parsed = assistantMessageEventSchema.safeParse(event);
-    return parsed.success ? [parsed.data.message] : [];
-  });
-}
-
-function assistantModels(messages: ReturnType<typeof assistantMessagesFromEvents>): string[] {
-  const models: string[] = [];
-  for (const message of messages) {
-    const model = message.responseModel ?? message.model;
-    if (model && !models.includes(model)) {
-      models.push(model);
-    }
-  }
-  return models;
-}
-
-function assistantUsage(
-  messages: ReturnType<typeof assistantMessagesFromEvents>,
-): PiRunUsage | undefined {
-  const usageMessages = messages.flatMap((message) => {
-    const parsed = assistantUsageMessageSchema.safeParse(message);
-    return parsed.success ? [parsed.data] : [];
-  });
-  if (usageMessages.length === 0) {
-    return undefined;
-  }
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let costUsd = 0;
-  let partial = usageMessages.length !== messages.length;
-  for (const message of usageMessages) {
-    const nextInputTokens = inputTokens + message.usage.input;
-    if (Number.isSafeInteger(nextInputTokens)) {
-      inputTokens = nextInputTokens;
-    } else {
-      partial = true;
-    }
-    const nextOutputTokens = outputTokens + message.usage.output;
-    if (Number.isSafeInteger(nextOutputTokens)) {
-      outputTokens = nextOutputTokens;
-    } else {
-      partial = true;
-    }
-    const nextCostUsd = costUsd + message.usage.cost.total;
-    if (Number.isFinite(nextCostUsd)) {
-      costUsd = nextCostUsd;
-    } else {
-      partial = true;
-    }
-  }
-  return {
-    status: partial ? "partial" : "complete",
-    inputTokens,
-    outputTokens,
-    costUsd,
-  };
-}
-
-function assistantTextFromEvent(event: Record<string, unknown>): string | undefined {
-  if (event.type === "message_end" || event.type === "turn_end") {
-    return assistantMessageText(event.message);
-  }
-  if (event.type === "agent_end") {
-    return lastAssistantMessageText(event.messages);
-  }
-}
-
-function lastAssistantMessageText(messages: unknown): string | undefined {
-  if (!Array.isArray(messages)) {
-    return undefined;
-  }
-  let text: string | undefined;
-  for (const message of messages) {
-    text = assistantMessageText(message) ?? text;
-  }
-  return text;
 }
 
 function assistantMessageText(message: unknown): string | undefined {
@@ -449,10 +566,17 @@ function textContent(content: unknown): string {
 function runProcess(
   command: string,
   args: string[],
-  options: { cwd: string; env: NodeJS.ProcessEnv; started: number; timeoutSeconds?: number },
+  options: {
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    started: number;
+    timeoutSeconds?: number;
+    streamLimits: PiStreamLimits;
+  },
 ): Promise<PiRunResult> {
   return new Promise((resolve, reject) => {
     let timedOut = false;
+    let streamFailure: string | undefined;
     let timeout: NodeJS.Timeout | undefined;
     const detached = process.platform !== "win32";
     const child = spawn(command, args, {
@@ -461,16 +585,42 @@ function runProcess(
       env: options.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    let stdout = "";
+    const stdout = new PiOutputCollector(options.streamLimits);
     let stderr = "";
+    let stderrBytes = 0;
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
+      const failure = stdout.push(chunk);
+      if (failure) {
+        failStream(failure);
+      }
     });
     child.stderr.on("data", (chunk: string) => {
+      if (streamFailure || timedOut) {
+        return;
+      }
+      const nextBytes = stderrBytes + Buffer.byteLength(chunk, "utf8");
+      if (nextBytes > options.streamLimits.maxStderrBytes) {
+        failStream("Pi stderr exceeded the output limit");
+        return;
+      }
       stderr += chunk;
+      stderrBytes = nextBytes;
     });
+    const failStream = (reason: string) => {
+      if (streamFailure || timedOut) {
+        return;
+      }
+      streamFailure = reason;
+      stderr = "";
+      stderrBytes = 0;
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = undefined;
+      }
+      killProcessGroup(child, "SIGTERM");
+    };
     if (options.timeoutSeconds !== undefined) {
       timeout = setTimeout(() => {
         timedOut = true;
@@ -482,17 +632,55 @@ function runProcess(
       if (timeout) {
         clearTimeout(timeout);
       }
-      if (timedOut) {
-        stderr += `${stderr ? "\n" : ""}Pi timed out after ${options.timeoutSeconds}s`;
-      }
-      resolve({
-        stdout,
-        stderr,
-        exitCode: timedOut ? 124 : (exitCode ?? 1),
-        durationMs: Date.now() - options.started,
-      });
+      resolve(
+        finalizeProcessResult({
+          collector: stdout,
+          stderr,
+          exitCode,
+          timedOut,
+          streamFailure,
+          timeoutSeconds: options.timeoutSeconds,
+          durationMs: Date.now() - options.started,
+        }),
+      );
     });
   });
+}
+
+function finalizeProcessResult(options: {
+  collector: PiOutputCollector;
+  stderr: string;
+  exitCode: number | null;
+  timedOut: boolean;
+  streamFailure: string | undefined;
+  timeoutSeconds: number | undefined;
+  durationMs: number;
+}): PiRunResult {
+  const collected = options.collector.finish();
+  const streamFailure = options.streamFailure ?? options.collector.failure();
+  if (options.timedOut) {
+    return {
+      ...collected,
+      stderr: `${options.stderr ? `${options.stderr}\n` : ""}Pi timed out after ${options.timeoutSeconds}s`,
+      exitCode: 124,
+      durationMs: options.durationMs,
+    };
+  }
+  if (streamFailure) {
+    return {
+      ...collected,
+      stdout: "",
+      stderr: streamFailure,
+      exitCode: 1,
+      durationMs: options.durationMs,
+    };
+  }
+  return {
+    ...collected,
+    stderr: options.stderr,
+    exitCode: options.exitCode ?? 1,
+    durationMs: options.durationMs,
+  };
 }
 
 function killProcessGroup(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { definePipr, type Schema, z } from "@usepipr/sdk";
 import { buildPiprPlan } from "@usepipr/sdk/internal";
+import { createRuntimeLog, type RuntimeLogRecord } from "../../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
 import { runReviewAgent } from "../agent/review-run.js";
 
@@ -42,6 +43,69 @@ const outputSchema: Schema<unknown> = {
 };
 
 describe("runReviewAgent", () => {
+  it("logs bounded Pi stream statistics without event content", async () => {
+    const factory = definePipr((pipr) => {
+      pipr.agent({
+        name: "reviewer",
+        instructions: "Review.",
+        output: outputSchema,
+        prompt: () => "Review.",
+      });
+    });
+    const plan = buildPiprPlan(factory);
+    const agent = plan.agents[0];
+    if (!agent) {
+      throw new Error("test fixture missing agent");
+    }
+    const records: RuntimeLogRecord[] = [];
+    const log = createRuntimeLog({
+      logSink: {
+        log(record) {
+          records.push(record);
+        },
+        async group(_name, run) {
+          return await run();
+        },
+      },
+    });
+
+    await runReviewAgent({
+      agent,
+      input: {},
+      runOptions: undefined,
+      toolMode: "none",
+      runtime: {
+        workspace: process.cwd(),
+        config,
+        event: eventContext(),
+        provider,
+        plan,
+        runId: "test-run",
+        log,
+        piRunner: async () => ({
+          exitCode: 0,
+          stdout: "{}",
+          stderr: "",
+          durationMs: 1,
+          stream: {
+            rawStdoutBytes: 4096,
+            jsonEventCount: 12,
+            largestEventBytes: 512,
+            peakBufferedBytes: 768,
+          },
+        }),
+      },
+    });
+
+    expect(records.find((record) => record.event === "pi run")?.fields).toMatchObject({
+      stdoutBytes: 2,
+      rawStdoutBytes: 4096,
+      jsonEventCount: 12,
+      largestEventBytes: 512,
+      peakBufferedBytes: 768,
+    });
+  });
+
   it("repairs invalid output without following or inventing content from it", async () => {
     const factory = definePipr((pipr) => {
       const strictOutput = pipr.schema({

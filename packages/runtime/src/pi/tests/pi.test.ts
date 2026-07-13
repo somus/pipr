@@ -518,6 +518,229 @@ describe("buildPiArgs", () => {
     }
   });
 
+  it("bounds retained output while consuming a large Pi JSON event stream", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi");
+    const reviewJson = '{"summary":{"body":"No findings."},"inlineFindings":[]}';
+    try {
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/usr/bin/env bun",
+          'let text = "";',
+          "for (let index = 0; index < 512; index += 1) {",
+          '  text += "x".repeat(256);',
+          '  console.log(JSON.stringify({ type: "message_update", message: { role: "assistant", content: [{ type: "text", text }] }, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "x" } }));',
+          "}",
+          `console.log(${JSON.stringify(
+            JSON.stringify({
+              type: "message_end",
+              message: {
+                role: "assistant",
+                model: "router",
+                responseModel: "concrete-model",
+                content: [{ type: "text", text: reviewJson }],
+                usage: {
+                  input: 100,
+                  output: 10,
+                  cost: { total: 0.001 },
+                },
+              },
+            }),
+          )});`,
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        prompt: "Review this diff.",
+        ...deepseekRunOptions(),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe(reviewJson);
+      expect(result.models).toEqual(["concrete-model"]);
+      expect(result.usage).toEqual({
+        status: "complete",
+        inputTokens: 100,
+        outputTokens: 10,
+        costUsd: 0.001,
+      });
+      expect(result.stream).toMatchObject({
+        jsonEventCount: 513,
+      });
+      expect(result.stream?.rawStdoutBytes).toBeGreaterThan(32 * 1024 * 1024);
+      expect(result.stream?.largestEventBytes).toBeLessThan(1024 * 1024);
+      expect(result.stream?.peakBufferedBytes).toBeLessThan(1024 * 1024);
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("frames Pi JSON records across chunks and Unicode byte boundaries", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi");
+    const output = '{"summary":{"body":"A🌱B"},"inlineFindings":[]}';
+    const event = JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        responseModel: "unicode-model",
+        content: [{ type: "text", text: output }],
+        usage: { input: 4, output: 2, cost: { total: 0.001 } },
+      },
+    });
+    try {
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/usr/bin/env bun",
+          `const bytes = Buffer.from(${JSON.stringify(`${event}\n`)});`,
+          'const unicodeStart = bytes.indexOf(Buffer.from("🌱"));',
+          "const cuts = [1, 7, unicodeStart + 1, unicodeStart + 3, bytes.length];",
+          "let start = 0;",
+          "for (const end of cuts) {",
+          "  process.stdout.write(bytes.subarray(start, end));",
+          "  start = end;",
+          "  await Bun.sleep(5);",
+          "}",
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        prompt: "Review this diff.",
+        ...deepseekRunOptions(),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe(output);
+      expect(result.models).toEqual(["unicode-model"]);
+      expect(result.stream).toEqual({
+        rawStdoutBytes: Buffer.byteLength(`${event}\n`),
+        jsonEventCount: 1,
+        largestEventBytes: Buffer.byteLength(event),
+        peakBufferedBytes: Buffer.byteLength(event),
+      });
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("terminates Pi when one JSON event exceeds the private limit", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi");
+    try {
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/usr/bin/env bun",
+          'console.log(JSON.stringify({ type: "session", version: 3 }));',
+          'console.log(JSON.stringify({ type: "message_update", sensitive: "do-not-log".repeat(200) }));',
+          "await Bun.sleep(2_000);",
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        prompt: "Review this diff.",
+        streamLimits: {
+          maxJsonEventBytes: 512,
+          maxRawStdoutBytes: 512,
+          maxStderrBytes: 512,
+        },
+        ...deepseekRunOptions(),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("Pi JSON event exceeded the output limit");
+      expect(result.stderr).not.toContain("do-not-log");
+      expect(result.stream?.peakBufferedBytes).toBeLessThanOrEqual(512);
+      expect(result.durationMs).toBeLessThan(1_500);
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("terminates Pi when raw stdout exceeds the private limit", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi");
+    try {
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/usr/bin/env bun",
+          'console.log("raw-output");',
+          'console.log("do-not-log".repeat(200));',
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        prompt: "Review this diff.",
+        streamLimits: {
+          maxJsonEventBytes: 64,
+          maxRawStdoutBytes: 64,
+          maxStderrBytes: 64,
+        },
+        ...deepseekRunOptions(),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("Pi raw stdout exceeded the output limit");
+      expect(result.stderr).not.toContain("do-not-log");
+      expect(result.stream?.peakBufferedBytes).toBeLessThanOrEqual(64);
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("terminates Pi when stderr exceeds the private limit", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi");
+    try {
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/usr/bin/env bun",
+          'console.error("do-not-log".repeat(200));',
+          "await Bun.sleep(2_000);",
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        prompt: "Review this diff.",
+        streamLimits: {
+          maxJsonEventBytes: 64,
+          maxRawStdoutBytes: 64,
+          maxStderrBytes: 64,
+        },
+        ...deepseekRunOptions(),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("Pi stderr exceeded the output limit");
+      expect(result.stderr).not.toContain("do-not-log");
+      expect(result.durationMs).toBeLessThan(1_500);
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
   it("marks malformed and overflowing Pi usage as partial without failing the run", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
     const piExecutable = path.join(workspace, "fake-pi");
@@ -573,7 +796,7 @@ describe("buildPiArgs", () => {
     }
   });
 
-  it("does not report partial usage from malformed Pi JSON event streams", async () => {
+  it("fails closed when malformed data follows a Pi JSON event", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
     const piExecutable = path.join(workspace, "fake-pi");
     try {
@@ -594,7 +817,10 @@ describe("buildPiArgs", () => {
         ...deepseekRunOptions(),
       });
 
-      expect(result.stdout).toContain("not-json");
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("Pi JSON output was malformed");
+      expect(result.stderr).not.toContain("not-json");
       expect(result.usage).toBeUndefined();
     } finally {
       await rm(workspace, { recursive: true, force: true });
