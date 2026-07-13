@@ -36,6 +36,7 @@ type StarterFile = {
 };
 
 const defaultWorkflowActionRef = "somus/pipr@v0.3.8"; // x-release-please-version
+const defaultGitLabImageRef = "ghcr.io/somus/pipr:v0.3.8"; // x-release-please-version
 const defaultSdkVersion = "0.3.8"; // x-release-please-version
 
 function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInitAdapter[] {
@@ -175,7 +176,7 @@ function starterGitLabPipeline(relativeConfigDir: string, recipe?: string): stri
   const lines = [
     "pipr:",
     "  image:",
-    "    name: ghcr.io/somus/pipr:v0.3.8", // x-release-please-version
+    `    name: ${defaultGitLabImageRef}`,
     '    entrypoint: [""]',
     "  rules:",
     "    - if: '$CI_PIPELINE_SOURCE == \"merge_request_event\"'",
