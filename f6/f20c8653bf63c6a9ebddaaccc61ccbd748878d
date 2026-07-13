@@ -366,6 +366,7 @@ packages/runtime/src/hosts/gitlab/client.ts
 packages/runtime/src/hosts/git.ts
   s_4ebdfc62030aaf::t_5de9c4aaaacc6d 2-4,19,22-24,30,32-37,40-44,52,54
   s_4ebdfc62030aaf::t_d37568adb6d1d2 5
+  s_4ebdfc62030aaf::t_b1db1e622962d6 8,10,12,25-26
 apps/docs/content/docs/guide/gitlab.mdx
   s_4ebdfc62030aaf::t_fc78e548225d85 1-39,41-46,48-55,57-73
   s_4ebdfc62030aaf::t_118ba92e34cc69 47,56
