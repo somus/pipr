@@ -58,6 +58,7 @@ async function runContainerScenario(scenario: Scenario): Promise<void> {
 function runDryRunContainer(prepared: PreparedScenario): void {
   const env = {
     DEEPSEEK_API_KEY: "local-fixture-key",
+    GITHUB_ACTIONS: "true",
     GITHUB_EVENT_NAME: "pull_request",
     GITHUB_EVENT_PATH: `/workspace/${prepared.scenario.eventFile}`,
     GITHUB_REPOSITORY: "local/pipr",
@@ -79,7 +80,9 @@ function runDryRunContainer(prepared: PreparedScenario): void {
       "/workspace",
       ...Object.entries(env).flatMap(([key, value]) => ["--env", `${key}=${value}`]),
       actionImage,
-      "action",
+      "host-run",
+      "--host",
+      "github",
       "--config-dir",
       ".pipr",
     ],
@@ -113,7 +116,9 @@ async function runFixtureContainer(prepared: PreparedScenario): Promise<void> {
       ...Object.entries(env).flatMap(([key, value]) => ["--env", `${key}=${value}`]),
       actionImage,
       `/opt/pipr/${actionFixtureScript}`,
-      "action",
+      "host-run",
+      "--host",
+      "github",
     ],
     sourceRoot,
   );
