@@ -120,6 +120,27 @@ describe("GitHub command client", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("maps GitHub's non-collaborator permission payload to no repository permission", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () =>
+        Response.json({ permission: "none", role_name: "" })) as unknown as typeof fetch;
+      const client = createGitHubCommandClient({
+        GITHUB_API_URL: "https://api.github.test",
+        GITHUB_TOKEN: "token",
+      });
+
+      await expect(
+        client.getRepositoryPermission({
+          repository: { slug: "local/pipr" },
+          actor: "outsider",
+        }),
+      ).resolves.toBe("none");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 function requestUrl(input: Parameters<typeof fetch>[0]): URL {

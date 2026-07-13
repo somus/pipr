@@ -43,7 +43,7 @@ const pullRequestDetailsSchema = z.looseObject({
 
 const githubRepositoryPermissionResponseSchema = z.looseObject({
   permission: z.string().min(1),
-  role_name: z.string().min(1).optional(),
+  role_name: z.string().optional(),
 });
 
 export type GitHubPullRequestDetails = {
