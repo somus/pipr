@@ -28,7 +28,7 @@ export type PiRunOptions = {
     toolResponseMaxBytes: number;
   };
   customTools?: PiCustomToolRequest;
-  streamLimits?: Partial<PiStreamLimits>;
+  streamLimits?: PiStreamLimits;
 };
 
 export type PiRunResult = {
@@ -102,7 +102,27 @@ const ignoredWorkspacePaths = new Set([
   ".fallow",
   "coverage",
 ]);
-const eventRecordSchema = z.record(z.string(), z.unknown());
+const typedEventSchema = z.looseObject({ type: z.string() });
+const piJsonEventTypes = new Set([
+  "agent_start",
+  "agent_end",
+  "auto_retry_start",
+  "auto_retry_end",
+  "compaction_start",
+  "compaction_end",
+  "message_start",
+  "message_update",
+  "message_end",
+  "queue_update",
+  "session",
+  "session_info_changed",
+  "thinking_level_changed",
+  "tool_execution_start",
+  "tool_execution_update",
+  "tool_execution_end",
+  "turn_start",
+  "turn_end",
+]);
 const tokenCountSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const assistantMessageEventSchema = z.looseObject({
   type: z.literal("message_end"),
@@ -125,6 +145,9 @@ const defaultPiStreamLimits: PiStreamLimits = {
   maxRawStdoutBytes: 16 * 1024 * 1024,
   maxStderrBytes: 16 * 1024 * 1024,
 };
+const maxRetainedModelCount = 64;
+const maxRetainedModelBytes = 64 * 1024;
+const processTerminationGraceMs = 250;
 
 export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
   const started = Date.now();
@@ -156,7 +179,7 @@ export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
       env: buildPiEnv(options.provider, sandbox, options.env, preparedTools),
       started,
       timeoutSeconds: options.timeoutSeconds,
-      streamLimits: { ...defaultPiStreamLimits, ...options.streamLimits },
+      streamLimits: options.streamLimits ?? defaultPiStreamLimits,
     });
   } finally {
     await preparedTools?.custom?.close();
@@ -326,6 +349,8 @@ class PiOutputCollector {
   private failureReason: string | undefined;
   private assistantText: string | undefined;
   private readonly models: string[] = [];
+  private readonly modelSet = new Set<string>();
+  private modelBytes = 0;
   private assistantMessageCount = 0;
   private usageMessageCount = 0;
   private inputTokens = 0;
@@ -420,7 +445,7 @@ class PiOutputCollector {
     }
     const event = parsePiEvent(line);
     if (this.mode === "undetermined") {
-      if (!event) {
+      if (!event || !piJsonEventTypes.has(event.type)) {
         this.mode = "raw";
         this.appendRaw(source);
         return;
@@ -462,19 +487,24 @@ class PiOutputCollector {
     this.rawOutputBytes = 0;
     this.assistantText = undefined;
     this.models.length = 0;
+    this.modelSet.clear();
+    this.modelBytes = 0;
   }
 
   private consumeEvent(event: Record<string, unknown>): void {
+    this.assistantText = assistantTextFromEvent(event) ?? this.assistantText;
     const parsed = assistantMessageEventSchema.safeParse(event);
     if (!parsed.success) {
       return;
     }
     const message = parsed.data.message;
     this.assistantMessageCount += 1;
-    this.assistantText = assistantMessageText(message) ?? this.assistantText;
     const model = message.responseModel ?? message.model;
-    if (model && !this.models.includes(model)) {
-      this.models.push(model);
+    if (model) {
+      this.addModel(model);
+      if (this.failureReason) {
+        return;
+      }
     }
     const usage = assistantUsageMessageSchema.safeParse(message);
     if (!usage.success) {
@@ -482,6 +512,23 @@ class PiOutputCollector {
     }
     this.usageMessageCount += 1;
     this.addUsage(usage.data);
+  }
+
+  private addModel(model: string): void {
+    if (this.modelSet.has(model)) {
+      return;
+    }
+    const modelBytes = Buffer.byteLength(model, "utf8");
+    if (
+      this.modelSet.size >= maxRetainedModelCount ||
+      this.modelBytes + modelBytes > maxRetainedModelBytes
+    ) {
+      this.fail("Pi model metadata exceeded the output limit");
+      return;
+    }
+    this.modelSet.add(model);
+    this.models.push(model);
+    this.modelBytes += modelBytes;
   }
 
   private addUsage(message: z.infer<typeof assistantUsageMessageSchema>): void {
@@ -522,16 +569,36 @@ class PiOutputCollector {
   }
 }
 
-function parsePiEvent(line: string): Record<string, unknown> | undefined {
+function parsePiEvent(line: string): (Record<string, unknown> & { type: string }) | undefined {
   try {
-    const parsed = eventRecordSchema.safeParse(JSON.parse(line) as unknown);
-    if (!parsed.success || typeof parsed.data.type !== "string") {
+    const parsed = typedEventSchema.safeParse(JSON.parse(line) as unknown);
+    if (!parsed.success) {
       return undefined;
     }
     return parsed.data;
   } catch {
     return undefined;
   }
+}
+
+function assistantTextFromEvent(event: Record<string, unknown>): string | undefined {
+  if (event.type === "message_end" || event.type === "turn_end") {
+    return assistantMessageText(event.message);
+  }
+  if (event.type === "agent_end") {
+    return lastAssistantMessageText(event.messages);
+  }
+}
+
+function lastAssistantMessageText(messages: unknown): string | undefined {
+  if (!Array.isArray(messages)) {
+    return undefined;
+  }
+  let text: string | undefined;
+  for (const message of messages) {
+    text = assistantMessageText(message) ?? text;
+  }
+  return text;
 }
 
 function assistantMessageText(message: unknown): string | undefined {
@@ -578,6 +645,7 @@ function runProcess(
     let timedOut = false;
     let streamFailure: string | undefined;
     let timeout: NodeJS.Timeout | undefined;
+    let terminationTimeout: NodeJS.Timeout | undefined;
     const detached = process.platform !== "win32";
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -619,12 +687,18 @@ function runProcess(
         clearTimeout(timeout);
         timeout = undefined;
       }
+      terminateProcessGroup();
+    };
+    const terminateProcessGroup = () => {
       killProcessGroup(child, "SIGTERM");
+      terminationTimeout ??= setTimeout(() => {
+        killProcessGroup(child, "SIGKILL");
+      }, processTerminationGraceMs);
     };
     if (options.timeoutSeconds !== undefined) {
       timeout = setTimeout(() => {
         timedOut = true;
-        killProcessGroup(child, "SIGTERM");
+        terminateProcessGroup();
       }, options.timeoutSeconds * 1000);
     }
     child.on("error", reject);
