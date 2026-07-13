@@ -191,9 +191,7 @@ export function createBitbucketClient(
         jsonRequest("PUT", { content: { raw: content } }),
       ),
     async replyToComment(id, commentId, content) {
-      const parentId = Number(commentId);
-      if (!Number.isSafeInteger(parentId) || parentId <= 0)
-        throw new Error("Bitbucket comment ID must be a positive integer");
+      const parentId = positiveCommentId(commentId);
       return await api.json(
         `${prPath(id)}/comments`,
         commentSchema,
@@ -201,6 +199,7 @@ export function createBitbucketClient(
       );
     },
     async resolveComment(id, commentId) {
+      positiveCommentId(commentId);
       await api.json(
         `${prPath(id)}/comments/${encodeURIComponent(commentId)}/resolve`,
         z.unknown(),
@@ -216,6 +215,13 @@ export function createBitbucketClient(
       return value.key;
     },
   };
+}
+
+function positiveCommentId(value: string): number {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id <= 0)
+    throw new Error("Bitbucket comment ID must be a positive integer");
+  return id;
 }
 
 export function bitbucketStatusState(state: CodeHostStatusState): string {

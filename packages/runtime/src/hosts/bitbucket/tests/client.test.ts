@@ -161,6 +161,19 @@ describe("Bitbucket Cloud client", () => {
     expect(requested).toBe(false);
   });
 
+  it("rejects nonnumeric resolution comment IDs before sending a request", async () => {
+    let requested = false;
+    const client = createBitbucketClient(env, async () => {
+      requested = true;
+      return Response.json({});
+    });
+
+    await expect(client.resolveComment(7, "not-a-number")).rejects.toThrow(
+      "Bitbucket comment ID must be a positive integer",
+    );
+    expect(requested).toBe(false);
+  });
+
   it.each([
     ["pending", "INPROGRESS"],
     ["success", "SUCCESSFUL"],
