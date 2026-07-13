@@ -1,69 +1,44 @@
 import path from "node:path";
 import { normalizePackageManifest, type PackageManifest } from "./package-manifest.js";
-import { defaultScaffoldTypescriptSpec } from "./scaffold-versions.js";
 
 const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
 
-type InstallableDependency = {
-  name: string;
-  spec: string;
-};
-
-export async function installConfigDependencies(
-  configDir: string,
-  options: { frozen?: boolean } = {},
-): Promise<void> {
+export async function installConfigDependencies(configDir: string): Promise<void> {
   const packageJsonPath = path.join(configDir, "package.json");
   if (!(await Bun.file(packageJsonPath).exists())) {
     return;
   }
   const originalPackageJson = await Bun.file(packageJsonPath).text();
   const manifest = normalizePackageManifest(JSON.parse(originalPackageJson));
-  const installablePackages = installableDependencySpecs(manifest);
-  if (installablePackages.length === 0) {
+  if (!hasInstallableDependencies(manifest)) {
     return;
   }
   const bunLockPath = path.join(configDir, "bun.lock");
   const originalBunLock = (await Bun.file(bunLockPath).exists())
     ? await Bun.file(bunLockPath).text()
     : undefined;
-  if (options.frozen && originalBunLock === undefined) {
+  if (originalBunLock === undefined) {
     throw new Error(
       `${configDir}: bun.lock is required when .pipr/package.json declares dependencies. ` +
         "Run `bun install` in .pipr/ and commit bun.lock.",
     );
   }
   await assertBunAvailable();
-  // Bun still treats the stripped runtime-provided entries as lockfile changes in temp copies.
-  const args = configInstallArgs(installablePackages, {
-    frozen: options.frozen === true && !hasRuntimeProvidedDependencies(manifest),
-  });
   await withSanitizedConfigInstallInputs(
     { packageJsonPath, originalPackageJson, bunLockPath, originalBunLock },
-    () => runConfigBunInstall(configDir, args),
-  );
-}
-
-function configInstallArgs(
-  installablePackages: InstallableDependency[],
-  options: { frozen: boolean },
-): string[] {
-  return [
-    "install",
-    "--ignore-scripts",
-    "--no-save",
-    ...(options.frozen ? ["--frozen-lockfile"] : []),
-    // Bun verifies the runtime-owned SDK tarball even though Pipr replaces it with a stub.
-    // --no-verify skips every integrity check, so keep this only on the pinned scaffold install.
-    ...(isDefaultScaffoldTypescriptInstall(installablePackages) ? ["--no-verify"] : []),
-    ...installablePackages.map((dependency) => dependency.spec),
-  ];
-}
-
-function isDefaultScaffoldTypescriptInstall(installablePackages: InstallableDependency[]): boolean {
-  return (
-    installablePackages.length === 1 &&
-    installablePackages[0]?.spec === defaultScaffoldTypescriptSpec
+    async () => {
+      if (hasRuntimeProvidedDependencies(manifest)) {
+        await runConfigBunInstall(configDir, ["install", "--ignore-scripts", "--lockfile-only"]);
+        const projectedBunLock = await Bun.file(bunLockPath).text();
+        assertTrustedLockProjection(configDir, originalBunLock, projectedBunLock);
+      }
+      await runConfigBunInstall(configDir, [
+        "install",
+        "--ignore-scripts",
+        "--no-save",
+        "--frozen-lockfile",
+      ]);
+    },
   );
 }
 
@@ -72,7 +47,7 @@ async function withSanitizedConfigInstallInputs(
     packageJsonPath: string;
     originalPackageJson: string;
     bunLockPath: string;
-    originalBunLock: string | undefined;
+    originalBunLock: string;
   },
   install: () => Promise<void>,
 ): Promise<void> {
@@ -83,16 +58,11 @@ async function withSanitizedConfigInstallInputs(
       sanitizedPackageJsonForConfigInstall(inputs.originalPackageJson),
     );
     wroteInstallInputs = true;
-    if (inputs.originalBunLock !== undefined) {
-      await Bun.write(inputs.bunLockPath, sanitizedBunLockForConfigInstall(inputs.originalBunLock));
-    }
     await install();
   } finally {
     if (wroteInstallInputs) {
       await Bun.write(inputs.packageJsonPath, inputs.originalPackageJson);
-      if (inputs.originalBunLock !== undefined) {
-        await Bun.write(inputs.bunLockPath, inputs.originalBunLock);
-      }
+      await Bun.write(inputs.bunLockPath, inputs.originalBunLock);
     }
   }
 }
@@ -113,10 +83,8 @@ async function runConfigBunInstall(configDir: string, args: string[]): Promise<v
   }
 }
 
-function installableDependencySpecs(manifest: PackageManifest): InstallableDependency[] {
-  return dependencyEntries(manifest)
-    .filter(([name]) => !runtimeProvidedPackages.has(name))
-    .map(([name, version]) => ({ name, spec: `${name}@${version}` }));
+function hasInstallableDependencies(manifest: PackageManifest): boolean {
+  return dependencyEntries(manifest).some(([name]) => !runtimeProvidedPackages.has(name));
 }
 
 function hasRuntimeProvidedDependencies(manifest: PackageManifest): boolean {
@@ -149,24 +117,104 @@ function sanitizedPackageJsonForConfigInstall(packageJson: string): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function sanitizedBunLockForConfigInstall(lockfile: string): string {
-  let sanitized = lockfile;
-  for (const packageName of runtimeProvidedPackages) {
-    const escapedName = escapeRegExp(packageName);
-    sanitized = sanitized.replace(
-      new RegExp(`^\\s*"${escapedName}":\\s*"[^"]+",\\r?\\n`, "gm"),
-      "",
-    );
-    sanitized = sanitized.replace(
-      new RegExp(`^\\s*"${escapedName}":\\s*\\[[^\\n]*\\],\\r?\\n(?:\\r?\\n)?`, "gm"),
-      "",
+function assertTrustedLockProjection(
+  configDir: string,
+  committedLockfile: string,
+  projectedLockfile: string,
+): void {
+  let committed: unknown;
+  let projected: unknown;
+  try {
+    committed = Bun.JSONC.parse(committedLockfile);
+    projected = Bun.JSONC.parse(projectedLockfile);
+  } catch {
+    throw new Error(`${configDir}: projected bun.lock is not valid JSONC.`);
+  }
+  if (!isRecord(committed) || !isRecord(projected)) {
+    throw new Error(`${configDir}: projected bun.lock must be an object.`);
+  }
+  const { packages: committedPackages, ...committedMetadata } = committed;
+  const { packages: projectedPackages, ...projectedMetadata } = projected;
+  const changedPath = firstProjectionChange(committedMetadata, projectedMetadata);
+  if (changedPath !== undefined) {
+    throw new Error(
+      `${configDir}: projected bun.lock changed committed dependency data at ${changedPath}.`,
     );
   }
-  return sanitized;
+  assertProjectedPackages(configDir, committedPackages, projectedPackages);
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function assertProjectedPackages(
+  configDir: string,
+  committedPackages: unknown,
+  projectedPackages: unknown,
+): void {
+  if (!isRecord(committedPackages) || !isRecord(projectedPackages)) {
+    throw new Error(`${configDir}: projected bun.lock packages must be objects.`);
+  }
+  const committedValues = Object.values(committedPackages);
+  for (const [key, projectedValue] of Object.entries(projectedPackages)) {
+    const committedValue = committedPackages[key];
+    const matchesCommitted =
+      committedValue === undefined
+        ? committedValues.some((value) => isDeepEqual(value, projectedValue))
+        : isDeepEqual(committedValue, projectedValue);
+    if (!matchesCommitted) {
+      throw new Error(
+        `${configDir}: projected bun.lock changed committed dependency data at bun.lock.packages.${key}.`,
+      );
+    }
+  }
+}
+
+function isDeepEqual(left: unknown, right: unknown): boolean {
+  return (
+    firstProjectionChange(left, right) === undefined &&
+    firstProjectionChange(right, left) === undefined
+  );
+}
+
+function firstProjectionChange(
+  committed: unknown,
+  projected: unknown,
+  valuePath = "bun.lock",
+): string | undefined {
+  if (Array.isArray(committed) || Array.isArray(projected)) {
+    if (!Array.isArray(committed) || !Array.isArray(projected)) {
+      return valuePath;
+    }
+    if (committed.length !== projected.length) {
+      return valuePath;
+    }
+    for (const [index, value] of projected.entries()) {
+      const changedPath = firstProjectionChange(committed[index], value, `${valuePath}[${index}]`);
+      if (changedPath !== undefined) {
+        return changedPath;
+      }
+    }
+    return undefined;
+  }
+  if (isRecord(committed) || isRecord(projected)) {
+    if (!isRecord(committed) || !isRecord(projected)) {
+      return valuePath;
+    }
+    for (const [key, value] of Object.entries(projected)) {
+      const childPath = `${valuePath}.${key}`;
+      if (!Object.hasOwn(committed, key)) {
+        return childPath;
+      }
+      const changedPath = firstProjectionChange(committed[key], value, childPath);
+      if (changedPath !== undefined) {
+        return changedPath;
+      }
+    }
+    return undefined;
+  }
+  return Object.is(committed, projected) ? undefined : valuePath;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
 }
 
 export async function assertBunAvailable(): Promise<void> {
