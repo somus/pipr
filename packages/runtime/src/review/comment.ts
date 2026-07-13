@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { createDiffRangeIndex } from "../diff/ranges.js";
-import { redactPotentialSecrets } from "../shared/redaction.js";
 import { compareStableSemver, stableSemverPattern } from "../shared/semver.js";
 import type {
   ChangeRequestEventContext,
@@ -299,7 +298,7 @@ function conciseInlineFindingBody(value: string): string {
     .trim()
     .split(/\n{2,}/)[0];
   const visibleLines = (firstParagraph ?? value).split("\n").slice(0, maxInlineFindingBodyLines);
-  const body = redactPotentialSecrets(visibleLines.join("\n").trim());
+  const body = visibleLines.join("\n").trim();
   if (body.length <= maxInlineFindingBodyCharacters) {
     return body;
   }
@@ -327,9 +326,7 @@ function findingWithPublishableSuggestedFix(
     return withoutSuggestedFix(finding);
   }
 
-  return redactPotentialSecrets(finding.suggestedFix) === finding.suggestedFix
-    ? finding
-    : withoutSuggestedFix(finding);
+  return finding;
 }
 
 function withoutSuggestedFix(finding: ReviewFinding): ReviewFinding {
@@ -359,7 +356,7 @@ function renderMainComment(options: {
     ...(options.metadata.validFindings > 0
       ? [`**Findings:** ${options.metadata.validFindings}`, ""]
       : []),
-    redactPotentialSecrets(options.main),
+    options.main,
     "",
     ...(!options.showStats || !options.metadata.stats ? [reviewStatsHiddenMarker, ""] : []),
     ...(options.showStats && options.metadata.stats

@@ -4,7 +4,7 @@ Research date: 2026-07-13
 
 ## Recommendation
 
-Use [Betterleaks](https://github.com/betterleaks/betterleaks) as an offline, container-bundled scanner at Pipr's final publication boundary. Keep Pipr's exact-value masking for known environment and resolved secrets, and keep the current cheap heuristic for synchronous logs until there is a separate logging design.
+Use [Betterleaks](https://github.com/betterleaks/betterleaks) as an offline, container-bundled scanner at Pipr's final publication boundary. Keep Pipr's exact-value masking for known environment and resolved secrets. Do not retain a second heuristic detector after adopting Betterleaks.
 
 Betterleaks is the best fit because it:
 
@@ -15,23 +15,23 @@ Betterleaks is the best fit because it:
 - keeps live credential validation disabled unless `--validation` is explicitly passed, so the default path is offline;
 - supports contextual filters, entropy checks, token-efficiency filtering, and 325 rules in the v1.6.1 embedded configuration.
 
-Do not treat it as a drop-in replacement for all current redaction. Pipr has two different workloads:
+Pipr has two different redaction workloads:
 
-1. Known runtime secrets must be removed synchronously from logs. Pipr already collects values from sensitive environment variables and `ctx.secret(...)`, then removes exact matches in `packages/runtime/src/shared/logging.ts`.
-2. Publication-bound text must be checked before it becomes a PR comment, suggested patch, verifier reply, command response, dropped-finding record, or Check Run summary. This is where a provider-aware scanner materially improves the current single regex in `packages/runtime/src/shared/redaction.ts`.
+1. Known runtime secrets must be removed synchronously from logs. Pipr collects values from sensitive environment variables and `ctx.secret(...)`, then removes exact matches in `packages/runtime/src/shared/logging.ts`.
+2. Publication-bound text must be checked before it becomes a PR comment, suggested patch, verifier reply, command response, dropped-finding record, or Check Run summary. Betterleaks owns unknown-secret detection at this boundary.
 
-A CLI process per log field would add hundreds of milliseconds and force asynchronous behavior through a synchronous logging API. One scan per completed publication payload is both safer and cheaper. Local `pipr review` output retains heuristic masking, while synchronous Action logs retain exact-value and heuristic masking. The Betterleaks subprocess is limited to the Docker Action's publication path.
+A CLI process per log field would add hundreds of milliseconds and force asynchronous behavior through a synchronous logging API. One scan per completed publication payload is both safer and cheaper. Local `pipr review` output does not scan for unknown secrets, while synchronous Action logs mask known secrets exactly. The Betterleaks subprocess is limited to the Docker Action's publication path.
 
-## Current Pipr boundary
+## Previous Pipr boundary
 
-The existing implementation is layered, but the heuristic layer is narrow:
+Before the Betterleaks integration, the implementation relied on narrow heuristics:
 
 - `packages/runtime/src/shared/logging.ts` registers sensitive environment values and resolved secrets, then performs exact string replacement before emitting log records.
-- `packages/runtime/src/shared/redaction.ts` applies one regex for unknown token-like strings containing `secret`, `token`, or `api_key`.
-- `packages/runtime/src/review/comment.ts` applies that regex to the main review body and inline finding bodies, and drops a suggested fix if the regex changes it.
+- `packages/runtime/src/shared/redaction.ts` applied one regex for unknown token-like strings containing `secret`, `token`, or `api_key`.
+- `packages/runtime/src/review/comment.ts` applied that regex to the main review body and inline finding bodies, and dropped a suggested fix if the regex changed it.
 - `packages/runtime/src/review/review-stats.ts` adds a separate provider-pattern and high-entropy guard for model telemetry.
 
-The main residual risk is model-generated publication text containing a credential that is not one of the registered runtime values and does not contain the literal words recognized by the generic regex. A GitHub PAT, Slack token, private key, database URL, or provider key can cross that path without matching `redactPotentialSecrets`.
+The main residual risk was model-generated publication text containing a credential that was not one of the registered runtime values and did not contain the literal words recognized by the generic regex. A GitHub PAT, Slack token, private key, database URL, or provider key could cross that path without being detected.
 
 ## Candidate comparison
 
@@ -51,7 +51,7 @@ Betterleaks is a continuation of the Gitleaks approach rather than an unrelated 
 
 The tested v1.6.1 binary produced redacted JSON with `RuleID`, `StartLine`, `EndLine`, `StartColumn`, and `EndColumn`. On a 757-byte synthetic input it took about 278 ms cold and found a Slack token plus a generic credential. Its embedded default configuration contains 325 rules. The Darwin arm64 artifact's SHA-256 matched the digest published on its immutable GitHub release.
 
-There are two caveats. First, its default rules did not flag Pipr's deliberately fake strings such as `pipr_eval_secret_do_not_repeat_12345`; those strings are caught by Pipr's current heuristic. Second, the upstream project recommends owning a reviewed configuration in production instead of silently inheriting new defaults. Pipr should pin both the binary digest and a tested rule configuration.
+There are two caveats. First, its default rules did not flag deliberately fake strings such as `pipr_eval_secret_do_not_repeat_12345`; tests of Betterleaks behavior must use realistic non-live credential formats. Second, the upstream project recommends owning a reviewed configuration in production instead of silently inheriting new defaults. Pipr should pin both the binary digest and a tested rule configuration.
 
 ### Gitleaks
 
@@ -94,7 +94,6 @@ At the async boundary immediately before publication planning:
 3. Run a pinned `betterleaks stdin` process with `--no-banner --redact=100 --report-format=json --report-path=- --max-decode-depth=0 --max-archive-depth=0` and no `--validation` flag.
 4. Parse the report with Zod and map locations back to segments.
 5. Replace detected spans in prose with `[redacted secret]`; drop any suggested fix containing a finding rather than trying to repair code.
-6. Run the existing heuristic afterward so current pseudo-secret behavior and synchronous log protection do not regress.
 
 Disabling recursive decoding for the first version keeps reported offsets directly mappable to the original text. A later change can detect encoded findings and drop the containing segment wholesale.
 
@@ -127,4 +126,4 @@ Run the same corpus against the current regex and Betterleaks, record which laye
 
 ## Decision
 
-Adopt Betterleaks for asynchronous scanning of publication-bound model output, retain exact-value masking and the current heuristic for logs, and pin the binary plus its architecture-specific digest. The trusted Pipr config should explicitly enable the pinned binary's embedded defaults; choose Gitleaks instead only if Pipr values longer operational history more than continued detector development.
+Adopt Betterleaks for asynchronous scanning of publication-bound model output, retain exact-value masking for known log secrets, and pin the binary plus its architecture-specific digest. Remove the prior heuristic detector instead of maintaining two unknown-secret policies. The trusted Pipr config should explicitly enable the pinned binary's embedded defaults; choose Gitleaks instead only if Pipr values longer operational history more than continued detector development.

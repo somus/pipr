@@ -72,7 +72,7 @@ describe("createRuntimeLog", () => {
     expect(output).not.toContain(secret.slice(0, 24));
   });
 
-  it("redacts secret-like values that were not registered from the environment", async () => {
+  it("leaves unregistered secret-like values unchanged", async () => {
     const sink = memoryRuntimeLogSink();
     const token = "github_token_abcdefghijklmnopqrstuvwxyz123456";
     const log = createRuntimeLog({ logSink: sink.logSink, env: {} });
@@ -84,12 +84,12 @@ describe("createRuntimeLog", () => {
 
     expect(sink.records[0]).toEqual({
       level: "error",
-      event: "failed [redacted secret]",
-      fields: { error: "[redacted secret]", values: ["[redacted secret]"] },
+      event: `failed ${token}`,
+      fields: { error: token, values: [token] },
     });
-    expect(sink.records[1]?.text).toContain("stdout [redacted secret]");
-    expect(sink.records[2]?.text).toContain("stderr [redacted secret]");
-    expect(sink.groups).toEqual(["group [redacted secret]"]);
-    expect(sink.messages.join("\n")).not.toContain(token);
+    expect(sink.records[1]?.text).toContain(`stdout ${token}`);
+    expect(sink.records[2]?.text).toContain(`stderr ${token}`);
+    expect(sink.groups).toEqual([`group ${token}`]);
+    expect(sink.messages.join("\n")).toContain(token);
   });
 });

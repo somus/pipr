@@ -79,9 +79,9 @@ Command help is exposed through the `main-comment` output. If GitHub denies veri
 
 ### Secret redaction
 
-Before it publishes, the Action scans review comments, suggested fixes, verifier replies, command responses, dropped-finding records, and Check Run summaries for credentials. Known runtime secrets are masked first, then the bundled offline Betterleaks scanner and Pipr's heuristic redaction run over the publication payload. Suggested fixes containing a detected credential are dropped instead of rewritten.
+Before it publishes, the Action scans review comments, suggested fixes, verifier replies, command responses, dropped-finding records, and Check Run summaries for credentials. Known runtime secrets are masked first, then the bundled offline Betterleaks scanner runs over the publication payload. Suggested fixes containing a detected credential are dropped instead of rewritten.
 
-If the scanner is missing, times out, or returns an invalid report, the Action fails before publishing the payload. Local `pipr review` output does not invoke Betterleaks and retains heuristic masking. Synchronous Action logs retain exact-value and heuristic masking.
+If the scanner is missing, times out, or returns an invalid report, the Action fails before publishing the payload. Local `pipr review` output does not invoke Betterleaks. Synchronous Action logs mask known environment and task-secret values exactly.
 
 ## Pinning
 

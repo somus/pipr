@@ -1,4 +1,3 @@
-import { redactPotentialSecrets } from "./redaction.js";
 import { sensitiveEnvironmentValues } from "./secret-redactor.js";
 
 export type RuntimeLogSink = {
@@ -41,8 +40,6 @@ export type RuntimeLog = {
 };
 
 export type LogLevel = "info" | "notice" | "warning" | "error" | "debug";
-
-const sensitiveEnvNamePattern = /(TOKEN|SECRET|PASSWORD|PASS|KEY|AUTH|CREDENTIAL|COOKIE)/i;
 
 export function createRuntimeLog(options: {
   logSink?: RuntimeLogSink;
@@ -141,7 +138,7 @@ function redact(message: string, secrets: Set<string>): string {
   for (const secret of secrets) {
     redacted = redacted.split(secret).join("***");
   }
-  return redactPotentialSecrets(redacted);
+  return redacted;
 }
 
 function compactFields(

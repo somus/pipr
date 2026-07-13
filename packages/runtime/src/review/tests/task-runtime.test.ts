@@ -1606,7 +1606,7 @@ describe("runTaskRuntime", () => {
     });
   });
 
-  it("bounds and redacts reported model telemetry before publication", async () => {
+  it("bounds reported model telemetry before publication", async () => {
     const secretModel = "model-api_key-abcdefghijklmnop";
     const oversizedModel = "m".repeat(500);
     const result = await runRuntime({
@@ -1624,9 +1624,9 @@ describe("runTaskRuntime", () => {
 
     const models = result.publicationPlan.metadata.stats?.models ?? [];
     expect(models).toHaveLength(20);
-    expect(models[0]).toBe("[redacted secret]");
-    expect(models[1]).toBe("[redacted credential]");
-    expect(result.mainComment).not.toContain(secretModel);
+    expect(models[0]).toBe(secretModel);
+    expect(models[1]).toBe("m".repeat(200));
+    expect(result.mainComment).toContain(secretModel);
   });
 
   it("falls back to the requested model when reported models are blank", async () => {

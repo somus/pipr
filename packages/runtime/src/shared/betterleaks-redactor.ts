@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { redactPotentialSecrets } from "./redaction.js";
 import {
   type SecretRedactionResult,
   type SecretRedactor,
@@ -68,13 +67,9 @@ export function createBetterleaksSecretRedactor(options?: {
       const spans = spansByTarget(framed, findings);
       return exact.map((result, index) => {
         const scannerRedacted = applySpans(result.value, spans.get(index) ?? [], redactedSecret);
-        const heuristicRedacted = redactPotentialSecrets(scannerRedacted);
         return {
-          value: heuristicRedacted,
-          detected:
-            result.detected ||
-            scannerRedacted !== result.value ||
-            heuristicRedacted !== scannerRedacted,
+          value: scannerRedacted,
+          detected: result.detected || scannerRedacted !== result.value,
         };
       });
     },

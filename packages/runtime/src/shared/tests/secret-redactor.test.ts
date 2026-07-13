@@ -42,7 +42,7 @@ describe("createBetterleaksSecretRedactor", () => {
     ]);
   });
 
-  it("masks registered values and keeps the heuristic fallback", async () => {
+  it("masks registered values without changing scanner-clean content", async () => {
     const redactor = createBetterleaksSecretRedactor({
       scan: async () => ({ exitCode: 0, stdout: "[]" }),
     });
@@ -53,7 +53,10 @@ describe("createBetterleaksSecretRedactor", () => {
     ]);
 
     expect(result).toEqual([
-      { value: "Known [redacted secret] and [redacted secret].", detected: true },
+      {
+        value: "Known [redacted secret] and model-api_key-abcdefghijklmnop.",
+        detected: true,
+      },
     ]);
   });
 
