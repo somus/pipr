@@ -1,0 +1,28 @@
+packages/runtime/src/hosts/bitbucket/tests/event.test.ts
+  s_4ebdfc62030aaf::t_ff79ff5ec0db17 23-69
+packages/runtime/src/hosts/bitbucket/tests/client.test.ts
+  s_4ebdfc62030aaf::t_ff79ff5ec0db17 18,212
+packages/runtime/src/hosts/bitbucket/client.ts
+  s_4ebdfc62030aaf::t_ae9b6b4c0da20c 18,161
+packages/runtime/src/hosts/bitbucket/event.ts
+  s_4ebdfc62030aaf::t_7124d6d34c601e 22,65-67,69-101,122-128
+  s_4ebdfc62030aaf::t_767e1621fae0ba 24,33-56,58-63
+  s_4ebdfc62030aaf::t_ae9b6b4c0da20c 9-12,102,129-133
+  s_4ebdfc62030aaf::t_d3c5fb9285c240 64,134-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "159b2152524926a88364fe43d4afbc41073991a0",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
