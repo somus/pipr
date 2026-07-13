@@ -104,14 +104,17 @@ describe("code host HTTP client", () => {
 
   it("redacts credentials and bounds error response text", async () => {
     const secret = "glpat-abcdefghijklmnopqrstuvwxyz";
+    const unregistered = "model-api_key-abcdefghijklmnop";
     const client = createCodeHostHttpClient({
       baseUrl: "https://example.test/",
       headers: { Authorization: `Bearer ${secret}` },
-      fetch: async () => new Response(`token=${secret} ${"x".repeat(2_000)}`, { status: 403 }),
+      fetch: async () =>
+        new Response(`token=${secret} ${unregistered} ${"x".repeat(2_000)}`, { status: 403 }),
     });
 
     const error = (await client.json("private", z.unknown()).catch((caught) => caught)) as Error;
     expect(error.message).not.toContain(secret);
+    expect(error.message).toContain(unregistered);
     expect(error.message.length).toBeLessThan(1_400);
   });
 
