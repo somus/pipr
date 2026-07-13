@@ -1,0 +1,33 @@
+packages/runtime/src/review/publication-redaction.ts
+  s_5eca1d7251411e::t_8fe824e9bbd9ba 125-126,145,150
+  s_5eca1d7251411e::t_491f9085edca3b 151
+  s_5eca1d7251411e::t_72c37f6082c4ac 121
+packages/runtime/src/shared/secret-redactor.ts
+  s_6efee882ee4aaf::t_2fe1b667178f9b 11
+packages/runtime/src/shared/tests/secret-redactor.test.ts
+  s_6efee882ee4aaf::t_c7ca7fff9b16fc 3-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "9f0593fdda894ee754c0f72b25d1e6f33725c496",
+  "prompts": {},
+  "sessions": {
+    "s_5eca1d7251411e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a57-3320-7360-92de-151eb5435525",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_6efee882ee4aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5c5b-0ac5-73f0-b2e9-ee95558cf478",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
