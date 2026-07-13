@@ -364,10 +364,13 @@ describe("check-release-metadata", () => {
   it("rejects a stale webhook deployment image pin", () => {
     const repository = copyRepositoryFixture();
     const composePath = path.join(repository, "deploy/webhook/compose.yml");
+    const rootPackage = JSON.parse(readFileSync(path.join(repository, "package.json"), "utf8")) as {
+      version: string;
+    };
     write(
       composePath,
       readFileSync(composePath, "utf8").replace(
-        "ghcr.io/somus/pipr:v0.3.8",
+        `ghcr.io/somus/pipr:v${rootPackage.version}`,
         "ghcr.io/somus/pipr:v0.0.0",
       ),
     );
