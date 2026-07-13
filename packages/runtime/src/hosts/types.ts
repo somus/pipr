@@ -63,6 +63,7 @@ export type ReviewCommentReplyEvent = {
 };
 
 export type CodeHostEvent =
+  | { kind: "ignored"; reason: string }
   | { kind: "change-request"; change: ChangeRequestEventContext }
   | { kind: "command-comment"; comment: CommandCommentEvent }
   | { kind: "review-comment-reply"; reply: ReviewCommentReplyEvent };

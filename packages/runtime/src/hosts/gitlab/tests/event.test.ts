@@ -143,6 +143,31 @@ describe("GitLab event parser", () => {
     }
   });
 
+  it("ignores draft merge request webhooks before loading the change", async () => {
+    const fixture = await eventFixture({
+      object_kind: "merge_request",
+      project: { id: 42, path_with_namespace: "group/project" },
+      object_attributes: { iid: 7, action: "open", draft: true },
+    });
+    let loadCalls = 0;
+    try {
+      await expect(
+        parseGitLabEvent({
+          eventPath: fixture.path,
+          env: {},
+          workspace: fixture.root,
+          loadChangeRequest: async () => {
+            loadCalls += 1;
+            throw new Error("draft merge requests must not be loaded");
+          },
+        }),
+      ).resolves.toEqual({ kind: "ignored", reason: "merge request is a draft" });
+      expect(loadCalls).toBe(0);
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("synthesizes pipeline change events from GitLab CI variables", async () => {
     const loaded = {
       repository: { slug: "group/project" },
@@ -170,6 +195,31 @@ describe("GitLab event parser", () => {
       kind: "change-request",
       change: { action: "updated", change: { number: 7 } },
     });
+  });
+
+  it("ignores draft merge requests loaded by GitLab pipelines", async () => {
+    await expect(
+      parseGitLabEvent({
+        env: {
+          CI_PROJECT_ID: "42",
+          CI_PROJECT_PATH: "group/project",
+          CI_MERGE_REQUEST_IID: "7",
+        },
+        workspace: "/workspace",
+        loadChangeRequest: async () => ({
+          repository: { slug: "group/project" },
+          coordinates: { provider: "gitlab", projectId: "42", projectPath: "group/project" },
+          change: {
+            number: 7,
+            title: "Draft MR",
+            description: "",
+            base: { sha: "base", ref: "main" },
+            head: { sha: "head", ref: "feature" },
+            isDraft: true,
+          },
+        }),
+      }),
+    ).resolves.toEqual({ kind: "ignored", reason: "merge request is a draft" });
   });
 });
 

@@ -14,6 +14,7 @@ const mergeRequestHookSchema = z.looseObject({
   object_attributes: z.looseObject({
     iid: z.number().int().positive(),
     action: z.string().optional(),
+    draft: z.boolean().optional(),
   }),
   changes: z
     .looseObject({
@@ -69,6 +70,9 @@ async function pipelineEvent(options: GitLabEventParseOptions): Promise<CodeHost
   const projectPath = requiredEnv(options.env, "CI_PROJECT_PATH");
   const changeNumber = positiveIntegerEnv(options.env, "CI_MERGE_REQUEST_IID");
   const loaded = await loadChange(options, { projectId, projectPath, changeNumber });
+  if (loaded.change.isDraft) {
+    return { kind: "ignored", reason: "merge request is a draft" };
+  }
   return {
     kind: "change-request",
     change: parseChangeRequestEventContext({
@@ -89,6 +93,11 @@ async function mergeRequestEvent(
   options: GitLabEventParseOptions,
 ): Promise<CodeHostEvent> {
   const hook = mergeRequestHookSchema.parse(payload);
+  const becameReady =
+    hook.changes?.draft?.previous === true && hook.changes.draft.current === false;
+  if (hook.object_attributes.draft === true && !becameReady) {
+    return { kind: "ignored", reason: "merge request is a draft" };
+  }
   const loaded = await loadChange(options, {
     projectId: String(hook.project.id),
     projectPath: hook.project.path_with_namespace,

@@ -18,6 +18,7 @@ const githubPullRequestPayloadSchema = z.looseObject({
       title: z.string().optional(),
       body: z.string().nullable().optional(),
       html_url: z.string().optional(),
+      draft: z.boolean().optional(),
       user: z
         .looseObject({
           login: z.string().optional(),
@@ -222,6 +223,7 @@ function githubEventChange(
     base: githubBaseEndpoint(pullRequest),
     head: githubHeadEndpoint(pullRequest),
     isFork: githubEventHeadIsFork(pullRequest.head?.repo?.full_name, repositorySlug),
+    isDraft: pullRequest.draft,
   };
 }
 

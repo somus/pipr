@@ -53,6 +53,7 @@ const mergeRequestResponseSchema = z.looseObject({
   source_project_id: z.number().int().positive(),
   target_project_id: z.number().int().positive(),
   sha: z.string().min(1),
+  draft: z.boolean().optional(),
   author: userSchema.optional(),
   references: z.looseObject({ full: z.string().optional() }).optional(),
   diff_refs: diffRefsSchema.nullable().optional(),
@@ -193,6 +194,7 @@ export function createGitLabClient(
           base: { sha: mergeRequest.diff_refs.start_sha, ref: mergeRequest.target_branch },
           head: { sha: mergeRequest.diff_refs.head_sha, ref: mergeRequest.source_branch },
           isFork: mergeRequest.source_project_id !== mergeRequest.target_project_id,
+          isDraft: mergeRequest.draft,
         },
       };
     },
