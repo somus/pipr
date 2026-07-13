@@ -72,6 +72,64 @@ describe("code host HTTP client", () => {
     expect(exhaustedCalls).toBe(3);
   });
 
+  it("does not retry permanent server responses", async () => {
+    let calls = 0;
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://example.test/",
+      fetch: async () => {
+        calls += 1;
+        return new Response("not implemented", { status: 501 });
+      },
+      sleep: async () => {},
+    });
+
+    await expect(client.json("items", z.unknown())).rejects.toThrow("501");
+    expect(calls).toBe(1);
+  });
+
+  it("does not retry before an excessive Retry-After delay", async () => {
+    const waits: number[] = [];
+    let calls = 0;
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://example.test/",
+      fetch: async () => {
+        calls += 1;
+        return new Response("busy", { status: 429, headers: { "Retry-After": "61" } });
+      },
+      sleep: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    });
+
+    await expect(client.json("items", z.unknown())).rejects.toThrow("429");
+    expect(calls).toBe(1);
+    expect(waits).toEqual([]);
+  });
+
+  it("retries GitHub rate-limit responses using the reset header", async () => {
+    const waits: number[] = [];
+    const responses = [
+      new Response("limited", {
+        status: 403,
+        headers: { "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "101" },
+      }),
+      Response.json({ value: "ok" }),
+    ];
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://api.github.test/",
+      now: () => 100_000,
+      fetch: async () => responses.shift() ?? Response.json({ value: "ok" }),
+      sleep: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    });
+
+    await expect(client.json("items", z.object({ value: z.string() }))).resolves.toEqual({
+      value: "ok",
+    });
+    expect(waits).toEqual([1_000]);
+  });
+
   it("does not retry unsafe writes", async () => {
     let calls = 0;
     const client = createCodeHostHttpClient({

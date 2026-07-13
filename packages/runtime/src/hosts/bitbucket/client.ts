@@ -208,9 +208,9 @@ export function createBitbucketClient(
     },
     async setStatus(sha, key, body) {
       const value = await api.json(
-        `commit/${encodeURIComponent(sha)}/statuses/build`,
+        `commit/${encodeURIComponent(sha)}/statuses/build/${encodeURIComponent(key)}`,
         z.looseObject({ key: z.string().default(key) }),
-        jsonRequest("POST", { ...body, key }),
+        jsonRequest("PUT", { ...body, key }),
       );
       return value.key;
     },

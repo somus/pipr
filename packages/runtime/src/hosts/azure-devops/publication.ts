@@ -10,10 +10,12 @@ import {
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
+  assertInlinePublicationComplete,
   commandResponseBody,
   completeHostPublication,
   publishUnseenInlineItems,
 } from "../publication.js";
+import { retryCodeHostOperation } from "../retry.js";
 import type { InlineThreadContext } from "../types.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
 
@@ -34,22 +36,6 @@ export async function publishAzureDevOpsPlan(options: {
     owner.uniqueName,
     mainMarker(options.change.change.number),
   );
-  const main = existingMain
-    ? await options.client.updateComment(
-        coordinates.repositoryId,
-        options.change.change.number,
-        existingMain.id,
-        existingMain.comments[0]?.id ?? "",
-        options.plan.mainComment,
-      )
-    : (
-        await options.client.createThread(
-          coordinates.repositoryId,
-          options.change.change.number,
-          unpositionedThread(options.plan.mainComment),
-        )
-      ).comments[0];
-  if (!main) throw new Error("Azure DevOps did not return the Main Review Comment");
   const markerBodies = ownedThreadComments(threads, owner.uniqueName).map(
     (comment) => comment.content,
   );
@@ -61,6 +47,11 @@ export async function publishAzureDevOpsPlan(options: {
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
     existingBodies: markerBodies,
+    reloadExistingBodies: async () =>
+      ownedThreadComments(
+        await options.client.listThreads(coordinates.repositoryId, options.change.change.number),
+        owner.uniqueName,
+      ).map((comment) => comment.content),
     publish: async (item) => {
       await options.client.createThread(
         coordinates.repositoryId,
@@ -76,6 +67,39 @@ export async function publishAzureDevOpsPlan(options: {
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     threads,
   });
+  assertInlinePublicationComplete({
+    provider: "Azure DevOps",
+    inline,
+    metadata: options.plan.metadata,
+  });
+  const main = existingMain
+    ? await options.client.updateComment(
+        coordinates.repositoryId,
+        options.change.change.number,
+        existingMain.id,
+        existingMain.comments[0]?.id ?? "",
+        options.plan.mainComment,
+      )
+    : (
+        await retryCodeHostOperation({
+          operation: () =>
+            options.client.createThread(
+              coordinates.repositoryId,
+              options.change.change.number,
+              unpositionedThread(options.plan.mainComment),
+            ),
+          reconcile: async () =>
+            ownedRootThread(
+              await options.client.listThreads(
+                coordinates.repositoryId,
+                options.change.change.number,
+              ),
+              owner.uniqueName,
+              mainMarker(options.change.change.number),
+            ),
+        })
+      ).comments[0];
+  if (!main) throw new Error("Azure DevOps did not return the Main Review Comment");
   return completeHostPublication({
     provider: "Azure DevOps",
     mainAction: existingMain ? "updated" : "created",
@@ -116,11 +140,23 @@ export async function publishAzureDevOpsCommandResponse(options: {
         response.body,
       )
     : (
-        await options.client.createThread(
-          coordinates.repositoryId,
-          options.change.change.number,
-          unpositionedThread(response.body),
-        )
+        await retryCodeHostOperation({
+          operation: () =>
+            options.client.createThread(
+              coordinates.repositoryId,
+              options.change.change.number,
+              unpositionedThread(response.body),
+            ),
+          reconcile: async () =>
+            ownedRootThread(
+              await options.client.listThreads(
+                coordinates.repositoryId,
+                options.change.change.number,
+              ),
+              owner.uniqueName,
+              response.marker,
+            ),
+        })
       ).comments[0];
   if (!comment) throw new Error("Azure DevOps did not return the command response comment");
   return { action: existing ? ("updated" as const) : ("created" as const), id: comment.id };
@@ -236,24 +272,39 @@ async function publishAzureDevOpsThreadAction(options: {
         comment.content.includes(options.action.responseKey),
       )
     ) {
-      await options.client.createThreadComment(
-        options.repositoryId,
-        options.changeNumber,
-        options.thread.id,
-        {
-          parentCommentId: Number(options.thread.comments[0]?.id ?? 0),
-          content: options.action.body,
-          commentType: 1,
+      await retryCodeHostOperation({
+        operation: () =>
+          options.client.createThreadComment(
+            options.repositoryId,
+            options.changeNumber,
+            options.thread?.id ?? "",
+            {
+              parentCommentId: Number(options.thread?.comments[0]?.id ?? 0),
+              content: options.action.body,
+              commentType: 1,
+            },
+          ),
+        reconcile: async () => {
+          const thread = (
+            await options.client.listThreads(options.repositoryId, options.changeNumber)
+          ).find((candidate) => candidate.id === options.thread?.id);
+          return thread?.comments.find((comment) =>
+            comment.content.includes(options.action.responseKey),
+          );
         },
-      );
+      });
     }
     if (options.action.kind === "resolve" && !isResolved(options.thread)) {
-      await options.client.updateThreadStatus(
-        options.repositoryId,
-        options.changeNumber,
-        options.thread.id,
-        "fixed",
-      );
+      await retryCodeHostOperation({
+        idempotent: true,
+        operation: () =>
+          options.client.updateThreadStatus(
+            options.repositoryId,
+            options.changeNumber,
+            options.thread?.id ?? "",
+            "fixed",
+          ),
+      });
     }
   } catch (error) {
     return error instanceof Error ? error.message : String(error);

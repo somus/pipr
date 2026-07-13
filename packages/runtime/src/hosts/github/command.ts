@@ -1,8 +1,8 @@
-import { Octokit } from "@octokit/rest";
 import { z } from "zod";
-import { githubActor, githubApiVersion, parseRepoSlug } from "../../shared/github.js";
+import { githubActor, parseRepoSlug } from "../../shared/github.js";
 import type { ChangeRequestRef, CommandPermissionLevel, RepositoryRef } from "../../types.js";
 import type { RepositoryPermission } from "../types.js";
+import { createGitHubOctokit } from "./octokit.js";
 
 const pullRequestDetailsSchema = z.looseObject({
   title: z.string().optional(),
@@ -74,15 +74,7 @@ const permissionLevels = new Set<CommandPermissionLevel>([
 export function createGitHubCommandClient(
   env: NodeJS.ProcessEnv = process.env,
 ): GitHubCommandClient {
-  const octokit = new Octokit({
-    auth: env.GITHUB_TOKEN,
-    baseUrl: env.GITHUB_API_URL ?? "https://api.github.com",
-    request: {
-      headers: {
-        "X-GitHub-Api-Version": githubApiVersion,
-      },
-    },
-  });
+  const octokit = createGitHubOctokit(env);
   return {
     async getPullRequest(options) {
       const repo = parseRepoSlug(options.repository.slug);

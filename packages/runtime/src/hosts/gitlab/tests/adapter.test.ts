@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
 import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
+import { runCodeHostAdapterContract } from "../../tests/adapter-contract.js";
 import { createGitLabHostAdapter } from "../adapter.js";
 import type {
   GitLabClient,
@@ -133,6 +134,7 @@ describe("GitLab host adapter", () => {
       message: "GitLab inline comment publication failed",
       result: { inlineComments: { posted: 0, skipped: 0, failed: 1 } },
     });
+    expect(client.notes).toEqual([]);
   });
 
   it("renders native multiline anchors, renamed paths, suggestions, and thread actions", async () => {
@@ -211,6 +213,79 @@ describe("GitLab host adapter", () => {
   });
 });
 
+runCodeHostAdapterContract("GitLab", {
+  async pagination() {
+    const client = new FakeGitLabClient();
+    const adapter = createGitLabHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    await adapter.publication?.publish({ change, plan: secondPublicationPlan() });
+    return (await adapter.comments?.loadInlineThreadContexts?.({ change }))?.length ?? 0;
+  },
+  async staleHeadWrites() {
+    const client = new FakeGitLabClient();
+    client.mergeRequest.diff_refs.head_sha = "new-head";
+    await createGitLabHostAdapter({ client })
+      .publication?.publish({ change, plan: publicationPlan() })
+      .catch(() => undefined);
+    return client.notes.length + client.discussions.length;
+  },
+  async partialRetry() {
+    const client = new FakeGitLabClient();
+    client.loseNextDiscussionResponse = true;
+    await createGitLabHostAdapter({ client }).publication?.publish({
+      change,
+      plan: publicationPlan(),
+    });
+    return { inlineWrites: client.discussions.length, mainWrites: client.notes.length };
+  },
+  async markerOwnership() {
+    const client = new FakeGitLabClient();
+    client.discussions.push(foreignGitLabDiscussion());
+    const adapter = createGitLabHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const foreignWrites = client.discussions.filter(
+      (discussion) => discussion.notes[0]?.author?.username === "someone-else",
+    ).length;
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const ownedWritesAfterRerun = client.discussions.filter(
+      (discussion) => discussion.notes[0]?.author?.username === "pipr-bot",
+    ).length;
+    return { foreignWrites, ownedWritesAfterRerun };
+  },
+  async statusIdempotency() {
+    const client = new FakeGitLabClient();
+    const statuses = createGitLabHostAdapter({ client }).statuses;
+    const firstStatus = await statuses?.upsert({ change, name: "review", state: "pending" });
+    const secondStatus = await statuses?.upsert({ change, name: "review", state: "success" });
+    if (!firstStatus || !secondStatus) throw new Error("Expected status support");
+    return {
+      firstId: firstStatus.id,
+      secondId: secondStatus.id,
+      nativeRecords: client.statusKeys.size,
+    };
+  },
+  async threadActions() {
+    const client = new FakeGitLabClient();
+    const publication = createGitLabHostAdapter({ client }).publication;
+    await publication?.publish({ change, plan: publicationPlan() });
+    const action = gitLabResolveAction();
+    await publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [action],
+    });
+    await publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [action],
+    });
+    return {
+      replies: client.discussions[0]?.notes.length === 2 ? 1 : 0,
+      resolutions: client.resolveCalls,
+    };
+  },
+});
+
 const change: ChangeRequestEventContext = {
   eventName: "merge_request",
   action: "updated",
@@ -278,11 +353,55 @@ function publicationPlan() {
   });
 }
 
+function secondPublicationPlan() {
+  const plan = publicationPlan();
+  const item = plan.inlineItems[0];
+  if (!item) throw new Error("Expected inline fixture");
+  plan.inlineItems = [
+    {
+      ...item,
+      findingId: "finding-2",
+      marker: "pipr:finding:finding-2:head",
+      body: `${renderInlineFindingMarker("finding-2", "head")}\nFix this too.`,
+    },
+  ];
+  return plan;
+}
+
+function foreignGitLabDiscussion(): GitLabDiscussion {
+  return {
+    id: "foreign",
+    notes: [
+      {
+        id: "foreign-inline",
+        body: publicationPlan().inlineItems[0]?.body ?? "",
+        author: { id: 2, username: "someone-else" },
+        resolved: false,
+      },
+    ],
+  };
+}
+
+function gitLabResolveAction() {
+  return {
+    kind: "resolve" as const,
+    findingId: "finding-1",
+    findingHeadSha: "head",
+    commentId: "inline-1",
+    threadId: "discussion-1",
+    body: "Resolved. response-key",
+    responseKey: "response-key",
+  };
+}
+
 class FakeGitLabClient implements GitLabClient {
   notes: GitLabNote[] = [];
   discussions: GitLabDiscussion[] = [];
   positions: GitLabPosition[] = [];
   createDiscussionError?: Error;
+  loseNextDiscussionResponse = false;
+  statusKeys = new Set<string>();
+  resolveCalls = 0;
   afterListNotes?: () => void;
   mergeRequest: GitLabMergeRequest = {
     iid: 7,
@@ -363,6 +482,10 @@ class FakeGitLabClient implements GitLabClient {
     };
     this.positions.push(position);
     this.discussions.push(discussion);
+    if (this.loseNextDiscussionResponse) {
+      this.loseNextDiscussionResponse = false;
+      throw Object.assign(new Error("response lost"), { status: 503 });
+    }
     return discussion;
   };
   replyDiscussion = async (
@@ -382,8 +505,12 @@ class FakeGitLabClient implements GitLabClient {
     return note;
   };
   resolveDiscussion = async (_projectId: string, _changeNumber: number, discussionId: string) => {
+    this.resolveCalls += 1;
     const root = this.discussions.find((candidate) => candidate.id === discussionId)?.notes[0];
     if (root) root.resolved = true;
   };
-  setStatus = async () => "status-1";
+  setStatus = async (_projectId: string, sha: string, name: string) => {
+    this.statusKeys.add(`${sha}:${name}`);
+    return "status-1";
+  };
 }

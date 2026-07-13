@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
 import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
+import { runCodeHostAdapterContract } from "../../tests/adapter-contract.js";
 import { createBitbucketHostAdapter } from "../adapter.js";
 import type { BitbucketClient, BitbucketComment, BitbucketPullRequest } from "../client.js";
 
@@ -18,7 +19,7 @@ describe("Bitbucket Cloud adapter", () => {
       mainComment: { action: "updated" },
       inlineComments: { skipped: 1 },
     });
-    expect(client.createdBodies[1]).toMatchObject({
+    expect(client.createdBodies[0]).toMatchObject({
       inline: { path: "src/a.ts", to: 4, start_to: 2 },
     });
     const command = { change, sourceCommentId: "9", commandName: "ask", body: "answer" };
@@ -97,7 +98,7 @@ describe("Bitbucket Cloud adapter", () => {
 
     await adapter.publication?.publish({ change, plan });
 
-    expect(client.createdBodies[1]).toMatchObject({
+    expect(client.createdBodies[0]).toMatchObject({
       inline: { path: "src/old.ts", from: 4, start_from: 2 },
     });
   });
@@ -113,6 +114,84 @@ describe("Bitbucket Cloud adapter", () => {
     expect(client.currentUserCalls).toBe(1);
     expect(client.listCommentsCalls).toBe(1);
   });
+});
+
+runCodeHostAdapterContract("Bitbucket Cloud", {
+  async pagination() {
+    const client = new FakeBitbucketClient();
+    const adapter = createBitbucketHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    await adapter.publication?.publish({ change, plan: secondPublicationPlan() });
+    return (await adapter.comments?.loadInlineThreadContexts?.({ change }))?.length ?? 0;
+  },
+  async staleHeadWrites() {
+    const client = new FakeBitbucketClient();
+    client.pullRequest.source.commit.hash = "new-head";
+    await createBitbucketHostAdapter({ client })
+      .publication?.publish({ change, plan: publicationPlan() })
+      .catch(() => undefined);
+    return client.comments.length;
+  },
+  async partialRetry() {
+    const client = new FakeBitbucketClient();
+    client.loseNextInlineResponse = true;
+    await createBitbucketHostAdapter({ client }).publication?.publish({
+      change,
+      plan: publicationPlan(),
+    });
+    return {
+      inlineWrites: client.comments.filter((comment) => comment.inline).length,
+      mainWrites: client.comments.filter((comment) => !comment.inline && !comment.parent).length,
+    };
+  },
+  async markerOwnership() {
+    const client = new FakeBitbucketClient();
+    client.comments.push(foreignBitbucketComment());
+    const adapter = createBitbucketHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const foreignWrites = client.comments.filter(
+      (comment) => comment.user?.uuid === "{someone-else}",
+    ).length;
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const ownedWritesAfterRerun = client.comments.filter(
+      (comment) => comment.inline && comment.user?.uuid === "{bot}",
+    ).length;
+    return { foreignWrites, ownedWritesAfterRerun };
+  },
+  async statusIdempotency() {
+    const client = new FakeBitbucketClient();
+    const statuses = createBitbucketHostAdapter({ client }).statuses;
+    const firstStatus = await statuses?.upsert({ change, name: "review", state: "pending" });
+    const secondStatus = await statuses?.upsert({ change, name: "review", state: "success" });
+    if (!firstStatus || !secondStatus) throw new Error("Expected status support");
+    return {
+      firstId: firstStatus.id,
+      secondId: secondStatus.id,
+      nativeRecords: client.statusKeys.size,
+    };
+  },
+  async threadActions() {
+    const client = new FakeBitbucketClient();
+    const publication = createBitbucketHostAdapter({ client }).publication;
+    await publication?.publish({ change, plan: publicationPlan() });
+    const inline = client.comments.find((comment) => comment.inline);
+    if (!inline) throw new Error("Expected inline comment");
+    const action = bitbucketResolveAction(inline);
+    await publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [action],
+    });
+    await publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [action],
+    });
+    return {
+      replies: client.comments.filter((comment) => comment.parent?.id === inline.id).length,
+      resolutions: client.resolveCalls,
+    };
+  },
 });
 
 const change: ChangeRequestEventContext = {
@@ -186,12 +265,51 @@ function publicationPlan() {
   });
 }
 
+function secondPublicationPlan() {
+  const plan = publicationPlan();
+  const item = plan.inlineItems[0];
+  if (!item) throw new Error("Expected inline fixture");
+  plan.inlineItems = [
+    {
+      ...item,
+      findingId: "finding-2",
+      marker: "pipr:finding:finding-2:head",
+      body: `${renderInlineFindingMarker("finding-2", "head")}\nFix this too.`,
+    },
+  ];
+  return plan;
+}
+
+function foreignBitbucketComment(): BitbucketComment {
+  return {
+    id: "foreign",
+    content: { raw: publicationPlan().inlineItems[0]?.body ?? "" },
+    user: { uuid: "{someone-else}", nickname: "someone-else" },
+    inline: { path: "src/a.ts", to: 4, start_to: 2 },
+  };
+}
+
+function bitbucketResolveAction(inline: BitbucketComment) {
+  return {
+    kind: "resolve" as const,
+    findingId: "finding-1",
+    findingHeadSha: "head",
+    commentId: inline.id,
+    threadId: inline.id,
+    body: "Resolved. response-key",
+    responseKey: "response-key",
+  };
+}
+
 class FakeBitbucketClient implements BitbucketClient {
   workspace = "workspace";
   repository = "repository";
   comments: BitbucketComment[] = [];
   createdBodies: Array<Record<string, unknown>> = [];
   statusBodies: Array<Record<string, unknown>> = [];
+  statusKeys = new Set<string>();
+  loseNextInlineResponse = false;
+  resolveCalls = 0;
   currentUserCalls = 0;
   listCommentsCalls = 0;
   pullRequest: BitbucketPullRequest = {
@@ -233,6 +351,10 @@ class FakeBitbucketClient implements BitbucketClient {
       parent: body.parent as BitbucketComment["parent"],
     };
     this.comments.push(comment);
+    if (body.inline && this.loseNextInlineResponse) {
+      this.loseNextInlineResponse = false;
+      throw Object.assign(new Error("response lost"), { status: 503 });
+    }
     return comment;
   };
   updateComment = async (_id: number, commentId: string, content: string) => {
@@ -244,11 +366,13 @@ class FakeBitbucketClient implements BitbucketClient {
   replyToComment = async (id: number, commentId: string, content: string) =>
     this.createComment(id, { content: { raw: content }, parent: { id: commentId } });
   resolveComment = async (_id: number, commentId: string) => {
+    this.resolveCalls += 1;
     const comment = this.comments.find((item) => item.id === commentId);
     if (comment) comment.resolution = { type: "resolution" };
   };
   setStatus = async (_sha: string, key: string, body: Record<string, unknown>) => {
     this.statusBodies.push(body);
+    this.statusKeys.add(key);
     return key;
   };
 }

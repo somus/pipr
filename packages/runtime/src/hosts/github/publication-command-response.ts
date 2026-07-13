@@ -1,6 +1,10 @@
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { GitHubIssueComment, GitHubPublicationClient } from "./publication-client.js";
-import { assertCurrentHeadSha, findOwnedIssueComment } from "./publication-shared.js";
+import {
+  assertCurrentHeadSha,
+  findOwnedIssueComment,
+  upsertOwnedIssueComment,
+} from "./publication-shared.js";
 
 const commandResponseMarker = "pipr:command-response";
 
@@ -20,28 +24,13 @@ export async function publishGitHubCommandResponse(options: {
     commandName: options.commandName,
   });
   const body = [marker, "", options.body, ""].join("\n");
-  const existing = findCommandResponseComment(
-    await options.client.listIssueComments({
-      repo: options.change.repository.slug,
-      issueNumber: options.change.change.number,
-    }),
-    marker,
-    ownerLogin,
-  );
-  if (existing) {
-    const updated = await options.client.updateIssueComment({
-      repo: options.change.repository.slug,
-      commentId: existing.id,
-      body,
-    });
-    return { action: "updated", id: String(updated.id) };
-  }
-  const created = await options.client.createIssueComment({
+  return upsertOwnedIssueComment({
+    client: options.client,
     repo: options.change.repository.slug,
     issueNumber: options.change.change.number,
     body,
+    find: (comments) => findCommandResponseComment(comments, marker, ownerLogin),
   });
-  return { action: "created", id: String(created.id) };
 }
 
 function findCommandResponseComment(

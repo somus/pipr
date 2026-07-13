@@ -1,4 +1,5 @@
 import { githubCoordinates } from "../../shared/github.js";
+import { retryCodeHostOperation } from "../retry.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGitHubCommandClient, type GitHubCommandClient } from "./command.js";
 import {
@@ -139,12 +140,32 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
       },
       async upsert(options) {
         if (!options.status) {
-          const checkRun = await publicationClient.createCheckRun({
-            repo: options.change.repository.slug,
-            name: options.name,
-            headSha: options.change.change.head.sha,
-            summary: options.summary,
-          });
+          const externalId = githubStatusExternalId(options);
+          const existing = (
+            await publicationClient.listCheckRuns({
+              repo: options.change.repository.slug,
+              headSha: options.change.change.head.sha,
+            })
+          ).find((check) => check.externalId === externalId);
+          const checkRun =
+            existing ??
+            (await retryCodeHostOperation({
+              operation: () =>
+                publicationClient.createCheckRun({
+                  repo: options.change.repository.slug,
+                  name: options.name,
+                  headSha: options.change.change.head.sha,
+                  externalId,
+                  summary: options.summary,
+                }),
+              reconcile: async () =>
+                (
+                  await publicationClient.listCheckRuns({
+                    repo: options.change.repository.slug,
+                    headSha: options.change.change.head.sha,
+                  })
+                ).find((check) => check.externalId === externalId),
+            }));
           return { id: String(checkRun.id), name: checkRun.name };
         }
         if (options.state === "pending") {
@@ -161,4 +182,15 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
       },
     },
   };
+}
+
+function githubStatusExternalId(
+  options: Parameters<NonNullable<CodeHostAdapter["statuses"]>["upsert"]>[0],
+): string {
+  const identity = [
+    options.change.change.number,
+    options.change.change.head.sha,
+    options.name,
+  ].join("\0");
+  return `pipr:${new Bun.CryptoHasher("sha256").update(identity).digest("hex")}`;
 }

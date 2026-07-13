@@ -6,6 +6,7 @@ import {
   renderVerifierResponseMarker,
 } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
+import { retryCodeHostOperation } from "../retry.js";
 import type {
   GitHubPublicationClient,
   GitHubReviewComment,
@@ -138,11 +139,31 @@ async function postThreadActionReplyIfNeeded(
     return undefined;
   }
   try {
-    await context.client.createReviewCommentReply({
-      repo: context.change.repository.slug,
-      pullRequestNumber: context.change.change.number,
-      commentId: Number(action.commentId),
-      body: [marker.body, "", action.body.replaceAll("<!--", "&lt;!--")].join("\n"),
+    await retryCodeHostOperation({
+      operation: async () => {
+        await context.client.createReviewCommentReply({
+          repo: context.change.repository.slug,
+          pullRequestNumber: context.change.change.number,
+          commentId: Number(action.commentId),
+          body: [marker.body, "", action.body.replaceAll("<!--", "&lt;!--")].join("\n"),
+        });
+        return true;
+      },
+      reconcile: async () => {
+        const comments = await listOwnedReviewComments({
+          client: context.client,
+          change: context.change,
+          ownerLogin: await context.client.getAuthenticatedUserLogin(),
+        });
+        const bodies = comments.map((comment) => comment.body ?? "");
+        const found =
+          action.kind === "resolve"
+            ? extractResolvedFindingMarkerRecords(bodies).some(
+                (record) => `${record.id}:${record.head}` === marker.key,
+              )
+            : extractVerifierResponseMarkers(bodies).has(marker.key);
+        return found ? true : undefined;
+      },
     });
     recordThreadActionReply(context, action, marker.key);
     return undefined;
@@ -233,7 +254,10 @@ async function resolveReviewThread(
     if (thread?.isResolved) {
       return undefined;
     }
-    await context.client.resolveReviewThread({ threadId });
+    await retryCodeHostOperation({
+      idempotent: true,
+      operation: () => context.client.resolveReviewThread({ threadId }),
+    });
     return undefined;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

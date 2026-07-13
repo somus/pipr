@@ -9,10 +9,12 @@ import {
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
+  assertInlinePublicationComplete,
   commandResponseBody,
   completeHostPublication,
   publishUnseenInlineItems,
 } from "../publication.js";
+import { retryCodeHostOperation } from "../retry.js";
 import type { InlineThreadContext } from "../types.js";
 import type { BitbucketClient, BitbucketComment } from "./client.js";
 
@@ -28,18 +30,13 @@ export async function publishBitbucketPlan(options: {
   const existingMain = owned.find((comment) =>
     comment.content.raw.includes(mainMarker(options.change.change.number)),
   );
-  const main = existingMain
-    ? await options.client.updateComment(
-        options.change.change.number,
-        existingMain.id,
-        options.plan.mainComment,
-      )
-    : await options.client.createComment(options.change.change.number, {
-        content: { raw: options.plan.mainComment },
-      });
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
     existingBodies: owned.map((comment) => comment.content.raw),
+    reloadExistingBodies: async () =>
+      (await options.client.listComments(options.change.change.number))
+        .filter((comment) => comment.user?.uuid === owner.uuid)
+        .map((comment) => comment.content.raw),
     publish: (item) =>
       options.client.createComment(options.change.change.number, {
         content: { raw: item.body },
@@ -53,6 +50,29 @@ export async function publishBitbucketPlan(options: {
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     comments,
   });
+  assertInlinePublicationComplete({
+    provider: "Bitbucket",
+    inline,
+    metadata: options.plan.metadata,
+  });
+  const main = existingMain
+    ? await options.client.updateComment(
+        options.change.change.number,
+        existingMain.id,
+        options.plan.mainComment,
+      )
+    : await retryCodeHostOperation({
+        operation: () =>
+          options.client.createComment(options.change.change.number, {
+            content: { raw: options.plan.mainComment },
+          }),
+        reconcile: async () =>
+          (await options.client.listComments(options.change.change.number)).find(
+            (comment) =>
+              comment.user?.uuid === owner.uuid &&
+              comment.content.raw.includes(mainMarker(options.change.change.number)),
+          ),
+      });
   return completeHostPublication({
     provider: "Bitbucket",
     mainAction: existingMain ? "updated" : "created",
@@ -83,8 +103,16 @@ export async function publishBitbucketCommandResponse(options: {
   );
   const comment = existing
     ? await options.client.updateComment(options.change.change.number, existing.id, response.body)
-    : await options.client.createComment(options.change.change.number, {
-        content: { raw: response.body },
+    : await retryCodeHostOperation({
+        operation: () =>
+          options.client.createComment(options.change.change.number, {
+            content: { raw: response.body },
+          }),
+        reconcile: async () =>
+          (await options.client.listComments(options.change.change.number)).find(
+            (comment) =>
+              comment.user?.uuid === owner.uuid && comment.content.raw.includes(response.marker),
+          ),
       });
   return { action: existing ? ("updated" as const) : ("created" as const), id: comment.id };
 }
@@ -173,9 +201,28 @@ export async function publishBitbucketThreadActions(options: {
     try {
       const replies = comments.filter((comment) => comment.parent?.id === root.id);
       if (!replies.some((comment) => comment.content.raw.includes(action.responseKey)))
-        await options.client.replyToComment(options.change.change.number, root.id, action.body);
+        await retryCodeHostOperation({
+          operation: () =>
+            options.client.replyToComment(options.change.change.number, root.id, action.body),
+          reconcile: async () =>
+            (await options.client.listComments(options.change.change.number)).find(
+              (comment) =>
+                comment.parent?.id === root.id && comment.content.raw.includes(action.responseKey),
+            ),
+        });
       if (action.kind === "resolve" && root.resolution === undefined)
-        await options.client.resolveComment(options.change.change.number, root.id);
+        await retryCodeHostOperation({
+          operation: async () => {
+            await options.client.resolveComment(options.change.change.number, root.id);
+            return true;
+          },
+          reconcile: async () =>
+            (await options.client.listComments(options.change.change.number)).find(
+              (comment) => comment.id === root.id && comment.resolution !== undefined,
+            )
+              ? true
+              : undefined,
+        });
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }

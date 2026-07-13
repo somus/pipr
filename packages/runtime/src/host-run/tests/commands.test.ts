@@ -1920,6 +1920,12 @@ function fakeGitHubPublicationClient(
       checks?.created.push(checkRun);
       return { id: checkRun.id, name: checkRun.name };
     },
+    async listCheckRuns() {
+      return (checks?.created ?? []).map((checkRun) => ({
+        id: checkRun.id,
+        name: checkRun.name,
+      }));
+    },
     async updateCheckRun(options) {
       checks?.updated.push({
         checkRunId: options.checkRunId,
@@ -2103,6 +2109,9 @@ function failingGitHubPublishingClient(): GitHubPublicationClient {
       throw new Error("GitHub publishing should not be called");
     },
     async createCheckRun() {
+      throw new Error("GitHub publishing should not be called");
+    },
+    async listCheckRuns() {
       throw new Error("GitHub publishing should not be called");
     },
     async updateCheckRun() {

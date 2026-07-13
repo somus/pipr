@@ -3,7 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { buildPublicationPlan, runtimeVersion } from "../../../review/comment.js";
+import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
+import { runCodeHostAdapterContract } from "../../tests/adapter-contract.js";
 import { createGitHubHostAdapter } from "../adapter.js";
 import type { GitHubCommandClient } from "../command.js";
 import type { GitHubPublicationClient } from "../publication.js";
@@ -132,6 +134,14 @@ describe("GitHub host adapter contract", () => {
       summary: "Running.",
     });
     expect(checkRun).toEqual({ id: "9", name: "pipr" });
+    await expect(
+      adapter.statuses?.upsert({
+        change,
+        name: "pipr",
+        state: "pending",
+        summary: "Still running.",
+      }),
+    ).resolves.toEqual({ id: "9", name: "pipr" });
     await adapter.statuses?.upsert({
       change,
       name: "pipr",
@@ -147,6 +157,7 @@ describe("GitHub host adapter contract", () => {
     expect(calls).toContain("getPullRequestHeadSha");
     expect(calls).toContain("createIssueComment");
     expect(calls).toContain("createCheckRun");
+    expect(calls.filter((call) => call === "createCheckRun")).toHaveLength(1);
     expect(calls).toContain("updateCheckRun");
   });
 
@@ -183,6 +194,85 @@ describe("GitHub host adapter contract", () => {
     ).rejects.toThrow("Change request head changed");
     expect(calls).toEqual(["getPullRequestHeadSha"]);
   });
+});
+
+runCodeHostAdapterContract("GitHub", {
+  async pagination() {
+    const change = githubContractChange();
+    const client = new StatefulPublicationClient();
+    const adapter = createGitHubHostAdapter({ publicationClient: client });
+    await adapter.publication?.publish({ change, plan: githubContractPlan(change) });
+    await adapter.publication?.publish({
+      change,
+      plan: githubContractPlan(change, "fnd_bbbbbbbbbbbbbbbb"),
+    });
+    return (await adapter.comments?.loadInlineThreadContexts?.({ change }))?.length ?? 0;
+  },
+  async staleHeadWrites() {
+    const change = githubContractChange();
+    const client = new StatefulPublicationClient();
+    client.headSha = "new-head";
+    await createGitHubHostAdapter({ publicationClient: client })
+      .publication?.publish({ change, plan: githubContractPlan(change) })
+      .catch(() => undefined);
+    return client.issueComments.length + client.reviewComments.length;
+  },
+  async partialRetry() {
+    const change = githubContractChange();
+    const client = new StatefulPublicationClient();
+    client.loseNextInlineResponse = true;
+    await createGitHubHostAdapter({ publicationClient: client }).publication?.publish({
+      change,
+      plan: githubContractPlan(change),
+    });
+    return { inlineWrites: client.reviewComments.length, mainWrites: client.issueComments.length };
+  },
+  async markerOwnership() {
+    const change = githubContractChange();
+    const client = new StatefulPublicationClient();
+    client.addReviewComment(githubContractPlan(change).inlineItems[0]?.body ?? "", "someone-else");
+    const adapter = createGitHubHostAdapter({ publicationClient: client });
+    await adapter.publication?.publish({ change, plan: githubContractPlan(change) });
+    const foreignWrites = client.reviewComments.filter(
+      (comment) => comment.authorLogin === "someone-else",
+    ).length;
+    await adapter.publication?.publish({ change, plan: githubContractPlan(change) });
+    const ownedWritesAfterRerun = client.reviewComments.filter(
+      (comment) => comment.authorLogin === client.ownerLogin && comment.path,
+    ).length;
+    return { foreignWrites, ownedWritesAfterRerun };
+  },
+  async statusIdempotency() {
+    const change = githubContractChange();
+    const client = new StatefulPublicationClient();
+    const statuses = createGitHubHostAdapter({ publicationClient: client }).statuses;
+    const firstStatus = await statuses?.upsert({ change, name: "review", state: "pending" });
+    const secondStatus = await statuses?.upsert({ change, name: "review", state: "success" });
+    if (!firstStatus || !secondStatus) throw new Error("Expected status support");
+    return {
+      firstId: firstStatus.id,
+      secondId: secondStatus.id,
+      nativeRecords: client.checkRuns.length,
+    };
+  },
+  async threadActions() {
+    const change = githubContractChange();
+    const client = new StatefulPublicationClient();
+    const publication = createGitHubHostAdapter({ publicationClient: client }).publication;
+    await publication?.publish({ change, plan: githubContractPlan(change) });
+    const action = githubResolveAction();
+    await publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [action],
+    });
+    await publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [action],
+    });
+    return { replies: client.reviewReplies.length, resolutions: client.resolveCalls };
+  },
 });
 
 function commandClient(calls: string[] = []): GitHubCommandClient {
@@ -230,6 +320,7 @@ function publicationClient(
   calls: string[] = [],
   options: { headSha?: string } = {},
 ): GitHubPublicationClient {
+  const checkRuns: Array<{ id: number; name: string; externalId?: string }> = [];
   return {
     async getAuthenticatedUserLogin() {
       calls.push("getAuthenticatedUserLogin");
@@ -270,14 +361,230 @@ function publicationClient(
     async resolveReviewThread() {
       calls.push("resolveReviewThread");
     },
-    async createCheckRun() {
+    async createCheckRun(options) {
       calls.push("createCheckRun");
-      return { id: 9, name: "pipr" };
+      const checkRun = { id: 9, name: options.name, externalId: options.externalId };
+      checkRuns.push(checkRun);
+      return checkRun;
+    },
+    async listCheckRuns() {
+      calls.push("listCheckRuns");
+      return checkRuns;
     },
     async updateCheckRun() {
       calls.push("updateCheckRun");
     },
   };
+}
+
+function githubContractChange(): ChangeRequestEventContext {
+  return {
+    eventName: "pull_request",
+    action: "updated",
+    platform: { id: "github" },
+    repository: { slug: "local/pipr" },
+    coordinates: { provider: "github", owner: "local", repository: "pipr" },
+    change: {
+      number: 7,
+      title: "Adapter contract",
+      description: "",
+      base: { sha: "base", ref: "main" },
+      head: { sha: "head", ref: "feature" },
+    },
+    workspace: "/workspace",
+  };
+}
+
+function githubContractPlan(change: ChangeRequestEventContext, findingId = "fnd_aaaaaaaaaaaaaaaa") {
+  const line = findingId === "fnd_bbbbbbbbbbbbbbbb" ? 3 : 2;
+  const finding = {
+    body: "Fix this.",
+    path: "src/a.ts",
+    rangeId: `range-${findingId}`,
+    side: "RIGHT" as const,
+    startLine: line,
+    endLine: line,
+  };
+  const marker = `pipr:finding:${findingId}:head`;
+  return buildPublicationPlan({
+    event: change,
+    main: "Summary.",
+    inlineItems: [
+      {
+        finding,
+        range: {
+          id: finding.rangeId,
+          path: "src/a.ts",
+          side: "RIGHT",
+          startLine: line,
+          endLine: line,
+          kind: "added",
+          hunkIndex: 1,
+          hunkHeader: "@@ -1 +1,2 @@",
+          hunkContentHash: "deadbeefcafe",
+        },
+        path: "src/a.ts",
+        side: "RIGHT",
+        startLine: line,
+        endLine: line,
+        body: `${renderInlineFindingMarker(findingId, "head")}\nFix this.`,
+        marker,
+        findingId,
+        reviewedHeadSha: "head",
+      },
+    ],
+    reviewState: buildPriorReviewState({
+      findings: [finding],
+      reviewedHeadSha: "head",
+      selectedTasks: ["review"],
+    }),
+    metadata: {
+      runtimeVersion,
+      reviewedHeadSha: "head",
+      selectedTasks: ["review"],
+      failedTasks: [],
+      validFindings: 1,
+      droppedFindings: 0,
+    },
+  });
+}
+
+function githubResolveAction() {
+  return {
+    kind: "resolve" as const,
+    findingId: "finding-1",
+    findingHeadSha: "head",
+    commentId: "1",
+    threadId: "thread-1",
+    body: "Resolved. response-key",
+    responseKey: "response-key",
+  };
+}
+
+type StatefulReviewComment = Awaited<
+  ReturnType<GitHubPublicationClient["listReviewComments"]>
+>[number];
+type StatefulReviewThread = Awaited<
+  ReturnType<GitHubPublicationClient["listReviewThreads"]>
+>[number];
+
+class StatefulPublicationClient implements GitHubPublicationClient {
+  readonly ownerLogin = "github-actions[bot]";
+  headSha = "head";
+  loseNextInlineResponse = false;
+  resolveCalls = 0;
+  issueComments: Array<{ id: number; body: string; authorLogin: string | undefined }> = [];
+  reviewComments: StatefulReviewComment[] = [];
+  reviewThreads: StatefulReviewThread[] = [];
+  reviewReplies: Array<{ commentId: number; body: string }> = [];
+  checkRuns: Array<{ id: number; name: string; externalId?: string }> = [];
+
+  async getAuthenticatedUserLogin() {
+    return this.ownerLogin;
+  }
+
+  async getPullRequestHeadSha() {
+    return this.headSha;
+  }
+
+  async listIssueComments() {
+    return this.issueComments;
+  }
+
+  async createIssueComment(options: { body: string }) {
+    const comment = {
+      id: this.issueComments.length + 1,
+      body: options.body,
+      authorLogin: this.ownerLogin,
+    };
+    this.issueComments.push(comment);
+    return { id: comment.id };
+  }
+
+  async updateIssueComment(options: { commentId: number; body: string }) {
+    const comment = this.issueComments.find((candidate) => candidate.id === options.commentId);
+    if (!comment) throw new Error("missing issue comment");
+    comment.body = options.body;
+    return { id: comment.id };
+  }
+
+  async listReviewComments() {
+    return this.reviewComments;
+  }
+
+  async listReviewThreads() {
+    return this.reviewThreads;
+  }
+
+  addReviewComment(body: string, authorLogin = this.ownerLogin, line = 2) {
+    const id = this.reviewComments.length + 1;
+    this.reviewComments.push({
+      id,
+      body,
+      authorLogin,
+      path: "src/a.ts",
+      commitId: "head",
+      line,
+      startLine: undefined,
+      side: "RIGHT",
+      startSide: undefined,
+    });
+    this.reviewThreads.push({ id: `thread-${id}`, isResolved: false, commentIds: [id] });
+    return id;
+  }
+
+  async createReviewComment(options: unknown) {
+    const payload = options as { body: string; line?: number };
+    const id = this.addReviewComment(payload.body, this.ownerLogin, payload.line);
+    if (this.loseNextInlineResponse) {
+      this.loseNextInlineResponse = false;
+      throw Object.assign(new Error("response lost"), { status: 503 });
+    }
+    return { id };
+  }
+
+  async createReviewCommentReply(options: { commentId: number; body: string }) {
+    this.reviewReplies.push(options);
+    const id = this.reviewComments.length + 1;
+    this.reviewComments.push({
+      id,
+      body: options.body,
+      authorLogin: this.ownerLogin,
+      path: undefined,
+      commitId: undefined,
+      line: undefined,
+      startLine: undefined,
+      side: undefined,
+      startSide: undefined,
+    });
+    this.reviewThreads
+      .find((thread) => thread.commentIds.includes(options.commentId))
+      ?.commentIds.push(id);
+    return { id };
+  }
+
+  async resolveReviewThread(options: { threadId: string }) {
+    this.resolveCalls += 1;
+    const thread = this.reviewThreads.find((candidate) => candidate.id === options.threadId);
+    if (!thread) throw new Error("missing review thread");
+    thread.isResolved = true;
+  }
+
+  async createCheckRun(options: { name: string; externalId?: string }) {
+    const check = {
+      id: this.checkRuns.length + 1,
+      name: options.name,
+      externalId: options.externalId,
+    };
+    this.checkRuns.push(check);
+    return check;
+  }
+
+  async listCheckRuns() {
+    return this.checkRuns;
+  }
+
+  async updateCheckRun() {}
 }
 
 async function withEventFile(

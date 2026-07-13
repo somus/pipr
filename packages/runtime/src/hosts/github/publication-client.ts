@@ -1,6 +1,6 @@
-import { Octokit } from "@octokit/rest";
 import { z } from "zod";
-import { githubApiVersion, parseRepoSlug } from "../../shared/github.js";
+import { parseRepoSlug } from "../../shared/github.js";
+import { createGitHubOctokit } from "./octokit.js";
 
 const githubCommentFields = {
   id: z.number().int().positive(),
@@ -117,10 +117,17 @@ const pullRequestHeadSchema = z.looseObject({
   }),
 });
 
-const githubCheckRunSchema = z.looseObject({
-  id: z.number().int().positive(),
-  name: z.string().min(1),
-});
+const githubCheckRunSchema = z
+  .looseObject({
+    id: z.number().int().positive(),
+    name: z.string().min(1),
+    external_id: z.string().optional(),
+  })
+  .transform((check) => ({
+    id: check.id,
+    name: check.name,
+    ...(check.external_id ? { externalId: check.external_id } : {}),
+  }));
 
 export type GitHubIssueComment = z.infer<typeof githubIssueCommentSchema>;
 export type GitHubReviewComment = z.infer<typeof githubReviewCommentSchema>;
@@ -171,8 +178,10 @@ export type GitHubPublicationClient = {
     repo: string;
     name: string;
     headSha: string;
+    externalId?: string;
     summary?: string;
   }): Promise<GitHubCheckRun>;
+  listCheckRuns(options: { repo: string; headSha: string }): Promise<GitHubCheckRun[]>;
   updateCheckRun(options: {
     repo: string;
     checkRunId: number;
@@ -186,15 +195,7 @@ export function createGitHubPublicationClient(
   env: NodeJS.ProcessEnv = process.env,
 ): GitHubPublicationClient {
   const authenticatedUserLogin = env.GITHUB_ACTIONS === "true" ? githubActionsBotLogin : undefined;
-  const octokit = new Octokit({
-    auth: env.GITHUB_TOKEN,
-    baseUrl: env.GITHUB_API_URL ?? "https://api.github.com",
-    request: {
-      headers: {
-        "X-GitHub-Api-Version": githubApiVersion,
-      },
-    },
-  });
+  const octokit = createGitHubOctokit(env);
   return {
     async getAuthenticatedUserLogin() {
       if (authenticatedUserLogin) {
@@ -301,6 +302,7 @@ export function createGitHubPublicationClient(
         ...repo,
         name: options.name,
         head_sha: options.headSha,
+        external_id: options.externalId,
         status: "in_progress",
         output: {
           title: options.name,
@@ -308,6 +310,16 @@ export function createGitHubPublicationClient(
         },
       });
       return githubCheckRunSchema.parse(data);
+    },
+    async listCheckRuns(options) {
+      const repo = parseRepoSlug(options.repo);
+      return z.array(githubCheckRunSchema).parse(
+        await octokit.paginate(octokit.rest.checks.listForRef, {
+          ...repo,
+          ref: options.headSha,
+          per_page: 100,
+        }),
+      );
     },
     async updateCheckRun(options) {
       const repo = parseRepoSlug(options.repo);

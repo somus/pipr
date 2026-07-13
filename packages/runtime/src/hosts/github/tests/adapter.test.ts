@@ -124,6 +124,9 @@ function publicationClient(): GitHubPublicationClient {
     async createCheckRun() {
       return { id: 1, name: "pipr" };
     },
+    async listCheckRuns() {
+      return [];
+    },
     async updateCheckRun() {},
   };
 }

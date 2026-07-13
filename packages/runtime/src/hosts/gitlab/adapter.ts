@@ -1,3 +1,4 @@
+import { retryCodeHostOperation } from "../retry.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGitLabClient, type GitLabClient } from "./client.js";
 import { parseGitLabEvent } from "./event.js";
@@ -73,13 +74,17 @@ export function createGitLabHostAdapter(
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {
-        const id = await client.setStatus(
-          gitLabChangeCoordinates(change).projectId,
-          change.change.head.sha,
-          name,
-          state,
-          summary,
-        );
+        const id = await retryCodeHostOperation({
+          idempotent: true,
+          operation: () =>
+            client.setStatus(
+              gitLabChangeCoordinates(change).projectId,
+              change.change.head.sha,
+              name,
+              state,
+              summary,
+            ),
+        });
         return status ?? { id, name };
       },
     },

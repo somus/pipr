@@ -5,6 +5,7 @@ import path from "node:path";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
 import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
+import { runCodeHostAdapterContract } from "../../tests/adapter-contract.js";
 import { createAzureDevOpsHostAdapter } from "../adapter.js";
 import type { AzureDevOpsClient, AzureDevOpsPullRequest, AzureDevOpsThread } from "../client.js";
 
@@ -31,7 +32,7 @@ describe("Azure DevOps host adapter", () => {
       mainComment: { action: "updated" },
       inlineComments: { posted: 0, skipped: 1, failed: 0 },
     });
-    expect(client.createdThreadBodies[1]).toMatchObject({
+    expect(client.createdThreadBodies[0]).toMatchObject({
       threadContext: {
         filePath: "/src/a.ts",
         rightFileStart: { line: 2, offset: 1 },
@@ -209,7 +210,7 @@ describe("Azure DevOps host adapter", () => {
     ];
 
     await adapter.publication?.publish({ change, plan });
-    expect(client.createdThreadBodies[1]).toMatchObject({
+    expect(client.createdThreadBodies[0]).toMatchObject({
       threadContext: {
         filePath: "/src/old.ts",
         leftFileStart: { line: 3, offset: 1 },
@@ -235,14 +236,14 @@ describe("Azure DevOps host adapter", () => {
 
     await adapter.publication?.publish({ change, plan });
 
-    expect(client.createdThreadBodies[1]).toMatchObject({
+    expect(client.createdThreadBodies[0]).toMatchObject({
       threadContext: {
         filePath: "/src/a.ts",
         rightFileStart: { line: 2, offset: 1 },
         rightFileEnd: { line: 2, offset: 1 },
       },
     });
-    const comments = client.createdThreadBodies[1]?.comments as
+    const comments = client.createdThreadBodies[0]?.comments as
       | Array<{ content: string }>
       | undefined;
     expect(comments?.[0]?.content).toContain("```suggestion\nconst value = 2;\n```");
@@ -305,13 +306,90 @@ describe("Azure DevOps host adapter", () => {
         change: unicodeChange,
         plan,
       });
-      expect(client.createdThreadBodies[1]).toMatchObject({
+      expect(client.createdThreadBodies[0]).toMatchObject({
         threadContext: { rightFileEnd: { line: 1, offset: 14 } },
       });
     } finally {
       await rm(workspace, { recursive: true, force: true });
     }
   });
+});
+
+runCodeHostAdapterContract("Azure DevOps", {
+  async pagination() {
+    const client = new FakeAzureDevOpsClient();
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    await adapter.publication?.publish({ change, plan: secondPublicationPlan() });
+    return (await adapter.comments?.loadInlineThreadContexts?.({ change }))?.length ?? 0;
+  },
+  async staleHeadWrites() {
+    const client = new FakeAzureDevOpsClient();
+    client.pullRequest.lastMergeSourceCommit.commitId = "new-head";
+    await createAzureDevOpsHostAdapter({ client })
+      .publication?.publish({ change, plan: publicationPlan() })
+      .catch(() => undefined);
+    return client.threads.length;
+  },
+  async partialRetry() {
+    const client = new FakeAzureDevOpsClient();
+    client.loseNextPositionedThreadResponse = true;
+    await createAzureDevOpsHostAdapter({ client }).publication?.publish({
+      change,
+      plan: publicationPlan(),
+    });
+    return {
+      inlineWrites: client.threads.filter((thread) => thread.threadContext?.filePath).length,
+      mainWrites: client.threads.filter((thread) => !thread.threadContext?.filePath).length,
+    };
+  },
+  async markerOwnership() {
+    const client = new FakeAzureDevOpsClient();
+    client.threads.push(foreignAzureThread());
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const foreignWrites = client.threads.filter(
+      (thread) => thread.comments[0]?.author?.uniqueName === "someone@example.com",
+    ).length;
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const ownedWritesAfterRerun = client.threads.filter(
+      (thread) =>
+        thread.threadContext?.filePath &&
+        thread.comments[0]?.author?.uniqueName === "pipr@example.com",
+    ).length;
+    return { foreignWrites, ownedWritesAfterRerun };
+  },
+  async statusIdempotency() {
+    const client = new FakeAzureDevOpsClient();
+    const statuses = createAzureDevOpsHostAdapter({ client }).statuses;
+    const firstStatus = await statuses?.upsert({ change, name: "review", state: "pending" });
+    const secondStatus = await statuses?.upsert({ change, name: "review", state: "success" });
+    if (!firstStatus || !secondStatus) throw new Error("Expected status support");
+    return {
+      firstId: firstStatus.id,
+      secondId: secondStatus.id,
+      nativeRecords: client.statusKeys.size,
+    };
+  },
+  async threadActions() {
+    const client = new FakeAzureDevOpsClient();
+    const publication = createAzureDevOpsHostAdapter({ client }).publication;
+    await publication?.publish({ change, plan: publicationPlan() });
+    const inline = client.threads.find((thread) => thread.threadContext?.filePath);
+    if (!inline) throw new Error("Expected inline thread");
+    const action = azureResolveAction(inline);
+    await publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [action],
+    });
+    await publication?.publishThreadActions?.({
+      change,
+      reviewedHeadSha: "head",
+      actions: [action],
+    });
+    return { replies: inline.comments.length === 2 ? 1 : 0, resolutions: client.resolveCalls };
+  },
 });
 
 const change: ChangeRequestEventContext = {
@@ -386,12 +464,57 @@ function publicationPlan() {
   });
 }
 
+function secondPublicationPlan() {
+  const plan = publicationPlan();
+  const item = plan.inlineItems[0];
+  if (!item) throw new Error("Expected inline fixture");
+  plan.inlineItems = [
+    {
+      ...item,
+      findingId: "finding-2",
+      marker: "pipr:finding:finding-2:head",
+      body: `${renderInlineFindingMarker("finding-2", "head")}\nFix this too.`,
+    },
+  ];
+  return plan;
+}
+
+function foreignAzureThread(): AzureDevOpsThread {
+  return {
+    id: "foreign",
+    status: "active",
+    comments: [
+      {
+        id: "foreign-inline",
+        content: publicationPlan().inlineItems[0]?.body ?? "",
+        author: { uniqueName: "someone@example.com" },
+      },
+    ],
+    threadContext: { filePath: "/src/a.ts" },
+  };
+}
+
+function azureResolveAction(inline: AzureDevOpsThread) {
+  return {
+    kind: "resolve" as const,
+    findingId: "finding-1",
+    findingHeadSha: "head",
+    commentId: inline.comments[0]?.id ?? "",
+    threadId: inline.id,
+    body: "Resolved. response-key",
+    responseKey: "response-key",
+  };
+}
+
 class FakeAzureDevOpsClient implements AzureDevOpsClient {
   organization = "org";
   project = "project";
   threads: AzureDevOpsThread[] = [];
   createdThreadBodies: Array<Record<string, unknown>> = [];
   statusBodies: Array<Record<string, unknown>> = [];
+  statusKeys = new Set<string>();
+  loseNextPositionedThreadResponse = false;
+  resolveCalls = 0;
   headSha = "head";
   iterationChanges = [{ changeTrackingId: 11, changeType: "edit", path: "src/a.ts" }];
   listIterationsCalls = 0;
@@ -461,6 +584,10 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
         body.pullRequestThreadContext as AzureDevOpsThread["pullRequestThreadContext"],
     };
     this.threads.push(thread);
+    if (body.threadContext && this.loseNextPositionedThreadResponse) {
+      this.loseNextPositionedThreadResponse = false;
+      throw Object.assign(new Error("response lost"), { status: 503 });
+    }
     return thread;
   };
   updateComment = async (
@@ -481,6 +608,7 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     threadId: string,
     body: Record<string, unknown>,
   ) => {
+    this.resolveCalls += 1;
     const thread = this.threads.find((candidate) => candidate.id === threadId);
     if (!thread) throw new Error("thread not found");
     const comment = {
@@ -508,6 +636,8 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     body: Record<string, unknown>,
   ) => {
     this.statusBodies.push(body);
+    const context = body.context as { genre?: string; name?: string } | undefined;
+    this.statusKeys.add(`${context?.genre}:${context?.name}:${String(body.iterationId)}`);
     return "status-1";
   };
 }

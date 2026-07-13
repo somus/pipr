@@ -9,10 +9,12 @@ import {
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
+  assertInlinePublicationComplete,
   commandResponseBody,
   completeHostPublication,
   publishUnseenInlineItems,
 } from "../publication.js";
+import { retryCodeHostOperation } from "../retry.js";
 import type { InlineThreadContext } from "../types.js";
 import type {
   GitLabClient,
@@ -36,21 +38,13 @@ export async function publishGitLabPlan(options: {
     .filter((note) => note.author?.username === owner.username)
     .map((note) => note.body);
   const mergeRequest = await assertCurrentHead(options.client, projectId, options.change);
-  const main = existingMain
-    ? await options.client.updateNote(
-        projectId,
-        options.change.change.number,
-        existingMain.id,
-        options.plan.mainComment,
-      )
-    : await options.client.createNote(
-        projectId,
-        options.change.change.number,
-        options.plan.mainComment,
-      );
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
     existingBodies: ownedBodies,
+    reloadExistingBodies: async () =>
+      discussionNotes(await options.client.listDiscussions(projectId, options.change.change.number))
+        .filter((note) => note.author?.username === owner.username)
+        .map((note) => note.body),
     publish: async (item) => {
       await options.client.createDiscussion(
         projectId,
@@ -67,6 +61,32 @@ export async function publishGitLabPlan(options: {
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     discussions,
   });
+  assertInlinePublicationComplete({
+    provider: "GitLab",
+    inline,
+    metadata: options.plan.metadata,
+  });
+  const main = existingMain
+    ? await options.client.updateNote(
+        projectId,
+        options.change.change.number,
+        existingMain.id,
+        options.plan.mainComment,
+      )
+    : await retryCodeHostOperation({
+        operation: () =>
+          options.client.createNote(
+            projectId,
+            options.change.change.number,
+            options.plan.mainComment,
+          ),
+        reconcile: async () =>
+          ownedNote(
+            await options.client.listNotes(projectId, options.change.change.number),
+            owner.username,
+            mainMarker(options.change.change.number),
+          ),
+      });
   return completeHostPublication({
     provider: "GitLab",
     mainAction: existingMain ? "updated" : "created",
@@ -105,7 +125,16 @@ export async function publishGitLabCommandResponse(options: {
         existing.id,
         response.body,
       )
-    : await options.client.createNote(projectId, options.change.change.number, response.body);
+    : await retryCodeHostOperation({
+        operation: () =>
+          options.client.createNote(projectId, options.change.change.number, response.body),
+        reconcile: async () =>
+          ownedNote(
+            await options.client.listNotes(projectId, options.change.change.number),
+            owner.username,
+            response.marker,
+          ),
+      });
   return { action: existing ? ("updated" as const) : ("created" as const), id: note.id };
 }
 
@@ -214,19 +243,36 @@ async function publishGitLabThreadAction(options: {
   }
   try {
     if (!options.discussion.notes.some((note) => note.body.includes(options.action.responseKey))) {
-      await options.client.replyDiscussion(
-        options.projectId,
-        options.changeNumber,
-        options.discussion.id,
-        options.action.body,
-      );
+      await retryCodeHostOperation({
+        operation: () =>
+          options.client.replyDiscussion(
+            options.projectId,
+            options.changeNumber,
+            options.discussion?.id ?? "",
+            options.action.body,
+          ),
+        reconcile: async () => {
+          const discussion = await options.client.getDiscussion(
+            options.projectId,
+            options.changeNumber,
+            options.discussion?.id ?? "",
+          );
+          return discussion.notes.some((note) => note.body.includes(options.action.responseKey))
+            ? discussion.notes[0]
+            : undefined;
+        },
+      });
     }
     if (options.action.kind === "resolve" && !options.discussion.notes[0]?.resolved) {
-      await options.client.resolveDiscussion(
-        options.projectId,
-        options.changeNumber,
-        options.discussion.id,
-      );
+      await retryCodeHostOperation({
+        idempotent: true,
+        operation: () =>
+          options.client.resolveDiscussion(
+            options.projectId,
+            options.changeNumber,
+            options.discussion?.id ?? "",
+          ),
+      });
     }
   } catch (error) {
     return error instanceof Error ? error.message : String(error);

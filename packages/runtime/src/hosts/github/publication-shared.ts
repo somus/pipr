@@ -2,6 +2,7 @@ import { firstNonEmptyLine } from "../../commands/grammar.js";
 import { parseMainCommentIdentity } from "../../review/prior-state.js";
 import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
+import { retryCodeHostOperation } from "../retry.js";
 import type {
   GitHubIssueComment,
   GitHubPublicationClient,
@@ -86,4 +87,41 @@ export function findMainComment(
     const parsed = parseMainCommentIdentity(firstLine);
     return parsed?.marker === marker && parsed.changeNumber === changeNumber;
   });
+}
+
+export async function upsertOwnedIssueComment(options: {
+  client: GitHubPublicationClient;
+  repo: string;
+  issueNumber: number;
+  body: string;
+  find(comments: GitHubIssueComment[]): GitHubIssueComment | undefined;
+}): Promise<{ action: "created" | "updated"; id: string }> {
+  const list = () =>
+    options.client.listIssueComments({ repo: options.repo, issueNumber: options.issueNumber });
+  const existing = options.find(await list());
+  if (existing) {
+    const updated = await retryCodeHostOperation({
+      idempotent: true,
+      operation: () =>
+        options.client.updateIssueComment({
+          repo: options.repo,
+          commentId: existing.id,
+          body: options.body,
+        }),
+    });
+    return { action: "updated", id: String(updated.id) };
+  }
+  const created = await retryCodeHostOperation({
+    operation: () =>
+      options.client.createIssueComment({
+        repo: options.repo,
+        issueNumber: options.issueNumber,
+        body: options.body,
+      }),
+    reconcile: async () => {
+      const reconciled = options.find(await list());
+      return reconciled ? { id: reconciled.id } : undefined;
+    },
+  });
+  return { action: "created", id: String(created.id) };
 }

@@ -1,3 +1,4 @@
+import { retryCodeHostOperation } from "../retry.js";
 import type { CodeHostAdapter } from "../types.js";
 import { type BitbucketClient, bitbucketStatusState, createBitbucketClient } from "./client.js";
 import { parseBitbucketEvent } from "./event.js";
@@ -80,13 +81,17 @@ export function createBitbucketHostAdapter(
         )
           throw new Error("Bitbucket pull request endpoints changed before status publication");
         const key = `pipr-${name}`.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 40);
-        const id = await client.setStatus(change.change.head.sha, key, {
-          state: bitbucketStatusState(state),
-          key,
-          name: `Pipr: ${name}`.slice(0, 255),
-          description: summary?.slice(0, 255),
-          refname: change.change.head.ref,
-          url: change.change.url,
+        const id = await retryCodeHostOperation({
+          idempotent: true,
+          operation: () =>
+            client.setStatus(change.change.head.sha, key, {
+              state: bitbucketStatusState(state),
+              key,
+              name: `Pipr: ${name}`.slice(0, 255),
+              description: summary?.slice(0, 255),
+              refname: change.change.head.ref,
+              url: change.change.url,
+            }),
         });
         return status ?? { id, name };
       },

@@ -246,6 +246,7 @@ describe("publishGitHubPublicationPlan", () => {
         },
       },
     });
+    expect(client.issueComments).toHaveLength(0);
     const retry = await publishGitHubPublicationPlan({
       client,
       change: event,
@@ -255,6 +256,53 @@ describe("publishGitHubPublicationPlan", () => {
     expect(client.issueComments).toHaveLength(1);
     expect(client.reviewCommentPayloads).toHaveLength(2);
     expect(retry.inlineComments).toEqual({ posted: 1, skipped: 1, failed: 0 });
+  });
+
+  it("reconciles a GitHub inline comment whose success response was lost", async () => {
+    const client = new FakePublicationClient("head");
+    const createReviewComment = client.createReviewComment.bind(client);
+    let loseResponse = true;
+    client.createReviewComment = async (options) => {
+      const created = await createReviewComment(options);
+      if (loseResponse) {
+        loseResponse = false;
+        throw Object.assign(new Error("response lost"), { status: 503 });
+      }
+      return created;
+    };
+
+    const result = await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: plan({ maxInlineComments: 1 }),
+    });
+
+    expect(result.inlineComments).toEqual({ posted: 1, skipped: 0, failed: 0 });
+    expect(client.reviewCommentPayloads).toHaveLength(1);
+    expect(client.issueComments).toHaveLength(1);
+  });
+
+  it("reconciles a GitHub main comment whose success response was lost", async () => {
+    const client = new FakePublicationClient("head");
+    const createIssueComment = client.createIssueComment.bind(client);
+    let loseResponse = true;
+    client.createIssueComment = async (options) => {
+      const created = await createIssueComment(options);
+      if (loseResponse) {
+        loseResponse = false;
+        throw Object.assign(new Error("response lost"), { status: 503 });
+      }
+      return created;
+    };
+
+    const result = await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: plan({ maxInlineComments: 0 }),
+    });
+
+    expect(result.mainComment).toEqual({ action: "created", id: "1" });
+    expect(client.issueComments).toHaveLength(1);
   });
 
   it("dedupes same-head inline comments by location when finding wording changes", async () => {
@@ -844,7 +892,7 @@ describe("createGitHubPublicationClient", () => {
           : { "Content-Type": "application/json" };
       const comments = [{ id: Number(page), body: `page ${page}` }];
       return new Response(JSON.stringify(comments), { status: 200, headers });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const client = createGitHubPublicationClient({
       GITHUB_API_URL: "https://api.github.test",
@@ -865,6 +913,29 @@ describe("createGitHubPublicationClient", () => {
     expect(requestedUrls[3]).toBe(
       "https://api.github.test/repos/local/pipr/pulls/1/comments?per_page=100&page=2",
     );
+  });
+
+  it("retries transient GitHub reads", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response("unavailable", {
+          status: 503,
+          headers: { "Retry-After": "0" },
+        });
+      }
+      return Response.json({ head: { sha: "head" } });
+    }) as unknown as typeof fetch;
+
+    const client = createGitHubPublicationClient({
+      GITHUB_API_URL: "https://api.github.test",
+    });
+
+    await expect(
+      client.getPullRequestHeadSha({ repo: "local/pipr", pullRequestNumber: 1 }),
+    ).resolves.toBe("head");
+    expect(calls).toBe(2);
   });
 
   it("uses GitHub review reply and review thread APIs", async () => {
@@ -1343,6 +1414,10 @@ class FakePublicationClient implements GitHubPublicationClient {
 
   async createCheckRun(options: { name: string }) {
     return { id: 100, name: options.name };
+  }
+
+  async listCheckRuns() {
+    return [];
   }
 
   async updateCheckRun() {}

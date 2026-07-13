@@ -129,7 +129,7 @@ describe("Bitbucket Cloud client", () => {
           content: { raw: "inline" },
           inline: { path: "a.ts", to: 2 },
         });
-      if (url.endsWith("/statuses/build")) return Response.json({ key: "pipr-review" });
+      if (url.endsWith("/statuses/build/pipr-review")) return Response.json({ key: "pipr-review" });
       return Response.json({ id: 1, content: { raw: "updated" } });
     });
 
@@ -142,8 +142,8 @@ describe("Bitbucket Cloud client", () => {
     expect(requests.map((request) => request.method)).toContain("PUT");
     expect(requests.some((request) => request.url.endsWith("/resolve"))).toBe(true);
     expect(requests).toContainEqual({
-      url: "https://api.bitbucket.org/2.0/repositories/workspace/repository/commit/head/statuses/build",
-      method: "POST",
+      url: "https://api.bitbucket.org/2.0/repositories/workspace/repository/commit/head/statuses/build/pipr-review",
+      method: "PUT",
       body: { state: "SUCCESSFUL", key: "pipr-review" },
     });
   });

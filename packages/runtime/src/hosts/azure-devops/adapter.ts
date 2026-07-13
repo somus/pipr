@@ -1,3 +1,4 @@
+import { retryCodeHostOperation } from "../retry.js";
 import type { CodeHostAdapter } from "../types.js";
 import {
   type AzureDevOpsClient,
@@ -99,11 +100,15 @@ export function createAzureDevOpsHostAdapter(
             `Azure DevOps has no pull request iteration for head ${change.change.head.sha}`,
           );
         }
-        const id = await client.createStatus(coordinates.repositoryId, change.change.number, {
-          state: azureDevOpsStatusState(state),
-          description: summary?.slice(0, 1_000),
-          context: { genre: "pipr", name: `pipr/${name}` },
-          iterationId: iteration.id,
+        const id = await retryCodeHostOperation({
+          idempotent: true,
+          operation: () =>
+            client.createStatus(coordinates.repositoryId, change.change.number, {
+              state: azureDevOpsStatusState(state),
+              description: summary?.slice(0, 1_000),
+              context: { genre: "pipr", name: `pipr/${name}` },
+              iterationId: iteration.id,
+            }),
         });
         return status ?? { id, name };
       },

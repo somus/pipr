@@ -6,12 +6,14 @@ import {
 import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import { PublicationError, type PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
+import { retryCodeHostOperation } from "../retry.js";
 import { mapFindingToGithubReviewCommentLocation } from "./inline.js";
 import type { GitHubPublicationClient, GitHubReviewComment } from "./publication-client.js";
 import {
   assertCurrentHeadSha,
   findMainComment,
   listOwnedReviewComments,
+  upsertOwnedIssueComment,
 } from "./publication-shared.js";
 import { publishGitHubPublicationThreadActions } from "./publication-thread-actions.js";
 
@@ -23,15 +25,13 @@ export async function publishGitHubPublicationPlan(options: {
   await assertCurrentHeadSha(options.client, options.change, options.plan.metadata.reviewedHeadSha);
 
   const ownerLogin = await options.client.getAuthenticatedUserLogin();
-  const mainComment = await upsertMainComment({ ...options, ownerLogin });
   const existingReviewComments = await listOwnedReviewComments({ ...options, ownerLogin });
   const inline = await publishInlineComments({ ...options, ownerLogin, existingReviewComments });
   const threadActions = await publishGitHubPublicationThreadActions({
     ...options,
     existingReviewComments,
   });
-  const result: PublicationResult = {
-    mainComment,
+  const partial = {
     inlineComments: {
       posted: inline.posted,
       skipped: inline.skipped,
@@ -44,12 +44,10 @@ export async function publishGitHubPublicationPlan(options: {
     },
   };
   if (inline.errors.length > 0) {
-    throw new PublicationError("GitHub inline comment publication failed", {
-      inlineComments: result.inlineComments,
-      metadata: result.metadata,
-    });
+    throw new PublicationError("GitHub inline comment publication failed", partial);
   }
-  return result;
+  const mainComment = await upsertMainComment({ ...options, ownerLogin });
+  return { mainComment, ...partial };
 }
 
 async function upsertMainComment(options: {
@@ -58,29 +56,19 @@ async function upsertMainComment(options: {
   plan: PublicationPlan;
   ownerLogin: string;
 }): Promise<PublicationResult["mainComment"]> {
-  const existing = findMainComment(
-    await options.client.listIssueComments({
-      repo: options.change.repository.slug,
-      issueNumber: options.change.change.number,
-    }),
-    options.plan.mainMarker,
-    options.change.change.number,
-    options.ownerLogin,
-  );
-  if (existing) {
-    const updated = await options.client.updateIssueComment({
-      repo: options.change.repository.slug,
-      commentId: existing.id,
-      body: options.plan.mainComment,
-    });
-    return { action: "updated", id: String(updated.id) };
-  }
-  const created = await options.client.createIssueComment({
+  return upsertOwnedIssueComment({
+    client: options.client,
     repo: options.change.repository.slug,
     issueNumber: options.change.change.number,
     body: options.plan.mainComment,
+    find: (comments) =>
+      findMainComment(
+        comments,
+        options.plan.mainMarker,
+        options.change.change.number,
+        options.ownerLogin,
+      ),
   });
-  return { action: "created", id: String(created.id) };
 }
 
 async function publishInlineComments(options: {
@@ -141,6 +129,7 @@ async function publishInlineCommentItem(options: {
   change: ChangeRequestEventContext;
   existing: ExistingInlineCommentState;
   item: PublicationPlan["inlineItems"][number];
+  ownerLogin: string;
 }): Promise<{ status: "posted" | "skipped" } | { status: "failed"; error: string }> {
   let location: GitHubReviewCommentLocation;
   try {
@@ -163,11 +152,33 @@ async function publishInlineCommentItem(options: {
     return { status: "skipped" };
   }
   try {
-    await options.client.createReviewComment({
-      repo: options.change.repository.slug,
-      pullRequestNumber: options.change.change.number,
-      body: options.item.body,
-      ...location,
+    await retryCodeHostOperation({
+      operation: async () => {
+        await options.client.createReviewComment({
+          repo: options.change.repository.slug,
+          pullRequestNumber: options.change.change.number,
+          body: options.item.body,
+          ...location,
+        });
+        return true;
+      },
+      reconcile: async () => {
+        const refreshed = existingInlineCommentState(
+          await listOwnedReviewComments({
+            client: options.client,
+            change: options.change,
+            ownerLogin: options.ownerLogin,
+          }),
+        );
+        mergeExistingInlineCommentState(options.existing, refreshed);
+        return inlinePublicationDecision({
+          marker: options.item.marker,
+          location: publicationLocation,
+          existing: options.existing,
+        }) === "skip"
+          ? true
+          : undefined;
+      },
     });
     options.existing.markers.add(options.item.marker);
     options.existing.locations.push(publicationLocation);
@@ -175,6 +186,14 @@ async function publishInlineCommentItem(options: {
   } catch (error) {
     return { status: "failed", error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+function mergeExistingInlineCommentState(
+  target: ExistingInlineCommentState,
+  source: ExistingInlineCommentState,
+): void {
+  for (const marker of source.markers) target.markers.add(marker);
+  target.locations.push(...source.locations);
 }
 
 type GitHubReviewCommentLocation = {

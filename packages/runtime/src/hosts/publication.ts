@@ -1,11 +1,14 @@
 import type { InlinePublicationItem, PublicationMetadata } from "../review/comment.js";
 import { extractInlineFindingMarkerRecords } from "../review/prior-state.js";
 import { PublicationError, type PublicationResult } from "../review/publication-result.js";
+import { retryCodeHostOperation } from "./retry.js";
 
 export async function publishUnseenInlineItems(options: {
   items: InlinePublicationItem[];
   existingBodies: string[];
   publish(item: InlinePublicationItem): Promise<unknown>;
+  reloadExistingBodies?: () => Promise<string[]>;
+  sleep?: (milliseconds: number) => Promise<void>;
 }): Promise<{ posted: number; skipped: number; errors: string[] }> {
   const existing = new Set(
     extractInlineFindingMarkerRecords(options.existingBodies).map(
@@ -16,18 +19,55 @@ export async function publishUnseenInlineItems(options: {
   let posted = 0;
   let skipped = 0;
   for (const item of options.items) {
-    if (existing.has(`${item.findingId}:${item.reviewedHeadSha}`)) {
+    const key = `${item.findingId}:${item.reviewedHeadSha}`;
+    if (existing.has(key)) {
       skipped += 1;
       continue;
     }
     try {
-      await options.publish(item);
+      await retryCodeHostOperation({
+        operation: async () => {
+          await options.publish(item);
+          return true;
+        },
+        reconcile: options.reloadExistingBodies
+          ? async () => {
+              const records = extractInlineFindingMarkerRecords(
+                (await options.reloadExistingBodies?.()) ?? [],
+              );
+              for (const record of records) existing.add(`${record.id}:${record.head}`);
+              return existing.has(key) ? true : undefined;
+            }
+          : undefined,
+        sleep: options.sleep,
+      });
+      existing.add(key);
       posted += 1;
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
   }
   return { posted, skipped, errors };
+}
+
+export function assertInlinePublicationComplete(options: {
+  provider: string;
+  inline: { posted: number; skipped: number; errors: string[] };
+  metadata: PublicationMetadata;
+}): void {
+  if (options.inline.errors.length === 0) return;
+  throw new PublicationError(`${options.provider} inline comment publication failed`, {
+    inlineComments: {
+      posted: options.inline.posted,
+      skipped: options.inline.skipped,
+      failed: options.inline.errors.length,
+    },
+    metadata: {
+      ...options.metadata,
+      inlinePublicationErrors: options.inline.errors,
+      inlineResolutionErrors: [],
+    },
+  });
 }
 
 export function commandResponseBody(options: {
@@ -48,6 +88,7 @@ export function completeHostPublication(options: {
   resolutionErrors: string[];
   metadata: PublicationMetadata;
 }): PublicationResult {
+  assertInlinePublicationComplete(options);
   const partial = {
     inlineComments: {
       posted: options.inline.posted,
@@ -60,9 +101,6 @@ export function completeHostPublication(options: {
       inlineResolutionErrors: options.resolutionErrors,
     },
   };
-  if (options.inline.errors.length > 0) {
-    throw new PublicationError(`${options.provider} inline comment publication failed`, partial);
-  }
   return {
     mainComment: { action: options.mainAction, id: options.mainId },
     ...partial,
