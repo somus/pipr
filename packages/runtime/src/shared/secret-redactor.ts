@@ -10,7 +10,8 @@ export type SecretRedactor = {
 
 const redactedSecret = "[redacted secret]";
 const minimumSecretLength = 4;
-const sensitiveEnvNamePattern = /(TOKEN|SECRET|PASSWORD|KEY|AUTH|CREDENTIAL|COOKIE)/i;
+const sensitiveEnvNamePattern =
+  /(?:^|_)(?:TOKEN|SECRET|PASSWORD|KEY|AUTH|CREDENTIAL|COOKIE)(?:_|$)/i;
 
 export function createKnownSecretRedactor(options?: { env?: NodeJS.ProcessEnv }): SecretRedactor {
   const secrets = new Set(

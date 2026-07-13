@@ -2,14 +2,17 @@ import { describe, expect, it } from "bun:test";
 import { createKnownSecretRedactor, sensitiveEnvironmentValues } from "../secret-redactor.js";
 
 describe("sensitiveEnvironmentValues", () => {
-  it("does not treat pass substrings in ordinary environment names as secrets", () => {
+  it("matches credential name segments without matching ordinary substrings", () => {
     expect(
       sensitiveEnvironmentValues({
         COMPASS_DIR: "/workspace/compass",
         BYPASS_PROXY: "localhost",
+        TURKEY_MODE: "enabled",
+        MONKEY_PATCH: "disabled",
         DATABASE_PASSWORD: "secret-password",
+        PROVIDER_API_KEY: "secret-key",
       }),
-    ).toEqual(["secret-password"]);
+    ).toEqual(["secret-password", "secret-key"]);
   });
 });
 
