@@ -1,0 +1,19 @@
+packages/runtime/src/pi/tests/pi.test.ts
+  s_63f74fc97e024c::t_2db87226b6af0d 1,344-361,1146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "984bf0915165457b80c0c5cdf84175c28aa889d1",
+  "prompts": {},
+  "sessions": {
+    "s_63f74fc97e024c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d53-def2-7801-aa62-67506e17600c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
