@@ -97,8 +97,12 @@ export function createWebhookQueueProcessor(options: {
     run(): Promise<void> {
       if (stopped) return Promise.resolve();
       active ??= (async () => {
-        while (await processNextWebhookDelivery(options)) {
-          // Deliveries run serially because each checkout mutates the shared workspace.
+        try {
+          while (await processNextWebhookDelivery(options)) {
+            // Deliveries run serially because each checkout mutates the shared workspace.
+          }
+        } catch {
+          options.log?.("webhook queue processing failed; the next interval will retry");
         }
       })().finally(() => {
         active = undefined;

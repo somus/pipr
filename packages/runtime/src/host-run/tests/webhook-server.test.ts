@@ -45,6 +45,38 @@ describe("webhook runner", () => {
     expect(runs).toBe(1);
   });
 
+  it("contains transient store failures and retries on the next processor run", async () => {
+    const backingStore = new MemoryDeliveryStore();
+    backingStore.enqueue({ id: "delivery-1", host: "gitlab", payload: "{}" });
+    let failNext = true;
+    const store: WebhookDeliveryStore = {
+      enqueue: (delivery) => backingStore.enqueue(delivery),
+      next() {
+        if (failNext) {
+          failNext = false;
+          throw new Error("token=glpat-secret-value");
+        }
+        return backingStore.next();
+      },
+      complete: (id) => backingStore.complete(id),
+      fail: (id, error) => backingStore.fail(id, error),
+    };
+    const messages: string[] = [];
+    const processor = createWebhookQueueProcessor({
+      store,
+      run: async () => {},
+      log: (message) => messages.push(message),
+    });
+
+    await expect(processor.run()).resolves.toBeUndefined();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain("webhook queue processing failed");
+    expect(messages[0]).not.toContain("glpat-secret-value");
+
+    await processor.run();
+    expect(backingStore.completed).toEqual(["delivery-1"]);
+  });
+
   it("validates GitLab secrets and dedupes delivery IDs before enqueue", async () => {
     const store = new MemoryDeliveryStore();
     const ingress = createWebhookIngress({
