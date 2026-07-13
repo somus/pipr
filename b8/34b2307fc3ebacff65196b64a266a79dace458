@@ -47,6 +47,8 @@ packages/runtime/src/hosts/bitbucket/publication.ts
   s_eb835b87b5f823::t_fd2c7df0774125 135,170
 packages/runtime/src/hosts/bitbucket/webhook.ts
   s_eb835b87b5f823::t_635f19771faed0 40,45-47
+apps/docs/content/docs/guide/github-action.mdx
+  s_4ebdfc62030aaf::t_325be06cc86008 6
 ---
 {
   "schema_version": "authorship/3.0.0",
