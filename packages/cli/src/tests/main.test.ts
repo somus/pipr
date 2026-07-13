@@ -237,6 +237,16 @@ describe("pipr CLI", () => {
     expect(dryRun.stdout).toContain("--host <host>");
   });
 
+  it("requires a repository before starting the webhook server", async () => {
+    const result = await runCli(["webhook", "serve", "--host", "gitlab", "--workspace", "."], {
+      PIPR_WEBHOOK_SECRET: "test-secret",
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("required option '--repository <project>' not specified");
+    expect(result.stderr).not.toContain("Code host request failed");
+  });
+
   it("prints no-args help without failing inside GitHub Actions", async () => {
     const result = await runCli([], { GITHUB_ACTIONS: "true" });
 
