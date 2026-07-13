@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { chmod, lstat, mkdtemp, readdir, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -339,6 +339,24 @@ describe("buildPiArgs", () => {
         },
       }),
     ).rejects.toThrow("PIPR_PI_SANDBOX_UID must be a positive integer");
+  });
+
+  it("keeps configured sandbox identities on the non-root mode-bit path", async () => {
+    const getuid = spyOn(process, "getuid").mockReturnValue(1000);
+    try {
+      const base = deepseekRunOptions();
+      const result = await runFakePiWithToolOptions({
+        env: {
+          ...base.env,
+          PIPR_PI_SANDBOX_UID: "1000",
+          PIPR_PI_SANDBOX_GID: "1000",
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+    } finally {
+      getuid.mockRestore();
+    }
   });
 
   it("passes runtime tool data env only when condensed runtime tools are enabled", async () => {
@@ -1125,7 +1143,7 @@ function expectPiTools(args: string[]): string {
 }
 
 async function runFakePiWithToolOptions(
-  options: Pick<PiRunOptions, "runtimeTools" | "customTools">,
+  options: Pick<PiRunOptions, "runtimeTools" | "customTools" | "env">,
 ) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
   const piExecutable = path.join(workspace, "fake-pi.sh");
