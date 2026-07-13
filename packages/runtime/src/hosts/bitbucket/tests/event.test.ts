@@ -20,6 +20,53 @@ describe("Bitbucket Cloud events", () => {
     ).resolves.toMatchObject({ kind: "change-request", change: { action: "opened" } });
   });
 
+  it("ignores draft pipeline pull requests", async () => {
+    await expect(
+      parseBitbucketEvent({
+        env: {
+          BITBUCKET_WORKSPACE: "workspace",
+          BITBUCKET_REPO_SLUG: "repository",
+          BITBUCKET_PR_ID: "7",
+        },
+        workspace: "/workspace",
+        loadChangeRequest: async () => ({
+          ...loaded,
+          change: { ...loaded.change, isDraft: true },
+        }),
+      }),
+    ).resolves.toEqual({ kind: "ignored", reason: "pull request is a draft" });
+  });
+
+  it("ignores draft webhook pull requests without loading them", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-event-"));
+    try {
+      const eventPath = path.join(directory, "event.json");
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          actor: { nickname: "developer" },
+          repository,
+          pullrequest: { id: 7, draft: true },
+        }),
+      );
+      let loadedChange = false;
+      await expect(
+        parseBitbucketEvent({
+          eventPath,
+          env: { BITBUCKET_EVENT_KEY: "pullrequest:updated" },
+          workspace: "/workspace",
+          loadChangeRequest: async () => {
+            loadedChange = true;
+            return loaded;
+          },
+        }),
+      ).resolves.toEqual({ kind: "ignored", reason: "pull request is a draft" });
+      expect(loadedChange).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("normalizes root comments and replies", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-event-"));
     try {

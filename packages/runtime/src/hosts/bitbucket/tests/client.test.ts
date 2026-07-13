@@ -15,6 +15,7 @@ describe("Bitbucket Cloud client", () => {
       },
       change: {
         number: 7,
+        isDraft: true,
         base: { sha: "base", ref: "main" },
         head: { sha: "head", ref: "feature" },
         isFork: true,
@@ -208,6 +209,7 @@ const repository = (uuid: string, fullName: string) => ({
 
 const pullRequest = {
   id: 7,
+  draft: true,
   title: "Update fixture",
   description: "Body",
   author: { nickname: "developer" },

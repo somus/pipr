@@ -15,6 +15,7 @@ const endpointSchema = z.looseObject({
 });
 const pullRequestSchema = z.looseObject({
   id: z.number().int().positive(),
+  draft: z.boolean().optional(),
   title: z.string(),
   description: z.string().default(""),
   author: userSchema.optional(),
@@ -157,6 +158,7 @@ export function createBitbucketClient(
         },
         change: {
           number: pullRequest.id,
+          isDraft: pullRequest.draft,
           title: pullRequest.title,
           description: pullRequest.description,
           url: pullRequest.links.html.href,
