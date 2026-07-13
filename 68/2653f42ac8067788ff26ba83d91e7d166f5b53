@@ -1,0 +1,69 @@
+packages/e2e/package.json
+  s_5eca1d7251411e::t_4e70187461c7ac 10-12
+apps/docs/content/docs/guide/meta.json
+  s_5eca1d7251411e::t_4e70187461c7ac 15
+apps/docs/content/docs/reference/cli.mdx
+  s_5eca1d7251411e::t_4e70187461c7ac 118-119
+apps/docs/content/docs/guide/webhook-docker.mdx
+  s_5eca1d7251411e::t_4e70187461c7ac 1-126
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 19-36
+deploy/webhook/compose.yml
+  s_5eca1d7251411e::t_4e70187461c7ac 1-41
+scripts/changed-scope.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 108,121-123
+scripts/sync-release-lockfile.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 22,91-96
+  s_5eca1d7251411e::t_e1df10c32e5c2c 97
+release-please-config.json
+  s_5eca1d7251411e::t_4e70187461c7ac 47-48
+  s_5eca1d7251411e::t_d3cd845775d66d 45-46
+packages/runtime/src/host-run/webhook-server.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 38-39,70-72
+  s_5eca1d7251411e::t_fcdc7fbd79c1e4 73-74
+scripts/check-release-metadata.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 26,123-130,347,353
+scripts/tests/release-scripts.test.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 147-149,199-201,364-380
+scripts/docker-e2e.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 5-21
+apps/docs/content/docs/guide/azure-devops.mdx
+  s_5eca1d7251411e::t_4e70187461c7ac 66-67
+packages/e2e/webhook-fetch-mock.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 1-25
+apps/docs/content/docs/guide/bitbucket.mdx
+  s_5eca1d7251411e::t_4e70187461c7ac 43-44
+package.json
+  s_5eca1d7251411e::t_4e70187461c7ac 38
+packages/e2e/webhook-health-fixture.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 1-107
+apps/docs/content/docs/guide/gitlab.mdx
+  s_5eca1d7251411e::t_4e70187461c7ac 58-59
+Dockerfile
+  s_5eca1d7251411e::t_4e70187461c7ac 82-84,89-90
+.github/workflows/release-please.yml
+  s_5eca1d7251411e::t_4e70187461c7ac 44,50
+apps/docs/content/docs/guide/index.mdx
+  s_5eca1d7251411e::t_4e70187461c7ac 47-48,50
+deploy/webhook/.env.example
+  s_5eca1d7251411e::t_4e70187461c7ac 1-26
+packages/e2e/container-check.ts
+  s_5eca1d7251411e::t_4e70187461c7ac 41-42,202-255
+  s_5eca1d7251411e::t_3289d354a5133b 256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "682653f42ac8067788ff26ba83d91e7d166f5b53",
+  "prompts": {},
+  "sessions": {
+    "s_5eca1d7251411e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a57-3320-7360-92de-151eb5435525",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
