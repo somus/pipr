@@ -1,0 +1,140 @@
+packages/runtime/src/hosts/github/publication-thread-actions.ts
+  s_df9d72eaa889bb::t_1abf6abd7ce8ba 14,28,31
+  s_df9d72eaa889bb::t_6df3fc078d674b 7,69,130-132,140,142,180-183
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_df9d72eaa889bb::t_1abf6abd7ce8ba 452-454
+  s_df9d72eaa889bb::t_064932717ccdd8 8-12,16-20,199-203,373-392,394-424,428-430,436-451,455-492,504-595,609-615,622-624,666-668,672-673,677-691,693
+  s_df9d72eaa889bb::t_217524abef0b0b 493-503
+  s_df9d72eaa889bb::t_cf3c5e99937591 641-645
+  s_df9d72eaa889bb::t_befe5832d0924e 431-435
+  s_df9d72eaa889bb::t_700336049af717 596-608
+  s_df9d72eaa889bb::t_5c00c57d19118e 649-659
+  s_df9d72eaa889bb::t_d19214f6d17a9b 393,425-427,616-621
+  s_df9d72eaa889bb::t_0f05697c74becf 6,625-640,646-648,660-665,669-671,674-676
+  s_df9d72eaa889bb::t_2e5905fccd02f5 692
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_df9d72eaa889bb::t_e610165f23d445 458-481
+  s_df9d72eaa889bb::t_0f05697c74becf 419-427,431-442,446-448
+  s_df9d72eaa889bb::t_700336049af717 349,382-393,395
+  s_df9d72eaa889bb::t_2527305b499966 2-4,8-12,138-142,222-235,256-259,273-276,278-282,285,297-298,305-308,310,312-326,331-348,350-381,394,396-404,414-418,443-445,449-450,453-454,456-457
+  s_df9d72eaa889bb::t_ba1ed2c1ec1e8f 455
+  s_df9d72eaa889bb::t_52d84b455efff7 89-100,237,248
+  s_df9d72eaa889bb::t_cf3c5e99937591 428-430,451-452
+  s_df9d72eaa889bb::t_d19214f6d17a9b 236,268-270,405-413
+  s_df9d72eaa889bb::t_3c11a841f50759 482
+packages/runtime/src/hosts/gitlab/client.ts
+  s_df9d72eaa889bb::t_2ec2812e1fccab 30-41
+packages/runtime/src/hosts/publication.ts
+  s_df9d72eaa889bb::t_2ec2812e1fccab 33-42
+  s_df9d72eaa889bb::t_ccb4a51311d09a 6-11,93-97
+  s_df9d72eaa889bb::t_aec94c34e083c7 62-78,98
+  s_df9d72eaa889bb::t_befe5832d0924e 1-5
+  s_df9d72eaa889bb::t_00680137070d78 12-14,20-21,43-46,53-54,79-82,99-103
+packages/runtime/src/hosts/gitlab/tests/client.test.ts
+  s_df9d72eaa889bb::t_0f05697c74becf 236-239,255,258
+  s_df9d72eaa889bb::t_6df3fc078d674b 256-257
+packages/runtime/src/hosts/azure-devops/tests/adapter.test.ts
+  s_df9d72eaa889bb::t_700336049af717 710-722
+  s_df9d72eaa889bb::t_0f05697c74becf 746-761,765-768,772-786,793-800
+  s_df9d72eaa889bb::t_389a9d6c428aeb 343,354-356
+  s_df9d72eaa889bb::t_cf3c5e99937591 762-764,769-771
+  s_df9d72eaa889bb::t_ba1ed2c1ec1e8f 804
+  s_df9d72eaa889bb::t_e610165f23d445 807-835
+  s_df9d72eaa889bb::t_d19214f6d17a9b 473,521-525,732-740
+  s_df9d72eaa889bb::t_52d84b455efff7 6-10,94-135,474,489
+  s_df9d72eaa889bb::t_befe5832d0924e 651-657,659-663
+  s_df9d72eaa889bb::t_85ad96b7a26212 12-16,373-377,459-472,496-499,531-534,537-541,548,569-570,598,607-622,627-650,658,664-709,723-731,741-745,787-792,801-803,805-806
+  s_63f74fc97e024c::t_efb1d7f753a3f7 136,836
+packages/runtime/src/hosts/tests/conformance.ts
+  s_df9d72eaa889bb::t_0f05697c74becf 8-11,62-64,251-263,310-334,502,510
+  s_df9d72eaa889bb::t_e022b603a9317d 162-180,335-339,341-354
+  s_df9d72eaa889bb::t_ea9b5df1f61ea1 307-309
+  s_df9d72eaa889bb::t_ad16760621c909 141,146,153,158,292,298,302,340,385-400,402-417
+  s_df9d72eaa889bb::t_f09e3276bd43d4 420
+  s_df9d72eaa889bb::t_0e5515280f5498 84
+  s_df9d72eaa889bb::t_700336049af717 24,82,111
+  s_df9d72eaa889bb::t_b86b31f9fb7ca2 1-7,12-23,25-59,61,65-81,83,85-110,112-140,142-145,147-149,181-199,201-228,240,247-250,264-291,293-297,299-301,303,355-384,401,418-419,421-422,424-429,431-495,503-509,511-561
+  s_df9d72eaa889bb::t_c3d6013cb3601b 60,150-152,154-157,159-161,229-239,241-246,423,430
+  s_df9d72eaa889bb::t_064932717ccdd8 200
+  s_df9d72eaa889bb::t_befe5832d0924e 304-306,496-501
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_df9d72eaa889bb::t_aec94c34e083c7 16,99-100,103-105
+  s_df9d72eaa889bb::t_f879093f38f0ce 101-102,113
+  s_df9d72eaa889bb::t_2ec2812e1fccab 68,126-136,186,455
+  s_df9d72eaa889bb::t_e8e0b4a9dd39e1 106-112,114-125
+  s_df9d72eaa889bb::t_ccb4a51311d09a 18,300,314
+  s_df9d72eaa889bb::t_02a5f178fe575d 67,95-96,98
+  s_df9d72eaa889bb::t_6df3fc078d674b 83,256,264,267,282,302-305
+  s_df9d72eaa889bb::t_1abf6abd7ce8ba 154
+  s_df9d72eaa889bb::t_0e170086e3ae26 97,179,195,210,223,265-266,295,430,443,449-454
+  s_df9d72eaa889bb::t_ba8036a278118a 30-33,153,174-178,180-185
+  s_df9d72eaa889bb::t_f565ae5e947452 3,137,187,456
+packages/runtime/src/hosts/github/publication-review.ts
+  s_df9d72eaa889bb::t_538b10c68adba8 61-64,67
+  s_df9d72eaa889bb::t_befe5832d0924e 65
+packages/runtime/src/hosts/github/publication-shared.ts
+  s_df9d72eaa889bb::t_f09e3276bd43d4 23
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_df9d72eaa889bb::t_e8e0b4a9dd39e1 97-102,104-115
+  s_df9d72eaa889bb::t_6df3fc078d674b 74,227,236,247,262,270-275
+  s_df9d72eaa889bb::t_ccb4a51311d09a 17,269,280
+  s_df9d72eaa889bb::t_2ec2812e1fccab 58,116-126
+  s_df9d72eaa889bb::t_aec94c34e083c7 15,90-91,94-96
+  s_df9d72eaa889bb::t_02a5f178fe575d 57,86-89
+  s_df9d72eaa889bb::t_f879093f38f0ce 92-93,103
+  s_df9d72eaa889bb::t_cf3c5e99937591 235
+  s_df9d72eaa889bb::t_fd9123bef7bb70 2,127
+packages/runtime/src/review/tests/publish.test.ts
+  s_df9d72eaa889bb::t_a14b59c61a2353 446-458,1256,1258-1262,1300-1301
+  s_df9d72eaa889bb::t_723bc571215cdb 661-677
+packages/runtime/src/hosts/bitbucket/publication.ts
+  s_df9d72eaa889bb::t_0e170086e3ae26 142,175,185,221,296-299
+  s_df9d72eaa889bb::t_ccb4a51311d09a 17
+  s_df9d72eaa889bb::t_2ec2812e1fccab 49-50,75,99-108
+  s_df9d72eaa889bb::t_e8e0b4a9dd39e1 78,82-98
+  s_df9d72eaa889bb::t_d61161b60ef0d4 109,146,226-230,233-242,244-251,257,259-260,262-264,300
+  s_df9d72eaa889bb::t_ba8036a278118a 28,125,137-141,143-145
+  s_df9d72eaa889bb::t_1abf6abd7ce8ba 126
+  s_df9d72eaa889bb::t_aec94c34e083c7 15,76-77,79-81
+  s_df9d72eaa889bb::t_6df3fc078d674b 63,215,223,231,243,252-253,255-256
+  s_df9d72eaa889bb::t_cf3c5e99937591 254
+  s_df9d72eaa889bb::t_befe5832d0924e 29-32
+  s_df9d72eaa889bb::t_13c205170c0c47 2,110,147,222,301
+packages/runtime/src/hosts/github/publication-command-response.ts
+  s_df9d72eaa889bb::t_1abf6abd7ce8ba 23-28
+packages/runtime/src/hosts/gitlab/tests/adapter.test.ts
+  s_df9d72eaa889bb::t_cf3c5e99937591 595
+  s_df9d72eaa889bb::t_0f05697c74becf 544-556,558-584,588-590,593-594,596-597
+  s_df9d72eaa889bb::t_909ac6f093e21c 393,401-407
+  s_df9d72eaa889bb::t_befe5832d0924e 464-468
+  s_df9d72eaa889bb::t_5c00c57d19118e 557
+  s_df9d72eaa889bb::t_e610165f23d445 602,605-626
+  s_df9d72eaa889bb::t_700336049af717 461,509-518
+  s_df9d72eaa889bb::t_d19214f6d17a9b 531-540
+  s_df9d72eaa889bb::t_d87bc94e63198d 2-4,8-12,222-226,300-311,331-334,341-342,352-353,388-392,435-460,462-463,469-508,519-530,541-543,585-587,591-592,598-601,603-604
+  s_df9d72eaa889bb::t_1abf6abd7ce8ba 359-363
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "0be8e067d4c182c06e54f9c49ac29637b2276989",
+  "prompts": {},
+  "sessions": {
+    "s_63f74fc97e024c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d53-def2-7801-aa62-67506e17600c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_df9d72eaa889bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d3b-26e8-7fb0-9482-9e678d5f00aa",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
