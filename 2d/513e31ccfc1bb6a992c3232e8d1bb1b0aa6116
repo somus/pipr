@@ -1,0 +1,47 @@
+packages/e2e/action-fixture.ts
+  s_e687529015e9e5::t_7672be0fe3763f 313
+packages/runtime/src/hosts/github/adapter.ts
+  s_e687529015e9e5::t_12a20679c8ba45 169-177,184
+packages/runtime/src/hosts/gitlab/tests/adapter.test.ts
+  s_e687529015e9e5::t_7056e803666bd5 265,405,515
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_e687529015e9e5::t_7056e803666bd5 171
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_e687529015e9e5::t_12a20679c8ba45 260
+packages/runtime/src/hosts/http.ts
+  s_e687529015e9e5::t_12a20679c8ba45 36-37,44,48-54,57,65-66,80-81
+packages/runtime/src/host-run/tests/commands.test.ts
+  s_e687529015e9e5::t_7672be0fe3763f 1933
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_e687529015e9e5::t_7056e803666bd5 256,482,576,590-592
+packages/runtime/src/hosts/azure-devops/tests/adapter.test.ts
+  s_e687529015e9e5::t_7056e803666bd5 372
+packages/runtime/src/hosts/github/octokit.ts
+  s_e687529015e9e5::t_12a20679c8ba45 27
+packages/runtime/src/hosts/tests/http.test.ts
+  s_e687529015e9e5::t_12a20679c8ba45 152,169
+  s_e687529015e9e5::t_f9185b503101ec 164-168,170-186
+packages/runtime/src/hosts/github/publication-client.ts
+  s_e687529015e9e5::t_12a20679c8ba45 189,326-338,344,348
+packages/runtime/src/review/tests/publish.test.ts
+  s_e687529015e9e5::t_12a20679c8ba45 1024
+  s_e687529015e9e5::t_7056e803666bd5 941-960
+packages/runtime/src/hosts/tests/adapter-contract.ts
+  s_e687529015e9e5::t_7056e803666bd5 8-13,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "2d513e31ccfc1bb6a992c3232e8d1bb1b0aa6116",
+  "prompts": {},
+  "sessions": {
+    "s_e687529015e9e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5c9c-d84f-7ac1-9051-e67aa92f922b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
