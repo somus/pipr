@@ -2,13 +2,18 @@ import { describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Octokit } from "@octokit/rest";
 import { buildPublicationPlan, runtimeVersion } from "../../../review/comment.js";
 import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
-import { runCodeHostAdapterContract } from "../../tests/adapter-contract.js";
+import {
+  runCodeHostAdapterContract,
+  runCodeHostPaginationContract,
+} from "../../tests/adapter-contract.js";
 import { createGitHubHostAdapter } from "../adapter.js";
 import type { GitHubCommandClient } from "../command.js";
 import type { GitHubPublicationClient } from "../publication.js";
+import { createGitHubPublicationClient } from "../publication-client.js";
 
 describe("GitHub host adapter contract", () => {
   it("normalizes native event fixtures through provider-neutral surfaces", async () => {
@@ -276,6 +281,45 @@ runCodeHostAdapterContract("GitHub", {
     return { replies: client.reviewReplies.length, resolutions: client.resolveCalls };
   },
 });
+
+runCodeHostPaginationContract("GitHub", githubPaginationProbe);
+
+async function githubPaginationProbe(): Promise<{ items: number; pages: number }> {
+  const pages = new Map<string, number>();
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url);
+      const page = Number(url.searchParams.get("page") ?? "1");
+      pages.set(url.pathname, (pages.get(url.pathname) ?? 0) + 1);
+      const headers =
+        page === 1 ? { Link: `<${url.origin}${url.pathname}?page=2>; rel="next"` } : undefined;
+      const item = { id: page, name: "pipr", body: `page ${page}`, user: { login: "pipr" } };
+      if (url.pathname.endsWith("/check-runs")) {
+        return Response.json({ total_count: 2, check_runs: [item] }, { headers });
+      }
+      return Response.json([item], { headers });
+    },
+  });
+  try {
+    const octokit = new Octokit({ baseUrl: server.url.origin });
+    const client = createGitHubPublicationClient({}, octokit);
+    const issueComments = await client.listIssueComments({ repo: "local/pipr", issueNumber: 7 });
+    const reviewComments = await client.listReviewComments({
+      repo: "local/pipr",
+      pullRequestNumber: 7,
+    });
+    const checkRuns = await client.listCheckRuns({ repo: "local/pipr", headSha: "head" });
+
+    expect(issueComments).toHaveLength(2);
+    expect(reviewComments).toHaveLength(2);
+    expect(checkRuns).toHaveLength(2);
+    expect([...pages.values()]).toEqual([2, 2, 2]);
+    return { items: issueComments.length + reviewComments.length + checkRuns.length, pages: 6 };
+  } finally {
+    server.stop(true);
+  }
+}
 
 function commandClient(calls: string[] = []): GitHubCommandClient {
   return {

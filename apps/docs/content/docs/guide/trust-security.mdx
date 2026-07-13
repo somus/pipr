@@ -87,7 +87,7 @@ Review Tasks do not receive broad code host write tools. They emit one final out
 
 | Output surface | When Pipr writes it | Safety control |
 | --- | --- | --- |
-| Main Review Comment | Inline comments and thread actions for the review have succeeded | Written last as the publication watermark, then replaced by Pipr marker on a complete rerun. |
+| Main Review Comment | Required inline comments for the review have succeeded | Written after inline publication as the review-state watermark, then replaced by Pipr marker on a complete rerun. Thread-action errors are recorded separately. |
 | Inline Review Comment | A task passes valid `ReviewFinding[]` | Anchored to Diff Manifest ranges, capped by config, and deduped. |
 | Command response | A command task calls `ctx.command.reply(...)` | Keyed to the source command comment and updated on rerun. |
 | Check Run | Checks are enabled in config | Created and completed by the runtime after task execution. |
@@ -107,7 +107,7 @@ Review Tasks do not call code host APIs directly. They emit final output, then P
 - drops invalid findings
 - caps inline comments
 - dedupes same-head inline comments
-- publishes inline comments and thread actions with bounded, reconciliation-safe retries
+- publishes inline comments and thread actions with bounded, reconciliation-safe retries, recording thread-action errors separately
 - upserts the Main Review Comment by marker after inline publication succeeds
 - records publication metadata
 

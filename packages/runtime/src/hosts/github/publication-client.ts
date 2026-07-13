@@ -1,3 +1,4 @@
+import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import { parseRepoSlug } from "../../shared/github.js";
 import { createGitHubOctokit } from "./octokit.js";
@@ -193,9 +194,9 @@ export type GitHubPublicationClient = {
 
 export function createGitHubPublicationClient(
   env: NodeJS.ProcessEnv = process.env,
+  octokit: Octokit = createGitHubOctokit(env),
 ): GitHubPublicationClient {
   const authenticatedUserLogin = env.GITHUB_ACTIONS === "true" ? githubActionsBotLogin : undefined;
-  const octokit = createGitHubOctokit(env);
   return {
     async getAuthenticatedUserLogin() {
       if (authenticatedUserLogin) {

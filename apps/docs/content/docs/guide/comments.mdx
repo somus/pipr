@@ -61,7 +61,7 @@ The Main Review Comment is the single visible summary for a review task. Pipr up
 
 ### Publication watermark
 
-Pipr writes the Main Review Comment last, after Inline Review Comments and thread actions succeed. Its hidden marker is the publication watermark for the completed review state.
+Pipr writes the Main Review Comment after required Inline Review Comments succeed. Its hidden marker is the publication watermark for that review state. Thread-action errors, such as a failed verifier reply or resolution, are recorded separately and do not prevent the main-comment update.
 
 If an inline request fails after other inline comments were accepted, Pipr leaves the prior main body and state unchanged and fails the run. A rerun reloads Pipr-owned markers, skips the inline comments that already exist, and updates the main comment after publication completes. Pipr uses bounded retries for rate limits and transient provider failures, and it reconciles markers before retrying create operations whose success response may have been lost.
 
