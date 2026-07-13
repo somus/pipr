@@ -1,0 +1,34 @@
+docs/research/code-host-adapter-guideline.md
+  s_4ebdfc62030aaf::t_d8d9ceebea94d3 478-479,494
+apps/docs/content/docs/guide/azure-devops.mdx
+  s_4ebdfc62030aaf::t_d8d9ceebea94d3 52-53,70
+packages/runtime/src/hosts/azure-devops/client.ts
+  s_4ebdfc62030aaf::t_502af224cbdb8f 18-26
+  s_4ebdfc62030aaf::t_92e301845a0b35 6-17
+  s_4ebdfc62030aaf::t_1b6bc7a01c644b 272,274
+  s_4ebdfc62030aaf::t_7780632d8944dc 273,286
+  s_4ebdfc62030aaf::t_687fb1dc75f02a 384-385,387,391,400,402
+  s_4ebdfc62030aaf::t_c010c3d75163de 467,470
+packages/runtime/src/hosts/azure-devops/tests/client.test.ts
+  s_4ebdfc62030aaf::t_1b6bc7a01c644b 236
+  s_4ebdfc62030aaf::t_687fb1dc75f02a 135,142-143,146-148
+  s_4ebdfc62030aaf::t_7780632d8944dc 241
+  s_4ebdfc62030aaf::t_c010c3d75163de 251,256,268-270
+  s_4ebdfc62030aaf::t_92e301845a0b35 37-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "a88c0decee8fbe158d9653ef27dfbc477dda4a3c",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
