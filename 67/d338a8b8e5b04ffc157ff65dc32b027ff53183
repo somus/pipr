@@ -1,0 +1,27 @@
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_e687529015e9e5::t_629148bc82a7c0 9-12,16,285-296,298-323
+  s_e687529015e9e5::t_e17061708a7e6a 297
+  s_e687529015e9e5::t_a38f8ea515741d 5
+apps/docs/content/docs/guide/trust-security.mdx
+  s_e687529015e9e5::t_75dc192f98dca0 90,110
+apps/docs/content/docs/guide/comments.mdx
+  s_e687529015e9e5::t_75dc192f98dca0 64
+packages/runtime/src/hosts/github/publication-client.ts
+  s_e687529015e9e5::t_66f79185a841b7 1,197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "67d338a8b8e5b04ffc157ff65dc32b027ff53183",
+  "prompts": {},
+  "sessions": {
+    "s_e687529015e9e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5c9c-d84f-7ac1-9051-e67aa92f922b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
