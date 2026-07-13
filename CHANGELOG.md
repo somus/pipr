@@ -4,6 +4,16 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.3.9](https://github.com/somus/pipr/compare/v0.3.8...v0.3.9) (2026-07-13)
+
+
+### Features
+
+* add Azure DevOps adapter ([#64](https://github.com/somus/pipr/issues/64)) ([38213f9](https://github.com/somus/pipr/commit/38213f9a4e3ce7c463c2d9737fed87b1979c6139))
+* add Bitbucket Cloud adapter ([#65](https://github.com/somus/pipr/issues/65)) ([9b5c336](https://github.com/somus/pipr/commit/9b5c336bcb8a4561656b9a5a39d9c5e9ab2f6f26))
+* add code host adapter foundation ([#62](https://github.com/somus/pipr/issues/62)) ([f6018df](https://github.com/somus/pipr/commit/f6018dfe6046ef8aefbb02ae08f91e247da22962))
+* add GitLab adapter ([#63](https://github.com/somus/pipr/issues/63)) ([d6c639a](https://github.com/somus/pipr/commit/d6c639a4c73e6a1fe91c6aea8d67c7bda1c67334))
+
 ## [0.3.8](https://github.com/somus/pipr/compare/v0.3.7...v0.3.8) (2026-07-11)
 
 
