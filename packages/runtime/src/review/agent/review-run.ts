@@ -401,6 +401,7 @@ function logPiResult(
     stdoutBytes: result.stdout.length,
     stderrBytes: result.stderr.length,
     timeoutSeconds,
+    ...(result.stream ?? {}),
   });
 }
 

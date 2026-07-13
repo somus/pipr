@@ -160,6 +160,8 @@ function verifierInput(
   };
 }
 
+type VerifierInput = ReturnType<typeof verifierInput>;
+
 function autoResolveEnabled(config: PiprConfig, mode: VerifierMode): boolean {
   const autoResolve = config.publication.autoResolve;
   if (!autoResolve.enabled) {
@@ -299,7 +301,7 @@ function verifierResponseBody(response: string | undefined): string | undefined 
 function internalVerifierAgent(
   provider: ProviderConfig,
   config: PiprConfig,
-): Agent<unknown, VerifierOutput> {
+): Agent<VerifierInput, VerifierOutput> {
   return {
     kind: "pipr.agent",
     name: "pipr-internal-verifier",
@@ -322,13 +324,17 @@ function internalVerifierAgent(
       ]
         .filter(Boolean)
         .join("\n"),
-      prompt: (input) => JSON.stringify(input, null, 2),
+      prompt: (input) => {
+        const { manifest: _manifest, ...verifierPromptInput } = input;
+        return JSON.stringify(verifierPromptInput, null, 2);
+      },
       tools: [],
+      timeout: "2m",
       retry: { invalidOutput: 1, transientFailure: 0 },
     },
     extend(patch) {
       return { ...this, definition: { ...this.definition, ...patch } } as Agent<
-        unknown,
+        VerifierInput,
         VerifierOutput
       >;
     },
