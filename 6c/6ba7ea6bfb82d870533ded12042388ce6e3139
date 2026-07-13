@@ -1,0 +1,146 @@
+packages/runtime/src/hosts/http.ts
+  s_e687529015e9e5::t_01d345ca1c1fe4 2,12-14,21,23,27,34,52-84
+packages/runtime/src/host-run/tests/commands.test.ts
+  s_e687529015e9e5::t_5df7e961120c17 2114-2116
+  s_e687529015e9e5::t_d72a7b097830a8 1923-1928
+packages/runtime/src/hosts/github/command.ts
+  s_e687529015e9e5::t_bd9a130e1c4627 2,5,77
+packages/runtime/src/hosts/github/publication-client.ts
+  s_e687529015e9e5::t_d72a7b097830a8 126-130
+  s_e687529015e9e5::t_bd9a130e1c4627 2-3,198
+  s_e687529015e9e5::t_6f894a52a024e2 120-125,181,184,305,314-322
+  s_e687529015e9e5::t_02fa40151f2680 323
+packages/runtime/src/hosts/github/publication-review.ts
+  s_e687529015e9e5::t_65a208bed0e31b 9,67-69,155-181,191-196
+  s_e687529015e9e5::t_300a9385b30fde 16,59-60,64-66,70
+  s_e687529015e9e5::t_7122ace7403d66 34,47,49-50
+  s_e687529015e9e5::t_d72a7b097830a8 132
+  s_e687529015e9e5::t_32c0d66f4deea5 197-198
+packages/runtime/src/hosts/github/publication-thread-actions.ts
+  s_e687529015e9e5::t_14038ab97ee22c 142-166,257-260
+  s_e687529015e9e5::t_35d3a1ab18bf7b 9
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_e687529015e9e5::t_5585fb493c3d0a 180-189
+  s_e687529015e9e5::t_7c76e1003955af 119-167,170-179,190-194
+  s_e687529015e9e5::t_f3f288c236ded5 5,168-169,195-196,310-312,354-357,369,375
+  s_e687529015e9e5::t_a7ccd03a8dd1c7 268-303
+  s_e687529015e9e5::t_4f549dec3929ea 22,101
+packages/e2e/action-fixture.ts
+  s_e687529015e9e5::t_c0a489445f53b3 297,302-305,331-337
+packages/runtime/src/hosts/bitbucket/adapter.ts
+  s_e687529015e9e5::t_ff5f187201dde6 84-94
+  s_e687529015e9e5::t_4d13e53ed7f214 1
+packages/runtime/src/hosts/bitbucket/tests/client.test.ts
+  s_e687529015e9e5::t_31f2fad87e66a7 132
+  s_e687529015e9e5::t_420a69a8636390 145-146
+packages/runtime/src/hosts/github/tests/adapter.test.ts
+  s_e687529015e9e5::t_5df7e961120c17 127-129
+packages/runtime/src/hosts/tests/retry.test.ts
+  s_e687529015e9e5::t_289fd21312f2e1 1-63
+packages/runtime/src/hosts/azure-devops/tests/adapter.test.ts
+  s_e687529015e9e5::t_bfd2de6fae6e5a 318-368,371-380,391-392
+  s_e687529015e9e5::t_42da0b7d60bd9f 467-508
+  s_e687529015e9e5::t_f6533c6104951e 8,369-370,393-394,515-517,587-590,611,639-640
+  s_e687529015e9e5::t_4f549dec3929ea 35,213,239,246,309
+  s_e687529015e9e5::t_5585fb493c3d0a 381-390
+packages/runtime/src/hosts/gitlab/adapter.ts
+  s_e687529015e9e5::t_ff5f187201dde6 77-87
+  s_e687529015e9e5::t_af0de11f8093ff 1
+packages/runtime/src/hosts/bitbucket/client.ts
+  s_e687529015e9e5::t_1a58298d73e6fd 211,213
+packages/runtime/src/review/tests/publish.test.ts
+  s_e687529015e9e5::t_d72a7b097830a8 895
+  s_e687529015e9e5::t_bd9a130e1c4627 918-928,930-940
+  s_e687529015e9e5::t_6f894a52a024e2 1419-1422
+  s_e687529015e9e5::t_d219c2d410bb37 261-307
+  s_e687529015e9e5::t_5df7e961120c17 929
+  s_e687529015e9e5::t_16e8fca47c883e 249
+packages/runtime/src/hosts/retry-policy.ts
+  s_e687529015e9e5::t_fa48b2d364b0e4 1-53
+packages/runtime/src/hosts/github/octokit.ts
+  s_e687529015e9e5::t_31f2fad87e66a7 15-18,20-21
+  s_e687529015e9e5::t_d72a7b097830a8 19
+  s_e687529015e9e5::t_bd9a130e1c4627 1-14,22-28
+packages/runtime/src/hosts/github/publication-shared.ts
+  s_e687529015e9e5::t_300a9385b30fde 5,91-126
+  s_e687529015e9e5::t_34a84a80a0df1d 127
+packages/runtime/src/hosts/bitbucket/publication.ts
+  s_e687529015e9e5::t_109293dbc544f9 210
+  s_e687529015e9e5::t_839f04c8bdcbe5 12,17,36-39,53-63,75
+  s_e687529015e9e5::t_3320405c797014 64-74,106-115
+  s_e687529015e9e5::t_14038ab97ee22c 204-209,211-212,214-225
+packages/runtime/src/hosts/github/publication-command-response.ts
+  s_e687529015e9e5::t_300a9385b30fde 3-7,27-28,32
+packages/runtime/src/hosts/tests/adapter-contract.ts
+  s_e687529015e9e5::t_5585fb493c3d0a 12
+  s_e687529015e9e5::t_616636f7536d5c 3-9,15,19,23,27,34,40,44
+  s_e687529015e9e5::t_106db5e2cd4614 1-2,10-11,13-14,16-18,20-22,24-26,28-33,35,37-39,41-43,45-47
+  s_e687529015e9e5::t_2dcf88e3eed3ad 36
+packages/runtime/src/hosts/retry.ts
+  s_e687529015e9e5::t_fa48b2d364b0e4 1
+  s_e687529015e9e5::t_04dceee6da2d9b 2
+packages/runtime/src/hosts/azure-devops/adapter.ts
+  s_e687529015e9e5::t_ff5f187201dde6 103-111
+  s_e687529015e9e5::t_16cb5e2ad0d042 1
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_e687529015e9e5::t_839f04c8bdcbe5 12,17,44,46-47,64-75
+  s_e687529015e9e5::t_14038ab97ee22c 246-264,267-275
+  s_e687529015e9e5::t_3320405c797014 76-89,128-137
+  s_e687529015e9e5::t_31f2fad87e66a7 45
+packages/runtime/src/hosts/retry-operation.ts
+  s_e687529015e9e5::t_2091231dcab58f 1-22,24-29,36,38-39,66-85,87,90-91
+  s_e687529015e9e5::t_73f75772bbdf3e 23,30-35,37,40-65,88-89
+  s_e687529015e9e5::t_e3c4226a406b86 86
+packages/runtime/src/hosts/publication.ts
+  s_e687529015e9e5::t_31f2fad87e66a7 36
+  s_e687529015e9e5::t_d72a7b097830a8 68
+  s_e687529015e9e5::t_839f04c8bdcbe5 4,10-11,22-23,28-35,37-44,53-67,69-72,91
+packages/runtime/src/hosts/gitlab/tests/adapter.test.ts
+  s_e687529015e9e5::t_c628e34c30c26e 5,262-263,287-288,402-404,485-488,508,512-513
+  s_e687529015e9e5::t_518e28ab5ced58 356-396,515
+  s_e687529015e9e5::t_5b5f1b753de83c 514
+  s_e687529015e9e5::t_16e8fca47c883e 137
+  s_e687529015e9e5::t_2d6bc4e013c359 216-261,264-271,282-286
+  s_e687529015e9e5::t_5585fb493c3d0a 272-281
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_e687529015e9e5::t_31d9d3bc74e57b 398,573
+  s_e687529015e9e5::t_6f894a52a024e2 370-371
+  s_e687529015e9e5::t_d7e031756149d7 399,405-406,419-420,428-429,476,519,527-528,530,537-538,549-559
+  s_e687529015e9e5::t_5585fb493c3d0a 264-273
+  s_e687529015e9e5::t_006b625ac0e0e3 369,380-397,400-404,407-418,421-427,430-451,464-475,477-518,520-526,529,531-536,539-548,560-572,574-589
+  s_e687529015e9e5::t_5a699c33c02f1c 6,8,253-254
+  s_e687529015e9e5::t_c91de3c2ebb731 137-144,160,323,364,366-368,372
+  s_e687529015e9e5::t_53928b980e38d3 452-463
+  s_e687529015e9e5::t_64b52cf4ce264c 199-252,255-263,274-275
+  s_e687529015e9e5::t_1320a181cc4cce 276-277
+docs/adr/0005-pipr-owned-comment-publishing.md
+  s_e687529015e9e5::t_a4679be6dfe32f 14-15,26,28,30-32
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_e687529015e9e5::t_3320405c797014 84-100,143-159
+  s_e687529015e9e5::t_839f04c8bdcbe5 13,18,50-51,53-54,70-83,101-102
+  s_e687529015e9e5::t_31f2fad87e66a7 52
+  s_e687529015e9e5::t_14038ab97ee22c 275-293,295,298-307
+packages/runtime/src/hosts/tests/http.test.ts
+  s_e687529015e9e5::t_289fd21312f2e1 75-132
+packages/runtime/src/hosts/github/adapter.ts
+  s_e687529015e9e5::t_6f894a52a024e2 143-168,186-195
+  s_e687529015e9e5::t_86ffce1afe9e1d 2,196
+packages/runtime/src/hosts/tests/publication.test.ts
+  s_e687529015e9e5::t_16e8fca47c883e 1-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "6c6ba7ea6bfb82d870533ded12042388ce6e3139",
+  "prompts": {},
+  "sessions": {
+    "s_e687529015e9e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5c9c-d84f-7ac1-9051-e67aa92f922b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
