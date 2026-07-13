@@ -1,0 +1,22 @@
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_4ebdfc62030aaf::t_73acee59a1db52 33
+  s_4ebdfc62030aaf::t_8e397f28d7bbcc 29
+packages/runtime/src/host-run/webhook-server.ts
+  s_4ebdfc62030aaf::t_fb07b8bf08f634 71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "de71cbcc948b1119c79a352d9f9dcbb88e3509c3",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
