@@ -187,19 +187,23 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
     this.maxRetainedPayloadBytes = options.maxRetainedPayloadBytes ?? 32 * 1024 * 1024;
     this.maxRetainedDeliveries = options.maxRetainedDeliveries ?? 10_000;
     this.database.exec("PRAGMA journal_mode = WAL");
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS webhook_deliveries (
-        id TEXT PRIMARY KEY,
-        host TEXT NOT NULL,
-        payload TEXT,
-        status TEXT NOT NULL,
-        attempts INTEGER NOT NULL DEFAULT 0,
-        error TEXT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      UPDATE webhook_deliveries SET status = 'pending' WHERE status = 'processing';
-    `);
+    this.database.transaction(() => {
+      this.database.exec(`
+        CREATE TABLE IF NOT EXISTS webhook_deliveries (
+          id TEXT PRIMARY KEY,
+          host TEXT NOT NULL,
+          payload TEXT,
+          status TEXT NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          error TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      this.database
+        .query("UPDATE webhook_deliveries SET status = 'pending' WHERE status = 'processing'")
+        .run();
+    })();
   }
 
   enqueue(delivery: WebhookDelivery): "created" | "duplicate" | "full" {

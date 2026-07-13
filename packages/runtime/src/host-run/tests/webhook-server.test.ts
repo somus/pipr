@@ -255,13 +255,17 @@ describe("webhook runner", () => {
 
       const second = new SqliteWebhookDeliveryStore(databasePath);
       expect(second.next()).toEqual({ id: "delivery-1", host: "gitlab", payload: "{}" });
-      second.complete("delivery-1");
       second.close();
 
       const third = new SqliteWebhookDeliveryStore(databasePath);
-      expect(third.next()).toBeUndefined();
-      expect(third.enqueue({ id: "delivery-1", host: "gitlab", payload: "{}" })).toBe("duplicate");
+      expect(third.next()).toEqual({ id: "delivery-1", host: "gitlab", payload: "{}" });
+      third.complete("delivery-1");
       third.close();
+
+      const fourth = new SqliteWebhookDeliveryStore(databasePath);
+      expect(fourth.next()).toBeUndefined();
+      expect(fourth.enqueue({ id: "delivery-1", host: "gitlab", payload: "{}" })).toBe("duplicate");
+      fourth.close();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
