@@ -1671,7 +1671,7 @@ export default definePipr((pipr) => {
     const pipeline = await Bun.file(path.join(rootDir, ".gitlab-ci.yml")).text();
 
     expect(result.created).toContain(".gitlab-ci.yml");
-    expect(pipeline).toContain("ghcr.io/somus/pipr:v0.3.8");
+    expect(pipeline).toContain("ghcr.io/somus/pipr:v0.3.8"); // x-release-please-version
     expect(pipeline).toContain("pipr host-run --host gitlab --config-dir config/pipr");
     expect(pipeline).toContain('PIPR_CODE_HOST: "gitlab"');
     expect(pipeline).toContain('GIT_DEPTH: "0"');
