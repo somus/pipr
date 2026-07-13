@@ -1,0 +1,29 @@
+packages/runtime/src/hosts/bitbucket/tests/event.test.ts
+  s_4ebdfc62030aaf::t_ff79ff5ec0db17 23-69
+packages/runtime/src/hosts/bitbucket/tests/client.test.ts
+  s_4ebdfc62030aaf::t_ff79ff5ec0db17 18,212
+packages/runtime/src/hosts/bitbucket/event.ts
+  s_4ebdfc62030aaf::t_ae9b6b4c0da20c 9-12,104,131-135
+  s_4ebdfc62030aaf::t_7124d6d34c601e 22,66-67,70-73,76-84,87-89,91-92,94-103,124-130
+  s_4ebdfc62030aaf::t_cc3cbd2ff48bda 23,68,74-75,85-86,90,93
+  s_4ebdfc62030aaf::t_767e1621fae0ba 25,34-57,59-64
+  s_4ebdfc62030aaf::t_d3c5fb9285c240 65,136-137
+packages/runtime/src/hosts/bitbucket/client.ts
+  s_4ebdfc62030aaf::t_ae9b6b4c0da20c 18,161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "bed616ce780ee27bffef5628f271bc317e186799",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
