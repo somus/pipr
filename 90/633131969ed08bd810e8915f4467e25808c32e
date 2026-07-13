@@ -1,0 +1,21 @@
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_4ebdfc62030aaf::t_1de99344b148fb 278
+packages/runtime/src/hosts/gitlab/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_1de99344b148fb 136,175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "90633131969ed08bd810e8915f4467e25808c32e",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
