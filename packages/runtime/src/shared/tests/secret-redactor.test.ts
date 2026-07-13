@@ -1,5 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import { createBetterleaksSecretRedactor } from "../betterleaks-redactor.js";
+import { sensitiveEnvironmentValues } from "../secret-redactor.js";
+
+describe("sensitiveEnvironmentValues", () => {
+  it("does not treat pass substrings in ordinary environment names as secrets", () => {
+    expect(
+      sensitiveEnvironmentValues({
+        COMPASS_DIR: "/workspace/compass",
+        BYPASS_PROXY: "localhost",
+        DATABASE_PASSWORD: "secret-password",
+      }),
+    ).toEqual(["secret-password"]);
+  });
+});
 
 describe("createBetterleaksSecretRedactor", () => {
   it("redacts Betterleaks spans across batched Unicode targets", async () => {

@@ -118,11 +118,12 @@ export async function redactReviewPublication(options: {
   });
 
   const redacted = await options.redactor.redact(targets.map((target) => target.value));
-  if (redacted.length !== targets.length || redacted.some((result) => !result)) {
+  if (redacted.length !== targets.length) {
     throw new Error("Secret redactor returned an invalid result; publication aborted");
   }
   redacted.forEach((result, index) => {
-    targets[index]?.apply(result);
+    // biome-ignore lint/style/noNonNullAssertion: equal lengths are validated above.
+    targets[index]!.apply(result);
   });
 
   return publication;
@@ -141,12 +142,13 @@ export async function redactCommandPublication(options: {
     ...options.taskChecks.flatMap((check) => (check.summary ? [check.summary] : [])),
   ];
   const redacted = await options.redactor.redact(targets);
-  if (redacted.length !== targets.length || !redacted[0]) {
+  if (redacted.length !== targets.length) {
     throw new Error("Secret redactor returned an invalid result; publication aborted");
   }
   const taskChecks = consumeTaskChecks(options.taskChecks, redacted, 1);
   return {
-    body: redacted[0].value,
+    // biome-ignore lint/style/noNonNullAssertion: targets always contains the body.
+    body: redacted[0]!.value,
     taskChecks,
   };
 }

@@ -8,7 +8,7 @@ export type SecretRedactor = {
   redact(values: readonly string[]): Promise<readonly SecretRedactionResult[]>;
 };
 
-const sensitiveEnvNamePattern = /(TOKEN|SECRET|PASSWORD|PASS|KEY|AUTH|CREDENTIAL|COOKIE)/i;
+const sensitiveEnvNamePattern = /(TOKEN|SECRET|PASSWORD|KEY|AUTH|CREDENTIAL|COOKIE)/i;
 
 export function sensitiveEnvironmentValues(env: NodeJS.ProcessEnv): string[] {
   return Object.entries(env).flatMap(([name, value]) =>
