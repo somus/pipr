@@ -1,0 +1,41 @@
+packages/runtime/src/hosts/github/command.ts
+  s_4ebdfc62030aaf::t_10ee0a50be98f1 11,156
+packages/runtime/src/hosts/types.ts
+  s_4ebdfc62030aaf::t_3e156585e9698a 66
+packages/runtime/src/hosts/github/adapter.ts
+  s_4ebdfc62030aaf::t_10ee0a50be98f1 61-64
+packages/runtime/src/hosts/gitlab/client.ts
+  s_4ebdfc62030aaf::t_dcf4df3bd9c4af 56,197
+packages/runtime/src/host-run/commands.ts
+  s_4ebdfc62030aaf::t_3e156585e9698a 214-215
+packages/runtime/src/hosts/gitlab/event.ts
+  s_4ebdfc62030aaf::t_dcf4df3bd9c4af 73-75
+  s_4ebdfc62030aaf::t_3e156585e9698a 17,96-100
+packages/runtime/src/hosts/gitlab/tests/event.test.ts
+  s_4ebdfc62030aaf::t_559f1d6b63d752 146-170
+  s_4ebdfc62030aaf::t_2533c570a36ed1 199-223
+packages/runtime/src/hosts/github/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_a1b76ec9245fe3 2-4,37-70
+  s_4ebdfc62030aaf::t_697378d5ee5dca 71
+packages/runtime/src/types.ts
+  s_4ebdfc62030aaf::t_10ee0a50be98f1 134
+packages/runtime/src/hosts/github/event.ts
+  s_4ebdfc62030aaf::t_c845c50abd018a 21
+  s_4ebdfc62030aaf::t_10ee0a50be98f1 226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "05d0655174488f6975a2e48e598da767aad14117",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
