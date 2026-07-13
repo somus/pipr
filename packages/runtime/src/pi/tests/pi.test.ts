@@ -756,6 +756,8 @@ describe("buildPiArgs", () => {
         piExecutable,
         [
           "#!/usr/bin/env bun",
+          'console.log(JSON.stringify({ type: "message_end", message: { role: "assistant", model: "failed-model", content: [{ type: "text", text: "{}" }], usage: { input: 10, output: 2, cost: { total: 0.001 } } } }));',
+          "await Bun.sleep(20);",
           'console.error("do-not-log".repeat(200));',
           "await Bun.sleep(2_000);",
         ].join("\n"),
@@ -767,8 +769,8 @@ describe("buildPiArgs", () => {
         piExecutable,
         prompt: "Review this diff.",
         streamLimits: {
-          maxJsonEventBytes: 64,
-          maxRawStdoutBytes: 64,
+          maxJsonEventBytes: 1_024,
+          maxRawStdoutBytes: 1_024,
           maxStderrBytes: 64,
         },
         ...deepseekRunOptions(),
@@ -778,6 +780,8 @@ describe("buildPiArgs", () => {
       expect(result.stdout).toBe("");
       expect(result.stderr).toBe("Pi stderr exceeded the output limit");
       expect(result.stderr).not.toContain("do-not-log");
+      expect(result.models).toBeUndefined();
+      expect(result.usage).toBeUndefined();
       expect(result.durationMs).toBeLessThan(1_500);
     } finally {
       await rm(workspace, { recursive: true, force: true });

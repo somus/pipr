@@ -742,11 +742,11 @@ function finalizeProcessResult(options: {
   }
   if (streamFailure) {
     return {
-      ...collected,
       stdout: "",
       stderr: streamFailure,
       exitCode: 1,
       durationMs: options.durationMs,
+      ...(collected.stream ? { stream: collected.stream } : {}),
     };
   }
   return {
