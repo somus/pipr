@@ -34,6 +34,24 @@ describe("Azure DevOps API client", () => {
     expect(authorizations).toEqual([`Basic ${Buffer.from(":test-token").toString("base64")}`]);
   });
 
+  it("normalizes Microsoft account identities from connection data", async () => {
+    const client = createAzureDevOpsClient(azureEnv, async () =>
+      Response.json({
+        authenticatedUser: {
+          id: "user-id",
+          providerDisplayName: "Pipr User",
+          properties: { Account: { $type: "System.String", $value: "pipr@example.test" } },
+        },
+      }),
+    );
+
+    await expect(client.currentUser()).resolves.toMatchObject({
+      id: "user-id",
+      displayName: "Pipr User",
+      uniqueName: "pipr@example.test",
+    });
+  });
+
   it("loads a pull request and selects the iteration for the reviewed head", async () => {
     const requests: string[] = [];
     const client = createAzureDevOpsClient(azureEnv, async (input) => {
@@ -114,18 +132,20 @@ describe("Azure DevOps API client", () => {
       requests.push(url);
       return url.includes("$skip=1")
         ? Response.json({
-            count: 1,
-            value: [
+            changeEntries: [
               {
                 changeTrackingId: 12,
                 changeType: "rename",
                 item: { path: "/src/new.ts", originalPath: "/src/old.ts" },
               },
             ],
+            nextSkip: 0,
+            nextTop: 0,
           })
         : Response.json({
-            count: 1,
-            value: [{ changeTrackingId: 11, changeType: "edit", item: { path: "/src/a.ts" } }],
+            changeEntries: [
+              { changeTrackingId: 11, changeType: "edit", item: { path: "/src/a.ts" } },
+            ],
             nextSkip: 1,
             nextTop: 1,
           });
@@ -213,12 +233,12 @@ describe("Azure DevOps API client", () => {
               descriptor: "user-descriptor",
               isActive: true,
               isContainer: false,
-              memberOf: [{ descriptor: "contributors-group" }],
+              memberOf: ["contributors-group", { descriptor: "reviewers-group" }],
             },
           ],
         });
       }
-      expect(url).toContain("descriptors=user-descriptor%2Ccontributors-group");
+      expect(url).toContain("descriptors=user-descriptor%2Ccontributors-group%2Creviewers-group");
       const token = new URL(url).searchParams.get("token") ?? "";
       aclTokens.push(token);
       return Response.json({
@@ -228,12 +248,12 @@ describe("Azure DevOps API client", () => {
             inheritPermissions: true,
             acesDictionary: {
               user: {
-                allow: token === "repoV2/project-id" ? 16387 : 0,
+                allow: token === "repoV2/project-id" ? 2 | 4 | 16384 : 0,
                 deny: 0,
               },
               group: {
                 allow: 0,
-                deny: token.endsWith("/repo-id") ? 2 : 0,
+                deny: token.endsWith("/repo-id") ? 4 : 0,
               },
             },
           },
@@ -245,9 +265,9 @@ describe("Azure DevOps API client", () => {
       client.getRepositoryPermission("developer@example.com", "project-id", "repo-id"),
     ).resolves.toBe("triage");
     expect(aclTokens).toEqual(["repoV2/project-id", "repoV2/project-id/repo-id"]);
-    expect(azureRepositoryPermission(1 | 2 | 16384)).toBe("write");
-    expect(azureRepositoryPermission(1 | 2048)).toBe("maintain");
-    expect(azureRepositoryPermission(1 | 8192)).toBe("admin");
+    expect(azureRepositoryPermission(2 | 4 | 16384)).toBe("write");
+    expect(azureRepositoryPermission(2 | 2048)).toBe("maintain");
+    expect(azureRepositoryPermission(2 | 8192)).toBe("admin");
   });
 });
 

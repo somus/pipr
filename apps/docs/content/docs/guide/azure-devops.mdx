@@ -49,6 +49,8 @@ pipr webhook serve \
 
 Use a Microsoft Entra service principal or managed identity for a hosted runner when possible, and pass its access token through `AZURE_DEVOPS_BEARER_TOKEN`. `AZURE_DEVOPS_TOKEN` accepts a PAT for local development and disposable testing; scope it to the one organization and revoke it after use.
 
+For full local adapter parity, create an organization-scoped PAT with `Code (Read & write)`, `Code (Status)`, `Identity (Read)`, and `Security (Manage)`. Pipr only reads the Security ACL API, but Azure DevOps exposes no read-only PAT scope for that API; its documented security scope is `vso.security_manage`. If commands are disabled, omit `Identity (Read)` and `Security (Manage)` because repository permission evaluation is not needed.
+
 Create Azure DevOps service-hook subscriptions for:
 
 - `git.pullrequest.created`;
@@ -65,7 +67,7 @@ Pipr rejects payloads larger than 2 MiB, bounds pending queue data to 1,000 deli
 
 Pipr resolves the comment actor through Azure DevOps Identities, expands inherited group membership, and queries the Git Repositories security namespace with extended effective permissions. Explicit and inherited denies override allows. Pipr maps read, pull-request contribution, repository contribution, policy editing, and permission management into its provider-neutral `read`, `triage`, `write`, `maintain`, and `admin` levels.
 
-The runner token needs identity and security-read scope for command authorization. If Azure DevOps returns no unique active identity or the ACL cannot be evaluated, Pipr fails closed.
+The runner token needs identity-read and security-manage scope for command authorization. If Azure DevOps returns no unique active identity or the ACL cannot be evaluated, Pipr fails closed.
 
 ## Supported behavior
 

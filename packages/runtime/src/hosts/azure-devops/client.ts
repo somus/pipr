@@ -3,11 +3,27 @@ import { createCodeHostHttpClient } from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
 import { azureOrganizationFromUrl } from "./coordinates.js";
 
-const identitySchema = z.looseObject({
-  displayName: z.string().optional(),
-  uniqueName: z.string().optional(),
-  id: z.string().optional(),
-});
+const identitySchema = z
+  .looseObject({
+    displayName: z.string().optional(),
+    providerDisplayName: z.string().optional(),
+    uniqueName: z.string().optional(),
+    id: z.string().optional(),
+    properties: z
+      .looseObject({
+        Account: z.looseObject({ $value: z.string().optional() }).optional(),
+      })
+      .optional(),
+  })
+  .transform((identity) => {
+    const displayName = identity.displayName ?? identity.providerDisplayName;
+    const uniqueName = identity.uniqueName ?? identity.properties?.Account?.$value;
+    return {
+      ...identity,
+      ...(displayName ? { displayName } : {}),
+      ...(uniqueName ? { uniqueName } : {}),
+    };
+  });
 
 const commitSchema = z.looseObject({ commitId: z.string().min(1) });
 const forkRepositorySchema = z.looseObject({ remoteUrl: z.string().min(1) });
@@ -253,7 +269,9 @@ export function createAzureDevOpsClient(
             descriptor: z.string().min(1),
             isActive: z.boolean().optional(),
             isContainer: z.boolean().optional(),
-            memberOf: z.array(z.looseObject({ descriptor: z.string().min(1) })).default([]),
+            memberOf: z
+              .array(z.union([z.string().min(1), z.looseObject({ descriptor: z.string().min(1) })]))
+              .default([]),
           }),
         ),
       );
@@ -265,7 +283,7 @@ export function createAzureDevOpsClient(
       if (!identity) return "none";
       const descriptors = [
         identity.descriptor,
-        ...identity.memberOf.map((group) => group.descriptor),
+        ...identity.memberOf.map((group) => (typeof group === "string" ? group : group.descriptor)),
       ];
       const loadAcls = (token: string) => {
         const query = new URLSearchParams({
@@ -363,13 +381,14 @@ export function createAzureDevOpsClient(
         const path = `${pullRequestPath(repositoryId, changeNumber)}/iterations/${iterationId}/changes?compareTo=0&$skip=${skip}&$top=${top}`;
         const page = await api.json(
           withApiVersion(path),
-          collectionSchema(iterationChangeSchema).extend({
+          z.looseObject({
+            changeEntries: z.array(iterationChangeSchema),
             nextSkip: z.number().int().nonnegative().optional(),
-            nextTop: z.number().int().positive().max(2_000).optional(),
+            nextTop: z.number().int().nonnegative().max(2_000).optional(),
           }),
         );
         changes.push(
-          ...page.value.map((change) => ({
+          ...page.changeEntries.map((change) => ({
             changeTrackingId: change.changeTrackingId,
             changeType: change.changeType,
             path: trimLeadingSlash(change.item.path),
@@ -378,9 +397,9 @@ export function createAzureDevOpsClient(
               : {}),
           })),
         );
-        if (page.nextSkip === undefined) return changes;
+        if (!page.nextSkip) return changes;
         skip = page.nextSkip;
-        top = page.nextTop ?? top;
+        if (page.nextTop) top = page.nextTop;
       }
     },
     async listThreads(repositoryId, changeNumber) {
@@ -445,10 +464,10 @@ export function azureDevOpsStatusState(state: CodeHostStatusState): string {
 }
 
 export function azureRepositoryPermission(bits: number): RepositoryPermission {
-  if ((bits & 1) === 0) return "none";
+  if ((bits & 2) === 0) return "none";
   if ((bits & 8192) !== 0) return "admin";
   if ((bits & 2048) !== 0) return "maintain";
-  if ((bits & 2) !== 0 && (bits & 16384) !== 0) return "write";
+  if ((bits & 4) !== 0 && (bits & 16384) !== 0) return "write";
   if ((bits & 16384) !== 0) return "triage";
   return "read";
 }
