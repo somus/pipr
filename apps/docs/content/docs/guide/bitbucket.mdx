@@ -40,6 +40,8 @@ Create repository webhooks for `pullrequest:created`, `pullrequest:updated`, `pu
 
 The review token must be an Atlassian API token created with Bitbucket scopes. The permission token needs workspace administration access to read effective repository permissions. Pipr maps Bitbucket `read`, `write`, and `admin` to the same provider-neutral levels and fails closed when no effective permission is returned.
 
+Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run this command from the versioned Pipr image with persistent state and a container health check.
+
 ## Supported behavior
 
 The Bitbucket Cloud adapter supports:

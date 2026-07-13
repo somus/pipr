@@ -35,6 +35,8 @@ export function createWebhookIngress(options: {
   const maxPayloadBytes = options.maxPayloadBytes ?? MAX_WEBHOOK_PAYLOAD_BYTES;
   const protocol = createCodeHostWebhookProtocol(options.host);
   return async (request: Request): Promise<Response> => {
+    const healthResponse = webhookHealthResponse(request);
+    if (healthResponse) return healthResponse;
     const authenticated = await readAuthenticatedWebhookPayload(
       request,
       maxPayloadBytes,
@@ -63,6 +65,11 @@ export function createWebhookIngress(options: {
       status: result === "created" ? 202 : 200,
     });
   };
+}
+
+function webhookHealthResponse(request: Request): Response | undefined {
+  if (request.method !== "GET" && request.method !== "HEAD") return undefined;
+  return new URL(request.url).pathname === "/healthz" ? new Response("OK") : undefined;
 }
 
 async function readAuthenticatedWebhookPayload(

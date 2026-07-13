@@ -144,6 +144,9 @@ describe("changed-scope", () => {
       "packages/e2e/pi-contract.ts",
       "packages/e2e/run.ts",
       "packages/e2e/scenarios.ts",
+      "packages/e2e/webhook-fetch-mock.ts",
+      "packages/e2e/webhook-health-fixture.ts",
+      "deploy/webhook/compose.yml",
       "scripts/docker-e2e.ts",
     ]) {
       expect(dockerScopeChanged(file)).toBe(true);
@@ -192,6 +195,9 @@ describe("sync-release-lockfile", () => {
     );
     expect(readFileSync(path.join(repository, "action.yml"), "utf8")).toContain(
       "docker://ghcr.io/somus/pipr:v0.1.1",
+    );
+    expect(readFileSync(path.join(repository, "deploy/webhook/compose.yml"), "utf8")).toContain(
+      "image: ghcr.io/somus/pipr:v0.1.1",
     );
     expect(readFileSync(path.join(repository, ".github/workflows/pipr.yml"), "utf8")).toContain(
       "uses: somus/pipr@v0.1.1",
@@ -355,6 +361,23 @@ describe("install.sh", () => {
 });
 
 describe("check-release-metadata", () => {
+  it("rejects a stale webhook deployment image pin", () => {
+    const repository = copyRepositoryFixture();
+    const composePath = path.join(repository, "deploy/webhook/compose.yml");
+    const rootPackage = JSON.parse(readFileSync(path.join(repository, "package.json"), "utf8")) as {
+      version: string;
+    };
+    write(
+      composePath,
+      readFileSync(composePath, "utf8").replace(
+        `ghcr.io/somus/pipr:v${rootPackage.version}`,
+        "ghcr.io/somus/pipr:v0.0.0",
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
   it("rejects missing public package publish steps", () => {
     const repository = copyRepositoryFixture();
     const workflowPath = path.join(repository, ".github/workflows/release.yml");

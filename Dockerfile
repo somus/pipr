@@ -57,11 +57,15 @@ COPY --from=build --chown=bun:bun /opt/pipr/packages/sdk/dist packages/sdk/dist
 RUN chown -R bun:bun /opt/pipr \
   && chmod +x /opt/pipr/packages/cli/dist/main.mjs \
   && ln -sf /opt/pipr/packages/cli/dist/main.mjs /usr/local/bin/pipr \
-  && pipr host-run --help >/dev/null
+  && command -v wget >/dev/null \
+  && pipr host-run --help >/dev/null \
+  && pipr webhook serve --help >/dev/null
 
 FROM runtime-base AS e2e
 COPY --chown=bun:bun packages/e2e/action-fixture.ts packages/e2e/action-fixture.ts
 COPY --chown=bun:bun packages/e2e/assertions.ts packages/e2e/assertions.ts
+COPY --chown=bun:bun packages/e2e/webhook-fetch-mock.ts packages/e2e/webhook-fetch-mock.ts
+COPY --chown=bun:bun packages/e2e/webhook-health-fixture.ts packages/e2e/webhook-health-fixture.ts
 RUN mkdir -p packages/e2e/node_modules/@usepipr \
   && ln -sf ../../../runtime packages/e2e/node_modules/@usepipr/runtime
 WORKDIR /workspace

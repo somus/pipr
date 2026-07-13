@@ -41,13 +41,13 @@ jobs:
           git fetch origin "$branch"
           git worktree add -B "$branch" "$worktree" FETCH_HEAD
           bun run sync:release-lockfile -- --root "$worktree"
-          if git -C "$worktree" diff --quiet -- bun.lock .pipr/bun.lock action.yml .github/workflows/pipr.yml; then
+          if git -C "$worktree" diff --quiet -- bun.lock .pipr/bun.lock action.yml deploy/webhook/compose.yml .github/workflows/pipr.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git -C "$worktree" config user.name "github-actions[bot]"
           git -C "$worktree" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "$worktree" add bun.lock .pipr/bun.lock action.yml .github/workflows/pipr.yml
+          git -C "$worktree" add bun.lock .pipr/bun.lock action.yml deploy/webhook/compose.yml .github/workflows/pipr.yml
           git -C "$worktree" commit -m "chore: update release metadata"
           echo "changed=true" >> "$GITHUB_OUTPUT"
 

@@ -36,6 +36,8 @@ if (scenarioArg && selectedScenarios.length === 0) {
 
 assertDockerImageExists(actionImage);
 await checkPiContract({ cwd: sourceRoot, image: actionImage });
+assertWebhookEntrypoint(actionImage);
+await assertWebhookHealth(actionImage);
 
 for (const scenario of selectedScenarios) {
   await runContainerScenario(scenario);
@@ -193,6 +195,61 @@ function assertDockerImageExists(image: string): void {
   if (result.exitCode !== 0) {
     throw new Error(`Docker image '${image}' not found; build it before check:container`);
   }
+}
+
+function assertWebhookEntrypoint(image: string): void {
+  const output = runOutput(
+    "docker",
+    ["run", "--rm", "--user", "1000:1000", image, "webhook", "serve", "--help"],
+    sourceRoot,
+  );
+  assertContains(output.stdout, "--repository <repository>");
+  assertContains(output.stdout, "--database <path>");
+  assertContains(output.stdout, "--hostname <hostname>");
+  console.log("container webhook entrypoint ok");
+}
+
+async function assertWebhookHealth(image: string): Promise<void> {
+  const healthcheckCommand = await webhookComposeHealthcheckCommand();
+  const output = runOutput(
+    "docker",
+    [
+      "run",
+      "--rm",
+      "--user",
+      "1000:1000",
+      "--entrypoint",
+      "/usr/local/bin/bun",
+      image,
+      "/opt/pipr/packages/e2e/webhook-health-fixture.ts",
+      "--",
+      ...healthcheckCommand,
+    ],
+    sourceRoot,
+  );
+  for (const host of ["gitlab", "azure-devops", "bitbucket"]) {
+    assertContains(output.stdout, `container webhook ${host} Compose healthcheck ok`);
+  }
+}
+
+async function webhookComposeHealthcheckCommand(): Promise<string[]> {
+  const compose = Bun.YAML.parse(
+    await Bun.file(join(sourceRoot, "deploy/webhook/compose.yml")).text(),
+  ) as { services?: { webhook?: { healthcheck?: { test?: unknown } } } };
+  const test = compose.services?.webhook?.healthcheck?.test;
+  if (!isComposeHealthcheck(test)) {
+    throw new Error("webhook Compose healthcheck must use a string CMD array");
+  }
+  return test.slice(1);
+}
+
+function isComposeHealthcheck(value: unknown): value is ["CMD", ...string[]] {
+  return (
+    Array.isArray(value) &&
+    value.length > 1 &&
+    value[0] === "CMD" &&
+    value.slice(1).every((part) => typeof part === "string")
+  );
 }
 
 function assertContains(output: string, expected: string): void {
