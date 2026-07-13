@@ -90,7 +90,7 @@ function commentEvent(
   return comment.parent
     ? {
         kind: "review-comment-reply",
-        reply: { ...common, parentCommentId: comment.parent?.id },
+        reply: { ...common, parentCommentId: comment.parent.id },
       }
     : { kind: "command-comment", comment: { ...common, isChangeRequest: true } };
 }
