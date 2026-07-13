@@ -9,7 +9,7 @@ describe("Bitbucket Cloud workspace", () => {
   it("fetches an exact private-fork head with an API-token header", async () => {
     const fixture = await createFixture();
     try {
-      ensureBitbucketHeadCheckout({
+      await ensureBitbucketHeadCheckout({
         rootDir: fixture.checkout,
         change: change(fixture.remote, fixture.head, true),
         env: fixture.env,
@@ -29,7 +29,7 @@ describe("Bitbucket Cloud workspace", () => {
     const fixture = await createFixture();
     try {
       git(fixture.checkout, ["remote", "add", "origin", fixture.remote]);
-      ensureBitbucketHeadCheckout({
+      await ensureBitbucketHeadCheckout({
         rootDir: fixture.checkout,
         change: change("https://bitbucket.org/workspace/repository", fixture.head, false),
         env: fixture.env,
