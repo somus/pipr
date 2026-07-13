@@ -55,7 +55,7 @@ export function createAzureDevOpsWebhookProtocol(): CodeHostWebhookProtocol {
         subscriptionId,
       };
     },
-    verifySecret(headers, secret) {
+    verifySecret(headers, secret, _payload) {
       return webhookSecretsEqual(
         headers.get("X-Pipr-Webhook-Secret") ?? basicPassword(headers.get("Authorization")),
         secret,

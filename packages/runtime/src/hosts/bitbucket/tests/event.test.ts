@@ -157,12 +157,18 @@ describe("Bitbucket Cloud events", () => {
         workspace: "/workspace",
         loadChangeRequest: async () => loaded,
       };
-      await expect(
-        parseBitbucketEvent({
-          ...options,
-          env: { BITBUCKET_EVENT_KEY: "pullrequest:fulfilled" },
-        }),
-      ).resolves.toMatchObject({ kind: "change-request", change: { action: "closed" } });
+      for (const eventKey of [
+        "pullrequest:fulfilled",
+        "pullrequest:rejected",
+        "pullrequest:superseded",
+      ]) {
+        await expect(
+          parseBitbucketEvent({
+            ...options,
+            env: { BITBUCKET_EVENT_KEY: eventKey },
+          }),
+        ).resolves.toMatchObject({ kind: "change-request", change: { action: "closed" } });
+      }
       await expect(
         parseBitbucketEvent({
           ...options,

@@ -16,7 +16,7 @@ export function createGitLabWebhookProtocol(): CodeHostWebhookProtocol {
   return {
     host: "gitlab",
     resolveExpectedRepository: (env, repository) => createGitLabClient(env).getProject(repository),
-    verifySecret(headers, secret) {
+    verifySecret(headers, secret, _payload) {
       return webhookSecretsEqual(headers.get("X-Gitlab-Token"), secret);
     },
     matchesExpectedRepository(payload, expected) {
