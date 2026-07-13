@@ -223,9 +223,9 @@ async function runWebhookServe(options: CliOptions): Promise<void> {
   });
 }
 
-function webhookHost(value: string | undefined): "gitlab" | "azure-devops" {
-  if (value === "gitlab" || value === "azure-devops") return value;
-  throw new Error("webhook serve supports --host gitlab or --host azure-devops");
+function webhookHost(value: string | undefined): "gitlab" | "azure-devops" | "bitbucket" {
+  if (value === "gitlab" || value === "azure-devops" || value === "bitbucket") return value;
+  throw new Error("webhook serve supports --host gitlab, azure-devops, or bitbucket");
 }
 
 function webhookPort(value: string | undefined): number {

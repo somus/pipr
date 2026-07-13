@@ -11,6 +11,7 @@
     "github-action",
     "gitlab",
     "azure-devops",
+    "bitbucket",
     "local-runs",
     "troubleshooting",
     "---[Settings]Configure---",

@@ -87,7 +87,7 @@ Options:
 | `--event <path>` | `PIPR_EVENT_PATH` or provider event path | Native event payload path when the provider supplies one. |
 | `--config-dir <dir>` | `.pipr` | Config directory to load. |
 
-The command selects a workspace from recognized provider CI variables, then falls back to the current directory. The GitHub Action invokes this command with `--host github` and preserves GitHub Actions logging and outputs. This release includes `github`, `gitlab`, and `azure-devops`; `bitbucket` returns an unavailable-adapter error until its stacked release lands.
+The command selects a workspace from recognized provider CI variables, then falls back to the current directory. The GitHub Action invokes this command with `--host github` and preserves GitHub Actions logging and outputs. This release includes `github`, `gitlab`, `azure-devops`, and `bitbucket`.
 
 ## `pipr webhook serve`
 
@@ -105,15 +105,15 @@ Options:
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `--host <host>` | required | Webhook provider: `gitlab` or `azure-devops`. |
-| `--repository <repository>` | required | Expected GitLab project path/ID or Azure repository name/ID. Mismatched payloads are rejected. |
+| `--host <host>` | required | Webhook provider: `gitlab`, `azure-devops`, or `bitbucket`. |
+| `--repository <repository>` | required | Expected GitLab project path/ID, Azure repository name/ID, or Bitbucket repository slug. Mismatched payloads are rejected. |
 | `--workspace <path>` | required | Dedicated trusted repository checkout. |
 | `--database <path>` | `.pipr/webhooks.sqlite` | Durable delivery and deduplication database. |
 | `--hostname <hostname>` | `127.0.0.1` | Listen hostname. Keep loopback when using a reverse proxy. |
 | `--port <port>` | `8787` | Listen port. |
 | `--config-dir <dir>` | `.pipr` | Config directory to load from Trusted Base Config. |
 
-`PIPR_WEBHOOK_SECRET` is required. Azure workers also require `AZURE_DEVOPS_ORGANIZATION`, `AZURE_DEVOPS_PROJECT`, and `PIPR_AZURE_SUBSCRIPTION_ID`. Provider credentials and model keys remain in the runner environment. Bitbucket webhook support lands with its adapter.
+`PIPR_WEBHOOK_SECRET` is required. Azure workers also require `AZURE_DEVOPS_ORGANIZATION`, `AZURE_DEVOPS_PROJECT`, and `PIPR_AZURE_SUBSCRIPTION_ID`. Bitbucket workers require `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, and `BITBUCKET_API_TOKEN`; command permission checks also require the separate workspace-admin permission credential documented in the [Bitbucket Cloud guide](/docs/guide/bitbucket). Provider credentials and model keys remain in the runner environment.
 
 ## `pipr check`
 

@@ -1,0 +1,61 @@
+---
+title: "Bitbucket Cloud"
+description: "Run Pipr reviews, commands, and reply verification on Bitbucket Cloud."
+---
+
+Run Pipr on Bitbucket Cloud through a trusted repository-webhook runner. Bitbucket pull-request pipelines can launch same-repository reviews, but source-controlled pipeline YAML is not a safe place for write-capable repository tokens or model-provider keys.
+
+## Initialize the adapter
+
+```bash
+pipr init --adapters bitbucket
+```
+
+The command creates `bitbucket.pipr.env.example`. Copy its variable names into the trusted runner's secret store and leave the checked-in example values empty.
+
+## Configure the runner
+
+```bash
+export BITBUCKET_WORKSPACE="your-workspace"
+export BITBUCKET_REPO_SLUG="your-repository"
+export BITBUCKET_EMAIL="pipr-bot@example.com"
+export BITBUCKET_API_TOKEN="..."
+export BITBUCKET_PERMISSION_EMAIL="workspace-admin@example.com"
+export BITBUCKET_PERMISSION_API_TOKEN="..."
+export PIPR_WEBHOOK_SECRET="..."
+export DEEPSEEK_API_KEY="..."
+
+pipr webhook serve \
+  --host bitbucket \
+  --repository your-repository \
+  --workspace /srv/pipr/repository \
+  --database /var/lib/pipr/webhooks.sqlite \
+  --hostname 127.0.0.1 \
+  --port 8787
+```
+
+Use a scoped user API token for the Pipr bot. Grant exactly `read:user:bitbucket`, `read:repository:bitbucket`, and `read:pullrequest:bitbucket`. Bitbucket permits PR comment creation, update, replies, and resolution through the pull-request read scope, and commit-status creation through the repository read scope, so the runtime does not need a write scope. A user token lets Pipr identify its own comments and fetch a private source fork when that bot has access; repository access tokens cannot provide those contracts. `BITBUCKET_PERMISSION_API_TOKEN` must be a separate user API token owned by a workspace administrator because Bitbucket's effective repository-permission endpoint is admin-only. It needs `read:repository:bitbucket`; set its account email through `BITBUCKET_PERMISSION_EMAIL`.
+
+Create repository webhooks for `pullrequest:created`, `pullrequest:updated`, `pullrequest:fulfilled`, `pullrequest:rejected`, `pullrequest:superseded`, and `pullrequest:comment_created`. Configure the same secret as `PIPR_WEBHOOK_SECRET`. Pipr verifies `X-Hub-Signature` with HMAC-SHA256, binds every delivery to the configured repository UUID and full name, and deduplicates retries by hook UUID, request UUID, and payload digest.
+
+The review token must be an Atlassian API token created with Bitbucket scopes. The permission token needs workspace administration access to read effective repository permissions. Pipr maps Bitbucket `read`, `write`, and `admin` to the same provider-neutral levels and fails closed when no effective permission is returned.
+
+## Supported behavior
+
+The Bitbucket Cloud adapter supports:
+
+- pull-request created and updated reviews, with terminal events normalized as closed;
+- Main Review Comment upsert and marker deduplication;
+- left-side, right-side, and multiline Inline Review Comments;
+- prior-state loading, replies, and thread resolution;
+- `@pipr` commands with effective workspace repository permissions;
+- stable-key source-commit statuses;
+- fork source checkout and exact base/head stale checks.
+
+Bitbucket Cloud's public REST API does not document directly applicable suggestion syntax, so Pipr renders suggested fixes as ordinary fenced code. Bitbucket Data Center uses different APIs and is not supported by this adapter.
+
+## Next steps
+
+- [Configure Pipr](/docs/guide/configuration) to select Review Tasks and command permission levels.
+- [Review the trust model](/docs/guide/trust-security) before accepting untrusted pull requests.
+- [Use local runs](/docs/guide/local-runs) to validate `.pipr/config.ts` before enabling webhooks.

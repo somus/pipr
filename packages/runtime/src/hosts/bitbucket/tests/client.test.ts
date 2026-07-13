@@ -1,0 +1,295 @@
+import { describe, expect, it } from "bun:test";
+import { bitbucketStatusState, createBitbucketClient } from "../client.js";
+
+describe("Bitbucket Cloud client", () => {
+  it("loads exact pull request coordinates and fork metadata", async () => {
+    const client = createBitbucketClient(env, async () => Response.json(pullRequest));
+    await expect(
+      client.loadChange({ workspace: "workspace", repository: "repository", changeNumber: 7 }),
+    ).resolves.toMatchObject({
+      coordinates: {
+        provider: "bitbucket",
+        workspace: "workspace",
+        repository: "repository",
+        repositoryUuid: "{target-repo}",
+      },
+      change: {
+        number: 7,
+        isDraft: true,
+        base: { sha: "base", ref: "main" },
+        head: { sha: "head", ref: "feature" },
+        isFork: true,
+      },
+    });
+  });
+
+  it("derives repository slugs omitted from pull request endpoint objects", async () => {
+    const withoutSlugs = structuredClone(pullRequest);
+    delete (withoutSlugs.source.repository as Partial<typeof withoutSlugs.source.repository>).slug;
+    delete (
+      withoutSlugs.destination.repository as Partial<typeof withoutSlugs.destination.repository>
+    ).slug;
+    const client = createBitbucketClient(env, async () => Response.json(withoutSlugs));
+
+    await expect(
+      client.loadChange({ workspace: "workspace", repository: "repository", changeNumber: 7 }),
+    ).resolves.toMatchObject({
+      repository: { slug: "workspace/repository" },
+      change: { isFork: true },
+    });
+  });
+
+  it("follows opaque comment pages", async () => {
+    const requests: string[] = [];
+    const client = createBitbucketClient(env, async (input) => {
+      const url = String(input);
+      requests.push(url);
+      return url.includes("page=2")
+        ? Response.json({ values: [{ id: 2, content: { raw: "second" } }] })
+        : Response.json({
+            values: [{ id: 1, content: { raw: "first" } }],
+            next: "https://api.bitbucket.org/2.0/repositories/workspace/repository/pullrequests/7/comments?page=2",
+          });
+    });
+    await expect(client.listComments(7)).resolves.toHaveLength(2);
+    expect(requests[1]).toContain("page=2");
+  });
+
+  it("rejects cross-origin pagination before sending credentials", async () => {
+    const requests: string[] = [];
+    const client = createBitbucketClient(env, async (input) => {
+      requests.push(String(input));
+      return Response.json({ values: [], next: "https://example.com/steal" });
+    });
+    await expect(client.listComments(7)).rejects.toThrow(
+      "Bitbucket pagination URL must stay inside the configured repository API",
+    );
+    expect(requests).toHaveLength(1);
+  });
+
+  it("rejects same-origin pagination outside the configured repository", async () => {
+    const requests: string[] = [];
+    const client = createBitbucketClient(env, async (input) => {
+      requests.push(String(input));
+      return Response.json({
+        values: [],
+        next: "https://api.bitbucket.org/2.0/repositories/other/repository/pullrequests/7/comments",
+      });
+    });
+    await expect(client.listComments(7)).rejects.toThrow(
+      "Bitbucket pagination URL must stay inside the configured repository API",
+    );
+    expect(requests).toHaveLength(1);
+  });
+
+  it("accepts outdated inline comments with null native anchors", async () => {
+    const client = createBitbucketClient(env, async () =>
+      Response.json({
+        values: [
+          {
+            id: 1,
+            content: { raw: "outdated" },
+            inline: { path: "a.ts", from: null, to: null, start_from: null, start_to: null },
+          },
+        ],
+      }),
+    );
+    await expect(client.listComments(7)).resolves.toMatchObject([
+      { inline: { from: null, to: null, start_from: null, start_to: null } },
+    ]);
+  });
+
+  it("omits soft-deleted comments", async () => {
+    const client = createBitbucketClient(env, async () =>
+      Response.json({
+        values: [
+          { id: 1, content: { raw: "active" } },
+          { id: 2, content: { raw: "deleted" }, deleted: true },
+        ],
+      }),
+    );
+
+    await expect(client.listComments(7)).resolves.toMatchObject([
+      { id: "1", content: { raw: "active" } },
+    ]);
+  });
+
+  it("uses native comment and status contracts", async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown }> = [];
+    const client = createBitbucketClient(env, async (input, init) => {
+      const url = String(input);
+      requests.push({
+        url,
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      if (url.endsWith("/comments"))
+        return Response.json({
+          id: 3,
+          content: { raw: "inline" },
+          inline: { path: "a.ts", to: 2 },
+        });
+      if (url.endsWith("/statuses/build")) return Response.json({ key: "pipr-review" });
+      return Response.json({ id: 1, content: { raw: "updated" } });
+    });
+
+    await client.createComment(7, { content: { raw: "inline" }, inline: { path: "a.ts", to: 2 } });
+    await client.updateComment(7, "1", "updated");
+    await client.replyToComment(7, "1", "reply");
+    await client.resolveComment(7, "1");
+    await client.setStatus("head", "pipr-review", { state: "SUCCESSFUL" });
+
+    expect(requests.map((request) => request.method)).toContain("PUT");
+    expect(requests.some((request) => request.url.endsWith("/resolve"))).toBe(true);
+    expect(requests).toContainEqual({
+      url: "https://api.bitbucket.org/2.0/repositories/workspace/repository/commit/head/statuses/build",
+      method: "POST",
+      body: { state: "SUCCESSFUL", key: "pipr-review" },
+    });
+  });
+
+  it("rejects nonnumeric reply parent IDs before sending a request", async () => {
+    let requested = false;
+    const client = createBitbucketClient(env, async () => {
+      requested = true;
+      return Response.json({});
+    });
+
+    await expect(client.replyToComment(7, "not-a-number", "reply")).rejects.toThrow(
+      "Bitbucket comment ID must be a positive integer",
+    );
+    expect(requested).toBe(false);
+  });
+
+  it("rejects nonnumeric resolution comment IDs before sending a request", async () => {
+    let requested = false;
+    const client = createBitbucketClient(env, async () => {
+      requested = true;
+      return Response.json({});
+    });
+
+    await expect(client.resolveComment(7, "not-a-number")).rejects.toThrow(
+      "Bitbucket comment ID must be a positive integer",
+    );
+    expect(requested).toBe(false);
+  });
+
+  it.each([
+    ["pending", "INPROGRESS"],
+    ["success", "SUCCESSFUL"],
+    ["failure", "FAILED"],
+    ["neutral", "STOPPED"],
+  ] as const)("maps %s statuses to %s", (state, expected) => {
+    expect(bitbucketStatusState(state)).toBe(expected);
+  });
+
+  it("uses scoped API-token Basic authentication and native resolution objects", async () => {
+    const authorizations: string[] = [];
+    const client = createBitbucketClient(env, async (_input, init) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "");
+      return Response.json({
+        values: [{ id: 1, content: { raw: "resolved" }, resolution: { type: "resolution" } }],
+      });
+    });
+    const comments = await client.listComments(7);
+    expect(authorizations).toEqual([
+      `Basic ${Buffer.from("pipr@example.com:token").toString("base64")}`,
+    ]);
+    expect(comments[0]?.resolution).toEqual({ type: "resolution" });
+  });
+
+  it("maps effective workspace repository permissions", async () => {
+    const client = createBitbucketClient(
+      {
+        ...env,
+        BITBUCKET_PERMISSION_EMAIL: "admin@example.com",
+        BITBUCKET_PERMISSION_API_TOKEN: "admin-token",
+      },
+      async (input) =>
+        String(input).includes("permissions/repositories")
+          ? Response.json({ values: [{ permission: "admin", user: { nickname: "maintainer" } }] })
+          : Response.json({}),
+    );
+    await expect(client.getRepositoryPermission("maintainer", "{target-repo}")).resolves.toBe(
+      "admin",
+    );
+  });
+
+  it("fails closed when the separate permission credential is missing", async () => {
+    const client = createBitbucketClient(env, async () => Response.json({ values: [] }));
+    await expect(client.getRepositoryPermission("maintainer", "{target-repo}")).rejects.toThrow(
+      "BITBUCKET_PERMISSION_EMAIL and BITBUCKET_PERMISSION_API_TOKEN are required",
+    );
+  });
+
+  it("uses the separate workspace-admin credential for permission queries", async () => {
+    const authorizations: string[] = [];
+    const client = createBitbucketClient(
+      {
+        ...env,
+        BITBUCKET_PERMISSION_EMAIL: "admin@example.com",
+        BITBUCKET_PERMISSION_API_TOKEN: "admin-token",
+      },
+      async (_input, init) => {
+        authorizations.push(new Headers(init?.headers).get("Authorization") ?? "");
+        return Response.json({ values: [] });
+      },
+    );
+    await client.getRepositoryPermission("maintainer", "{target-repo}");
+    expect(authorizations).toEqual([
+      `Basic ${Buffer.from("admin@example.com:admin-token").toString("base64")}`,
+    ]);
+  });
+
+  it("escapes backslashes and quotes in permission filter values", async () => {
+    let query = "";
+    const client = createBitbucketClient(
+      {
+        ...env,
+        BITBUCKET_PERMISSION_EMAIL: "admin@example.com",
+        BITBUCKET_PERMISSION_API_TOKEN: "admin-token",
+      },
+      async (input) => {
+        query = new URL(String(input)).searchParams.get("q") ?? "";
+        return Response.json({ values: [] });
+      },
+    );
+
+    await client.getRepositoryPermission('dev\\"name', "{target-repo}");
+    expect(query).toBe('repository.uuid="{target-repo}" AND user.nickname="dev\\\\\\"name"');
+  });
+});
+
+const env = {
+  BITBUCKET_WORKSPACE: "workspace",
+  BITBUCKET_REPO_SLUG: "repository",
+  BITBUCKET_EMAIL: "pipr@example.com",
+  BITBUCKET_API_TOKEN: "token",
+};
+
+const repository = (uuid: string, fullName: string) => ({
+  uuid,
+  name: fullName.split("/")[1],
+  slug: fullName.split("/")[1],
+  full_name: fullName,
+  links: { html: { href: `https://bitbucket.org/${fullName}` } },
+});
+
+const pullRequest = {
+  id: 7,
+  draft: true,
+  title: "Update fixture",
+  description: "Body",
+  author: { nickname: "developer" },
+  source: {
+    branch: { name: "feature" },
+    commit: { hash: "head" },
+    repository: repository("{source-repo}", "fork/repository"),
+  },
+  destination: {
+    branch: { name: "main" },
+    commit: { hash: "base" },
+    repository: repository("{target-repo}", "workspace/repository"),
+  },
+  links: { html: { href: "https://bitbucket.org/workspace/repository/pull-requests/7" } },
+};

@@ -32,4 +32,17 @@ describe("host-run adapter selection", () => {
       createHostRunAdapter({ host: "azure-devops", env: { AZURE_DEVOPS_TOKEN: "token" } }),
     ).toThrow("AZURE_DEVOPS_ORGANIZATION is required");
   });
+
+  it("registers Bitbucket for explicit and native pipeline selection", () => {
+    const env = {
+      BITBUCKET_WORKSPACE: "workspace",
+      BITBUCKET_REPO_SLUG: "repository",
+      BITBUCKET_EMAIL: "pipr@example.com",
+      BITBUCKET_API_TOKEN: "token",
+    };
+    expect(createHostRunAdapter({ host: "bitbucket", env }).id).toBe("bitbucket");
+    expect(createHostRunAdapter({ env: { ...env, BITBUCKET_BUILD_NUMBER: "1" } }).id).toBe(
+      "bitbucket",
+    );
+  });
 });
