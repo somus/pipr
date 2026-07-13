@@ -1,0 +1,23 @@
+packages/runtime/src/hosts/gitlab/client.ts
+  s_4ebdfc62030aaf::t_930fd523e8fee4 14-25
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_4ebdfc62030aaf::t_ea07ad7017fd24 123
+packages/runtime/src/hosts/gitlab/tests/client.test.ts
+  s_4ebdfc62030aaf::t_255e9ba542826d 197-227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "a8c769a67a69fe9d3c77fce27b3da7b7f8c974f0",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
