@@ -194,6 +194,37 @@ describe("GitLab API client", () => {
     expect(requests[4]?.body).toEqual({ body: "inline", position });
     expect(requests[6]?.body).toEqual({ resolved: true });
   });
+
+  it("accepts GitLab nulls for the unused side of an inline position", async () => {
+    const client = createGitLabClient({ GITLAB_TOKEN: "test-token" }, async () =>
+      Response.json([
+        {
+          id: "thread-1",
+          notes: [
+            {
+              id: 10,
+              body: "inline",
+              position: {
+                old_path: "src/a.ts",
+                new_path: "src/a.ts",
+                old_line: null,
+                new_line: 2,
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    const discussions = await client.listDiscussions("group/project", 7);
+
+    expect(discussions[0]?.notes[0]?.position).toMatchObject({
+      old_path: "src/a.ts",
+      new_path: "src/a.ts",
+      new_line: 2,
+    });
+    expect(discussions[0]?.notes[0]?.position?.old_line).toBeUndefined();
+  });
 });
 
 const mergeRequest = {

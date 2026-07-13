@@ -120,7 +120,7 @@ describe("webhook runner", () => {
     expect(store.failures).toEqual([{ id: "delivery-2", error: "provider failed" }]);
   });
 
-  it("writes one temporary event, selects GitLab, and cleans up after action execution", async () => {
+  it("writes one temporary event, selects GitLab, and cleans up after host-run execution", async () => {
     const observedPaths: string[] = [];
     await runWebhookDelivery(
       { id: "delivery-1", host: "gitlab", payload: '{"project":{"id":42}}' },

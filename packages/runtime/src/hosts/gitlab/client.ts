@@ -11,8 +11,18 @@ const noteSchema = z.looseObject({
 const positionSchema = z.looseObject({
   new_path: z.string().optional(),
   old_path: z.string().optional(),
-  new_line: z.number().int().positive().optional(),
-  old_line: z.number().int().positive().optional(),
+  new_line: z
+    .number()
+    .int()
+    .positive()
+    .nullish()
+    .transform((value) => value ?? undefined),
+  old_line: z
+    .number()
+    .int()
+    .positive()
+    .nullish()
+    .transform((value) => value ?? undefined),
 });
 const discussionNoteSchema = noteSchema.extend({
   resolvable: z.boolean().optional(),
