@@ -19,6 +19,7 @@ const rootDir =
 const lockPath = path.join(rootDir, "bun.lock");
 const selfReviewLockPath = path.join(rootDir, ".pipr/bun.lock");
 const actionPath = path.join(rootDir, "action.yml");
+const webhookComposePath = path.join(rootDir, "deploy/webhook/compose.yml");
 const selfReviewWorkflowPath = path.join(rootDir, ".github/workflows/pipr.yml");
 
 const rootPackage = await readPackageJson("package.json");
@@ -86,6 +87,13 @@ actionMetadata = actionMetadata.replace(
   `docker://ghcr.io/somus/pipr:v${rootPackage.version}`,
 );
 await Bun.write(actionPath, actionMetadata);
+
+let webhookCompose = await Bun.file(webhookComposePath).text();
+webhookCompose = webhookCompose.replace(
+  /ghcr\.io\/somus\/pipr:v[0-9]+\.[0-9]+\.[0-9]+/g,
+  `ghcr.io/somus/pipr:v${rootPackage.version}`,
+);
+await Bun.write(webhookComposePath, webhookCompose);
 
 let selfReviewWorkflow = await Bun.file(selfReviewWorkflowPath).text();
 selfReviewWorkflow = selfReviewWorkflow.replace(

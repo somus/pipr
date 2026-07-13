@@ -57,7 +57,9 @@ COPY --from=build --chown=bun:bun /opt/pipr/packages/sdk/dist packages/sdk/dist
 RUN chown -R bun:bun /opt/pipr \
   && chmod +x /opt/pipr/packages/cli/dist/main.mjs \
   && ln -sf /opt/pipr/packages/cli/dist/main.mjs /usr/local/bin/pipr \
-  && pipr host-run --help >/dev/null
+  && command -v wget >/dev/null \
+  && pipr host-run --help >/dev/null \
+  && pipr webhook serve --help >/dev/null
 
 FROM runtime-base AS e2e
 COPY --chown=bun:bun packages/e2e/action-fixture.ts packages/e2e/action-fixture.ts

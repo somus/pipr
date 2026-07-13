@@ -1,0 +1,41 @@
+services:
+  webhook:
+    image: ghcr.io/somus/pipr:v0.3.8 # x-release-please-version
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15m
+    env_file:
+      - ${PIPR_ENV_FILE:-.env}
+    command:
+      - webhook
+      - serve
+      - --host
+      - ${PIPR_CODE_HOST:?Set PIPR_CODE_HOST}
+      - --repository
+      - ${PIPR_REPOSITORY:?Set PIPR_REPOSITORY}
+      - --workspace
+      - /workspace
+      - --database
+      - /var/lib/pipr/webhooks.sqlite
+      - --hostname
+      - 0.0.0.0
+      - --port
+      - "8787"
+      - --config-dir
+      - ${PIPR_CONFIG_DIR:-.pipr}
+    ports:
+      - ${PIPR_BIND_ADDRESS:-127.0.0.1}:${PIPR_PORT:-8787}:8787
+    volumes:
+      - type: bind
+        source: ${PIPR_WORKSPACE:?Set PIPR_WORKSPACE}
+        target: /workspace
+      - type: bind
+        source: ${PIPR_STATE_DIR:?Set PIPR_STATE_DIR}
+        target: /var/lib/pipr
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8787/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -105,6 +105,7 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
       ".github/workflows/ci.yml",
     ].includes(file) ||
     file === "scripts/docker-e2e.ts" ||
+    file.startsWith("deploy/webhook/") ||
     file.startsWith("packages/cli/") ||
     file.startsWith("packages/runtime/") ||
     file.startsWith("packages/sdk/") ||

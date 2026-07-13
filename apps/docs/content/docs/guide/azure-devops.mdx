@@ -63,6 +63,8 @@ The worker resolves `--repository` through Azure DevOps, then requires the event
 
 Pipr rejects payloads larger than 2 MiB, bounds pending queue data to 1,000 deliveries and 32 MiB, retains the newest 10,000 terminal records, and retries failed work up to three times. Keep the listener on loopback behind your reverse proxy, persist the SQLite directory, and dedicate the workspace to this worker.
 
+Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run this command from the versioned Pipr image with persistent state and a container health check.
+
 ## Command permissions
 
 Pipr resolves the comment actor through Azure DevOps Identities, expands inherited group membership, and queries the Git Repositories security namespace with extended effective permissions. Explicit and inherited denies override allows. Pipr maps read, pull-request contribution, repository contribution, policy editing, and permission management into its provider-neutral `read`, `triage`, `write`, `maintain`, and `admin` levels.

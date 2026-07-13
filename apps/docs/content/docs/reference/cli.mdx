@@ -115,6 +115,8 @@ Options:
 
 `PIPR_WEBHOOK_SECRET` is required. Azure workers also require `AZURE_DEVOPS_ORGANIZATION`, `AZURE_DEVOPS_PROJECT`, and `PIPR_AZURE_SUBSCRIPTION_ID`. Bitbucket workers require `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, and `BITBUCKET_API_TOKEN`; command permission checks also require the separate workspace-admin permission credential documented in the [Bitbucket Cloud guide](/docs/guide/bitbucket). Provider credentials and model keys remain in the runner environment.
 
+`GET /healthz` returns `200 OK` while the HTTP server can accept deliveries. It does not inspect provider credentials or run model work. See [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for the supported Compose deployment.
+
 ## `pipr check`
 
 Type-load config and validate the runtime plan:

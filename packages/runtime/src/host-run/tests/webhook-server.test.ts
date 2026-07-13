@@ -16,6 +16,22 @@ import {
 } from "../webhook-server.js";
 
 describe("webhook runner", () => {
+  it("reports HTTP health without requiring webhook authentication", async () => {
+    const store = new MemoryDeliveryStore();
+    const ingress = createWebhookIngress({
+      host: "gitlab",
+      secret: "webhook-secret",
+      expectedRepository: { id: "42", path: "group/project" },
+      store,
+    });
+
+    const response = await ingress(new Request("http://localhost/healthz"));
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("OK");
+    expect(store.deliveries).toHaveLength(0);
+  });
+
   it("waits for the active delivery before completing shutdown", async () => {
     const store = new MemoryDeliveryStore();
     store.enqueue({ id: "delivery-1", host: "gitlab", payload: "{}" });

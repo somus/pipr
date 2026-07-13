@@ -1,0 +1,126 @@
+---
+title: "Deploy the webhook runner with Docker"
+description: "Run Pipr's trusted webhook service with Docker Compose, persistent queue state, and health checks."
+---
+
+Deploy one Pipr webhook worker for one repository with the versioned GHCR image and the provided Docker Compose file. The deployment keeps the trusted checkout and SQLite delivery queue on the host, listens on loopback for an HTTPS reverse proxy, and waits for active review work during shutdown.
+
+## Before you begin
+
+You need:
+
+- Docker Engine with Docker Compose v2;
+- a Linux host that can reach your code host and model provider;
+- one dedicated repository checkout containing `.pipr/config.ts`;
+- the provider credentials listed in the [GitLab](/docs/guide/gitlab), [Azure DevOps](/docs/guide/azure-devops), or [Bitbucket Cloud](/docs/guide/bitbucket) guide;
+- an HTTPS reverse proxy that forwards the provider webhook path to `127.0.0.1:8787`.
+
+Run one service per repository. The worker mutates its checkout while it processes deliveries, and its SQLite queue serializes work for that checkout, so don't share a workspace between containers or scale one repository across replicas.
+
+## 1. Create the deployment directories
+
+Create separate directories for deployment configuration, the trusted checkout, and durable queue state:
+
+```bash
+sudo install -d -o "$USER" -g "$USER" /srv/pipr/deployment
+sudo install -d -o 1000 -g 1000 /srv/pipr/repository /srv/pipr/state
+```
+
+The Compose service runs as UID and GID `1000`. Keep both mounted directories writable by that identity so Pipr can update the checkout and SQLite queue without running the container as root.
+
+## 2. Download the versioned deployment files
+
+Download the Compose file and environment template from the same Pipr release tag:
+
+```bash
+cd /srv/pipr/deployment
+curl --fail --location --output compose.yml \
+  https://raw.githubusercontent.com/somus/pipr/v0.3.8/deploy/webhook/compose.yml
+curl --fail --location --output .env \
+  https://raw.githubusercontent.com/somus/pipr/v0.3.8/deploy/webhook/.env.example
+chmod 600 .env
+```
+
+The Compose file pins `ghcr.io/somus/pipr:v0.3.8`. Keep the file and image on the same release so the documented CLI contract matches the container.
+
+## 3. Prepare the trusted checkout
+
+Clone the repository into the mounted workspace, then make the checkout writable by the container identity:
+
+```bash
+git clone <repository-clone-url> /srv/pipr/repository
+sudo chown -R 1000:1000 /srv/pipr/repository
+```
+
+Confirm that the default branch contains `.pipr/config.ts` and its package files. The runner loads Trusted Base Config from the change request's base commit, then checks out the exact proposed head while processing the event.
+
+## 4. Configure the environment
+
+Open `/srv/pipr/deployment/.env` and set the shared deployment values:
+
+```dotenv
+PIPR_CODE_HOST=gitlab
+PIPR_REPOSITORY=group/project
+PIPR_WORKSPACE=/srv/pipr/repository
+PIPR_STATE_DIR=/srv/pipr/state
+PIPR_WEBHOOK_SECRET=replace-with-a-long-random-secret
+DEEPSEEK_API_KEY=replace-with-your-model-key
+```
+
+If your config uses another model provider, replace `DEEPSEEK_API_KEY` with the `apiKeyEnv` declared in `.pipr/config.ts`. Set only the credential block for your selected code host:
+
+| Host | `PIPR_CODE_HOST` | Required provider values |
+| --- | --- | --- |
+| GitLab.com | `gitlab` | `GITLAB_TOKEN` |
+| Azure DevOps Services | `azure-devops` | `AZURE_DEVOPS_ORGANIZATION`, `AZURE_DEVOPS_PROJECT`, `PIPR_AZURE_SUBSCRIPTION_ID`, and either `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` |
+| Bitbucket Cloud | `bitbucket` | `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, `BITBUCKET_PERMISSION_EMAIL`, and `BITBUCKET_PERMISSION_API_TOKEN` |
+
+Keep `PIPR_BIND_ADDRESS=127.0.0.1` unless another private network provides the TLS and access boundary. Don't commit `.env` or copy its values into Compose command arguments.
+
+## 5. Start and verify the worker
+
+Pull the pinned image and start the service:
+
+```bash
+cd /srv/pipr/deployment
+docker compose pull
+docker compose up --detach
+docker compose ps
+curl --fail http://127.0.0.1:8787/healthz
+```
+
+The health request returns `OK`. It proves that the HTTP server can accept deliveries; provider authentication and model access are exercised only by a real delivery.
+
+Inspect startup and delivery records without printing the environment:
+
+```bash
+docker compose logs --follow webhook
+```
+
+Point the provider webhook at your reverse proxy's HTTPS URL and use the event list and authentication method from the matching provider guide. The proxy should preserve provider headers, cap request bodies at 2 MiB, and forward only the webhook route to port `8787`.
+
+## Operate the worker
+
+The service stores delivery state in `/srv/pipr/state/webhooks.sqlite`. Back up that directory with the container stopped, and preserve it across upgrades so provider retries remain deduplicated.
+
+To stop the worker gracefully:
+
+```bash
+docker compose down --timeout 900
+```
+
+The 15-minute stop window lets an active model run and publication finish before Docker terminates the process. Pending deliveries remain in SQLite and resume when the service starts again.
+
+To upgrade, download `compose.yml` from the new release tag, review its changes, then run:
+
+```bash
+docker compose pull
+docker compose up --detach
+```
+
+## Next steps
+
+- [Configure the GitLab webhook](/docs/guide/gitlab#commands-and-reply-verification) to select events and authenticate deliveries.
+- [Configure Azure DevOps service hooks](/docs/guide/azure-devops#commands-and-reply-verification) to bind one worker to one subscription.
+- [Configure Bitbucket Cloud webhooks](/docs/guide/bitbucket#configure-the-runner) to set event and API-token requirements.
+- [Review the trust model](/docs/guide/trust-security) before accepting events from untrusted contributors.

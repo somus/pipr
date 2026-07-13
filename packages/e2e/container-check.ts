@@ -36,6 +36,7 @@ if (scenarioArg && selectedScenarios.length === 0) {
 
 assertDockerImageExists(actionImage);
 await checkPiContract({ cwd: sourceRoot, image: actionImage });
+assertWebhookEntrypoint(actionImage);
 
 for (const scenario of selectedScenarios) {
   await runContainerScenario(scenario);
@@ -193,6 +194,18 @@ function assertDockerImageExists(image: string): void {
   if (result.exitCode !== 0) {
     throw new Error(`Docker image '${image}' not found; build it before check:container`);
   }
+}
+
+function assertWebhookEntrypoint(image: string): void {
+  const output = runOutput(
+    "docker",
+    ["run", "--rm", "--user", "1000:1000", image, "webhook", "serve", "--help"],
+    sourceRoot,
+  );
+  assertContains(output.stdout, "--repository <repository>");
+  assertContains(output.stdout, "--database <path>");
+  assertContains(output.stdout, "--hostname <hostname>");
+  console.log("container webhook entrypoint ok");
 }
 
 function assertContains(output: string, expected: string): void {

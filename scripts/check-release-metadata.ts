@@ -23,6 +23,7 @@ const releaseWorkflow = await readText(".github/workflows/release.yml");
 const releasePleaseWorkflow = await readText(".github/workflows/release-please.yml");
 const selfReviewWorkflow = await readText(".github/workflows/pipr.yml");
 const actionMetadata = await readText("action.yml");
+const webhookCompose = await readText("deploy/webhook/compose.yml");
 const bunLock = await readText("bun.lock");
 const releaseVersionExpression = githubExpression("steps.version.outputs.version");
 const releasePushTokenExpression = githubExpression(
@@ -118,6 +119,14 @@ assert(
 assert(
   actionMetadata.includes(`docker://ghcr.io/somus/pipr:v${rootPackage.version}`),
   "action.yml must pin the release image tag",
+);
+assert(
+  webhookCompose.includes(`image: ghcr.io/somus/pipr:v${rootPackage.version}`),
+  "webhook Compose deployment must pin the release image tag",
+);
+assert(
+  releasePleaseConfig.includes('"path": "deploy/webhook/compose.yml"'),
+  "Release Please must update the webhook Compose image tag",
 );
 assert(
   selfReviewWorkflow.includes(`uses: somus/pipr@v${rootPackage.version}`),
@@ -335,13 +344,13 @@ assert(
   "Release Please workflow must run the trusted lockfile sync script against the release worktree",
 );
 assert(
-  /git -C "\$worktree" diff --quiet -- [^\n]*bun\.lock[^\n]*\.pipr\/bun\.lock[^\n]*action\.yml[^\n]*\.github\/workflows\/pipr\.yml/.test(
+  /git -C "\$worktree" diff --quiet -- [^\n]*bun\.lock[^\n]*\.pipr\/bun\.lock[^\n]*action\.yml[^\n]*deploy\/webhook\/compose\.yml[^\n]*\.github\/workflows\/pipr\.yml/.test(
     releasePleaseWorkflow,
   ),
   "Release Please workflow must detect release metadata changes",
 );
 assert(
-  /git -C "\$worktree" add [^\n]*bun\.lock[^\n]*\.pipr\/bun\.lock[^\n]*action\.yml[^\n]*\.github\/workflows\/pipr\.yml/.test(
+  /git -C "\$worktree" add [^\n]*bun\.lock[^\n]*\.pipr\/bun\.lock[^\n]*action\.yml[^\n]*deploy\/webhook\/compose\.yml[^\n]*\.github\/workflows\/pipr\.yml/.test(
     releasePleaseWorkflow,
   ),
   "Release Please workflow must commit release metadata changes",

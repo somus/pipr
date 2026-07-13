@@ -35,7 +35,7 @@
     "lint": "turbo run lint",
     "format": "biome check --write .",
     "format:check": "bun run format:check:packages && bun run format:check:docs",
-    "format:check:root": "biome format .github .pipr scripts action.yml Dockerfile Dockerfile.docs package.json tsconfig.json tsconfig.base.json turbo.json release-please-config.json .release-please-manifest.json .fallowrc.json install.sh .dockerignore --files-ignore-unknown=true",
+    "format:check:root": "biome format .github .pipr deploy scripts action.yml Dockerfile Dockerfile.docs package.json tsconfig.json tsconfig.base.json turbo.json release-please-config.json .release-please-manifest.json .fallowrc.json install.sh .dockerignore --files-ignore-unknown=true",
     "format:check:docs-root": "biome format docs *.md --files-ignore-unknown=true --no-errors-on-unmatched",
     "format:check:packages": "turbo run format:check --filter='!@pipr/docs' //#format:check:root",
     "format:check:docs": "turbo run format:check --filter=@pipr/docs //#format:check:docs-root",

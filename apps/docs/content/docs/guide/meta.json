@@ -12,6 +12,7 @@
     "gitlab",
     "azure-devops",
     "bitbucket",
+    "webhook-docker",
     "local-runs",
     "troubleshooting",
     "---[Settings]Configure---",
