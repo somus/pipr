@@ -22,6 +22,22 @@ describe("Bitbucket Cloud client", () => {
     });
   });
 
+  it("derives repository slugs omitted from pull request endpoint objects", async () => {
+    const withoutSlugs = structuredClone(pullRequest);
+    delete (withoutSlugs.source.repository as Partial<typeof withoutSlugs.source.repository>).slug;
+    delete (
+      withoutSlugs.destination.repository as Partial<typeof withoutSlugs.destination.repository>
+    ).slug;
+    const client = createBitbucketClient(env, async () => Response.json(withoutSlugs));
+
+    await expect(
+      client.loadChange({ workspace: "workspace", repository: "repository", changeNumber: 7 }),
+    ).resolves.toMatchObject({
+      repository: { slug: "workspace/repository" },
+      change: { isFork: true },
+    });
+  });
+
   it("follows opaque comment pages", async () => {
     const requests: string[] = [];
     const client = createBitbucketClient(env, async (input) => {
