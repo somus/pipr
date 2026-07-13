@@ -1,0 +1,39 @@
+packages/runtime/src/hosts/gitlab/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_2b3d30af0b2d82 62-78,286,307-311
+packages/runtime/src/host-run/webhook-server.ts
+  s_4ebdfc62030aaf::t_bf604c3abfc06e 88-114,125,136-140,147-168
+  s_4ebdfc62030aaf::t_e53ee78482c29c 213
+packages/runtime/src/review/tests/comment.test.ts
+  s_4ebdfc62030aaf::t_2b3d30af0b2d82 1275-1297
+packages/runtime/src/hosts/gitlab/tests/client.test.ts
+  s_4ebdfc62030aaf::t_2b3d30af0b2d82 106-129
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_4ebdfc62030aaf::t_4b8fca60108d84 17-47,186
+  s_4ebdfc62030aaf::t_2b3d30af0b2d82 70-83,133-154,172-181
+  s_4ebdfc62030aaf::t_a609d801dd5b36 8,182-185,187
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_4ebdfc62030aaf::t_124b355cb2ed02 29-36,103,109,111-117,287,294
+packages/runtime/src/hosts/tests/http.test.ts
+  s_4ebdfc62030aaf::t_2b3d30af0b2d82 117-127
+packages/runtime/src/hosts/http.ts
+  s_4ebdfc62030aaf::t_e53ee78482c29c 16-25,74,79
+packages/runtime/src/hosts/gitlab/client.ts
+  s_4ebdfc62030aaf::t_e53ee78482c29c 2-5
+  s_4ebdfc62030aaf::t_20ba8013cd9fb7 6,227,306,310,321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "0c9119a873ed0d9d45f9be24a523ed2f25fa3683",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
