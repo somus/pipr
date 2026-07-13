@@ -209,7 +209,11 @@ Command response output publishes a normal pull request issue comment keyed by t
 
 ### Comment updates and state
 
-Before publishing, Pipr checks the current head SHA. It upserts the Main Review Comment by hidden marker and replaces the visible main body wholesale. That marker also carries Pipr-owned review state for prior finding IDs, locations, statuses, task scope, and head metadata. Reruns pass matching open prior finding locations back to the reviewer and keep open findings visible in state unless the internal verifier explicitly marks them fixed. On `pull_request.synchronize`, the verifier can recheck prior Pipr Inline Review Comments against the current diff, reply with the resolving commit, and resolve the GitHub review thread when permissions allow. On `pull_request_review_comment.created`, the verifier can process user replies to Pipr Inline Review Comments, resolve fixed findings, or explain why a still-valid finding remains open. Cleanup failures are recorded in publication metadata without failing the review. Inline Review Comments are deduped by stable finding id, reviewed head SHA, and Pipr-owned same-head location overlap.
+Before publishing, Pipr checks the current head SHA. It publishes Inline Review Comments and thread actions first, then upserts the Main Review Comment only after inline publication succeeds. The main comment is the publication watermark: a partial inline failure leaves its prior body and state unchanged. A rerun reconciles Pipr-owned markers, skips inline comments the earlier attempt already published, and advances the main comment after the remaining work succeeds.
+
+Pipr bounds retries for rate limits and transient provider failures. Before retrying a create operation whose response may have been lost, it reloads provider state and checks the Pipr marker so the retry doesn't duplicate the comment.
+
+The hidden main marker carries Pipr-owned review state for prior finding IDs, locations, statuses, task scope, and head metadata. Reruns pass matching open prior finding locations back to the reviewer and keep open findings visible in state unless the internal verifier explicitly marks them fixed. On `pull_request.synchronize`, the verifier can recheck prior Pipr Inline Review Comments against the current diff, reply with the resolving commit, and resolve the GitHub review thread when permissions allow. On `pull_request_review_comment.created`, the verifier can process user replies to Pipr Inline Review Comments, resolve fixed findings, or explain why a still-valid finding remains open. Cleanup failures are recorded in publication metadata without failing the review. Inline Review Comments are deduped by stable finding id, reviewed head SHA, and Pipr-owned same-head location overlap.
 
 See [Comments and Findings](/docs/guide/comments) for the publication model.
 
@@ -225,7 +229,7 @@ See [Comments and Findings](/docs/guide/comments) for the publication model.
 | Pi returns invalid JSON after repair | Task fails and metadata records failure. |
 | Finding targets invalid range | Finding is dropped, run continues. |
 | Stale head before publication | Publication stops before writes. |
-| Comment API failure | Publication metadata is emitted and the Action fails. |
+| Comment API failure | Publication metadata is emitted and the Action fails. If inline publication was partial, the Main Review Comment stays at its prior watermark and a rerun resumes from Pipr-owned inline markers. |
 | Stale review-thread cleanup failure | Publication metadata records the cleanup error and the Action continues. |
 
 ## Local checks

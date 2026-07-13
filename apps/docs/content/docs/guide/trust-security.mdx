@@ -87,7 +87,7 @@ Review Tasks do not receive broad code host write tools. They emit one final out
 
 | Output surface | When Pipr writes it | Safety control |
 | --- | --- | --- |
-| Main Review Comment | A task calls `ctx.comment(...)` with main output | Upserted by Pipr marker and replaced on rerun. |
+| Main Review Comment | Inline comments and thread actions for the review have succeeded | Written last as the publication watermark, then replaced by Pipr marker on a complete rerun. |
 | Inline Review Comment | A task passes valid `ReviewFinding[]` | Anchored to Diff Manifest ranges, capped by config, and deduped. |
 | Command response | A command task calls `ctx.command.reply(...)` | Keyed to the source command comment and updated on rerun. |
 | Check Run | Checks are enabled in config | Created and completed by the runtime after task execution. |
@@ -106,8 +106,9 @@ Review Tasks do not call code host APIs directly. They emit final output, then P
 - validates structured findings
 - drops invalid findings
 - caps inline comments
-- upserts the Main Review Comment by marker
 - dedupes same-head inline comments
+- publishes inline comments and thread actions with bounded, reconciliation-safe retries
+- upserts the Main Review Comment by marker after inline publication succeeds
 - records publication metadata
 
 ## Guarantees and limits
@@ -120,7 +121,7 @@ Pipr makes deterministic checks around model output and publication:
 - Pi receives read-only repository access during review.
 - Review Findings must match a changed Diff Manifest file and range before inline publication.
 - Pipr checks the current head SHA before publishing review output.
-- Reruns use Pipr-owned markers to update the Main Review Comment and skip duplicate Inline Review Comments.
+- Reruns use Pipr-owned markers to skip duplicate Inline Review Comments and advance the Main Review Comment only after publication completes.
 - Invalid findings are dropped with metadata instead of being published on invented locations.
 
 ### Runtime limits

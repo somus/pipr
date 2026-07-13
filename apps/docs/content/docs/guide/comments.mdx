@@ -49,8 +49,8 @@ Tasks choose one final output shape. Pipr rejects missing or duplicate final out
 
 | Task output | Publication behavior |
 | --- | --- |
-| `ctx.comment(markdown)` | Publishes or updates the Main Review Comment only. |
-| `ctx.comment({ main, inlineFindings })` | Publishes or updates the Main Review Comment and valid Inline Review Comments. |
+| `ctx.comment(markdown)` | Publishes or updates the Main Review Comment. |
+| `ctx.comment({ main, inlineFindings })` | Publishes valid Inline Review Comments, then updates the Main Review Comment after inline publication succeeds. |
 | `ctx.command?.reply(markdown)` | Publishes or updates a command response issue comment keyed to the source command. |
 
 ## Main Review Comment
@@ -58,6 +58,12 @@ Tasks choose one final output shape. Pipr rejects missing or duplicate final out
 ### Upserted summary
 
 The Main Review Comment is the single visible summary for a review task. Pipr upserts it by hidden marker, then replaces the visible body on rerun.
+
+### Publication watermark
+
+Pipr writes the Main Review Comment last, after Inline Review Comments and thread actions succeed. Its hidden marker is the publication watermark for the completed review state.
+
+If an inline request fails after other inline comments were accepted, Pipr leaves the prior main body and state unchanged and fails the run. A rerun reloads Pipr-owned markers, skips the inline comments that already exist, and updates the main comment after publication completes. Pipr uses bounded retries for rate limits and transient provider failures, and it reconciles markers before retrying create operations whose success response may have been lost.
 
 <img
   alt="GitHub pull request comment from github-actions bot titled Pipr Review with a summary of security and error-handling findings"
