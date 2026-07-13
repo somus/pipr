@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { memoryActionLogSink } from "../../tests/helpers/action-log-sink.js";
-import { createRuntimeActionLog } from "../logging.js";
+import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
+import { createRuntimeLog } from "../logging.js";
 
-describe("createRuntimeActionLog", () => {
+describe("createRuntimeLog", () => {
   it("redacts JSON-escaped secrets in structured fields", () => {
-    const sink = memoryActionLogSink();
+    const sink = memoryRuntimeLogSink();
     const secret = 'abc"def';
-    const log = createRuntimeActionLog({ logSink: sink.logSink, env: { API_KEY: secret } });
+    const log = createRuntimeLog({ logSink: sink.logSink, env: { API_KEY: secret } });
 
     log.error("boom", { error: secret, values: [secret] });
 
@@ -25,8 +25,8 @@ describe("createRuntimeActionLog", () => {
   });
 
   it("emits structured debug logs when PIPR_LOG_LEVEL enables debug", () => {
-    const sink = memoryActionLogSink();
-    const log = createRuntimeActionLog({
+    const sink = memoryRuntimeLogSink();
+    const log = createRuntimeLog({
       logSink: sink.logSink,
       env: { PIPR_LOG_LEVEL: "debug" },
     });
@@ -55,9 +55,9 @@ describe("createRuntimeActionLog", () => {
   });
 
   it("redacts text snippets before bounding output", () => {
-    const sink = memoryActionLogSink();
+    const sink = memoryRuntimeLogSink();
     const secret = "sk-live-abcdefghijklmnopqrstuvwxyz123456";
-    const log = createRuntimeActionLog({
+    const log = createRuntimeLog({
       logSink: sink.logSink,
       env: { DEEPSEEK_API_KEY: secret },
     });
@@ -73,9 +73,9 @@ describe("createRuntimeActionLog", () => {
   });
 
   it("redacts secret-like values that were not registered from the environment", async () => {
-    const sink = memoryActionLogSink();
+    const sink = memoryRuntimeLogSink();
     const token = "github_token_abcdefghijklmnopqrstuvwxyz123456";
-    const log = createRuntimeActionLog({ logSink: sink.logSink, env: {} });
+    const log = createRuntimeLog({ logSink: sink.logSink, env: {} });
 
     log.error(`failed ${token}`, { error: token, values: [token] });
     log.text("error", "pi invalid output", `stdout ${token}`);

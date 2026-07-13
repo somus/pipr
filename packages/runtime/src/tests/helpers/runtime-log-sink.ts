@@ -1,16 +1,16 @@
-import type { ActionLogRecord, ActionLogSink } from "../../shared/logging.js";
+import type { RuntimeLogRecord, RuntimeLogSink } from "../../shared/logging.js";
 
-export type MemoryActionLogSink = {
-  logSink: ActionLogSink;
-  records: ActionLogRecord[];
+export type MemoryRuntimeLogSink = {
+  logSink: RuntimeLogSink;
+  records: RuntimeLogRecord[];
   messages: string[];
   notices: string[];
   groups: string[];
 };
 
-export function memoryActionLogSink(): MemoryActionLogSink {
+export function memoryRuntimeLogSink(): MemoryRuntimeLogSink {
   const messages: string[] = [];
-  const records: ActionLogRecord[] = [];
+  const records: RuntimeLogRecord[] = [];
   const notices: string[] = [];
   const groups: string[] = [];
   return {
@@ -21,7 +21,7 @@ export function memoryActionLogSink(): MemoryActionLogSink {
     logSink: {
       log(record) {
         records.push(record);
-        const message = formatActionLogRecord(record);
+        const message = formatRuntimeLogRecord(record);
         messages.push(message);
         if (record.level === "notice") {
           notices.push(message);
@@ -35,7 +35,7 @@ export function memoryActionLogSink(): MemoryActionLogSink {
   };
 }
 
-function formatActionLogRecord(record: ActionLogRecord): string {
+function formatRuntimeLogRecord(record: RuntimeLogRecord): string {
   const line = JSON.stringify({
     level: record.level,
     event: record.event,

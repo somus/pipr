@@ -57,9 +57,11 @@ async function assertActionMetadataRendering(): Promise<void> {
   expect(rendered).toContain("inputs:");
   expect(rendered).toContain("outputs:");
   expect(rendered).toContain("args:");
+  expect(rendered).toContain("    - host-run");
+  expect(rendered).not.toContain("    - action");
   expect(fixtureRendered).toContain("entrypoint: /usr/local/bin/bun");
   expect(fixtureRendered).toContain("    - /opt/pipr/packages/e2e/action-fixture.ts");
-  expect(fixtureRendered).toContain("    - action");
+  expect(fixtureRendered).toContain("    - host-run");
 }
 
 async function expectFailure(message: string, fixture: PublicationFixture): Promise<void> {

@@ -1,18 +1,18 @@
 # Pipr repository instructions
 
-Pipr is a Bun and Turborepo TypeScript monorepo for Pi-powered GitHub pull request review automation. It owns the Docker Action, CLI, SDK, runtime package, product docs, `.pipr/` configuration, and local Action fixtures.
+Pipr is a Bun and Turborepo TypeScript monorepo for Pi-powered code host review automation. It owns the Docker Action, CLI, SDK, runtime package, product docs, `.pipr/` configuration, and local Action fixtures.
 
 ## Architecture and ownership
 
-Pipr owns the GitHub pull request runtime; Pi owns agent execution. Pi is the only agent runner in the Core MVP, while Fallow remains repository quality tooling and must not enter the review runtime.
+Pipr owns the provider-neutral change request runtime; Pi owns agent execution. Pi is the only agent runner in the Core MVP, while Fallow remains repository quality tooling and must not enter the review runtime.
 
 | Area | Owns | Entry points |
 |---|---|---|
 | SDK | Public configuration and authoring API | `packages/sdk/src/index.ts` |
 | Runtime | Config loading, task execution, diff handling, Pi execution, review validation, and rendering | `packages/runtime/src/` |
 | Review validation | Review contract, parse/repair, bounded-range validation, and comment publication | `packages/runtime/src/review/contract.ts`, `packages/runtime/src/review/agent/review-run.ts`, `packages/runtime/src/review/range-validation.ts`, `packages/runtime/src/review/review.ts` |
-| CLI and Action | CLI commands and GitHub Action entry | `packages/cli/src/`, `action.yml`, `Dockerfile` |
-| PR event dispatch | Action command selection, pull request entry, and GitHub payload parsing | `packages/runtime/src/action/commands.ts`, `packages/runtime/src/action/pull-request-entry.ts`, `packages/runtime/src/hosts/github/event.ts` |
+| CLI and hosted runs | CLI commands, provider-neutral host execution, and GitHub Action packaging | `packages/cli/src/`, `packages/runtime/src/host-run/`, `action.yml`, `Dockerfile` |
+| Change request dispatch | Host-run command selection, change request entry, and native payload parsing | `packages/runtime/src/host-run/commands.ts`, `packages/runtime/src/host-run/change-request-entry.ts`, `packages/runtime/src/hosts/*/event.ts` |
 | Action integration tests | Docker image, Pi contract, and `act` fixtures | `packages/e2e/` |
 | Product docs | Fumadocs content | `apps/docs/content/docs/` |
 | Domain and decisions | Product language and durable architecture | `docs/CONTEXT.md`, `docs/adr/` |
@@ -33,7 +33,7 @@ Keep user configuration in `.pipr/config.ts`. `.pi` is only the internal Pi home
 
 Treat this table as the canonical command map for task planning. Do not reopen root or package manifests solely to confirm a command already listed here; inspect them only when changing scripts, dependencies, or package-specific behavior not covered by the table.
 
-After Docker packaging changes, also verify the image can run `pi --help` and `pipr action --help`.
+After Docker packaging changes, also verify the image can run `pi --help` and `pipr host-run --help`.
 
 Local tooling is Bun 1.3.14, `act` 0.2.89, and hk 1.50.0 through mise. Action verification requires Docker. GitHub Action dispatch reads `GITHUB_EVENT_PATH` and `GITHUB_EVENT_NAME`; provider credentials remain external secrets and must not be copied into repository instructions or fixtures.
 
@@ -70,8 +70,8 @@ Never commit real local sessions, secrets, credentials, private logs, unredacted
 ## Tests
 
 - Use TDD for behavior changes: add or port one failing behavior test, implement the minimum, then refactor while green.
-- Add focused coverage when config loading, provider resolution, plan inspection, task execution, diff parsing, schema validation, comment rendering, GitHub publishing, or dry-run boundaries change.
-- Put executable tests in the nearest `tests/` folder under the source folder they cover: `src/action/commands.ts` maps to `src/action/tests/commands.test.ts`.
+- Add focused coverage when config loading, provider resolution, plan inspection, task execution, diff parsing, schema validation, comment rendering, code host publishing, or dry-run boundaries change.
+- Put executable tests in the nearest `tests/` folder under the source folder they cover: `src/host-run/commands.ts` maps to `src/host-run/tests/commands.test.ts`.
 - Use `src/tests/` only for package-root files such as `src/index.ts` or `src/types.ts`.
 - Prefer public API tests. Test internals only when they have meaningful independent complexity.
 - Preserve fixture behavior unless the test documents an intentional divergence.

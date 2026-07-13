@@ -3,13 +3,14 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PublicationError } from "@usepipr/runtime";
 import {
-  type ActionCommandResult,
+  createGitHubHostAdapter,
   type GitHubPublicationClient,
-  runActionCommandWithDependencies,
+  type HostRunCommandResult,
+  runHostRunCommandWithDependencies,
 } from "@usepipr/runtime/internal/testing";
 import { type ActAssertionMode, assertActFixture } from "./assertions.ts";
 
-type LoadedActionResult = Exclude<ActionCommandResult, { kind: "ignored" }>;
+type LoadedActionResult = Exclude<HostRunCommandResult, { kind: "ignored" }>;
 type FixtureReviewComment = Awaited<
   ReturnType<GitHubPublicationClient["listReviewComments"]>
 >[number];
@@ -17,11 +18,11 @@ type FixtureReviewThread = Awaited<
   ReturnType<GitHubPublicationClient["listReviewThreads"]>
 >[number];
 type ActionResultHandlers = {
-  [Kind in ActionCommandResult["kind"]]: (
-    result: Extract<ActionCommandResult, { kind: Kind }>,
+  [Kind in HostRunCommandResult["kind"]]: (
+    result: Extract<HostRunCommandResult, { kind: Kind }>,
   ) => Promise<void> | void;
 };
-type ActionFixtureOptions = Parameters<typeof runActionCommandWithDependencies>[0];
+type ActionFixtureOptions = Parameters<typeof runHostRunCommandWithDependencies>[0];
 type ActionFixtureContext = {
   fixturePath: string;
   options: ActionFixtureOptions;
@@ -37,9 +38,9 @@ const actionResultHandlers: ActionResultHandlers = {
 };
 
 async function main(): Promise<void> {
-  assertActionCommand(process.argv[2] ?? "action");
+  assertHostRunCommand(process.argv[2] ?? "host-run");
   const context = await actionFixtureContext();
-  const result = await runActionCommandWithDependencies(context.options);
+  const result = await runHostRunCommandWithDependencies(context.options);
   await handleActionResult(result);
   if (result.kind === "review") {
     await recordDroppedFindings(context.fixturePath, result.review.validated.droppedFindings);
@@ -47,9 +48,9 @@ async function main(): Promise<void> {
   await assertConfiguredFixture(context.fixturePath);
 }
 
-function assertActionCommand(command: string): void {
-  if (command !== "action") {
-    throw new Error(`act fixture wrapper only supports 'action', got '${command}'`);
+function assertHostRunCommand(command: string): void {
+  if (command !== "host-run") {
+    throw new Error(`act fixture wrapper only supports 'host-run', got '${command}'`);
   }
 }
 
@@ -65,7 +66,9 @@ async function actionFixtureContext(): Promise<ActionFixtureContext> {
       eventPath: requiredEnv("GITHUB_EVENT_PATH"),
       dryRun: envValue("PIPR_DRY_RUN") === "1",
       piExecutable: await actionPiExecutable(requiredEnv("PIPR_ACT_PI_EXECUTABLE")),
-      githubPublicationClient: fixturePublicationClient(fixturePath),
+      hostAdapter: createGitHubHostAdapter({
+        publicationClient: fixturePublicationClient(fixturePath),
+      }),
     },
   };
 }
@@ -107,7 +110,7 @@ function envValue(name: string): string | undefined {
   return Bun.env[name];
 }
 
-async function handleActionResult(result: ActionCommandResult): Promise<void> {
+async function handleActionResult(result: HostRunCommandResult): Promise<void> {
   await actionResultHandlers[result.kind](result as never);
 }
 
@@ -124,18 +127,20 @@ async function assertConfiguredFixture(fixturePath: string): Promise<void> {
 }
 
 function handleIgnoredActionResult(
-  result: Extract<ActionCommandResult, { kind: "ignored" }>,
+  result: Extract<HostRunCommandResult, { kind: "ignored" }>,
 ): void {
   info(`pipr ignored event: ${result.reason}`);
 }
 
-function handleDryRunActionResult(result: Extract<ActionCommandResult, { kind: "dry-run" }>): void {
+function handleDryRunActionResult(
+  result: Extract<HostRunCommandResult, { kind: "dry-run" }>,
+): void {
   logActionContext(result);
   info("PIPR_DRY_RUN=1; stopping before review runtime, model, or GitHub publishing calls");
 }
 
 async function handleCommandHelpActionResult(
-  result: Extract<ActionCommandResult, { kind: "command-help" }>,
+  result: Extract<HostRunCommandResult, { kind: "command-help" }>,
 ): Promise<void> {
   logActionContext(result);
   info(`pipr command help: ${result.reason}`);
@@ -143,7 +148,7 @@ async function handleCommandHelpActionResult(
 }
 
 async function handleReviewActionResult(
-  result: Extract<ActionCommandResult, { kind: "review" }>,
+  result: Extract<HostRunCommandResult, { kind: "review" }>,
 ): Promise<void> {
   logActionContext(result);
   info(
@@ -165,7 +170,7 @@ async function handleReviewActionResult(
 }
 
 async function handleCommandResponseActionResult(
-  result: Extract<ActionCommandResult, { kind: "command-response" }>,
+  result: Extract<HostRunCommandResult, { kind: "command-response" }>,
 ): Promise<void> {
   logActionContext(result);
   info(
@@ -176,7 +181,7 @@ async function handleCommandResponseActionResult(
 }
 
 async function handleVerifierActionResult(
-  result: Extract<ActionCommandResult, { kind: "verifier" }>,
+  result: Extract<HostRunCommandResult, { kind: "verifier" }>,
 ): Promise<void> {
   logActionContext(result);
   info(`pipr verifier processed review comment reply with ${result.errors.length} error(s)`);

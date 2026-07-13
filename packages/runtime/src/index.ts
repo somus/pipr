@@ -1,24 +1,3 @@
-export type {
-  ActionCommandOptions,
-  ActionCommandResult,
-  ActionLogRecord,
-  ActionLogSink,
-  DryRunCommandOptions,
-  DryRunCommandResult,
-  InitCommandOptions,
-  InspectCommandResult,
-  LocalReviewCommandOptions,
-  LocalReviewCommandResult,
-  RuntimeCommandOptions,
-} from "./action/commands.js";
-export {
-  runActionCommand,
-  runDryRunCommand,
-  runInitCommand,
-  runInspectCommand,
-  runLocalReviewCommand,
-  runValidateCommand,
-} from "./action/commands.js";
 export type { OfficialInitAdapter } from "./config/init.js";
 export { supportedOfficialInitAdapters } from "./config/init.js";
 export type {
@@ -27,6 +6,27 @@ export type {
   OfficialInitRecipeId,
 } from "./config/recipes.js";
 export { listOfficialInitRecipes, supportedOfficialInitRecipes } from "./config/recipes.js";
+export type {
+  DryRunCommandOptions,
+  DryRunCommandResult,
+  HostRunCommandOptions,
+  HostRunCommandResult,
+  InitCommandOptions,
+  InspectCommandResult,
+  LocalReviewCommandOptions,
+  LocalReviewCommandResult,
+  RuntimeCommandOptions,
+  RuntimeLogRecord,
+  RuntimeLogSink,
+} from "./host-run/commands.js";
+export {
+  runDryRunCommand,
+  runHostRunCommand,
+  runInitCommand,
+  runInspectCommand,
+  runLocalReviewCommand,
+  runValidateCommand,
+} from "./host-run/commands.js";
 export type { PublicationResult } from "./review/publication-result.js";
 export { PublicationError } from "./review/publication-result.js";
 export type {

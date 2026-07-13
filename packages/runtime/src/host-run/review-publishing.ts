@@ -2,7 +2,7 @@ import type { Task } from "@usepipr/sdk";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import { publicationPlanForHostCapabilities } from "../review/comment.js";
 import { type RuntimeCommandInvocation, runTaskRuntime } from "../review/task/task-runtime.js";
-import type { RuntimeActionLog } from "../shared/logging.js";
+import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import {
   finalizeRuntimeChecks,
@@ -10,13 +10,13 @@ import {
   startRuntimeChecks,
 } from "./runtime-checks.js";
 import type {
-  ActionCommandDependencyOptions,
+  HostRunCommandDependencyOptions,
   TrustedReviewAndPublishResult,
   TrustedRuntimeProject,
 } from "./types.js";
 
 export async function runTrustedReviewAndPublish(options: {
-  options: ActionCommandDependencyOptions;
+  options: HostRunCommandDependencyOptions;
   adapter: CodeHostAdapter;
   trustedRuntime: TrustedRuntimeProject;
   event: ChangeRequestEventContext;
@@ -24,7 +24,7 @@ export async function runTrustedReviewAndPublish(options: {
   taskInput?: unknown;
   selectedTasks: Task<unknown>[];
   commandInvocation?: RuntimeCommandInvocation;
-  log: RuntimeActionLog;
+  log: RuntimeLog;
 }): Promise<TrustedReviewAndPublishResult> {
   const checks = await startRuntimeChecks({
     adapter: options.adapter,

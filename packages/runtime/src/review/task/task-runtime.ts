@@ -1,11 +1,11 @@
 import type { Agent, DiffManifestOptions, SecretRef, Task, TaskContext } from "@usepipr/sdk";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
-import { selectRuntimeTasks } from "../../action/entry-dispatch.js";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/diff.js";
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
-import type { RuntimeActionLog } from "../../shared/logging.js";
+import { selectRuntimeTasks } from "../../host-run/entry-dispatch.js";
+import type { RuntimeLog } from "../../shared/logging.js";
 import type {
   ChangeRequestEventContext,
   DiffManifest,
@@ -76,7 +76,7 @@ export type RunTaskRuntimeOptions = {
   loadInlineThreadContexts?: () => Promise<import("../../hosts/types.js").InlineThreadContext[]>;
   checkSink?: RuntimeCheckSink;
   commandInvocation?: RuntimeCommandInvocation;
-  log?: RuntimeActionLog;
+  log?: RuntimeLog;
   taskLog?: TaskContext["log"];
 };
 

@@ -112,11 +112,11 @@ The implementation is partially ready:
 
 Several seams still encode GitHub assumptions and should be fixed once before implementing provider modules:
 
-- `packages/runtime/src/action/commands.ts` selects the event path using `GITHUB_EVENT_NAME` and documents the command as a GitHub Action workflow.
-- `packages/runtime/src/action/action-host.ts` defaults directly to the GitHub adapter and exposes GitHub-specific client injection.
-- `packages/runtime/src/action/types.ts` exposes GitHub-specific test dependencies.
-- `packages/runtime/src/action/runtime-checks.ts`, `packages/cli/src/runner.ts`, and several logs and errors call the generic status capability a GitHub Check Run.
-- `packages/runtime/src/action/verifier-entry.ts` contains the literal `github-actions[bot]` actor rule.
+- `packages/runtime/src/host-run/commands.ts` selects the event path through a Code Host Adapter.
+- `packages/runtime/src/host-run/adapter.ts` resolves the selected provider and accepts a complete adapter only through the internal test seam.
+- `packages/runtime/src/host-run/types.ts` defines provider-neutral hosted-run inputs and results.
+- `packages/runtime/src/host-run/runtime-checks.ts`, `packages/cli/src/runner.ts`, and shared logging use provider-neutral status and runtime terminology.
+- `packages/runtime/src/host-run/verifier-entry.ts` delegates provider-authored reply detection to the adapter.
 - `packages/runtime/src/review/agent/agent-prompt.ts` tells the model that GitHub applies `suggestedFix`.
 - `packages/runtime/src/config/init.ts` supports only the GitHub workflow and `pipr init` rejects the three target adapters.
 - `RepositoryRef` carries only `slug` and `url`. That is insufficient as a durable API locator for Azure's organization, project, and repository UUID, and it encourages fragile parsing for the other providers.
@@ -134,7 +134,7 @@ Add a provider resolver at the CLI boundary. The recommended order is:
 
 Do not silently default to GitHub once more than one production adapter exists. A wrong adapter can read valid-looking environment variables and publish to the wrong native resource.
 
-Rename the internal Action command to a provider-neutral host-run concept while retaining `pipr action` as a public command only if compatibility requires it. Logs, dry-run help, errors, and outputs should use Code Host Adapter or host run terminology.
+Use `pipr host-run` as the only hosted execution command, including for the GitHub Action. Logs, dry-run help, errors, and outputs should use Code Host Adapter or host run terminology.
 
 ### 2. Separate event kind from provider action
 
@@ -659,7 +659,7 @@ Record only redacted request shapes and resulting native IDs in test output. Do 
 
 ### Repository checks
 
-During implementation, run provider-local tests first. Before a PR, run `mise run check`. Because adapter work changes Docker packaging, workflow fixtures, event handling, and CLI mapping, also run `mise run check-actions`. Verify the image can run both `pi --help` and `pipr action --help`, then run the three provider smoke repositories against the exact image digest under review.
+During implementation, run provider-local tests first. Before a PR, run `mise run check`. Because adapter work changes Docker packaging, workflow fixtures, event handling, and CLI mapping, also run `mise run check-actions`. Verify the image can run both `pi --help` and `pipr host-run --help`, then run the three provider smoke repositories against the exact image digest under review.
 
 ## Acceptance criteria for each adapter
 

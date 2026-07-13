@@ -7,7 +7,7 @@ import { z } from "zod";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
 import { type PiRunOptions, type PiRunResult, type PiRunUsage, runPi } from "../../pi/runner.js";
-import { boundedLogSnippet, type RuntimeActionLog } from "../../shared/logging.js";
+import { boundedLogSnippet, type RuntimeLog } from "../../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
 import { parseReviewResult, reviewResultSchemaId } from "../review.js";
@@ -44,7 +44,7 @@ export type RunReviewAgentOptions = {
     taskContext?: TaskContext;
     priorReviewState?: PriorReviewState;
     runId?: string;
-    log?: RuntimeActionLog;
+    log?: RuntimeLog;
     piRunSink?: (run: PiRunStats) => void;
   };
 };
@@ -434,7 +434,7 @@ function parseDurationSeconds(value: DurationInput): number {
   return amount;
 }
 
-function assertSuccessfulPiResult(result: PiRunResult, log: RuntimeActionLog | undefined): void {
+function assertSuccessfulPiResult(result: PiRunResult, log: RuntimeLog | undefined): void {
   if (result.exitCode === 0) {
     return;
   }

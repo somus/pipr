@@ -1,15 +1,15 @@
 # @usepipr/runtime
 
-`@usepipr/runtime` owns Pipr's config loading, Action and local command
+`@usepipr/runtime` owns Pipr's config loading, hosted and local command
 execution, Diff Manifest creation, Pi execution, review validation, and
 publication planning.
 
-Most users should interact with this package through the `pipr` CLI or the
-GitHub Action. Repository configs should import from `@usepipr/sdk`.
+Most users should interact with this package through the `pipr` CLI or a code
+host integration. Repository configs should import from `@usepipr/sdk`.
 
 ## Technical Notes
 
-- The package root exports command APIs for init, Action runs, dry runs,
+- The package root exports command APIs for init, hosted runs, dry runs,
   config checks, plan inspection, and local review.
 - `./runtime-tools-extension` is the static Pi runtime tools extension loaded
   during condensed Diff Manifest runs.
@@ -23,12 +23,12 @@ GitHub Action. Repository configs should import from `@usepipr/sdk`.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/action` | CLI and GitHub Action command orchestration |
+| `src/host-run` | Provider-neutral hosted event orchestration |
 | `src/config` | `.pipr/config.ts` loading, init files, recipes, and SDK stubs |
 | `src/diff` | Diff Manifest parsing, projection, ranges, and path filters |
 | `src/pi` | Pi subprocess contract, runtime tools, and provider wiring |
 | `src/review` | Task execution, agent prompts, validation, comments, and publication plans |
-| `src/hosts` | Code host adapters for GitHub and local runs |
+| `src/hosts` | Code host adapters and local-run integration |
 
 ## Local Checks
 

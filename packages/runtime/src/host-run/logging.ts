@@ -1,10 +1,10 @@
-import type { RuntimeActionLog } from "../shared/logging.js";
+import type { RuntimeLog } from "../shared/logging.js";
 import { shortSha } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
 import type { TrustedRuntimeProject } from "./types.js";
 
 export async function logPhase<T>(
-  log: RuntimeActionLog,
+  log: RuntimeLog,
   name: string,
   run: () => Promise<T> | T,
 ): Promise<T> {
@@ -24,7 +24,7 @@ export async function logPhase<T>(
   }
 }
 
-export function logEventContext(log: RuntimeActionLog, event: ChangeRequestEventContext): void {
+export function logEventContext(log: RuntimeLog, event: ChangeRequestEventContext): void {
   log.notice("event", {
     platform: event.platform.id,
     eventName: event.eventName,
@@ -38,7 +38,7 @@ export function logEventContext(log: RuntimeActionLog, event: ChangeRequestEvent
   });
 }
 
-export function logTrustedRuntime(log: RuntimeActionLog, runtime: TrustedRuntimeProject): void {
+export function logTrustedRuntime(log: RuntimeLog, runtime: TrustedRuntimeProject): void {
   log.notice("trusted config", {
     source: runtime.settings.source,
     trustedConfigSha: shortSha(runtime.trustedConfigSha),
@@ -52,14 +52,14 @@ export function logTrustedRuntime(log: RuntimeActionLog, runtime: TrustedRuntime
   logConfigWarnings(log, runtime.settings.warnings);
 }
 
-export function logConfigWarnings(log: RuntimeActionLog, warnings: readonly string[]): void {
+export function logConfigWarnings(log: RuntimeLog, warnings: readonly string[]): void {
   for (const warning of warnings) {
     log.warning("config warning", { warning });
   }
 }
 
 export function addProviderSecrets(
-  log: RuntimeActionLog,
+  log: RuntimeLog,
   config: PiprConfig,
   env: NodeJS.ProcessEnv | undefined,
 ): void {

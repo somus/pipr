@@ -1,30 +1,30 @@
 import { redactPotentialSecrets } from "./redaction.js";
 
-export type ActionLogSink = {
-  log(record: ActionLogRecord): void;
+export type RuntimeLogSink = {
+  log(record: RuntimeLogRecord): void;
   group<T>(name: string, run: () => Promise<T>): Promise<T>;
 };
 
-export type ActionLogRecord = {
+export type RuntimeLogRecord = {
   level: LogLevel;
   event: string;
-  fields: ActionLogRecordFields;
+  fields: RuntimeLogRecordFields;
   text?: string;
 };
 
-export type ActionLogFields = Record<
+export type RuntimeLogFields = Record<
   string,
   string | number | boolean | readonly string[] | undefined
 >;
 
-export type ActionLogRecordFields = Record<string, string | number | boolean | readonly string[]>;
+export type RuntimeLogRecordFields = Record<string, string | number | boolean | readonly string[]>;
 
-export type RuntimeActionLog = {
-  info(event: string, fields?: ActionLogFields): void;
-  notice(event: string, fields?: ActionLogFields): void;
-  warning(event: string, fields?: ActionLogFields): void;
-  error(event: string, fields?: ActionLogFields): void;
-  debug(event: string, fields?: ActionLogFields): void;
+export type RuntimeLog = {
+  info(event: string, fields?: RuntimeLogFields): void;
+  notice(event: string, fields?: RuntimeLogFields): void;
+  warning(event: string, fields?: RuntimeLogFields): void;
+  error(event: string, fields?: RuntimeLogFields): void;
+  debug(event: string, fields?: RuntimeLogFields): void;
   text(level: LogLevel, event: string, text: string): void;
   textSnippet(
     level: LogLevel,
@@ -43,10 +43,10 @@ export type LogLevel = "info" | "notice" | "warning" | "error" | "debug";
 
 const sensitiveEnvNamePattern = /(TOKEN|SECRET|PASSWORD|PASS|KEY|AUTH|CREDENTIAL|COOKIE)/i;
 
-export function createRuntimeActionLog(options: {
-  logSink?: ActionLogSink;
+export function createRuntimeLog(options: {
+  logSink?: RuntimeLogSink;
   env?: NodeJS.ProcessEnv;
-}): RuntimeActionLog {
+}): RuntimeLog {
   const secrets = new Set<string>();
   for (const [key, value] of Object.entries(options.env ?? process.env)) {
     if (sensitiveEnvNamePattern.test(key)) {
@@ -56,7 +56,7 @@ export function createRuntimeActionLog(options: {
   const debugEnabled =
     (options.env ?? process.env).ACTIONS_STEP_DEBUG === "true" ||
     (options.env ?? process.env).PIPR_LOG_LEVEL === "debug";
-  const sink = options.logSink ?? noopActionLogSink;
+  const sink = options.logSink ?? noopRuntimeLogSink;
 
   return {
     debugEnabled,
@@ -146,10 +146,10 @@ function redact(message: string, secrets: Set<string>): string {
 }
 
 function compactFields(
-  fields: ActionLogFields | undefined,
+  fields: RuntimeLogFields | undefined,
   secrets: Set<string>,
-): ActionLogRecordFields {
-  const compact: ActionLogRecordFields = {};
+): RuntimeLogRecordFields {
+  const compact: RuntimeLogRecordFields = {};
   for (const [key, value] of Object.entries(fields ?? {})) {
     if (typeof value === "string") {
       compact[key] = redact(value, secrets);
@@ -171,11 +171,11 @@ function formatTextSnippet(
 }
 
 function emitRecord(
-  sink: ActionLogSink,
+  sink: RuntimeLogSink,
   secrets: Set<string>,
   level: LogLevel,
   event: string,
-  fields?: ActionLogFields,
+  fields?: RuntimeLogFields,
   text?: string,
 ): void {
   sink.log({
@@ -186,7 +186,7 @@ function emitRecord(
   });
 }
 
-const noopActionLogSink: ActionLogSink = {
+const noopRuntimeLogSink: RuntimeLogSink = {
   log() {},
   async group(_name, run) {
     return await run();

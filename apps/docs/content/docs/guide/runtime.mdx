@@ -13,10 +13,10 @@ Use this page for the end-to-end flow. Use [Comments and Findings](/docs/guide/c
 
 | Mode | Command or trigger | Publishes comments |
 | --- | --- | --- |
-| Change request event | GitHub `pull_request` event through `pipr action` | Yes |
+| Change request event | Code host event through `pipr host-run` | Yes |
 | Command comment | GitHub `issue_comment` event such as `@pipr review` | Yes |
 | Local review | `pipr review --base <sha> [--head <sha>]` | No |
-| Dry run | `pipr dry-run --event <path>` or `PIPR_DRY_RUN=1` in Action | No |
+| Dry run | `pipr dry-run --host <host> --event <path>` or `PIPR_DRY_RUN=1` in a hosted run | No |
 
 Local review uses the local code host adapter. It builds the same Diff Manifest and executes every unique change-request task that is not marked `local: false`, but publication is disabled.
 

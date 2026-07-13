@@ -1,11 +1,11 @@
 import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
-  type ActionCommandResult,
-  type ActionLogRecord,
-  type ActionLogSink,
-  runActionCommand,
+  type HostRunCommandResult,
+  type RuntimeLogRecord,
+  type RuntimeLogSink,
   runDryRunCommand,
+  runHostRunCommand,
   runInitCommand,
   runInspectCommand,
   runLocalReviewCommand,
@@ -21,8 +21,6 @@ import {
   resolveCurrentExecutablePath,
   runPiprUpdate,
 } from "./update.js";
-
-type ActionOptions = Parameters<typeof runActionCommand>[0];
 
 type CliOptions = {
   configDir: string;
@@ -89,12 +87,6 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .action(runInit);
 
   program
-    .command("action")
-    .description("Run inside GitHub Docker Action")
-    .option("--config-dir <dir>", "Config directory", ".pipr")
-    .action(runAction);
-
-  program
     .command("host-run")
     .description("Run a change request event through a Code Host Adapter")
     .option("--host <host>", "Code host adapter")
@@ -112,7 +104,8 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
   program
     .command("dry-run")
     .description("Load config and event without publishing")
-    .requiredOption("--event <path>", "GitHub event JSON path")
+    .requiredOption("--event <path>", "Native event payload path")
+    .option("--host <host>", "Code host adapter")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .action(runDryRun);
 
@@ -160,26 +153,22 @@ Prefer it over guessing commands or config shape from memory.
   skill path  Materialize the setup skill and print its directory path
 `;
 
-async function runAction(options: CliOptions): Promise<void> {
-  writeActionResult(await runActionCommand(actionOptions(options)));
-}
-
 async function runHostRun(options: CliOptions): Promise<void> {
   const env = process.env;
-  const result = await runActionCommand({
-    rootDir:
-      env.GITHUB_WORKSPACE ??
-      env.CI_PROJECT_DIR ??
-      env.BITBUCKET_CLONE_DIR ??
-      env.BUILD_SOURCESDIRECTORY ??
-      process.cwd(),
+  const isGitHubAction = env.GITHUB_ACTIONS === "true";
+  const result = await runHostRunCommand({
+    rootDir: hostRunRootDir(env),
     configDir: options.configDir,
     host: options.host,
     eventPath: options.event ?? env.PIPR_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
     env,
     dryRun: env.PIPR_DRY_RUN === "1",
-    logSink: localConsoleLogSink,
+    logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
   });
+  if (isGitHubAction) {
+    writeGitHubActionResult(result);
+    return;
+  }
   if (result.kind === "ignored") {
     console.log(`ignored: ${result.reason}`);
     return;
@@ -187,25 +176,19 @@ async function runHostRun(options: CliOptions): Promise<void> {
   console.log(`pipr ${result.kind} completed for change #${result.event.change.number}`);
 }
 
-function actionOptions(options: CliOptions): ActionOptions {
-  const eventPath = process.env.GITHUB_EVENT_PATH;
-  if (!eventPath) {
-    throw new Error("GITHUB_EVENT_PATH is required for pipr action");
-  }
-  return {
-    rootDir: process.env.GITHUB_WORKSPACE ?? process.cwd(),
-    configDir: process.env["INPUT_CONFIG-DIR"] || options.configDir,
-    host: "github",
-    env: process.env,
-    eventPath,
-    dryRun: process.env.PIPR_DRY_RUN === "1",
-    logSink: githubActionsLogSink,
-  };
+function hostRunRootDir(env: NodeJS.ProcessEnv): string {
+  return (
+    env.GITHUB_WORKSPACE ??
+    env.CI_PROJECT_DIR ??
+    env.BITBUCKET_CLONE_DIR ??
+    env.BUILD_SOURCESDIRECTORY ??
+    process.cwd()
+  );
 }
 
-const githubActionsLogSink: ActionLogSink = {
+const githubActionsLogSink: RuntimeLogSink = {
   log(record) {
-    githubActionLogWriters[record.level](formatGitHubActionLogRecord(record));
+    githubActionLogWriters[record.level](formatGitHubRuntimeLogRecord(record));
   },
   async group(name, run) {
     return await core.group(name, run);
@@ -218,9 +201,9 @@ const githubActionLogWriters = {
   warning: core.warning,
   error: core.error,
   debug: core.debug,
-} satisfies Record<ActionLogRecord["level"], (message: string) => void>;
+} satisfies Record<RuntimeLogRecord["level"], (message: string) => void>;
 
-function formatGitHubActionLogRecord(record: ActionLogRecord): string {
+function formatGitHubRuntimeLogRecord(record: RuntimeLogRecord): string {
   const line = JSON.stringify({
     level: record.level,
     event: record.event,
@@ -229,82 +212,87 @@ function formatGitHubActionLogRecord(record: ActionLogRecord): string {
   return record.text === undefined ? line : `${line}\n${record.text}`;
 }
 
-function writeActionResult(result: ActionCommandResult): void {
+function writeGitHubActionResult(result: HostRunCommandResult): void {
   if (result.kind === "ignored") {
     core.info(`pipr ignored event: ${result.reason}`);
     return;
   }
-  writeLoadedActionResult(result);
+  writeLoadedGitHubActionResult(result);
 }
 
-type LoadedActionResult = Exclude<ActionCommandResult, { kind: "ignored" }>;
-type PublishedActionResult = Exclude<LoadedActionResult, { kind: "dry-run" }>;
-type CommandActionResult = Extract<
-  PublishedActionResult,
+type LoadedGitHubActionResult = Exclude<HostRunCommandResult, { kind: "ignored" }>;
+type PublishedGitHubActionResult = Exclude<LoadedGitHubActionResult, { kind: "dry-run" }>;
+type CommandGitHubActionResult = Extract<
+  PublishedGitHubActionResult,
   { kind: "command-help" | "command-response" }
 >;
-type ReviewWorkflowActionResult = Exclude<PublishedActionResult, CommandActionResult>;
+type ReviewWorkflowGitHubActionResult = Exclude<
+  PublishedGitHubActionResult,
+  CommandGitHubActionResult
+>;
 
-function writeLoadedActionResult(result: LoadedActionResult): void {
+function writeLoadedGitHubActionResult(result: LoadedGitHubActionResult): void {
   core.info(
     `pipr loaded change #${result.event.change.number} for ${result.event.repository.slug}`,
   );
   core.info(`pipr config source: ${result.configSource}`);
   if (result.kind === "dry-run") {
-    writeDryRunActionResult(result);
+    writeDryRunGitHubActionResult(result);
     return;
   }
-  writePublishedActionResult(result);
+  writePublishedGitHubActionResult(result);
 }
 
-function writePublishedActionResult(result: PublishedActionResult): void {
+function writePublishedGitHubActionResult(result: PublishedGitHubActionResult): void {
   if (result.kind === "command-help" || result.kind === "command-response") {
-    writeCommandActionResult(result);
+    writeCommandGitHubActionResult(result);
     return;
   }
-  writeReviewWorkflowActionResult(result);
+  writeReviewWorkflowGitHubActionResult(result);
 }
 
-function writeCommandActionResult(result: CommandActionResult): void {
+function writeCommandGitHubActionResult(result: CommandGitHubActionResult): void {
   switch (result.kind) {
     case "command-help":
-      writeCommandHelpActionResult(result);
+      writeCommandHelpGitHubActionResult(result);
       break;
     case "command-response":
-      writeCommandResponseActionResult(result);
+      writeCommandResponseGitHubActionResult(result);
       break;
     default:
       result satisfies never;
   }
 }
 
-function writeReviewWorkflowActionResult(result: ReviewWorkflowActionResult): void {
+function writeReviewWorkflowGitHubActionResult(result: ReviewWorkflowGitHubActionResult): void {
   switch (result.kind) {
     case "review":
-      writeReviewActionResult(result);
+      writeReviewGitHubActionResult(result);
       break;
     case "verifier":
-      writeVerifierActionResult(result);
+      writeVerifierGitHubActionResult(result);
       break;
     default:
       result satisfies never;
   }
 }
 
-function writeDryRunActionResult(result: Extract<ActionCommandResult, { kind: "dry-run" }>): void {
+function writeDryRunGitHubActionResult(
+  result: Extract<HostRunCommandResult, { kind: "dry-run" }>,
+): void {
   void result;
   core.info("PIPR_DRY_RUN=1; stopping before review runtime, model, or GitHub publishing calls");
 }
 
-function writeCommandHelpActionResult(
-  result: Extract<ActionCommandResult, { kind: "command-help" }>,
+function writeCommandHelpGitHubActionResult(
+  result: Extract<HostRunCommandResult, { kind: "command-help" }>,
 ): void {
   core.info(`pipr command help: ${result.reason}`);
   core.setOutput("main-comment", result.body);
 }
 
-function writeCommandResponseActionResult(
-  result: Extract<ActionCommandResult, { kind: "command-response" }>,
+function writeCommandResponseGitHubActionResult(
+  result: Extract<HostRunCommandResult, { kind: "command-response" }>,
 ): void {
   core.info(
     `pipr command '${result.command}' published response comment (${result.publication.action})`,
@@ -313,8 +301,8 @@ function writeCommandResponseActionResult(
   core.setOutput("publication", JSON.stringify(result.publication));
 }
 
-function writeVerifierActionResult(
-  result: Extract<ActionCommandResult, { kind: "verifier" }>,
+function writeVerifierGitHubActionResult(
+  result: Extract<HostRunCommandResult, { kind: "verifier" }>,
 ): void {
   core.info(
     `pipr verifier processed review comment reply with ${result.errors.length} publication error(s)`,
@@ -323,7 +311,9 @@ function writeVerifierActionResult(
   core.setOutput("publication", JSON.stringify({ inlineResolutionErrors: result.errors }));
 }
 
-function writeReviewActionResult(result: Extract<ActionCommandResult, { kind: "review" }>): void {
+function writeReviewGitHubActionResult(
+  result: Extract<HostRunCommandResult, { kind: "review" }>,
+): void {
   core.info(
     `pipr review produced ${result.review.validated.validFindings.length} valid inline finding(s), ` +
       `${result.review.validated.droppedFindings.length} dropped finding(s)`,
@@ -502,7 +492,7 @@ const stderrTaskLog = {
   },
 };
 
-const localConsoleLogSink: ActionLogSink = {
+const localConsoleLogSink: RuntimeLogSink = {
   log(record) {
     console.error(formatLocalLogRecord(record));
   },
@@ -511,7 +501,7 @@ const localConsoleLogSink: ActionLogSink = {
   },
 };
 
-function formatLocalLogRecord(record: ActionLogRecord): string {
+function formatLocalLogRecord(record: RuntimeLogRecord): string {
   const fields = Object.entries(record.fields)
     .map(([key, value]) => formatLocalLogField(key, value))
     .filter((field): field is string => field !== undefined);
@@ -520,7 +510,7 @@ function formatLocalLogRecord(record: ActionLogRecord): string {
   return record.text === undefined ? formatted : `${formatted}\n${record.text}`;
 }
 
-function formatLocalLogPrefix(record: ActionLogRecord): string[] {
+function formatLocalLogPrefix(record: RuntimeLogRecord): string[] {
   return ["pipr", localLogPlainLevels.has(record.level) ? "" : record.level, record.event].filter(
     Boolean,
   );
@@ -630,7 +620,7 @@ async function runDryRun(options: CliOptions): Promise<void> {
   const result = await runDryRunCommand({
     rootDir: process.cwd(),
     configDir: options.configDir,
-    host: "github",
+    host: options.host,
     env: process.env,
     eventPath: options.event,
   });

@@ -8,6 +8,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -277,6 +278,11 @@ describe("CLI package bundled skills", () => {
     );
     const isolatedDist = path.join(tempDir, "isolated-cli-dist");
     cpSync(sourceDist, isolatedDist, { recursive: true });
+    symlinkSync(
+      path.join(repoRoot, "packages/cli/node_modules"),
+      path.join(isolatedDist, "node_modules"),
+      "dir",
+    );
     const cliPath = path.join(isolatedDist, "main.mjs");
     const cacheDir = path.join(realpathSync(tempDir), "dist-skill-cache");
     const skill = executableResult(cliPath, ["skill"], repoRoot, {

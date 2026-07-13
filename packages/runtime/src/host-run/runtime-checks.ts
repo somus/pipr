@@ -2,7 +2,7 @@ import type { Task } from "@usepipr/sdk";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter, CodeHostStatus, CodeHostStatusState } from "../hosts/types.js";
 import type { RuntimeCheckSink, RuntimeTaskCheckResult } from "../review/task/task-runtime.js";
-import type { RuntimeActionLog } from "../shared/logging.js";
+import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 
 export const genericCheckFailureSummary = "pipr failed; see Action logs for details.";
@@ -15,7 +15,7 @@ export type StartedRuntimeChecks = {
   taskRuns: Map<string, CodeHostStatus>;
   aggregate?: CodeHostStatus;
   sink: RuntimeCheckSink;
-  log?: RuntimeActionLog;
+  log?: RuntimeLog;
 };
 
 export type FinalizeRuntimeCheckOptions = {
@@ -30,7 +30,7 @@ export async function startRuntimeChecks(options: {
   plan: RuntimePlan;
   taskName?: string;
   selectedTasks: Task<unknown>[];
-  log?: RuntimeActionLog;
+  log?: RuntimeLog;
 }): Promise<StartedRuntimeChecks | undefined> {
   if (!canStartRuntimeChecks(options)) {
     return undefined;

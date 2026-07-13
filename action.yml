@@ -21,6 +21,8 @@ runs:
   using: docker
   image: docker://ghcr.io/somus/pipr:v0.3.8 # x-release-please-version
   args:
-    - action
+    - host-run
+    - --host
+    - github
     - --config-dir
     - ${{ inputs.config-dir }}

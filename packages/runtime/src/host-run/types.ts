@@ -1,10 +1,8 @@
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
-import type { GitHubCommandClient } from "../hosts/github/command.js";
-import type { GitHubPublicationClient } from "../hosts/github/publication.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
 import type { PublicationResult } from "../review/publication-result.js";
 import type { ReviewRuntimeResult } from "../review/task/task-runtime.js";
-import type { ActionLogSink } from "../shared/logging.js";
+import type { RuntimeLogSink } from "../shared/logging.js";
 import type { ChangeRequestEventContext, RuntimeSettings } from "../types.js";
 
 export type RuntimeCommandOptions = {
@@ -26,18 +24,16 @@ export type DryRunCommandOptions = RuntimeCommandOptions & {
   eventPath: string;
 };
 
-export type ActionCommandOptions = RuntimeCommandOptions & {
+export type HostRunCommandOptions = RuntimeCommandOptions & {
   host?: string;
   eventPath?: string;
   dryRun: boolean;
-  logSink?: ActionLogSink;
+  logSink?: RuntimeLogSink;
 };
 
-export type ActionCommandDependencyOptions = ActionCommandOptions & {
+export type HostRunCommandDependencyOptions = HostRunCommandOptions & {
   piExecutable?: string;
   hostAdapter?: CodeHostAdapter;
-  githubClient?: GitHubCommandClient;
-  githubPublicationClient?: GitHubPublicationClient;
 };
 
 export type LocalReviewTaskLog = {
@@ -50,7 +46,7 @@ export type LocalReviewCommandOptions = RuntimeCommandOptions & {
   baseSha: string;
   headSha?: string;
   piExecutable?: string;
-  logSink?: ActionLogSink;
+  logSink?: RuntimeLogSink;
   taskLog?: LocalReviewTaskLog;
 };
 
@@ -71,7 +67,7 @@ export type LocalReviewCommandResult = ReviewRuntimeResult & {
 
 export type PublishedReviewRuntimeResult = Extract<ReviewRuntimeResult, { kind: "review" }>;
 
-export type ActionCommandResult =
+export type HostRunCommandResult =
   | {
       kind: "ignored";
       reason: string;

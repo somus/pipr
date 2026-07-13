@@ -1,7 +1,7 @@
 import type { Agent, ModelProfile, Schema } from "@usepipr/sdk";
 import { z } from "zod";
 import type { InlineThreadContext } from "../hosts/types.js";
-import type { RuntimeActionLog } from "../shared/logging.js";
+import type { RuntimeLog } from "../shared/logging.js";
 import type {
   ChangeRequestEventContext,
   DiffManifest,
@@ -44,7 +44,7 @@ export type RunVerifierOptions = {
   threadContexts: InlineThreadContext[];
   mode: VerifierMode;
   runId: string;
-  log?: RuntimeActionLog;
+  log?: RuntimeLog;
   piRunSink?: (run: PiRunStats) => void;
 };
 
