@@ -29,13 +29,13 @@ describe("Azure DevOps workspace checkout", () => {
       git(seed, ["push", "origin", "feature"]);
       git(root, ["clone", "--branch", "main", origin, workspace]);
 
-      ensureAzureDevOpsHeadCheckout({ rootDir: workspace, change: changeAt(headSha) });
+      await ensureAzureDevOpsHeadCheckout({ rootDir: workspace, change: changeAt(headSha) });
       expect(git(workspace, ["rev-parse", "HEAD"]).trim()).toBe(headSha);
 
       await rename(origin, `${origin}.offline`);
-      expect(() =>
+      await expect(
         ensureAzureDevOpsHeadCheckout({ rootDir: workspace, change: changeAt(headSha) }),
-      ).not.toThrow();
+      ).resolves.toBeUndefined();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -67,7 +67,7 @@ describe("Azure DevOps workspace checkout", () => {
       git(seed, ["push", "fork", "feature"]);
       git(root, ["clone", "--branch", "main", target, workspace]);
 
-      ensureAzureDevOpsHeadCheckout({
+      await ensureAzureDevOpsHeadCheckout({
         rootDir: workspace,
         change: changeAt(headSha, { isFork: true, headUrl: fork }),
       });
