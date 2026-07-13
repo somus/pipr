@@ -163,7 +163,7 @@ export async function runWebhookServer(options: {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   try {
-    console.log(`pipr webhook server listening on ${server.hostname}:${server.port}`);
+    console.error(`pipr webhook server listening on ${server.hostname}:${server.port}`);
     await processor.run();
     await shutdown.promise;
   } finally {
