@@ -7,13 +7,10 @@ const provider = Bun.serve({
       path_with_namespace: "group/project",
     }),
 });
-const portReservation = Bun.serve({
-  hostname: "127.0.0.1",
-  port: 0,
-  fetch: () => new Response("reserved"),
-});
-const webhookPort = portReservation.port;
-portReservation.stop(true);
+const argumentSeparator = process.argv.indexOf("--");
+const healthcheckCommand = process.argv.slice(argumentSeparator === -1 ? 2 : argumentSeparator + 1);
+if (healthcheckCommand.length === 0) throw new Error("Compose healthcheck command is required");
+const webhookPort = 8787;
 
 const webhook = Bun.spawn(
   [
@@ -52,15 +49,11 @@ try {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     if (webhook.exitCode !== null) break;
-    try {
-      const response = await fetch(`http://127.0.0.1:${webhookPort}/healthz`);
-      if (response.status === 200 && (await response.text()) === "OK") {
-        console.log("container webhook health ok");
-        healthy = true;
-        break;
-      }
-    } catch {
-      // The packaged CLI may still be resolving its repository and starting the listener.
+    const healthcheck = Bun.spawn(healthcheckCommand, { stderr: "ignore", stdout: "ignore" });
+    if ((await healthcheck.exited) === 0) {
+      console.log("container webhook Compose healthcheck ok");
+      healthy = true;
+      break;
     }
     await Bun.sleep(100);
   }
@@ -68,7 +61,7 @@ try {
     if (webhook.exitCode === null) webhook.kill("SIGTERM");
     await webhook.exited;
     throw new Error(
-      `packaged webhook server did not become healthy\nstdout:\n${await stdout}\nstderr:\n${await stderr}`,
+      `Compose healthcheck did not pass against the packaged webhook server\nstdout:\n${await stdout}\nstderr:\n${await stderr}`,
     );
   }
 } finally {
