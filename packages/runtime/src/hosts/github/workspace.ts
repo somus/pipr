@@ -79,8 +79,8 @@ function gitGlobalConfigHome(env: NodeJS.ProcessEnv): string {
 export function ensureGitHubHeadCheckout(options: {
   rootDir: string;
   change: ChangeRequestEventContext;
-}): void {
-  ensureCodeHostHeadCheckout({
+}): Promise<void> {
+  return ensureCodeHostHeadCheckout({
     rootDir: options.rootDir,
     headSha: options.change.change.head.sha,
     fetchRef: `refs/pull/${options.change.change.number}/head`,

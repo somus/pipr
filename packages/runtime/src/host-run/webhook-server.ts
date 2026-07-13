@@ -282,6 +282,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
   }
 
   private pruneTerminalDeliveries(): void {
+    // SQLite uses LIMIT -1 to leave the result unbounded after skipping the retained rows.
     this.database
       .query(
         "DELETE FROM webhook_deliveries WHERE id IN (SELECT id FROM webhook_deliveries WHERE status IN ('completed', 'failed') ORDER BY updated_at DESC, id DESC LIMIT -1 OFFSET ?)",

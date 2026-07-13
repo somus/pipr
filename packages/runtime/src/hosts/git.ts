@@ -1,34 +1,39 @@
-export function ensureCodeHostHeadCheckout(options: {
+export async function ensureCodeHostHeadCheckout(options: {
   rootDir: string;
   headSha: string;
   fetchRef: string;
-}): void {
-  if (!hasGitCommit(options.rootDir, options.headSha)) {
-    runGit(options.rootDir, ["fetch", "--no-tags", "--depth=1", "origin", options.fetchRef]);
+}): Promise<void> {
+  if (!(await hasGitCommit(options.rootDir, options.headSha))) {
+    await runGit(options.rootDir, ["fetch", "--no-tags", "--depth=1", "origin", options.fetchRef]);
   }
-  if (runGit(options.rootDir, ["rev-parse", "HEAD"]).trim() !== options.headSha) {
-    runGit(options.rootDir, ["checkout", "--detach", options.headSha]);
+  if ((await runGit(options.rootDir, ["rev-parse", "HEAD"])).trim() !== options.headSha) {
+    await runGit(options.rootDir, ["checkout", "--detach", options.headSha]);
   }
 }
 
-function hasGitCommit(rootDir: string, sha: string): boolean {
+async function hasGitCommit(rootDir: string, sha: string): Promise<boolean> {
   try {
-    runGit(rootDir, ["cat-file", "-e", `${sha}^{commit}`]);
+    await runGit(rootDir, ["cat-file", "-e", `${sha}^{commit}`]);
     return true;
   } catch {
     return false;
   }
 }
 
-function runGit(rootDir: string, args: string[]): string {
-  const result = Bun.spawnSync(["git", ...args], {
+async function runGit(rootDir: string, args: string[]): Promise<string> {
+  const child = Bun.spawn(["git", ...args], {
     cwd: rootDir,
     env: process.env,
     stderr: "pipe",
     stdout: "pipe",
   });
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr.toString().trim() || `git ${args.join(" ")} failed`);
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(stderr.trim() || `git ${args.join(" ")} failed`);
   }
-  return result.stdout.toString();
+  return stdout;
 }

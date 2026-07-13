@@ -28,13 +28,13 @@ describe("GitLab workspace checkout", () => {
       git(seed, ["push", "origin", `HEAD:refs/merge-requests/7/head`]);
       git(root, ["clone", "--branch", "main", origin, workspace]);
 
-      ensureGitLabHeadCheckout({ rootDir: workspace, change: changeAt(headSha) });
+      await ensureGitLabHeadCheckout({ rootDir: workspace, change: changeAt(headSha) });
       expect(git(workspace, ["rev-parse", "HEAD"]).trim()).toBe(headSha);
 
       await rename(origin, `${origin}.offline`);
-      expect(() =>
+      await expect(
         ensureGitLabHeadCheckout({ rootDir: workspace, change: changeAt(headSha) }),
-      ).not.toThrow();
+      ).resolves.toBeUndefined();
     } finally {
       await rm(root, { recursive: true, force: true });
     }

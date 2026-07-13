@@ -107,7 +107,10 @@ export type CodeHostPermissions = {
 };
 
 export type CodeHostWorkspace = {
-  ensureHeadCheckout(options: { rootDir: string; change: ChangeRequestEventContext }): void;
+  ensureHeadCheckout(options: {
+    rootDir: string;
+    change: ChangeRequestEventContext;
+  }): Promise<void>;
   ensureWorkspaceSafeDirectory?(options: { rootDir: string; env?: NodeJS.ProcessEnv }): void;
 };
 
