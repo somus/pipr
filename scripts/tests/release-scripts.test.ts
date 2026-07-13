@@ -144,6 +144,7 @@ describe("changed-scope", () => {
       "packages/e2e/pi-contract.ts",
       "packages/e2e/run.ts",
       "packages/e2e/scenarios.ts",
+      "packages/e2e/webhook-fetch-mock.ts",
       "packages/e2e/webhook-health-fixture.ts",
       "deploy/webhook/compose.yml",
       "scripts/docker-e2e.ts",

@@ -227,7 +227,9 @@ async function assertWebhookHealth(image: string): Promise<void> {
     ],
     sourceRoot,
   );
-  assertContains(output.stdout, "container webhook Compose healthcheck ok");
+  for (const host of ["gitlab", "azure-devops", "bitbucket"]) {
+    assertContains(output.stdout, `container webhook ${host} Compose healthcheck ok`);
+  }
 }
 
 async function webhookComposeHealthcheckCommand(): Promise<string[]> {

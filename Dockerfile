@@ -64,6 +64,7 @@ RUN chown -R bun:bun /opt/pipr \
 FROM runtime-base AS e2e
 COPY --chown=bun:bun packages/e2e/action-fixture.ts packages/e2e/action-fixture.ts
 COPY --chown=bun:bun packages/e2e/assertions.ts packages/e2e/assertions.ts
+COPY --chown=bun:bun packages/e2e/webhook-fetch-mock.ts packages/e2e/webhook-fetch-mock.ts
 COPY --chown=bun:bun packages/e2e/webhook-health-fixture.ts packages/e2e/webhook-health-fixture.ts
 RUN mkdir -p packages/e2e/node_modules/@usepipr \
   && ln -sf ../../../runtime packages/e2e/node_modules/@usepipr/runtime

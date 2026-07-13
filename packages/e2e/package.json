@@ -8,6 +8,7 @@
     "pipr-e2e-check": "./check.ts",
     "pipr-e2e-container-check": "./container-check.ts",
     "pipr-e2e-run": "./run.ts",
+    "pipr-e2e-webhook-fetch-mock": "./webhook-fetch-mock.ts",
     "pipr-e2e-webhook-health-fixture": "./webhook-health-fixture.ts"
   },
   "scripts": {
