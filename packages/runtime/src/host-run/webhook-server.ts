@@ -68,7 +68,7 @@ export function createWebhookIngress(options: {
 }
 
 function webhookHealthResponse(request: Request): Response | undefined {
-  if (request.method !== "GET") return undefined;
+  if (request.method !== "GET" && request.method !== "HEAD") return undefined;
   return new URL(request.url).pathname === "/healthz" ? new Response("OK") : undefined;
 }
 

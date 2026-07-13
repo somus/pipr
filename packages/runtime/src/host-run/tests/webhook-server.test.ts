@@ -26,9 +26,11 @@ describe("webhook runner", () => {
     });
 
     const response = await ingress(new Request("http://localhost/healthz"));
+    const headResponse = await ingress(new Request("http://localhost/healthz", { method: "HEAD" }));
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("OK");
+    expect(headResponse.status).toBe(200);
     expect(store.deliveries).toHaveLength(0);
   });
 
