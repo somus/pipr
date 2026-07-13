@@ -166,16 +166,22 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
                   })
                 ).find((check) => check.externalId === externalId),
             }));
+          if (existing || options.state !== "pending") {
+            await publicationClient.updateCheckRun({
+              repo: options.change.repository.slug,
+              checkRunId: checkRun.id,
+              name: checkRun.name,
+              state: options.state,
+              summary: options.summary,
+            });
+          }
           return { id: String(checkRun.id), name: checkRun.name };
-        }
-        if (options.state === "pending") {
-          return options.status;
         }
         await publicationClient.updateCheckRun({
           repo: options.change.repository.slug,
           checkRunId: Number(options.status.id),
           name: options.status.name,
-          conclusion: options.state,
+          state: options.state,
           summary: options.summary,
         });
         return options.status;

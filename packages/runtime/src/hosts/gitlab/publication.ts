@@ -257,9 +257,7 @@ async function publishGitLabThreadAction(options: {
             options.changeNumber,
             options.discussion?.id ?? "",
           );
-          return discussion.notes.some((note) => note.body.includes(options.action.responseKey))
-            ? discussion.notes[0]
-            : undefined;
+          return discussion.notes.find((note) => note.body.includes(options.action.responseKey));
         },
       });
     }

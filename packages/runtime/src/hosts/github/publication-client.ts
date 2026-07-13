@@ -186,7 +186,7 @@ export type GitHubPublicationClient = {
     repo: string;
     checkRunId: number;
     name: string;
-    conclusion: "success" | "failure" | "neutral";
+    state: "pending" | "success" | "failure" | "neutral";
     summary?: string;
   }): Promise<void>;
 };
@@ -323,16 +323,29 @@ export function createGitHubPublicationClient(
     },
     async updateCheckRun(options) {
       const repo = parseRepoSlug(options.repo);
+      if (options.state === "pending") {
+        await octokit.rest.checks.update({
+          ...repo,
+          check_run_id: options.checkRunId,
+          name: options.name,
+          status: "in_progress",
+          output: {
+            title: options.name,
+            summary: options.summary ?? "pipr is running.",
+          },
+        });
+        return;
+      }
       await octokit.rest.checks.update({
         ...repo,
         check_run_id: options.checkRunId,
         name: options.name,
         status: "completed",
-        conclusion: options.conclusion,
+        conclusion: options.state,
         completed_at: new Date().toISOString(),
         output: {
           title: options.name,
-          summary: options.summary ?? checkRunSummary(options.conclusion),
+          summary: options.summary ?? checkRunSummary(options.state),
         },
       });
     },

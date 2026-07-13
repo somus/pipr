@@ -149,6 +149,7 @@ describe("code host HTTP client", () => {
     const waits: number[] = [];
     const client = createCodeHostHttpClient({
       baseUrl: "https://example.test/",
+      now: () => 100_000,
       fetch: async () => Response.json({ value: "ok" }, { headers: { "Retry-After": "1" } }),
       sleep: async (milliseconds) => {
         waits.push(milliseconds);
@@ -158,6 +159,29 @@ describe("code host HTTP client", () => {
     await client.json("first", z.object({ value: z.string() }));
     await client.json("second", z.object({ value: z.string() }));
     expect(waits).toEqual([1_000]);
+  });
+
+  it("does not wait or send the next request after an excessive successful Retry-After", async () => {
+    const waits: number[] = [];
+    let calls = 0;
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://example.test/",
+      now: () => 100_000,
+      fetch: async () => {
+        calls += 1;
+        return Response.json({ value: "ok" }, { headers: { "Retry-After": "61" } });
+      },
+      sleep: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    });
+
+    await client.json("first", z.object({ value: z.string() }));
+    await expect(client.json("second", z.unknown())).rejects.toThrow(
+      "exceeds the configured maximum",
+    );
+    expect(calls).toBe(1);
+    expect(waits).toEqual([]);
   });
 
   it("redacts credentials and bounds error response text", async () => {

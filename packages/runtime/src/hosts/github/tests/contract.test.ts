@@ -253,6 +253,7 @@ runCodeHostAdapterContract("GitHub", {
       firstId: firstStatus.id,
       secondId: secondStatus.id,
       nativeRecords: client.checkRuns.length,
+      statusWrites: client.statusWrites,
     };
   },
   async threadActions() {
@@ -478,6 +479,7 @@ class StatefulPublicationClient implements GitHubPublicationClient {
   reviewThreads: StatefulReviewThread[] = [];
   reviewReplies: Array<{ commentId: number; body: string }> = [];
   checkRuns: Array<{ id: number; name: string; externalId?: string }> = [];
+  statusWrites = 0;
 
   async getAuthenticatedUserLogin() {
     return this.ownerLogin;
@@ -571,6 +573,7 @@ class StatefulPublicationClient implements GitHubPublicationClient {
   }
 
   async createCheckRun(options: { name: string; externalId?: string }) {
+    this.statusWrites += 1;
     const check = {
       id: this.checkRuns.length + 1,
       name: options.name,
@@ -584,7 +587,9 @@ class StatefulPublicationClient implements GitHubPublicationClient {
     return this.checkRuns;
   }
 
-  async updateCheckRun() {}
+  async updateCheckRun() {
+    this.statusWrites += 1;
+  }
 }
 
 async function withEventFile(

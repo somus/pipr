@@ -24,5 +24,5 @@ export function createGitHubOctokit(env: NodeJS.ProcessEnv): Octokit {
 }
 
 function isIdempotentMethod(method: string | undefined): boolean {
-  return ["GET", "HEAD", "PUT", "PATCH", "DELETE"].includes(method?.toUpperCase() ?? "GET");
+  return ["GET", "HEAD", "PUT", "DELETE"].includes(method?.toUpperCase() ?? "GET");
 }

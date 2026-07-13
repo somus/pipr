@@ -938,6 +938,26 @@ describe("createGitHubPublicationClient", () => {
     expect(calls).toBe(2);
   });
 
+  it("leaves transient GitHub PATCH retries to the publication operation", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response("unavailable", {
+        status: 503,
+        headers: { "Retry-After": "0" },
+      });
+    }) as unknown as typeof fetch;
+
+    const client = createGitHubPublicationClient({
+      GITHUB_API_URL: "https://api.github.test",
+    });
+
+    await expect(
+      client.updateIssueComment({ repo: "local/pipr", commentId: 1, body: "updated" }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(calls).toBe(1);
+  });
+
   it("uses GitHub review reply and review thread APIs", async () => {
     const requests: Array<{ url: string; body: string }> = [];
     globalThis.fetch = mockGitHubReviewThreadApi(requests);
@@ -1001,7 +1021,7 @@ describe("createGitHubPublicationClient", () => {
       repo: "local/pipr",
       checkRunId: 123,
       name: "pipr / review",
-      conclusion: "failure",
+      state: "failure",
       summary: "Failed.",
     });
 

@@ -1930,7 +1930,7 @@ function fakeGitHubPublicationClient(
       checks?.updated.push({
         checkRunId: options.checkRunId,
         name: options.name,
-        conclusion: options.conclusion,
+        conclusion: options.state,
         summary: options.summary,
       });
     },

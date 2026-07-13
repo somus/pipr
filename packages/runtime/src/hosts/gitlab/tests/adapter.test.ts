@@ -262,6 +262,7 @@ runCodeHostAdapterContract("GitLab", {
       firstId: firstStatus.id,
       secondId: secondStatus.id,
       nativeRecords: client.statusKeys.size,
+      statusWrites: client.statusWrites,
     };
   },
   async threadActions() {
@@ -401,6 +402,7 @@ class FakeGitLabClient implements GitLabClient {
   createDiscussionError?: Error;
   loseNextDiscussionResponse = false;
   statusKeys = new Set<string>();
+  statusWrites = 0;
   resolveCalls = 0;
   afterListNotes?: () => void;
   mergeRequest: GitLabMergeRequest = {
@@ -510,6 +512,7 @@ class FakeGitLabClient implements GitLabClient {
     if (root) root.resolved = true;
   };
   setStatus = async (_projectId: string, sha: string, name: string) => {
+    this.statusWrites += 1;
     this.statusKeys.add(`${sha}:${name}`);
     return "status-1";
   };

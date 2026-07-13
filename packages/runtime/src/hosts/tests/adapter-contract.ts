@@ -5,7 +5,12 @@ export type AdapterContractProbes = {
   staleHeadWrites(): Promise<number>;
   partialRetry(): Promise<{ inlineWrites: number; mainWrites: number }>;
   markerOwnership(): Promise<{ foreignWrites: number; ownedWritesAfterRerun: number }>;
-  statusIdempotency(): Promise<{ firstId: string; secondId: string; nativeRecords: number }>;
+  statusIdempotency(): Promise<{
+    firstId: string;
+    secondId: string;
+    nativeRecords: number;
+    statusWrites: number;
+  }>;
   threadActions(): Promise<{ replies: number; resolutions: number }>;
 };
 
@@ -34,6 +39,7 @@ export function runCodeHostAdapterContract(provider: string, probes: AdapterCont
       const status = await probes.statusIdempotency();
       expect(status.secondId).toBe(status.firstId);
       expect(status.nativeRecords).toBe(1);
+      expect(status.statusWrites).toBe(2);
     });
 
     it("publishes one idempotent thread reply", async () => {

@@ -310,7 +310,7 @@ function fixturePublicationClient(fixturePath: string): GitHubPublicationClient 
       fixture.checkRunUpdates.push({
         checkRunId: options.checkRunId,
         name: options.name,
-        conclusion: options.conclusion,
+        conclusion: options.state,
         summary: options.summary,
       });
       await writeFixture(fixturePath, fixture);

@@ -168,6 +168,7 @@ runCodeHostAdapterContract("Bitbucket Cloud", {
       firstId: firstStatus.id,
       secondId: secondStatus.id,
       nativeRecords: client.statusKeys.size,
+      statusWrites: client.statusBodies.length,
     };
   },
   async threadActions() {
