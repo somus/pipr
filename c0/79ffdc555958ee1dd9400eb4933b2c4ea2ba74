@@ -1,0 +1,159 @@
+apps/docs/content/docs/reference/cli.mdx
+  s_4ebdfc62030aaf::t_fc78e548225d85 66,91-98,100-107,110-115
+  s_4ebdfc62030aaf::t_9e5028a4a137c5 99
+packages/runtime/src/config/init.ts
+  s_4ebdfc62030aaf::t_62a19211616a5d 187
+  s_4ebdfc62030aaf::t_9be27ef0e376ee 43,165-170,180-186,188,190-198
+  s_4ebdfc62030aaf::t_42a16fdd021a5a 199-200
+  s_4ebdfc62030aaf::t_468a260ed8fd68 189
+packages/runtime/src/config/tests/init.test.ts
+  s_4ebdfc62030aaf::t_31950a174d5270 1663-1676,1678-1680
+  s_4ebdfc62030aaf::t_31ef92fe6d9b17 1677
+apps/docs/content/docs/guide/meta.json
+  s_4ebdfc62030aaf::t_fc78e548225d85 12
+packages/cli/src/runner.ts
+  s_4ebdfc62030aaf::t_ce88b76b6a8eae 27,29-30,32,102-107,109-114,207,209-210,213,215-217,219-223
+  s_4ebdfc62030aaf::t_4ebd3f20345e52 208
+  s_4ebdfc62030aaf::t_acea8edc590550 224-225
+  s_4ebdfc62030aaf::t_52abbc25d6407c 31,218
+packages/runtime/src/hosts/gitlab/workspace.ts
+  s_4ebdfc62030aaf::t_5de9c4aaaacc6d 2,8-11
+  s_4ebdfc62030aaf::t_8db97a25d15882 1,3-7,12-13
+packages/runtime/src/host-run/adapter.ts
+  s_4ebdfc62030aaf::t_68378699e47e55 41-43
+  s_4ebdfc62030aaf::t_615592ab93e8aa 3
+packages/runtime/src/hosts/gitlab/event.ts
+  s_4ebdfc62030aaf::t_6ce18e0b3cdfc1 1-2,4-18,24-45,52-62,64-68,76-105,107-116,121-133,135,142-156,163,165-166,177,184-185,186-188
+  s_4ebdfc62030aaf::t_1fbe9a7f2fd763 46-51,63,117-120,134,136-141
+  s_4ebdfc62030aaf::t_3089502e5527e2 178-183
+  s_4ebdfc62030aaf::t_9b16bfbfb434f4 19-23,157-162
+  s_4ebdfc62030aaf::t_a9a792688e28b2 106
+  s_4ebdfc62030aaf::t_a4fb35e4ee7a86 164,167-175
+  s_4ebdfc62030aaf::t_38bd6e79f77937 176
+packages/runtime/src/hosts/gitlab/tests/event.test.ts
+  s_4ebdfc62030aaf::t_592139017e3aa4 99-102,104
+  s_4ebdfc62030aaf::t_2acff01fedf178 33-48
+  s_4ebdfc62030aaf::t_3a6c022f0d5918 1-10,16-32,49-73,80-91,95-97,106,108-114,146-159,166-168,173-181
+  s_4ebdfc62030aaf::t_3089502e5527e2 11-15,74-79,92-94,98,105,160-165,169-172
+  s_4ebdfc62030aaf::t_c45962e81f5e18 115-145
+  s_4ebdfc62030aaf::t_fb8cd9439ffa7c 103,107
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_4ebdfc62030aaf::t_fc78e548225d85 45-49,102-107,143-149
+packages/runtime/src/hosts/gitlab/tests/client.test.ts
+  s_4ebdfc62030aaf::t_efe363b0f34099 1-4,17-41,228
+  s_4ebdfc62030aaf::t_c45962e81f5e18 128-144
+  s_4ebdfc62030aaf::t_3d6248ca4321f5 85-91,118-119
+  s_4ebdfc62030aaf::t_12335371052155 127,145-146,156-163,165-196
+  s_4ebdfc62030aaf::t_eb4a96a6df66f2 147-155,164
+  s_4ebdfc62030aaf::t_a6bb38a0261d26 5-16
+  s_4ebdfc62030aaf::t_11a90713f2bf10 113-115
+  s_4ebdfc62030aaf::t_31ef92fe6d9b17 42-84,92-112,116-117,120-126,229-240
+  s_4ebdfc62030aaf::t_255e9ba542826d 197-227
+packages/runtime/src/hosts/gitlab/client.ts
+  s_4ebdfc62030aaf::t_188e53001e7d52 1,3-13,26-36,43-53,55,57-80,82,88-91,98,122,130-131,140-143,148,157-159,170-188,190-194,206-207,212-228,279-286,288-292,294-306,311-325,327-330,337-338,347-352
+  s_4ebdfc62030aaf::t_1fbe9a7f2fd763 104-109,258,263-264,266
+  s_4ebdfc62030aaf::t_ad34f82f572217 134-137
+  s_4ebdfc62030aaf::t_3089502e5527e2 83-87,92-97,110-121,123-129,208-211,229-252,267-278,307-310,339-346
+  s_4ebdfc62030aaf::t_efe363b0f34099 132-133,139,150
+  s_4ebdfc62030aaf::t_701c3dcb18c796 189
+  s_4ebdfc62030aaf::t_468a260ed8fd68 37-42,54,56,99-103,138,195-205,253-257,259-262,265,293,326,331-334
+  s_4ebdfc62030aaf::t_9b16bfbfb434f4 81,154,156,160-169,287
+  s_4ebdfc62030aaf::t_9ea5b9d18bf496 2
+  s_4ebdfc62030aaf::t_aab869b39173c6 144-147,149,151
+  s_4ebdfc62030aaf::t_6541e393111745 152-153,155,335-336
+  s_4ebdfc62030aaf::t_930fd523e8fee4 14-25
+packages/cli/src/tests/main.test.ts
+  s_4ebdfc62030aaf::t_2601f793defc24 204,210,219,229,233
+packages/runtime/src/hosts/git.ts
+  s_4ebdfc62030aaf::t_5de9c4aaaacc6d 1-4,6-7,15-41
+apps/docs/content/docs/guide/gitlab.mdx
+  s_4ebdfc62030aaf::t_fc78e548225d85 1-39,41-46,48-55,57-73
+  s_4ebdfc62030aaf::t_118ba92e34cc69 47,56
+  s_4ebdfc62030aaf::t_9e5028a4a137c5 40
+packages/runtime/src/hosts/gitlab/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_3089502e5527e2 49-52,291-295,324-329,333-340,346-351,354-358
+  s_4ebdfc62030aaf::t_1bab8aea38d1c7 1-48,53-73,195-267,269-279,281-290,296-299,302-305,331-332,341-345,359-367
+  s_4ebdfc62030aaf::t_26d8db62f6a4dc 300-301,352-353
+  s_4ebdfc62030aaf::t_0bd6f97f891e23 311-321,323
+  s_4ebdfc62030aaf::t_351e8b46327c97 74,121-135,137-174,176-194
+  s_4ebdfc62030aaf::t_3d1fe43b864cd8 280
+  s_4ebdfc62030aaf::t_126db174099738 117
+  s_4ebdfc62030aaf::t_132dbcc7032a57 75-116,118-120,268
+  s_4ebdfc62030aaf::t_468a260ed8fd68 306-310
+  s_4ebdfc62030aaf::t_11a90713f2bf10 322
+  s_4ebdfc62030aaf::t_b9f6e5f3ef5df7 330
+  s_4ebdfc62030aaf::t_1de99344b148fb 136,175
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_4ebdfc62030aaf::t_5d49e6d884e0de 241
+  s_4ebdfc62030aaf::t_81818f4e8f7f81 1-8,10,23-34,46-50,53-54,59-61,63-64,67-73,82-93,100-102,104-105,113-157,173-185,192-193,226,233,236,238-240,242-253,255,258-265,267-271,277-283,287-297,301-310
+  s_4ebdfc62030aaf::t_3089502e5527e2 16-22,35-45,51-52,158-172,186-191,284-286,298-300
+  s_4ebdfc62030aaf::t_5de9c4aaaacc6d 194-225,227-232,234-235,237
+  s_4ebdfc62030aaf::t_351e8b46327c97 62,254,256-257,266,272-273
+  s_4ebdfc62030aaf::t_f670b7ab4b4a48 275-276
+  s_4ebdfc62030aaf::t_1de99344b148fb 274
+packages/runtime/src/review/comment.ts
+  s_4ebdfc62030aaf::t_3089502e5527e2 238-244
+  s_4ebdfc62030aaf::t_5d49e6d884e0de 48,87,229-230,233,255,273
+packages/runtime/src/hosts/gitlab/adapter.ts
+  s_4ebdfc62030aaf::t_3089502e5527e2 14-16,39-51,57-60,89-91
+  s_4ebdfc62030aaf::t_1fbe9a7f2fd763 33-34
+  s_4ebdfc62030aaf::t_8db97a25d15882 1-13,17-32,35-38,52-56,61-88,92-101
+packages/runtime/src/hosts/github/workspace.ts
+  s_4ebdfc62030aaf::t_5de9c4aaaacc6d 4,83-86
+apps/docs/content/docs/reference/index.mdx
+  s_4ebdfc62030aaf::t_9e5028a4a137c5 12
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_4ebdfc62030aaf::t_e03f9b8c1e6d4e 3,9,185-203
+  s_4ebdfc62030aaf::t_74dae9b2f2bcd3 206-224
+  s_4ebdfc62030aaf::t_c45962e81f5e18 21,38-56,163,204,272-285,289-310
+  s_4ebdfc62030aaf::t_31ef92fe6d9b17 18-20,22-23,32,57-70,148-154,156-157,159-162
+  s_4ebdfc62030aaf::t_a9a792688e28b2 286-288
+  s_4ebdfc62030aaf::t_11a90713f2bf10 155,158
+  s_4ebdfc62030aaf::t_90d0ab263cae49 164
+  s_4ebdfc62030aaf::t_0c2a54290762f9 205
+  s_4ebdfc62030aaf::t_62a19211616a5d 24-31,37,71-83,317-318,324-326
+  s_4ebdfc62030aaf::t_f370ee1c926822 2,4,8,181-183,225-240,267-269
+  s_4ebdfc62030aaf::t_473f0dac124001 241-266
+  s_4ebdfc62030aaf::t_a71d7e8a2b7ee9 1,5-7,10-17,33-36,84-86,165-180,270-271,311-316,319-323,327-335
+  s_4ebdfc62030aaf::t_dcef9a30b41da7 336
+packages/runtime/src/hosts/http.ts
+  s_4ebdfc62030aaf::t_9b16bfbfb434f4 13,51-52,54-59,76,80,87-89
+  s_4ebdfc62030aaf::t_6c4535df0cc6fa 83-84
+  s_4ebdfc62030aaf::t_26f0c27be5db23 53,85
+packages/runtime/src/hosts/gitlab/tests/workspace.test.ts
+  s_4ebdfc62030aaf::t_5ef6c13f87bb66 1-71
+apps/docs/content/docs/index.mdx
+  s_4ebdfc62030aaf::t_9c6d2aa3a1fd43 3
+apps/docs/content/docs/guide/quickstart.mdx
+  s_4ebdfc62030aaf::t_9c6d2aa3a1fd43 8
+packages/runtime/src/host-run/webhook-server.ts
+  s_4ebdfc62030aaf::t_bb49fc032579ec 91
+  s_4ebdfc62030aaf::t_9b16bfbfb434f4 9,31,39,118,165,169-173,178,241-248,252-259,265-271,343-346,356-357
+  s_4ebdfc62030aaf::t_c45962e81f5e18 79,86,90,92,130,303-309
+  s_4ebdfc62030aaf::t_74dae9b2f2bcd3 109,129,293
+  s_4ebdfc62030aaf::t_52abbc25d6407c 6,25,60-61,67-69,102,115-117,119-120,163-164,167-168,174,176-177,195-220,334-342,347-351,353-355,358
+  s_4ebdfc62030aaf::t_c93c6cc603e73f 275
+  s_4ebdfc62030aaf::t_8fda1502c19f0e 272,310
+  s_4ebdfc62030aaf::t_701c3dcb18c796 13-14,46,141
+  s_4ebdfc62030aaf::t_f370ee1c926822 160
+  s_4ebdfc62030aaf::t_d07d07d58a8ead 1-5,11,15,17-24,26-30,40-42,44-45,47-54,55-58,66,70-78,80-85,87-89,93-101,103-108,114,121-124,132-140,142-159,161-162,166,175,179-194,221-230,234-240,249-251,260-264,273-274,276-281,283-287,289-292,294,296-301,311,317-318,322-324,326-329,452
+  s_4ebdfc62030aaf::t_62a19211616a5d 125-128,131,231-233,319-321
+packages/runtime/src/host-run/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_24f3a43e92feaa 1,3,5,9,11-14,16-18,35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "c079ffdc555958ee1dd9400eb4933b2c4ea2ba74",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
