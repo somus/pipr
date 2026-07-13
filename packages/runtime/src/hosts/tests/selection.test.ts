@@ -31,4 +31,11 @@ describe("code host selection", () => {
       "Multiple code hosts detected: github, gitlab",
     );
   });
+
+  it("rejects missing and unsupported hosts", () => {
+    expect(() => resolveCodeHostId({ env: {} })).toThrow("A code host must be selected");
+    expect(() => resolveCodeHostId({ explicitHost: "unknown-host", env: {} })).toThrow(
+      "Unsupported code host 'unknown-host'",
+    );
+  });
 });

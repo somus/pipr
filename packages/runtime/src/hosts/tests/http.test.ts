@@ -3,6 +3,21 @@ import { z } from "zod";
 import { createCodeHostHttpClient } from "../http.js";
 
 describe("code host HTTP client", () => {
+  it("aborts requests that exceed the configured timeout", async () => {
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://example.test/",
+      requestTimeoutMilliseconds: 1,
+      fetch: async (_input, init) =>
+        await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+            once: true,
+          });
+        }),
+    });
+
+    await expect(client.json("items", z.unknown())).rejects.toThrow("timed out");
+  });
+
   it("retries throttled reads using Retry-After", async () => {
     const waits: number[] = [];
     const responses = [

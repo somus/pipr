@@ -9,12 +9,14 @@ export type CodeHostHttpClientOptions = {
   fetch?: Fetch;
   sleep?: (milliseconds: number) => Promise<void>;
   maxRetries?: number;
+  requestTimeoutMilliseconds?: number;
 };
 
 export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
   const fetchRequest = options.fetch ?? fetch;
   const sleep = options.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds));
   const maxRetries = options.maxRetries ?? 2;
+  const requestTimeoutMilliseconds = options.requestTimeoutMilliseconds ?? 30_000;
   const secrets = [...new Headers(options.headers).values()].flatMap((value) =>
     [value, value.split(/\s+/).at(-1)].filter(
       (candidate): candidate is string => candidate !== undefined && candidate.length >= 8,
@@ -32,12 +34,14 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
       const method = init.method?.toUpperCase() ?? "GET";
       const canRetry = method === "GET" || method === "HEAD";
       for (let attempt = 0; ; attempt += 1) {
+        const timeoutSignal = AbortSignal.timeout(requestTimeoutMilliseconds);
         const response = await fetchRequest(new URL(path, options.baseUrl), {
           ...init,
           headers: {
             ...Object.fromEntries(new Headers(options.headers)),
             ...Object.fromEntries(new Headers(init.headers)),
           },
+          signal: init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal,
         });
         const retryAfter = retryAfterMilliseconds(response.headers.get("Retry-After"));
         if (response.ok) {
