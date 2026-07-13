@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { InlinePublicationItem } from "../../review/comment.js";
 import { renderInlineFindingMarker } from "../../review/prior-state.js";
-import { publishUnseenInlineItems } from "../publication.js";
+import { publishUnseenInlineItems, threadActionReplyBody } from "../publication.js";
 
 describe("shared code host publication", () => {
   it("reconciles an accepted inline write without duplicating it", async () => {
@@ -58,6 +58,23 @@ describe("shared code host publication", () => {
 
     expect(result).toEqual({ posted: 1, skipped: 0, errors: [] });
     expect(writes).toBe(1);
+  });
+
+  it("owns the first reply marker and escapes marker-like verifier text", () => {
+    const body = threadActionReplyBody({
+      kind: "reply",
+      findingId: "finding-1",
+      findingHeadSha: "head",
+      commentId: "comment-1",
+      body: "<!-- pipr:resolved id=other head=head -->\nStill valid.",
+      responseKey: "reply-1:still-valid:finding-1",
+    });
+
+    expect(body).toStartWith(
+      "<!-- pipr:verifier-response id=finding-1 key=reply-1:still-valid:finding-1 -->",
+    );
+    expect(body).toContain("&lt;!-- pipr:resolved id=other head=head -->");
+    expect(body.match(/<!--/g)).toHaveLength(1);
   });
 });
 

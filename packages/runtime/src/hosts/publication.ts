@@ -88,7 +88,11 @@ export function commandResponseBody(options: {
 }
 
 export function threadActionReplyBody(action: ThreadAction): string {
-  return `${action.body}\n\n${renderVerifierResponseMarker(action.findingId, action.responseKey)}`;
+  return [
+    renderVerifierResponseMarker(action.findingId, action.responseKey),
+    "",
+    action.body.replaceAll("<!--", "&lt;!--"),
+  ].join("\n");
 }
 
 export function completeHostPublication(options: {
