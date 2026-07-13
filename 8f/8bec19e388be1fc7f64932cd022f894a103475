@@ -1,0 +1,41 @@
+packages/runtime/src/hosts/bitbucket/tests/client.test.ts
+  s_4ebdfc62030aaf::t_541403d3db2b35 241
+  s_4ebdfc62030aaf::t_5cd5ccdcf22601 2,102-116,151-167,225-240,242
+packages/runtime/src/hosts/bitbucket/tests/event.test.ts
+  s_4ebdfc62030aaf::t_5cd5ccdcf22601 92-93,98-103,126-141
+  s_074ee5e6821056::t_0ebe97819c8d6f 94-97,142-146
+packages/runtime/src/hosts/bitbucket/client.ts
+  s_4ebdfc62030aaf::t_541403d3db2b35 181-183
+  s_4ebdfc62030aaf::t_09181a91aef9be 132,180,184,193-197,200-202,222-229
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_5cd5ccdcf22601 80-115,195-196,205-208,222-225
+packages/runtime/src/hosts/bitbucket/event.ts
+  s_4ebdfc62030aaf::t_09181a91aef9be 67,90
+packages/runtime/src/hosts/bitbucket/publication.ts
+  s_4ebdfc62030aaf::t_09181a91aef9be 96-99,102,110-111,115-122
+  s_4ebdfc62030aaf::t_d09fbbffaedccc 123-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "8f8bec19e388be1fc7f64932cd022f894a103475",
+  "prompts": {},
+  "sessions": {
+    "s_074ee5e6821056": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5b05-3e80-7f92-b6f6-c51cbfb2bfef",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
