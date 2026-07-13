@@ -3,6 +3,7 @@ apps/docs/content/docs/reference/cli.mdx
   s_4ebdfc62030aaf::t_9e5028a4a137c5 99
   s_4ebdfc62030aaf::t_aa95f384634b1e 109,116
   s_4ebdfc62030aaf::t_f0850840a6ffd7 108
+  s_4ebdfc62030aaf::t_730c2240ccabec 90
 packages/runtime/src/config/init.ts
   s_4ebdfc62030aaf::t_62a19211616a5d 198
   s_4ebdfc62030aaf::t_9be27ef0e376ee 48,170-175,191-197,199,201-209
@@ -187,6 +188,7 @@ packages/runtime/src/host-run/tests/adapter.test.ts
   s_4ebdfc62030aaf::t_24f3a43e92feaa 1,3,5,9,11-14,16-18,47
   s_4ebdfc62030aaf::t_ea38ae1699115e 19-25,28-31,33-34
   s_4ebdfc62030aaf::t_f94e90fa15b297 35-41,44-46
+  s_4ebdfc62030aaf::t_730c2240ccabec 42-43
 packages/runtime/src/hosts/azure-devops/adapter.ts
   s_4ebdfc62030aaf::t_9a244ca9ee6084 53
   s_4ebdfc62030aaf::t_b81b037d6eee09 58-59,61
@@ -375,6 +377,8 @@ packages/runtime/src/hosts/bitbucket/schema.ts
   s_4ebdfc62030aaf::t_1c82686afc6975 1-9
 README.md
   s_4ebdfc62030aaf::t_f0850840a6ffd7 23
+packages/runtime/package.json
+  s_4ebdfc62030aaf::t_730c2240ccabec 48
 ---
 {
   "schema_version": "authorship/3.0.0",
