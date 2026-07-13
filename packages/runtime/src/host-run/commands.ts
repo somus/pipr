@@ -8,6 +8,7 @@ import { runGit as runGitCommand } from "../diff/git.js";
 import { createLocalChangeRequestEvent } from "../hosts/local/adapter.js";
 import { runTaskRuntime } from "../review/task/task-runtime.js";
 import { createRuntimeLog } from "../shared/logging.js";
+import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
 import { parseChangeRequestEventContext } from "../types.js";
 import { createHostRunAdapter } from "./adapter.js";
 import { runChangeRequestHostRunCommand } from "./change-request-entry.js";
@@ -182,7 +183,10 @@ export async function runLocalReviewCommand(
 export async function runHostRunCommand(
   options: HostRunCommandOptions,
 ): Promise<HostRunCommandResult> {
-  return await runHostRunCommandWithDependencies(options);
+  return await runHostRunCommandWithDependencies({
+    ...options,
+    secretRedactor: createKnownSecretRedactor({ env: options.env ?? process.env }),
+  });
 }
 
 export async function runHostRunCommandWithDependencies(

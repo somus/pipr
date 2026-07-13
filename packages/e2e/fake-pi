@@ -82,6 +82,7 @@ async function fullFixtureReview() {
         side: range.side,
         startLine: range.startLine,
         endLine: range.startLine,
+        suggestedFix: "const normalized = true;",
       },
       ...outOfScopeFindings(range),
     ],

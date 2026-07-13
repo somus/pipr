@@ -18,6 +18,7 @@ import {
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
 } from "../../review/prior-state.js";
+import type { SecretRedactor } from "../../shared/secret-redactor.js";
 import { runtimeVersion } from "../../shared/version.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import {
@@ -1148,6 +1149,26 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
     }
   });
 
+  it("redacts user-reply verifier responses before publication", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = verifierPublicationClient(workspace);
+    const detected = "registered-runtime-secret";
+    try {
+      await writeStillValidVerifierOutput(workspace, `Still applies because ${detected}.`);
+      await expectVerifierReplyPublished(workspace, publication, {
+        githubClient: fakeGitHubClient(workspace, "write"),
+        secretRedactor: replacingSecretRedactor(detected),
+      });
+
+      expect(publication.reviewReplies[0]?.body).toContain(
+        "Still applies because [redacted secret].",
+      );
+      expect(publication.reviewReplies[0]?.body).not.toContain(detected);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("keys user-reply verifier run ids to the source review reply", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     try {
@@ -1329,6 +1350,7 @@ async function runReviewCommentAction(
     githubClient: GitHubCommandClient;
     githubPublicationClient: GitHubPublicationClient;
     logSink?: RuntimeLogSink;
+    secretRedactor?: SecretRedactor;
   },
 ) {
   const eventPath = path.join(workspace.rootDir, "event.json");
@@ -1342,7 +1364,20 @@ async function runReviewCommentAction(
     githubPublicationClient: options.githubPublicationClient,
     piExecutable: workspace.piExecutable,
     logSink: options.logSink,
+    secretRedactor: options.secretRedactor,
   });
+}
+
+function replacingSecretRedactor(detected: string): SecretRedactor {
+  return {
+    addSecret() {},
+    redact(value) {
+      return {
+        detected: value.includes(detected),
+        value: value.replaceAll(detected, "[redacted secret]"),
+      };
+    },
+  };
 }
 
 async function expectPiNotCalled(workspace: CommandWorkspace): Promise<void> {
@@ -1408,6 +1443,7 @@ async function expectVerifierReplyPublished(
     githubClient: GitHubCommandClient;
     event?: Parameters<typeof writeReviewCommentEvent>[1];
     logSink?: RuntimeLogSink;
+    secretRedactor?: SecretRedactor;
   },
 ): Promise<void> {
   const eventPath = path.join(workspace.rootDir, "event.json");
@@ -1416,6 +1452,7 @@ async function expectVerifierReplyPublished(
     githubClient: options.githubClient,
     githubPublicationClient: publication,
     logSink: options.logSink,
+    secretRedactor: options.secretRedactor,
   });
   expect(result).toMatchObject({
     kind: "verifier",

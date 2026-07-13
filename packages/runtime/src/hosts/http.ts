@@ -1,5 +1,4 @@
 import type { z } from "zod";
-import { redactPotentialSecrets } from "../shared/redaction.js";
 
 type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -118,5 +117,5 @@ function redact(value: string, secrets: string[]): string {
   for (const secret of secrets) {
     redacted = redacted.split(secret).join("***");
   }
-  return redactPotentialSecrets(redacted);
+  return redacted;
 }

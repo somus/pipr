@@ -582,7 +582,7 @@ describe("comments", () => {
     expect(priorReviewForTask(plan.mainComment, undefined).main).toBe(main);
   });
 
-  it("redacts credential-shaped model identifiers from comments and metadata", () => {
+  it("preserves bounded model identifiers in comments and metadata", () => {
     const credentials = [
       ["sk-proj-", "abcdefghijklmnopqrstuvwxyz123456"].join(""),
       ["sk_live_", "abcdefghijklmnopqrstuvwxyz123456"].join(""),
@@ -609,9 +609,9 @@ describe("comments", () => {
       },
     });
 
-    expect(plan.metadata.stats?.models).toEqual(credentials.map(() => "[redacted credential]"));
+    expect(plan.metadata.stats?.models).toEqual(credentials);
     for (const credential of credentials) {
-      expect(plan.mainComment).not.toContain(credential);
+      expect(plan.mainComment).toContain(credential);
     }
   });
 
@@ -672,7 +672,7 @@ describe("comments", () => {
     expect(plan.mainComment).not.toContain("Old summary.");
   });
 
-  it("redacts secret-like tokens from the visible main comment body", () => {
+  it("preserves the visible main comment body", () => {
     const plan = buildPublicationPlan({
       event,
       main: "A hard-coded secret was committed: pipr_eval_secret_do_not_repeat_12345.",
@@ -680,8 +680,7 @@ describe("comments", () => {
       metadata: metadata(),
     });
 
-    expect(plan.mainComment).toContain("[redacted secret]");
-    expect(plan.mainComment).not.toContain("pipr_eval_secret_do_not_repeat_12345");
+    expect(plan.mainComment).toContain("pipr_eval_secret_do_not_repeat_12345");
   });
 
   it("dedupes inline drafts with hidden markers", () => {
@@ -794,7 +793,7 @@ describe("comments", () => {
     });
   });
 
-  it("redacts secret-like tokens from inline bodies and strips leaking suggestions", () => {
+  it("preserves inline bodies and suggestions before Action publication redaction", () => {
     const [item] = prepareInlinePublicationItems({
       validated: {
         validFindings: [
@@ -809,11 +808,12 @@ describe("comments", () => {
       reviewedHeadSha: "head",
     });
 
-    expect(item?.finding.body).toContain("[redacted secret]");
-    expect(item?.finding.body).not.toContain("pipr_eval_secret_do_not_repeat_12345");
-    expect(item?.finding.suggestedFix).toBeUndefined();
-    expect(item?.body).not.toContain("pipr_eval_secret_do_not_repeat_12345");
-    expect(item?.body).not.toContain("```suggestion");
+    expect(item?.finding.body).toContain("pipr_eval_secret_do_not_repeat_12345");
+    expect(item?.finding.suggestedFix).toBe(
+      'const apiKey = "pipr_eval_secret_do_not_repeat_12345";',
+    );
+    expect(item?.body).toContain("pipr_eval_secret_do_not_repeat_12345");
+    expect(item?.body).toContain("```suggestion");
   });
 
   it("uses publishable inline finding bodies for marker IDs and review state", () => {

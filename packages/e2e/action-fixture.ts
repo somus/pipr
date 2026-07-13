@@ -4,6 +4,7 @@ import path from "node:path";
 import { PublicationError } from "@usepipr/runtime";
 import {
   createGitHubHostAdapter,
+  createKnownSecretRedactor,
   type GitHubPublicationClient,
   type HostRunCommandResult,
   runHostRunCommandWithDependencies,
@@ -69,6 +70,7 @@ async function actionFixtureContext(): Promise<ActionFixtureContext> {
       hostAdapter: createGitHubHostAdapter({
         publicationClient: fixturePublicationClient(fixturePath),
       }),
+      secretRedactor: createKnownSecretRedactor({ env: Bun.env }),
     },
   };
 }

@@ -77,6 +77,12 @@ Use the generated permission block unless you have intentionally disabled the ma
 
 Command help is exposed through the `main-comment` output. If GitHub denies verifier cleanup or the API fails, the review still succeeds and records the issue in `publication.metadata.inlineResolutionErrors`.
 
+### Secret redaction
+
+The Action masks exact values for credentials Pipr receives at runtime, including sensitive environment variables and values resolved through `ctx.secret(...)`. Pipr applies this masking to Action logs and publication-bound review comments, suggested fixes, verifier replies, command responses, dropped-finding records, and Check Run summaries.
+
+Pipr does not scan repository or model-generated text for unknown credentials. Use a repository secret scanner and revoke exposed credentials separately; Pipr's masking prevents known runtime credentials from creating an additional disclosure through logs or published output.
+
 ## Pinning
 
 ### Release tag

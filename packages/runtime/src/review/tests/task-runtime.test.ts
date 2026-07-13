@@ -10,6 +10,7 @@ import {
   type PiRunner,
   type ReviewRuntimeResult,
   type RunTaskRuntimeOptions,
+  type RuntimeTaskCheckResult,
   runTaskRuntime,
 } from "../task/task-runtime.js";
 
@@ -355,6 +356,55 @@ describe("runTaskRuntime", () => {
     expect(result.inlineCommentDrafts.map((item) => item.finding.body)).toEqual(["inline body"]);
   });
 
+  it("redacts known runtime secrets before building the publication plan", async () => {
+    const detected = "registered-runtime-secret";
+    const plan = singleTaskPlan({
+      async run(ctx) {
+        await ctx.comment({
+          main: `Review summary contains ${detected}.`,
+          inlineFindings: [
+            {
+              ...finding("inline", "range-1", 10),
+              body: `Inline body contains ${detected}.`,
+              suggestedFix: `const value = "${detected}";`,
+            },
+            {
+              ...finding("inline-duplicate", "range-1", 10),
+              body: `Inline body contains ${detected}.`,
+              suggestedFix: `const value = "${detected}";`,
+            },
+          ],
+        });
+      },
+    });
+
+    const result = await runRuntime({
+      plan,
+      secretRedactor: {
+        addSecret() {},
+        redact(value) {
+          return {
+            detected: value.includes(detected),
+            value: value.replaceAll(detected, "[redacted secret]"),
+          };
+        },
+      },
+    });
+
+    expect(result.publicationPlan.mainComment).toContain(
+      "Review summary contains [redacted secret].",
+    );
+    expect(result.publicationPlan.inlineItems[0]?.finding).toMatchObject({
+      body: "Inline body contains [redacted secret].",
+    });
+    expect(result.publicationPlan.inlineItems[0]?.finding).not.toHaveProperty("suggestedFix");
+    expect(result.publicationPlan.inlineItems[0]?.body).not.toContain(detected);
+    expect(result.validated.droppedFindings[0]?.finding).toMatchObject({
+      body: "Inline body contains [redacted secret].",
+    });
+    expect(result.validated.droppedFindings[0]?.finding).not.toHaveProperty("suggestedFix");
+  });
+
   it("uses string ctx.comment output as the review summary body", async () => {
     const plan = singleTaskPlan({
       async run(ctx) {
@@ -405,6 +455,21 @@ describe("runTaskRuntime", () => {
     });
     expect(result).not.toHaveProperty("publicationPlan");
     expect(result).not.toHaveProperty("review");
+  });
+
+  it("redacts command replies before returning them for publication", async () => {
+    const detected = "registered-runtime-secret";
+    const result = await runRuntime({
+      plan: commandTaskPlan(async (ctx) => {
+        await ctx.command?.reply(`Answer contains ${detected}.`);
+      }),
+      taskName: "ask",
+      taskInput: { question: "what changed?" },
+      commandInvocation: askCommandInvocation(),
+      secretRedactor: replacingRedactor(detected),
+    });
+
+    expect(result.commandResponse?.body).toBe("Answer contains [redacted secret].");
   });
 
   it("does not expose command context outside command-triggered tasks", async () => {
@@ -528,6 +593,32 @@ describe("runTaskRuntime", () => {
       { taskName: "review", conclusion: "failure", summary: "Security gate failed." },
     ]);
     expect(result.mainComment).toContain("Review completed.");
+  });
+
+  it("redacts task check summaries before exposing them to the check sink", async () => {
+    const detected = "registered-runtime-secret";
+    const outcomes: unknown[] = [];
+    const plan = singleTaskPlan({
+      check: { name: "pipr / review" },
+      async run(ctx) {
+        ctx.check.fail(`Security gate contains ${detected}.`);
+        await ctx.comment("Review completed.");
+      },
+    });
+
+    const result = await runRuntime({
+      plan,
+      checkSink: recordingCheckSink(outcomes),
+      secretRedactor: replacingRedactor(detected),
+    });
+
+    const expected: RuntimeTaskCheckResult = {
+      taskName: "review",
+      conclusion: "failure",
+      summary: "Security gate contains [redacted secret].",
+    };
+    expect(result.taskChecks).toEqual([expected]);
+    expect(outcomes).toEqual([expected]);
   });
 
   it("rejects multiple ctx.check outcomes from one task", async () => {
@@ -1515,7 +1606,7 @@ describe("runTaskRuntime", () => {
     });
   });
 
-  it("bounds and redacts reported model telemetry before publication", async () => {
+  it("bounds reported model telemetry before publication", async () => {
     const secretModel = "model-api_key-abcdefghijklmnop";
     const oversizedModel = "m".repeat(500);
     const result = await runRuntime({
@@ -1533,9 +1624,9 @@ describe("runTaskRuntime", () => {
 
     const models = result.publicationPlan.metadata.stats?.models ?? [];
     expect(models).toHaveLength(20);
-    expect(models[0]).toBe("[redacted secret]");
-    expect(models[1]).toBe("[redacted credential]");
-    expect(result.mainComment).not.toContain(secretModel);
+    expect(models[0]).toBe(secretModel);
+    expect(models[1]).toBe("m".repeat(200));
+    expect(result.mainComment).toContain(secretModel);
   });
 
   it("falls back to the requested model when reported models are blank", async () => {
@@ -2304,6 +2395,18 @@ function expectedCodeUnitSortedCommandRunId(commandArguments: Record<string, str
 
 function manifestBuilder(manifest: DiffManifest = reviewTestManifest()) {
   return () => manifest;
+}
+
+function replacingRedactor(detected: string) {
+  return {
+    addSecret() {},
+    redact(value: string) {
+      return {
+        detected: value.includes(detected),
+        value: value.replaceAll(detected, "[redacted secret]"),
+      };
+    },
+  };
 }
 
 function reviewTestManifestWithContext(): DiffManifest {
