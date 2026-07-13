@@ -34,6 +34,7 @@ packages/runtime/src/hosts/bitbucket/tests/client.test.ts
   s_4ebdfc62030aaf::t_321f892f9a7b51 98-116
 packages/runtime/src/host-run/webhook-server.ts
   s_4ebdfc62030aaf::t_fed7feb5520c7f 331,343
+  s_4ebdfc62030aaf::t_0b42c1fe5cfbb8 228-231
 packages/runtime/src/hosts/bitbucket/tests/workspace.test.ts
   s_4ebdfc62030aaf::t_321f892f9a7b51 1,3-66,72-115
   s_4ebdfc62030aaf::t_c7674eb57fa1c3 2
