@@ -1,0 +1,27 @@
+Dockerfile
+  s_4ebdfc62030aaf::t_c2db018632bfe5 67
+packages/e2e/package.json
+  s_4ebdfc62030aaf::t_5a2ee46504efb7 10-11
+packages/e2e/container-check.ts
+  s_4ebdfc62030aaf::t_96c4620240bb3c 40,212-227
+  s_4ebdfc62030aaf::t_d3b0fbaed40a5e 228-229
+packages/e2e/webhook-health-fixture.ts
+  s_4ebdfc62030aaf::t_48fbab423b9356 51,59,67-69,75
+  s_4ebdfc62030aaf::t_c2db018632bfe5 1-50,52-58,60-66,70-74,76-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "16fcbeeeeb4e9c42d9950a0d311251db837dd02b",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
