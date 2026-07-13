@@ -1,5 +1,6 @@
 apps/docs/content/docs/reference/cli.mdx
   s_4ebdfc62030aaf::t_fc78e548225d85 66,91-114
+  s_4ebdfc62030aaf::t_e42bb3a248483d 90
 packages/runtime/src/config/init.ts
   s_4ebdfc62030aaf::t_62a19211616a5d 181
   s_4ebdfc62030aaf::t_9be27ef0e376ee 29,43,59,165-170,174-180,182-191
@@ -49,6 +50,7 @@ packages/runtime/src/hosts/gitlab/client.ts
 packages/cli/src/tests/main.test.ts
   s_4ebdfc62030aaf::t_2601f793defc24 204,210,219,229,233
   s_4ebdfc62030aaf::t_5f3da11a3e0557 581,591
+  s_4ebdfc62030aaf::t_e42bb3a248483d 234
 packages/runtime/src/hosts/git.ts
   s_4ebdfc62030aaf::t_5de9c4aaaacc6d 1-34
 apps/docs/content/docs/guide/gitlab.mdx
@@ -63,6 +65,7 @@ packages/runtime/src/host-run/webhook-server.ts
   s_4ebdfc62030aaf::t_f370ee1c926822 122
   s_4ebdfc62030aaf::t_d07d07d58a8ead 1-6,10-30,32-87,94-102,104-121,123-144,148-160,164-170,174-178,182-202,204-220,224-233
   s_4ebdfc62030aaf::t_62a19211616a5d 88-93,145-147,161-163,171-173,179,181,221-223
+  s_4ebdfc62030aaf::t_e42bb3a248483d 7,203
 packages/runtime/src/hosts/gitlab/publication.ts
   s_4ebdfc62030aaf::t_5d49e6d884e0de 245
   s_4ebdfc62030aaf::t_81818f4e8f7f81 1-10,18-29,41-46,51-161,177-189,196-197,230,237,240,242-244,246-281,285-295,299-308
@@ -77,6 +80,10 @@ packages/runtime/src/hosts/gitlab/adapter.ts
   s_4ebdfc62030aaf::t_8db97a25d15882 1-13,17-32,35-38,52-56,61-88,92-101
 packages/runtime/src/hosts/github/workspace.ts
   s_4ebdfc62030aaf::t_5de9c4aaaacc6d 4,83-86
+packages/runtime/package.json
+  s_4ebdfc62030aaf::t_e42bb3a248483d 48
+packages/runtime/src/index.ts
+  s_4ebdfc62030aaf::t_e42bb3a248483d 22-23
 ---
 {
   "schema_version": "authorship/3.0.0",
