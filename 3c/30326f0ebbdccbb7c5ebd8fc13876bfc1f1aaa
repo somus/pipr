@@ -1,0 +1,30 @@
+packages/runtime/src/hosts/tests/adapter-contract.ts
+  s_e687529015e9e5::t_ff6ed3e757b0f1 49-58
+  s_e687529015e9e5::t_ace6eb3040bf3e 59-61
+packages/runtime/src/review/tests/publish.test.ts
+  s_e687529015e9e5::t_0fd317a1d52cbd 895,904-905
+  s_e687529015e9e5::t_c9e0fc06111261 10,875,894,896-903,906-907,914-923,932-937
+packages/runtime/src/hosts/azure-devops/tests/client.test.ts
+  s_e687529015e9e5::t_e41f4e13df5251 2,130,156-157,168
+packages/runtime/src/hosts/bitbucket/tests/client.test.ts
+  s_e687529015e9e5::t_e41f4e13df5251 2,43,55,57
+packages/runtime/src/hosts/gitlab/tests/client.test.ts
+  s_e687529015e9e5::t_e41f4e13df5251 2,255-268
+  s_e687529015e9e5::t_ace6eb3040bf3e 269-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "3c30326f0ebbdccbb7c5ebd8fc13876bfc1f1aaa",
+  "prompts": {},
+  "sessions": {
+    "s_e687529015e9e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5c9c-d84f-7ac1-9051-e67aa92f922b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
