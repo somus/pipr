@@ -4,6 +4,28 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.4.0](https://github.com/somus/pipr/compare/v0.3.8...v0.4.0) (2026-07-13)
+
+
+### Features
+
+* add Azure DevOps adapter ([#64](https://github.com/somus/pipr/issues/64)) ([38213f9](https://github.com/somus/pipr/commit/38213f9a4e3ce7c463c2d9737fed87b1979c6139))
+* add Bitbucket Cloud adapter ([#65](https://github.com/somus/pipr/issues/65)) ([9b5c336](https://github.com/somus/pipr/commit/9b5c336bcb8a4561656b9a5a39d9c5e9ab2f6f26))
+* add code host adapter foundation ([#62](https://github.com/somus/pipr/issues/62)) ([f6018df](https://github.com/somus/pipr/commit/f6018dfe6046ef8aefbb02ae08f91e247da22962))
+* add Docker webhook deployment ([#69](https://github.com/somus/pipr/issues/69)) ([27ccd5b](https://github.com/somus/pipr/commit/27ccd5bf2a13c60b612e5b247213a0f57afdce07))
+* add GitLab adapter ([#63](https://github.com/somus/pipr/issues/63)) ([d6c639a](https://github.com/somus/pipr/commit/d6c639a4c73e6a1fe91c6aea8d67c7bda1c67334))
+
+
+### Bug Fixes
+
+* bound Pi streaming memory ([#68](https://github.com/somus/pipr/issues/68)) ([0313af5](https://github.com/somus/pipr/commit/0313af53b78926cc1c0875c0bb482041c3ef3eec))
+* track GitLab image assertion version ([#71](https://github.com/somus/pipr/issues/71)) ([6d9116a](https://github.com/somus/pipr/commit/6d9116a05741f4036563fc1f909b4106edb72c73))
+
+
+### Miscellaneous Chores
+
+* release 0.4.0 ([c3554e7](https://github.com/somus/pipr/commit/c3554e70cbfc8c77247c8bd16271887a2d636a2d))
+
 ## [0.3.8](https://github.com/somus/pipr/compare/v0.3.7...v0.3.8) (2026-07-11)
 
 
