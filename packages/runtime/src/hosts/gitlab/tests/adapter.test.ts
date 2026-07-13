@@ -150,7 +150,7 @@ describe("GitLab host adapter", () => {
         endLine: 4,
         findingId: "finding-right",
         reviewedHeadSha: "head",
-        body: `${renderInlineFindingMarker("finding-right", "head")}\nFix both.\n\n\`\`\`suggestion\nfirst replacement\n\`\`\`\n\n\`\`\`suggestion\nsecond replacement\n\`\`\``,
+        body: `${renderInlineFindingMarker("finding-right", "head")}\nFix both.\n\n\`\`\`suggestion\nfirst replacement\n\`\`\`\n\n\`\`\`suggestion\r\nsecond replacement\r\n\`\`\``,
       },
       {
         ...baseItem,
