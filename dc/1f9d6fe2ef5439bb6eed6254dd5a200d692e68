@@ -1,0 +1,38 @@
+packages/runtime/src/shared/tests/secret-redactor.test.ts
+  s_5eca1d7251411e::t_1ed8418330e8d3 45,56-59
+packages/runtime/src/shared/tests/logging.test.ts
+  s_5eca1d7251411e::t_1ed8418330e8d3 75,87-88,90-93
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_5eca1d7251411e::t_1ed8418330e8d3 1609,1627-1629
+packages/runtime/src/shared/logging.ts
+  s_5eca1d7251411e::t_075ae3d91b84d8 141
+packages/runtime/src/review/comment.ts
+  s_5eca1d7251411e::t_075ae3d91b84d8 291,319,349
+packages/runtime/src/review/tests/comment.test.ts
+  s_5eca1d7251411e::t_1ed8418330e8d3 585,612,614,675,683,796,811-816
+packages/runtime/src/review/review-stats.ts
+  s_5eca1d7251411e::t_075ae3d91b84d8 68
+packages/runtime/src/shared/betterleaks-redactor.ts
+  s_5eca1d7251411e::t_075ae3d91b84d8 71-72
+apps/docs/content/docs/guide/github-action.mdx
+  s_5eca1d7251411e::t_075ae3d91b84d8 82,84
+docs/research/secret-redaction-libraries.md
+  s_5eca1d7251411e::t_075ae3d91b84d8 7,18,20-21,23,27,30-31,34,54,129
+  s_5eca1d7251411e::t_2849741f856142 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "dc1f9d6fe2ef5439bb6eed6254dd5a200d692e68",
+  "prompts": {},
+  "sessions": {
+    "s_5eca1d7251411e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a57-3320-7360-92de-151eb5435525",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
