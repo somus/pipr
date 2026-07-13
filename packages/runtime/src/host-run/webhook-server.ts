@@ -85,6 +85,33 @@ export async function processNextWebhookDelivery(options: {
   return true;
 }
 
+export function createWebhookQueueProcessor(options: {
+  store: WebhookDeliveryStore;
+  run: (delivery: WebhookDelivery) => Promise<unknown>;
+  log?: (message: string) => void;
+}) {
+  let active: Promise<void> | undefined;
+  let stopped = false;
+
+  return {
+    run(): Promise<void> {
+      if (stopped) return Promise.resolve();
+      active ??= (async () => {
+        while (await processNextWebhookDelivery(options)) {
+          // Deliveries run serially because each checkout mutates the shared workspace.
+        }
+      })().finally(() => {
+        active = undefined;
+      });
+      return active;
+    },
+    async stop(): Promise<void> {
+      stopped = true;
+      await active;
+    },
+  };
+}
+
 export async function runWebhookServer(options: {
   host: WebhookHost;
   workspace: string;
@@ -95,7 +122,7 @@ export async function runWebhookServer(options: {
   port: number;
   hostname?: string;
   env?: NodeJS.ProcessEnv;
-}): Promise<never> {
+}): Promise<void> {
   await mkdir(path.dirname(path.resolve(options.databasePath)), { recursive: true });
   const env = { ...process.env, ...options.env };
   const expectedRepository = await createGitLabClient(env).getProject(options.expectedRepository);
@@ -106,44 +133,39 @@ export async function runWebhookServer(options: {
     expectedRepository,
     store,
   });
-  let processing = false;
-  const processQueue = async () => {
-    if (processing) return;
-    processing = true;
-    try {
-      while (
-        await processNextWebhookDelivery({
-          store,
-          run: (delivery) => runWebhookDelivery(delivery, { ...options, env }),
-          log: console.error,
-        })
-      ) {
-        // Drain one installation's durable queue serially because checkout mutates the workspace.
-      }
-    } finally {
-      processing = false;
-    }
-  };
+  const processor = createWebhookQueueProcessor({
+    store,
+    run: (delivery) => runWebhookDelivery(delivery, { ...options, env }),
+    log: console.error,
+  });
   const server = Bun.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port,
     maxRequestBodySize: MAX_WEBHOOK_PAYLOAD_BYTES,
     fetch: ingress,
   });
-  const interval = setInterval(() => void processQueue(), 250);
-  process.once("SIGINT", () => {
-    clearInterval(interval);
-    server.stop();
-    store.close();
-  });
-  process.once("SIGTERM", () => {
-    clearInterval(interval);
-    server.stop();
-    store.close();
-  });
-  console.log(`pipr webhook server listening on ${server.hostname}:${server.port}`);
-  await processQueue();
-  return await new Promise<never>(() => {});
+  const interval = setInterval(() => void processor.run(), 250);
+  const shutdown = Promise.withResolvers<void>();
+  let stopping: Promise<void> | undefined;
+  const stop = () => {
+    stopping ??= (async () => {
+      clearInterval(interval);
+      server.stop();
+      await processor.stop();
+      store.close();
+    })();
+    void stopping.then(shutdown.resolve, shutdown.reject);
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  try {
+    console.log(`pipr webhook server listening on ${server.hostname}:${server.port}`);
+    await processor.run();
+    await shutdown.promise;
+  } finally {
+    process.off("SIGINT", stop);
+    process.off("SIGTERM", stop);
+  }
 }
 
 export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
@@ -188,7 +210,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
       if (existing) return "duplicate";
       const retained = this.database
         .query<{ count: number; bytes: number }, []>(
-          "SELECT COUNT(*) AS count, COALESCE(SUM(length(CAST(payload AS BLOB))), 0) AS bytes FROM webhook_deliveries WHERE payload IS NOT NULL",
+          "SELECT COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS count, COALESCE(SUM(length(CAST(payload AS BLOB))), 0) AS bytes FROM webhook_deliveries WHERE payload IS NOT NULL",
         )
         .get();
       const payloadBytes = Buffer.byteLength(delivery.payload);

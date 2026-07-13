@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   createWebhookIngress,
+  createWebhookQueueProcessor,
   processNextWebhookDelivery,
   runWebhookDelivery,
   SqliteWebhookDeliveryStore,
@@ -13,6 +14,37 @@ import {
 } from "../webhook-server.js";
 
 describe("webhook runner", () => {
+  it("waits for the active delivery before completing shutdown", async () => {
+    const store = new MemoryDeliveryStore();
+    store.enqueue({ id: "delivery-1", host: "gitlab", payload: "{}" });
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let runs = 0;
+    const processor = createWebhookQueueProcessor({
+      store,
+      run: async () => {
+        runs += 1;
+        started.resolve();
+        await release.promise;
+      },
+    });
+
+    const processing = processor.run();
+    await started.promise;
+    let stopped = false;
+    const stopping = processor.stop().then(() => {
+      stopped = true;
+    });
+    await Bun.sleep(0);
+    expect(stopped).toBe(false);
+
+    release.resolve();
+    await Promise.all([processing, stopping]);
+    expect(store.completed).toEqual(["delivery-1"]);
+    await processor.run();
+    expect(runs).toBe(1);
+  });
+
   it("validates GitLab secrets and dedupes delivery IDs before enqueue", async () => {
     const store = new MemoryDeliveryStore();
     const ingress = createWebhookIngress({
@@ -35,6 +67,20 @@ describe("webhook runner", () => {
     expect((await ingress(request())).status).toBe(202);
     expect((await ingress(request())).status).toBe(200);
     expect(store.deliveries).toHaveLength(1);
+    expect(
+      (
+        await ingress(
+          new Request("http://localhost/webhook", {
+            method: "POST",
+            headers: {
+              "X-Gitlab-Token": "webhook-secret",
+              "X-Gitlab-Webhook-UUID": "missing-project",
+            },
+            body: "{}",
+          }),
+        )
+      ).status,
+    ).toBe(403);
     for (const body of [
       '{"project":{"id":42,"path_with_namespace":"other/project"}}',
       '{"project":{"id":99,"path_with_namespace":"group/project"}}',
@@ -84,6 +130,28 @@ describe("webhook runner", () => {
     ).toBe(401);
   });
 
+  it("returns retry guidance when the durable queue is full", async () => {
+    const ingress = createWebhookIngress({
+      host: "gitlab",
+      secret: "webhook-secret",
+      expectedRepository: { id: "42", path: "group/project" },
+      store: { enqueue: () => "full", next: () => undefined, complete() {}, fail() {} },
+    });
+    const response = await ingress(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "X-Gitlab-Token": "webhook-secret",
+          "X-Gitlab-Webhook-UUID": "full-queue",
+        },
+        body: '{"project":{"id":42,"path_with_namespace":"group/project"}}',
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("30");
+  });
+
   it("rejects deliveries when the durable pending queue reaches its byte or count budget", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
     try {
@@ -95,6 +163,22 @@ describe("webhook runner", () => {
       expect(store.enqueue({ id: "two", host: "gitlab", payload: "{}" })).toBe("full");
       store.complete("one");
       expect(store.enqueue({ id: "three", host: "gitlab", payload: "x".repeat(101) })).toBe("full");
+      store.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not count the active delivery against the pending queue budget", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    try {
+      const store = new SqliteWebhookDeliveryStore(path.join(root, "deliveries.sqlite"), {
+        maxPendingDeliveries: 1,
+      });
+      expect(store.enqueue({ id: "processing", host: "gitlab", payload: "{}" })).toBe("created");
+      expect(store.next()?.id).toBe("processing");
+      expect(store.enqueue({ id: "pending", host: "gitlab", payload: "{}" })).toBe("created");
+      expect(store.enqueue({ id: "overflow", host: "gitlab", payload: "{}" })).toBe("full");
       store.close();
     } finally {
       await rm(root, { recursive: true, force: true });

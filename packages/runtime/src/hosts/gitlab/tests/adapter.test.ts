@@ -59,6 +59,23 @@ describe("GitLab host adapter", () => {
     expect(client.discussions).toEqual([]);
   });
 
+  it("rechecks the head after publication reads and before the first write", async () => {
+    const client = new FakeGitLabClient();
+    client.afterListNotes = () => {
+      client.mergeRequest = {
+        ...client.mergeRequest,
+        diff_refs: { ...client.mergeRequest.diff_refs, head_sha: "new-head" },
+      };
+    };
+    const adapter = createGitLabHostAdapter({ client });
+
+    await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
+      "head changed",
+    );
+    expect(client.notes).toEqual([]);
+    expect(client.discussions).toEqual([]);
+  });
+
   it("loads prior state and inline discussion contexts", async () => {
     const client = new FakeGitLabClient();
     const adapter = createGitLabHostAdapter({ client });
@@ -266,6 +283,7 @@ class FakeGitLabClient implements GitLabClient {
   discussions: GitLabDiscussion[] = [];
   positions: GitLabPosition[] = [];
   createDiscussionError?: Error;
+  afterListNotes?: () => void;
   mergeRequest: GitLabMergeRequest = {
     iid: 7,
     title: "Test MR",
@@ -286,7 +304,11 @@ class FakeGitLabClient implements GitLabClient {
   });
   getMergeRequest = async () => this.mergeRequest;
   getRepositoryPermission = async () => "write" as const;
-  listNotes = async () => this.notes;
+  listNotes = async () => {
+    const notes = this.notes;
+    this.afterListNotes?.();
+    return notes;
+  };
   createNote = async (_projectId: string, _changeNumber: number, body: string) => {
     const note = {
       id: String(this.notes.length + 1),

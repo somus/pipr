@@ -114,4 +114,15 @@ describe("code host HTTP client", () => {
     expect(error.message).not.toContain(secret);
     expect(error.message.length).toBeLessThan(1_400);
   });
+
+  it("exposes response status without coupling callers to error message text", async () => {
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://example.test/",
+      fetch: async () => new Response("missing", { status: 404 }),
+    });
+
+    const error = await client.json("missing", z.unknown()).catch((caught) => caught);
+
+    expect(error).toMatchObject({ status: 404 });
+  });
 });

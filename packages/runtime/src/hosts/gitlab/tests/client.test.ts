@@ -103,6 +103,30 @@ describe("GitLab API client", () => {
     await expect(client.findReplyParent("42", 7, "102")).resolves.toBeUndefined();
   });
 
+  it("maps missing GitLab memberships by HTTP status", async () => {
+    const client = createGitLabClient({ GITLAB_TOKEN: "test-token" }, async (input) => {
+      if (String(input).includes("/users?")) {
+        return Response.json([{ id: 1, username: "outside-user" }]);
+      }
+      return new Response("missing", { status: 404 });
+    });
+
+    await expect(client.getRepositoryPermission("42", "outside-user")).resolves.toBe("none");
+  });
+
+  it("bounds pagination when GitLab never returns a terminal page", async () => {
+    let calls = 0;
+    const fullPage = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: "note" }));
+    const client = createGitLabClient({ GITLAB_TOKEN: "test-token" }, async () => {
+      calls += 1;
+      if (calls > 100) throw new Error("fixture exhausted");
+      return Response.json(fullPage);
+    });
+
+    await expect(client.listNotes("42", 7)).rejects.toThrow("exceeded 100 pages");
+    expect(calls).toBe(100);
+  });
+
   it("sends bounded commit statuses through the GitLab write contract", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const client = createGitLabClient({ GITLAB_TOKEN: "test-token" }, async (input, init) => {

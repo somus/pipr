@@ -23,10 +23,17 @@ export async function publishGitLabPlan(options: {
   plan: PublicationPlan;
 }): Promise<PublicationResult> {
   const { projectId } = gitLabCoordinates(options.change);
-  await assertCurrentHead(options.client, projectId, options.change);
   const owner = await options.client.currentUser();
   const notes = await options.client.listNotes(projectId, options.change.change.number);
   const existingMain = ownedNote(notes, owner.username, mainMarker(options.change.change.number));
+  const discussions = await options.client.listDiscussions(projectId, options.change.change.number);
+  const ownedBodies = discussionNotes(discussions)
+    .filter((note) => note.author?.username === owner.username)
+    .map((note) => note.body);
+  const existingMarkers = new Set(
+    extractInlineFindingMarkerRecords(ownedBodies).map((record) => `${record.id}:${record.head}`),
+  );
+  const mergeRequest = await assertCurrentHead(options.client, projectId, options.change);
   const main = existingMain
     ? await options.client.updateNote(
         projectId,
@@ -39,17 +46,6 @@ export async function publishGitLabPlan(options: {
         options.change.change.number,
         options.plan.mainComment,
       );
-  const discussions = await options.client.listDiscussions(projectId, options.change.change.number);
-  const ownedBodies = discussionNotes(discussions)
-    .filter((note) => note.author?.username === owner.username)
-    .map((note) => note.body);
-  const existingMarkers = new Set(
-    extractInlineFindingMarkerRecords(ownedBodies).map((record) => `${record.id}:${record.head}`),
-  );
-  const mergeRequest = await options.client.getMergeRequest(
-    projectId,
-    options.change.change.number,
-  );
   const errors: string[] = [];
   let posted = 0;
   let skipped = 0;
@@ -102,18 +98,23 @@ export async function publishGitLabCommandResponse(options: {
   body: string;
 }) {
   const { projectId } = gitLabCoordinates(options.change);
-  await assertCurrentHead(options.client, projectId, options.change);
   const owner = await options.client.currentUser();
   const marker = `<!-- pipr:command-response change=${options.change.change.number} source=${options.sourceCommentId} command=${options.commandName} -->`;
-  const body = [marker, "", options.body, ""].join("\n");
+  const responseBody = [marker, "", options.body, ""].join("\n");
   const existing = ownedNote(
     await options.client.listNotes(projectId, options.change.change.number),
     owner.username,
     marker,
   );
+  await assertCurrentHead(options.client, projectId, options.change);
   const note = existing
-    ? await options.client.updateNote(projectId, options.change.change.number, existing.id, body)
-    : await options.client.createNote(projectId, options.change.change.number, body);
+    ? await options.client.updateNote(
+        projectId,
+        options.change.change.number,
+        existing.id,
+        responseBody,
+      )
+    : await options.client.createNote(projectId, options.change.change.number, responseBody);
   return { action: existing ? ("updated" as const) : ("created" as const), id: note.id };
 }
 
@@ -283,13 +284,14 @@ async function assertCurrentHead(
   projectId: string,
   change: ChangeRequestEventContext,
   reviewedHeadSha = change.change.head.sha,
-): Promise<void> {
+): Promise<Awaited<ReturnType<GitLabClient["getMergeRequest"]>>> {
   const current = await client.getMergeRequest(projectId, change.change.number);
   if (current.diff_refs.head_sha !== reviewedHeadSha) {
     throw new Error(
       `GitLab merge request head changed from ${reviewedHeadSha} to ${current.diff_refs.head_sha}`,
     );
   }
+  return current;
 }
 
 function gitLabCoordinates(change: ChangeRequestEventContext) {

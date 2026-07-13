@@ -13,6 +13,16 @@ export type CodeHostHttpClientOptions = {
   retryNonIdempotentStatuses?: readonly number[];
 };
 
+export class CodeHostHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "CodeHostHttpError";
+    this.status = status;
+  }
+}
+
 export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
   const fetchRequest = options.fetch ?? fetch;
   const sleep = options.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds));
@@ -61,11 +71,12 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
           continue;
         }
         const body = (await response.text()).slice(0, 1_024);
-        throw new Error(
+        throw new CodeHostHttpError(
           redact(
             `Code host request failed (${response.status} ${response.statusText}): ${body}`,
             secrets,
           ),
+          response.status,
         );
       }
     },

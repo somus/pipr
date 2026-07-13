@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { type CodeHostHttpClientOptions, createCodeHostHttpClient } from "../http.js";
+import {
+  type CodeHostHttpClientOptions,
+  CodeHostHttpError,
+  createCodeHostHttpClient,
+} from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
 
 const userSchema = z.looseObject({ id: z.number().int().positive(), username: z.string().min(1) });
@@ -220,7 +224,7 @@ export function createGitLabClient(
         );
         return accessLevelPermission(member.access_level);
       } catch (error) {
-        if (error instanceof Error && error.message.includes("(404 ")) {
+        if (error instanceof CodeHostHttpError && error.status === 404) {
           return "none";
         }
         throw error;
@@ -299,10 +303,11 @@ export function createGitLabClient(
 }
 
 type JsonClient = ReturnType<typeof createCodeHostHttpClient>;
+const MAX_PAGINATION_PAGES = 100;
 
 async function paginated<T>(client: JsonClient, path: string, schema: z.ZodType<T>): Promise<T[]> {
   const values: T[] = [];
-  for (let page = 1; ; page += 1) {
+  for (let page = 1; page <= MAX_PAGINATION_PAGES; page += 1) {
     const separator = path.includes("?") ? "&" : "?";
     const batch = await client.json(
       `${path}${separator}per_page=100&page=${page}`,
@@ -313,6 +318,7 @@ async function paginated<T>(client: JsonClient, path: string, schema: z.ZodType<
       return values;
     }
   }
+  throw new Error(`GitLab pagination exceeded ${MAX_PAGINATION_PAGES} pages for ${path}`);
 }
 
 function jsonRequest(method: "POST" | "PUT", body: Record<string, unknown>): RequestInit {
