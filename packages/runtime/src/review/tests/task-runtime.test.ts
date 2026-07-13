@@ -356,8 +356,8 @@ describe("runTaskRuntime", () => {
     expect(result.inlineCommentDrafts.map((item) => item.finding.body)).toEqual(["inline body"]);
   });
 
-  it("redacts scanner findings before building the publication plan", async () => {
-    const detected = "scanner-only-value";
+  it("redacts known runtime secrets before building the publication plan", async () => {
+    const detected = "registered-runtime-secret";
     const plan = singleTaskPlan({
       async run(ctx) {
         await ctx.comment({
@@ -382,11 +382,11 @@ describe("runTaskRuntime", () => {
       plan,
       secretRedactor: {
         addSecret() {},
-        async redact(values) {
-          return values.map((value) => ({
+        redact(value) {
+          return {
             detected: value.includes(detected),
             value: value.replaceAll(detected, "[redacted secret]"),
-          }));
+          };
         },
       },
     });
@@ -458,7 +458,7 @@ describe("runTaskRuntime", () => {
   });
 
   it("redacts command replies before returning them for publication", async () => {
-    const detected = "scanner-only-value";
+    const detected = "registered-runtime-secret";
     const result = await runRuntime({
       plan: commandTaskPlan(async (ctx) => {
         await ctx.command?.reply(`Answer contains ${detected}.`);
@@ -596,7 +596,7 @@ describe("runTaskRuntime", () => {
   });
 
   it("redacts task check summaries before exposing them to the check sink", async () => {
-    const detected = "scanner-only-value";
+    const detected = "registered-runtime-secret";
     const outcomes: unknown[] = [];
     const plan = singleTaskPlan({
       check: { name: "pipr / review" },
@@ -2400,11 +2400,11 @@ function manifestBuilder(manifest: DiffManifest = reviewTestManifest()) {
 function replacingRedactor(detected: string) {
   return {
     addSecret() {},
-    async redact(values: readonly string[]) {
-      return values.map((value) => ({
+    redact(value: string) {
+      return {
         detected: value.includes(detected),
         value: value.replaceAll(detected, "[redacted secret]"),
-      }));
+      };
     },
   };
 }

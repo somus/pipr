@@ -205,7 +205,7 @@ async function runReviewCommentVerifier(
   });
   return {
     ...result,
-    threadActions: await redactThreadActions({
+    threadActions: redactThreadActions({
       threadActions: result.threadActions,
       redactor: options.secretRedactor,
     }),

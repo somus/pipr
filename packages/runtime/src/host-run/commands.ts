@@ -7,8 +7,8 @@ import { buildDiffManifest } from "../diff/diff.js";
 import { runGit as runGitCommand } from "../diff/git.js";
 import { createLocalChangeRequestEvent } from "../hosts/local/adapter.js";
 import { runTaskRuntime } from "../review/task/task-runtime.js";
-import { createBetterleaksSecretRedactor } from "../shared/betterleaks-redactor.js";
 import { createRuntimeLog } from "../shared/logging.js";
+import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
 import { parseChangeRequestEventContext } from "../types.js";
 import { createHostRunAdapter } from "./adapter.js";
 import { runChangeRequestHostRunCommand } from "./change-request-entry.js";
@@ -185,7 +185,7 @@ export async function runHostRunCommand(
 ): Promise<HostRunCommandResult> {
   return await runHostRunCommandWithDependencies({
     ...options,
-    secretRedactor: createBetterleaksSecretRedactor({ env: options.env ?? process.env }),
+    secretRedactor: createKnownSecretRedactor({ env: options.env ?? process.env }),
   });
 }
 

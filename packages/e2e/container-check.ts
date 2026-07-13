@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import { join } from "node:path";
-import { checkBetterleaksContract } from "./betterleaks-contract.ts";
 import { checkPiContract } from "./pi-contract.ts";
 import {
   actionFixtureScript,
@@ -37,7 +36,6 @@ if (scenarioArg && selectedScenarios.length === 0) {
 
 assertDockerImageExists(actionImage);
 await checkPiContract({ cwd: sourceRoot, image: actionImage });
-await checkBetterleaksContract({ cwd: sourceRoot, image: actionImage });
 assertWebhookEntrypoint(actionImage);
 await assertWebhookHealth(actionImage);
 

@@ -11,4 +11,4 @@ export {
   piRequiredCliFlags,
   piThinkingLevels,
 } from "../pi/contract.js";
-export { createBetterleaksSecretRedactor } from "../shared/betterleaks-redactor.js";
+export { createKnownSecretRedactor } from "../shared/secret-redactor.js";

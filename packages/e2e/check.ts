@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-import { checkBetterleaksContract } from "./betterleaks-contract.ts";
 import { checkPiContract } from "./pi-contract.ts";
 import { envValue, run, scenarioNames, sourceRoot } from "./scenarios.ts";
 
@@ -11,7 +10,6 @@ if (envValue("PIPR_SKIP_ACTION_IMAGE_BUILD") !== "1") {
 
 run("bun", ["run", "--cwd", "packages/runtime", "build"], sourceRoot);
 await checkPiContract({ cwd: sourceRoot, image: actionImage });
-await checkBetterleaksContract({ cwd: sourceRoot, image: actionImage });
 run("bun", ["packages/e2e/assertions.test.ts"], sourceRoot);
 try {
   for (const scenario of scenarioNames) {

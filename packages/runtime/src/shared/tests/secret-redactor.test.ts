@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createBetterleaksSecretRedactor } from "../betterleaks-redactor.js";
-import { sensitiveEnvironmentValues } from "../secret-redactor.js";
+import { createKnownSecretRedactor, sensitiveEnvironmentValues } from "../secret-redactor.js";
 
 describe("sensitiveEnvironmentValues", () => {
   it("does not treat pass substrings in ordinary environment names as secrets", () => {
@@ -14,75 +13,36 @@ describe("sensitiveEnvironmentValues", () => {
   });
 });
 
-describe("createBetterleaksSecretRedactor", () => {
-  it("redacts Betterleaks spans across batched Unicode targets", async () => {
-    const detected = "scanner-only-value";
-    const redactor = createBetterleaksSecretRedactor({
-      scan: async (payload) => {
-        const lines = payload.split("\n");
-        const lineIndex = lines.findIndex((line) => line.includes(detected));
-        const line = lines[lineIndex];
-        if (lineIndex < 0 || line === undefined) {
-          throw new Error("test payload omitted detected value");
-        }
-        const startColumn =
-          new TextEncoder().encode(line.slice(0, line.indexOf(detected))).length +
-          1 +
-          (lineIndex > 0 ? 1 : 0);
-        const detectedBytes = new TextEncoder().encode(detected).length;
-        return {
-          exitCode: 1,
-          stdout: JSON.stringify([
-            {
-              StartLine: lineIndex + 1,
-              EndLine: lineIndex + 1,
-              StartColumn: startColumn,
-              EndColumn: startColumn + detectedBytes - 1,
-            },
-          ]),
-        };
-      },
-    });
-
-    const result = await redactor.redact([
-      `Unicode 😀 é before ${detected} after.`,
-      "Safe content.",
-    ]);
-
-    expect(result).toEqual([
-      { value: "Unicode 😀 é before [redacted secret] after.", detected: true },
-      { value: "Safe content.", detected: false },
-    ]);
-  });
-
-  it("masks registered values without changing scanner-clean content", async () => {
-    const redactor = createBetterleaksSecretRedactor({
-      scan: async () => ({ exitCode: 0, stdout: "[]" }),
-    });
+describe("createKnownSecretRedactor", () => {
+  it("masks registered values without scanning unknown credential-like content", () => {
+    const redactor = createKnownSecretRedactor({ env: {} });
     redactor.addSecret("registered-value");
 
-    const result = await redactor.redact([
-      "Known registered-value and model-api_key-abcdefghijklmnop.",
-    ]);
+    const result = redactor.redact("Known registered-value and model-api_key-abcdefghijklmnop.");
 
-    expect(result).toEqual([
-      {
-        value: "Known [redacted secret] and model-api_key-abcdefghijklmnop.",
-        detected: true,
-      },
-    ]);
+    expect(result).toEqual({
+      value: "Known [redacted secret] and model-api_key-abcdefghijklmnop.",
+      detected: true,
+    });
   });
 
-  it.each([
-    { name: "scanner failure", exitCode: 2, stdout: "[]" },
-    { name: "malformed report", exitCode: 1, stdout: "not-json" },
-  ])("fails closed on $name", async ({ exitCode, stdout }) => {
-    const redactor = createBetterleaksSecretRedactor({
-      scan: async () => ({ exitCode, stdout }),
+  it("masks sensitive environment values exactly", () => {
+    const redactor = createKnownSecretRedactor({
+      env: { PROVIDER_TOKEN: "runtime-token" },
     });
 
-    await expect(redactor.redact(["publication body"])).rejects.toThrow(
-      "Secret redaction failed; publication aborted",
-    );
+    expect(redactor.redact("Use runtime-token here.")).toEqual({
+      value: "Use [redacted secret] here.",
+      detected: true,
+    });
+  });
+
+  it("ignores short sensitive environment values", () => {
+    const redactor = createKnownSecretRedactor({ env: { PROVIDER_TOKEN: "x" } });
+
+    expect(redactor.redact("example text")).toEqual({
+      value: "example text",
+      detected: false,
+    });
   });
 });

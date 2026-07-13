@@ -1152,7 +1152,7 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
   it("redacts user-reply verifier responses before publication", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const publication = verifierPublicationClient(workspace);
-    const detected = "scanner-only-value";
+    const detected = "registered-runtime-secret";
     try {
       await writeStillValidVerifierOutput(workspace, `Still applies because ${detected}.`);
       await expectVerifierReplyPublished(workspace, publication, {
@@ -1371,11 +1371,11 @@ async function runReviewCommentAction(
 function replacingSecretRedactor(detected: string): SecretRedactor {
   return {
     addSecret() {},
-    async redact(values) {
-      return values.map((value) => ({
+    redact(value) {
+      return {
         detected: value.includes(detected),
         value: value.replaceAll(detected, "[redacted secret]"),
-      }));
+      };
     },
   };
 }
