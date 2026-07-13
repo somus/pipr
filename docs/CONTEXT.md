@@ -22,7 +22,7 @@ _Avoid_: PR-authored runtime settings
 
 **Code Host Adapter**:
 The internal provider boundary for native events, permissions, checkout, comment publication, and inline location mapping.
-GitHub is first. GitLab, Bitbucket, and Azure DevOps support is coming soon.
+GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud are supported.
 _Avoid_: GitHub runtime, provider-specific user config
 
 **Change Request**:

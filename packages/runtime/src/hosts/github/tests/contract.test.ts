@@ -110,7 +110,7 @@ describe("GitHub host adapter contract", () => {
 
     await expect(
       adapter.permissions.getRepositoryPermission({
-        repository: change.repository,
+        change,
         actor: "octo-dev",
       }),
     ).resolves.toBe("maintain");

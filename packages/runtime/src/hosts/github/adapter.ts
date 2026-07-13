@@ -58,10 +58,10 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
             reply: await loadGitHubReviewCommentReplyEvent(eventOptions),
           };
         }
-        return {
-          kind: "change-request",
-          change: await loadGitHubPullRequestEventContext(eventOptions),
-        };
+        const change = await loadGitHubPullRequestEventContext(eventOptions);
+        return change.change.isDraft
+          ? { kind: "ignored", reason: "pull request is a draft" }
+          : { kind: "change-request", change };
       },
       async loadChangeRequest(ref) {
         const loaded = await commandClient.getPullRequest({
@@ -83,8 +83,8 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
       ensureWorkspaceSafeDirectory: ensureGitHubWorkspaceSafeDirectory,
     },
     permissions: {
-      getRepositoryPermission(options) {
-        return commandClient.getRepositoryPermission(options);
+      getRepositoryPermission({ change, actor }) {
+        return commandClient.getRepositoryPermission({ repository: change.repository, actor });
       },
     },
     publication: {

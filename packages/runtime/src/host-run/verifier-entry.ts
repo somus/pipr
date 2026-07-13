@@ -237,7 +237,7 @@ async function verifierActorAllowed(
     return true;
   }
   const permission = await adapter.permissions.getRepositoryPermission({
-    repository: event.repository,
+    change: event,
     actor: reply.actor,
   });
   return hasRequiredRepositoryPermission(permission, "write");

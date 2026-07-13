@@ -8,6 +8,7 @@ const pullRequestDetailsSchema = z.looseObject({
   title: z.string().optional(),
   body: z.string().nullable().optional(),
   html_url: z.string().optional(),
+  draft: z.boolean().optional(),
   user: z
     .looseObject({
       login: z.string().min(1).optional(),
@@ -152,6 +153,7 @@ function githubPullRequestDetails(options: {
         fork: options.json.head.repo?.fork,
       },
       isFork: githubHeadIsFork(options.json, repository.slug),
+      isDraft: options.json.draft,
     },
   };
 }

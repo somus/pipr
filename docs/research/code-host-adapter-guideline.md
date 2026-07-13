@@ -373,21 +373,17 @@ Bitbucket Data Center must not share this module. Its endpoints use project keys
 
 ### Authentication and permissions
 
-For a repository installation, prefer a repository access token so the bot identity and blast radius are repository-scoped. Use OAuth or a workspace access token only when one installation must span repositories. API tokens tied to a human are acceptable for development, not the recommended production identity. Bitbucket documents these choices, token identity behavior, and scopes in [REST API authentication](https://developer.atlassian.com/cloud/bitbucket/rest/intro/).
+Use a dedicated Bitbucket bot account with a scoped user API token. The adapter needs the user endpoint to identify its own comments, and it may need the same user credential to fetch a private source fork; repository access tokens do not satisfy those contracts. Keep the bot's workspace and repository access limited to the repositories Pipr reviews. Bitbucket documents API-token identity behavior and scopes in [REST API authentication](https://developer.atlassian.com/cloud/bitbucket/rest/intro/).
 
-The minimum functional scopes are:
+The review token needs exactly these granular scopes:
 
-- pull request read/comment scope for PR reads, comments, replies, and thread resolution;
-- repository read scope for commit statuses and any repository endpoint used by the adapter;
-- webhook scope only for installation management, not for handling an already configured webhook.
+- `read:user:bitbucket` for the current bot identity;
+- `read:pullrequest:bitbucket` for PR reads, comment creation and update, replies, and thread resolution;
+- `read:repository:bitbucket` for repository metadata, private checkout, and commit-status creation.
 
-Atlassian's current granular scope names distinguish `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket`, and `read:repository:bitbucket`; the legacy OAuth scope names are `pullrequest`, `pullrequest:write`, and `repository`. Use the scope vocabulary that matches the selected token mechanism and test every write during adapter setup.
+Bitbucket's API-token scopes do not imply one another. The PR comment and commit-status APIs use read scopes even though they create resources, so do not add `write:pullrequest:bitbucket` or `write:repository:bitbucket` unless another installation operation requires them. Webhook scope is needed only for installation management, not for handling an already configured webhook.
 
-Command authorization is the main least-privilege problem. `GET /workspaces/{workspace}/permissions/repositories` returns effective repository permissions, including indirect group privileges, but only workspace administrators can call it. A write-scoped review bot therefore cannot securely resolve arbitrary command actors by itself. Choose one of these explicit product decisions:
-
-1. require an admin-capable credential for commands while keeping automatic reviews on a narrower credential;
-2. accept an authorization assertion from a trusted installation service;
-3. disable `@pipr` commands on Bitbucket Cloud initially.
+Command authorization is the main least-privilege problem. `GET /workspaces/{workspace}/permissions/repositories` returns effective repository permissions, including indirect group privileges, but only workspace administrators can call it. Require a separate workspace-administrator user API token with `read:repository:bitbucket`; do not reuse the review token even when the same account owns both credentials. Alternative designs can accept a signed authorization assertion from a trusted installation service or disable `@pipr` commands.
 
 Do not use the newer repository `permissions-config` endpoint as an effective permission check. It exposes explicit assignments and requires repository admin scope. The effective workspace endpoint is documented in the [Workspaces API](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-workspaces/), and the explicit permission endpoints are described in Atlassian's [repository permission API announcement](https://developer.atlassian.com/cloud/bitbucket/new-repo-permission-apis/).
 
@@ -475,6 +471,8 @@ Inside Azure Pipelines, prefer the short-lived `System.AccessToken`, mapped expl
 
 For a hosted webhook runner, prefer a Microsoft Entra service principal or managed identity added explicitly to the Azure DevOps organization and project. Azure DevOps permissions are managed in Azure DevOps, not through Entra application permissions. PATs should be limited to local development and prototypes. Microsoft recommends Entra identities over long-lived PATs in [service principal and managed identity guidance](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/service-principal-managed-identity?view=azure-devops) and [PAT guidance](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops).
 
+For a full-parity local PAT, select `Code (Read & write)`, `Code (Status)`, `Identity (Read)`, and `Security (Manage)` and scope it to one organization. The identity lookup requires `vso.identity`. Azure DevOps exposes `vso.security_manage`, rather than a read-only Security PAT scope, even when the adapter only queries ACLs. Installations that disable commands can omit the Identity and Security scopes because they do not need effective actor-permission evaluation.
+
 Use REST API 7.1 consistently for the initial adapter because all required Git PR endpoints are released there. Do not implement new Azure DevOps OAuth registration; Microsoft has deprecated that flow for new applications in favor of Entra OAuth.
 
 Command authorization does not have a simple role endpoint. Effective repository permission is derived from the Git Repositories security namespace, hierarchical tokens, user and group identity descriptors, inherited allow bits, and explicit deny bits. The adapter must either:
@@ -489,7 +487,7 @@ Do not treat an ACL entry for the user alone as effective permission because Azu
 
 Load the pull request with `GET .../_apis/git/repositories/{repositoryId}/pullrequests/{pullRequestId}?api-version=7.1`. The object supplies title, description, creator, source and target refs, repository identities, URL, and `lastMergeSourceCommit` and `lastMergeTargetCommit` data. See [Get Pull Request](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-requests/get-pull-request?view=azure-devops-rest-7.1).
 
-List iterations and choose the latest iteration whose source commit matches the reviewed head. Iteration one is created with the PR and later pushes create later iterations. Fetch `GET .../iterations/{iterationId}/changes` with `compareTo=0` and follow `nextSkip` and `nextTop`. Each change supplies `changeTrackingId`, current path, original path, and change type. The maximum page size is 2000. See [Pull Request Iteration Changes](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-iteration-changes/get?view=azure-devops-rest-7.1).
+List iterations and choose the latest iteration whose source commit matches the reviewed head. Iteration one is created with the PR and later pushes create later iterations. Fetch `GET .../iterations/{iterationId}/changes` with `compareTo=0`, read entries from `changeEntries`, and follow nonzero `nextSkip` and `nextTop` values. Each change supplies `changeTrackingId`, current path, original path, and change type. The maximum page size is 2000. See [Pull Request Iteration Changes](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-iteration-changes/get?view=azure-devops-rest-7.1).
 
 The Diff Manifest remains local Git output. The iteration changes are a native anchor index from path to `changeTrackingId` and iteration pair.
 

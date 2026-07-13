@@ -1,0 +1,73 @@
+---
+title: "GitLab"
+description: "Run Pipr reviews, commands, and reply verification on GitLab.com."
+---
+
+Pipr supports GitLab.com merge requests through GitLab CI for automatic reviews and a trusted webhook runner for commands and reply verification. Use the webhook runner when merge requests can change pipeline code or come from forks.
+
+## Automatic merge request reviews
+
+Generate a GitLab pipeline alongside `.pipr/config.ts`:
+
+```bash
+pipr init --adapters gitlab
+```
+
+The command creates `.gitlab-ci.yml` with a merge-request job that runs the Pipr container through `pipr host-run --host gitlab`.
+
+Configure these masked CI/CD variables in GitLab:
+
+| Variable | Purpose |
+| --- | --- |
+| `GITLAB_TOKEN` | Project access token used to read the merge request and publish notes, discussions, and commit statuses. |
+| Your model provider key | The `apiKeyEnv` configured in `.pipr/config.ts`, such as `DEEPSEEK_API_KEY`. |
+
+Give the project access token API scope and a project role that can read code, comment on merge requests, resolve discussions, and create commit statuses. Pipr maps GitLab access levels into its provider-neutral command permissions.
+
+GitLab CI configuration comes from source control. A contributor who can change the pipeline can attempt to expose variables available to that job, so don't provide write or model credentials to pipelines that run untrusted merge-request code. Use the trusted webhook runner for fork reviews or repositories where contributors can edit `.gitlab-ci.yml`.
+
+## Commands and reply verification
+
+Run one trusted checkout behind an HTTPS reverse proxy:
+
+```bash
+export GITLAB_TOKEN="..."
+export PIPR_WEBHOOK_SECRET="..."
+export DEEPSEEK_API_KEY="..."
+
+pipr webhook serve \
+  --host gitlab \
+  --repository group/project \
+  --workspace /srv/pipr/project \
+  --database /var/lib/pipr/webhooks.sqlite \
+  --hostname 127.0.0.1 \
+  --port 8787
+```
+
+The runner resolves `--repository` to one GitLab project, validates `X-Gitlab-Token`, requires every payload's project ID and path to match that project, deduplicates GitLab delivery UUIDs in SQLite, acknowledges accepted deliveries before model work, and drains the durable queue serially. Mount the SQLite directory on persistent storage and keep the repository workspace dedicated to this runner because each review checks out the exact merge-request head.
+
+Create a project webhook in GitLab with:
+
+- your reverse proxy's HTTPS URL;
+- the same secret stored in `PIPR_WEBHOOK_SECRET`;
+- Merge request events;
+- Comments.
+
+The reverse proxy should restrict request size and access before forwarding to the loopback listener. Pipr also rejects payloads larger than 2 MiB, bounds pending queue data to 1,000 deliveries and 32 MiB, retains only the newest 10,000 terminal delivery records for deduplication, and retries failed queued work up to three times. Completion and redacted failure records are written to the server log.
+
+## Supported behavior
+
+The GitLab.com adapter supports:
+
+- merge-request open, update, reopen, merge, and close normalization;
+- trusted base config and exact-head checkout;
+- Main Review Comment upsert through merge-request notes;
+- single-line and multi-line Inline Review Comments through discussions;
+- GitLab suggestion blocks;
+- prior-state loading and marker deduplication;
+- `@pipr` commands with GitLab member permission checks;
+- reply-driven verification and discussion resolution;
+- individual and aggregate external commit statuses;
+- stale-head rejection before writes.
+
+GitLab Dedicated and Self-Managed compatibility isn't part of this release.

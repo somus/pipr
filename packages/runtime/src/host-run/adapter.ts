@@ -1,4 +1,7 @@
+import { createAzureDevOpsHostAdapter } from "../hosts/azure-devops/adapter.js";
+import { createBitbucketHostAdapter } from "../hosts/bitbucket/adapter.js";
 import { createGitHubHostAdapter } from "../hosts/github/adapter.js";
+import { createGitLabHostAdapter } from "../hosts/gitlab/adapter.js";
 import { resolveCodeHostId } from "../hosts/selection.js";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import type { PiprConfig } from "../types.js";
@@ -33,6 +36,15 @@ export function createHostRunAdapter(options: {
     env: options.env ?? process.env,
   });
   if (host !== "github") {
+    if (host === "azure-devops") {
+      return createAzureDevOpsHostAdapter({ env: options.env });
+    }
+    if (host === "gitlab") {
+      return createGitLabHostAdapter({ env: options.env });
+    }
+    if (host === "bitbucket") {
+      return createBitbucketHostAdapter({ env: options.env });
+    }
     throw new Error(`Code host adapter '${host}' is not available in this build`);
   }
   return createGitHubHostAdapter({ env: options.env });

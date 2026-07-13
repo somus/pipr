@@ -19,6 +19,8 @@ export type {
   RuntimeLogRecord,
   RuntimeLogSink,
 } from "./host-run/commands.js";
+export type { WebhookHost } from "./host-run/webhook-server.js";
+export { runWebhookServer } from "./host-run/webhook-server.js";
 export {
   runDryRunCommand,
   runHostRunCommand,

@@ -33,6 +33,6 @@ export async function prepareTrustedHeadCheckout(
   addProviderSecrets(log, config, options.env);
   assertTrustedHostRunProviderEnv(options, config);
   await logPhase(log, "checkout head", async () => {
-    adapter.workspace.ensureHeadCheckout({ rootDir: options.rootDir, change: event });
+    await adapter.workspace.ensureHeadCheckout({ rootDir: options.rootDir, change: event });
   });
 }

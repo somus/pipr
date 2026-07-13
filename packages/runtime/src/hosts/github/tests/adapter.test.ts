@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { createGitHubHostAdapter } from "../adapter.js";
 import type { GitHubCommandClient } from "../command.js";
 import type { GitHubPublicationClient } from "../publication.js";
@@ -30,6 +33,41 @@ describe("GitHub host adapter", () => {
     expect(typeof adapter.statuses?.upsert).toBe("function");
     expect("parseEvent" in adapter).toBe(false);
     expect("publish" in adapter).toBe(false);
+  });
+
+  it("ignores draft pull request events", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-github-adapter-"));
+    const eventPath = path.join(root, "event.json");
+    await Bun.write(
+      eventPath,
+      JSON.stringify({
+        action: "opened",
+        number: 1,
+        repository: { full_name: "local/pipr" },
+        pull_request: {
+          number: 1,
+          draft: true,
+          base: { sha: "base", repo: { full_name: "local/pipr" } },
+          head: { sha: "head", repo: { full_name: "local/pipr" } },
+        },
+      }),
+    );
+    const adapter = createGitHubHostAdapter({
+      env: {},
+      commandClient: commandClient(),
+      publicationClient: publicationClient(),
+    });
+    try {
+      await expect(
+        adapter.events.parseEvent({
+          eventPath,
+          env: { GITHUB_EVENT_NAME: "pull_request", GITHUB_REPOSITORY: "local/pipr" },
+          workspace: root,
+        }),
+      ).resolves.toEqual({ kind: "ignored", reason: "pull request is a draft" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

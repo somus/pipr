@@ -5,7 +5,7 @@ description: "Install Pipr, configure review tasks, and understand how runs publ
 
 Use this section when you are adding Pipr to a repository, changing how it reviews pull requests, or debugging what it publishes.
 
-GitHub pull requests are the supported production target today. GitLab, Bitbucket, and Azure DevOps support is coming soon.
+Pipr supports GitHub pull requests, GitLab.com merge requests, Azure DevOps Services pull requests, and Bitbucket Cloud pull requests.
 
 Pipr is a lean core you build on: start with the default review, then compose recipes, custom tasks, commands, and plugins in the same `.pipr/config.ts` as your needs grow. The [Build on the core](/docs#build-on-the-core) ladder shows which page matches each level.
 
@@ -44,6 +44,7 @@ Pick the page based on the job you are doing.
 | --- | --- |
 | [Quickstart](/docs/guide/quickstart) | The shortest path from install to the first review. |
 | [GitHub Action](/docs/guide/github-action) | Workflow YAML, permissions, outputs, dry runs, and command events. |
+| [Bitbucket Cloud](/docs/guide/bitbucket) | Trusted webhook runner, API-token scopes, events, and publication behavior. |
 | [Local Runs](/docs/guide/local-runs) | Running review tasks locally without publishing comments. |
 | [Comments and Findings](/docs/guide/comments) | Main comments, inline comments, dropped findings, prior state, and verifier replies. |
 | [Troubleshooting](/docs/guide/troubleshooting) | Symptom-first fixes for setup, config, Action, model, and publication failures. |

@@ -63,6 +63,7 @@ export type ReviewCommentReplyEvent = {
 };
 
 export type CodeHostEvent =
+  | { kind: "ignored"; reason: string }
   | { kind: "change-request"; change: ChangeRequestEventContext }
   | { kind: "command-comment"; comment: CommandCommentEvent }
   | { kind: "review-comment-reply"; reply: ReviewCommentReplyEvent };
@@ -100,13 +101,16 @@ export type CodeHostEvents = {
 
 export type CodeHostPermissions = {
   getRepositoryPermission(options: {
-    repository: RepositoryRef;
+    change: ChangeRequestEventContext;
     actor: string;
   }): Promise<RepositoryPermission>;
 };
 
 export type CodeHostWorkspace = {
-  ensureHeadCheckout(options: { rootDir: string; change: ChangeRequestEventContext }): void;
+  ensureHeadCheckout(options: {
+    rootDir: string;
+    change: ChangeRequestEventContext;
+  }): Promise<void>;
   ensureWorkspaceSafeDirectory?(options: { rootDir: string; env?: NodeJS.ProcessEnv }): void;
 };
 
