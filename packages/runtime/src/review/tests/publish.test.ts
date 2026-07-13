@@ -7,6 +7,7 @@ import {
   publishGitHubPublicationPlan,
   publishGitHubThreadActions,
 } from "../../hosts/github/publication.js";
+import { runCodeHostPaginationContract } from "../../hosts/tests/adapter-contract.js";
 import type { ChangeRequestEventContext, DiffManifest, ValidatedReview } from "../../types.js";
 import { buildPublicationPlan, prepareInlinePublicationItems, runtimeVersion } from "../comment.js";
 import {
@@ -871,7 +872,7 @@ describe("createGitHubPublicationClient", () => {
     expect(called).toBe(false);
   });
 
-  it("lists all issue and review comment pages before marker checks", async () => {
+  runCodeHostPaginationContract("GitHub", async () => {
     const requestedUrls: string[] = [];
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url =
@@ -890,21 +891,36 @@ describe("createGitHubPublicationClient", () => {
               Link: `<${requestUrl.origin}${requestUrl.pathname}?per_page=100&page=2>; rel="next"`,
             }
           : { "Content-Type": "application/json" };
-      const comments = [{ id: Number(page), body: `page ${page}` }];
-      return new Response(JSON.stringify(comments), { status: 200, headers });
+      if (requestUrl.pathname.endsWith("/check-runs")) {
+        const response = Response.json(
+          {
+            total_count: 2,
+            check_runs: [
+              { id: Number(page), name: "review", external_id: `review-${String(page)}` },
+            ],
+          },
+          { headers },
+        );
+        Object.defineProperty(response, "url", { value: requestUrl.toString() });
+        return response;
+      }
+      return Response.json([{ id: Number(page), body: `page ${page}` }], { headers });
     }) as unknown as typeof fetch;
 
     const client = createGitHubPublicationClient({
       GITHUB_API_URL: "https://api.github.test",
     });
 
-    await expect(
-      client.listIssueComments({ repo: "local/pipr", issueNumber: 1 }),
-    ).resolves.toHaveLength(2);
-    await expect(
-      client.listReviewComments({ repo: "local/pipr", pullRequestNumber: 1 }),
-    ).resolves.toHaveLength(2);
-    expect(requestedUrls).toHaveLength(4);
+    const issueComments = await client.listIssueComments({ repo: "local/pipr", issueNumber: 1 });
+    const reviewComments = await client.listReviewComments({
+      repo: "local/pipr",
+      pullRequestNumber: 1,
+    });
+    const checkRuns = await client.listCheckRuns({ repo: "local/pipr", headSha: "head" });
+    expect(issueComments).toHaveLength(2);
+    expect(reviewComments).toHaveLength(2);
+    expect(checkRuns).toHaveLength(2);
+    expect(requestedUrls).toHaveLength(6);
     expect(requestedUrls[0]).toContain("/repos/local/pipr/issues/1/comments");
     expect(requestedUrls[1]).toBe(
       "https://api.github.test/repos/local/pipr/issues/1/comments?per_page=100&page=2",
@@ -913,6 +929,12 @@ describe("createGitHubPublicationClient", () => {
     expect(requestedUrls[3]).toBe(
       "https://api.github.test/repos/local/pipr/pulls/1/comments?per_page=100&page=2",
     );
+    expect(requestedUrls[4]).toContain("/repos/local/pipr/commits/head/check-runs");
+    expect(requestedUrls[5]).toContain("page=2");
+    return {
+      items: issueComments.length + reviewComments.length + checkRuns.length,
+      pages: requestedUrls.length,
+    };
   });
 
   it("retries transient GitHub reads", async () => {

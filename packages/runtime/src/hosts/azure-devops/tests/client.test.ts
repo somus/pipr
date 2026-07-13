@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { runCodeHostPaginationContract } from "../../tests/adapter-contract.js";
 import { azureRepositoryPermission, createAzureDevOpsClient } from "../client.js";
 
 describe("Azure DevOps API client", () => {
@@ -126,7 +127,7 @@ describe("Azure DevOps API client", () => {
     });
   });
 
-  it("follows iteration change paging and preserves native tracking IDs", async () => {
+  runCodeHostPaginationContract("Azure DevOps", async () => {
     const requests: string[] = [];
     const client = createAzureDevOpsClient(azureEnv, async (input) => {
       const url = String(input);
@@ -152,7 +153,8 @@ describe("Azure DevOps API client", () => {
           });
     });
 
-    await expect(client.listIterationChanges("repo-id", 7, 2)).resolves.toEqual([
+    const changes = await client.listIterationChanges("repo-id", 7, 2);
+    expect(changes).toEqual([
       { changeTrackingId: 11, changeType: "edit", path: "src/a.ts" },
       {
         changeTrackingId: 12,
@@ -163,6 +165,7 @@ describe("Azure DevOps API client", () => {
     ]);
     expect(requests[0]).toContain("compareTo=0");
     expect(requests[1]).toContain("$skip=1");
+    return { items: changes.length, pages: requests.length };
   });
 
   it("uses Azure thread, comment, resolution, and PR status write contracts", async () => {

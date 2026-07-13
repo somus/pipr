@@ -128,13 +128,6 @@ describe("Bitbucket Cloud adapter", () => {
 });
 
 runCodeHostAdapterContract("Bitbucket Cloud", {
-  async pagination() {
-    const client = new FakeBitbucketClient();
-    const adapter = createBitbucketHostAdapter({ client });
-    await adapter.publication?.publish({ change, plan: publicationPlan() });
-    await adapter.publication?.publish({ change, plan: secondPublicationPlan() });
-    return (await adapter.comments?.loadInlineThreadContexts?.({ change }))?.length ?? 0;
-  },
   async staleHeadWrites() {
     const client = new FakeBitbucketClient();
     client.pullRequest.source.commit.hash = "new-head";
@@ -275,21 +268,6 @@ function publicationPlan() {
       droppedFindings: 0,
     },
   });
-}
-
-function secondPublicationPlan() {
-  const plan = publicationPlan();
-  const item = plan.inlineItems[0];
-  if (!item) throw new Error("Expected inline fixture");
-  plan.inlineItems = [
-    {
-      ...item,
-      findingId: "finding-2",
-      marker: "pipr:finding:finding-2:head",
-      body: `${renderInlineFindingMarker("finding-2", "head")}\nFix this too.`,
-    },
-  ];
-  return plan;
 }
 
 function foreignBitbucketComment(): BitbucketComment {

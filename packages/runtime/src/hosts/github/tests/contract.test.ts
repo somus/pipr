@@ -209,17 +209,6 @@ describe("GitHub host adapter contract", () => {
 });
 
 runCodeHostAdapterContract("GitHub", {
-  async pagination() {
-    const change = githubContractChange();
-    const client = new StatefulPublicationClient();
-    const adapter = createGitHubHostAdapter({ publicationClient: client });
-    await adapter.publication?.publish({ change, plan: githubContractPlan(change) });
-    await adapter.publication?.publish({
-      change,
-      plan: githubContractPlan(change, "fnd_bbbbbbbbbbbbbbbb"),
-    });
-    return (await adapter.comments?.loadInlineThreadContexts?.({ change }))?.length ?? 0;
-  },
   async staleHeadWrites() {
     const change = githubContractChange();
     const client = new StatefulPublicationClient();

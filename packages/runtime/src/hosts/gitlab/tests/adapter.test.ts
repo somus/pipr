@@ -225,13 +225,6 @@ describe("GitLab host adapter", () => {
 });
 
 runCodeHostAdapterContract("GitLab", {
-  async pagination() {
-    const client = new FakeGitLabClient();
-    const adapter = createGitLabHostAdapter({ client });
-    await adapter.publication?.publish({ change, plan: publicationPlan() });
-    await adapter.publication?.publish({ change, plan: secondPublicationPlan() });
-    return (await adapter.comments?.loadInlineThreadContexts?.({ change }))?.length ?? 0;
-  },
   async staleHeadWrites() {
     const client = new FakeGitLabClient();
     client.mergeRequest.diff_refs.head_sha = "new-head";
@@ -363,21 +356,6 @@ function publicationPlan() {
       droppedFindings: 0,
     },
   });
-}
-
-function secondPublicationPlan() {
-  const plan = publicationPlan();
-  const item = plan.inlineItems[0];
-  if (!item) throw new Error("Expected inline fixture");
-  plan.inlineItems = [
-    {
-      ...item,
-      findingId: "finding-2",
-      marker: "pipr:finding:finding-2:head",
-      body: `${renderInlineFindingMarker("finding-2", "head")}\nFix this too.`,
-    },
-  ];
-  return plan;
 }
 
 function foreignGitLabDiscussion(): GitLabDiscussion {

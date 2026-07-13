@@ -327,13 +327,6 @@ describe("Azure DevOps host adapter", () => {
 });
 
 runCodeHostAdapterContract("Azure DevOps", {
-  async pagination() {
-    const client = new FakeAzureDevOpsClient();
-    const adapter = createAzureDevOpsHostAdapter({ client });
-    await adapter.publication?.publish({ change, plan: publicationPlan() });
-    await adapter.publication?.publish({ change, plan: secondPublicationPlan() });
-    return (await adapter.comments?.loadInlineThreadContexts?.({ change }))?.length ?? 0;
-  },
   async staleHeadWrites() {
     const client = new FakeAzureDevOpsClient();
     client.pullRequest.lastMergeSourceCommit.commitId = "new-head";
@@ -474,21 +467,6 @@ function publicationPlan() {
       droppedFindings: 0,
     },
   });
-}
-
-function secondPublicationPlan() {
-  const plan = publicationPlan();
-  const item = plan.inlineItems[0];
-  if (!item) throw new Error("Expected inline fixture");
-  plan.inlineItems = [
-    {
-      ...item,
-      findingId: "finding-2",
-      marker: "pipr:finding:finding-2:head",
-      body: `${renderInlineFindingMarker("finding-2", "head")}\nFix this too.`,
-    },
-  ];
-  return plan;
 }
 
 function foreignAzureThread(): AzureDevOpsThread {

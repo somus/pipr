@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
 export type AdapterContractProbes = {
-  pagination(): Promise<number>;
   staleHeadWrites(): Promise<number>;
   partialRetry(): Promise<{ inlineWrites: number; mainWrites: number }>;
   markerOwnership(): Promise<{ foreignWrites: number; ownedWritesAfterRerun: number }>;
@@ -16,10 +15,6 @@ export type AdapterContractProbes = {
 
 export function runCodeHostAdapterContract(provider: string, probes: AdapterContractProbes): void {
   describe(`${provider} shared adapter contract`, () => {
-    it("consumes every page of provider comments", async () => {
-      expect(await probes.pagination()).toBe(2);
-    });
-
     it("performs zero writes when the reviewed head is stale", async () => {
       expect(await probes.staleHeadWrites()).toBe(0);
     });
@@ -48,6 +43,19 @@ export function runCodeHostAdapterContract(provider: string, probes: AdapterCont
 
     it("resolves a thread once", async () => {
       expect((await probes.threadActions()).resolutions).toBe(1);
+    });
+  });
+}
+
+export function runCodeHostPaginationContract(
+  provider: string,
+  probe: () => Promise<{ items: number; pages: number }>,
+): void {
+  describe(`${provider} shared pagination contract`, () => {
+    it("follows provider pages through the terminal response", async () => {
+      const result = await probe();
+      expect(result.items).toBeGreaterThanOrEqual(2);
+      expect(result.pages).toBeGreaterThanOrEqual(2);
     });
   });
 }

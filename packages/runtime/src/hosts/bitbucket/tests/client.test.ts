@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { runCodeHostPaginationContract } from "../../tests/adapter-contract.js";
 import { bitbucketStatusState, createBitbucketClient } from "../client.js";
 
 describe("Bitbucket Cloud client", () => {
@@ -39,7 +40,7 @@ describe("Bitbucket Cloud client", () => {
     });
   });
 
-  it("follows opaque comment pages", async () => {
+  runCodeHostPaginationContract("Bitbucket Cloud", async () => {
     const requests: string[] = [];
     const client = createBitbucketClient(env, async (input) => {
       const url = String(input);
@@ -51,8 +52,9 @@ describe("Bitbucket Cloud client", () => {
             next: "https://api.bitbucket.org/2.0/repositories/workspace/repository/pullrequests/7/comments?page=2",
           });
     });
-    await expect(client.listComments(7)).resolves.toHaveLength(2);
+    const comments = await client.listComments(7);
     expect(requests[1]).toContain("page=2");
+    return { items: comments.length, pages: requests.length };
   });
 
   it("rejects cross-origin pagination before sending credentials", async () => {

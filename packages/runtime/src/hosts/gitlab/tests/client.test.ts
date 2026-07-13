@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { runCodeHostPaginationContract } from "../../tests/adapter-contract.js";
 import { createGitLabClient } from "../client.js";
 
 describe("GitLab API client", () => {
@@ -249,6 +250,22 @@ describe("GitLab API client", () => {
     });
     expect(discussions[0]?.notes[0]?.position?.old_line).toBeUndefined();
   });
+});
+
+runCodeHostPaginationContract("GitLab", async () => {
+  const requests: string[] = [];
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    id: index + 1,
+    body: `note ${index + 1}`,
+  }));
+  const client = createGitLabClient({ GITLAB_TOKEN: "test-token" }, async (input) => {
+    const url = String(input);
+    requests.push(url);
+    return Response.json(url.includes("page=2") ? [{ id: 101, body: "terminal note" }] : firstPage);
+  });
+
+  const notes = await client.listNotes("42", 7);
+  return { items: notes.length, pages: requests.length };
 });
 
 const mergeRequest = {
