@@ -266,6 +266,7 @@ describe("Azure DevOps API client", () => {
       client.getRepositoryPermission("developer@example.com", "project-id", "repo-id"),
     ).resolves.toBe("triage");
     expect(aclTokens).toEqual(["repoV2/project-id", "repoV2/project-id/repo-id"]);
+    expect(azureRepositoryPermission(2 | 4)).toBe("write");
     expect(azureRepositoryPermission(2 | 4 | 16384)).toBe("write");
     expect(azureRepositoryPermission(2 | 2048)).toBe("maintain");
     expect(azureRepositoryPermission(2 | 8192)).toBe("admin");

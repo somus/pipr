@@ -469,7 +469,7 @@ export function azureRepositoryPermission(bits: number): RepositoryPermission {
   if ((bits & 2) === 0) return "none";
   if ((bits & 8192) !== 0) return "admin";
   if ((bits & 2048) !== 0) return "maintain";
-  if ((bits & 4) !== 0 && (bits & 16384) !== 0) return "write";
+  if ((bits & 4) !== 0) return "write";
   if ((bits & 16384) !== 0) return "triage";
   return "read";
 }

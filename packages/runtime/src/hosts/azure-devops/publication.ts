@@ -100,7 +100,7 @@ export async function publishAzureDevOpsCommandResponse(options: {
     commandName: options.commandName,
     body: options.body,
   });
-  await currentNativeChange(options.client, options.change);
+  await currentPullRequest(options.client, options.change);
   const owner = await options.client.currentUser();
   const existing = ownedRootThread(
     await options.client.listThreads(coordinates.repositoryId, options.change.change.number),
@@ -320,6 +320,20 @@ async function currentNativeChange(
   change: ChangeRequestEventContext,
   reviewedHeadSha = change.change.head.sha,
 ) {
+  const pullRequest = await currentPullRequest(client, change, reviewedHeadSha);
+  const coordinates = azureCoordinates(change);
+  const iterations = await client.listIterations(coordinates.repositoryId, change.change.number);
+  const iteration = iterations.findLast((candidate) => candidate.headSha === reviewedHeadSha);
+  if (!iteration)
+    throw new Error(`Azure DevOps has no pull request iteration for head ${reviewedHeadSha}`);
+  return { pullRequest, iterationId: iteration.id };
+}
+
+async function currentPullRequest(
+  client: AzureDevOpsClient,
+  change: ChangeRequestEventContext,
+  reviewedHeadSha = change.change.head.sha,
+) {
   const coordinates = azureCoordinates(change);
   const pullRequest = await client.getPullRequest(coordinates.repositoryId, change.change.number);
   if (pullRequest.lastMergeSourceCommit.commitId !== reviewedHeadSha) {
@@ -332,11 +346,7 @@ async function currentNativeChange(
       `Azure DevOps pull request base changed from ${change.change.base.sha} to ${pullRequest.lastMergeTargetCommit.commitId}`,
     );
   }
-  const iterations = await client.listIterations(coordinates.repositoryId, change.change.number);
-  const iteration = iterations.findLast((candidate) => candidate.headSha === reviewedHeadSha);
-  if (!iteration)
-    throw new Error(`Azure DevOps has no pull request iteration for head ${reviewedHeadSha}`);
-  return { pullRequest, iterationId: iteration.id };
+  return pullRequest;
 }
 
 function azureCoordinates(change: ChangeRequestEventContext) {

@@ -176,6 +176,7 @@ describe("Azure DevOps host adapter", () => {
     ).resolves.toMatchObject({ action: "updated" });
     expect(client.threads).toHaveLength(1);
     expect(client.threads[0]?.comments[0]?.content).toContain("Updated response");
+    expect(client.listIterationsCalls).toBe(0);
   });
 
   it("anchors multiline renamed-file findings on the selected diff side", async () => {
@@ -393,6 +394,7 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
   statusBodies: Array<Record<string, unknown>> = [];
   headSha = "head";
   iterationChanges = [{ changeTrackingId: 11, changeType: "edit", path: "src/a.ts" }];
+  listIterationsCalls = 0;
   pullRequest: AzureDevOpsPullRequest = {
     pullRequestId: 7,
     title: "Test PR",
@@ -428,10 +430,13 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     change: change.change,
     iterationId: 2,
   });
-  listIterations = async () => [
-    { id: 1, headSha: "old-head" },
-    { id: 2, headSha: this.headSha },
-  ];
+  listIterations = async () => {
+    this.listIterationsCalls += 1;
+    return [
+      { id: 1, headSha: "old-head" },
+      { id: 2, headSha: this.headSha },
+    ];
+  };
   listIterationChanges = async () => this.iterationChanges;
   listThreads = async () => this.threads;
   createThread = async (
