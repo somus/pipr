@@ -1,0 +1,137 @@
+packages/runtime/src/host-run/commands.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 10,30
+  s_4ebdfc62030aaf::t_e296d8d327cb05 12-13,16,215
+  s_4ebdfc62030aaf::t_06d3d78c0c2c57 14,20-22,32,36-37,82,87,90,109,181-185,188-193,198,217
+  s_4ebdfc62030aaf::t_55ed54e9797e03 219
+apps/docs/content/docs/reference/cli.mdx
+  s_4ebdfc62030aaf::t_97f038ddd15935 89
+  s_4ebdfc62030aaf::t_e47f2f20210f41 110,113,120-121
+Dockerfile
+  s_4ebdfc62030aaf::t_4fcd82fbefd33b 60
+packages/runtime/src/host-run/tests/commands.test.ts
+  s_4ebdfc62030aaf::t_9d00649777e715 787,837
+  s_4ebdfc62030aaf::t_59e63c572b5550 11-15,25,29-48
+  s_4ebdfc62030aaf::t_06d3d78c0c2c57 49-50,56,88,143,169,500,511,556,862,894,919,926,954,1285,1309,1335,1459
+  s_4ebdfc62030aaf::t_ce98e00f54643b 795,806
+  s_4ebdfc62030aaf::t_1f7efceb754793 24,239,456,789,818,854,1126,1280,1304,1331,1410
+  s_4ebdfc62030aaf::t_1d26de70cc135a 22
+AGENTS.md
+  s_4ebdfc62030aaf::t_fa41d323fcb822 15,74
+  s_4ebdfc62030aaf::t_c587487bf829e6 3,7,14,73
+  s_4ebdfc62030aaf::t_c5da593219e958 36
+packages/runtime/src/shared/tests/logging.test.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 3,5,7,9,28-29,58,60,76,78
+  s_4ebdfc62030aaf::t_1d26de70cc135a 2
+packages/runtime/README.md
+  s_4ebdfc62030aaf::t_fa41d323fcb822 26
+  s_4ebdfc62030aaf::t_c587487bf829e6 3,7-8,12,31
+packages/runtime/src/host-run/logging.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 1-69
+packages/runtime/src/host-run/trusted-runtime.ts
+  s_4ebdfc62030aaf::t_e296d8d327cb05 4
+  s_4ebdfc62030aaf::t_06d3d78c0c2c57 6-7,10,12,27,31,34
+  s_4ebdfc62030aaf::t_1f7efceb754793 2
+packages/runtime/src/host-run/types.ts
+  s_4ebdfc62030aaf::t_06d3d78c0c2c57 27,34,70
+  s_4ebdfc62030aaf::t_1f7efceb754793 5,31,49
+packages/runtime/src/host-run/change-request-entry.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 2
+  s_4ebdfc62030aaf::t_e296d8d327cb05 5,8,10-11,13,15
+scripts/tests/release-scripts.test.ts
+  s_4ebdfc62030aaf::t_0bd5b277818d80 11,285
+  s_4ebdfc62030aaf::t_e0853d90d00a49 282-284
+  s_5eca1d7251411e::t_da2f3c55c7b31b 281
+packages/runtime/src/internal/testing.ts
+  s_4ebdfc62030aaf::t_e296d8d327cb05 5
+  s_4ebdfc62030aaf::t_877c44a830963b 3-4
+  s_4ebdfc62030aaf::t_50457460898d04 6
+packages/runtime/src/review/task/task-runtime.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 7
+  s_4ebdfc62030aaf::t_651467268e6137 8,79
+packages/runtime/src/tests/helpers/runtime-log-sink.ts
+  s_4ebdfc62030aaf::t_dd3f1c10c80bdd 1,3-5,11,13,24,38
+packages/e2e/assertions.test.ts
+  s_4ebdfc62030aaf::t_00ce24fd7eb204 60-61,64
+packages/runtime/src/host-run/verifier-entry.ts
+  s_4ebdfc62030aaf::t_06d3d78c0c2c57 11,14-15,19-20,22,24,61,96,99,146,149
+  s_4ebdfc62030aaf::t_1f7efceb754793 7
+packages/runtime/src/index.ts
+  s_4ebdfc62030aaf::t_e296d8d327cb05 19
+  s_4ebdfc62030aaf::t_f6a33e48a62346 1-8,12-13,20-21,24,29
+packages/cli/src/runner.ts
+  s_4ebdfc62030aaf::t_9104fd5ab4116c 229-232,280-282,314-316
+  s_4ebdfc62030aaf::t_194430ad89ee2a 107-108,623
+  s_4ebdfc62030aaf::t_49597a06096363 158,166,168,170-171
+  s_4ebdfc62030aaf::t_33e30343bb9e6e 160,179-186
+  s_4ebdfc62030aaf::t_69c533a345b207 169,215,220,223-226,234,240,243,246,248,251,254,257,260,267,270,273,287,294,304
+  s_4ebdfc62030aaf::t_877c44a830963b 4,159,288,295,305
+  s_4ebdfc62030aaf::t_1f7efceb754793 5-6,189,191,204,206,495,504,513
+  s_4ebdfc62030aaf::t_7a3922b9748d68 8
+packages/runtime/src/host-run/command-entry.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 3
+  s_4ebdfc62030aaf::t_06d3d78c0c2c57 14,18-19,35-36,38,40,55,57,113,116-117,215,220,238,244
+docs/research/code-host-adapter-guideline.md
+  s_4ebdfc62030aaf::t_02c94fc544df27 116
+  s_4ebdfc62030aaf::t_97f038ddd15935 115,117-119,137,662
+packages/runtime/src/host-run/adapter.ts
+  s_4ebdfc62030aaf::t_9380857e114b54 5,7-8,23,32,38
+packages/cli/src/tests/main.test.ts
+  s_4ebdfc62030aaf::t_f112241c719a6e 723,725-726,730,732,755,757
+  s_4ebdfc62030aaf::t_0582ee59b298f0 206,216,228
+  s_4ebdfc62030aaf::t_9d00649777e715 661,724,739,743,756,855-856,897
+  s_4ebdfc62030aaf::t_729249659b7bd0 201
+  s_4ebdfc62030aaf::t_7664e0a8fe3609 203,208,231
+  s_4ebdfc62030aaf::t_194430ad89ee2a 618,805-809
+packages/runtime/src/review/agent/review-run.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 10,47,437
+packages/runtime/src/host-run/runtime-checks.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 1-271
+packages/runtime/src/review/verifier.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 4,47
+apps/docs/content/docs/guide/github-action.mdx
+  s_4ebdfc62030aaf::t_e47f2f20210f41 129
+  s_4ebdfc62030aaf::t_97f038ddd15935 6,53
+apps/docs/content/docs/reference/index.mdx
+  s_4ebdfc62030aaf::t_97f038ddd15935 10
+action.yml
+  s_4ebdfc62030aaf::t_4fcd82fbefd33b 24-26
+packages/runtime/src/host-run/review-publishing.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 5,27
+  s_4ebdfc62030aaf::t_06d3d78c0c2c57 13,19
+packages/runtime/package.json
+  s_4ebdfc62030aaf::t_e296d8d327cb05 48
+packages/runtime/src/shared/logging.ts
+  s_4ebdfc62030aaf::t_1f7efceb754793 3-4,8,11,15,20,22-27,46-47,49,59,149,151-152,174,178,189
+apps/docs/content/docs/guide/runtime.mdx
+  s_4ebdfc62030aaf::t_e47f2f20210f41 19
+  s_4ebdfc62030aaf::t_97f038ddd15935 16
+packages/e2e/action-fixture.ts
+  s_4ebdfc62030aaf::t_ed8ee2773f1d2f 51-53,69
+  s_4ebdfc62030aaf::t_9104fd5ab4116c 135
+  s_4ebdfc62030aaf::t_877c44a830963b 6,8-9,13,21-22,25,41
+  s_4ebdfc62030aaf::t_605ea853e82998 43,70-71,113,130,136-137,143,151,173,184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "6915da864f29729b93a07111231e3fcc6adb992c",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_5eca1d7251411e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a57-3320-7360-92de-151eb5435525",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
