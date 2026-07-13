@@ -118,7 +118,8 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
     file === "packages/e2e/fake-pi" ||
     file === "packages/e2e/pi-contract.ts" ||
     file === "packages/e2e/run.ts" ||
-    file === "packages/e2e/scenarios.ts"
+    file === "packages/e2e/scenarios.ts" ||
+    file === "packages/e2e/webhook-health-fixture.ts"
   );
 }
 
