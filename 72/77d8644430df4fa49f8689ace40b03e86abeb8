@@ -1,0 +1,47 @@
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_604f2033c585c0::t_aadae24baeb2a3 467,603,608,636,661
+  s_604f2033c585c0::t_085f775133d6bc 414,493,496,505,538-573,575-581,583-589
+  s_604f2033c585c0::t_47048c5164e682 2,387,399-413,415-420,456,458-460,469-470,474-483
+  s_604f2033c585c0::t_5fad5a4bf736c5 595,615-618
+  s_604f2033c585c0::t_cbcbc60045fa41 494-495,497-504,506-537,574,582,590-594
+docs/adr/0006-installable-config-dependencies.md
+  s_604f2033c585c0::t_4a6e34e31bf48f 16,18
+  s_604f2033c585c0::t_88fdccd5d80ede 17
+  s_df9d72eaa889bb::t_85222549922b0d 24
+packages/runtime/src/config/config-deps.ts
+  s_604f2033c585c0::t_e131f79ce6ff16 203
+  s_604f2033c585c0::t_b5275b1e4b0a72 32,121-132,140,167,175-176,178,182,196-198,200,212,216-217
+  s_604f2033c585c0::t_3e07ff380139ca 29,31,34,41
+  s_604f2033c585c0::t_ae5a11f9e22047 33,50,65,120,204
+  s_604f2033c585c0::t_fdafdb2c4eeac7 133-138,144-166,168-174
+  s_604f2033c585c0::t_aadae24baeb2a3 6,13,20,30,35-40,86-87
+  s_604f2033c585c0::t_c8ef16a3a5fce1 139,141,177,179-181,183-195,199,201-202,205-211,213
+packages/runtime/src/config/ts-loader.ts
+  s_604f2033c585c0::t_aadae24baeb2a3 72,91-92,119
+apps/docs/content/docs/reference/architecture.mdx
+  s_df9d72eaa889bb::t_fd458bbef757c6 108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "7277d8644430df4fa49f8689ace40b03e86abeb8",
+  "prompts": {},
+  "sessions": {
+    "s_604f2033c585c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d44-79a6-7893-bf10-9fb06b7780ea",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_df9d72eaa889bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d3b-26e8-7fb0-9482-9e678d5f00aa",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
