@@ -56,11 +56,15 @@ export async function publishBitbucketPlan(options: {
     metadata: options.plan.metadata,
   });
   const main = existingMain
-    ? await options.client.updateComment(
-        options.change.change.number,
-        existingMain.id,
-        options.plan.mainComment,
-      )
+    ? await retryCodeHostOperation({
+        idempotent: true,
+        operation: () =>
+          options.client.updateComment(
+            options.change.change.number,
+            existingMain.id,
+            options.plan.mainComment,
+          ),
+      })
     : await retryCodeHostOperation({
         operation: () =>
           options.client.createComment(options.change.change.number, {
@@ -102,7 +106,11 @@ export async function publishBitbucketCommandResponse(options: {
     (comment) => comment.user?.uuid === owner.uuid && comment.content.raw.includes(response.marker),
   );
   const comment = existing
-    ? await options.client.updateComment(options.change.change.number, existing.id, response.body)
+    ? await retryCodeHostOperation({
+        idempotent: true,
+        operation: () =>
+          options.client.updateComment(options.change.change.number, existing.id, response.body),
+      })
     : await retryCodeHostOperation({
         operation: () =>
           options.client.createComment(options.change.change.number, {

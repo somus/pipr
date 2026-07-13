@@ -194,6 +194,18 @@ describe("GitHub host adapter contract", () => {
     ).rejects.toThrow("Change request head changed");
     expect(calls).toEqual(["getPullRequestHeadSha"]);
   });
+
+  it("retries a transient check-run update", async () => {
+    const change = githubContractChange();
+    const client = new StatefulPublicationClient();
+    const statuses = createGitHubHostAdapter({ publicationClient: client }).statuses;
+    await statuses?.upsert({ change, name: "review", state: "pending" });
+    client.loseNextCheckUpdate = true;
+
+    await statuses?.upsert({ change, name: "review", state: "success" });
+
+    expect(client.checkUpdateAttempts).toBe(2);
+  });
 });
 
 runCodeHostAdapterContract("GitHub", {
@@ -473,6 +485,8 @@ class StatefulPublicationClient implements GitHubPublicationClient {
   readonly ownerLogin = "github-actions[bot]";
   headSha = "head";
   loseNextInlineResponse = false;
+  loseNextCheckUpdate = false;
+  checkUpdateAttempts = 0;
   resolveCalls = 0;
   issueComments: Array<{ id: number; body: string; authorLogin: string | undefined }> = [];
   reviewComments: StatefulReviewComment[] = [];
@@ -589,6 +603,11 @@ class StatefulPublicationClient implements GitHubPublicationClient {
 
   async updateCheckRun() {
     this.statusWrites += 1;
+    this.checkUpdateAttempts += 1;
+    if (this.loseNextCheckUpdate) {
+      this.loseNextCheckUpdate = false;
+      throw Object.assign(new Error("unavailable"), { status: 503 });
+    }
   }
 }
 

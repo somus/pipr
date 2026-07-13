@@ -73,13 +73,17 @@ export async function publishAzureDevOpsPlan(options: {
     metadata: options.plan.metadata,
   });
   const main = existingMain
-    ? await options.client.updateComment(
-        coordinates.repositoryId,
-        options.change.change.number,
-        existingMain.id,
-        existingMain.comments[0]?.id ?? "",
-        options.plan.mainComment,
-      )
+    ? await retryCodeHostOperation({
+        idempotent: true,
+        operation: () =>
+          options.client.updateComment(
+            coordinates.repositoryId,
+            options.change.change.number,
+            existingMain.id,
+            existingMain.comments[0]?.id ?? "",
+            options.plan.mainComment,
+          ),
+      })
     : (
         await retryCodeHostOperation({
           operation: () =>
@@ -132,13 +136,17 @@ export async function publishAzureDevOpsCommandResponse(options: {
     response.marker,
   );
   const comment = existing
-    ? await options.client.updateComment(
-        coordinates.repositoryId,
-        options.change.change.number,
-        existing.id,
-        existing.comments[0]?.id ?? "",
-        response.body,
-      )
+    ? await retryCodeHostOperation({
+        idempotent: true,
+        operation: () =>
+          options.client.updateComment(
+            coordinates.repositoryId,
+            options.change.change.number,
+            existing.id,
+            existing.comments[0]?.id ?? "",
+            response.body,
+          ),
+      })
     : (
         await retryCodeHostOperation({
           operation: () =>

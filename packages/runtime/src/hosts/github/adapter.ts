@@ -139,7 +139,8 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
         return change.eventName === "pull_request";
       },
       async upsert(options) {
-        if (!options.status) {
+        const status = options.status;
+        if (!status) {
           const externalId = githubStatusExternalId(options);
           const existing = (
             await publicationClient.listCheckRuns({
@@ -167,24 +168,32 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
                 ).find((check) => check.externalId === externalId),
             }));
           if (existing || options.state !== "pending") {
-            await publicationClient.updateCheckRun({
-              repo: options.change.repository.slug,
-              checkRunId: checkRun.id,
-              name: checkRun.name,
-              state: options.state,
-              summary: options.summary,
+            await retryCodeHostOperation({
+              idempotent: true,
+              operation: () =>
+                publicationClient.updateCheckRun({
+                  repo: options.change.repository.slug,
+                  checkRunId: checkRun.id,
+                  name: checkRun.name,
+                  state: options.state,
+                  summary: options.summary,
+                }),
             });
           }
           return { id: String(checkRun.id), name: checkRun.name };
         }
-        await publicationClient.updateCheckRun({
-          repo: options.change.repository.slug,
-          checkRunId: Number(options.status.id),
-          name: options.status.name,
-          state: options.state,
-          summary: options.summary,
+        await retryCodeHostOperation({
+          idempotent: true,
+          operation: () =>
+            publicationClient.updateCheckRun({
+              repo: options.change.repository.slug,
+              checkRunId: Number(status.id),
+              name: status.name,
+              state: options.state,
+              summary: options.summary,
+            }),
         });
-        return options.status;
+        return status;
       },
     },
   };

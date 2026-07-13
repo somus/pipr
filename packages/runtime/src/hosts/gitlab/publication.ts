@@ -67,12 +67,16 @@ export async function publishGitLabPlan(options: {
     metadata: options.plan.metadata,
   });
   const main = existingMain
-    ? await options.client.updateNote(
-        projectId,
-        options.change.change.number,
-        existingMain.id,
-        options.plan.mainComment,
-      )
+    ? await retryCodeHostOperation({
+        idempotent: true,
+        operation: () =>
+          options.client.updateNote(
+            projectId,
+            options.change.change.number,
+            existingMain.id,
+            options.plan.mainComment,
+          ),
+      })
     : await retryCodeHostOperation({
         operation: () =>
           options.client.createNote(
@@ -119,12 +123,16 @@ export async function publishGitLabCommandResponse(options: {
   );
   await assertCurrentHead(options.client, projectId, options.change);
   const note = existing
-    ? await options.client.updateNote(
-        projectId,
-        options.change.change.number,
-        existing.id,
-        response.body,
-      )
+    ? await retryCodeHostOperation({
+        idempotent: true,
+        operation: () =>
+          options.client.updateNote(
+            projectId,
+            options.change.change.number,
+            existing.id,
+            response.body,
+          ),
+      })
     : await retryCodeHostOperation({
         operation: () =>
           options.client.createNote(projectId, options.change.change.number, response.body),

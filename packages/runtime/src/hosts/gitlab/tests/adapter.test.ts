@@ -45,6 +45,17 @@ describe("GitLab host adapter", () => {
     expect(status).toEqual({ id: "status-1", name: "review" });
   });
 
+  it("retries a transient main comment update", async () => {
+    const client = new FakeGitLabClient();
+    const publication = createGitLabHostAdapter({ client }).publication;
+    await publication?.publish({ change, plan: publicationPlan() });
+    client.loseNextNoteUpdate = true;
+
+    await publication?.publish({ change, plan: publicationPlan() });
+
+    expect(client.noteUpdateAttempts).toBe(2);
+  });
+
   it("fails stale publication before any GitLab write", async () => {
     const client = new FakeGitLabClient();
     client.mergeRequest = {
@@ -401,6 +412,8 @@ class FakeGitLabClient implements GitLabClient {
   positions: GitLabPosition[] = [];
   createDiscussionError?: Error;
   loseNextDiscussionResponse = false;
+  loseNextNoteUpdate = false;
+  noteUpdateAttempts = 0;
   statusKeys = new Set<string>();
   statusWrites = 0;
   resolveCalls = 0;
@@ -440,6 +453,11 @@ class FakeGitLabClient implements GitLabClient {
     return note;
   };
   updateNote = async (_projectId: string, _changeNumber: number, noteId: string, body: string) => {
+    this.noteUpdateAttempts += 1;
+    if (this.loseNextNoteUpdate) {
+      this.loseNextNoteUpdate = false;
+      throw Object.assign(new Error("unavailable"), { status: 503 });
+    }
     const note = this.notes.find((candidate) => candidate.id === noteId);
     if (!note) throw new Error(`Unknown note ${noteId}`);
     note.body = body;

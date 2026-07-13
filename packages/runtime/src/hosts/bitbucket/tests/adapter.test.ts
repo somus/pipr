@@ -58,6 +58,17 @@ describe("Bitbucket Cloud adapter", () => {
     expect(client.statusBodies[0]).toMatchObject({ state: "SUCCESSFUL", refname: "feature" });
   });
 
+  it("retries a transient main comment update", async () => {
+    const client = new FakeBitbucketClient();
+    const publication = createBitbucketHostAdapter({ client }).publication;
+    await publication?.publish({ change, plan: publicationPlan() });
+    client.loseNextCommentUpdate = true;
+
+    await publication?.publish({ change, plan: publicationPlan() });
+
+    expect(client.commentUpdateAttempts).toBe(2);
+  });
+
   it("fails stale endpoints before writes and declares native limits", async () => {
     const client = new FakeBitbucketClient();
     client.pullRequest = {
@@ -310,6 +321,8 @@ class FakeBitbucketClient implements BitbucketClient {
   statusBodies: Array<Record<string, unknown>> = [];
   statusKeys = new Set<string>();
   loseNextInlineResponse = false;
+  loseNextCommentUpdate = false;
+  commentUpdateAttempts = 0;
   resolveCalls = 0;
   currentUserCalls = 0;
   listCommentsCalls = 0;
@@ -359,6 +372,11 @@ class FakeBitbucketClient implements BitbucketClient {
     return comment;
   };
   updateComment = async (_id: number, commentId: string, content: string) => {
+    this.commentUpdateAttempts += 1;
+    if (this.loseNextCommentUpdate) {
+      this.loseNextCommentUpdate = false;
+      throw Object.assign(new Error("unavailable"), { status: 503 });
+    }
     const comment = this.comments.find((item) => item.id === commentId);
     if (!comment) throw new Error("missing");
     comment.content.raw = content;

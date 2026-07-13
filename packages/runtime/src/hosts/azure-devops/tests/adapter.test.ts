@@ -51,6 +51,17 @@ describe("Azure DevOps host adapter", () => {
     });
   });
 
+  it("retries a transient main comment update", async () => {
+    const client = new FakeAzureDevOpsClient();
+    const publication = createAzureDevOpsHostAdapter({ client }).publication;
+    await publication?.publish({ change, plan: publicationPlan() });
+    client.loseNextCommentUpdate = true;
+
+    await publication?.publish({ change, plan: publicationPlan() });
+
+    expect(client.commentUpdateAttempts).toBe(2);
+  });
+
   it("fails stale publication before any Azure write", async () => {
     const client = new FakeAzureDevOpsClient();
     client.pullRequest = {
@@ -515,6 +526,8 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
   statusBodies: Array<Record<string, unknown>> = [];
   statusKeys = new Set<string>();
   loseNextPositionedThreadResponse = false;
+  loseNextCommentUpdate = false;
+  commentUpdateAttempts = 0;
   resolveCalls = 0;
   headSha = "head";
   iterationChanges = [{ changeTrackingId: 11, changeType: "edit", path: "src/a.ts" }];
@@ -598,6 +611,11 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     commentId: string,
     content: string,
   ) => {
+    this.commentUpdateAttempts += 1;
+    if (this.loseNextCommentUpdate) {
+      this.loseNextCommentUpdate = false;
+      throw Object.assign(new Error("unavailable"), { status: 503 });
+    }
     const comment = this.threads.find((thread) => thread.id === threadId)?.comments[0];
     if (!comment || comment.id !== commentId) throw new Error("comment not found");
     comment.content = content;
