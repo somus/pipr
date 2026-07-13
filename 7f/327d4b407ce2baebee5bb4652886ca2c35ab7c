@@ -1,0 +1,21 @@
+packages/runtime/src/hosts/azure-devops/workspace.ts
+  s_4ebdfc62030aaf::t_699b0d0ea98696 7,10
+packages/runtime/src/hosts/azure-devops/tests/workspace.test.ts
+  s_4ebdfc62030aaf::t_699b0d0ea98696 32,36,38,70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "7f327d4b407ce2baebee5bb4652886ca2c35ab7c",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
