@@ -1,0 +1,61 @@
+packages/runtime/src/host-run/verifier-entry.ts
+  s_5eca1d7251411e::t_77040267dcadad 208
+packages/runtime/src/internal/testing.ts
+  s_5eca1d7251411e::t_e4ad709fca1e1a 14
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_5eca1d7251411e::t_ad8d909dd4a38f 359-360,461,599
+  s_5eca1d7251411e::t_726eacaf5b33f1 385-386,389,2403-2404,2407
+packages/e2e/fake-pi
+  s_5eca1d7251411e::t_e4ad709fca1e1a 75,79,85
+packages/e2e/action-fixture.ts
+  s_5eca1d7251411e::t_e4ad709fca1e1a 73
+  s_5eca1d7251411e::t_53246d579647c6 7
+packages/runtime/src/host-run/tests/commands.test.ts
+  s_5eca1d7251411e::t_ad8d909dd4a38f 1155
+  s_5eca1d7251411e::t_726eacaf5b33f1 1374-1375,1378
+docs/research/secret-redaction-libraries.md
+  s_5eca1d7251411e::t_bf1c654879669a 5,7,9,11,13-20,22,24,26,28,30,32,34-37,39
+packages/runtime/src/host-run/commands.ts
+  s_5eca1d7251411e::t_e4ad709fca1e1a 11,188
+packages/runtime/src/review/publication-redaction.ts
+  s_5eca1d7251411e::t_6b12cbe3763b95 37,40
+  s_5eca1d7251411e::t_05f0c824886da0 79,82
+  s_5eca1d7251411e::t_349be43e2a1396 1,13,19,29-32,35-36,38-39,42-44,47,50-54,58,62,67-68,72,75-76,80-81,83-92,94-109
+apps/docs/content/docs/guide/github-action.mdx
+  s_5eca1d7251411e::t_ad8d909dd4a38f 82,84
+packages/runtime/src/review/task/task-runtime.ts
+  s_5eca1d7251411e::t_c7f4eaf0158962 248,259,292-298
+  s_5eca1d7251411e::t_77040267dcadad 557,565-566
+  s_5eca1d7251411e::t_b1b2971bea70c7 350,353-359,362,369,377
+packages/runtime/src/shared/tests/secret-redactor.test.ts
+  s_5eca1d7251411e::t_17f389db667d96 19,23,29,34
+  s_5eca1d7251411e::t_b949b4e467d7bf 16,18,31
+  s_5eca1d7251411e::t_7c7748cafaa867 17,30,41,44-46
+  s_5eca1d7251411e::t_91f42fff8ea5a3 21,24,26,35-37
+  s_5eca1d7251411e::t_867c5cce1269b1 40,43
+  s_5eca1d7251411e::t_46bee8de203036 25
+  s_5eca1d7251411e::t_6b12cbe3763b95 2
+packages/e2e/assertions.test.ts
+  s_5eca1d7251411e::t_e4ad709fca1e1a 103-104
+packages/runtime/src/shared/secret-redactor.ts
+  s_5eca1d7251411e::t_a5eb479f515d47 11,15,21-22,24-26,28,34-36
+  s_5eca1d7251411e::t_19bc1ebdeadd3a 12,16-20,23
+  s_5eca1d7251411e::t_349be43e2a1396 8,27,29-33
+  s_5eca1d7251411e::t_8f6a32fcdb19c8 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "b128ccfbe876e9ca89276faf4ea2f9b32bd62926",
+  "prompts": {},
+  "sessions": {
+    "s_5eca1d7251411e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a57-3320-7360-92de-151eb5435525",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

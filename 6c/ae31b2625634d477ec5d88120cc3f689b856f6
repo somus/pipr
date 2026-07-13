@@ -1,0 +1,130 @@
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_5eca1d7251411e::t_a5696f0e130585 371-375,402-405
+  s_5eca1d7251411e::t_aed703950788f1 359-370,376-401,406-407
+  s_5eca1d7251411e::t_c81498b691cd06 460-474,598-614,616-622
+  s_5eca1d7251411e::t_29a5cea017bccb 13
+  s_5eca1d7251411e::t_e7eba7cf1141f6 615
+  s_5eca1d7251411e::t_530a888f4e4943 2400-2411
+  s_5eca1d7251411e::t_b07020bff5e58c 623
+packages/runtime/assets/betterleaks.toml
+  s_5eca1d7251411e::t_3e0e26a4f03434 1-4
+packages/e2e/check.ts
+  s_5eca1d7251411e::t_cbb7d5e8e04f6e 2,14
+packages/e2e/fake-pi
+  s_5eca1d7251411e::t_cbb7d5e8e04f6e 72-73,77,81,87,94-95
+  s_5eca1d7251411e::t_d86bc2a739a93b 96-97
+packages/e2e/assertions.test.ts
+  s_5eca1d7251411e::t_cbb7d5e8e04f6e 103-106
+packages/runtime/src/host-run/verifier-entry.ts
+  s_5eca1d7251411e::t_b72df0edf74f21 5,206-212
+packages/e2e/assertions.ts
+  s_5eca1d7251411e::t_3526b6ee07d3d5 64
+  s_5eca1d7251411e::t_cbb7d5e8e04f6e 54,60-63,65
+  s_5eca1d7251411e::t_d7c79f4896ee87 66-67
+apps/docs/content/docs/guide/github-action.mdx
+  s_5eca1d7251411e::t_026eebe06811e0 84
+  s_4ebdfc62030aaf::t_b44357a70c3d24 80-83,85
+Dockerfile
+  s_5eca1d7251411e::t_3e0e26a4f03434 18-35,67,76-77,81
+packages/runtime/src/shared/betterleaks-redactor.ts
+  s_5eca1d7251411e::t_5edb61915e36d6 3-7,34,37-39
+  s_5eca1d7251411e::t_3526b6ee07d3d5 70
+  s_5eca1d7251411e::t_3f04111ec74c9e 1-2,8-33,35-36,40-69,71-174,180-181,202-278
+  s_4ebdfc62030aaf::t_7014689d202d17 175-179,182-201
+packages/runtime/src/host-run/commands.ts
+  s_5eca1d7251411e::t_518133aa1110be 10,187-189
+  s_5eca1d7251411e::t_81393cc529c581 186
+packages/runtime/src/shared/secret-redactor.ts
+  s_5eca1d7251411e::t_0adb727fd94973 1-9
+  s_5eca1d7251411e::t_5edb61915e36d6 10-17
+packages/runtime/src/host-run/types.ts
+  s_5eca1d7251411e::t_b72df0edf74f21 6,38
+packages/e2e/action-fixture.ts
+  s_5eca1d7251411e::t_79acced8857c6c 6,73
+packages/runtime/src/review/task/task-runtime.ts
+  s_5eca1d7251411e::t_b69dcb95b930cb 259,265-266,396-406
+  s_5eca1d7251411e::t_1c09e44a8079c2 248,357-371
+  s_5eca1d7251411e::t_e1b2c0fcb7833d 347-348
+  s_5eca1d7251411e::t_0adb727fd94973 9,28,83,308-309,316,578
+  s_5eca1d7251411e::t_a790c74a1f5514 243-245
+  s_5eca1d7251411e::t_7f12eca619c061 269,335,352,374,380-381,389,582,589-595,600,606,611-617
+  s_5eca1d7251411e::t_d8ac361a6691fa 293
+  s_5eca1d7251411e::t_b72df0edf74f21 294-305,372,407,618-632
+  s_5eca1d7251411e::t_820cdca38484a2 373,408,633
+packages/runtime/src/review/publication-redaction.ts
+  s_5eca1d7251411e::t_a5696f0e130585 35-38,40-44,58,76-99,111
+  s_5eca1d7251411e::t_7f12eca619c061 4,10,17,25,46,114-132,134-135
+  s_5eca1d7251411e::t_b9fe5f98b23520 107,113,133,136,144,146
+  s_5eca1d7251411e::t_0da34e12be46dc 39
+  s_5eca1d7251411e::t_b72df0edf74f21 157-178
+  s_5eca1d7251411e::t_4209b0ef054e31 138-143,145,147-155
+  s_5eca1d7251411e::t_0adb727fd94973 1-3,5-9,11-16,18-24,26-34,45,47-57,59-75,100-106,108-110,112,137,156
+packages/runtime/src/shared/logging.ts
+  s_5eca1d7251411e::t_5edb61915e36d6 2,52-53
+packages/runtime/src/host-run/review-publishing.ts
+  s_5eca1d7251411e::t_518133aa1110be 53
+packages/runtime/assets/betterleaks.LICENSE
+  s_5eca1d7251411e::t_3e0e26a4f03434 1-21
+packages/runtime/src/shared/tests/secret-redactor.test.ts
+  s_5eca1d7251411e::t_867c5cce1269b1 59-71
+  s_5eca1d7251411e::t_3526b6ee07d3d5 34,37
+  s_5eca1d7251411e::t_17f389db667d96 1-15,20-26,28-33,38-39,41-58,72
+  s_4ebdfc62030aaf::t_aa90fff6a8bc5f 16-19,27,35-36,40
+packages/e2e/betterleaks-contract.ts
+  s_5eca1d7251411e::t_cbb7d5e8e04f6e 1-21,23-24,42,44-46,50-87,94-96,100-102,106-128,132-150,154-156
+  s_5eca1d7251411e::t_4209b0ef054e31 88-93,97-99,103-105
+  s_5eca1d7251411e::t_3526b6ee07d3d5 47,49,129-131,151-153
+  s_5eca1d7251411e::t_e9fecda0333b90 28
+  s_5eca1d7251411e::t_0732997e5542fc 22
+  s_5eca1d7251411e::t_65bd83a8745055 25-27
+  s_5eca1d7251411e::t_e073fe33310e22 29-31,39-41
+  s_5eca1d7251411e::t_db24675ee93477 43
+  s_5eca1d7251411e::t_28fdb133603623 48
+  s_9125fd27db09cd::t_176b7bdb38c0bd 32-38
+docs/research/secret-redaction-libraries.md
+  s_5eca1d7251411e::t_026eebe06811e0 23
+  s_5eca1d7251411e::t_43088773d45c0c 93,111,130
+  s_5eca1d7251411e::t_b183e26b695be5 1-20,22,24-92,94-110,112-129
+  s_4ebdfc62030aaf::t_d4bdf1e628a2fe 21
+packages/runtime/src/host-run/tests/commands.test.ts
+  s_5eca1d7251411e::t_27be780b40219f 1353,1367,1446,1455
+  s_5eca1d7251411e::t_7c10a6e9d7bf58 1371-1382
+  s_5eca1d7251411e::t_454caa7cde0121 1152-1171
+  s_5eca1d7251411e::t_16d65f9a85c21d 21
+packages/e2e/container-check.ts
+  s_5eca1d7251411e::t_cbb7d5e8e04f6e 3,40
+packages/runtime/src/internal/testing.ts
+  s_5eca1d7251411e::t_95b4111a4baac9 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "6cae31b2625634d477ec5d88120cc3f689b856f6",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_5eca1d7251411e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a57-3320-7360-92de-151eb5435525",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_9125fd27db09cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f481a-a6f0-7681-a6d8-fb733a1367c8",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
