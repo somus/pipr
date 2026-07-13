@@ -1,7 +1,15 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
 import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
+import {
+  type CodeHostAdapterConformanceHarness,
+  defineCodeHostAdapterConformanceSuite,
+} from "../../tests/conformance.js";
+import type { CodeHostStatusState, RepositoryPermission } from "../../types.js";
 import { createGitLabHostAdapter } from "../adapter.js";
 import type {
   GitLabClient,
@@ -211,6 +219,11 @@ describe("GitLab host adapter", () => {
   });
 });
 
+defineCodeHostAdapterConformanceSuite({
+  name: "GitLab",
+  createHarness: createGitLabConformanceHarness,
+});
+
 const change: ChangeRequestEventContext = {
   eventName: "merge_request",
   action: "updated",
@@ -284,6 +297,18 @@ class FakeGitLabClient implements GitLabClient {
   positions: GitLabPosition[] = [];
   createDiscussionError?: Error;
   afterListNotes?: () => void;
+  permission: RepositoryPermission = "write";
+  permissionActors: string[] = [];
+  mainCreates = 0;
+  mainUpdates = 0;
+  commandCreates = 0;
+  commandUpdates = 0;
+  statusWrites: Array<{
+    name: string;
+    state: CodeHostStatusState;
+    summary?: string;
+    headSha: string;
+  }> = [];
   mergeRequest: GitLabMergeRequest = {
     iid: 7,
     title: "Test MR",
@@ -303,13 +328,18 @@ class FakeGitLabClient implements GitLabClient {
     change: change.change,
   });
   getMergeRequest = async () => this.mergeRequest;
-  getRepositoryPermission = async () => "write" as const;
+  getRepositoryPermission = async (_projectId: string, actor: string) => {
+    this.permissionActors.push(actor);
+    return this.permission;
+  };
   listNotes = async () => {
     const notes = this.notes;
     this.afterListNotes?.();
     return notes;
   };
   createNote = async (_projectId: string, _changeNumber: number, body: string) => {
+    if (body.includes("pipr:command-response")) this.commandCreates += 1;
+    else this.mainCreates += 1;
     const note = {
       id: String(this.notes.length + 1),
       body,
@@ -319,12 +349,18 @@ class FakeGitLabClient implements GitLabClient {
     return note;
   };
   updateNote = async (_projectId: string, _changeNumber: number, noteId: string, body: string) => {
+    if (body.includes("pipr:command-response")) this.commandUpdates += 1;
+    else this.mainUpdates += 1;
     const note = this.notes.find((candidate) => candidate.id === noteId);
     if (!note) throw new Error(`Unknown note ${noteId}`);
     note.body = body;
     return note;
   };
-  listDiscussions = async () => this.discussions;
+  listDiscussions = async () => {
+    const discussions = this.discussions;
+    this.afterListNotes?.();
+    return discussions;
+  };
   getDiscussion = async (_projectId: string, _changeNumber: number, discussionId: string) => {
     const discussion = this.discussions.find((candidate) => candidate.id === discussionId);
     if (!discussion) throw new Error(`Unknown discussion ${discussionId}`);
@@ -349,8 +385,12 @@ class FakeGitLabClient implements GitLabClient {
     body: string,
     position: GitLabPosition,
   ) => {
-    if (this.createDiscussionError) throw this.createDiscussionError;
-    const discussion = {
+    if (this.createDiscussionError) {
+      const error = this.createDiscussionError;
+      this.createDiscussionError = undefined;
+      throw error;
+    }
+    const discussion: GitLabDiscussion = {
       id: `discussion-${this.discussions.length + 1}`,
       notes: [
         {
@@ -358,6 +398,13 @@ class FakeGitLabClient implements GitLabClient {
           body,
           author: { id: 1, username: "pipr-bot" },
           resolved: false,
+          position: {
+            new_path: position.new_path,
+            old_path: position.old_path,
+            new_line: position.new_line,
+            old_line: position.old_line,
+            line_range: position.line_range,
+          },
         },
       ],
     };
@@ -385,5 +432,196 @@ class FakeGitLabClient implements GitLabClient {
     const root = this.discussions.find((candidate) => candidate.id === discussionId)?.notes[0];
     if (root) root.resolved = true;
   };
-  setStatus = async () => "status-1";
+  setStatus = async (
+    _projectId: string,
+    headSha: string,
+    name: string,
+    state: CodeHostStatusState,
+    summary?: string,
+  ) => {
+    this.statusWrites.push({ name, state, summary, headSha });
+    return "status-1";
+  };
+}
+
+async function createGitLabConformanceHarness(): Promise<CodeHostAdapterConformanceHarness> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pipr-gitlab-conformance-"));
+  const client = new FakeGitLabClient();
+  const adapter = createGitLabHostAdapter({ client });
+  return {
+    adapter,
+    change,
+    async events() {
+      const eventPath = path.join(root, "event.json");
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          object_kind: "merge_request",
+          project: { id: 42, path_with_namespace: "group/project", web_url: "https://gitlab.com" },
+          object_attributes: { iid: 7, action: "open", draft: false },
+        }),
+      );
+      const changeRequest = await adapter.events.parseEvent({
+        eventPath,
+        env: {},
+        workspace: root,
+      });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          object_kind: "note",
+          project: { id: 42, path_with_namespace: "group/project" },
+          merge_request: { iid: 7 },
+          user: { username: "developer" },
+          object_attributes: {
+            id: 101,
+            note: "@pipr review",
+            action: "create",
+            noteable_type: "MergeRequest",
+          },
+        }),
+      );
+      const command = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
+      client.discussions.push({
+        id: "discussion-event",
+        notes: [
+          { id: "101", body: "root", author: { id: 2, username: "developer" } },
+          { id: "102", body: "Fixed.", author: { id: 2, username: "developer" } },
+        ],
+      });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          object_kind: "note",
+          project: { id: 42, path_with_namespace: "group/project" },
+          merge_request: { iid: 7 },
+          user: { username: "developer" },
+          object_attributes: {
+            id: 102,
+            note: "Fixed.",
+            action: "create",
+            noteable_type: "MergeRequest",
+            discussion_id: "discussion-event",
+          },
+        }),
+      );
+      const reply = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          object_kind: "merge_request",
+          project: { id: 42, path_with_namespace: "group/project" },
+          object_attributes: { iid: 7, action: "open", draft: true },
+        }),
+      );
+      const draft = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
+      return { changeRequest, command, reply, draft };
+    },
+    setPermission(permission) {
+      client.permission = permission;
+    },
+    permissionRequests: () => client.permissionActors.map((actor) => ({ actor })),
+    setCurrentHead(headSha) {
+      client.mergeRequest = {
+        ...client.mergeRequest,
+        sha: headSha,
+        diff_refs: { ...client.mergeRequest.diff_refs, head_sha: headSha },
+      };
+    },
+    advanceHeadDuringPreflight() {
+      client.afterListNotes = () => {
+        client.afterListNotes = undefined;
+        client.mergeRequest = {
+          ...client.mergeRequest,
+          sha: "new-head",
+          diff_refs: { ...client.mergeRequest.diff_refs, head_sha: "new-head" },
+        };
+      };
+    },
+    failNextInline() {
+      client.createDiscussionError = new Error("GitLab rejected the position");
+    },
+    seedForeignInline() {
+      client.discussions.push({
+        id: "discussion-foreign",
+        notes: [
+          {
+            id: "inline-foreign",
+            body: `${renderInlineFindingMarker("foreign", "head")}\nForeign.`,
+            author: { id: 2, username: "developer" },
+            resolved: false,
+            position: {
+              new_path: "src/new.ts",
+              old_path: "src/new.ts",
+              new_line: 4,
+              old_line: undefined,
+              line_range: {
+                start: { new_line: 2 },
+                end: { new_line: 4 },
+              },
+            },
+          },
+        ],
+      });
+    },
+    seedForeignReply(body) {
+      const discussion = client.discussions.find(
+        (item) => item.notes[0]?.author?.username === "pipr-bot",
+      );
+      if (!discussion) throw new Error("GitLab conformance discussion not found");
+      discussion.notes.push({
+        id: "reply-foreign",
+        body,
+        author: { id: 2, username: "developer" },
+      });
+    },
+    ownedReplyBodies: () =>
+      client.discussions.flatMap((item) =>
+        item.notes
+          .slice(1)
+          .filter((note) => note.author?.username === "pipr-bot")
+          .map((note) => note.body),
+      ),
+    writes: () => ({
+      mainCreates: client.mainCreates,
+      mainUpdates: client.mainUpdates,
+      inlineCreates: client.discussions.filter(
+        (item) => item.notes[0]?.author?.username === "pipr-bot" && item.notes[0]?.position,
+      ).length,
+      commandCreates: client.commandCreates,
+      commandUpdates: client.commandUpdates,
+      replies: client.discussions.reduce(
+        (count, item) =>
+          count + item.notes.slice(1).filter((note) => note.author?.username === "pipr-bot").length,
+        0,
+      ),
+      resolutions: client.discussions.filter(
+        (item) => item.id !== "discussion-event" && item.notes[0]?.resolved,
+      ).length,
+    }),
+    anchors: () => client.positions.map(observedGitLabAnchor),
+    statuses: () => client.statusWrites,
+    dispose: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
+function observedGitLabAnchor(position: GitLabPosition) {
+  const range = position.line_range;
+  if (position.new_line !== undefined) {
+    return {
+      path: position.new_path,
+      side: "RIGHT" as const,
+      startLine: range?.start.new_line ?? position.new_line,
+      endLine: position.new_line,
+      headSha: position.head_sha,
+    };
+  }
+  return {
+    path: position.new_path,
+    ...(position.old_path !== position.new_path ? { previousPath: position.old_path } : {}),
+    side: "LEFT" as const,
+    startLine: range?.start.old_line ?? position.old_line ?? 0,
+    endLine: position.old_line ?? 0,
+    headSha: position.head_sha,
+  };
 }

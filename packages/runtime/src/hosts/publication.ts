@@ -1,10 +1,24 @@
-import type { InlinePublicationItem, PublicationMetadata } from "../review/comment.js";
-import { extractInlineFindingMarkerRecords } from "../review/prior-state.js";
+import type {
+  InlinePublicationItem,
+  PublicationMetadata,
+  ThreadAction,
+} from "../review/comment.js";
+import {
+  type InlinePublicationLocation,
+  inlinePublicationDecision,
+} from "../review/inline-publication-policy.js";
+import {
+  extractInlineFindingMarkerRecords,
+  renderResolvedFindingMarker,
+  renderVerifierResponseMarker,
+} from "../review/prior-state.js";
 import { PublicationError, type PublicationResult } from "../review/publication-result.js";
 
 export async function publishUnseenInlineItems(options: {
   items: InlinePublicationItem[];
   existingBodies: string[];
+  existingLocations?: InlinePublicationLocation[];
+  location?(item: InlinePublicationItem): InlinePublicationLocation;
   publish(item: InlinePublicationItem): Promise<unknown>;
 }): Promise<{ posted: number; skipped: number; errors: string[] }> {
   const existing = new Set(
@@ -16,18 +30,54 @@ export async function publishUnseenInlineItems(options: {
   let posted = 0;
   let skipped = 0;
   for (const item of options.items) {
-    if (existing.has(`${item.findingId}:${item.reviewedHeadSha}`)) {
+    const marker = `${item.findingId}:${item.reviewedHeadSha}`;
+    const location = options.location?.(item);
+    if (
+      existing.has(marker) ||
+      (location !== undefined &&
+        inlinePublicationDecision({
+          marker,
+          location,
+          existing: {
+            markers: existing,
+            locations: options.existingLocations ?? [],
+          },
+        }) === "skip")
+    ) {
       skipped += 1;
       continue;
     }
     try {
       await options.publish(item);
       posted += 1;
+      existing.add(marker);
+      if (location) options.existingLocations?.push(location);
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
   }
   return { posted, skipped, errors };
+}
+
+export function nativeInlineLocation(options: {
+  commitId: string;
+  rightPath: string;
+  leftPath: string;
+  rightStart?: number;
+  rightEnd?: number;
+  leftStart?: number;
+  leftEnd?: number;
+}): InlinePublicationLocation | undefined {
+  const rightSide = options.rightEnd !== undefined;
+  const endLine = rightSide ? options.rightEnd : options.leftEnd;
+  if (endLine === undefined) return undefined;
+  return {
+    path: rightSide ? options.rightPath : options.leftPath,
+    commitId: options.commitId,
+    side: rightSide ? "RIGHT" : "LEFT",
+    startLine: (rightSide ? options.rightStart : options.leftStart) ?? endLine,
+    endLine,
+  };
 }
 
 export function commandResponseBody(options: {
@@ -38,6 +88,17 @@ export function commandResponseBody(options: {
 }): { marker: string; body: string } {
   const marker = `<!-- pipr:command-response change=${options.changeNumber} source=${options.sourceCommentId} command=${options.commandName} -->`;
   return { marker, body: [marker, "", options.body, ""].join("\n") };
+}
+
+export function threadActionReply(action: ThreadAction): { body: string; marker: string } {
+  const marker =
+    action.kind === "resolve"
+      ? renderResolvedFindingMarker(action.findingId, action.findingHeadSha)
+      : renderVerifierResponseMarker(action.findingId, action.responseKey);
+  return {
+    marker,
+    body: [marker, "", action.body.replaceAll("<!--", "&lt;!--")].join("\n"),
+  };
 }
 
 export function completeHostPublication(options: {

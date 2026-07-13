@@ -2,17 +2,16 @@ import type { PublicationPlan } from "../../review/comment.js";
 import {
   extractResolvedFindingMarkerRecords,
   extractVerifierResponseMarkers,
-  renderResolvedFindingMarker,
-  renderVerifierResponseMarker,
 } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
+import { threadActionReply } from "../publication.js";
 import type {
   GitHubPublicationClient,
   GitHubReviewComment,
   GitHubReviewThread,
 } from "./publication-client.js";
 import {
-  currentHeadShaMismatch,
+  assertCurrentHeadSha,
   listOwnedReviewComments,
   reviewThreadByCommentId,
 } from "./publication-shared.js";
@@ -26,16 +25,10 @@ export async function publishGitHubThreadActions(options: {
   if (options.actions.length === 0) {
     return { errors: [] };
   }
-  const headMismatch = await currentHeadShaMismatch(
-    options.client,
-    options.change,
-    options.reviewedHeadSha,
-  );
-  if (headMismatch) {
-    return { errors: [headMismatch] };
-  }
+  await assertCurrentHeadSha(options.client, options.change, options.reviewedHeadSha);
   const ownerLogin = await options.client.getAuthenticatedUserLogin();
   const existingReviewComments = await listOwnedReviewComments({ ...options, ownerLogin });
+  await assertCurrentHeadSha(options.client, options.change, options.reviewedHeadSha);
   return await publishGitHubPublicationThreadActions({ ...options, existingReviewComments });
 }
 
@@ -73,6 +66,7 @@ export async function publishGitHubPublicationThreadActions(options: {
   if (threadLoad.error) {
     errors.push(threadLoad.error);
   }
+  await assertCurrentHeadSha(options.client, options.change, context.reviewedHeadSha);
   for (const action of actions) {
     errors.push(...(await publishThreadAction(context, action)));
   }
@@ -133,8 +127,9 @@ async function postThreadActionReplyIfNeeded(
   context: ThreadActionContext,
   action: PublicationPlan["threadActions"][number],
 ): Promise<string | undefined> {
-  const marker = threadActionReplyMarker(action);
-  if (threadActionReplyExists(context, action, marker.key)) {
+  const reply = threadActionReply(action);
+  const markerKey = threadActionReplyKey(action);
+  if (threadActionReplyExists(context, action, markerKey)) {
     return undefined;
   }
   try {
@@ -142,9 +137,9 @@ async function postThreadActionReplyIfNeeded(
       repo: context.change.repository.slug,
       pullRequestNumber: context.change.change.number,
       commentId: Number(action.commentId),
-      body: [marker.body, "", action.body.replaceAll("<!--", "&lt;!--")].join("\n"),
+      body: reply.body,
     });
-    recordThreadActionReply(context, action, marker.key);
+    recordThreadActionReply(context, action, markerKey);
     return undefined;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -182,20 +177,10 @@ async function loadThreadActionThreads(
   }
 }
 
-function threadActionReplyMarker(action: PublicationPlan["threadActions"][number]): {
-  body: string;
-  key: string;
-} {
-  if (action.kind === "resolve") {
-    return {
-      body: renderResolvedFindingMarker(action.findingId, action.findingHeadSha),
-      key: `${action.findingId}:${action.findingHeadSha}`,
-    };
-  }
-  return {
-    body: renderVerifierResponseMarker(action.findingId, action.responseKey),
-    key: `pipr:verifier-response:${action.findingId}:${action.responseKey}`,
-  };
+function threadActionReplyKey(action: PublicationPlan["threadActions"][number]): string {
+  return action.kind === "resolve"
+    ? `${action.findingId}:${action.findingHeadSha}`
+    : `pipr:verifier-response:${action.findingId}:${action.responseKey}`;
 }
 
 function threadActionReplyExists(

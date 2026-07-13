@@ -1,4 +1,5 @@
 import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../../review/comment.js";
+import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
   applyResolvedFindingMarkers,
@@ -11,7 +12,9 @@ import type { ChangeRequestEventContext } from "../../types.js";
 import {
   commandResponseBody,
   completeHostPublication,
+  nativeInlineLocation,
   publishUnseenInlineItems,
+  threadActionReply,
 } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
 import type {
@@ -51,6 +54,8 @@ export async function publishGitLabPlan(options: {
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
     existingBodies: ownedBodies,
+    existingLocations: gitLabInlineLocations(discussions, owner.username),
+    location: gitLabInlineLocation,
     publish: async (item) => {
       await options.client.createDiscussion(
         projectId,
@@ -66,6 +71,7 @@ export async function publishGitLabPlan(options: {
     actions: options.plan.threadActions,
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     discussions,
+    ownerUsername: owner.username,
   });
   return completeHostPublication({
     provider: "GitLab",
@@ -75,6 +81,48 @@ export async function publishGitLabPlan(options: {
     resolutionErrors: resolution.errors,
     metadata: options.plan.metadata,
   });
+}
+
+function gitLabInlineLocations(
+  discussions: GitLabDiscussion[],
+  ownerUsername: string,
+): InlinePublicationLocation[] {
+  const locations: InlinePublicationLocation[] = [];
+  for (const discussion of discussions) {
+    if (discussion.notes[0]?.author?.username !== ownerUsername) continue;
+    const location = gitLabInlineLocationFromDiscussion(discussion);
+    if (location) locations.push(location);
+  }
+  return locations;
+}
+
+function gitLabInlineLocationFromDiscussion(
+  discussion: GitLabDiscussion,
+): InlinePublicationLocation | undefined {
+  const root = discussion.notes[0];
+  if (!root?.position) return undefined;
+  const marker = extractInlineFindingMarkerRecords([root.body])[0];
+  if (!marker) return undefined;
+  const position = root.position;
+  return nativeInlineLocation({
+    commitId: marker.head,
+    rightPath: position.new_path ?? "",
+    leftPath: position.old_path ?? position.new_path ?? "",
+    rightStart: position.line_range?.start.new_line ?? undefined,
+    rightEnd: position.new_line,
+    leftStart: position.line_range?.start.old_line ?? undefined,
+    leftEnd: position.old_line,
+  });
+}
+
+function gitLabInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
+  return {
+    path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
+    commitId: item.reviewedHeadSha,
+    side: item.side,
+    startLine: item.startLine,
+    endLine: item.endLine,
+  };
 }
 
 export async function publishGitLabCommandResponse(options: {
@@ -176,6 +224,7 @@ export async function publishGitLabThreadActions(options: {
   actions: ThreadAction[];
   reviewedHeadSha: string;
   discussions?: GitLabDiscussion[];
+  ownerUsername?: string;
 }): Promise<{ errors: string[] }> {
   if (options.actions.length === 0) return { errors: [] };
   const { projectId } = gitLabCoordinates(options.change);
@@ -183,6 +232,8 @@ export async function publishGitLabThreadActions(options: {
   const discussions =
     options.discussions ??
     (await options.client.listDiscussions(projectId, options.change.change.number));
+  const ownerUsername = options.ownerUsername ?? (await options.client.currentUser()).username;
+  await assertCurrentHead(options.client, projectId, options.change, options.reviewedHeadSha);
   const byNote = new Map(
     discussions.flatMap((discussion) => discussion.notes.map((note) => [note.id, discussion])),
   );
@@ -193,6 +244,7 @@ export async function publishGitLabThreadActions(options: {
       projectId,
       changeNumber: options.change.change.number,
       action,
+      ownerUsername,
       discussion: action.threadId
         ? discussions.find((candidate) => candidate.id === action.threadId)
         : byNote.get(action.commentId),
@@ -207,18 +259,25 @@ async function publishGitLabThreadAction(options: {
   projectId: string;
   changeNumber: number;
   action: ThreadAction;
+  ownerUsername: string;
   discussion?: GitLabDiscussion;
 }): Promise<string | undefined> {
   if (!options.discussion) {
     return `GitLab discussion not found for comment ${options.action.commentId}`;
   }
   try {
-    if (!options.discussion.notes.some((note) => note.body.includes(options.action.responseKey))) {
+    const reply = threadActionReply(options.action);
+    if (
+      !options.discussion.notes.some(
+        (note) =>
+          note.author?.username === options.ownerUsername && note.body.includes(reply.marker),
+      )
+    ) {
       await options.client.replyDiscussion(
         options.projectId,
         options.changeNumber,
         options.discussion.id,
-        options.action.body,
+        reply.body,
       );
     }
     if (options.action.kind === "resolve" && !options.discussion.notes[0]?.resolved) {

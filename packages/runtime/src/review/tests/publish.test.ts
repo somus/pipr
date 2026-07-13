@@ -443,6 +443,19 @@ describe("publishGitHubPublicationPlan", () => {
     expectThreadResolved(client, "thread-1");
   });
 
+  it("rechecks the PR head after loading review threads", async () => {
+    const { client, publicationPlan } = staleResolutionFixture({ resolved: false });
+    client.afterListReviewThreads = () => {
+      client.setHeadSha("new-head");
+    };
+
+    await expect(
+      publishGitHubPublicationPlan({ client, change: event, plan: publicationPlan }),
+    ).rejects.toThrow("Change request head changed");
+    expect(client.reviewReplies).toHaveLength(0);
+    expect(client.resolvedThreadIds).toHaveLength(0);
+  });
+
   it("resolves stale inline threads by parent comment when verifier action lacks a thread id", async () => {
     const { client, publicationPlan } = staleResolutionFixture({ resolved: false });
     if (publicationPlan.threadActions[0]) {
@@ -645,25 +658,24 @@ describe("publishGitHubPublicationPlan", () => {
   it("does not publish standalone verifier actions when the PR head changed", async () => {
     const client = new FakePublicationClient("new-head");
 
-    const result = await publishGitHubThreadActions({
-      client,
-      change: event,
-      actions: [
-        {
-          kind: "reply",
-          findingId: "fnd_existing",
-          findingHeadSha: "old-head",
-          commentId: "10",
-          body: "Still valid.",
-          responseKey: "reply-99:still-valid:fnd_existing",
-        },
-      ],
-      reviewedHeadSha: "head",
-    });
+    await expect(
+      publishGitHubThreadActions({
+        client,
+        change: event,
+        actions: [
+          {
+            kind: "reply",
+            findingId: "fnd_existing",
+            findingHeadSha: "old-head",
+            commentId: "10",
+            body: "Still valid.",
+            responseKey: "reply-99:still-valid:fnd_existing",
+          },
+        ],
+        reviewedHeadSha: "head",
+      }),
+    ).rejects.toThrow("Change request head changed from 'head' to 'new-head' before publication");
 
-    expect(result.errors).toEqual([
-      "Change request head changed from 'head' to 'new-head' before publication",
-    ]);
     expect(client.reviewReplies).toHaveLength(0);
   });
 
@@ -1241,8 +1253,13 @@ class FakePublicationClient implements GitHubPublicationClient {
   failInline = false;
   failReply = false;
   failResolve = false;
+  afterListReviewThreads?: () => void;
 
-  constructor(private readonly headSha: string) {}
+  constructor(private headSha: string) {}
+
+  setHeadSha(headSha: string) {
+    this.headSha = headSha;
+  }
 
   async getAuthenticatedUserLogin() {
     return this.ownerLogin;
@@ -1280,6 +1297,8 @@ class FakePublicationClient implements GitHubPublicationClient {
   }
 
   async listReviewThreads() {
+    this.afterListReviewThreads?.();
+    this.afterListReviewThreads = undefined;
     return this.reviewThreads;
   }
 

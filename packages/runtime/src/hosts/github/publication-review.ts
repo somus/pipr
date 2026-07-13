@@ -58,11 +58,13 @@ async function upsertMainComment(options: {
   plan: PublicationPlan;
   ownerLogin: string;
 }): Promise<PublicationResult["mainComment"]> {
+  const comments = await options.client.listIssueComments({
+    repo: options.change.repository.slug,
+    issueNumber: options.change.change.number,
+  });
+  await assertCurrentHeadSha(options.client, options.change, options.plan.metadata.reviewedHeadSha);
   const existing = findMainComment(
-    await options.client.listIssueComments({
-      repo: options.change.repository.slug,
-      issueNumber: options.change.change.number,
-    }),
+    comments,
     options.plan.mainMarker,
     options.change.change.number,
     options.ownerLogin,
