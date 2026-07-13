@@ -1,0 +1,33 @@
+packages/runtime/src/hosts/bitbucket/event.ts
+  s_4ebdfc62030aaf::t_268195a4b1f3c0 7,60
+packages/runtime/src/hosts/bitbucket/client.ts
+  s_4ebdfc62030aaf::t_8b7db7b9b088e0 88,90,223,230-231,233-234
+  s_4ebdfc62030aaf::t_6d166131b935c3 178,232
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_4ebdfc62030aaf::t_3653c53994ee10 134
+packages/runtime/src/hosts/bitbucket/tests/event.test.ts
+  s_4ebdfc62030aaf::t_268195a4b1f3c0 30,33,48,71-74
+packages/runtime/src/hosts/bitbucket/tests/client.test.ts
+  s_4ebdfc62030aaf::t_8b7db7b9b088e0 48-63
+  s_4ebdfc62030aaf::t_3653c53994ee10 41-47,64-67
+packages/runtime/src/hosts/gitlab/tests/client.test.ts
+  s_4ebdfc62030aaf::t_255e9ba542826d 197-227
+packages/runtime/src/hosts/gitlab/client.ts
+  s_4ebdfc62030aaf::t_930fd523e8fee4 14-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "1c71f0214aca4f2b3044f9be8a23dce8d22bc77d",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
