@@ -591,7 +591,7 @@ describe("webhook runner", () => {
     }
   });
 
-  it("logs redacted delivery failures", async () => {
+  it("logs bounded delivery failures without rewriting stored errors", async () => {
     const store = new MemoryDeliveryStore();
     const messages: string[] = [];
     store.enqueue({ id: "delivery-1", host: "gitlab", payload: "{}" });
@@ -605,6 +605,7 @@ describe("webhook runner", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]).toContain("delivery-1");
     expect(messages[0]).not.toContain("glpat-secret-value");
+    expect(store.failures).toEqual([{ id: "delivery-1", error: "token=glpat-secret-value" }]);
   });
 });
 

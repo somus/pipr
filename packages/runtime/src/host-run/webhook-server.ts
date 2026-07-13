@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { createCodeHostWebhookProtocol, type WebhookHost } from "../hosts/webhook.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
-import { redactPotentialSecrets } from "../shared/redaction.js";
 import { runHostRunCommand } from "./commands.js";
 
 const MAX_WEBHOOK_PAYLOAD_BYTES = 2 * 1024 * 1024;
@@ -99,7 +98,7 @@ export async function processNextWebhookDelivery(options: {
     options.store.complete(delivery.id);
     options.log?.(`webhook delivery completed: ${delivery.id.slice(0, 200)}`);
   } catch (error) {
-    const message = redactPotentialSecrets(error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
     options.store.fail(delivery.id, message.slice(0, 1_000));
     options.log?.(
       `webhook delivery failed and was retained for retry or inspection: ${delivery.id.slice(0, 200)}`,
