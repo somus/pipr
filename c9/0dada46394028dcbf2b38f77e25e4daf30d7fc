@@ -1,0 +1,34 @@
+packages/e2e/webhook-health-fixture.ts
+  s_4ebdfc62030aaf::t_9611e361e728d0 72,74-83,87-89,93-104
+  s_4ebdfc62030aaf::t_424bd15e3bf537 5-21,23-24,26-29,32,34-71,73
+packages/e2e/webhook-fetch-mock.ts
+  s_4ebdfc62030aaf::t_424bd15e3bf537 19,23
+  s_4ebdfc62030aaf::t_e7ccec157c0c6d 1,17-18,24-25
+  s_4ebdfc62030aaf::t_9611e361e728d0 2-16,20-22
+scripts/tests/release-scripts.test.ts
+  s_4ebdfc62030aaf::t_c47cb435490e44 147
+scripts/changed-scope.ts
+  s_4ebdfc62030aaf::t_c47cb435490e44 122
+packages/e2e/package.json
+  s_4ebdfc62030aaf::t_424bd15e3bf537 11
+Dockerfile
+  s_4ebdfc62030aaf::t_c47cb435490e44 67
+packages/e2e/container-check.ts
+  s_4ebdfc62030aaf::t_c47cb435490e44 230-232
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "c90dada46394028dcbf2b38f77e25e4daf30d7fc",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
