@@ -1,0 +1,63 @@
+packages/runtime/src/hosts/types.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 104
+apps/docs/content/docs/guide/azure-devops.mdx
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 6,8,10,16,18-20,24,27
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 223-229,232-245
+packages/runtime/src/host-run/verifier-entry.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 240
+apps/docs/content/docs/guide/quickstart.mdx
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 8
+packages/runtime/src/hosts/azure-devops/tests/client.test.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 5-36,205,222-223,228,230-233,235-236,247
+packages/runtime/src/hosts/gitlab/adapter.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 56,58
+apps/docs/content/docs/reference/index.mdx
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 12
+packages/runtime/src/config/init.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 173-174,201,203-208,211
+packages/runtime/src/hosts/azure-devops/tests/adapter.test.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 67,69-72,75-93,96,99-106,109,119-134,143-219
+packages/runtime/src/hosts/azure-devops/client.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 87-104,270-288,290-293,324,328,456-465
+packages/runtime/src/host-run/command-entry.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 124
+packages/runtime/src/host-run/webhook-server.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 5,12,30,35,40,47,50,129-133
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 271-278,288,330-334,375-380
+apps/docs/content/docs/index.mdx
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 3
+packages/runtime/src/hosts/azure-devops/adapter.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 40,54-57,60,80-89,123,125,130
+packages/runtime/src/hosts/azure-devops/webhook.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 1-106
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 113
+packages/runtime/src/hosts/gitlab/webhook.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 1-40
+packages/runtime/src/config/tests/init.test.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 1681,1689,1691-1695
+packages/runtime/src/hosts/webhook-shared.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 1-18
+packages/runtime/src/hosts/github/adapter.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 86-87
+packages/runtime/src/hosts/webhook.ts
+  s_4ebdfc62030aaf::t_9b5ea9a087cdd2 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "25be60142e0743a906d0cdaed820f1bafa11e509",
+  "prompts": {},
+  "sessions": {
+    "s_4ebdfc62030aaf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f56e7-3f15-75e1-ad7b-c8717b2986dd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
