@@ -1,0 +1,24 @@
+apps/docs/content/docs/guide/comments.mdx
+  s_e687529015e9e5::t_4d398aac65fca3 52-53,62-66
+  s_e687529015e9e5::t_d54445310d98a7 67
+apps/docs/content/docs/guide/trust-security.mdx
+  s_e687529015e9e5::t_4d398aac65fca3 90,110-111,124
+apps/docs/content/docs/guide/runtime.mdx
+  s_e687529015e9e5::t_4d398aac65fca3 212-216,232
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "dd728da94e0ac07f882f12491dcebf3b103c329f",
+  "prompts": {},
+  "sessions": {
+    "s_e687529015e9e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5c9c-d84f-7ac1-9051-e67aa92f922b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
