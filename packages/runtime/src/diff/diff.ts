@@ -36,15 +36,17 @@ export function buildDiffManifest(options: BuildDiffManifestOptions): DiffManife
   const mergeBaseSha = runGit(["merge-base", options.baseSha, options.headSha], options.cwd).trim();
   const diffHead = options.includeWorkingTree ? undefined : options.headSha;
   const nameStatus = runGit(
-    buildDiffArgs(["--name-status", "--find-renames"], mergeBaseSha, diffHead),
+    buildDiffArgs(["--name-status", "-z", "--find-renames"], mergeBaseSha, diffHead),
     options.cwd,
   );
   const diffStats = getDiffStats(options.cwd, mergeBaseSha, diffHead);
   const preExcludedFiles = getPreExcludedFiles(diffStats);
-  const diff = runGit(buildUnifiedDiffArgs(mergeBaseSha, diffHead, preExcludedFiles), options.cwd);
+  const rawPatch = parseRawPatch(
+    runGit(buildUnifiedDiffArgs(mergeBaseSha, diffHead, preExcludedFiles), options.cwd),
+  );
 
   const files = parseNameStatus(nameStatus);
-  const parsedDiff = parseUnifiedDiff(diff);
+  const parsedDiff = parseUnifiedDiff(rawPatch.patch, rawPatch.filePaths);
   for (const file of files) {
     const stats = diffStats.get(file.path);
     file.additions = stats?.additions ?? 0;
@@ -70,15 +72,31 @@ export function buildDiffManifest(options: BuildDiffManifestOptions): DiffManife
 }
 
 export function parseNameStatus(output: string): DiffFile[] {
-  return output
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map(parseNameStatusLine);
+  const fields = output.split("\0");
+  const files: DiffFile[] = [];
+  let index = 0;
+  while (index < fields.length) {
+    const rawStatus = fields[index++];
+    if (!rawStatus) {
+      continue;
+    }
+    const firstPath = fields[index++] ?? "";
+    const status = parseFileStatus(rawStatus);
+    if (status === "renamed") {
+      const secondPath = fields[index++] ?? "";
+      files.push(baseFile(secondPath || firstPath, status, firstPath));
+      continue;
+    }
+    files.push(baseFile(firstPath, status));
+  }
+  return files;
 }
 
-export function parseUnifiedDiff(diff: string): Map<string, ParsedUnifiedDiffFile> {
-  const state = createDiffParserState();
+export function parseUnifiedDiff(
+  diff: string,
+  filePaths: readonly string[],
+): Map<string, ParsedUnifiedDiffFile> {
+  const state = createDiffParserState(filePaths);
 
   for (const line of diff.split("\n")) {
     parseUnifiedDiffLine(state, line);
@@ -93,21 +111,21 @@ function getDiffStats(
   baseSha: string,
   headSha: string | undefined,
 ): Map<string, DiffStat> {
-  const output = runGit(buildDiffArgs(["--numstat", "--find-renames"], baseSha, headSha), cwd);
+  const output = runGit(
+    buildDiffArgs(["--numstat", "-z", "--find-renames"], baseSha, headSha),
+    cwd,
+  );
   const stats = new Map<string, DiffStat>();
-  for (const line of output.split("\n").filter(Boolean)) {
-    const stat = parseNumstatLine(line);
-    if (!stat) {
-      continue;
-    }
-    if (stat.kind === "binary") {
+  for (const stat of parseNumstat(output)) {
+    if (stat.binary) {
       stats.set(stat.path, { additions: 0, deletions: 0, excludedReason: "binary diff" });
       continue;
     }
     stats.set(stat.path, {
       additions: stat.additions,
       deletions: stat.deletions,
-      excludedReason: stat.changedLines > maxInlineChangedLines ? "oversized diff" : undefined,
+      excludedReason:
+        stat.additions + stat.deletions > maxInlineChangedLines ? "oversized diff" : undefined,
     });
   }
   return stats;
@@ -128,7 +146,11 @@ function buildUnifiedDiffArgs(
   headSha: string | undefined,
   excludedFiles: Map<string, string>,
 ): string[] {
-  const args = buildDiffArgs(["--unified=80", "--find-renames"], baseSha, headSha);
+  const args = buildDiffArgs(
+    ["--raw", "-z", "--patch", "--unified=80", "--find-renames"],
+    baseSha,
+    headSha,
+  );
   if (excludedFiles.size === 0) {
     return args;
   }
@@ -144,37 +166,75 @@ function buildDiffArgs(options: string[], baseSha: string, headSha: string | und
   return headSha ? ["diff", ...options, baseSha, headSha] : ["diff", ...options, baseSha];
 }
 
-function parseNumstatLine(
-  line: string,
-):
-  | { kind: "text"; path: string; additions: number; deletions: number; changedLines: number }
-  | { kind: "binary"; path: string }
-  | undefined {
-  const [rawAdditions, rawDeletions, ...pathParts] = line.split("\t");
-  const filePath = pathParts.join("\t");
-  if (!rawAdditions || !rawDeletions || !filePath) {
+function parseNumstat(
+  output: string,
+): Array<{ path: string; additions: number; deletions: number; binary: boolean }> {
+  const fields = output.split("\0");
+  const stats: Array<{ path: string; additions: number; deletions: number; binary: boolean }> = [];
+  let index = 0;
+  while (index < fields.length) {
+    const header = parseNumstatHeader(fields[index++] ?? "");
+    if (!header) {
+      continue;
+    }
+    let filePath = header.path;
+    if (!filePath) {
+      index += 1;
+      filePath = fields[index++] ?? "";
+    }
+    if (!filePath) {
+      continue;
+    }
+    const binary = header.rawAdditions === "-" || header.rawDeletions === "-";
+    stats.push({
+      path: filePath,
+      additions: binary ? 0 : Number(header.rawAdditions),
+      deletions: binary ? 0 : Number(header.rawDeletions),
+      binary,
+    });
+  }
+  return stats;
+}
+
+function parseNumstatHeader(
+  record: string,
+): { rawAdditions: string; rawDeletions: string; path: string } | undefined {
+  const firstTab = record.indexOf("\t");
+  const secondTab = record.indexOf("\t", firstTab + 1);
+  if (firstTab < 0 || secondTab < 0) {
     return undefined;
   }
-  if (rawAdditions === "-" || rawDeletions === "-") {
-    return { kind: "binary", path: normalizeNumstatPath(filePath) };
-  }
-  const additions = Number(rawAdditions);
-  const deletions = Number(rawDeletions);
   return {
-    kind: "text",
-    path: normalizeNumstatPath(filePath),
-    additions,
-    deletions,
-    changedLines: additions + deletions,
+    rawAdditions: record.slice(0, firstTab),
+    rawDeletions: record.slice(firstTab + 1, secondTab),
+    path: record.slice(secondTab + 1),
   };
 }
 
-function normalizeNumstatPath(filePath: string): string {
-  if (filePath.includes("{") && filePath.includes(" => ") && filePath.includes("}")) {
-    return filePath.replace(/\{(?<before>.*) => (?<after>.*)\}/, "$<after>");
+function parseRawPatch(output: string): { filePaths: string[]; patch: string } {
+  const rawPatchSeparator = "\0\0";
+  const separatorIndex = output.indexOf(rawPatchSeparator);
+  const raw = separatorIndex < 0 ? output : output.slice(0, separatorIndex);
+  const fields = raw.split("\0");
+  const filePaths: string[] = [];
+  let index = 0;
+  while (index < fields.length) {
+    const metadata = fields[index++];
+    if (!metadata) {
+      continue;
+    }
+    const rawStatus = metadata.slice(metadata.lastIndexOf(" ") + 1);
+    const firstPath = fields[index++] ?? "";
+    if (rawStatus.startsWith("R") || rawStatus.startsWith("C")) {
+      filePaths.push(fields[index++] || firstPath);
+      continue;
+    }
+    filePaths.push(firstPath);
   }
-  const renameTarget = / => (?<target>.*)$/.exec(filePath)?.groups?.target;
-  return renameTarget ?? filePath;
+  return {
+    filePaths,
+    patch: separatorIndex < 0 ? "" : output.slice(separatorIndex + rawPatchSeparator.length),
+  };
 }
 
 function baseFile(filePath: string, status: FileStatus, previousPath?: string): DiffFile {
@@ -191,15 +251,6 @@ function baseFile(filePath: string, status: FileStatus, previousPath?: string): 
     file.previousPath = previousPath;
   }
   return file;
-}
-
-function parseNameStatusLine(line: string): DiffFile {
-  const [rawStatus = "M", firstPath = "", secondPath = ""] = line.split("\t");
-  const status = parseFileStatus(rawStatus);
-  if (status === "renamed") {
-    return baseFile(secondPath || firstPath, "renamed", firstPath);
-  }
-  return baseFile(firstPath, status);
 }
 
 function parseFileStatus(rawStatus: string): FileStatus {
@@ -293,25 +344,23 @@ type ActiveHunk = {
 
 type DiffParserState = {
   filesByPath: Map<string, ParsedUnifiedDiffFile>;
+  filePaths: readonly string[];
+  nextFileIndex: number;
   currentPath?: string;
   activeHunk?: ActiveHunk;
 };
 
-function createDiffParserState(): DiffParserState {
+function createDiffParserState(filePaths: readonly string[]): DiffParserState {
   return {
     filesByPath: new Map(),
+    filePaths,
+    nextFileIndex: 0,
   };
 }
 
 function parseUnifiedDiffLine(state: DiffParserState, line: string): void {
   if (line.startsWith("diff --git ")) {
     resetFileState(state);
-    return;
-  }
-
-  if (line.startsWith("+++ b/")) {
-    state.currentPath = line.slice("+++ b/".length);
-    ensureParsedFile(state, state.currentPath);
     return;
   }
 
@@ -329,7 +378,11 @@ function parseUnifiedDiffLine(state: DiffParserState, line: string): void {
 
 function resetFileState(state: DiffParserState): void {
   finishActiveHunk(state);
-  state.currentPath = undefined;
+  state.currentPath = state.filePaths[state.nextFileIndex];
+  state.nextFileIndex += 1;
+  if (state.currentPath) {
+    ensureParsedFile(state, state.currentPath);
+  }
 }
 
 function startHunk(state: DiffParserState, line: string): void {

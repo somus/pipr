@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -8,7 +8,7 @@ import { runGit } from "../git.js";
 
 describe("diff manifest parsing", () => {
   it("parses name-status output", () => {
-    expect(parseNameStatus("A\tsrc/a.ts\nM\tsrc/b.ts\nR100\told.ts\tnew.ts\n")).toMatchObject([
+    expect(parseNameStatus("A\0src/a.ts\0M\0src/b.ts\0R100\0old.ts\0new.ts\0")).toMatchObject([
       { path: "src/a.ts", status: "added" },
       { path: "src/b.ts", status: "modified" },
       { path: "new.ts", previousPath: "old.ts", status: "renamed" },
@@ -28,7 +28,7 @@ describe("diff manifest parsing", () => {
       "-const old = 4;",
     ].join("\n");
 
-    const file = parseUnifiedDiff(diff).get("src/a.ts");
+    const file = parseUnifiedDiff(diff, ["src/a.ts"]).get("src/a.ts");
     const ranges = file?.commentableRanges;
 
     expect(ranges).toHaveLength(2);
@@ -49,7 +49,7 @@ describe("diff manifest parsing", () => {
       " const tail = 5;",
     ].join("\n");
 
-    const file = parseUnifiedDiff(diff).get("src/a.ts");
+    const file = parseUnifiedDiff(diff, ["src/a.ts"]).get("src/a.ts");
 
     expect(file?.hunks).toMatchObject([
       {
@@ -94,8 +94,10 @@ describe("diff manifest parsing", () => {
       "+const b = 3;",
     ].join("\n");
 
-    const baseId = parseUnifiedDiff(baseDiff).get("src/a.ts")?.commentableRanges[0]?.id;
-    const changedId = parseUnifiedDiff(changedDiff).get("src/a.ts")?.commentableRanges[0]?.id;
+    const baseId = parseUnifiedDiff(baseDiff, ["src/a.ts"]).get("src/a.ts")?.commentableRanges[0]
+      ?.id;
+    const changedId = parseUnifiedDiff(changedDiff, ["src/a.ts"]).get("src/a.ts")
+      ?.commentableRanges[0]?.id;
 
     expect(baseId).toBeDefined();
     expect(changedId).toBeDefined();
@@ -116,7 +118,7 @@ describe("diff manifest parsing", () => {
       "+const d = 4;",
     ].join("\n");
 
-    const file = parseUnifiedDiff(diff).get("src/a.ts");
+    const file = parseUnifiedDiff(diff, ["src/a.ts"]).get("src/a.ts");
 
     expect(file?.hunks.map((hunk) => hunk.hunkIndex)).toEqual([1, 2]);
     expect(file?.hunks[0]?.contentHash).not.toBe(file?.hunks[1]?.contentHash);
@@ -138,7 +140,7 @@ describe("diff manifest parsing", () => {
       "+new",
     ].join("\n");
 
-    const hunk = parseUnifiedDiff(diff).get("src/a.ts")?.hunks[0];
+    const hunk = parseUnifiedDiff(diff, ["src/a.ts"]).get("src/a.ts")?.hunks[0];
 
     expect(hunk).toMatchObject({
       oldStart: 1,
@@ -304,6 +306,54 @@ describe("diff manifest parsing", () => {
       expect(manifest.files[0]?.commentableRanges[0]?.id).toMatch(
         /^rng_[a-f0-9]{8}_h1_RIGHT_\d+_\d+_[a-f0-9]{12}$/,
       );
+    });
+  });
+
+  it("preserves exact Git paths containing delimiters and rename-like text", async () => {
+    await withGitRepo(async (repo) => {
+      const previousPath = "src/old\tname.ts";
+      const renamedPath = "src/new\nname.ts";
+      const renameLikePath = "src/{before => after}.ts";
+      await mkdir(path.join(repo, "src"), { recursive: true });
+      await Bun.write(path.join(repo, previousPath), "one\ntwo\nthree\nfour\n");
+      await Bun.write(path.join(repo, renameLikePath), "before\n");
+      commitAll(repo, "base");
+      const baseSha = git(repo, "rev-parse", "HEAD");
+
+      await rename(path.join(repo, previousPath), path.join(repo, renamedPath));
+      await Bun.write(path.join(repo, renamedPath), "one\ntwo\nthree\nFOUR\n");
+      await Bun.write(path.join(repo, renameLikePath), "after\n");
+      commitAll(repo, "head");
+      const headSha = git(repo, "rev-parse", "HEAD");
+
+      const manifest = buildDiffManifest({ cwd: repo, baseSha, headSha });
+
+      expect({
+        renamed: changedFile(manifest, renamedPath),
+        renameLike: changedFile(manifest, renameLikePath),
+      }).toMatchObject({
+        renamed: {
+          path: renamedPath,
+          previousPath,
+          status: "renamed",
+          additions: 1,
+          deletions: 1,
+          hunks: expect.arrayContaining([expect.any(Object)]),
+          commentableRanges: expect.arrayContaining([
+            expect.objectContaining({ path: renamedPath }),
+          ]),
+        },
+        renameLike: {
+          path: renameLikePath,
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          hunks: expect.arrayContaining([expect.any(Object)]),
+          commentableRanges: expect.arrayContaining([
+            expect.objectContaining({ path: renameLikePath }),
+          ]),
+        },
+      });
     });
   });
 
