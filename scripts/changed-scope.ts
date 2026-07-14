@@ -76,6 +76,10 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
     return (
       file.startsWith("apps/docs/") ||
       file.startsWith("docs/") ||
+      file.startsWith("packages/sdk/src/") ||
+      file === "packages/sdk/tsconfig.json" ||
+      file === "packages/runtime/src/config/recipes.ts" ||
+      file.startsWith("packages/runtime/src/config/recipes/") ||
       file.endsWith(".md") ||
       [
         "package.json",
