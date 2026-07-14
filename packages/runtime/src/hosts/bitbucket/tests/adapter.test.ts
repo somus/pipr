@@ -113,6 +113,56 @@ describe("Bitbucket Cloud adapter", () => {
     expect(client.currentUserCalls).toBe(1);
     expect(client.listCommentsCalls).toBe(1);
   });
+
+  it("retries only inline comments missing after partial publication", async () => {
+    const client = new FakeBitbucketClient();
+    const adapter = createBitbucketHostAdapter({ client });
+    const plan = publicationPlan();
+    const first = plan.inlineItems[0];
+    if (!first) throw new Error("Expected inline fixture");
+    const second = {
+      ...first,
+      finding: { ...first.finding, body: "Second fix", startLine: 5, endLine: 5 },
+      range: { ...first.range, startLine: 5, endLine: 5 },
+      startLine: 5,
+      endLine: 5,
+      findingId: "finding-2",
+      marker: "pipr:finding:finding-2:head",
+      body: `${renderInlineFindingMarker("finding-2", "head")}\nSecond fix`,
+    };
+    plan.inlineItems = [first, second];
+    client.failCommentBodyOnce = "finding-2";
+
+    await expect(adapter.publication?.publish({ change, plan })).rejects.toThrow(
+      "Bitbucket inline comment publication failed",
+    );
+    await expect(adapter.publication?.publish({ change, plan })).resolves.toMatchObject({
+      mainComment: { action: "updated" },
+      inlineComments: { posted: 1, skipped: 1, failed: 0 },
+    });
+
+    expect(client.createdBodies.filter((body) => body.inline)).toHaveLength(2);
+    expect(
+      client.createdBodies.filter((body) => (body.inline as { to?: number } | undefined)?.to === 4),
+    ).toHaveLength(1);
+    expect(
+      client.createdBodies.filter((body) => (body.inline as { to?: number } | undefined)?.to === 5),
+    ).toHaveLength(1);
+  });
+
+  it("upserts a pending status to success with the same key", async () => {
+    const client = new FakeBitbucketClient();
+    const adapter = createBitbucketHostAdapter({ client });
+
+    await adapter.statuses?.upsert({ change, name: "review", state: "pending" });
+    await adapter.statuses?.upsert({ change, name: "review", state: "success" });
+
+    expect(client.statusKeys).toEqual(["pipr-review", "pipr-review"]);
+    expect(client.statusBodies).toMatchObject([
+      { state: "INPROGRESS", refname: "feature" },
+      { state: "SUCCESSFUL", refname: "feature" },
+    ]);
+  });
 });
 
 const change: ChangeRequestEventContext = {
@@ -192,6 +242,8 @@ class FakeBitbucketClient implements BitbucketClient {
   comments: BitbucketComment[] = [];
   createdBodies: Array<Record<string, unknown>> = [];
   statusBodies: Array<Record<string, unknown>> = [];
+  statusKeys: string[] = [];
+  failCommentBodyOnce: string | undefined;
   currentUserCalls = 0;
   listCommentsCalls = 0;
   pullRequest: BitbucketPullRequest = {
@@ -224,6 +276,13 @@ class FakeBitbucketClient implements BitbucketClient {
     return this.comments;
   };
   createComment = async (_id: number, body: Record<string, unknown>) => {
+    if (
+      this.failCommentBodyOnce &&
+      (body.content as { raw?: string }).raw?.includes(this.failCommentBodyOnce)
+    ) {
+      this.failCommentBodyOnce = undefined;
+      throw new Error("controlled Bitbucket comment failure");
+    }
     this.createdBodies.push(body);
     const comment: BitbucketComment = {
       id: String(this.comments.length + 1),
@@ -248,6 +307,7 @@ class FakeBitbucketClient implements BitbucketClient {
     if (comment) comment.resolution = { type: "resolution" };
   };
   setStatus = async (_sha: string, key: string, body: Record<string, unknown>) => {
+    this.statusKeys.push(key);
     this.statusBodies.push(body);
     return key;
   };

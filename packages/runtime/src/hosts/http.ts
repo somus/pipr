@@ -10,6 +10,12 @@ export type CodeHostHttpClientOptions = {
   maxRetries?: number;
   requestTimeoutMilliseconds?: number;
   retryNonIdempotentStatuses?: readonly number[];
+  successThrottle?: CodeHostSuccessThrottle;
+};
+
+export type CodeHostSuccessThrottle = {
+  wait(): Promise<void>;
+  update(retryAfter: string | null): void;
 };
 
 export class CodeHostHttpError extends Error {
@@ -25,6 +31,7 @@ export class CodeHostHttpError extends Error {
 export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
   const fetchRequest = options.fetch ?? fetch;
   const sleep = options.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds));
+  const successThrottle = options.successThrottle ?? createCodeHostSuccessThrottle(sleep);
   const maxRetries = options.maxRetries ?? 2;
   const requestTimeoutMilliseconds = options.requestTimeoutMilliseconds ?? 30_000;
   const secrets = [...new Headers(options.headers).values()].flatMap((value) =>
@@ -32,17 +39,12 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
       (candidate): candidate is string => candidate !== undefined && candidate.length >= 8,
     ),
   );
-  let delayBeforeNextRequest = 0;
 
   return {
     async json<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
-      if (delayBeforeNextRequest > 0) {
-        await sleep(delayBeforeNextRequest);
-        delayBeforeNextRequest = 0;
-      }
-
       const method = init.method?.toUpperCase() ?? "GET";
       for (let attempt = 0; ; attempt += 1) {
+        await successThrottle.wait();
         const timeoutSignal = AbortSignal.timeout(requestTimeoutMilliseconds);
         const response = await fetchRequest(new URL(path, options.baseUrl), {
           ...init,
@@ -54,7 +56,7 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
         });
         const retryAfter = retryAfterMilliseconds(response.headers.get("Retry-After"));
         if (response.ok) {
-          delayBeforeNextRequest = retryAfter;
+          successThrottle.update(response.headers.get("Retry-After"));
           return schema.parse(await response.json());
         }
         if (
@@ -78,6 +80,44 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
           response.status,
         );
       }
+    },
+  };
+}
+
+export function createCodeHostSuccessThrottle(
+  sleep: (milliseconds: number) => Promise<void> = (milliseconds) => Bun.sleep(milliseconds),
+): CodeHostSuccessThrottle {
+  let notBefore = 0;
+  let waitInFlight: Promise<void> | undefined;
+
+  const waitUntilReady = async () => {
+    while (true) {
+      const deadline = notBefore;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        if (notBefore === deadline) notBefore = 0;
+        return;
+      }
+      await sleep(remaining);
+      if (notBefore <= deadline) {
+        notBefore = 0;
+        return;
+      }
+    }
+  };
+
+  return {
+    wait() {
+      if (waitInFlight) return waitInFlight;
+      const currentWait = waitUntilReady().finally(() => {
+        if (waitInFlight === currentWait) waitInFlight = undefined;
+      });
+      waitInFlight = currentWait;
+      return waitInFlight;
+    },
+    update(retryAfter) {
+      const delay = retryAfterMilliseconds(retryAfter);
+      if (delay > 0) notBefore = Math.max(notBefore, Date.now() + delay);
     },
   };
 }

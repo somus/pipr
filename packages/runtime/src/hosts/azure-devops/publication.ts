@@ -305,14 +305,25 @@ async function lineEndOffset(
 ): Promise<number> {
   const root = path.resolve(change.workspace);
   const sha = side === "RIGHT" ? change.change.head.sha : change.change.base.sha;
+  let result: ReturnType<typeof Bun.spawnSync>;
   try {
-    const result = Bun.spawnSync(["git", "show", `${sha}:${filePath}`], { cwd: root });
-    if (result.exitCode !== 0) return 1;
-    const content = result.stdout.toString().split(/\r?\n/)[line - 1];
-    return content === undefined ? 1 : content.length + 1;
-  } catch {
-    return 1;
+    result = Bun.spawnSync(["git", "show", `${sha}:${filePath}`], { cwd: root });
+  } catch (error) {
+    throw new Error(`Azure DevOps could not read ${side} blob ${sha}:${filePath}`, {
+      cause: error,
+    });
   }
+  if (result.exitCode !== 0) {
+    throw new Error(`Azure DevOps could not read ${side} blob ${sha}:${filePath}`);
+  }
+  if (!result.stdout) {
+    throw new Error(`Azure DevOps returned no ${side} blob data for ${sha}:${filePath}`);
+  }
+  const content = result.stdout.toString().split(/\r?\n/)[line - 1];
+  if (content === undefined) {
+    throw new Error(`Azure DevOps line ${line} is outside ${side} blob ${sha}:${filePath}`);
+  }
+  return content.length + 1;
 }
 
 async function currentNativeChange(

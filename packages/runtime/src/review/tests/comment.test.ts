@@ -110,6 +110,9 @@ describe("comments", () => {
     expect(adapted.inlineItems).toHaveLength(1);
     expect(adapted.inlineItems[0]?.finding.suggestedFix).toBeUndefined();
     expect(adapted.inlineItems[0]?.body).not.toContain("```suggestion");
+    expect(adapted.inlineItems[0]?.body).toContain(
+      "**Suggested change**\n\n```\nUse a safe call.\n```",
+    );
   });
 
   it("renders one whole main comment body with review state", () => {

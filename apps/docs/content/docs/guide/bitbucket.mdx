@@ -48,13 +48,15 @@ The Bitbucket Cloud adapter supports:
 
 - pull-request created and updated reviews, with terminal events normalized as closed;
 - Main Review Comment upsert and marker deduplication;
-- left-side, right-side, and multiline Inline Review Comments;
+- single-line and multiline left-side and right-side Inline Review Comments;
 - prior-state loading, replies, and thread resolution;
 - `@pipr` commands with effective workspace repository permissions;
 - stable-key source-commit statuses;
 - fork source checkout and exact base/head stale checks.
 
 Bitbucket Cloud's public REST API does not document directly applicable suggestion syntax, so Pipr renders suggested fixes as ordinary fenced code. Bitbucket Data Center uses different APIs and is not supported by this adapter.
+
+The public REST endpoint accepts added ranges as `start_to` plus `to` and deleted ranges as `start_from` plus `from`. Live Cloud probes created and returned both forms with the expected three-line context.
 
 ## Next steps
 

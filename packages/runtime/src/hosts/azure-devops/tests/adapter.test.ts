@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,19 @@ import { buildPriorReviewState, renderInlineFindingMarker } from "../../../revie
 import type { ChangeRequestEventContext } from "../../../types.js";
 import { createAzureDevOpsHostAdapter } from "../adapter.js";
 import type { AzureDevOpsClient, AzureDevOpsPullRequest, AzureDevOpsThread } from "../client.js";
+
+const fixtureWorkspace = mkdtempSync(path.join(os.tmpdir(), "pipr-azure-adapter-"));
+git(fixtureWorkspace, ["init"]);
+git(fixtureWorkspace, ["config", "user.name", "Pipr Test"]);
+git(fixtureWorkspace, ["config", "user.email", "pipr@example.test"]);
+mkdirSync(path.join(fixtureWorkspace, "src"));
+writeFileSync(path.join(fixtureWorkspace, "src/a.ts"), "line one\n\n");
+writeFileSync(path.join(fixtureWorkspace, "src/old.ts"), "one\ntwo\nthree\nfour\n\n");
+git(fixtureWorkspace, ["add", "."]);
+git(fixtureWorkspace, ["commit", "-m", "fixture"]);
+git(fixtureWorkspace, ["tag", "base"]);
+
+afterAll(() => rmSync(fixtureWorkspace, { recursive: true, force: true }));
 
 describe("Azure DevOps host adapter", () => {
   it("publishes idempotent main, iteration-anchored inline, and status results", async () => {
@@ -62,6 +76,23 @@ describe("Azure DevOps host adapter", () => {
       "head changed",
     );
     expect(client.threads).toEqual([]);
+  });
+
+  it("reports an inline publication failure when the reviewed blob cannot be read", async () => {
+    const client = new FakeAzureDevOpsClient();
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    const missingWorkspaceChange = {
+      ...change,
+      workspace: path.join(fixtureWorkspace, "missing"),
+    };
+
+    await expect(
+      adapter.publication?.publish({ change: missingWorkspaceChange, plan: publicationPlan() }),
+    ).rejects.toMatchObject({
+      message: "Azure DevOps inline comment publication failed",
+      result: { inlineComments: { posted: 0, skipped: 0, failed: 1 } },
+    });
+    expect(client.createdThreadBodies).toHaveLength(1);
   });
 
   it("fails publication and statuses when only the target commit changed", async () => {
@@ -219,7 +250,7 @@ describe("Azure DevOps host adapter", () => {
     });
   });
 
-  it("publishes native suggestions in a positioned thread", async () => {
+  it("publishes visible suggestion fallbacks in a positioned thread", async () => {
     const client = new FakeAzureDevOpsClient();
     const adapter = createAzureDevOpsHostAdapter({ client });
     const plan = publicationPlan();
@@ -229,7 +260,7 @@ describe("Azure DevOps host adapter", () => {
       {
         ...item,
         finding: { ...item.finding, suggestedFix: "const value = 2;" },
-        body: `${item.body}\n**Suggested change**\n\n\`\`\`suggestion\nconst value = 2;\n\`\`\``,
+        body: `${item.body}\n**Suggested change**\n\n\`\`\`\nconst value = 2;\n\`\`\``,
       },
     ];
 
@@ -245,7 +276,7 @@ describe("Azure DevOps host adapter", () => {
     const comments = client.createdThreadBodies[1]?.comments as
       | Array<{ content: string }>
       | undefined;
-    expect(comments?.[0]?.content).toContain("```suggestion\nconst value = 2;\n```");
+    expect(comments?.[0]?.content).toContain("```\nconst value = 2;\n```");
   });
 
   it("declares Azure-native capability limits", () => {
@@ -255,7 +286,7 @@ describe("Azure DevOps host adapter", () => {
       reviewCommentReplies: true,
       threadResolution: true,
       multilineInlineComments: true,
-      suggestedChanges: true,
+      suggestedChanges: false,
       statuses: true,
     });
   });
@@ -333,7 +364,7 @@ const change: ChangeRequestEventContext = {
     base: { sha: "base", ref: "main" },
     head: { sha: "head", ref: "feature" },
   },
-  workspace: "/workspace",
+  workspace: fixtureWorkspace,
 };
 
 function publicationPlan() {

@@ -26,7 +26,7 @@ export function createAzureDevOpsHostAdapter(
       reviewCommentReplies: true,
       threadResolution: true,
       multilineInlineComments: true,
-      suggestedChanges: true,
+      suggestedChanges: false,
       statuses: true,
     },
     events: {
