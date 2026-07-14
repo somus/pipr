@@ -28,6 +28,7 @@ writeFileSync(path.join(fixtureWorkspace, "src/old.ts"), "one\ntwo\nthree\nfour\
 git(fixtureWorkspace, ["add", "."]);
 git(fixtureWorkspace, ["commit", "-m", "fixture"]);
 git(fixtureWorkspace, ["tag", "base"]);
+git(fixtureWorkspace, ["tag", "head"]);
 
 afterAll(() => rmSync(fixtureWorkspace, { recursive: true, force: true }));
 
