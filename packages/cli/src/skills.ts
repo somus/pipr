@@ -155,9 +155,11 @@ async function skillDirectoryPathsMatch(
   skillDir: string,
   files: BundledSkillFile[],
 ): Promise<boolean> {
-  return samePaths(
-    await listSkillDirectoryEntries(skillDir),
-    files.map((file) => file.path).sort(),
+  const actualPaths = await listSkillDirectoryEntries(skillDir);
+  const expectedPaths = files.map((file) => file.path).sort();
+  return (
+    actualPaths.length === expectedPaths.length &&
+    actualPaths.every((value, index) => value === expectedPaths[index])
   );
 }
 
@@ -192,10 +194,6 @@ async function listSkillDirectoryEntries(skillDir: string, prefix = ""): Promise
       }),
   );
   return paths.flat().sort();
-}
-
-function samePaths(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 const existingDirectoryErrorCodes = new Set(["EEXIST", "ENOTEMPTY"]);

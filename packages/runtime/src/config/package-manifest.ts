@@ -1,10 +1,12 @@
+import { isRecord } from "../shared/record.js";
+
 export type PackageManifest = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
 };
 
 export function normalizePackageManifest(value: unknown): PackageManifest {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return {};
   }
 
@@ -12,11 +14,7 @@ export function normalizePackageManifest(value: unknown): PackageManifest {
   const rawManifest = value as Record<string, unknown>;
   for (const key of ["dependencies", "devDependencies"] as const) {
     const dependencyMap = rawManifest[key];
-    if (
-      dependencyMap === null ||
-      typeof dependencyMap !== "object" ||
-      Array.isArray(dependencyMap)
-    ) {
+    if (!isRecord(dependencyMap)) {
       continue;
     }
     const entries = Object.entries(dependencyMap).filter(

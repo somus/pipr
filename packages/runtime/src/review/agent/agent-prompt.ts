@@ -2,6 +2,7 @@ import type { Agent, AgentPromptContext, AgentTool, PathFilter, Schema } from "@
 import { renderPromptValue } from "@usepipr/sdk/internal";
 import { compact } from "lodash-es";
 import { piReadOnlyToolNames } from "../../pi/contract.js";
+import { isRecord } from "../../shared/record.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
 import type { PriorReviewState } from "../prior-state.js";
 import { reviewResultSchemaId, reviewSchemaExample } from "../review.js";
@@ -173,11 +174,11 @@ function suggestedFixOutputPromptLines(): string[] {
 }
 
 function schemaMentionsField(value: unknown, fieldName: string): boolean {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
   if (Array.isArray(value)) {
     return value.some((item) => schemaMentionsField(item, fieldName));
+  }
+  if (!isRecord(value)) {
+    return false;
   }
   return Object.entries(value).some(
     ([key, child]) => key === fieldName || schemaMentionsField(child, fieldName),

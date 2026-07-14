@@ -238,7 +238,14 @@ function webhookPort(value: string | undefined): number {
 
 const githubActionsLogSink: RuntimeLogSink = {
   log(record) {
-    githubActionLogWriters[record.level](formatGitHubRuntimeLogRecord(record));
+    const line = JSON.stringify({
+      level: record.level,
+      event: record.event,
+      ...record.fields,
+    });
+    githubActionLogWriters[record.level](
+      record.text === undefined ? line : `${line}\n${record.text}`,
+    );
   },
   async group(name, run) {
     return await core.group(name, run);
@@ -252,15 +259,6 @@ const githubActionLogWriters = {
   error: core.error,
   debug: core.debug,
 } satisfies Record<RuntimeLogRecord["level"], (message: string) => void>;
-
-function formatGitHubRuntimeLogRecord(record: RuntimeLogRecord): string {
-  const line = JSON.stringify({
-    level: record.level,
-    event: record.event,
-    ...record.fields,
-  });
-  return record.text === undefined ? line : `${line}\n${record.text}`;
-}
 
 function writeGitHubActionResult(result: HostRunCommandResult): void {
   if (result.kind === "ignored") {
@@ -394,7 +392,7 @@ async function runInit(options: CliOptions): Promise<void> {
     rootDir: process.cwd(),
     configDir: options.configDir,
     force: options.force === true,
-    adapters: parseInitAdapters(options.adapters),
+    adapters: options.adapters?.split(",").map((adapter) => adapter.trim()),
     recipe: options.recipe,
     minimal: options.minimal === true,
   });
@@ -407,10 +405,6 @@ async function runInit(options: CliOptions): Promise<void> {
       "For editor types, install @usepipr/sdk at the repo root: npm install -D @usepipr/sdk",
     );
   }
-}
-
-function parseInitAdapters(adapters: string | undefined): string[] | undefined {
-  return adapters?.split(",").map((adapter) => adapter.trim());
 }
 
 async function runCheck(options: CliOptions): Promise<void> {
@@ -624,7 +618,11 @@ function writeLocalReviewResult(result: LocalReviewResult, json: boolean): void 
 }
 
 function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }>): string {
-  const mainComment = stripMainCommentMarker(result.mainComment);
+  const mainComment = result.mainComment
+    .split("\n")
+    .filter((line) => !line.startsWith("<!-- pipr:main-comment "))
+    .join("\n")
+    .trimStart();
   const inlineFindings = result.inlineCommentDrafts.map((draft, index) => {
     const range =
       draft.startLine === draft.endLine
@@ -639,14 +637,6 @@ function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }
   return inlineFindings.length === 0
     ? mainComment
     : [mainComment.trimEnd(), "", "## Inline Findings", "", inlineFindings.join("\n\n")].join("\n");
-}
-
-function stripMainCommentMarker(comment: string): string {
-  return comment
-    .split("\n")
-    .filter((line) => !line.startsWith("<!-- pipr:main-comment "))
-    .join("\n")
-    .trimStart();
 }
 
 function localReviewJson(result: LocalReviewResult) {

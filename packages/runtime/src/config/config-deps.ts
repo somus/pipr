@@ -1,4 +1,5 @@
 import path from "node:path";
+import { isRecord } from "../shared/record.js";
 import { normalizePackageManifest, type PackageManifest } from "./package-manifest.js";
 
 const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
@@ -102,7 +103,7 @@ function sanitizedPackageJsonForConfigInstall(packageJson: string): string {
   const value = JSON.parse(packageJson) as Record<string, unknown>;
   for (const key of ["dependencies", "devDependencies"] as const) {
     const dependencies = value[key];
-    if (dependencies === null || typeof dependencies !== "object" || Array.isArray(dependencies)) {
+    if (!isRecord(dependencies)) {
       continue;
     }
     const sanitized = Object.fromEntries(
@@ -251,10 +252,6 @@ function firstRecordProjectionChange(
     }
   }
   return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export async function assertBunAvailable(): Promise<void> {

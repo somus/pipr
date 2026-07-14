@@ -2,6 +2,7 @@ import { lstat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { createDiffRangeIndex } from "../diff/ranges.js";
+import { isRecord } from "../shared/record.js";
 import type { CommentableRange, DiffHunk, DiffManifest, DiffManifestFile } from "../types.js";
 
 const readAtRefContextLines = 3;
@@ -59,10 +60,7 @@ export type LineSliceResult = {
 
 const readDiffParamsSchema = z.preprocess(
   (params) => {
-    const record =
-      typeof params === "object" && params !== null && !Array.isArray(params)
-        ? (params as Record<string, unknown>)
-        : {};
+    const record = isRecord(params) ? params : {};
     return {
       path: typeof record.path === "string" ? record.path : undefined,
       rangeId: typeof record.rangeId === "string" ? record.rangeId : undefined,
@@ -75,8 +73,7 @@ const readDiffParamsSchema = z.preprocess(
 );
 
 const readAtRefParamsSchema = z.preprocess(
-  (params) =>
-    typeof params === "object" && params !== null && !Array.isArray(params) ? params : {},
+  (params) => (isRecord(params) ? params : {}),
   z.object({
     path: z.unknown(),
     ref: z.enum(["base", "head"], {
