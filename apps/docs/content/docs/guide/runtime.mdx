@@ -74,7 +74,7 @@ For GitHub Action pull request runs:
 2. Pipr checks that configured provider env vars are available.
 3. Pipr checks out the pull request for review.
 4. Pull request changes to `.pipr/config.ts` are reviewed as code, but do not affect the current run.
-5. Pi receives a read-only workspace copy and Pipr-owned diff tools.
+5. Pi receives a read-only workspace copy and Pipr-owned diff tools. The official Docker Action enforces the copy across separate supervisor and Pi identities.
 
 This keeps model choice, API-key env names, task registration, command permissions, and publication policy out of untrusted pull request code.
 
