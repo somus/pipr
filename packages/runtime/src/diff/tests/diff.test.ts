@@ -314,15 +314,18 @@ describe("diff manifest parsing", () => {
       const previousPath = "src/old\tname.ts";
       const renamedPath = "src/new\nname.ts";
       const renameLikePath = "src/{before => after}.ts";
+      const tabPath = "src/plain\tname.ts";
       await mkdir(path.join(repo, "src"), { recursive: true });
       await Bun.write(path.join(repo, previousPath), "one\ntwo\nthree\nfour\n");
       await Bun.write(path.join(repo, renameLikePath), "before\n");
+      await Bun.write(path.join(repo, tabPath), "tab before\n");
       commitAll(repo, "base");
       const baseSha = git(repo, "rev-parse", "HEAD");
 
       await rename(path.join(repo, previousPath), path.join(repo, renamedPath));
       await Bun.write(path.join(repo, renamedPath), "one\ntwo\nthree\nFOUR\n");
       await Bun.write(path.join(repo, renameLikePath), "after\n");
+      await Bun.write(path.join(repo, tabPath), "tab after\n");
       commitAll(repo, "head");
       const headSha = git(repo, "rev-parse", "HEAD");
 
@@ -331,6 +334,7 @@ describe("diff manifest parsing", () => {
       expect({
         renamed: changedFile(manifest, renamedPath),
         renameLike: changedFile(manifest, renameLikePath),
+        tab: changedFile(manifest, tabPath),
       }).toMatchObject({
         renamed: {
           path: renamedPath,
@@ -352,6 +356,14 @@ describe("diff manifest parsing", () => {
           commentableRanges: expect.arrayContaining([
             expect.objectContaining({ path: renameLikePath }),
           ]),
+        },
+        tab: {
+          path: tabPath,
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          hunks: expect.arrayContaining([expect.any(Object)]),
+          commentableRanges: expect.arrayContaining([expect.objectContaining({ path: tabPath })]),
         },
       });
     });
