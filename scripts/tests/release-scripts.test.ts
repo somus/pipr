@@ -132,6 +132,22 @@ describe("changed-scope", () => {
     expect(result.stdout.trim()).toBe("changed=true");
   });
 
+  it("includes package inputs consumed by docs", () => {
+    for (const file of [
+      "packages/sdk/src/index.ts",
+      "packages/sdk/src/types/task.ts",
+      "packages/sdk/tsconfig.json",
+      "packages/runtime/src/config/recipes.ts",
+      "packages/runtime/src/config/recipes/default-review.ts",
+    ]) {
+      expect(scopeChanged("docs", file)).toBe(true);
+    }
+
+    for (const file of ["packages/sdk/package.json", "packages/runtime/src/review/review.ts"]) {
+      expect(scopeChanged("docs", file)).toBe(false);
+    }
+  }, 15000);
+
   it("limits docker scope to Docker image and container check inputs", () => {
     for (const file of [
       "packages/e2e/action-fixture.ts",
@@ -149,7 +165,7 @@ describe("changed-scope", () => {
       "deploy/webhook/compose.yml",
       "scripts/docker-e2e.ts",
     ]) {
-      expect(dockerScopeChanged(file)).toBe(true);
+      expect(scopeChanged("docker", file)).toBe(true);
     }
 
     for (const file of [
@@ -157,7 +173,7 @@ describe("changed-scope", () => {
       "packages/e2e/prompt-evals.test.ts",
       "packages/e2e/scenarios-cleanup.test.ts",
     ]) {
-      expect(dockerScopeChanged(file)).toBe(false);
+      expect(scopeChanged("docker", file)).toBe(false);
     }
   }, 15000);
 });
@@ -598,13 +614,13 @@ function git(cwd: string, ...args: string[]): string {
   return result.stdout.toString().trim();
 }
 
-function dockerScopeChanged(relativePath: string): boolean {
+function scopeChanged(scope: "docs" | "docker", relativePath: string): boolean {
   const repository = changedScopeRepository(relativePath);
   const base = git(repository, "rev-parse", "HEAD~1");
   const head = git(repository, "rev-parse", "HEAD");
   const result = scriptResult(
     path.join(repoRoot, "scripts/changed-scope.ts"),
-    ["docker"],
+    [scope],
     repository,
     {
       EVENT_NAME: "pull_request",
