@@ -1,0 +1,19 @@
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_df9d72eaa889bb::t_ff7c0459c349ad 101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "ccc47226a8446e2214dbcf8c9b663332659c1e7e",
+  "prompts": {},
+  "sessions": {
+    "s_df9d72eaa889bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d3b-26e8-7fb0-9482-9e678d5f00aa",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
