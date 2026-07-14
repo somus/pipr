@@ -387,45 +387,24 @@ describe("prepareConfigDirectory", () => {
   it("installs from a frozen verified projection without resolving runtime-provided deps", async () => {
     const originalSpawn = Bun.spawn;
     const observedInstalls: Array<{ command: string[]; packageJson: string; bunLock: string }> = [];
-    Bun.spawn = ((...args: Parameters<typeof Bun.spawn>): ReturnType<typeof Bun.spawn> => {
-      const command = commandFromSpawnArgs(args);
-      const cwd = cwdFromSpawnArgs(args);
-      if (command?.[0] === "bun" && command[1] === "install" && cwd) {
-        observedInstalls.push({
-          command,
-          packageJson: readFileSync(path.join(cwd, "package.json"), "utf8"),
-          bunLock: readFileSync(path.join(cwd, "bun.lock"), "utf8"),
-        });
-        if (command.includes("--lockfile-only")) {
-          writeFileSync(
-            path.join(cwd, "bun.lock"),
-            [
-              "{",
-              '  "lockfileVersion": 1,',
-              '  "configVersion": 1,',
-              '  "workspaces": {',
-              '    "": {',
-              '      "devDependencies": {',
-              '        "typescript": "6.0.3",',
-              "      },",
-              "    },",
-              "  },",
-              '  "packages": {',
-              '    "node_modules/typescript": ["typescript@6.0.3", "", {}, "sha512-typescript"],',
-              "  }",
-              "}",
-              "",
-            ].join("\n"),
-          );
-        }
-        return originalSpawn(["bun", "--version"], {
-          env: process.env,
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-      }
-      return originalSpawn(...args);
-    }) as typeof Bun.spawn;
+    const projectedBunLock = [
+      "{",
+      '  "lockfileVersion": 1,',
+      '  "configVersion": 1,',
+      '  "workspaces": {',
+      '    "": {',
+      '      "devDependencies": {',
+      '        "typescript": "6.0.3",',
+      "      },",
+      "    },",
+      "  },",
+      '  "packages": {',
+      '    "node_modules/typescript": ["typescript@6.0.3", "", {}, "sha512-typescript"],',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    Bun.spawn = interceptProjectedConfigInstalls(originalSpawn, observedInstalls, projectedBunLock);
     try {
       const configDir = await writePackageForInstallTest({
         dependencies: { "@usepipr/sdk": "999.0.0" },
@@ -467,20 +446,21 @@ describe("prepareConfigDirectory", () => {
       await installConfigDependencies(configDir);
 
       expect(observedInstalls).toHaveLength(2);
-      expect(observedInstalls[0]?.command).toContain("--lockfile-only");
-      expect(observedInstalls[0]?.packageJson).not.toContain("@usepipr/sdk");
-      expect(observedInstalls[0]?.packageJson).not.toContain("@types/bun");
-      expect(observedInstalls[0]?.packageJson).toContain('"typescript": "6.0.3"');
-      expect(observedInstalls[0]?.bunLock).toContain("@usepipr/sdk");
-      expect(observedInstalls[0]?.bunLock).toContain("@types/bun");
-      expect(observedInstalls[1]?.command).toContain("--frozen-lockfile");
-      expect(observedInstalls[1]?.command).toContain("--ignore-scripts");
-      expect(observedInstalls[1]?.command).toContain("--no-save");
-      expect(observedInstalls[1]?.command).not.toContain("--no-verify");
-      expect(observedInstalls[1]?.bunLock).not.toContain("@usepipr/sdk");
-      expect(observedInstalls[1]?.bunLock).not.toContain("@types/bun");
-      expect(observedInstalls[1]?.bunLock).not.toContain("zod");
-      expect(observedInstalls[1]?.bunLock).toContain('"typescript": "6.0.3"');
+      const [projectionInstall, frozenInstall] = requireTwoConfigInstalls(observedInstalls);
+      expect(projectionInstall.command).toContain("--lockfile-only");
+      expect(projectionInstall.packageJson).not.toContain("@usepipr/sdk");
+      expect(projectionInstall.packageJson).not.toContain("@types/bun");
+      expect(projectionInstall.packageJson).toContain('"typescript": "6.0.3"');
+      expect(projectionInstall.bunLock).toContain("@usepipr/sdk");
+      expect(projectionInstall.bunLock).toContain("@types/bun");
+      expect(frozenInstall.command).toContain("--frozen-lockfile");
+      expect(frozenInstall.command).toContain("--ignore-scripts");
+      expect(frozenInstall.command).toContain("--no-save");
+      expect(frozenInstall.command).not.toContain("--no-verify");
+      expect(frozenInstall.bunLock).not.toContain("@usepipr/sdk");
+      expect(frozenInstall.bunLock).not.toContain("@types/bun");
+      expect(frozenInstall.bunLock).not.toContain("zod");
+      expect(frozenInstall.bunLock).toContain('"typescript": "6.0.3"');
       expect(await readFile(path.join(configDir, "package.json"), "utf8")).toBe(
         originalPackageJson,
       );
@@ -664,6 +644,50 @@ describe("prepareConfigDirectory", () => {
     ).toBe(true);
   });
 });
+
+type ObservedConfigInstall = {
+  command: string[];
+  packageJson: string;
+  bunLock: string;
+};
+
+function requireTwoConfigInstalls(
+  installs: ObservedConfigInstall[],
+): [ObservedConfigInstall, ObservedConfigInstall] {
+  const first = installs[0];
+  const second = installs[1];
+  if (installs.length !== 2 || first === undefined || second === undefined) {
+    throw new Error(`expected two config installs, received ${installs.length}`);
+  }
+  return [first, second];
+}
+
+function interceptProjectedConfigInstalls(
+  originalSpawn: typeof Bun.spawn,
+  observedInstalls: ObservedConfigInstall[],
+  projectedBunLock: string,
+): typeof Bun.spawn {
+  return ((...args: Parameters<typeof Bun.spawn>): ReturnType<typeof Bun.spawn> => {
+    const command = commandFromSpawnArgs(args);
+    const cwd = cwdFromSpawnArgs(args);
+    if (command?.[0] !== "bun" || command[1] !== "install" || cwd === undefined) {
+      return originalSpawn(...args);
+    }
+    observedInstalls.push({
+      command,
+      packageJson: readFileSync(path.join(cwd, "package.json"), "utf8"),
+      bunLock: readFileSync(path.join(cwd, "bun.lock"), "utf8"),
+    });
+    if (command.includes("--lockfile-only")) {
+      writeFileSync(path.join(cwd, "bun.lock"), projectedBunLock);
+    }
+    return originalSpawn(["bun", "--version"], {
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  }) as typeof Bun.spawn;
+}
 
 function interceptSpawnCommands(
   originalSpawn: typeof Bun.spawn,

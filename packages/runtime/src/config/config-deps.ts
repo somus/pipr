@@ -179,42 +179,55 @@ function firstProjectionChange(
   projected: unknown,
   valuePath = "bun.lock",
 ): string | undefined {
-  if (Array.isArray(committed) || Array.isArray(projected)) {
-    if (!Array.isArray(committed) || !Array.isArray(projected)) {
-      return valuePath;
-    }
-    if (committed.length !== projected.length) {
-      return valuePath;
-    }
-    for (const [index, value] of projected.entries()) {
-      const changedPath = firstProjectionChange(committed[index], value, `${valuePath}[${index}]`);
-      if (changedPath !== undefined) {
-        return changedPath;
-      }
-    }
-    return undefined;
+  if (Array.isArray(committed)) {
+    return firstArrayProjectionChange(committed, projected, valuePath);
   }
-  if (isRecord(committed) || isRecord(projected)) {
-    if (!isRecord(committed) || !isRecord(projected)) {
-      return valuePath;
-    }
-    for (const [key, value] of Object.entries(projected)) {
-      const childPath = `${valuePath}.${key}`;
-      if (!Object.hasOwn(committed, key)) {
-        return childPath;
-      }
-      const changedPath = firstProjectionChange(committed[key], value, childPath);
-      if (changedPath !== undefined) {
-        return changedPath;
-      }
-    }
-    return undefined;
+  if (isRecord(committed)) {
+    return firstRecordProjectionChange(committed, projected, valuePath);
   }
   return Object.is(committed, projected) ? undefined : valuePath;
 }
 
+function firstArrayProjectionChange(
+  committed: unknown[],
+  projected: unknown,
+  valuePath: string,
+): string | undefined {
+  if (!Array.isArray(projected) || committed.length !== projected.length) {
+    return valuePath;
+  }
+  for (const [index, value] of projected.entries()) {
+    const changedPath = firstProjectionChange(committed[index], value, `${valuePath}[${index}]`);
+    if (changedPath !== undefined) {
+      return changedPath;
+    }
+  }
+  return undefined;
+}
+
+function firstRecordProjectionChange(
+  committed: Record<string, unknown>,
+  projected: unknown,
+  valuePath: string,
+): string | undefined {
+  if (!isRecord(projected)) {
+    return valuePath;
+  }
+  for (const [key, value] of Object.entries(projected)) {
+    const childPath = `${valuePath}.${key}`;
+    if (!Object.hasOwn(committed, key)) {
+      return childPath;
+    }
+    const changedPath = firstProjectionChange(committed[key], value, childPath);
+    if (changedPath !== undefined) {
+      return changedPath;
+    }
+  }
+  return undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export async function assertBunAvailable(): Promise<void> {
