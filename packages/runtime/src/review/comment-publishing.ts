@@ -17,6 +17,7 @@ export type BuildCommentPublishingPlanOptions = {
   manifest: DiffManifest;
   metadata: Omit<PublicationMetadata, "cappedInlineFindings">;
   maxInlineComments?: number;
+  maxStoredFindings?: number;
   showHeader?: boolean;
   showFooter?: boolean;
   showStats?: boolean;
@@ -53,6 +54,7 @@ export function buildCommentPublishingPlan(
     main: options.main,
     inlineItems: inlineCommentDrafts,
     maxInlineComments: options.maxInlineComments,
+    maxStoredFindings: options.maxStoredFindings,
     showHeader: options.showHeader,
     showFooter: options.showFooter,
     showStats: options.showStats,

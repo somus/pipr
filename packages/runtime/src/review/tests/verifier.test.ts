@@ -23,6 +23,7 @@ const config: PiprConfig = {
   providers: [provider],
   publication: {
     maxInlineComments: 5,
+    maxStoredFindings: 50,
     showHeader: true,
     showFooter: true,
     showStats: true,

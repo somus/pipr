@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { DiffManifest, ValidatedReview } from "../../types.js";
 import { runtimeVersion } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
-import type { PriorReviewState } from "../prior-state.js";
+import { extractPriorReviewState, type PriorReviewState } from "../prior-state.js";
 
 const event = {
   change: {
@@ -101,7 +101,7 @@ describe("buildCommentPublishingPlan", () => {
     expect(publishing.inlineCommentDrafts[0]?.finding.body).toBe("First finding.");
   });
 
-  it("keeps current findings visible when stored prior state is capped", () => {
+  it("keeps current findings visible while serialized prior state is capped", () => {
     const currentFindings = manyFindings(101);
     const publishing = buildCommentPublishingPlan({
       event,
@@ -112,7 +112,81 @@ describe("buildCommentPublishingPlan", () => {
     });
 
     expect(publishing.publicationPlan.reviewState.findings).toHaveLength(101);
+    expect(publishing.inlineCommentDrafts).toHaveLength(101);
+    expect(
+      extractPriorReviewState(publishing.publicationPlan.mainComment, event.change.number)
+        ?.findings,
+    ).toHaveLength(50);
     expect(publishing.publicationPlan.mainComment).toContain("Review completed.");
+  });
+
+  it("supports the maximum stored finding limit", () => {
+    const currentFindings = manyFindings(101);
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: currentFindings },
+      manifest: manifestForFindings(currentFindings),
+      maxStoredFindings: 100,
+      metadata: metadata({ validFindings: currentFindings.length }),
+    });
+
+    expect(
+      extractPriorReviewState(publishing.publicationPlan.mainComment, event.change.number)
+        ?.findings,
+    ).toHaveLength(100);
+  });
+
+  it("can serialize no finding records without hiding current findings", () => {
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated,
+      manifest,
+      maxStoredFindings: 0,
+      metadata: metadata({ validFindings: validated.validFindings.length }),
+    });
+
+    expect(publishing.publicationPlan.reviewState.findings).toHaveLength(2);
+    expect(publishing.inlineCommentDrafts).toHaveLength(2);
+    expect(
+      extractPriorReviewState(publishing.publicationPlan.mainComment, event.change.number),
+    ).toMatchObject({
+      reviewedHeadSha: "head",
+      selectedTasks: ["review"],
+      findings: [],
+    });
+  });
+
+  it("serializes current findings before historical findings without capping active state", () => {
+    const historicalFindings = Array.from({ length: 100 }, (_, index) =>
+      priorFindingRecord(`fnd_prior_${index + 1}`),
+    );
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated,
+      manifest,
+      maxStoredFindings: 3,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: historicalFindings,
+      },
+      metadata: metadata({ validFindings: validated.validFindings.length }),
+    });
+
+    expect(publishing.publicationPlan.reviewState.findings).toHaveLength(102);
+    const currentIds = publishing.publicationPlan.reviewState.findings
+      .slice(0, 2)
+      .map((finding) => finding.id);
+    expect(
+      extractPriorReviewState(
+        publishing.publicationPlan.mainComment,
+        event.change.number,
+      )?.findings.map((finding) => finding.id),
+    ).toEqual([...currentIds, "fnd_prior_1"]);
   });
 
   it("keeps prior open findings on same-head reruns when the agent omits them", () => {

@@ -191,6 +191,8 @@ The cap applies to published inline drafts. Keep the Main Review Comment useful 
 
 ## Prior state
 
+Prior state lets Review Tasks and the verifier track findings across reruns without changing what the current run publishes.
+
 ### Stored fields
 
 Pipr stores review state in hidden markers on Pipr-owned comments so reruns can keep track of prior findings.
@@ -203,6 +205,17 @@ State tracks:
 - path and range
 - side and lines
 - status
+
+Pipr stores at most 50 finding records by default. Set `publication.maxStoredFindings` from 0 to 100 to change that limit:
+
+```ts twoslash
+// @include: pipr-reviewer
+pipr.config({ publication: { maxStoredFindings: 25 } });
+```
+
+Pipr stores current findings first, in publication order, then uses any remaining capacity for historical findings. This limit does not change the current run's finding count or Inline Review Comments.
+
+Lower limits reduce the prior findings available to Review Tasks and the verifier on later reruns, including automatic stale-finding resolution candidates. On the first run after changing the limit, findings from the existing marker remain available and are rewritten to the new limit. Setting `maxStoredFindings: 0` writes no findings to the next marker, so subsequent runs have no finding-based cross-run behavior; other stored review metadata remains intact.
 
 ### Read prior state
 

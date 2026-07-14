@@ -43,11 +43,21 @@ describe("loadRuntimeProject", () => {
       thinking: "high",
     });
     expect(settings.config.publication.maxInlineComments).toBe(5);
+    expect(settings.config.publication.maxStoredFindings).toBe(50);
     expect(settings.config.publication).toMatchObject({
       showHeader: true,
       showFooter: true,
       showStats: true,
     });
+  });
+
+  it("normalizes the configured stored finding limit", async () => {
+    const rootDir = await newInitializedProject();
+    await writePiprConfig(rootDir, configWithPresentation("{ maxStoredFindings: 0 }"));
+
+    const settings = (await loadRuntimeProject({ rootDir })).settings;
+
+    expect(settings.config.publication.maxStoredFindings).toBe(0);
   });
 
   it("normalizes disabled main comment presentation settings", async () => {

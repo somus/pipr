@@ -51,6 +51,7 @@ describe("runtime boundary schemas", () => {
     });
 
     expect(config.providers[0]?.thinking).toBe("minimal");
+    expect(config.publication.maxStoredFindings).toBe(50);
   });
 
   it("rejects invalid pipr config values", () => {
