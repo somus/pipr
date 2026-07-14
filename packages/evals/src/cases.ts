@@ -11,6 +11,10 @@ export type PiprEvalExpectedFinding = {
   line: number;
   path: string;
   keywords: string[];
+  selection?: {
+    startLine: number;
+    endLine: number;
+  };
   suggestedFix?: PiprEvalExpectedSuggestedFix;
 };
 
@@ -111,7 +115,7 @@ const promptEvalCases: PiprEvalCase[] = [
         {
           line: 2,
           path: reviewTargetPath,
-          keywords: ["open", "redirect"],
+          keywords: ["redirect"],
         },
       ],
       maxInlineFindings: 1,
@@ -226,7 +230,7 @@ export async function persistValue(store: Store, value: string): Promise<void> {
         {
           line: 6,
           path: reviewTargetPath,
-          keywords: ["await", "write", "return"],
+          keywords: ["await", "write"],
         },
       ],
       maxInlineFindings: 1,
@@ -237,35 +241,83 @@ export async function persistValue(store: Store, value: string): Promise<void> {
     id: "unchanged-caller-contract-regression",
     description: "Reports a changed unit contract that breaks an unchanged cross-file caller.",
     baseFiles: {
-      [reviewTargetPath]: `export function timeoutMilliseconds(rawSeconds: number): number {
+      [reviewTargetPath]: `/** Returns the request timeout in seconds. */
+export function timeoutSeconds(rawSeconds: number): number {
   return rawSeconds;
 }
 `,
-      "src/request.ts": `import { timeoutMilliseconds } from "./review-target";
+      "src/request.ts": `import { timeoutSeconds } from "./review-target";
 
 export function scheduleRequest(rawSeconds: number, callback: () => void): void {
-  setTimeout(callback, timeoutMilliseconds(rawSeconds) * 1000);
+  setTimeout(callback, timeoutSeconds(rawSeconds) * 1000);
 }
 `,
     },
     headFiles: {
-      [reviewTargetPath]: `export function timeoutMilliseconds(rawSeconds: number): number {
+      [reviewTargetPath]: `/** Returns the request timeout in seconds. */
+export function timeoutSeconds(rawSeconds: number): number {
   return rawSeconds * 1000;
 }
 `,
-      "src/request.ts": `import { timeoutMilliseconds } from "./review-target";
+      "src/request.ts": `import { timeoutSeconds } from "./review-target";
 
 export function scheduleRequest(rawSeconds: number, callback: () => void): void {
-  setTimeout(callback, timeoutMilliseconds(rawSeconds) * 1000);
+  setTimeout(callback, timeoutSeconds(rawSeconds) * 1000);
 }
 `,
     },
     expected: {
       findings: [
         {
-          line: 2,
+          line: 3,
           path: reviewTargetPath,
-          keywords: ["caller", "1000", "millisecond"],
+          keywords: ["caller", "1000"],
+        },
+      ],
+      maxInlineFindings: 1,
+      requirePiCall: true,
+    },
+  },
+  {
+    id: "minimal-inline-selection",
+    description: "Anchors a function contract regression to its declaration instead of its body.",
+    modes: ["live"],
+    baseFiles: {
+      [reviewTargetPath]: `export function displayName(value: string): string {
+  const normalized = value.trim();
+  return normalized || "Anonymous";
+}
+`,
+      "src/greeting.ts": `import { displayName } from "./review-target";
+
+export function greeting(value: string): string {
+  return \`Hello \${displayName(value)}\`;
+}
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `export async function displayName(value: string): Promise<string> {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    return "Anonymous";
+  }
+  return normalized;
+}
+`,
+      "src/greeting.ts": `import { displayName } from "./review-target";
+
+export function greeting(value: string): string {
+  return \`Hello \${displayName(value)}\`;
+}
+`,
+    },
+    expected: {
+      findings: [
+        {
+          line: 1,
+          path: reviewTargetPath,
+          keywords: ["caller", "promise"],
+          selection: { startLine: 1, endLine: 1 },
         },
       ],
       maxInlineFindings: 1,

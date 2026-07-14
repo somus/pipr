@@ -276,7 +276,7 @@ describe("initOfficialMinimalProject", () => {
     expect(result.inlineCommentDrafts).toEqual([]);
   });
 
-  it("renders the standard finding count and keeps rationale in inline comments", async () => {
+  it("renders concise rich-review comments with collapsed rationales", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
 
     await initOfficialMinimalProject({
@@ -303,11 +303,11 @@ describe("initOfficialMinimalProject", () => {
         },
         findings: [
           {
-            title: "Fallback value is skipped",
+            title: "Fallback **value** is skipped",
             severity: "medium",
             category: "correctness",
-            rationale: "The new branch returns before the fallback can run.",
-            body: "This returns before the fallback path can execute.",
+            rationale: "The new branch returns </details> before the fallback can run.",
+            body: "This returns <early> before the fallback path can execute.",
             path: "src/a.ts",
             rangeId: "range-1",
             side: "RIGHT",
@@ -328,11 +328,67 @@ describe("initOfficialMinimalProject", () => {
     expect(result.mainComment).not.toContain("<summary>Finding rationales</summary>");
     expect(result.inlineCommentDrafts).toHaveLength(1);
     expect(result.inlineCommentDrafts[0]?.body).toContain(
-      "**Medium correctness:** Fallback value is skipped.",
+      [
+        "**Medium correctness:** Fallback **value** is skipped",
+        "",
+        "This returns &lt;early&gt; before the fallback path can execute.",
+        "",
+        "<details>",
+        "<summary>Rationale</summary>",
+        "",
+        "The new branch returns &lt;/details&gt; before the fallback can run.",
+        "",
+        "</details>",
+      ].join("\n"),
     );
-    expect(result.inlineCommentDrafts[0]?.body).toContain(
-      "The new branch returns before the fallback can run.",
-    );
+    expect(result.inlineCommentDrafts[0]?.body).not.toContain("**Issue**");
+  });
+
+  it("rejects rich-review titles containing line breaks", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "rich-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+
+    for (const title of ["First line\nSecond line", "First line\rSecond line"]) {
+      await expect(
+        runTaskRuntime({
+          workspace: rootDir,
+          config: project.settings.config,
+          event: eventContext(),
+          plan: project.plan,
+          diffManifestBuilder: () => reviewTestManifest(),
+          piRunner: jsonPiRunner({
+            summary: {
+              headline: "One correctness risk needs review",
+              changeSummary: ["Changes the return value used by the request handler."],
+              riskLevel: "medium",
+              riskSummary: "The changed path affects runtime behavior and has one concrete issue.",
+              reviewerFocus: [],
+            },
+            findings: [
+              {
+                title,
+                severity: "medium",
+                category: "correctness",
+                rationale: "The new branch returns before the fallback can run.",
+                body: "This returns early before the fallback path can execute.",
+                path: "src/a.ts",
+                rangeId: "range-1",
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              },
+            ],
+          }),
+        }),
+      ).rejects.toThrow("Pi output failed schema validation after 1 repair attempt(s)");
+    }
   });
 
   it("omits structured review findings with invalid diff anchors from all output", async () => {

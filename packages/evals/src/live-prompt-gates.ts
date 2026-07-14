@@ -2,7 +2,10 @@ import { type PiprEvalCase, type PiprEvalExpected, promptEvalCasesForMode } from
 import type { PiprEvalOutput } from "./runner.js";
 import { runPiprEvalCase } from "./runner.js";
 import {
+  diagnoseExpectedFindingRecall,
+  type ExpectedFindingRecallDiagnostics,
   scoreExpectedFindings,
+  scoreExpectedInlineSelection,
   scoreExpectedSuggestedFixBehavior,
   scoreFalsePositiveSuppression,
   scoreFindingCountBudget,
@@ -29,6 +32,13 @@ type LivePromptGateDefinition = {
   scorers: readonly LivePromptScorer[];
 };
 
+export type LivePromptGateFailure = {
+  caseId: string;
+  gate: string;
+  failedScorers: string[];
+  recall?: ExpectedFindingRecallDiagnostics;
+};
+
 export const livePromptGateCaseIds = {
   cleanSuppression: [
     "harmless-refactor",
@@ -38,6 +48,7 @@ export const livePromptGateCaseIds = {
   defectRecall: [
     "security-open-redirect",
     "empty-value-contract-regression",
+    "minimal-inline-selection",
     "removed-await-effect-regression",
     "unchanged-caller-contract-regression",
   ],
@@ -74,6 +85,11 @@ const validInlineAnchoringScorer = {
   scorer: ({ output }) => scoreValidAnchoring(output),
 } satisfies LivePromptScorer;
 
+const expectedInlineSelectionScorer = {
+  name: "Expected inline selection",
+  scorer: ({ output, expected }) => scoreExpectedInlineSelection(output, expected),
+} satisfies LivePromptScorer;
+
 const inlineFindingBodyBudgetScorer = {
   name: "Inline finding body budget",
   scorer: ({ output }) => scoreInlineFindingBodyBudget(output),
@@ -105,6 +121,7 @@ const defectRecallGateScorers = [
   expectedFindingRecallScorer,
   falsePositiveSuppressionScorer,
   validInlineAnchoringScorer,
+  expectedInlineSelectionScorer,
   inlineFindingBodyBudgetScorer,
   findingCountBudgetScorer,
 ] satisfies LivePromptScorer[];
@@ -115,6 +132,7 @@ export const fullAdvisoryScorers = [
   forbiddenOutputSuppressionScorer,
   falsePositiveSuppressionScorer,
   validInlineAnchoringScorer,
+  expectedInlineSelectionScorer,
   inlineFindingBodyBudgetScorer,
   suggestedFixRangeShapeScorer,
   expectedSuggestedFixBehaviorScorer,
@@ -188,13 +206,43 @@ export async function runLivePiprEvalCase(testCase: PiprEvalCase): Promise<PiprE
   return await runPiprEvalCase(testCase, { mode: "live" });
 }
 
+export function livePromptGateFailure(
+  gate: LivePromptGateDefinition,
+  caseId: string,
+  input: LivePromptScoreInput,
+): LivePromptGateFailure | undefined {
+  const failedScorers = gate.scorers
+    .filter(({ scorer }) => scorer(input) !== 1)
+    .map(({ name }) => name);
+  return failedScorers.length > 0
+    ? {
+        caseId,
+        gate: gate.label,
+        failedScorers,
+        ...(failedScorers.includes(expectedFindingRecallScorer.name)
+          ? { recall: diagnoseExpectedFindingRecall(input.output, input.expected) }
+          : {}),
+      }
+    : undefined;
+}
+
 export function livePromptGateEvalConfig(gate: LivePromptGateDefinition) {
   return {
     data: livePromptEvalCases(gate.caseIds, gate.label).map((testCase) => ({
       input: testCase,
       expected: testCase.expected,
     })),
-    task: runLivePiprEvalCase,
+    task: async (testCase: PiprEvalCase) => {
+      const output = await runLivePiprEvalCase(testCase);
+      const failure = livePromptGateFailure(gate, testCase.id, {
+        output,
+        expected: testCase.expected,
+      });
+      if (failure) {
+        console.error(`[pipr eval] ${JSON.stringify(failure)}`);
+      }
+      return output;
+    },
     scorers: [...gate.scorers],
   };
 }
