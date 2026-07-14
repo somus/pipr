@@ -401,6 +401,8 @@ describe("diff manifest parsing", () => {
         commitAll(repo, "base");
         const baseSha = git(repo, "rev-parse", "HEAD");
 
+        git(path.join(repo, "sub"), "config", "user.email", "test@example.com");
+        git(path.join(repo, "sub"), "config", "user.name", "pipr test");
         await Bun.write(path.join(repo, "sub/a.txt"), "a after\n");
         await Bun.write(path.join(repo, "sub/b.txt"), "b after\n");
         commitAll(path.join(repo, "sub"), "submodule head");
