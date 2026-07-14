@@ -4,8 +4,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
-import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
+import {
+  buildPriorReviewState,
+  renderInlineFindingMarker,
+  renderVerifierResponseMarker,
+} from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
+import {
+  type CodeHostAdapterConformanceHarness,
+  defineCodeHostAdapterConformanceSuite,
+} from "../../tests/conformance.js";
+import type { CodeHostStatusState, RepositoryPermission } from "../../types.js";
 import { createAzureDevOpsHostAdapter } from "../adapter.js";
 import type { AzureDevOpsClient, AzureDevOpsPullRequest, AzureDevOpsThread } from "../client.js";
 
@@ -111,6 +120,49 @@ describe("Azure DevOps host adapter", () => {
     ).rejects.toThrow("endpoints changed");
     expect(client.threads).toEqual([]);
     expect(client.statusBodies).toEqual([]);
+  });
+
+  it("rejects a missing authenticated identity before publication writes", async () => {
+    const client = new FakeAzureDevOpsClient();
+    client.currentUserUniqueName = undefined;
+    const adapter = createAzureDevOpsHostAdapter({ client });
+
+    await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
+      "authenticated user unique name is required",
+    );
+    expect(client.createdThreadBodies).toEqual([]);
+  });
+
+  it("rejects unattributed reply markers when the authenticated identity is missing", async () => {
+    const client = new FakeAzureDevOpsClient();
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    await adapter.publication?.publish({ change, plan: publicationPlan() });
+    const thread = client.threads.find((candidate) => candidate.threadContext?.filePath);
+    const root = thread?.comments[0];
+    if (!thread || !root) throw new Error("Expected Azure inline thread");
+    const action = {
+      kind: "reply" as const,
+      findingId: "finding-1",
+      findingHeadSha: "head",
+      commentId: root.id,
+      threadId: thread.id,
+      body: "Still applies.",
+      responseKey: "reply:finding-1",
+    };
+    thread.comments.push({
+      id: "foreign-reply",
+      content: renderVerifierResponseMarker(action.findingId, action.responseKey),
+    });
+    client.currentUserUniqueName = undefined;
+
+    await expect(
+      adapter.publication?.publishThreadActions?.({
+        change,
+        actions: [action],
+        reviewedHeadSha: "head",
+      }),
+    ).rejects.toThrow("authenticated user unique name is required");
+    expect(thread.comments).toHaveLength(2);
   });
 
   it("loads prior state and inline contexts", async () => {
@@ -319,6 +371,7 @@ describe("Azure DevOps host adapter", () => {
         workspace,
       };
       const plan = publicationPlan();
+      plan.metadata.reviewedHeadSha = sha;
       const item = plan.inlineItems[0];
       if (!item) throw new Error("Expected inline fixture");
       plan.inlineItems = [
@@ -329,6 +382,9 @@ describe("Azure DevOps host adapter", () => {
           path: "src-a.ts",
           startLine: 1,
           endLine: 1,
+          reviewedHeadSha: sha,
+          marker: `pipr:finding:finding-1:${sha}`,
+          body: `${renderInlineFindingMarker("finding-1", sha)}\nFix this.`,
         },
       ];
 
@@ -343,6 +399,11 @@ describe("Azure DevOps host adapter", () => {
       await rm(workspace, { recursive: true, force: true });
     }
   });
+});
+
+defineCodeHostAdapterConformanceSuite({
+  name: "Azure DevOps",
+  createHarness: createAzureDevOpsConformanceHarness,
 });
 
 const change: ChangeRequestEventContext = {
@@ -426,6 +487,22 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
   headSha = "head";
   iterationChanges = [{ changeTrackingId: 11, changeType: "edit", path: "src/a.ts" }];
   listIterationsCalls = 0;
+  permission: RepositoryPermission = "write";
+  permissionActors: string[] = [];
+  failInline = false;
+  mainCreates = 0;
+  mainUpdates = 0;
+  commandCreates = 0;
+  commandUpdates = 0;
+  resolutionWrites = 0;
+  normalizedStatusWrites: Array<{
+    name: string;
+    state: CodeHostStatusState;
+    summary?: string;
+    headSha: string;
+  }> = [];
+  afterListThreads?: () => void;
+  currentUserUniqueName: string | undefined = "pipr@example.com";
   pullRequest: AzureDevOpsPullRequest = {
     pullRequestId: 7,
     title: "Test PR",
@@ -440,14 +517,17 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
       project: { id: "project-id", name: "project" },
     },
   };
-  currentUser = async () => ({ uniqueName: "pipr@example.com" });
+  currentUser = async () => ({ uniqueName: this.currentUserUniqueName });
   getRepository = async () => ({
     id: "repo-id",
     name: "repository",
     projectId: "project-id",
     project: "project",
   });
-  getRepositoryPermission = async () => "write" as const;
+  getRepositoryPermission = async (actor: string) => {
+    this.permissionActors.push(actor);
+    return this.permission;
+  };
   getPullRequest = async () => this.pullRequest;
   loadChange = async () => ({
     repository: change.repository,
@@ -469,21 +549,34 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     ];
   };
   listIterationChanges = async () => this.iterationChanges;
-  listThreads = async () => this.threads;
+  listThreads = async () => {
+    const threads = this.threads;
+    this.afterListThreads?.();
+    return threads;
+  };
   createThread = async (
     _repositoryId: string,
     _changeNumber: number,
     body: Record<string, unknown>,
   ) => {
+    if (body.threadContext && this.failInline) {
+      this.failInline = false;
+      throw new Error("Azure DevOps rejected the inline thread");
+    }
     this.createdThreadBodies.push(body);
     const comments = body.comments as Array<{ content: string }>;
+    const content = comments[0]?.content ?? "";
+    if (!body.threadContext) {
+      if (content.includes("pipr:command-response")) this.commandCreates += 1;
+      else this.mainCreates += 1;
+    }
     const thread: AzureDevOpsThread = {
       id: String(this.threads.length + 1),
       status: "active",
       comments: [
         {
           id: String(this.threads.length + 10),
-          content: comments[0]?.content ?? "",
+          content,
           author: { uniqueName: "pipr@example.com" },
         },
       ],
@@ -504,6 +597,8 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     const comment = this.threads.find((thread) => thread.id === threadId)?.comments[0];
     if (!comment || comment.id !== commentId) throw new Error("comment not found");
     comment.content = content;
+    if (content.includes("pipr:command-response")) this.commandUpdates += 1;
+    else this.mainUpdates += 1;
     return comment;
   };
   createThreadComment = async (
@@ -531,6 +626,7 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     const thread = this.threads.find((candidate) => candidate.id === threadId);
     if (!thread) throw new Error("thread not found");
     thread.status = status;
+    this.resolutionWrites += 1;
     return thread;
   };
   createStatus = async (
@@ -539,7 +635,246 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     body: Record<string, unknown>,
   ) => {
     this.statusBodies.push(body);
+    const nativeState = String(body.state);
+    const state: CodeHostStatusState =
+      nativeState === "succeeded"
+        ? "success"
+        : nativeState === "failed"
+          ? "failure"
+          : nativeState === "notApplicable"
+            ? "neutral"
+            : "pending";
+    const context = body.context as { name?: string } | undefined;
+    this.normalizedStatusWrites.push({
+      name: context?.name?.replace(/^pipr\//, "") ?? "",
+      state,
+      ...(body.description ? { summary: String(body.description) } : {}),
+      headSha: this.pullRequest.lastMergeSourceCommit.commitId,
+    });
     return "status-1";
+  };
+}
+
+async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterConformanceHarness> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pipr-azure-conformance-"));
+  git(root, ["init"]);
+  git(root, ["config", "user.name", "Pipr Test"]);
+  git(root, ["config", "user.email", "pipr@example.test"]);
+  mkdirSync(path.join(root, "src"));
+  writeFileSync(path.join(root, "src/old.ts"), "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n");
+  git(root, ["add", "."]);
+  git(root, ["commit", "-m", "base fixture"]);
+  git(root, ["tag", "base"]);
+  writeFileSync(path.join(root, "src/new.ts"), "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n");
+  git(root, ["add", "."]);
+  git(root, ["commit", "-m", "head fixture"]);
+  git(root, ["tag", "head"]);
+  const conformanceChange = { ...change, workspace: root };
+  const client = new FakeAzureDevOpsClient();
+  client.iterationChanges = [
+    { changeTrackingId: 20, changeType: "add", path: "src/new.ts" },
+    { changeTrackingId: 21, changeType: "delete", path: "src/old.ts" },
+  ];
+  const adapter = createAzureDevOpsHostAdapter({ client });
+  return {
+    adapter,
+    change: conformanceChange,
+    async events() {
+      const eventPath = path.join(root, "event.json");
+      const envelope = (resource: Record<string, unknown>) => ({
+        id: "event-1",
+        eventType: "git.pullrequest.updated",
+        resource,
+        resourceContainers: {
+          account: { baseUrl: "https://dev.azure.com/org/" },
+          project: { id: "project-id", baseUrl: "https://dev.azure.com/org/project/" },
+        },
+      });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          ...envelope({
+            pullRequestId: 7,
+            repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
+          }),
+          eventType: "git.pullrequest.created",
+        }),
+      );
+      const changeRequest = await adapter.events.parseEvent({
+        eventPath,
+        env: {},
+        workspace: root,
+      });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          ...envelope({
+            comment: {
+              id: 101,
+              parentCommentId: 0,
+              content: "@pipr review",
+              author: { uniqueName: "developer" },
+            },
+            pullRequest: {
+              pullRequestId: 7,
+              repository: {
+                id: "repo-id",
+                name: "repository",
+                project: { id: "project-id", name: "project" },
+              },
+            },
+          }),
+          eventType: "ms.vss-code.git-pullrequest-comment-event",
+        }),
+      );
+      const command = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          ...envelope({
+            comment: {
+              id: 102,
+              parentCommentId: 101,
+              content: "Fixed.",
+              author: { uniqueName: "developer" },
+            },
+            pullRequest: {
+              pullRequestId: 7,
+              repository: {
+                id: "repo-id",
+                name: "repository",
+                project: { id: "project-id", name: "project" },
+              },
+            },
+          }),
+          eventType: "ms.vss-code.git-pullrequest-comment-event",
+        }),
+      );
+      const reply = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          ...envelope({
+            pullRequestId: 7,
+            isDraft: true,
+            repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
+          }),
+          eventType: "git.pullrequest.updated",
+        }),
+      );
+      const draft = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
+      return { changeRequest, command, reply, draft };
+    },
+    setPermission(permission) {
+      client.permission = permission;
+    },
+    permissionRequests: () => client.permissionActors.map((actor) => ({ actor })),
+    setCurrentHead(headSha) {
+      client.pullRequest = {
+        ...client.pullRequest,
+        lastMergeSourceCommit: { commitId: headSha },
+      };
+    },
+    advanceHeadDuringPreflight() {
+      client.afterListThreads = () => {
+        client.afterListThreads = undefined;
+        client.pullRequest = {
+          ...client.pullRequest,
+          lastMergeSourceCommit: { commitId: "new-head" },
+        };
+      };
+    },
+    failNextInline() {
+      client.failInline = true;
+    },
+    seedForeignInline() {
+      client.threads.push({
+        id: "thread-foreign",
+        status: "active",
+        comments: [
+          {
+            id: "inline-foreign",
+            content: `${renderInlineFindingMarker("foreign", "head")}\nForeign.`,
+            author: { uniqueName: "developer@example.com" },
+          },
+        ],
+        threadContext: {
+          filePath: "/src/new.ts",
+          rightFileStart: { line: 2, offset: 1 },
+          rightFileEnd: { line: 4, offset: 1 },
+        },
+        pullRequestThreadContext: {
+          iterationContext: { firstComparingIteration: 1, secondComparingIteration: 2 },
+        },
+      });
+    },
+    seedForeignReply(body) {
+      const thread = client.threads.find(
+        (item) =>
+          item.threadContext?.filePath &&
+          item.comments[0]?.author?.uniqueName === "pipr@example.com",
+      );
+      if (!thread) throw new Error("Azure DevOps conformance thread not found");
+      thread.comments.push({
+        id: "reply-foreign",
+        content: body,
+        author: { uniqueName: "developer@example.com" },
+      });
+    },
+    ownedReplyBodies: () =>
+      client.threads.flatMap((thread) =>
+        thread.comments
+          .slice(1)
+          .filter((comment) => comment.author?.uniqueName === "pipr@example.com")
+          .map((comment) => comment.content),
+      ),
+    writes: () => ({
+      mainCreates: client.mainCreates,
+      mainUpdates: client.mainUpdates,
+      inlineCreates: client.createdThreadBodies.filter((body) => body.threadContext).length,
+      commandCreates: client.commandCreates,
+      commandUpdates: client.commandUpdates,
+      replies: client.threads.reduce(
+        (count, thread) =>
+          count +
+          thread.comments
+            .slice(1)
+            .filter((comment) => comment.author?.uniqueName === "pipr@example.com").length,
+        0,
+      ),
+      resolutions: client.resolutionWrites,
+    }),
+    anchors: () =>
+      client.createdThreadBodies.filter((body) => body.threadContext).map(observedAzureAnchor),
+    statuses: () => client.normalizedStatusWrites,
+    dispose: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
+function observedAzureAnchor(body: Record<string, unknown>) {
+  const context = body.threadContext as {
+    filePath: string;
+    leftFileStart?: { line: number };
+    leftFileEnd?: { line: number };
+    rightFileStart?: { line: number };
+    rightFileEnd?: { line: number };
+  };
+  if (context.rightFileStart && context.rightFileEnd) {
+    return {
+      path: "src/new.ts",
+      side: "RIGHT" as const,
+      startLine: context.rightFileStart.line,
+      endLine: context.rightFileEnd.line,
+      headSha: "head",
+    };
+  }
+  return {
+    path: "src/new.ts",
+    previousPath: context.filePath.replace(/^\//, ""),
+    side: "LEFT" as const,
+    startLine: context.leftFileStart?.line ?? 0,
+    endLine: context.leftFileEnd?.line ?? 0,
+    headSha: "head",
   };
 }
 

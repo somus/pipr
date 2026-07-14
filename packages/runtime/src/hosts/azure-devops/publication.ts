@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../../review/comment.js";
+import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
   applyResolvedFindingMarkers,
@@ -12,7 +13,9 @@ import type { ChangeRequestEventContext } from "../../types.js";
 import {
   commandResponseBody,
   completeHostPublication,
+  nativeInlineLocation,
   publishUnseenInlineItems,
+  threadActionReply,
 } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
@@ -24,10 +27,10 @@ export async function publishAzureDevOpsPlan(options: {
 }): Promise<PublicationResult> {
   const coordinates = azureCoordinates(options.change);
   const native = await currentNativeChange(options.client, options.change);
-  const owner = await options.client.currentUser();
-  const threads = await options.client.listThreads(
-    coordinates.repositoryId,
-    options.change.change.number,
+  const { owner, threads } = await loadAzureWriteState(
+    options.client,
+    options.change,
+    options.plan.metadata.reviewedHeadSha,
   );
   const existingMain = ownedRootThread(
     threads,
@@ -61,6 +64,8 @@ export async function publishAzureDevOpsPlan(options: {
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
     existingBodies: markerBodies,
+    existingLocations: azureInlineLocations(threads, owner.uniqueName),
+    location: azureInlineLocation,
     publish: async (item) => {
       await options.client.createThread(
         coordinates.repositoryId,
@@ -75,6 +80,7 @@ export async function publishAzureDevOpsPlan(options: {
     actions: options.plan.threadActions,
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     threads,
+    ownerUniqueName: owner.uniqueName,
   });
   return completeHostPublication({
     provider: "Azure DevOps",
@@ -84,6 +90,49 @@ export async function publishAzureDevOpsPlan(options: {
     resolutionErrors: resolution.errors,
     metadata: options.plan.metadata,
   });
+}
+
+function azureInlineLocations(
+  threads: AzureDevOpsThread[],
+  ownerUniqueName: string,
+): InlinePublicationLocation[] {
+  const locations: InlinePublicationLocation[] = [];
+  for (const thread of threads) {
+    if (thread.comments[0]?.author?.uniqueName !== ownerUniqueName) continue;
+    const location = azureInlineLocationFromThread(thread);
+    if (location) locations.push(location);
+  }
+  return locations;
+}
+
+function azureInlineLocationFromThread(
+  thread: AzureDevOpsThread,
+): InlinePublicationLocation | undefined {
+  const root = thread.comments[0];
+  const context = thread.threadContext;
+  if (!root || !context?.filePath) return undefined;
+  const marker = extractInlineFindingMarkerRecords([root.content])[0];
+  if (!marker) return undefined;
+  const path = context.filePath.replace(/^\/+/, "");
+  return nativeInlineLocation({
+    commitId: marker.head,
+    rightPath: path,
+    leftPath: path,
+    rightStart: context.rightFileStart?.line,
+    rightEnd: context.rightFileEnd?.line,
+    leftStart: context.leftFileStart?.line,
+    leftEnd: context.leftFileEnd?.line,
+  });
+}
+
+function azureInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
+  return {
+    path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
+    commitId: item.reviewedHeadSha,
+    side: item.side,
+    startLine: item.startLine,
+    endLine: item.endLine,
+  };
 }
 
 export async function publishAzureDevOpsCommandResponse(options: {
@@ -101,12 +150,8 @@ export async function publishAzureDevOpsCommandResponse(options: {
     body: options.body,
   });
   await currentPullRequest(options.client, options.change);
-  const owner = await options.client.currentUser();
-  const existing = ownedRootThread(
-    await options.client.listThreads(coordinates.repositoryId, options.change.change.number),
-    owner.uniqueName,
-    response.marker,
-  );
+  const { owner, threads } = await loadAzureWriteState(options.client, options.change);
+  const existing = ownedRootThread(threads, owner.uniqueName, response.marker);
   const comment = existing
     ? await options.client.updateComment(
         coordinates.repositoryId,
@@ -126,6 +171,20 @@ export async function publishAzureDevOpsCommandResponse(options: {
   return { action: existing ? ("updated" as const) : ("created" as const), id: comment.id };
 }
 
+async function loadAzureWriteState(
+  client: AzureDevOpsClient,
+  change: ChangeRequestEventContext,
+  reviewedHeadSha = change.change.head.sha,
+) {
+  const owner = await authenticatedAzureOwner(client);
+  const threads = await client.listThreads(
+    azureCoordinates(change).repositoryId,
+    change.change.number,
+  );
+  await currentPullRequest(client, change, reviewedHeadSha);
+  return { owner, threads };
+}
+
 export async function loadAzureDevOpsPriorReviewState(options: {
   client: AzureDevOpsClient;
   change: ChangeRequestEventContext;
@@ -133,7 +192,7 @@ export async function loadAzureDevOpsPriorReviewState(options: {
   const body = await loadAzureDevOpsPriorMainComment(options);
   const state = extractPriorReviewState(body, options.change.change.number);
   if (!state) return undefined;
-  const owner = await options.client.currentUser();
+  const owner = await authenticatedAzureOwner(options.client);
   const bodies = ownedThreadComments(
     await options.client.listThreads(
       azureCoordinates(options.change).repositoryId,
@@ -148,7 +207,7 @@ export async function loadAzureDevOpsPriorMainComment(options: {
   client: AzureDevOpsClient;
   change: ChangeRequestEventContext;
 }): Promise<string | undefined> {
-  const owner = await options.client.currentUser();
+  const owner = await authenticatedAzureOwner(options.client);
   const threads = await options.client.listThreads(
     azureCoordinates(options.change).repositoryId,
     options.change.change.number,
@@ -161,7 +220,7 @@ export async function loadAzureDevOpsInlineThreadContexts(options: {
   client: AzureDevOpsClient;
   change: ChangeRequestEventContext;
 }): Promise<InlineThreadContext[]> {
-  const owner = await options.client.currentUser();
+  const owner = await authenticatedAzureOwner(options.client);
   const threads = await options.client.listThreads(
     azureCoordinates(options.change).repositoryId,
     options.change.change.number,
@@ -194,6 +253,7 @@ export async function publishAzureDevOpsThreadActions(options: {
   actions: ThreadAction[];
   reviewedHeadSha: string;
   threads?: AzureDevOpsThread[];
+  ownerUniqueName?: string;
 }): Promise<{ errors: string[] }> {
   if (options.actions.length === 0) return { errors: [] };
   const coordinates = azureCoordinates(options.change);
@@ -201,6 +261,10 @@ export async function publishAzureDevOpsThreadActions(options: {
   const threads =
     options.threads ??
     (await options.client.listThreads(coordinates.repositoryId, options.change.change.number));
+  const ownerUniqueName =
+    options.ownerUniqueName ?? (await authenticatedAzureOwner(options.client)).uniqueName;
+  if (!ownerUniqueName) throw new Error("Azure DevOps authenticated user unique name is required");
+  await currentNativeChange(options.client, options.change, options.reviewedHeadSha);
   const byComment = new Map(
     threads.flatMap((thread) => thread.comments.map((comment) => [comment.id, thread])),
   );
@@ -215,6 +279,7 @@ export async function publishAzureDevOpsThreadActions(options: {
       changeNumber: options.change.change.number,
       action,
       thread,
+      ownerUniqueName,
     });
     if (error) errors.push(error);
   }
@@ -227,13 +292,17 @@ async function publishAzureDevOpsThreadAction(options: {
   changeNumber: number;
   action: ThreadAction;
   thread?: AzureDevOpsThread;
+  ownerUniqueName: string;
 }): Promise<string | undefined> {
   if (!options.thread)
     return `Azure DevOps thread not found for comment ${options.action.commentId}`;
   try {
+    const reply = threadActionReply(options.action);
     if (
-      !options.thread.comments.some((comment) =>
-        comment.content.includes(options.action.responseKey),
+      !options.thread.comments.some(
+        (comment) =>
+          comment.author?.uniqueName === options.ownerUniqueName &&
+          comment.content.includes(reply.marker),
       )
     ) {
       await options.client.createThreadComment(
@@ -242,7 +311,7 @@ async function publishAzureDevOpsThreadAction(options: {
         options.thread.id,
         {
           parentCommentId: Number(options.thread.comments[0]?.id ?? 0),
-          content: options.action.body,
+          content: reply.body,
           commentType: 1,
         },
       );
@@ -369,7 +438,7 @@ function azureCoordinates(change: ChangeRequestEventContext) {
 
 function ownedRootThread(
   threads: AzureDevOpsThread[],
-  uniqueName: string | undefined,
+  uniqueName: string,
   marker: string,
 ): AzureDevOpsThread | undefined {
   return threads.find((thread) => {
@@ -382,10 +451,18 @@ function ownedRootThread(
   });
 }
 
-function ownedThreadComments(threads: AzureDevOpsThread[], uniqueName: string | undefined) {
+function ownedThreadComments(threads: AzureDevOpsThread[], uniqueName: string) {
   return threads.flatMap((thread) =>
     thread.comments.filter((comment) => comment.author?.uniqueName === uniqueName),
   );
+}
+
+async function authenticatedAzureOwner(client: AzureDevOpsClient): Promise<{ uniqueName: string }> {
+  const owner = await client.currentUser();
+  if (!owner.uniqueName) {
+    throw new Error("Azure DevOps authenticated user unique name is required");
+  }
+  return { uniqueName: owner.uniqueName };
 }
 
 function unpositionedThread(content: string) {

@@ -1,7 +1,15 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
 import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
+import {
+  type CodeHostAdapterConformanceHarness,
+  defineCodeHostAdapterConformanceSuite,
+} from "../../tests/conformance.js";
+import type { CodeHostStatusState, RepositoryPermission } from "../../types.js";
 import { createBitbucketHostAdapter } from "../adapter.js";
 import type { BitbucketClient, BitbucketComment, BitbucketPullRequest } from "../client.js";
 
@@ -76,6 +84,18 @@ describe("Bitbucket Cloud adapter", () => {
       suggestedChanges: false,
       statuses: true,
     });
+  });
+
+  it("rejects a missing authenticated UUID before publication writes", async () => {
+    const client = new FakeBitbucketClient();
+    client.currentUserUuid = undefined;
+    const adapter = createBitbucketHostAdapter({ client });
+
+    await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
+      "authenticated user UUID is required",
+    );
+    expect(client.createdBodies).toEqual([]);
+    expect(client.comments).toEqual([]);
   });
 
   it("publishes multiline LEFT-side comments against the previous path", async () => {
@@ -165,6 +185,11 @@ describe("Bitbucket Cloud adapter", () => {
   });
 });
 
+defineCodeHostAdapterConformanceSuite({
+  name: "Bitbucket Cloud",
+  createHarness: createBitbucketConformanceHarness,
+});
+
 const change: ChangeRequestEventContext = {
   eventName: "pullrequest:updated",
   platform: { id: "bitbucket" },
@@ -246,6 +271,22 @@ class FakeBitbucketClient implements BitbucketClient {
   failCommentBodyOnce: string | undefined;
   currentUserCalls = 0;
   listCommentsCalls = 0;
+  permission: RepositoryPermission = "write";
+  permissionActors: string[] = [];
+  failInline = false;
+  mainCreates = 0;
+  mainUpdates = 0;
+  commandCreates = 0;
+  commandUpdates = 0;
+  resolutionWrites = 0;
+  normalizedStatusWrites: Array<{
+    name: string;
+    state: CodeHostStatusState;
+    summary?: string;
+    headSha: string;
+  }> = [];
+  afterListComments?: () => void;
+  currentUserUuid: string | undefined = "{bot}";
   pullRequest: BitbucketPullRequest = {
     id: 7,
     title: "PR",
@@ -256,7 +297,7 @@ class FakeBitbucketClient implements BitbucketClient {
   };
   currentUser = async () => {
     this.currentUserCalls += 1;
-    return { uuid: "{bot}", nickname: "pipr" };
+    return { uuid: this.currentUserUuid, nickname: "pipr" };
   };
   getRepository = async () => ({
     uuid: "{repo}",
@@ -264,7 +305,10 @@ class FakeBitbucketClient implements BitbucketClient {
     fullName: "workspace/repository",
     url: "https://bitbucket.org/workspace/repository",
   });
-  getRepositoryPermission = async () => "write" as const;
+  getRepositoryPermission = async (actor: string) => {
+    this.permissionActors.push(actor);
+    return this.permission;
+  };
   getPullRequest = async () => this.pullRequest;
   loadChange = async () => ({
     repository: change.repository,
@@ -273,7 +317,9 @@ class FakeBitbucketClient implements BitbucketClient {
   });
   listComments = async () => {
     this.listCommentsCalls += 1;
-    return this.comments;
+    const comments = this.comments;
+    this.afterListComments?.();
+    return comments;
   };
   createComment = async (_id: number, body: Record<string, unknown>) => {
     if (
@@ -283,10 +329,19 @@ class FakeBitbucketClient implements BitbucketClient {
       this.failCommentBodyOnce = undefined;
       throw new Error("controlled Bitbucket comment failure");
     }
+    if (body.inline && this.failInline) {
+      this.failInline = false;
+      throw new Error("Bitbucket rejected the inline comment");
+    }
     this.createdBodies.push(body);
+    const content = body.content as { raw: string };
+    if (!body.inline && !body.parent) {
+      if (content.raw.includes("pipr:command-response")) this.commandCreates += 1;
+      else this.mainCreates += 1;
+    }
     const comment: BitbucketComment = {
       id: String(this.comments.length + 1),
-      content: body.content as { raw: string },
+      content,
       user: { uuid: "{bot}", nickname: "pipr" },
       inline: body.inline as BitbucketComment["inline"],
       parent: body.parent as BitbucketComment["parent"],
@@ -298,18 +353,190 @@ class FakeBitbucketClient implements BitbucketClient {
     const comment = this.comments.find((item) => item.id === commentId);
     if (!comment) throw new Error("missing");
     comment.content.raw = content;
+    if (content.includes("pipr:command-response")) this.commandUpdates += 1;
+    else this.mainUpdates += 1;
     return comment;
   };
   replyToComment = async (id: number, commentId: string, content: string) =>
     this.createComment(id, { content: { raw: content }, parent: { id: commentId } });
   resolveComment = async (_id: number, commentId: string) => {
     const comment = this.comments.find((item) => item.id === commentId);
-    if (comment) comment.resolution = { type: "resolution" };
+    if (comment) {
+      comment.resolution = { type: "resolution" };
+      this.resolutionWrites += 1;
+    }
   };
-  setStatus = async (_sha: string, key: string, body: Record<string, unknown>) => {
+  setStatus = async (sha: string, key: string, body: Record<string, unknown>) => {
     this.statusKeys.push(key);
     this.statusBodies.push(body);
+    const nativeState = String(body.state);
+    const state: CodeHostStatusState =
+      nativeState === "SUCCESSFUL"
+        ? "success"
+        : nativeState === "FAILED"
+          ? "failure"
+          : nativeState === "STOPPED"
+            ? "neutral"
+            : "pending";
+    this.normalizedStatusWrites.push({
+      name: key.replace(/^pipr-/, ""),
+      state,
+      ...(body.description ? { summary: String(body.description) } : {}),
+      headSha: sha,
+    });
     return key;
+  };
+}
+
+async function createBitbucketConformanceHarness(): Promise<CodeHostAdapterConformanceHarness> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-conformance-"));
+  const client = new FakeBitbucketClient();
+  const adapter = createBitbucketHostAdapter({ client });
+  const repository = {
+    uuid: "{repo}",
+    name: "repository",
+    full_name: "workspace/repository",
+    slug: "repository",
+    links: { html: { href: "https://bitbucket.org/workspace/repository" } },
+  };
+  return {
+    adapter,
+    change,
+    async events() {
+      const eventPath = path.join(root, "event.json");
+      const options = {
+        eventPath,
+        env: { BITBUCKET_EVENT_KEY: "pullrequest:created" },
+        workspace: root,
+      };
+      await Bun.write(
+        eventPath,
+        JSON.stringify({ actor: { nickname: "developer" }, repository, pullrequest: { id: 7 } }),
+      );
+      const changeRequest = await adapter.events.parseEvent(options);
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          actor: { nickname: "developer" },
+          repository,
+          pullrequest: { id: 7 },
+          comment: { id: 101, content: { raw: "@pipr review" } },
+        }),
+      );
+      const command = await adapter.events.parseEvent({
+        ...options,
+        env: { BITBUCKET_EVENT_KEY: "pullrequest:comment_created" },
+      });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          actor: { nickname: "developer" },
+          repository,
+          pullrequest: { id: 7 },
+          comment: { id: 102, parent: { id: 101 }, content: { raw: "Fixed." } },
+        }),
+      );
+      const reply = await adapter.events.parseEvent({
+        ...options,
+        env: { BITBUCKET_EVENT_KEY: "pullrequest:comment_created" },
+      });
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          actor: { nickname: "developer" },
+          repository,
+          pullrequest: { id: 7, draft: true },
+        }),
+      );
+      const draft = await adapter.events.parseEvent({
+        ...options,
+        env: { BITBUCKET_EVENT_KEY: "pullrequest:updated" },
+      });
+      return { changeRequest, command, reply, draft };
+    },
+    setPermission(permission) {
+      client.permission = permission;
+    },
+    permissionRequests: () => client.permissionActors.map((actor) => ({ actor })),
+    setCurrentHead(headSha) {
+      client.pullRequest = {
+        ...client.pullRequest,
+        source: { ...client.pullRequest.source, commit: { hash: headSha } },
+      };
+    },
+    advanceHeadDuringPreflight() {
+      client.afterListComments = () => {
+        client.afterListComments = undefined;
+        client.pullRequest = {
+          ...client.pullRequest,
+          source: { ...client.pullRequest.source, commit: { hash: "new-head" } },
+        };
+      };
+    },
+    failNextInline() {
+      client.failInline = true;
+    },
+    seedForeignInline() {
+      client.comments.push({
+        id: "foreign-inline",
+        content: { raw: `${renderInlineFindingMarker("foreign", "head")}\nForeign.` },
+        user: { uuid: "{developer}", nickname: "developer" },
+        inline: { path: "src/new.ts", to: 4, start_to: 2 },
+      });
+    },
+    seedForeignReply(body) {
+      const root = client.comments.find(
+        (comment) => comment.inline && comment.user?.uuid === "{bot}",
+      );
+      if (!root) throw new Error("Bitbucket conformance thread not found");
+      client.comments.push({
+        id: "foreign-reply",
+        content: { raw: body },
+        user: { uuid: "{developer}", nickname: "developer" },
+        parent: { id: root.id },
+      });
+    },
+    ownedReplyBodies: () =>
+      client.comments
+        .filter((comment) => comment.parent && comment.user?.uuid === "{bot}")
+        .map((comment) => comment.content.raw),
+    writes: () => ({
+      mainCreates: client.mainCreates,
+      mainUpdates: client.mainUpdates,
+      inlineCreates: client.comments.filter(
+        (comment) => comment.inline && comment.user?.uuid === "{bot}",
+      ).length,
+      commandCreates: client.commandCreates,
+      commandUpdates: client.commandUpdates,
+      replies: client.comments.filter((comment) => comment.parent && comment.user?.uuid === "{bot}")
+        .length,
+      resolutions: client.resolutionWrites,
+    }),
+    anchors: () => client.comments.filter((comment) => comment.inline).map(observedBitbucketAnchor),
+    statuses: () => client.normalizedStatusWrites,
+    dispose: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
+function observedBitbucketAnchor(comment: BitbucketComment) {
+  const inline = comment.inline;
+  if (!inline) throw new Error("Expected inline comment");
+  if (inline.to != null) {
+    return {
+      path: "src/new.ts",
+      side: "RIGHT" as const,
+      startLine: inline.start_to ?? inline.to,
+      endLine: inline.to,
+      headSha: "head",
+    };
+  }
+  return {
+    path: "src/new.ts",
+    previousPath: inline.path,
+    side: "LEFT" as const,
+    startLine: inline.start_from ?? inline.from ?? 0,
+    endLine: inline.from ?? 0,
+    headSha: "head",
   };
 }
 

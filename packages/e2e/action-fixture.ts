@@ -86,6 +86,21 @@ async function actionPiExecutable(piExecutable: string): Promise<string> {
   await writeFile(
     wrapperPath,
     `#!/usr/bin/env bun
+import { chmod, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+if (process.getuid?.() !== 1000 || process.getgid?.() !== 1000) {
+  throw new Error(
+    \`fake Pi must run as 1000:1000, got \${process.getuid?.()}:\${process.getgid?.()}\`,
+  );
+}
+const workspaceProbe = path.join(process.cwd(), ".pipr-isolation-probe");
+await expectPermissionDenied(() => chmod(process.cwd(), 0o755));
+await expectPermissionDenied(() => writeFile(workspaceProbe, "unexpected write"));
+const tempProbe = path.join(Bun.env.TMPDIR ?? "", ".pipr-writable-probe");
+await writeFile(tempProbe, "ok");
+await rm(tempProbe);
+
 Bun.env.PIPR_ACT_PI_CALL_DIR = ${JSON.stringify(callsDir)};
 const proc = Bun.spawn([${JSON.stringify(piExecutable)}, ...Bun.argv.slice(2)], {
   stdin: "inherit",
@@ -94,9 +109,20 @@ const proc = Bun.spawn([${JSON.stringify(piExecutable)}, ...Bun.argv.slice(2)], 
   env: Bun.env,
 });
 process.exit(await proc.exited);
+
+async function expectPermissionDenied(run: () => Promise<unknown>): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    const code = error && typeof error === "object" ? Reflect.get(error, "code") : undefined;
+    if (code === "EACCES" || code === "EPERM") return;
+    throw error;
+  }
+  throw new Error("fake Pi unexpectedly modified its read-only workspace");
+}
 `,
   );
-  await chmod(wrapperPath, 0o700);
+  await chmod(wrapperPath, 0o755);
   return wrapperPath;
 }
 

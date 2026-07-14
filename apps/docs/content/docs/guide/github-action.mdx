@@ -112,7 +112,7 @@ For pull request Action runs, Pipr loads `.pipr/config.ts` and local imports fro
 
 ### Pi workspace
 
-Pi runs in a read-only workspace copy with only `read`, `grep`, `find`, and `ls`. Condensed Diff Manifest runs may receive Pipr Diff Read Tools, which expose bounded reads over Pipr-owned diff data and base/head snapshots.
+The root Pipr supervisor owns and seals a workspace copy, then starts Pi as UID and GID `1000`. Unix permissions prevent Pi from restoring write access to the copy. Pi receives only `read`, `grep`, `find`, and `ls`; condensed Diff Manifest runs may also receive Pipr Diff Read Tools over bounded diff data and base/head snapshots.
 
 ## Dry run
 

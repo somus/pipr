@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
-import { chmod, cp, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { chmod, chown, cp, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { compact, isPlainObject } from "lodash-es";
@@ -67,6 +67,11 @@ type PiRunSandbox = {
   home: string;
   sessionDir: string;
   tmp: string;
+};
+
+type PiProcessIdentity = {
+  uid: number;
+  gid: number;
 };
 
 type PreparedPiTool = PreparedPiRuntimeReadTools | PreparedPiCustomTools;
@@ -148,9 +153,12 @@ const defaultPiStreamLimits: PiStreamLimits = {
 const maxRetainedModelCount = 64;
 const maxRetainedModelBytes = 64 * 1024;
 const processTerminationGraceMs = 250;
+const piSandboxUidEnv = "PIPR_PI_SANDBOX_UID";
+const piSandboxGidEnv = "PIPR_PI_SANDBOX_GID";
 
 export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
   const started = Date.now();
+  const processIdentity = resolvePiProcessIdentity(options.env ?? process.env);
   const sandbox = await createPiRunSandbox(options.workspace);
   let preparedTools: PreparedPiTools | undefined;
   try {
@@ -174,9 +182,11 @@ export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
       preparedTools,
       options.builtinTools,
     );
+    await sealPiRunSandbox(sandbox, processIdentity);
     return await runProcess(options.piExecutable ?? "pi", args, {
       cwd: sandbox.workspace,
       env: buildPiEnv(options.provider, sandbox, options.env, preparedTools),
+      processIdentity,
       started,
       timeoutSeconds: options.timeoutSeconds,
       streamLimits: options.streamLimits ?? defaultPiStreamLimits,
@@ -291,8 +301,44 @@ async function createPiRunSandbox(workspace: string): Promise<PiRunSandbox> {
   await mkdir(sessionDir, { recursive: true });
   await mkdir(tmp, { recursive: true });
   await copyWorkspace(workspace, runWorkspace);
-  await chmodRecursive(runWorkspace, 0o555);
   return { root, workspace: runWorkspace, home, sessionDir, tmp };
+}
+
+async function sealPiRunSandbox(
+  sandbox: PiRunSandbox,
+  processIdentity: PiProcessIdentity | undefined,
+): Promise<void> {
+  if (!processIdentity) {
+    await chmodRecursive(sandbox.workspace, 0o555);
+    return;
+  }
+  await sealReadOnlyTree(sandbox.root, 0, 0);
+  for (const directory of [sandbox.home, sandbox.sessionDir, sandbox.tmp]) {
+    await chown(directory, processIdentity.uid, processIdentity.gid);
+    await chmod(directory, 0o700);
+  }
+}
+
+function resolvePiProcessIdentity(env: NodeJS.ProcessEnv): PiProcessIdentity | undefined {
+  const uidValue = env[piSandboxUidEnv];
+  const gidValue = env[piSandboxGidEnv];
+  if (uidValue === undefined && gidValue === undefined) {
+    return undefined;
+  }
+  if (uidValue === undefined || gidValue === undefined) {
+    throw new Error(`${piSandboxUidEnv} and ${piSandboxGidEnv} must be configured together`);
+  }
+  const uid = positiveIntegerEnv(piSandboxUidEnv, uidValue);
+  const gid = positiveIntegerEnv(piSandboxGidEnv, gidValue);
+  return process.getuid?.() === 0 ? { uid, gid } : undefined;
+}
+
+function positiveIntegerEnv(name: string, value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
 }
 
 export async function createReadOnlyWorkspace(workspace: string): Promise<string> {
@@ -335,6 +381,22 @@ async function chmodRecursive(target: string, mode: number): Promise<void> {
   const entries = await readdir(target, { withFileTypes: true });
   for (const entry of entries) {
     await chmodRecursive(path.join(target, entry.name), mode);
+  }
+}
+
+async function sealReadOnlyTree(target: string, uid: number, gid: number): Promise<void> {
+  const stats = await lstat(target);
+  if (stats.isSymbolicLink()) {
+    return;
+  }
+  await chown(target, uid, gid);
+  await chmod(target, stats.isDirectory() ? 0o555 : 0o444);
+  if (!stats.isDirectory()) {
+    return;
+  }
+  const entries = await readdir(target, { withFileTypes: true });
+  for (const entry of entries) {
+    await sealReadOnlyTree(path.join(target, entry.name), uid, gid);
   }
 }
 
@@ -637,6 +699,7 @@ function runProcess(
     cwd: string;
     env: NodeJS.ProcessEnv;
     started: number;
+    processIdentity?: PiProcessIdentity;
     timeoutSeconds?: number;
     streamLimits: PiStreamLimits;
   },
@@ -647,7 +710,11 @@ function runProcess(
     let timeout: NodeJS.Timeout | undefined;
     let terminationTimeout: NodeJS.Timeout | undefined;
     const detached = process.platform !== "win32";
-    const child = spawn(command, args, {
+    const spawnCommand = options.processIdentity ? "su-exec" : command;
+    const spawnArgs = options.processIdentity
+      ? [`${options.processIdentity.uid}:${options.processIdentity.gid}`, command, ...args]
+      : args;
+    const child = spawn(spawnCommand, spawnArgs, {
       cwd: options.cwd,
       detached,
       env: options.env,
@@ -691,9 +758,11 @@ function runProcess(
     };
     const terminateProcessGroup = () => {
       killProcessGroup(child, "SIGTERM");
-      terminationTimeout ??= setTimeout(() => {
-        killProcessGroup(child, "SIGKILL");
-      }, processTerminationGraceMs);
+      if (!terminationTimeout) {
+        terminationTimeout = setTimeout(() => {
+          killProcessGroup(child, "SIGKILL");
+        }, processTerminationGraceMs);
+      }
     };
     if (options.timeoutSeconds !== undefined) {
       timeout = setTimeout(() => {

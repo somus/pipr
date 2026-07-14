@@ -69,7 +69,7 @@ export async function loadTypescriptConfig(
         return relative !== "node_modules" && !relative.startsWith(`node_modules${path.sep}`);
       },
     });
-    await prepareConfigDirectory(tempConfigDir, { frozen: true });
+    await prepareConfigDirectory(tempConfigDir);
 
     const configPath = path.join(tempConfigDir, "config.ts");
     const imported = await import(`${pathToFileURL(configPath).href}?pipr=${Date.now()}`);
@@ -88,11 +88,8 @@ export async function loadTypescriptConfig(
   }
 }
 
-export async function prepareConfigDirectory(
-  configDir: string,
-  options: { frozen?: boolean } = {},
-): Promise<void> {
-  await installConfigDependencies(configDir, options);
+export async function prepareConfigDirectory(configDir: string): Promise<void> {
+  await installConfigDependencies(configDir);
   await installTypedSdkStub(configDir);
 }
 
@@ -119,7 +116,7 @@ async function typecheckTypescriptConfig(
         );
       },
     });
-    await prepareConfigDirectory(tempConfigDir, { frozen: true });
+    await prepareConfigDirectory(tempConfigDir);
     const tsconfigPath = path.join(tempConfigDir, "tsconfig.json");
     if (!(await Bun.file(tsconfigPath).exists())) {
       await mkdir(tempConfigDir, { recursive: true });

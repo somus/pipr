@@ -233,6 +233,10 @@ describe("GitLab API client", () => {
                 new_path: "src/a.ts",
                 old_line: null,
                 new_line: 2,
+                line_range: {
+                  start: { old_line: null, new_line: 1 },
+                  end: { old_line: null, new_line: 2 },
+                },
               },
             },
           ],
@@ -248,6 +252,10 @@ describe("GitLab API client", () => {
       new_line: 2,
     });
     expect(discussions[0]?.notes[0]?.position?.old_line).toBeUndefined();
+    expect(discussions[0]?.notes[0]?.position?.line_range).toEqual({
+      start: { old_line: null, new_line: 1 },
+      end: { old_line: null, new_line: 2 },
+    });
   });
 });
 

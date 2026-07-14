@@ -68,6 +68,8 @@ Do not put raw provider keys, tokens, or private data in `.pipr/config.ts`, sche
 
 Pi runs with a read-only workspace copy. The runtime passes only read-only built-in tools plus Pipr-owned Diff Read Tools for condensed manifest runs.
 
+The official Docker Action adds a process-level permission boundary. Its root Pipr supervisor owns and seals the copy, then starts Pi as UID and GID `1000`, so the Pi process cannot restore write permission to that copy. Local runs and the non-root webhook container run Pipr and Pi under the same identity; in those modes, the copy's mode bits and tool allowlist provide defense in depth rather than process-level immutability.
+
 ### Bounded diff reads
 
 Diff Read Tools expose bounded reads over:
@@ -117,7 +119,7 @@ Review Tasks do not call code host APIs directly. They emit final output, then P
 Pipr makes deterministic checks around model output and publication:
 
 - Pull request Action runs load `.pipr/config.ts` from the base commit.
-- Pi receives read-only repository access during review.
+- In the official Docker Action, Pi cannot write to its root-owned workspace copy through normal filesystem operations.
 - Review Findings must match a changed Diff Manifest file and range before inline publication.
 - Pipr checks the current head SHA before publishing review output.
 - Reruns use Pipr-owned markers to update the Main Review Comment and skip duplicate Inline Review Comments.

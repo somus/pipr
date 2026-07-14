@@ -53,7 +53,7 @@ For GitHub Action pull request runs, Pipr loads `.pipr/config.ts` and local impo
 
 Provider backend, model, API-key env, and provider options come from the trusted base config, not pull request code.
 
-Pi receives a read-only workspace copy. It can use only read-only built-in tools and Pipr-owned Diff Read Tools for condensed manifest runs.
+Pi receives a read-only workspace copy. The official Docker Action seals the copy under the root supervisor, then runs Pi as UID and GID `1000`. Pi can use only read-only built-in tools and Pipr-owned Diff Read Tools for condensed manifest runs.
 
 ## Extension points
 
@@ -105,4 +105,4 @@ Pipr config supports two tiers:
 - **Tier 1:** `.pipr/config.ts` only. No install step; runtime SDK stub supplies the module.
 - **Tier 2:** `.pipr/package.json` + `.pipr/bun.lock` for third-party npm imports and self-contained editor types.
 
-Action runs copy trusted `.pipr/**` from the base commit (excluding `node_modules`), run frozen `bun install` when installable config deps are declared, then replace `@usepipr/sdk` with the image SDK stub for load and typecheck.
+Action runs copy trusted `.pipr/**` from the base commit (excluding `node_modules`), project runtime-provided packages out of the copied lockfile, and reject any new or changed package tuple or metadata. Pipr then runs a frozen, integrity-verified `bun install` before replacing `@usepipr/sdk` with the image SDK stub for load and typecheck.

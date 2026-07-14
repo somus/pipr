@@ -20,14 +20,12 @@ export async function publishGitHubCommandResponse(options: {
     commandName: options.commandName,
   });
   const body = [marker, "", options.body, ""].join("\n");
-  const existing = findCommandResponseComment(
-    await options.client.listIssueComments({
-      repo: options.change.repository.slug,
-      issueNumber: options.change.change.number,
-    }),
-    marker,
-    ownerLogin,
-  );
+  const comments = await options.client.listIssueComments({
+    repo: options.change.repository.slug,
+    issueNumber: options.change.change.number,
+  });
+  await assertCurrentHeadSha(options.client, options.change, options.change.change.head.sha);
+  const existing = findCommandResponseComment(comments, marker, ownerLogin);
   if (existing) {
     const updated = await options.client.updateIssueComment({
       repo: options.change.repository.slug,

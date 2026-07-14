@@ -20,7 +20,7 @@ export async function assertCurrentHeadSha(
   }
 }
 
-export async function currentHeadShaMismatch(
+async function currentHeadShaMismatch(
   client: GitHubPublicationClient,
   change: ChangeRequestEventContext,
   reviewedHeadSha: string,
