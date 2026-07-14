@@ -1,0 +1,94 @@
+packages/runtime/src/review/comment.ts
+  s_37028571f9aa38::t_d365e747734ee6 290
+packages/runtime/src/config/recipes/rich-review.ts
+  s_37028571f9aa38::t_d365e747734ee6 20,82-83,106,108,110-113,115-117
+  s_37028571f9aa38::t_f0f26a817cad40 49-52,107,109,114
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_37028571f9aa38::t_31079e467770e0 51,113-114,137,139,141-144,146-148
+  s_37028571f9aa38::t_a8e6178f0a236b 80-83,138,140,145
+packages/evals/src/tests/scoring.test.ts
+  s_37028571f9aa38::t_7353322a17ec91 284-285
+  s_37028571f9aa38::t_e71f6e6fb8ab62 229,320-345
+  s_37028571f9aa38::t_40e0d2f6c0d11d 294-319
+  s_37028571f9aa38::t_b39903ebb9b461 2,266-283,286-291
+  s_37028571f9aa38::t_7ebb97395b3a0e 254-264
+  s_37028571f9aa38::t_5d99b0211df98c 292-293,369-371,400-458
+  s_37028571f9aa38::t_b752d29893e0ad 5,235-253,265
+  s_37028571f9aa38::t_e81ce412e896e6 3-4,6-8,11-12,222,227
+  s_37028571f9aa38::t_e3c88a6b5588c0 228,346,364,368,372-374,459
+packages/runtime/src/review/tests/comment.test.ts
+  s_37028571f9aa38::t_ceac2c902fe556 1245,1247,1253,1261-1262
+  s_37028571f9aa38::t_c2248f14698ba0 1246
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_37028571f9aa38::t_058606b3946b40 87
+  s_37028571f9aa38::t_4d27d4c04a03a2 80-82
+  s_37028571f9aa38::t_8de4c07c1dd8d6 84-86
+  s_37028571f9aa38::t_d0b64200198eb1 88-95
+packages/runtime/src/review/agent/diff-manifest-context.ts
+  s_37028571f9aa38::t_a118617c6c01fa 75
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_37028571f9aa38::t_4442702462a41d 1269,1286
+  s_37028571f9aa38::t_b363170a22bc37 1288-1300,1368-1380
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_37028571f9aa38::t_4b2f4bb80c4307 155,226
+  s_37028571f9aa38::t_44594c161f3f1b 72,156,165-180
+  s_37028571f9aa38::t_f437740f424830 223
+  s_20e6f7049d0fc8::t_8e9f70ead85810 181
+packages/evals/src/live-prompt-gates.ts
+  s_37028571f9aa38::t_0d218410d20d19 5-6,39,217-226,242
+  s_37028571f9aa38::t_af938961fff31b 8,51,88-92,124,135
+  s_37028571f9aa38::t_df029c78060596 35-38,40-41,209-216,235-241,243-245
+  s_37028571f9aa38::t_2045d14a3b1045 227-228
+packages/evals/src/fake-pi.ts
+  s_37028571f9aa38::t_0739ceeb785290 148-157
+packages/evals/src/scoring.ts
+  s_37028571f9aa38::t_32922f14ccb001 42-45,157-180
+  s_37028571f9aa38::t_a302694fd0ff70 193
+  s_37028571f9aa38::t_0d218410d20d19 15-24,75-104
+  s_37028571f9aa38::t_1cba81840a9fc4 105-106
+  s_37028571f9aa38::t_460b621f6d8658 181-182
+packages/evals/src/cases.ts
+  s_37028571f9aa38::t_76f2ad560b5843 233
+  s_37028571f9aa38::t_2a8c092493e23d 244-245,257-258,272
+  s_37028571f9aa38::t_bbd1edf745be26 118
+  s_37028571f9aa38::t_d6337282e4b559 294,310
+  s_37028571f9aa38::t_af938961fff31b 279,282-293,295-309,311-317,319-320
+  s_37028571f9aa38::t_48f621b9ae3fe8 249,252,262,265
+  s_37028571f9aa38::t_31c99579f16f1e 274
+  s_37028571f9aa38::t_32922f14ccb001 14-17
+  s_37028571f9aa38::t_68178c4497f018 273
+  s_37028571f9aa38::t_a85f23bd743025 275-278
+  s_37028571f9aa38::t_37bdb72de3ec74 280-281
+packages/runtime/src/config/tests/init.test.ts
+  s_37028571f9aa38::t_67ee99c1386c1f 347-389,391
+  s_37028571f9aa38::t_f4b8fba47a901b 279
+  s_37028571f9aa38::t_ceac2c902fe556 331,333,335-338,340-342
+  s_37028571f9aa38::t_e578682fb9e8bb 332,334,339,344
+  s_37028571f9aa38::t_a302694fd0ff70 390
+  s_37028571f9aa38::t_23c7b8894d0769 306,309-310
+  s_37028571f9aa38::t_398f6f35c6edf6 345-346
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "61cb73eebb783a0f90e859cd34ca0f1f3372c26d",
+  "prompts": {},
+  "sessions": {
+    "s_20e6f7049d0fc8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f63-2f6f-7e83-84c0-27acc706cb5b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_37028571f9aa38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f600d-18dd-7203-8bd8-a9d6f88b66c1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
