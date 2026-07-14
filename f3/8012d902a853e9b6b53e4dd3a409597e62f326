@@ -1,0 +1,81 @@
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_6d72f8cf3cc786::t_b52cb7057de3f1 337,361
+  s_6d72f8cf3cc786::t_78b7fd06d053e1 362
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_6d72f8cf3cc786::t_a567c97282d2b3 44,2048-2068
+  s_6d72f8cf3cc786::t_9b19b560041b97 2069
+packages/runtime/src/review/tests/verifier.test.ts
+  s_6d72f8cf3cc786::t_caf33eb9b37a4d 26
+packages/sdk/src/builder.ts
+  s_6d72f8cf3cc786::t_aae8fa28334895 558-572
+  s_6d72f8cf3cc786::t_a37e66337377cf 24,315
+packages/sdk/src/tests/index.test.ts
+  s_6d72f8cf3cc786::t_11698d0c6b76d5 497-503,534-544
+  s_6d72f8cf3cc786::t_bff5767cceda91 526-533,545-546
+packages/runtime/src/review/comment-publishing.ts
+  s_6d72f8cf3cc786::t_b0b0e02d378d53 20,57
+packages/sdk/src/internal.ts
+  s_6d72f8cf3cc786::t_a37e66337377cf 10
+packages/runtime/src/review/prior-state.ts
+  s_6d72f8cf3cc786::t_f079c427178943 153,156-162
+  s_6d72f8cf3cc786::t_efb48eabb2e000 105
+  s_6d72f8cf3cc786::t_a37e66337377cf 2
+packages/runtime/src/types.ts
+  s_6d72f8cf3cc786::t_a37e66337377cf 10,63-68
+packages/runtime/src/review/tests/review-run.test.ts
+  s_6d72f8cf3cc786::t_caf33eb9b37a4d 19
+packages/runtime/src/review/task/task-runtime.ts
+  s_6d72f8cf3cc786::t_fe601b307ff736 305,620
+packages/runtime/src/config/tests/config.test.ts
+  s_6d72f8cf3cc786::t_727e964e7f35f5 46,54-60
+  s_6d72f8cf3cc786::t_5b18cc191cfd0c 61-62
+packages/runtime/src/config/project.ts
+  s_6d72f8cf3cc786::t_ccf81d2d2d0567 104
+packages/runtime/src/tests/types.test.ts
+  s_6d72f8cf3cc786::t_9c5db61fad4919 54
+packages/runtime/src/review/comment.ts
+  s_6d72f8cf3cc786::t_b0b0e02d378d53 165,193,348,360
+packages/sdk/src/types/config.ts
+  s_6d72f8cf3cc786::t_a37e66337377cf 3-5
+  s_6d72f8cf3cc786::t_0a58b5cbfab37a 82
+packages/runtime/src/review/tests/comment-publishing.test.ts
+  s_6d72f8cf3cc786::t_cb2e66a2061ab3 123-134,137-139
+  s_6d72f8cf3cc786::t_124a402eda220f 140-160,165-169,177-178,184,190
+  s_6d72f8cf3cc786::t_1ee19c3d66fb9b 117-118,135-136
+  s_6d72f8cf3cc786::t_8da1a0e1ace6b3 5,104,115-116,119
+  s_6d72f8cf3cc786::t_c2ff07075ca127 161-164
+  s_6d72f8cf3cc786::t_cc4d946dee11a2 170-172,174-176
+  s_6d72f8cf3cc786::t_819e7f155e6383 179-183
+  s_6d72f8cf3cc786::t_c7ee434af184bf 185-189
+  s_6d72f8cf3cc786::t_c04cb4da824a5d 191
+  s_6d72f8cf3cc786::t_5065b573cb94a2 173
+apps/docs/content/docs/guide/comments.mdx
+  s_6d72f8cf3cc786::t_b52cb7057de3f1 194-195,209-218
+  s_6d72f8cf3cc786::t_4e0ac25226e29a 219
+docs/adr/0005-pipr-owned-comment-publishing.md
+  s_fdcdcddae114a2::t_7bf2b109eb2e97 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "f38012d902a853e9b6b53e4dd3a409597e62f326",
+  "prompts": {},
+  "sessions": {
+    "s_6d72f8cf3cc786": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f7b-b8f1-70e1-9d6b-d69e116ca32b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_fdcdcddae114a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f7a-c078-7e30-a7e7-5e4dc3267cbf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
