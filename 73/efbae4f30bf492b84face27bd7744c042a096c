@@ -1,0 +1,39 @@
+packages/runtime/src/shared/logging.ts
+  s_fdcdcddae114a2::t_a745a9f32a46e4 1
+packages/runtime/src/shared/tests/secret-redactor.test.ts
+  s_fdcdcddae114a2::t_a745a9f32a46e4 2-3
+packages/runtime/src/review/publication-redaction.ts
+  s_fdcdcddae114a2::t_a745a9f32a46e4 1
+packages/runtime/src/shared/secret-redaction.ts
+  s_fdcdcddae114a2::t_a745a9f32a46e4 1-18
+packages/runtime/src/shared/secret-redactor.ts
+  s_fdcdcddae114a2::t_b807275d1c82d8 1-2,4-5
+packages/runtime/src/review/task/task-runtime.ts
+  s_fdcdcddae114a2::t_a745a9f32a46e4 9
+packages/runtime/src/host-run/types.ts
+  s_fdcdcddae114a2::t_a745a9f32a46e4 6
+packages/runtime/src/shared/secret-redactor-core.ts
+  s_fdcdcddae114a2::t_61020544f72b9c 7
+  s_fdcdcddae114a2::t_b807275d1c82d8 1-6,8-23
+packages/runtime/src/host-run/tests/commands.test.ts
+  s_fdcdcddae114a2::t_a745a9f32a46e4 21
+packages/runtime/src/diff/diff.ts
+  s_fdcdcddae114a2::t_da8f95f0c825ae 180-182,197-205
+  s_fdcdcddae114a2::t_62035d04f2bd27 206-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "73efbae4f30bf492b84face27bd7744c042a096c",
+  "prompts": {},
+  "sessions": {
+    "s_fdcdcddae114a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f7a-c078-7e30-a7e7-5e4dc3267cbf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
