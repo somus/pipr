@@ -1,0 +1,38 @@
+packages/runtime/src/shared/tests/record.test.ts
+  s_30278a932bd7da::t_7380df50e98a7d 1-16
+packages/runtime/src/shared/record.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 1-3
+packages/runtime/src/config/config-deps.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 2,106
+packages/runtime/src/pi/runtime-tools-core.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 5,63,76
+packages/cli/src/runner.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 241-248,395,621-625
+packages/cli/src/skills.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 158-162
+packages/runtime/src/config/package-manifest.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 1-2,9,17
+packages/cli/src/update.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 80,82-83
+packages/runtime/src/config/paths.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 26
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_30278a932bd7da::t_c4ac0a1c709c8f 5,180-181
+  s_30278a932bd7da::t_abb7f2aa4a0257 182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "1a6199312a4316bce8e09a6841f05f2c7dabef2c",
+  "prompts": {},
+  "sessions": {
+    "s_30278a932bd7da": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f49-fff2-70e1-9bad-4071afde04b6",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
