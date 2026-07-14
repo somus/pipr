@@ -105,4 +105,4 @@ Pipr config supports two tiers:
 - **Tier 1:** `.pipr/config.ts` only. No install step; runtime SDK stub supplies the module.
 - **Tier 2:** `.pipr/package.json` + `.pipr/bun.lock` for third-party npm imports and self-contained editor types.
 
-Action runs copy trusted `.pipr/**` from the base commit (excluding `node_modules`), run frozen `bun install` when installable config deps are declared, then replace `@usepipr/sdk` with the image SDK stub for load and typecheck.
+Action runs copy trusted `.pipr/**` from the base commit (excluding `node_modules`), project runtime-provided packages out of the copied lockfile, and reject any new or changed package tuple or metadata. Pipr then runs a frozen, integrity-verified `bun install` before replacing `@usepipr/sdk` with the image SDK stub for load and typecheck.
