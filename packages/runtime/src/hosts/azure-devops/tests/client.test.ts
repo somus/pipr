@@ -52,6 +52,60 @@ describe("Azure DevOps API client", () => {
     });
   });
 
+  it("shares successful Retry-After throttling across Azure API clients", async () => {
+    const waits: number[] = [];
+    const requests: string[] = [];
+    const client = createAzureDevOpsClient(
+      azureEnv,
+      async (input) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.includes("git/repositories/repository")) {
+          return Response.json(
+            {
+              id: "repo-id",
+              name: "repository",
+              project: { id: "project-id", name: "project" },
+            },
+            { headers: { "Retry-After": "2" } },
+          );
+        }
+        if (url.includes("/_apis/identities?")) {
+          return Response.json(
+            {
+              count: 1,
+              value: [
+                {
+                  descriptor: "user-descriptor",
+                  isActive: true,
+                  isContainer: false,
+                  memberOf: [],
+                },
+              ],
+            },
+            { headers: { "Retry-After": "3" } },
+          );
+        }
+        return Response.json({ count: 0, value: [] });
+      },
+      {
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      },
+    );
+
+    await client.getRepository("repository");
+    await expect(
+      client.getRepositoryPermission("developer@example.com", "project-id", "repo-id"),
+    ).resolves.toBe("none");
+
+    expect(requests).toHaveLength(4);
+    expect(waits).toHaveLength(2);
+    expect(waits[0]).toBeGreaterThan(1_900);
+    expect(waits[1]).toBeGreaterThan(2_900);
+  });
+
   it("loads a pull request and selects the iteration for the reviewed head", async () => {
     const requests: string[] = [];
     const client = createAzureDevOpsClient(azureEnv, async (input) => {

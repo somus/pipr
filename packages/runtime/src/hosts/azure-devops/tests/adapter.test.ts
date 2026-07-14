@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -16,6 +17,20 @@ import {
 import type { CodeHostStatusState, RepositoryPermission } from "../../types.js";
 import { createAzureDevOpsHostAdapter } from "../adapter.js";
 import type { AzureDevOpsClient, AzureDevOpsPullRequest, AzureDevOpsThread } from "../client.js";
+
+const fixtureWorkspace = mkdtempSync(path.join(os.tmpdir(), "pipr-azure-adapter-"));
+git(fixtureWorkspace, ["init"]);
+git(fixtureWorkspace, ["config", "user.name", "Pipr Test"]);
+git(fixtureWorkspace, ["config", "user.email", "pipr@example.test"]);
+mkdirSync(path.join(fixtureWorkspace, "src"));
+writeFileSync(path.join(fixtureWorkspace, "src/a.ts"), "line one\n\n");
+writeFileSync(path.join(fixtureWorkspace, "src/old.ts"), "one\ntwo\nthree\nfour\n\n");
+git(fixtureWorkspace, ["add", "."]);
+git(fixtureWorkspace, ["commit", "-m", "fixture"]);
+git(fixtureWorkspace, ["tag", "base"]);
+git(fixtureWorkspace, ["tag", "head"]);
+
+afterAll(() => rmSync(fixtureWorkspace, { recursive: true, force: true }));
 
 describe("Azure DevOps host adapter", () => {
   it("publishes idempotent main, iteration-anchored inline, and status results", async () => {
@@ -71,6 +86,23 @@ describe("Azure DevOps host adapter", () => {
       "head changed",
     );
     expect(client.threads).toEqual([]);
+  });
+
+  it("reports an inline publication failure when the reviewed blob cannot be read", async () => {
+    const client = new FakeAzureDevOpsClient();
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    const missingWorkspaceChange = {
+      ...change,
+      workspace: path.join(fixtureWorkspace, "missing"),
+    };
+
+    await expect(
+      adapter.publication?.publish({ change: missingWorkspaceChange, plan: publicationPlan() }),
+    ).rejects.toMatchObject({
+      message: "Azure DevOps inline comment publication failed",
+      result: { inlineComments: { posted: 0, skipped: 0, failed: 1 } },
+    });
+    expect(client.createdThreadBodies).toHaveLength(1);
   });
 
   it("fails publication and statuses when only the target commit changed", async () => {
@@ -271,7 +303,7 @@ describe("Azure DevOps host adapter", () => {
     });
   });
 
-  it("publishes native suggestions in a positioned thread", async () => {
+  it("publishes visible suggestion fallbacks in a positioned thread", async () => {
     const client = new FakeAzureDevOpsClient();
     const adapter = createAzureDevOpsHostAdapter({ client });
     const plan = publicationPlan();
@@ -281,7 +313,7 @@ describe("Azure DevOps host adapter", () => {
       {
         ...item,
         finding: { ...item.finding, suggestedFix: "const value = 2;" },
-        body: `${item.body}\n**Suggested change**\n\n\`\`\`suggestion\nconst value = 2;\n\`\`\``,
+        body: `${item.body}\n**Suggested change**\n\n\`\`\`\nconst value = 2;\n\`\`\``,
       },
     ];
 
@@ -297,7 +329,7 @@ describe("Azure DevOps host adapter", () => {
     const comments = client.createdThreadBodies[1]?.comments as
       | Array<{ content: string }>
       | undefined;
-    expect(comments?.[0]?.content).toContain("```suggestion\nconst value = 2;\n```");
+    expect(comments?.[0]?.content).toContain("```\nconst value = 2;\n```");
   });
 
   it("declares Azure-native capability limits", () => {
@@ -307,7 +339,7 @@ describe("Azure DevOps host adapter", () => {
       reviewCommentReplies: true,
       threadResolution: true,
       multilineInlineComments: true,
-      suggestedChanges: true,
+      suggestedChanges: false,
       statuses: true,
     });
   });
@@ -394,7 +426,7 @@ const change: ChangeRequestEventContext = {
     base: { sha: "base", ref: "main" },
     head: { sha: "head", ref: "feature" },
   },
-  workspace: "/workspace",
+  workspace: fixtureWorkspace,
 };
 
 function publicationPlan() {
@@ -626,6 +658,19 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
 
 async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterConformanceHarness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "pipr-azure-conformance-"));
+  git(root, ["init"]);
+  git(root, ["config", "user.name", "Pipr Test"]);
+  git(root, ["config", "user.email", "pipr@example.test"]);
+  mkdirSync(path.join(root, "src"));
+  writeFileSync(path.join(root, "src/old.ts"), "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n");
+  git(root, ["add", "."]);
+  git(root, ["commit", "-m", "base fixture"]);
+  git(root, ["tag", "base"]);
+  writeFileSync(path.join(root, "src/new.ts"), "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n");
+  git(root, ["add", "."]);
+  git(root, ["commit", "-m", "head fixture"]);
+  git(root, ["tag", "head"]);
+  const conformanceChange = { ...change, workspace: root };
   const client = new FakeAzureDevOpsClient();
   client.iterationChanges = [
     { changeTrackingId: 20, changeType: "add", path: "src/new.ts" },
@@ -634,7 +679,7 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
   const adapter = createAzureDevOpsHostAdapter({ client });
   return {
     adapter,
-    change,
+    change: conformanceChange,
     async events() {
       const eventPath = path.join(root, "event.json");
       const envelope = (resource: Record<string, unknown>) => ({

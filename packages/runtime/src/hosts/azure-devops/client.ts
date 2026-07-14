@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createCodeHostHttpClient } from "../http.js";
+import { createCodeHostHttpClient, createCodeHostSuccessThrottle } from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
 import { azureOrganizationFromUrl } from "./coordinates.js";
 
@@ -202,6 +202,7 @@ export function createAzureDevOpsClient(
     input: string | URL | Request,
     init?: RequestInit,
   ) => Promise<Response> = globalThis.fetch,
+  options: { sleep?: (milliseconds: number) => Promise<void> } = {},
 ): AzureDevOpsClient {
   const organization =
     env.AZURE_DEVOPS_ORGANIZATION ?? organizationFromCollectionUri(env.SYSTEM_COLLECTIONURI);
@@ -221,20 +222,24 @@ export function createAzureDevOpsClient(
   const headers = pat
     ? { Authorization: `Basic ${Buffer.from(`:${pat}`).toString("base64")}` }
     : { Authorization: `Bearer ${bearerToken}` };
+  const successThrottle = createCodeHostSuccessThrottle(options.sleep);
   const api = createCodeHostHttpClient({
     baseUrl: `https://dev.azure.com/${encodeURIComponent(organization)}/${encodeURIComponent(project)}/_apis/`,
     headers,
     fetch,
+    successThrottle,
   });
   const organizationApi = createCodeHostHttpClient({
     baseUrl: `https://dev.azure.com/${encodeURIComponent(organization)}/_apis/`,
     headers,
     fetch,
+    successThrottle,
   });
   const identityApi = createCodeHostHttpClient({
     baseUrl: `https://vssps.dev.azure.com/${encodeURIComponent(organization)}/_apis/`,
     headers,
     fetch,
+    successThrottle,
   });
 
   const pullRequestPath = (repositoryId: string, changeNumber: number) =>

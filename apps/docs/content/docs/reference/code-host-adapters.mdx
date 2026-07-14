@@ -113,7 +113,7 @@ See [Azure DevOps](/docs/guide/azure-devops) for branch-policy and trusted servi
 
 ### Bitbucket Cloud
 
-The Bitbucket Cloud adapter maps repository webhooks, pull request comments, effective workspace permissions, and source-commit statuses into the same runtime contract. It uses the public `from`, `to`, `start_from`, and `start_to` inline anchor fields and checks both pull request endpoints before writes.
+The Bitbucket Cloud adapter maps repository webhooks, pull request comments, effective workspace permissions, and source-commit statuses into the same runtime contract. It publishes proven single-line `from` and `to` anchors plus multiline `start_from` and `start_to` ranges, and checks both pull request endpoints before writes.
 
 See [Bitbucket Cloud](/docs/guide/bitbucket) for trusted webhook setup and permission-token requirements.
 

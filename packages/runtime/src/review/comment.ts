@@ -145,7 +145,12 @@ export function publicationPlanForHostCapabilities(
         return {
           ...item,
           finding,
-          body: renderInlineBody(finding, item.findingId, item.reviewedHeadSha),
+          body: [
+            renderInlineBody(finding, item.findingId, item.reviewedHeadSha),
+            "**Suggested change**",
+            "",
+            renderSuggestedChange(item.finding.suggestedFix, false),
+          ].join("\n"),
         };
       }),
   };
@@ -485,12 +490,12 @@ function startsWithStructuredMarkdown(value: string): boolean {
   );
 }
 
-function renderSuggestedChange(suggestedFix: string): string {
+function renderSuggestedChange(suggestedFix: string, native = true): string {
   const longestBacktickRun = Math.max(
     0,
     ...[...suggestedFix.matchAll(/`+/g)].map((match) => match[0].length),
   );
   const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
   const closingPrefix = suggestedFix.endsWith("\n") ? "" : "\n";
-  return `${fence}suggestion\n${suggestedFix}${closingPrefix}${fence}`;
+  return `${fence}${native ? "suggestion" : ""}\n${suggestedFix}${closingPrefix}${fence}`;
 }
