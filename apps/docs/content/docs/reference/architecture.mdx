@@ -53,7 +53,7 @@ For GitHub Action pull request runs, Pipr loads `.pipr/config.ts` and local impo
 
 Provider backend, model, API-key env, and provider options come from the trusted base config, not pull request code.
 
-Pi receives a read-only workspace copy. It can use only read-only built-in tools and Pipr-owned Diff Read Tools for condensed manifest runs.
+Pi receives a read-only workspace copy. The official Docker Action seals the copy under the root supervisor, then runs Pi as UID and GID `1000`. Pi can use only read-only built-in tools and Pipr-owned Diff Read Tools for condensed manifest runs.
 
 ## Extension points
 

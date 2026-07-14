@@ -1,15 +1,18 @@
 FROM oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS base
 
 USER root
-RUN apk add --no-cache bash fd git ripgrep \
+RUN apk add --no-cache bash fd git ripgrep su-exec=0.2-r3 \
   && ln -sf /usr/local/bin/bun /usr/local/bin/node \
-  && mkdir -p /home/bun/.pi/agent/bin /home/bun/.tmp \
+  && mkdir -p /home/bun/.pi/agent/bin \
   && ln -sf /usr/bin/rg /home/bun/.pi/agent/bin/rg \
   && ln -sf /usr/bin/fd /home/bun/.pi/agent/bin/fd \
-  && chown -R bun:bun /home/bun/.pi /home/bun/.tmp
+  && chown -R bun:bun /home/bun/.pi \
+  && chmod 1777 /tmp
 
 ENV BUN_INSTALL=/usr/local
-ENV TMPDIR=/home/bun/.tmp
+ENV TMPDIR=/tmp
+ENV PIPR_PI_SANDBOX_UID=1000
+ENV PIPR_PI_SANDBOX_GID=1000
 RUN bun add -g @earendil-works/pi-coding-agent@0.80.3 \
   && PI_OFFLINE=1 PI_TELEMETRY=0 pi --help >/dev/null
 
