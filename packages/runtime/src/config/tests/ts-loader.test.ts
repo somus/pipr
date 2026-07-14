@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -384,26 +384,27 @@ export default definePipr((pipr) => {
 });
 
 describe("prepareConfigDirectory", () => {
-  it("hides runtime-provided deps from Bun installs while preserving copied config files", async () => {
+  it("installs from a frozen verified projection without resolving runtime-provided deps", async () => {
     const originalSpawn = Bun.spawn;
     const observedInstalls: Array<{ command: string[]; packageJson: string; bunLock: string }> = [];
-    Bun.spawn = ((...args: Parameters<typeof Bun.spawn>): ReturnType<typeof Bun.spawn> => {
-      const command = commandFromSpawnArgs(args);
-      const cwd = cwdFromSpawnArgs(args);
-      if (command?.[0] === "bun" && command[1] === "install" && cwd) {
-        observedInstalls.push({
-          command,
-          packageJson: readFileSync(path.join(cwd, "package.json"), "utf8"),
-          bunLock: readFileSync(path.join(cwd, "bun.lock"), "utf8"),
-        });
-        return originalSpawn(["bun", "--version"], {
-          env: process.env,
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-      }
-      return originalSpawn(...args);
-    }) as typeof Bun.spawn;
+    const projectedBunLock = [
+      "{",
+      '  "lockfileVersion": 1,',
+      '  "configVersion": 1,',
+      '  "workspaces": {',
+      '    "": {',
+      '      "devDependencies": {',
+      '        "typescript": "6.0.3",',
+      "      },",
+      "    },",
+      "  },",
+      '  "packages": {',
+      '    "node_modules/typescript": ["typescript@6.0.3", "", {}, "sha512-typescript"],',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    Bun.spawn = interceptProjectedConfigInstalls(originalSpawn, observedInstalls, projectedBunLock);
     try {
       const configDir = await writePackageForInstallTest({
         dependencies: { "@usepipr/sdk": "999.0.0" },
@@ -431,25 +432,35 @@ describe("prepareConfigDirectory", () => {
         '  "packages": {',
         '    "@types/bun": ["@types/bun@1.3.14", "", {}, "sha512-test"],',
         "",
-        '    "@usepipr/sdk": ["@usepipr/sdk@999.0.0", "", {}, "sha512-test"],',
+        '    "@usepipr/sdk": ["@usepipr/sdk@999.0.0", "", { "dependencies": { "zod": "4.4.3" } }, "sha512-test"],',
         "",
-        '    "typescript": ["typescript@6.0.3", "", {}, "sha512-test"],',
+        '    "zod": ["zod@4.4.3", "", {}, "sha512-zod"],',
+        "",
+        '    "typescript": ["typescript@6.0.3", "", {}, "sha512-typescript"],',
         "  }",
         "}",
         "",
       ].join("\n");
       await Bun.write(path.join(configDir, "bun.lock"), bunLock);
 
-      await installConfigDependencies(configDir, { frozen: true });
+      await installConfigDependencies(configDir);
 
-      expect(observedInstalls).toHaveLength(1);
-      expect(observedInstalls[0]?.command).toContain(`typescript@${defaultTypescriptVersion}`);
-      expect(observedInstalls[0]?.packageJson).not.toContain("@usepipr/sdk");
-      expect(observedInstalls[0]?.packageJson).not.toContain("@types/bun");
-      expect(observedInstalls[0]?.packageJson).toContain('"typescript": "6.0.3"');
-      expect(observedInstalls[0]?.bunLock).not.toContain("@usepipr/sdk");
-      expect(observedInstalls[0]?.bunLock).not.toContain("@types/bun");
-      expect(observedInstalls[0]?.bunLock).toContain('"typescript": "6.0.3"');
+      expect(observedInstalls).toHaveLength(2);
+      const [projectionInstall, frozenInstall] = requireTwoConfigInstalls(observedInstalls);
+      expect(projectionInstall.command).toContain("--lockfile-only");
+      expect(projectionInstall.packageJson).not.toContain("@usepipr/sdk");
+      expect(projectionInstall.packageJson).not.toContain("@types/bun");
+      expect(projectionInstall.packageJson).toContain('"typescript": "6.0.3"');
+      expect(projectionInstall.bunLock).toContain("@usepipr/sdk");
+      expect(projectionInstall.bunLock).toContain("@types/bun");
+      expect(frozenInstall.command).toContain("--frozen-lockfile");
+      expect(frozenInstall.command).toContain("--ignore-scripts");
+      expect(frozenInstall.command).toContain("--no-save");
+      expect(frozenInstall.command).not.toContain("--no-verify");
+      expect(frozenInstall.bunLock).not.toContain("@usepipr/sdk");
+      expect(frozenInstall.bunLock).not.toContain("@types/bun");
+      expect(frozenInstall.bunLock).not.toContain("zod");
+      expect(frozenInstall.bunLock).toContain('"typescript": "6.0.3"');
       expect(await readFile(path.join(configDir, "package.json"), "utf8")).toBe(
         originalPackageJson,
       );
@@ -459,7 +470,125 @@ describe("prepareConfigDirectory", () => {
     }
   });
 
-  it("uses no-verify only for default scaffold TypeScript installs", async () => {
+  it("rejects metadata-only and tuple-only projection changes before installing", async () => {
+    const originalSpawn = Bun.spawn;
+    const commands: string[][] = [];
+    let projectedBunLock = "";
+    Bun.spawn = ((...args: Parameters<typeof Bun.spawn>): ReturnType<typeof Bun.spawn> => {
+      const command = commandFromSpawnArgs(args);
+      const cwd = cwdFromSpawnArgs(args);
+      if (command !== undefined) {
+        commands.push(command);
+      }
+      if (command?.[0] === "bun" && command[1] === "install" && cwd) {
+        if (command.includes("--lockfile-only")) {
+          writeFileSync(path.join(cwd, "bun.lock"), projectedBunLock);
+        }
+        return originalSpawn(["bun", "--version"], {
+          env: process.env,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+      }
+      return originalSpawn(...args);
+    }) as typeof Bun.spawn;
+    try {
+      const bunLock = [
+        "{",
+        '  "lockfileVersion": 1,',
+        '  "configVersion": 1,',
+        '  "workspaces": {',
+        '    "": {',
+        '      "dependencies": {',
+        '        "@usepipr/sdk": "999.0.0",',
+        "      },",
+        '      "devDependencies": {',
+        '        "typescript": "6.0.3",',
+        "      },",
+        "    },",
+        "  },",
+        '  "packages": {',
+        '    "@usepipr/sdk": ["@usepipr/sdk@999.0.0", "", {}, "sha512-sdk"],',
+        "",
+        '    "typescript": ["typescript@6.0.3", "", {}, "sha512-typescript"],',
+        "  }",
+        "}",
+        "",
+      ].join("\n");
+      const projectedBunLocks = [
+        [
+          "{",
+          '  "lockfileVersion": 1,',
+          '  "workspaces": {',
+          '    "": {',
+          '      "devDependencies": {',
+          '        "typescript": "6.0.3",',
+          "      },",
+          "    },",
+          "  },",
+          '  "packages": {',
+          '    "typescript": ["typescript@6.0.3", "", {}, "sha512-typescript"],',
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        [
+          "{",
+          '  "lockfileVersion": 1,',
+          '  "configVersion": 1,',
+          '  "workspaces": {',
+          '    "": {',
+          '      "devDependencies": {',
+          '        "typescript": "6.0.4",',
+          "      },",
+          "    },",
+          "  },",
+          '  "packages": {',
+          '    "typescript": ["typescript@6.0.3", "", {}, "sha512-typescript"],',
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        [
+          "{",
+          '  "lockfileVersion": 1,',
+          '  "configVersion": 1,',
+          '  "workspaces": {',
+          '    "": {',
+          '      "devDependencies": {',
+          '        "typescript": "6.0.3",',
+          "      },",
+          "    },",
+          "  },",
+          '  "packages": {',
+          '    "typescript": ["typescript@6.0.4", "", {}, "sha512-changed"],',
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+      ];
+
+      for (const [index, projection] of projectedBunLocks.entries()) {
+        projectedBunLock = projection;
+        const configDir = await writePackageForInstallTest({
+          dependencies: { "@usepipr/sdk": "999.0.0" },
+          devDependencies: { typescript: defaultTypescriptVersion },
+        });
+        await Bun.write(path.join(configDir, "bun.lock"), bunLock);
+
+        await expect(installConfigDependencies(configDir)).rejects.toThrow(
+          "projected bun.lock changed committed dependency data",
+        );
+
+        expect(commands.filter((command) => command[1] === "install")).toHaveLength(index + 1);
+        expect(await readFile(path.join(configDir, "bun.lock"), "utf8")).toBe(bunLock);
+      }
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+
+  it("keeps frozen lockfile and integrity verification for every install", async () => {
     const originalSpawn = Bun.spawn;
     const commands: string[][] = [];
     Bun.spawn = interceptSpawnCommands(originalSpawn, commands);
@@ -467,22 +596,22 @@ describe("prepareConfigDirectory", () => {
       const defaultConfigDir = await writePackageForInstallTest({
         devDependencies: { typescript: defaultTypescriptVersion },
       });
-      await installConfigDependencies(defaultConfigDir, { frozen: true });
+      await installConfigDependencies(defaultConfigDir);
 
       const customConfigDir = await writePackageForInstallTest({
         devDependencies: { typescript: "file:./typescript-local" },
       });
-      await installConfigDependencies(customConfigDir, { frozen: true });
+      await installConfigDependencies(customConfigDir);
     } finally {
       Bun.spawn = originalSpawn;
     }
 
     const installCommands = commands.filter((command) => command[1] === "install");
     expect(installCommands).toHaveLength(2);
-    expect(installCommands[0]).toContain("--no-verify");
-    expect(installCommands[0]).toContain(`typescript@${defaultTypescriptVersion}`);
-    expect(installCommands[1]).not.toContain("--no-verify");
-    expect(installCommands[1]).toContain("typescript@file:./typescript-local");
+    for (const command of installCommands) {
+      expect(command).toContain("--frozen-lockfile");
+      expect(command).not.toContain("--no-verify");
+    }
   });
 
   it("writes a typed SDK stub without running install for runtime-provided deps", async () => {
@@ -500,7 +629,7 @@ describe("prepareConfigDirectory", () => {
       )}\n`,
     );
 
-    await prepareConfigDirectory(configDir, { frozen: true });
+    await prepareConfigDirectory(configDir);
 
     expect(
       await Bun.file(
@@ -525,12 +654,56 @@ describe("prepareConfigDirectory", () => {
       })}\n`,
     );
 
-    await expect(prepareConfigDirectory(configDir, { frozen: true })).resolves.toBeUndefined();
+    await expect(prepareConfigDirectory(configDir)).resolves.toBeUndefined();
     expect(
       await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
     ).toBe(true);
   });
 });
+
+type ObservedConfigInstall = {
+  command: string[];
+  packageJson: string;
+  bunLock: string;
+};
+
+function requireTwoConfigInstalls(
+  installs: ObservedConfigInstall[],
+): [ObservedConfigInstall, ObservedConfigInstall] {
+  const first = installs[0];
+  const second = installs[1];
+  if (installs.length !== 2 || first === undefined || second === undefined) {
+    throw new Error(`expected two config installs, received ${installs.length}`);
+  }
+  return [first, second];
+}
+
+function interceptProjectedConfigInstalls(
+  originalSpawn: typeof Bun.spawn,
+  observedInstalls: ObservedConfigInstall[],
+  projectedBunLock: string,
+): typeof Bun.spawn {
+  return ((...args: Parameters<typeof Bun.spawn>): ReturnType<typeof Bun.spawn> => {
+    const command = commandFromSpawnArgs(args);
+    const cwd = cwdFromSpawnArgs(args);
+    if (command?.[0] !== "bun" || command[1] !== "install" || cwd === undefined) {
+      return originalSpawn(...args);
+    }
+    observedInstalls.push({
+      command,
+      packageJson: readFileSync(path.join(cwd, "package.json"), "utf8"),
+      bunLock: readFileSync(path.join(cwd, "bun.lock"), "utf8"),
+    });
+    if (command.includes("--lockfile-only")) {
+      writeFileSync(path.join(cwd, "bun.lock"), projectedBunLock);
+    }
+    return originalSpawn(["bun", "--version"], {
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  }) as typeof Bun.spawn;
+}
 
 function interceptSpawnCommands(
   originalSpawn: typeof Bun.spawn,
