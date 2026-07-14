@@ -358,7 +358,7 @@ pipr.config({
 });
 ```
 
-`maxInlineComments` limits Inline Review Comments published by the current run. `maxStoredFindings` limits the current-first finding records serialized for future runs; it defaults to `50` and accepts values from `0` through `100`. Setting it to `0` disables prior-finding input and automatic stale-finding resolution candidates without changing current output.
+`maxInlineComments` limits Inline Review Comments published by the current run. `maxStoredFindings` limits the current-first finding records serialized for future runs; it defaults to `50` and accepts values from `0` through `100`. Findings from an existing marker remain available during the run that rewrites it. Setting the limit to `0` writes no findings to the next marker, so subsequent runs receive no prior-finding input or automatic stale-finding resolution candidates; current output is unchanged.
 
 `showHeader`, `showFooter`, and `showStats` independently control the generated Pipr title, attribution footer, and collapsed review statistics. All three default to `true`. Hidden publication markers and `PublicationResult.metadata.stats` remain available when their visible sections are disabled.
 

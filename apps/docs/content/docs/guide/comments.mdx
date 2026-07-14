@@ -215,7 +215,7 @@ pipr.config({ publication: { maxStoredFindings: 25 } });
 
 Pipr stores current findings first, in publication order, then uses any remaining capacity for historical findings. This limit does not change the current run's finding count or Inline Review Comments.
 
-Lower limits reduce the prior findings available to Review Tasks and the verifier, including automatic stale-finding resolution candidates. Setting `maxStoredFindings: 0` disables those finding-based cross-run behaviors and leaves other stored review metadata intact.
+Lower limits reduce the prior findings available to Review Tasks and the verifier on later reruns, including automatic stale-finding resolution candidates. On the first run after changing the limit, findings from the existing marker remain available and are rewritten to the new limit. Setting `maxStoredFindings: 0` writes no findings to the next marker, so subsequent runs have no finding-based cross-run behavior; other stored review metadata remains intact.
 
 ### Read prior state
 
