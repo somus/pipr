@@ -1242,14 +1242,15 @@ describe("comments", () => {
     });
   });
 
-  it("publishes only a bounded first paragraph for verbose inline finding bodies", () => {
-    const secondParagraph = "This second paragraph should not be published.";
+  it("preserves the complete inline finding body during publication", () => {
+    const secondParagraph = "This second paragraph must remain published.";
+    const body = `${"The actionable issue is concise. ".repeat(40)}\n\n${secondParagraph}`;
     const [item] = prepareInlinePublicationItems({
       validated: {
         validFindings: [
           {
             ...finding,
-            body: `${"The actionable issue is concise. ".repeat(40)}\n\n${secondParagraph}`,
+            body,
           },
         ],
       },
@@ -1257,10 +1258,8 @@ describe("comments", () => {
       reviewedHeadSha: "head",
     });
 
-    expect(item?.finding.body.length).toBeLessThanOrEqual(703);
-    expect(item?.finding.body).toContain("The actionable issue is concise.");
-    expect(item?.finding.body.endsWith("...")).toBe(true);
-    expect(item?.body).not.toContain(secondParagraph);
+    expect(item?.finding.body).toBe(body);
+    expect(item?.body).toContain(body);
   });
 
   it("uses a longer suggestion fence when replacement code contains backticks", () => {

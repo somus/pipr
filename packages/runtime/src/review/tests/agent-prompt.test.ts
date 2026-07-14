@@ -77,8 +77,22 @@ describe("renderAgentPrompt", () => {
       `Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target`,
     );
     expect(prompt).toContain("Do not include step-by-step reasoning, broad context");
+    expect(prompt).toContain(
+      "Never copy a secret-looking literal from changed code into the review summary",
+    );
     expect(prompt).toContain("one inline finding");
-    expect(prompt).toContain("exact Diff Manifest commentable range");
+    expect(prompt).toContain(
+      "path, rangeId, and side must identify one Diff Manifest commentable range",
+    );
+    expect(prompt).toContain("startLine and endLine must select a valid span within that range");
+    expect(prompt).toContain(
+      "Select the smallest contiguous line span that makes the inline comment understandable",
+    );
+    expect(prompt).toContain("Prefer one line when it identifies the issue");
+    expect(prompt).toContain(
+      "select the relevant declaration or signature line instead of the enclosing body",
+    );
+    expect(prompt).toContain("the suggested-fix replacement span rules take precedence");
     expect(prompt).toContain("Select the smallest contiguous line span");
     expect(prompt).toContain("Do not select a larger enclosing block");
     expect(prompt).toContain(

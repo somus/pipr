@@ -146,6 +146,16 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
     "output prompt is missing suggested fix range rule",
   );
   assert(
+    prompt.includes("smallest contiguous line span that makes the inline comment understandable") &&
+      prompt.includes("select the relevant declaration or signature line") &&
+      prompt.includes("the suggested-fix replacement span rules take precedence"),
+    "output prompt is missing inline finding selection rules",
+  );
+  assert(
+    prompt.includes("startLine and endLine must select a valid span within that range"),
+    "diff manifest prompt is missing strict subrange guidance",
+  );
+  assert(
     prompt.includes("Inline finding bodies are final code-review comments") &&
       prompt.includes("Treat 700 as a hard ceiling, not a target"),
     "review policy is missing inline body budget rule",

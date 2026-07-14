@@ -12,6 +12,16 @@ export type PiprEvalScore = {
   score: number;
 };
 
+export type ExpectedFindingRecallDiagnostics = {
+  actualInlineFindingCount: number;
+  unmatchedExpectedFindings: Array<{
+    path: string;
+    line: number;
+    locationMatchCount: number;
+    missingKeywords: string[];
+  }>;
+};
+
 export function scorePiprEvalOutput(
   output: PiprEvalOutput,
   expected: PiprEvalExpected | undefined,
@@ -29,6 +39,10 @@ export function scorePiprEvalOutput(
       score: scoreFalsePositiveSuppression(output, expected),
     },
     { name: "Valid inline anchoring", score: scoreValidAnchoring(output) },
+    {
+      name: "Expected inline selection",
+      score: scoreExpectedInlineSelection(output, expected),
+    },
     { name: "Inline finding body budget", score: scoreInlineFindingBodyBudget(output) },
     { name: "Suggested fix range shape", score: scoreSuggestedFixRangeShape(output) },
     {
@@ -56,6 +70,38 @@ export function scoreExpectedFindings(
     output.inlineFindings.some((actual) => expectedFindingMatches(finding, actual)),
   );
   return matched.length / expected.findings.length;
+}
+
+export function diagnoseExpectedFindingRecall(
+  output: PiprEvalOutput,
+  expected: PiprEvalExpected | undefined,
+): ExpectedFindingRecallDiagnostics {
+  const unmatchedExpectedFindings = (expected?.findings ?? []).flatMap((finding) => {
+    const locationMatches = output.inlineFindings.filter((actual) =>
+      expectedFindingLocationMatches(finding, actual),
+    );
+    const missingKeywordsByMatch = locationMatches.map((actual) =>
+      finding.keywords.filter((keyword) => !actual.body.toLowerCase().includes(keyword)),
+    );
+    if (missingKeywordsByMatch.some((keywords) => keywords.length === 0)) {
+      return [];
+    }
+    const missingKeywords = missingKeywordsByMatch.toSorted(
+      (left, right) => left.length - right.length,
+    )[0] ?? [...finding.keywords];
+    return [
+      {
+        path: finding.path,
+        line: finding.line,
+        locationMatchCount: locationMatches.length,
+        missingKeywords,
+      },
+    ];
+  });
+  return {
+    actualInlineFindingCount: output.inlineFindings.length,
+    unmatchedExpectedFindings,
+  };
 }
 
 export function scoreFalsePositiveSuppression(
@@ -108,6 +154,32 @@ export function scoreValidAnchoring(output: PiprEvalOutput): number {
   return valid.length / output.inlineFindings.length;
 }
 
+export function scoreExpectedInlineSelection(
+  output: PiprEvalOutput,
+  expected: PiprEvalExpected | undefined,
+): number {
+  if (!hasExpectedOutput(output, expected)) {
+    return 0;
+  }
+  const expectedSelections = expected.findings.filter((finding) => finding.selection);
+  if (expectedSelections.length === 0) {
+    return 1;
+  }
+  const recalled = expectedSelections.flatMap((finding) => {
+    const actual = output.inlineFindings.find((item) => expectedFindingMatches(finding, item));
+    return actual ? [{ finding, actual }] : [];
+  });
+  if (recalled.length === 0) {
+    return 1;
+  }
+  const matched = recalled.filter(
+    ({ finding, actual }) =>
+      finding.selection?.startLine === actual.startLine &&
+      finding.selection.endLine === actual.endLine,
+  );
+  return matched.length / recalled.length;
+}
+
 export function scoreInlineFindingBodyBudget(output: PiprEvalOutput): number {
   if (!output.ok) {
     return 0;
@@ -118,7 +190,7 @@ export function scoreInlineFindingBodyBudget(output: PiprEvalOutput): number {
   const valid = output.inlineFindings.filter((finding) => {
     const lineCount = finding.body.replace(/\r\n?/g, "\n").split("\n").length;
     return (
-      finding.body.length <= maxInlineFindingBodyCharacters + 3 &&
+      finding.body.length <= maxInlineFindingBodyCharacters &&
       lineCount <= maxInlineFindingBodyLines
     );
   });

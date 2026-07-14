@@ -1,7 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { livePromptGateCaseIds, suggestedFixGateScorers } from "../live-prompt-gates.js";
+import { promptEvalCasesForMode } from "../cases.js";
+import {
+  defectRecallLivePromptGate,
+  livePromptGateCaseIds,
+  livePromptGateFailure,
+  suggestedFixGateScorers,
+} from "../live-prompt-gates.js";
 import type { EvalInlineFinding, PiprEvalOutput } from "../runner.js";
 import {
+  scoreExpectedFindings,
+  scoreExpectedInlineSelection,
   scoreExpectedSuggestedFixBehavior,
   scoreFalsePositiveSuppression,
   scoreFindingCountBudget,
@@ -211,13 +219,129 @@ describe("prompt eval scoring", () => {
     expect(livePromptGateCaseIds.defectRecall).toEqual(
       expect.arrayContaining([
         "empty-value-contract-regression",
+        "minimal-inline-selection",
         "removed-await-effect-regression",
         "unchanged-caller-contract-regression",
       ]),
     );
+    expect(defectRecallLivePromptGate.scorers.map((scorer) => scorer.name)).toContain(
+      "Expected inline selection",
+    );
     expect(livePromptGateCaseIds.cleanSuppression).toContain(
       "coordinated-cross-file-contract-clean",
     );
+  });
+
+  it("identifies the exact failed live-gate scorers for one case", () => {
+    expect(
+      livePromptGateFailure(defectRecallLivePromptGate, "missing-keyword", {
+        output,
+        expected: {
+          findings: [
+            {
+              line: 3,
+              path: finding.path,
+              keywords: ["unmatched"],
+            },
+          ],
+          maxInlineFindings: 1,
+          requirePiCall: true,
+        },
+      }),
+    ).toEqual({
+      caseId: "missing-keyword",
+      gate: "defect-recall",
+      failedScorers: ["Expected finding recall"],
+      recall: {
+        actualInlineFindingCount: 1,
+        unmatchedExpectedFindings: [
+          {
+            path: "src/review-target.ts",
+            line: 3,
+            locationMatchCount: 1,
+            missingKeywords: ["unmatched"],
+          },
+        ],
+      },
+    });
+  });
+
+  it("accepts caller contract evidence without requiring redundant unit wording", () => {
+    const testCase = promptEvalCasesForMode("live").find(
+      ({ id }) => id === "unchanged-caller-contract-regression",
+    );
+    if (!testCase) {
+      throw new Error("unchanged caller contract case is missing");
+    }
+
+    expect(
+      scoreExpectedFindings(
+        {
+          ...output,
+          inlineFindings: [
+            {
+              ...finding,
+              body: "The unchanged caller already multiplies this result by 1000, so the conversion now happens twice.",
+              startLine: 3,
+              endLine: 3,
+            },
+          ],
+        },
+        testCase.expected,
+      ),
+    ).toBe(1);
+  });
+
+  it("accepts removed-await evidence without requiring redundant return wording", () => {
+    const testCase = promptEvalCasesForMode("live").find(
+      ({ id }) => id === "removed-await-effect-regression",
+    );
+    if (!testCase) {
+      throw new Error("removed await effect case is missing");
+    }
+
+    expect(
+      scoreExpectedFindings(
+        {
+          ...output,
+          inlineFindings: [
+            {
+              ...finding,
+              body: "Removing await lets the asynchronous write continue after persistValue resolves.",
+              startLine: 6,
+              endLine: 6,
+            },
+          ],
+        },
+        testCase.expected,
+      ),
+    ).toBe(1);
+  });
+
+  it("accepts redirect evidence without requiring a conventional vulnerability label", () => {
+    const testCase = promptEvalCasesForMode("live").find(
+      ({ id }) => id === "security-open-redirect",
+    );
+    if (!testCase) {
+      throw new Error("security open redirect case is missing");
+    }
+
+    expect(
+      scoreExpectedFindings(
+        {
+          ...output,
+          inlineFindings: [
+            {
+              ...finding,
+              body: "Returning attacker-controlled input directly allows a redirect to an external site.",
+              startLine: 2,
+              endLine: 2,
+            },
+          ],
+        },
+        testCase.expected,
+      ),
+    ).toBe(1);
   });
 
   it("checks raw review summary text before publication rendering", () => {
@@ -237,11 +361,17 @@ describe("prompt eval scoring", () => {
     ).toBe(0);
   });
 
-  it("checks raw inline body length before publication truncation", () => {
+  it("enforces the raw inline body hard ceiling from the prompt policy", () => {
     expect(
       scoreInlineFindingBodyBudget({
         ...output,
-        inlineFindings: [{ ...finding, body: "This body is too long. ".repeat(50) }],
+        inlineFindings: [{ ...finding, body: "x".repeat(700) }],
+      }),
+    ).toBe(1);
+    expect(
+      scoreInlineFindingBodyBudget({
+        ...output,
+        inlineFindings: [{ ...finding, body: "x".repeat(701) }],
         publicationInlineFindings: [finding],
       }),
     ).toBe(0);
@@ -264,6 +394,66 @@ describe("prompt eval scoring", () => {
         maxInlineFindings: 1,
         requirePiCall: true,
       }),
+    ).toBe(1);
+  });
+
+  it("accepts the exact expected inline selection", () => {
+    expect(
+      scoreExpectedInlineSelection(output, {
+        findings: [
+          {
+            line: 3,
+            path: finding.path,
+            keywords: ["negative"],
+            selection: { startLine: 3, endLine: 3 },
+          },
+        ],
+        maxInlineFindings: 1,
+        requirePiCall: true,
+      }),
+    ).toBe(1);
+  });
+
+  it("rejects a broader inline selection containing the expected line", () => {
+    expect(
+      scoreExpectedInlineSelection(
+        {
+          ...output,
+          inlineFindings: [{ ...finding, startLine: 1, endLine: 3 }],
+        },
+        {
+          findings: [
+            {
+              line: 3,
+              path: finding.path,
+              keywords: ["negative"],
+              selection: { startLine: 3, endLine: 3 },
+            },
+          ],
+          maxInlineFindings: 1,
+          requirePiCall: true,
+        },
+      ),
+    ).toBe(0);
+  });
+
+  it("does not double-penalize inline selection when the finding is not recalled", () => {
+    expect(
+      scoreExpectedInlineSelection(
+        { ...output, inlineFindings: [] },
+        {
+          findings: [
+            {
+              line: 3,
+              path: finding.path,
+              keywords: ["negative"],
+              selection: { startLine: 3, endLine: 3 },
+            },
+          ],
+          maxInlineFindings: 1,
+          requirePiCall: true,
+        },
+      ),
     ).toBe(1);
   });
 
