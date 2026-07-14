@@ -6,7 +6,7 @@ import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/dif
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
 import { selectRuntimeTasks } from "../../host-run/entry-dispatch.js";
 import type { RuntimeLog } from "../../shared/logging.js";
-import type { SecretRedactor } from "../../shared/secret-redactor.js";
+import type { SecretRedactor } from "../../shared/secret-redaction.js";
 import type {
   ChangeRequestEventContext,
   DiffManifest,

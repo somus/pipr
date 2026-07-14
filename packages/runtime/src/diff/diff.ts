@@ -177,11 +177,9 @@ function parseNumstat(
     if (!header) {
       continue;
     }
-    let filePath = header.path;
-    if (!filePath) {
-      index += 1;
-      filePath = fields[index++] ?? "";
-    }
+    const resolvedPath = resolveNumstatPath(header.path, fields, index);
+    index = resolvedPath.nextIndex;
+    const filePath = resolvedPath.path;
     if (!filePath) {
       continue;
     }
@@ -194,6 +192,17 @@ function parseNumstat(
     });
   }
   return stats;
+}
+
+function resolveNumstatPath(
+  path: string,
+  fields: readonly string[],
+  nextIndex: number,
+): { path: string; nextIndex: number } {
+  if (path) {
+    return { path, nextIndex };
+  }
+  return { path: fields[nextIndex + 1] ?? "", nextIndex: nextIndex + 2 };
 }
 
 function parseNumstatHeader(

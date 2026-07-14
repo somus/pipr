@@ -18,7 +18,7 @@ import {
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
 } from "../../review/prior-state.js";
-import type { SecretRedactor } from "../../shared/secret-redactor.js";
+import type { SecretRedactor } from "../../shared/secret-redaction.js";
 import { runtimeVersion } from "../../shared/version.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import {

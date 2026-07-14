@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { createKnownSecretRedactor, sensitiveEnvironmentValues } from "../secret-redactor.js";
+import { sensitiveEnvironmentValues } from "../secret-redaction.js";
+import { createKnownSecretRedactor } from "../secret-redactor.js";
 
 describe("sensitiveEnvironmentValues", () => {
   it("matches credential name segments without matching ordinary substrings", () => {

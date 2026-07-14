@@ -3,7 +3,7 @@ import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts
 import type { PublicationResult } from "../review/publication-result.js";
 import type { ReviewRuntimeResult } from "../review/task/task-runtime.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
-import type { SecretRedactor } from "../shared/secret-redactor.js";
+import type { SecretRedactor } from "../shared/secret-redaction.js";
 import type { ChangeRequestEventContext, RuntimeSettings } from "../types.js";
 
 export type RuntimeCommandOptions = {

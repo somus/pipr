@@ -1,4 +1,4 @@
-import { sensitiveEnvironmentValues } from "./secret-redactor.js";
+import { sensitiveEnvironmentValues } from "./secret-redaction.js";
 
 export type RuntimeLogSink = {
   log(record: RuntimeLogRecord): void;
