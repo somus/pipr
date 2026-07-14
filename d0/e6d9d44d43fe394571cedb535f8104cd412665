@@ -1,0 +1,19 @@
+packages/runtime/src/diff/tests/diff.test.ts
+  s_fdcdcddae114a2::t_a9801acf00fc11 404-405
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "d0e6d9d44d43fe394571cedb535f8104cd412665",
+  "prompts": {},
+  "sessions": {
+    "s_fdcdcddae114a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f7a-c078-7e30-a7e7-5e4dc3267cbf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
