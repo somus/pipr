@@ -15,7 +15,14 @@ try {
   if (piTelemetry) {
     await delay(400);
   }
-  console.log(JSON.stringify(await buildReview()));
+  if (shouldFailPrimaryProvider()) {
+    console.error("transient primary provider fixture failure");
+    process.exitCode = 75;
+  } else if (shouldReturnInvalidOutput()) {
+    console.log("{invalid");
+  } else {
+    console.log(JSON.stringify(await buildReview()));
+  }
 } finally {
   await piTelemetry?.end();
 }
@@ -402,11 +409,36 @@ async function beginPiTelemetry() {
   run("mkdir", ["-p", directory]);
   const id = `${Date.now()}-${process.pid}-${crypto.randomUUID()}`;
   const file = `${directory}/${id}.jsonl`;
-  await appendTelemetry(file, { id, phase: "start", time: Date.now(), promptKind: promptKind() });
+  await appendTelemetry(file, {
+    id,
+    phase: "start",
+    time: Date.now(),
+    promptKind: promptKind(),
+    providerId: Bun.env.PIPR_PROVIDER_ID,
+    workspace: process.cwd(),
+    home: Bun.env.HOME,
+    sessionDir: Bun.env.PI_CODING_AGENT_SESSION_DIR,
+    tmp: Bun.env.TMPDIR,
+  });
   return {
     end: () =>
       appendTelemetry(file, { id, phase: "end", time: Date.now(), promptKind: promptKind() }),
   };
+}
+
+function shouldFailPrimaryProvider() {
+  return (
+    Bun.env.PIPR_ACT_FAIL_PRIMARY_PROVIDER === "1" &&
+    Bun.env.PIPR_PROVIDER_ID === "deepseek/deepseek-v4-pro"
+  );
+}
+
+function shouldReturnInvalidOutput() {
+  return (
+    Bun.env.PIPR_ACT_INVALID_FIRST_OUTPUT === "1" &&
+    promptKind() === "condensed" &&
+    !prompt.startsWith("Repair the previous output")
+  );
 }
 
 async function appendTelemetry(file, event) {

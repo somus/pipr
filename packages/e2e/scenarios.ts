@@ -19,6 +19,7 @@ export type Scenario = {
   headPath: string;
   headContent: string;
   telemetryDir?: string;
+  invalidFirstOutput?: boolean;
 };
 
 export type PreparedScenario = {
@@ -94,9 +95,15 @@ export default definePipr((pipr) => {
 const condensedConfig = `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
+  const primary = pipr.model({
     provider: "deepseek",
     model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+    options: { thinking: "high" },
+  });
+  const fallback = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-fallback",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
     options: { thinking: "high" },
   });
@@ -113,11 +120,28 @@ export default definePipr((pipr) => {
       },
     },
   });
-  pipr.review({
-    id: "review",
-    model,
+  const reviewer = pipr.agent({
+    name: "review",
+    model: primary,
+    fallbacks: [fallback],
     instructions: "Review the condensed act fixture.",
+    output: pipr.schemas.review,
+    tools: pipr.tools.readOnly,
+    retry: { invalidOutput: 1, transientFailure: 1 },
+    prompt: (input) => pipr.prompt\`Review this change.\n\nDiff Manifest:\n\${pipr.json(input.manifest)}\`,
   });
+  const task = pipr.task({
+    name: "review",
+    async run(ctx) {
+      const manifest = await ctx.change.diffManifest({ compressed: true });
+      const review = await ctx.pi.run(reviewer, { manifest });
+      await ctx.comment({
+        main: review.summary.body,
+        inlineFindings: review.inlineFindings,
+      });
+    },
+  });
+  pipr.on.changeRequest({ actions: ["opened"], task });
 });
 `;
 
@@ -286,6 +310,8 @@ export const scenarios: Record<ScenarioName, Scenario> = {
   return normalized || "fallback";
 }
 `,
+    telemetryDir: "pi-calls-condensed",
+    invalidFirstOutput: true,
   },
   orchestrator: {
     name: "orchestrator",

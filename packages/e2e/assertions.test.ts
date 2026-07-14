@@ -1,10 +1,14 @@
 #!/usr/bin/env bun
 import { expect } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { renderActActionMetadata } from "./action-metadata.ts";
 import {
   assertActCondensedFixture,
   assertActFullFixture,
   assertActOrchestratorFixture,
+  assertCondensedPiWorkspace,
 } from "./assertions.ts";
 import { prepareScenarioWorktree, scenarios } from "./scenarios.ts";
 
@@ -12,6 +16,7 @@ const headSha = "head-sha";
 
 await assertDryRunScenarioPreparation();
 await assertActionMetadataRendering();
+await assertCondensedWorkspaceTelemetry();
 
 await assertActFullFixture(validFullFixture(), headSha);
 expect(() => assertActCondensedFixture(validCondensedFixture())).not.toThrow();
@@ -62,6 +67,44 @@ async function assertActionMetadataRendering(): Promise<void> {
   expect(fixtureRendered).toContain("entrypoint: /usr/local/bin/bun");
   expect(fixtureRendered).toContain("    - /opt/pipr/packages/e2e/action-fixture.ts");
   expect(fixtureRendered).toContain("    - host-run");
+}
+
+async function assertCondensedWorkspaceTelemetry(): Promise<void> {
+  const telemetryPath = await mkdtemp(path.join(os.tmpdir(), "pipr-e2e-telemetry-"));
+  const workspace = path.join(telemetryPath, "removed-workspace");
+  try {
+    const attempts = [
+      ["primary-first", "deepseek/deepseek-v4-pro"],
+      ["primary-retry", "deepseek/deepseek-v4-pro"],
+      ["fallback", "deepseek/deepseek-v4-fallback"],
+      ["fallback-repair", "deepseek/deepseek-v4-fallback"],
+    ] as const;
+    for (const [index, [id, providerId]] of attempts.entries()) {
+      await Bun.write(
+        path.join(telemetryPath, `${id}.jsonl`),
+        `${JSON.stringify({
+          id,
+          phase: "start",
+          time: index * 2 + 1,
+          promptKind: "condensed",
+          providerId,
+          workspace,
+          home: `/tmp/home-${id}`,
+          sessionDir: `/tmp/session-${id}`,
+          tmp: `/tmp/tmp-${id}`,
+        })}\n${JSON.stringify({ id, phase: "end", time: index * 2 + 2, promptKind: "condensed" })}\n`,
+      );
+    }
+
+    await mkdir(workspace);
+    await expect(assertCondensedPiWorkspace(telemetryPath)).rejects.toThrow(
+      "shared Pi workspace was not cleaned up",
+    );
+    await rm(workspace, { recursive: true });
+    await expect(assertCondensedPiWorkspace(telemetryPath)).resolves.toBeUndefined();
+  } finally {
+    await rm(telemetryPath, { recursive: true, force: true });
+  }
 }
 
 async function expectFailure(message: string, fixture: PublicationFixture): Promise<void> {

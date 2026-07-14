@@ -169,6 +169,12 @@ function fixtureWorkflow(item: Scenario): string {
     `          PIPR_ACT_GITHUB_FIXTURE_PATH: ${githubWorkspace}/${fixtureRootPath}/${item.publicationFixture}`,
     `          PIPR_ACT_PI_EXECUTABLE: ${githubWorkspace}/${fakePiScript}`,
     `          PIPR_ACT_ASSERTION: ${item.assertion}`,
+    ...(item.invalidFirstOutput
+      ? [
+          '          PIPR_ACT_INVALID_FIRST_OUTPUT: "1"',
+          '          PIPR_ACT_FAIL_PRIMARY_PROVIDER: "1"',
+        ]
+      : []),
     ...(item.telemetryDir
       ? [
           `          PIPR_ACT_PI_CALL_DIR: ${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`,

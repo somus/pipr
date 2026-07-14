@@ -165,9 +165,6 @@ function publicationScenario(scenario: Scenario): PublicationScenario {
 }
 
 function fixtureEnv(scenario: PublicationScenario): Record<string, string> {
-  const telemetryPath = scenario.telemetryDir
-    ? `/workspace/${fixtureRootPath}/${scenario.telemetryDir}`
-    : undefined;
   return {
     DEEPSEEK_API_KEY: "local-fixture-key",
     GITHUB_EVENT_NAME: "pull_request",
@@ -182,9 +179,22 @@ function fixtureEnv(scenario: PublicationScenario): Record<string, string> {
     PIPR_ACT_ASSERTION: scenario.assertion,
     PIPR_ACT_GITHUB_FIXTURE_PATH: `/workspace/${fixtureRootPath}/${scenario.publicationFixture}`,
     PIPR_ACT_PI_EXECUTABLE: `/workspace/${fakePiScript}`,
-    ...(telemetryPath ? { PIPR_ACT_TELEMETRY_PATH: telemetryPath } : {}),
-    ...(telemetryPath ? { PIPR_ACT_PI_CALL_DIR: telemetryPath } : {}),
+    ...fixtureScenarioEnv(scenario),
   };
+}
+
+function fixtureScenarioEnv(scenario: PublicationScenario): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (scenario.invalidFirstOutput) {
+    env.PIPR_ACT_INVALID_FIRST_OUTPUT = "1";
+    env.PIPR_ACT_FAIL_PRIMARY_PROVIDER = "1";
+  }
+  if (scenario.telemetryDir) {
+    const telemetryPath = `/workspace/${fixtureRootPath}/${scenario.telemetryDir}`;
+    env.PIPR_ACT_TELEMETRY_PATH = telemetryPath;
+    env.PIPR_ACT_PI_CALL_DIR = telemetryPath;
+  }
+  return env;
 }
 
 function assertDockerImageExists(image: string): void {

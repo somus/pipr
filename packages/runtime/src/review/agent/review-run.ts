@@ -6,7 +6,13 @@ import { uniqBy } from "lodash-es";
 import { z } from "zod";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
-import { type PiRunOptions, type PiRunResult, type PiRunUsage, runPi } from "../../pi/runner.js";
+import {
+  type PiRunOptions,
+  type PiRunResult,
+  type PiRunUsage,
+  runPi,
+  withPiRunWorkspace,
+} from "../../pi/runner.js";
 import { boundedLogSnippet, type RuntimeLog } from "../../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
@@ -87,26 +93,36 @@ export async function runReviewAgent(
   const prompt = await renderAgentPrompt({ ...options, ...prepared });
   const providers = selectProviders(options.runtime, options.agent, options.runOptions);
   const retry = retrySettings(options.agent);
-  const errors: string[] = [];
-  const providerModels: string[] = [];
-  let repairAttempted = false;
+  const runProviders = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
+    const scopedOptions = {
+      ...options,
+      runtime: { ...options.runtime, piRunner },
+      ...prepared,
+    };
+    const errors: string[] = [];
+    const providerModels: string[] = [];
+    let repairAttempted = false;
 
-  for (const provider of providers) {
-    providerModels.push(provider.model);
-    const attempt = await runAgentWithProvider(
-      { ...options, ...prepared },
-      provider,
-      prompt,
-      retry,
-    );
-    repairAttempted ||= attempt.repairAttempted;
-    if (attempt.ok) {
-      return { value: attempt.value, repairAttempted, providerModels };
+    for (const provider of providers) {
+      providerModels.push(provider.model);
+      const attempt = await runAgentWithProvider(scopedOptions, provider, prompt, retry);
+      repairAttempted ||= attempt.repairAttempted;
+      if (attempt.ok) {
+        return { value: attempt.value, repairAttempted, providerModels };
+      }
+      errors.push(`${provider.id}: ${attempt.error}`);
     }
-    errors.push(`${provider.id}: ${attempt.error}`);
-  }
 
-  throw new Error(`Pi agent failed for all configured models: ${errors.join("; ")}`);
+    throw new Error(`Pi agent failed for all configured models: ${errors.join("; ")}`);
+  };
+
+  if (options.runtime.piRunner) {
+    return await runProviders(options.runtime.piRunner);
+  }
+  return await withPiRunWorkspace(
+    { workspace: options.runtime.workspace, env: options.runtime.env },
+    runProviders,
+  );
 }
 
 export function resolveProvider(config: PiprConfig, providerId: string): ProviderConfig {

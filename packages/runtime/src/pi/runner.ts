@@ -74,6 +74,14 @@ type PiProcessIdentity = {
   gid: number;
 };
 
+type PiWorkspaceScope = {
+  sourceWorkspace: string;
+  workspace: string;
+  processIdentity?: PiProcessIdentity;
+};
+
+type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
+
 type PreparedPiTool = PreparedPiRuntimeReadTools | PreparedPiCustomTools;
 
 export type PreparedPiTools = {
@@ -157,9 +165,48 @@ const piSandboxUidEnv = "PIPR_PI_SANDBOX_UID";
 const piSandboxGidEnv = "PIPR_PI_SANDBOX_GID";
 
 export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
+  return await runPiAttempt(options);
+}
+
+export function createScopedPiRunner(scope: PiWorkspaceScope): PiRunner {
+  const normalizedScope = {
+    ...scope,
+    sourceWorkspace: path.resolve(scope.sourceWorkspace),
+    workspace: path.resolve(scope.workspace),
+  };
+  return async (options) => await runPiAttempt(options, normalizedScope);
+}
+
+export async function withPiRunWorkspace<T>(
+  options: Pick<PiRunOptions, "workspace" | "env">,
+  run: (piRunner: PiRunner) => Promise<T>,
+): Promise<T> {
+  const processIdentity = resolvePiProcessIdentity(options.env ?? process.env);
+  if (!processIdentity) {
+    return await run(runPi);
+  }
+  const snapshot = await createPiWorkspaceSnapshot(options.workspace);
+  try {
+    return await run(
+      createScopedPiRunner({
+        sourceWorkspace: options.workspace,
+        workspace: snapshot.workspace,
+        processIdentity,
+      }),
+    );
+  } finally {
+    await removeSandboxRoot(snapshot.root);
+  }
+}
+
+async function runPiAttempt(
+  options: PiRunOptions,
+  workspaceScope?: PiWorkspaceScope,
+): Promise<PiRunResult> {
   const started = Date.now();
   const processIdentity = resolvePiProcessIdentity(options.env ?? process.env);
-  const sandbox = await createPiRunSandbox(options.workspace);
+  assertWorkspaceScope(options.workspace, processIdentity, workspaceScope);
+  const sandbox = await createPiRunSandbox(options.workspace, workspaceScope?.workspace);
   let preparedTools: PreparedPiTools | undefined;
   try {
     const runtimeRead = options.runtimeTools
@@ -193,8 +240,7 @@ export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
     });
   } finally {
     await preparedTools?.custom?.close();
-    await chmodRecursive(sandbox.root, 0o755);
-    await rm(sandbox.root, { recursive: true, force: true });
+    await removeSandboxRoot(sandbox.root);
   }
 }
 
@@ -291,17 +337,62 @@ function assertSharedExtensionPath(tools: PreparedPiTool[]): void {
   }
 }
 
-async function createPiRunSandbox(workspace: string): Promise<PiRunSandbox> {
+async function createPiRunSandbox(
+  workspace: string,
+  preparedWorkspace?: string,
+): Promise<PiRunSandbox> {
   const root = await mkdtemp(path.join(os.tmpdir(), "pipr-pi-"));
-  const runWorkspace = path.join(root, "workspace");
-  const home = path.join(root, "home");
-  const sessionDir = path.join(root, "sessions");
-  const tmp = path.join(root, "tmp");
-  await mkdir(home, { recursive: true });
-  await mkdir(sessionDir, { recursive: true });
-  await mkdir(tmp, { recursive: true });
-  await copyWorkspace(workspace, runWorkspace);
-  return { root, workspace: runWorkspace, home, sessionDir, tmp };
+  try {
+    const runWorkspace = preparedWorkspace ?? path.join(root, "workspace");
+    const home = path.join(root, "home");
+    const sessionDir = path.join(root, "sessions");
+    const tmp = path.join(root, "tmp");
+    await mkdir(home, { recursive: true });
+    await mkdir(sessionDir, { recursive: true });
+    await mkdir(tmp, { recursive: true });
+    if (!preparedWorkspace) {
+      await copyWorkspace(workspace, runWorkspace);
+    }
+    return { root, workspace: runWorkspace, home, sessionDir, tmp };
+  } catch (error) {
+    await removeSandboxRoot(root);
+    throw error;
+  }
+}
+
+async function createPiWorkspaceSnapshot(
+  workspace: string,
+): Promise<Pick<PiRunSandbox, "root" | "workspace">> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pipr-pi-workspace-"));
+  const snapshotWorkspace = path.join(root, "workspace");
+  try {
+    await copyWorkspace(workspace, snapshotWorkspace);
+    await sealReadOnlyTree(root, 0, 0);
+    return { root, workspace: snapshotWorkspace };
+  } catch (error) {
+    await removeSandboxRoot(root);
+    throw error;
+  }
+}
+
+function assertWorkspaceScope(
+  sourceWorkspace: string,
+  processIdentity: PiProcessIdentity | undefined,
+  scope: PiWorkspaceScope | undefined,
+): void {
+  if (!scope) {
+    return;
+  }
+  if (path.resolve(sourceWorkspace) !== scope.sourceWorkspace) {
+    throw new Error("scoped Pi runner cannot be used with a different source workspace");
+  }
+  if (
+    scope.processIdentity &&
+    (processIdentity?.uid !== scope.processIdentity.uid ||
+      processIdentity?.gid !== scope.processIdentity.gid)
+  ) {
+    throw new Error("scoped Pi runner cannot be used with a different sandbox identity");
+  }
 }
 
 async function sealPiRunSandbox(
@@ -381,6 +472,14 @@ async function chmodRecursive(target: string, mode: number): Promise<void> {
   const entries = await readdir(target, { withFileTypes: true });
   for (const entry of entries) {
     await chmodRecursive(path.join(target, entry.name), mode);
+  }
+}
+
+async function removeSandboxRoot(root: string): Promise<void> {
+  try {
+    await chmodRecursive(root, 0o755);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 }
 
@@ -712,7 +811,13 @@ function runProcess(
     const detached = process.platform !== "win32";
     const spawnCommand = options.processIdentity ? "su-exec" : command;
     const spawnArgs = options.processIdentity
-      ? [`${options.processIdentity.uid}:${options.processIdentity.gid}`, command, ...args]
+      ? [
+          `${options.processIdentity.uid}:${options.processIdentity.gid}`,
+          "env",
+          `HOME=${options.env.HOME ?? ""}`,
+          command,
+          ...args,
+        ]
       : args;
     const child = spawn(spawnCommand, spawnArgs, {
       cwd: options.cwd,
