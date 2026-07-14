@@ -1,0 +1,36 @@
+packages/runtime/src/diff/diff.ts
+  s_fdcdcddae114a2::t_acb088ae7ad78d 215-217,236
+  s_fdcdcddae114a2::t_a915f07d291963 119-120,127-128,169-194,196-205,208-210
+  s_fdcdcddae114a2::t_728c1543d8ed80 39,44-46,49,75-92,95-99,114-117,149-153,214,218-232,234-235,347-348,353,356-357,381-385
+  s_fdcdcddae114a2::t_b1a3f09251ddaf 237
+packages/runtime/src/diff/tests/diff.test.ts
+  s_fdcdcddae114a2::t_7dc67de2aab8ab 341-344,351-354
+  s_fdcdcddae114a2::t_83f7903571fe78 11,31,52,99-100,121,143
+  s_fdcdcddae114a2::t_6449bcc72d7bbd 2,312-340,345-350,355-356
+  s_fdcdcddae114a2::t_fedb7d417fdf48 97-98
+  s_6d72f8cf3cc786::t_3512c87a25fec0 357-359
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "8b2480542347c5ea6932166f9b7321a13323cb7d",
+  "prompts": {},
+  "sessions": {
+    "s_6d72f8cf3cc786": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f7b-b8f1-70e1-9d6b-d69e116ca32b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_fdcdcddae114a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f7a-c078-7e30-a7e7-5e4dc3267cbf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
