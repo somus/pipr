@@ -98,7 +98,7 @@ function azureInlineLocations(
 ): InlinePublicationLocation[] {
   const locations: InlinePublicationLocation[] = [];
   for (const thread of threads) {
-    if (!ownerUniqueName || thread.comments[0]?.author?.uniqueName !== ownerUniqueName) continue;
+    if (thread.comments[0]?.author?.uniqueName !== ownerUniqueName) continue;
     const location = azureInlineLocationFromThread(thread);
     if (location) locations.push(location);
   }
