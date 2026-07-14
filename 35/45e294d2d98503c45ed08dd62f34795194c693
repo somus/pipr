@@ -1,0 +1,85 @@
+Dockerfile
+  s_149ed0fb65970f::t_7b45510d63b5d8 4,6,9-10,13-15
+packages/runtime/src/hosts/bitbucket/publication.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 2,15,17,28-32,49-50,63,75-110,125-126,137-147,175,185,215,221-223,226-231,233-257,259-260,262-264,296-300
+  s_149ed0fb65970f::t_96dcbee85c7123 301
+packages/runtime/src/hosts/github/publication-thread-actions.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 7,14,28,31,69,130-132,140,142,180-183
+packages/runtime/src/hosts/gitlab/tests/client.test.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 236-239,255-258
+apps/docs/content/docs/guide/runtime.mdx
+  s_149ed0fb65970f::t_7b45510d63b5d8 77
+apps/docs/content/docs/guide/github-action.mdx
+  s_149ed0fb65970f::t_7b45510d63b5d8 115
+docs/adr/0002-docker-action-with-read-only-pi-workspace.md
+  s_149ed0fb65970f::t_7b45510d63b5d8 9-11
+packages/runtime/src/config/config-deps.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 6,13,20,29-41,50,65,86-87,120-144,147-253,256-257
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 2,15,17,57-58,74,86-127,227,235-236,247,262,269-275,280
+packages/runtime/src/hosts/github/publication-shared.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 23
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 3,16,18,30-33,67-68,83,95-137,153-154,174-187,195,210,223,256,264-267,282,295,300,302-305,314,441,454,460-466
+  s_149ed0fb65970f::t_bc1c99d530624b 467
+packages/runtime/src/config/ts-loader.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 72,91-92,119
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 2-4,8-12,89-100,188-192,274-289,300,308-311,320-322,332-335,337-341,344,356-357,364-367,369,372-386,391-541
+  s_149ed0fb65970f::t_cb3e2c0ae313fc 542
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 6,8-12,16-20,199-203,373-691,693
+  s_149ed0fb65970f::t_7627c7109e28fa 692
+packages/runtime/src/hosts/gitlab/tests/adapter.test.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 2-4,8-12,222-226,300-311,331-334,341-342,352-353,359-363,388-393,401-407,435-626
+packages/runtime/src/hosts/tests/conformance.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 1-561
+packages/runtime/src/pi/tests/pi.test.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 1,320-361,1146
+apps/docs/content/docs/guide/webhook-docker.mdx
+  s_149ed0fb65970f::t_7b45510d63b5d8 29
+docs/adr/0006-installable-config-dependencies.md
+  s_149ed0fb65970f::t_7b45510d63b5d8 16-18,24
+packages/runtime/src/review/tests/publish.test.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 446-458,661-677,1256,1258-1262,1300-1301
+packages/runtime/src/hosts/gitlab/client.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 30-41
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 2,387,390-407,435,437-439,446-463,473-591,599,604,611-614,632,657,664-706
+  s_149ed0fb65970f::t_20363a645fe6e4 707
+packages/e2e/action-fixture.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 89-103,112-122,125
+apps/docs/content/docs/guide/trust-security.mdx
+  s_149ed0fb65970f::t_7b45510d63b5d8 71-72,122
+packages/runtime/src/pi/runner.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 3,72-76,156-157,161,185,189,307-343,387-402,702,713-717,761-765
+packages/runtime/src/hosts/azure-devops/tests/adapter.test.ts
+  s_149ed0fb65970f::t_8c5329636cc870 660-672,681
+  s_149ed0fb65970f::t_7b45510d63b5d8 7-11,13-17,125-167,374,385-387,404-408,490-505,520,527-530,552-556,562-565,568-572,579,600-601,629,638-653,658-659,673-680,682-879
+  s_149ed0fb65970f::t_840da74cb28ff7 880
+packages/runtime/src/hosts/github/publication-review.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 61-65,67
+packages/runtime/src/hosts/publication.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 1-14,20-21,33-46,53-54,62-82,93-102
+  s_149ed0fb65970f::t_7213003b53e3f9 103
+packages/runtime/src/hosts/github/publication-command-response.ts
+  s_149ed0fb65970f::t_7b45510d63b5d8 23-28
+apps/docs/content/docs/reference/architecture.mdx
+  s_149ed0fb65970f::t_7b45510d63b5d8 56,108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "3545e294d2d98503c45ed08dd62f34795194c693",
+  "prompts": {},
+  "sessions": {
+    "s_149ed0fb65970f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d3a-44a2-7770-a7d0-b005b018d12b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
