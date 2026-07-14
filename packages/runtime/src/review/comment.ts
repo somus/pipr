@@ -162,6 +162,7 @@ export type BuildPublicationPlanOptions = {
   inlineItems: InlinePublicationItem[];
   metadata: Omit<PublicationMetadata, "cappedInlineFindings">;
   maxInlineComments?: number;
+  maxStoredFindings?: number;
   showHeader?: boolean;
   showFooter?: boolean;
   showStats?: boolean;
@@ -189,6 +190,7 @@ export function buildPublicationPlan(options: BuildPublicationPlanOptions): Publ
     mainComment: renderMainComment({
       event: options.event,
       reviewState,
+      maxStoredFindings: options.maxStoredFindings,
       main: options.main,
       metadata,
       showHeader: options.showHeader ?? true,
@@ -343,6 +345,7 @@ function withoutSuggestedFix(finding: ReviewFinding): ReviewFinding {
 function renderMainComment(options: {
   event: Pick<ChangeRequestEventContext, "change">;
   reviewState: PriorReviewState;
+  maxStoredFindings?: number;
   main: string;
   metadata: PublicationMetadata;
   showHeader: boolean;
@@ -354,6 +357,7 @@ function renderMainComment(options: {
       marker: mainCommentMarker,
       changeNumber: options.event.change.number,
       reviewState: options.reviewState,
+      maxStoredFindings: options.maxStoredFindings,
     }),
     "",
     ...(!options.showHeader ? [mainCommentHeaderHiddenMarker, ""] : []),

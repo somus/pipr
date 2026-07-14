@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { defaultMaxStoredFindings } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import { firstNonEmptyLine } from "../commands/grammar.js";
 import type { ReviewFinding } from "../types.js";
@@ -9,7 +10,6 @@ export const mainCommentMarker = "pipr:main-comment";
 const inlineFindingMarkerPrefix = "pipr:finding";
 const resolvedFindingMarkerPrefix = "pipr:resolved";
 const verifierResponseMarkerPrefix = "pipr:verifier-response";
-const maxStoredFindings = 100;
 
 export const findingIdSchema = z
   .string()
@@ -62,7 +62,6 @@ export function buildPriorReviewState(options: {
     (scopedPriorState?.findings ?? []).map((finding) => [finding.id, finding]),
   );
   const nextFindings = new Map<string, PriorFindingRecord>();
-  const currentFindingIds = new Set<string>();
   const usedPriorIds = new Set<string>();
   const stats = accumulateReviewStats(scopedPriorState?.stats, options.stats);
 
@@ -77,7 +76,6 @@ export function buildPriorReviewState(options: {
     if (prior) {
       usedPriorIds.add(prior.id);
     }
-    currentFindingIds.add(id);
     const record: PriorFindingRecord = {
       id,
       status: "open",
@@ -104,7 +102,7 @@ export function buildPriorReviewState(options: {
     version: 1,
     reviewedHeadSha: options.reviewedHeadSha,
     selectedTasks: options.selectedTasks,
-    findings: cappedFindings([...nextFindings.values()], currentFindingIds),
+    findings: [...nextFindings.values()],
     ...(stats ? { stats } : {}),
   };
 }
@@ -152,9 +150,16 @@ export function renderMainCommentMarker(options: {
   marker: string;
   changeNumber: number;
   reviewState: PriorReviewState;
+  maxStoredFindings?: number;
 }): string {
   return `<!-- ${options.marker} change=${options.changeNumber} version=1 state=${encodeReviewState(
-    options.reviewState,
+    {
+      ...options.reviewState,
+      findings: options.reviewState.findings.slice(
+        0,
+        options.maxStoredFindings ?? defaultMaxStoredFindings,
+      ),
+    },
   )} -->`;
 }
 
@@ -307,17 +312,6 @@ function selectFindingId(options: {
     }
   }
   return newFindingId(options.finding);
-}
-
-function cappedFindings(
-  findings: PriorFindingRecord[],
-  currentFindingIds: Set<string>,
-): PriorFindingRecord[] {
-  const current = findings.filter((finding) => currentFindingIds.has(finding.id));
-  const historical = findings
-    .filter((finding) => !currentFindingIds.has(finding.id))
-    .slice(0, Math.max(0, maxStoredFindings - current.length));
-  return [...current, ...historical];
 }
 
 function findUnambiguousOverlappingFinding(options: {

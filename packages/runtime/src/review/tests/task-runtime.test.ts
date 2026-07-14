@@ -41,6 +41,7 @@ const config: PiprConfig = {
   providers: [provider],
   publication: {
     maxInlineComments: 5,
+    maxStoredFindings: 50,
     showHeader: true,
     showFooter: true,
     showStats: true,
@@ -2043,6 +2044,28 @@ describe("runTaskRuntime", () => {
     expect(result.publicationPlan.inlineItems).toEqual([]);
     expect(result.publicationPlan.metadata.cappedInlineFindings).toBe(1);
     expect(result.mainComment).toContain("hidden");
+  });
+
+  it("honors publication maxStoredFindings 0 without hiding current findings", async () => {
+    const plan = testPlan((pipr) => {
+      pipr.config({ publication: { maxStoredFindings: 0 } });
+      pipr.review({
+        id: "review",
+        model: deepseekModel(pipr),
+        instructions: "Review source.",
+        entrypoints: { command: false },
+      });
+    });
+
+    const result = await runRuntime({
+      plan,
+      config: { ...config, publication: { ...config.publication, maxStoredFindings: 0 } },
+      piRunner: async () => reviewPiResult([finding("retained for this run", "range-1", 10)]),
+    });
+
+    expect(result.review.inlineFindings).toHaveLength(1);
+    expect(result.inlineCommentDrafts).toHaveLength(1);
+    expect(extractPriorReviewState(result.mainComment, 1)?.findings).toEqual([]);
   });
 });
 

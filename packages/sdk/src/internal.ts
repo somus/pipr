@@ -7,6 +7,7 @@ import {
 import type { AgentTool } from "./types/agent.js";
 
 export type { RuntimePlan } from "./runtime-contract.js";
+export { defaultMaxStoredFindings, maxStoredFindingsLimit } from "./types/config.js";
 
 import type { RuntimePlan } from "./runtime-contract.js";
 

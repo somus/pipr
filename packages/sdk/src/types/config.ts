@@ -1,5 +1,8 @@
 import type { RuntimeLimits } from "./manifest.js";
 
+export const defaultMaxStoredFindings = 50;
+export const maxStoredFindingsLimit = 100;
+
 /** Repository permission levels used to authorize pipr commands. */
 export type RepositoryPermission = "read" | "triage" | "write" | "maintain" | "admin";
 
@@ -76,6 +79,7 @@ export type AutoResolveOptions =
 /** Review publication settings. */
 export type PublicationOptions = {
   maxInlineComments?: number;
+  maxStoredFindings?: number;
   autoResolve?: AutoResolveOptions;
   showHeader?: boolean;
   showFooter?: boolean;

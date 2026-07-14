@@ -16,6 +16,7 @@ const config: PiprConfig = {
   defaultProvider: provider.id,
   providers: [provider],
   publication: {
+    maxStoredFindings: 50,
     showHeader: true,
     showFooter: true,
     showStats: true,

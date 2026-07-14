@@ -21,6 +21,7 @@ import type {
   PiprConfigOptions,
   PublicationOptions,
 } from "./types/config.js";
+import { maxStoredFindingsLimit } from "./types/config.js";
 import type { DiffManifestLimits, RuntimeLimits } from "./types/manifest.js";
 import type { Markdown } from "./types/prompt.js";
 import type {
@@ -311,6 +312,7 @@ const autoResolveOptionsSchema: z.ZodType<AutoResolveOptions> = z.union([
 
 const publicationOptionsSchema: z.ZodType<PublicationOptions> = z.strictObject({
   maxInlineComments: z.number().int().min(0).max(50).optional(),
+  maxStoredFindings: z.number().int().min(0).max(maxStoredFindingsLimit).optional(),
   autoResolve: autoResolveOptionsSchema.optional(),
   showHeader: z.boolean().optional(),
   showFooter: z.boolean().optional(),
@@ -553,24 +555,21 @@ function mergePublicationConfig(
   if (!next) {
     return;
   }
-  if (next.maxInlineComments !== undefined) {
-    if (
-      target.maxInlineComments !== undefined &&
-      target.maxInlineComments !== next.maxInlineComments
-    ) {
-      throw new Error("pipr.config publication.maxInlineComments conflicts with existing value");
-    }
-    target.maxInlineComments = next.maxInlineComments;
-  }
-  if (next.autoResolve !== undefined) {
-    if (
-      target.autoResolve !== undefined &&
-      stableJson(target.autoResolve) !== stableJson(next.autoResolve)
-    ) {
-      throw new Error("pipr.config publication.autoResolve conflicts with existing value");
-    }
-    target.autoResolve = next.autoResolve;
-  }
+  target.maxInlineComments = mergeConfigField(
+    "publication.maxInlineComments",
+    target.maxInlineComments,
+    next.maxInlineComments,
+  );
+  target.maxStoredFindings = mergeConfigField(
+    "publication.maxStoredFindings",
+    target.maxStoredFindings,
+    next.maxStoredFindings,
+  );
+  target.autoResolve = mergeConfigField(
+    "publication.autoResolve",
+    target.autoResolve,
+    next.autoResolve,
+  );
   target.showHeader = mergeConfigField(
     "publication.showHeader",
     target.showHeader,

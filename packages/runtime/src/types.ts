@@ -7,6 +7,7 @@ import type {
   RangeKind,
   ReviewSide,
 } from "@usepipr/sdk";
+import { defaultMaxStoredFindings, maxStoredFindingsLimit } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import { piProviderProfileSchema } from "./pi/contract.js";
 import { reviewFindingSchema, reviewResultSchema } from "./review/contract.js";
@@ -59,6 +60,12 @@ const piprConfigSchema = z.strictObject({
   providers: z.array(providerConfigSchema).min(1),
   publication: z.strictObject({
     maxInlineComments: z.number().int().min(0).max(50).optional(),
+    maxStoredFindings: z
+      .number()
+      .int()
+      .min(0)
+      .max(maxStoredFindingsLimit)
+      .default(defaultMaxStoredFindings),
     autoResolve: autoResolveConfigSchema,
     showHeader: z.boolean().default(true),
     showFooter: z.boolean().default(true),

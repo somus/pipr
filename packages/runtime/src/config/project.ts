@@ -101,6 +101,7 @@ function planToRuntimeSettings(
       providers,
       publication: {
         maxInlineComments: plan.publication.maxInlineComments,
+        maxStoredFindings: plan.publication.maxStoredFindings,
         autoResolve: normalizeAutoResolveConfig(plan.publication.autoResolve, defaultProvider.id),
         showHeader: plan.publication.showHeader ?? true,
         showFooter: plan.publication.showFooter ?? true,

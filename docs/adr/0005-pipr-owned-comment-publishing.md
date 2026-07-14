@@ -13,6 +13,7 @@ Comment Publishing:
 - verifies the current change request head SHA before publication writes
 - upserts the Main Review Comment by hidden marker and stores Pipr-owned review state on that marker
 - caps Inline Review Comments only when `publication.maxInlineComments` is configured
+- caps serialized prior findings through `publication.maxStoredFindings` independently of current-run publication
 - dedupes Inline Review Comments by stable finding id, reviewed head SHA, and Pipr-owned same-head location overlap
 - passes open prior finding locations into rerun prompts so reviewers can keep prior finding ids without resolving by omission
 - resolves fixed prior findings only through explicit verifier output and thread actions

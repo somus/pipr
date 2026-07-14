@@ -334,6 +334,7 @@ Checks publish only on GitHub `pull_request` Action runs. They do not publish fo
 pipr.config({
   publication: {
     maxInlineComments: 5,
+    maxStoredFindings: 50,
     showHeader: true,
     showFooter: true,
     showStats: true,
@@ -356,6 +357,8 @@ pipr.config({
   },
 });
 ```
+
+`maxInlineComments` limits Inline Review Comments published by the current run. `maxStoredFindings` limits the current-first finding records serialized for future runs; it defaults to `50` and accepts values from `0` through `100`. Setting it to `0` disables prior-finding input and automatic stale-finding resolution candidates without changing current output.
 
 `showHeader`, `showFooter`, and `showStats` independently control the generated Pipr title, attribution footer, and collapsed review statistics. All three default to `true`. Hidden publication markers and `PublicationResult.metadata.stats` remain available when their visible sections are disabled.
 

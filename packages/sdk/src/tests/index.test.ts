@@ -497,6 +497,13 @@ describe("definePipr", () => {
     expect(() =>
       buildPiprPlan(
         definePipr((pipr) => {
+          pipr.config({ publication: { maxStoredFindings: 101 } } as never);
+        }),
+      ),
+    ).toThrow("pipr.config received invalid option value");
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
           pipr.config({
             publication: { autoResolve: { userReplies: { allowedActors: "owner" } } },
           } as never);
@@ -514,6 +521,27 @@ describe("definePipr", () => {
         }),
       ),
     ).toThrow("publication.maxInlineComments conflicts");
+  });
+
+  it("registers the stored finding limit", () => {
+    const plan = buildPiprPlan(
+      definePipr((pipr) => {
+        pipr.config({ publication: { maxStoredFindings: 100 } });
+      }),
+    );
+
+    expect(plan.publication.maxStoredFindings).toBe(100);
+  });
+
+  it("rejects conflicting stored finding limits", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.config({ publication: { maxStoredFindings: 50 } });
+          pipr.config({ publication: { maxStoredFindings: 100 } });
+        }),
+      ),
+    ).toThrow("publication.maxStoredFindings conflicts");
   });
 
   it("allows matching global inline publication settings", () => {
