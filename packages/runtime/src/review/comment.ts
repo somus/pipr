@@ -19,10 +19,6 @@ import {
 } from "./comment-branding.js";
 import { reviewFindingSchema } from "./contract.js";
 import {
-  maxInlineFindingBodyCharacters,
-  maxInlineFindingBodyLines,
-} from "./inline-finding-limits.js";
-import {
   buildPriorReviewState,
   findingIdFor,
   findingIdSchema,
@@ -291,25 +287,11 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
 }
 
 function findingWithPublishableBody(finding: ReviewFinding): ReviewFinding | undefined {
-  const body = conciseInlineFindingBody(finding.body);
+  const body = finding.body.trim();
   if (body.length === 0) {
     return undefined;
   }
   return body === finding.body ? finding : { ...finding, body };
-}
-
-function conciseInlineFindingBody(value: string): string {
-  const firstParagraph = value
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .trim()
-    .split(/\n{2,}/)[0];
-  const visibleLines = (firstParagraph ?? value).split("\n").slice(0, maxInlineFindingBodyLines);
-  const body = visibleLines.join("\n").trim();
-  if (body.length <= maxInlineFindingBodyCharacters) {
-    return body;
-  }
-  return `${body.slice(0, maxInlineFindingBodyCharacters).trimEnd()}...`;
 }
 
 function findingWithPublishableSuggestedFix(

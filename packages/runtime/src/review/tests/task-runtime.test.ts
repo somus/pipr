@@ -1266,7 +1266,7 @@ describe("runTaskRuntime", () => {
       "The first non-whitespace character must be { or [ and the last non-whitespace character must be } or ].",
     );
     expect(observedPrompt).toContain(
-      "For inlineFindings, use only fields shown in the schema and only exact Diff Manifest commentable ranges.",
+      "Each finding's path, rangeId, and side must identify one Diff Manifest commentable range",
     );
     expect(observedPrompt).toContain("Treat 700 as a hard ceiling, not a target");
     expect(observedPrompt).toContain("Inline finding bodies are final code-review comments");
@@ -1283,8 +1283,21 @@ describe("runTaskRuntime", () => {
       "Diff Manifest:\nUse this as the authoritative changed-code context",
     );
     expect(observedPrompt).toContain(
-      "If your output includes publishable inline findings, each finding's path, rangeId, side, startLine, and endLine must come from a Diff Manifest commentable range.",
+      "Each publishable inline finding's path, rangeId, and side must identify one Diff Manifest commentable range, and its startLine and endLine must select a valid span within that range.",
     );
+    expect(
+      countOccurrences(
+        observedPrompt,
+        "Select the smallest contiguous line span that makes the inline comment understandable",
+      ),
+    ).toBe(1);
+    expect(
+      countOccurrences(
+        observedPrompt,
+        "select the relevant declaration or signature line instead of the enclosing body",
+      ),
+    ).toBe(1);
+    expect(countOccurrences(observedPrompt, "Inline Review Selection Policy:")).toBe(0);
     expect(observedPrompt).toContain("Manifest:");
     expect(observedPrompt).not.toContain("Diff Manifest Runtime Context");
   });
@@ -1352,6 +1365,19 @@ describe("runTaskRuntime", () => {
     expect(observedPrompt).toContain("Schema ID: custom/release-notes.");
     expect(observedPrompt).toContain("JSON Schema:");
     expect(observedPrompt).not.toContain("Example:");
+    expect(
+      countOccurrences(
+        observedPrompt,
+        "Select the smallest contiguous line span that makes the inline comment understandable",
+      ),
+    ).toBe(1);
+    expect(
+      countOccurrences(
+        observedPrompt,
+        "select the relevant declaration or signature line instead of the enclosing body",
+      ),
+    ).toBe(1);
+    expect(countOccurrences(observedPrompt, "Inline Review Selection Policy:")).toBe(1);
     expect(result.mainComment).toContain('{"ok":true}');
   });
 

@@ -17,7 +17,7 @@ type ReviewSummary = {
 };
 
 const categorizedFindingSchema = z.strictObject({
-  title: z.string(),
+  title: z.string().regex(/^[^\\r\\n]+$/),
   severity: z.enum(["critical", "high", "medium", "low"]),
   category: z.enum([
     "correctness",
@@ -45,6 +45,10 @@ const reviewSummarySchema = z.strictObject({
   riskSummary: z.string(),
   reviewerFocus: z.array(z.string()).max(4),
 });
+
+function escapeInlineCommentHtml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -75,6 +79,8 @@ export default definePipr((pipr) => {
       outage risks; high for other merge-blocking defects; medium for concrete
       non-blocking defects; and low for small but actionable issues. Each rationale
       must connect repository evidence to the defect and its concrete impact.
+      Keep each finding title to one line and its body concise. Put supporting
+      evidence and reasoning in rationale instead of appending it to the body.
 
       Make summary maintainer-facing and scannable: one concrete headline, one
       to four behavior-focused change bullets, a risk level with rationale, and
@@ -97,7 +103,18 @@ export default definePipr((pipr) => {
         const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
         const category = finding.category.replaceAll("-", " ");
         return {
-          body: \`**\${severity} \${category}:** \${finding.title}. \${finding.body} \${finding.rationale}\`,
+          body: [
+            \`**\${severity} \${category}:** \${escapeInlineCommentHtml(finding.title)}\`,
+            "",
+            escapeInlineCommentHtml(finding.body),
+            "",
+            "<details>",
+            "<summary>Rationale</summary>",
+            "",
+            escapeInlineCommentHtml(finding.rationale),
+            "",
+            "</details>",
+          ].join("\\n"),
           path: finding.path,
           rangeId: finding.rangeId,
           side: finding.side,

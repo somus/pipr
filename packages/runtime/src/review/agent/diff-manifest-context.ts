@@ -72,7 +72,7 @@ function diffManifestPromptBody(
 ): string {
   return [
     "Use this as the authoritative changed-code context for this run.",
-    "If your output includes publishable inline findings, each finding's path, rangeId, side, startLine, and endLine must come from a Diff Manifest commentable range.",
+    "Each publishable inline finding's path, rangeId, and side must identify one Diff Manifest commentable range, and its startLine and endLine must select a valid span within that range.",
     "Do not invent publishable inline locations outside the Diff Manifest.",
     "",
     "Payload:",
