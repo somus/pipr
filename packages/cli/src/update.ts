@@ -77,9 +77,10 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
   if (compareSemver(version, options.currentVersion) <= 0) {
     return { kind: "up-to-date", version: options.currentVersion };
   }
+  const releaseDownloadBaseUrl = `https://github.com/${officialRepo}/releases/download/${release.tag}`;
   const [binary, checksums] = await Promise.all([
-    downloadBytes(fetchRelease, releaseDownloadUrl(release.tag, asset)),
-    downloadText(fetchRelease, releaseDownloadUrl(release.tag, "SHA256SUMS")),
+    downloadBytes(fetchRelease, `${releaseDownloadBaseUrl}/${asset}`),
+    downloadText(fetchRelease, `${releaseDownloadBaseUrl}/SHA256SUMS`),
   ]);
   verifyChecksum(binary, expectedChecksum(checksums, asset), asset);
 
@@ -168,10 +169,6 @@ async function latestRelease(fetchRelease: ReleaseFetch): Promise<{
     throw new Error(`latest release tag is not a stable semver version: ${release.tag_name}`);
   }
   return { tag: release.tag_name, version };
-}
-
-function releaseDownloadUrl(tag: string, asset: string): string {
-  return `https://github.com/${officialRepo}/releases/download/${tag}/${asset}`;
 }
 
 async function downloadBytes(

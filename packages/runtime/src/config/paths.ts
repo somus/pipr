@@ -23,15 +23,11 @@ export function resolveContainedConfigDir(options: {
     configDir,
     projectDir,
     relativeConfigDir,
-    gitPath: toGitPath(relativeConfigDir),
+    gitPath: relativeConfigDir === "." ? "." : relativeConfigDir.split(path.sep).join("/"),
   };
 }
 
 export function isPathContained(child: string, parent: string): boolean {
   const relative = path.relative(parent, child);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-function toGitPath(filePath: string): string {
-  return filePath === "." ? "." : filePath.split(path.sep).join("/");
 }
