@@ -1,0 +1,81 @@
+packages/runtime/src/hosts/azure-devops/adapter.ts
+  s_149ed0fb65970f::t_97335271eaa56e 29
+packages/runtime/src/review/tests/comment.test.ts
+  s_149ed0fb65970f::t_6981cef640b617 113-115
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_149ed0fb65970f::t_4ae29d9b559696 308,310-318,322-324,326
+  s_149ed0fb65970f::t_c0756f9eb978ca 319-321
+packages/runtime/src/review/comment.ts
+  s_149ed0fb65970f::t_97335271eaa56e 148-153,493,500
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_149ed0fb65970f::t_513db173957581 145,147-148,150
+  s_149ed0fb65970f::t_21188b1caefa3a 137
+  s_149ed0fb65970f::t_331270370751fa 116-136,138-144,151-165,245-246,279-285,310
+  s_149ed0fb65970f::t_0d1ab8854d3cba 146,149
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_149ed0fb65970f::t_5ad42554451f8f 116
+docs/research/code-host-adapter-guideline.md
+  s_149ed0fb65970f::t_24874c6005ee32 88,91,100-104,525
+  s_149ed0fb65970f::t_5ad42554451f8f 90,92,108,442
+  s_149ed0fb65970f::t_59876d683a93c2 89
+packages/runtime/src/hosts/azure-devops/tests/adapter.test.ts
+  s_149ed0fb65970f::t_02032d9de7669b 1-2,12-24,81-90,94-95,367
+  s_149ed0fb65970f::t_359cd23e51cfa8 91-93
+  s_149ed0fb65970f::t_6981cef640b617 253,263,279,289
+  s_149ed0fb65970f::t_d72e690620d66c 96-97
+packages/runtime/src/hosts/tests/http.test.ts
+  s_149ed0fb65970f::t_8aa87009c7f47e 152-164,168-176
+  s_149ed0fb65970f::t_d5a9a7b21b0a06 105-135,137-146,150
+  s_149ed0fb65970f::t_4bb4a049d0e586 3
+  s_149ed0fb65970f::t_636c94a67387fd 102-104
+  s_149ed0fb65970f::t_e8a184afaab693 136
+  s_149ed0fb65970f::t_56bce924352f7f 147-149,165-167
+  s_5c20559f32f569::t_79eaacec88cc3f 151
+packages/runtime/src/hosts/http.ts
+  s_149ed0fb65970f::t_6d9761540f28fc 34,47,59
+  s_149ed0fb65970f::t_4bb4a049d0e586 13-18,87-89,91,109-111,114,116-118,121
+  s_149ed0fb65970f::t_7b0897819c01e4 90,92-108,112-113,115,119-120,122
+  s_df9d72eaa889bb::t_f2e50e60e26592 123-124
+packages/runtime/src/hosts/azure-devops/client.ts
+  s_149ed0fb65970f::t_4bb4a049d0e586 2,205,225,230,236,242
+apps/docs/content/docs/guide/bitbucket.mdx
+  s_149ed0fb65970f::t_5ad42554451f8f 51,59
+  s_149ed0fb65970f::t_e41991c1751ccb 60
+packages/runtime/src/hosts/azure-devops/tests/client.test.ts
+  s_149ed0fb65970f::t_513db173957581 91-95
+  s_149ed0fb65970f::t_9f885ef0ceff90 55-62,90,96-98,102,107-108
+  s_149ed0fb65970f::t_d5a9a7b21b0a06 63-89,99-101,103
+  s_149ed0fb65970f::t_8b39c32667eeff 104-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "9331ff106e73851d6fba1b066e3ad99da8762e9e",
+  "prompts": {},
+  "sessions": {
+    "s_149ed0fb65970f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d3a-44a2-7770-a7d0-b005b018d12b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_5c20559f32f569": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f48c4-1c30-7932-bec6-7a14bb05d22a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_df9d72eaa889bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5d3b-26e8-7fb0-9482-9e678d5f00aa",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
