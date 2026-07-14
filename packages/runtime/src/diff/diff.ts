@@ -147,7 +147,7 @@ function buildUnifiedDiffArgs(
   excludedFiles: Map<string, string>,
 ): string[] {
   const args = buildDiffArgs(
-    ["--raw", "-z", "--patch", "--unified=80", "--find-renames"],
+    ["--raw", "-z", "--patch", "--submodule=short", "--unified=80", "--find-renames"],
     baseSha,
     headSha,
   );

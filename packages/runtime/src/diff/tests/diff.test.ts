@@ -357,6 +357,72 @@ describe("diff manifest parsing", () => {
     });
   });
 
+  it("preserves exact Git paths from working-tree diffs", async () => {
+    await withGitRepo(async (repo) => {
+      const previousPath = "src/old\tname.ts";
+      const renamedPath = "src/new\nname.ts";
+      await mkdir(path.join(repo, "src"), { recursive: true });
+      await Bun.write(path.join(repo, previousPath), "one\ntwo\nthree\n");
+      commitAll(repo, "base");
+      const baseSha = git(repo, "rev-parse", "HEAD");
+
+      await rename(path.join(repo, previousPath), path.join(repo, renamedPath));
+      await Bun.write(path.join(repo, renamedPath), "one\ntwo\nTHREE\n");
+      git(repo, "add", "-A");
+
+      const manifest = buildDiffManifest({
+        cwd: repo,
+        baseSha,
+        headSha: baseSha,
+        includeWorkingTree: true,
+      });
+
+      expect(changedFile(manifest, renamedPath)).toMatchObject({
+        path: renamedPath,
+        previousPath,
+        status: "renamed",
+        additions: 1,
+        deletions: 1,
+        hunks: expect.arrayContaining([expect.any(Object)]),
+        commentableRanges: expect.arrayContaining([expect.objectContaining({ path: renamedPath })]),
+      });
+    });
+  });
+
+  it("keeps outer-file hunks aligned when Git expands submodule diffs", async () => {
+    await withGitRepo(async (repo) => {
+      await withGitRepo(async (submoduleRepo) => {
+        await Bun.write(path.join(submoduleRepo, "a.txt"), "a before\n");
+        await Bun.write(path.join(submoduleRepo, "b.txt"), "b before\n");
+        commitAll(submoduleRepo, "submodule base");
+
+        git(repo, "-c", "protocol.file.allow=always", "submodule", "add", submoduleRepo, "sub");
+        await Bun.write(path.join(repo, "zouter.txt"), "outer before\n");
+        commitAll(repo, "base");
+        const baseSha = git(repo, "rev-parse", "HEAD");
+
+        await Bun.write(path.join(repo, "sub/a.txt"), "a after\n");
+        await Bun.write(path.join(repo, "sub/b.txt"), "b after\n");
+        commitAll(path.join(repo, "sub"), "submodule head");
+        await Bun.write(path.join(repo, "zouter.txt"), "outer after\n");
+        git(repo, "config", "diff.submodule", "diff");
+        commitAll(repo, "head");
+        const headSha = git(repo, "rev-parse", "HEAD");
+
+        const manifest = buildDiffManifest({ cwd: repo, baseSha, headSha });
+        const outerFile = changedFile(manifest, "zouter.txt");
+
+        expect(outerFile?.hunks).toHaveLength(1);
+        expect(outerFile?.commentableRanges).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ path: "zouter.txt", preview: "outer after" }),
+            expect.objectContaining({ path: "zouter.txt", preview: "outer before" }),
+          ]),
+        );
+      });
+    });
+  });
+
   it("matches the golden diff manifest file shape", async () => {
     await withGitRepo(async (repo) => {
       const baseSha = await commitFile(repo, "src/a.ts", "one\ntwo\nthree\n", "base");
