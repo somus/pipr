@@ -135,13 +135,40 @@ function assertTrustedLockProjection(
   }
   const { packages: committedPackages, ...committedMetadata } = committed;
   const { packages: projectedPackages, ...projectedMetadata } = projected;
-  const changedPath = firstProjectionChange(committedMetadata, projectedMetadata);
+  const expectedMetadata = metadataWithoutRuntimeProvidedDependencies(committedMetadata);
+  const changedPath =
+    firstProjectionChange(expectedMetadata, projectedMetadata) ??
+    firstProjectionChange(projectedMetadata, expectedMetadata);
   if (changedPath !== undefined) {
     throw new Error(
       `${configDir}: projected bun.lock changed committed dependency data at ${changedPath}.`,
     );
   }
   assertProjectedPackages(configDir, committedPackages, projectedPackages);
+}
+
+function metadataWithoutRuntimeProvidedDependencies(
+  committedMetadata: Record<string, unknown>,
+): Record<string, unknown> {
+  const expectedMetadata = structuredClone(committedMetadata);
+  const workspaces = expectedMetadata.workspaces;
+  const rootWorkspace = isRecord(workspaces) ? workspaces[""] : undefined;
+  if (!isRecord(rootWorkspace)) {
+    return expectedMetadata;
+  }
+  for (const key of ["dependencies", "devDependencies"] as const) {
+    const dependencies = rootWorkspace[key];
+    if (!isRecord(dependencies)) {
+      continue;
+    }
+    for (const name of runtimeProvidedPackages) {
+      delete dependencies[name];
+    }
+    if (Object.keys(dependencies).length === 0) {
+      delete rootWorkspace[key];
+    }
+  }
+  return expectedMetadata;
 }
 
 function assertProjectedPackages(
