@@ -1,0 +1,58 @@
+packages/e2e/assertions.ts
+  s_22e47c51daa508::t_186ef4939fd781 25-28,47-49,80,100,103-106,198-211,247-266
+  s_22e47c51daa508::t_9116aa1c3bfbb9 81-83
+  s_22e47c51daa508::t_5c90756f2be7ff 1-2,29,84-99,101-102
+  s_22e47c51daa508::t_fbf72cf1c4584e 267
+packages/e2e/assertions.test.ts
+  s_22e47c51daa508::t_a2b840f5e942d2 3-5,11,19,72-75,98-102
+  s_22e47c51daa508::t_7e0db83e1a996c 76-97
+  s_22e47c51daa508::t_3fa2d28106a270 103-104
+packages/e2e/fake-pi
+  s_22e47c51daa508::t_5c90756f2be7ff 18-21,417,429-433
+  s_22e47c51daa508::t_c3fd124c18ff1e 22-25,412-416,418-422,434-442
+  s_22e47c51daa508::t_14f3ce07db0570 443
+packages/e2e/container-check.ts
+  s_22e47c51daa508::t_427b1ac9cc0942 185
+  s_22e47c51daa508::t_5c90756f2be7ff 186
+packages/e2e/scenarios.ts
+  s_22e47c51daa508::t_5c90756f2be7ff 23,99,105-110,124-127,129-143,145,316
+  s_22e47c51daa508::t_c3fd124c18ff1e 22,314-315
+packages/e2e/action-fixture.ts
+  s_22e47c51daa508::t_841c5c8f27b4d0 105
+  s_22e47c51daa508::t_5c90756f2be7ff 106
+docs/research/performance-debt-assessment.md
+  s_22e47c51daa508::t_2f1455dcdcc781 1,3,8,10,12,14,16,18,20
+  s_22e47c51daa508::t_1ca744a50d9f0a 2,4-7,9,11,13,15,17,19
+packages/runtime/src/review/agent/review-run.ts
+  s_22e47c51daa508::t_a1ce2fed1ff762 9-15,28,96-104,106-113,116-125
+packages/runtime/src/pi/runner.ts
+  s_22e47c51daa508::t_776147526dbec9 363-365,391-392
+  s_22e47c51daa508::t_52f5e171075489 77-84,168-205,208-209,243,340-343,345-362,366-390,393-395,478-484
+  s_22e47c51daa508::t_552d0e37ec0b95 814-820
+  s_22e47c51daa508::t_53bbfddf3a8efe 485
+packages/runtime/src/pi/tests/pi.test.ts
+  s_22e47c51daa508::t_5c90756f2be7ff 21,421-457
+  s_22e47c51daa508::t_43ec9cc9474d2d 320-321
+  s_22e47c51daa508::t_7ed94b3bbcb511 15-20,22,283-319,322-334,458-459,1244-1249
+  s_22e47c51daa508::t_e4ca5d57d2fd9f 460
+  s_22e47c51daa508::t_a4062d39d7f569 1250-1251
+packages/e2e/run.ts
+  s_22e47c51daa508::t_989b666f1674c8 172
+  s_22e47c51daa508::t_5c90756f2be7ff 173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "662642501156c00be7feb3240f9020ccbf1f2c8c",
+  "prompts": {},
+  "sessions": {
+    "s_22e47c51daa508": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5fa4-94fc-7a40-9116-cef150d3e616",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
