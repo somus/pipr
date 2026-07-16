@@ -1,0 +1,426 @@
+apps/docs/content/docs/guide/gitlab.mdx
+  s_20e6f7049d0fc8::t_8d434a4901f381 96-108
+  s_20e6f7049d0fc8::t_782b551cf63165 18-37
+  s_20e6f7049d0fc8::t_9ff541f25717cf 95
+packages/runtime/src/config/recipes/quality-gate.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 80
+apps/docs/scripts/tests/source-config.test.ts
+  s_20e6f7049d0fc8::t_41f3d981d02d90 53
+  s_20e6f7049d0fc8::t_8d434a4901f381 55-56
+  s_20e6f7049d0fc8::t_8c279dea4435f5 19-20,35
+  s_20e6f7049d0fc8::t_212c6692cbc78c 3,42-52
+  s_20e6f7049d0fc8::t_c3658186ff10df 15-18
+  s_20e6f7049d0fc8::t_45b936eee5b302 36
+  s_20e6f7049d0fc8::t_20743f159b8197 2,21-34,37-41,54
+  s_20e6f7049d0fc8::t_d3621a0935d8ec 4
+apps/docs/content/docs/guide/azure-devops.mdx
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 149
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 146-147
+  s_20e6f7049d0fc8::t_4cc721c6a69908 55,59
+  s_20e6f7049d0fc8::t_bdffc6d215b630 33-54,56-58,60-61,64
+  s_20e6f7049d0fc8::t_782b551cf63165 29-32,62-63,65
+  s_20e6f7049d0fc8::t_8c8b0da4f727bf 97-98
+  s_20e6f7049d0fc8::t_8d434a4901f381 133-143
+  s_20e6f7049d0fc8::t_d2ee7942e31163 130-132
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,81,114-117,150,154-156
+  s_20e6f7049d0fc8::t_8d434a4901f381 153
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 138
+  s_20e6f7049d0fc8::t_168d029f174347 135-136,151-152
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 144
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,120-123,156,160-162
+  s_20e6f7049d0fc8::t_8d434a4901f381 159
+  s_20e6f7049d0fc8::t_168d029f174347 141-142,157-158
+  s_20e6f7049d0fc8::t_ce0ee23d79a161 137
+packages/sdk/package.json
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 4
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_20e6f7049d0fc8::t_168d029f174347 178-179,194-195
+  s_20e6f7049d0fc8::t_8d434a4901f381 196
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 181
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,70,157-160,193,197-199
+apps/docs/content/docs/guide/entrypoints.mdx
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 222-223
+  s_20e6f7049d0fc8::t_9d65d38cf9a0f4 12-13,49-50,75-76,79,118,124-125,146-147,173-174,195,218
+  s_20e6f7049d0fc8::t_8d434a4901f381 219,226
+packages/runtime/src/hosts/bitbucket/event.ts
+  s_20e6f7049d0fc8::t_9dd96b1bf63cc2 7
+  s_20e6f7049d0fc8::t_85ab5d2b6299ec 79
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_20e6f7049d0fc8::t_8d434a4901f381 363
+  s_20e6f7049d0fc8::t_168d029f174347 338-339,361-362
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,313-316,360,364-366
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 341
+apps/docs/content/docs/reference/meta.json
+  s_20e6f7049d0fc8::t_f000c6c2a98413 3
+  s_20e6f7049d0fc8::t_c0b091c7804ddf 13
+scripts/tests/release-scripts.test.ts
+  s_20e6f7049d0fc8::t_a9be368ac1cc0c 323
+package.json
+  s_20e6f7049d0fc8::t_45b936eee5b302 4
+packages/runtime/src/config/recipes/default-review.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 6
+apps/docs/scripts/check-content.ts
+  s_20e6f7049d0fc8::t_8c279dea4435f5 44,58-62
+  s_20e6f7049d0fc8::t_08c6c228bb3d14 70,72-73,98-101,104,106-107,109-114,120-128,166-168,170-171,178-191,193,195,197-202,217-219,244-246,248-262,265,267
+  s_20e6f7049d0fc8::t_40154d33ab75f0 6
+  s_20e6f7049d0fc8::t_c3658186ff10df 1-3,5,7-31,33-43,45-57,63-69,71,74-97,102-103,105,108,129,131-132,147-165,169,220-243,247,284-298
+  s_20e6f7049d0fc8::t_ff46d6353250bb 172-173
+  s_20e6f7049d0fc8::t_bb4fea3928627e 116-119
+  s_20e6f7049d0fc8::t_8d434a4901f381 115,130,133-146,196,203-216,263-264,266,268-283
+  s_20e6f7049d0fc8::t_45b936eee5b302 4,32,174-177,192,194
+README.md
+  s_20e6f7049d0fc8::t_8dd95b56bf62ea 102,119
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 21,169
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 10,27,86-89,147,151-154,156
+packages/runtime/package.json
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 4
+packages/runtime/src/config/recipes/ci-triage-command.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 33
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 57,67,146
+apps/docs/content/docs/concepts/runtime.mdx
+  s_20e6f7049d0fc8::t_fc7ee9f2d4cf8c 1,3-11,14-15,18-20,22-26,28-29,32-72,74-76,79-80,82-88,91,94-109,111-112,115-149,151-165,168-199,202-219,221-223,225-229,232-233,236-237,239-243,245-247,250-251,254-261
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 16-17,92-93,234-235,252-253
+  s_20e6f7049d0fc8::t_968abb4616dcc7 12-13,30-31,89-90,113-114,166-167,200-201,230-231,248-249
+  s_20e6f7049d0fc8::t_402c094bee3964 2,21,27,73,77-78,81,110,150,220,224,238,244
+apps/docs/src/routes/index.tsx
+  s_20e6f7049d0fc8::t_89a351a465aeae 87,150,153,156,276
+apps/docs/content/docs/recipes/multi-agent-review.mdx
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,12,26,168-171,204,208-210
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 192
+  s_20e6f7049d0fc8::t_8d434a4901f381 207
+  s_20e6f7049d0fc8::t_168d029f174347 189-190,205-206
+  s_20e6f7049d0fc8::t_cddc83802ca65a 3
+apps/docs/content/docs/guide/configuration.mdx
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 35,166,349,355,387
+  s_20e6f7049d0fc8::t_8d434a4901f381 380,383-384
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 8
+  s_20e6f7049d0fc8::t_9d65d38cf9a0f4 14-15,128-129,152-153,192-193,243-244,247,276,307-308,326,365-366,379
+  s_20e6f7049d0fc8::t_e86675934fe84a 18-19,327,341-342,361
+packages/sdk/src/types/task.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 197
+skills/pipr-setup/references/recipes.md
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 1,5,25,34
+  s_20e6f7049d0fc8::t_d7cab01d6312a1 9,11-12
+apps/docs/src/routes/og/docs/$.tsx
+  s_20e6f7049d0fc8::t_37b6082bd16808 12-15,22-63
+  s_20e6f7049d0fc8::t_40154d33ab75f0 4
+docs/CONTEXT.md
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 12,20,29,73
+  s_20e6f7049d0fc8::t_fe0150222324df 1
+apps/docs/content/docs/project/index.mdx
+  s_20e6f7049d0fc8::t_f000c6c2a98413 3,11-12,15
+apps/docs/README.md
+  s_20e6f7049d0fc8::t_da55710ef3be80 15-22,27-28,48
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_20e6f7049d0fc8::t_168d029f174347 362-363,379-380
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,111,341-344,378,382-384
+  s_20e6f7049d0fc8::t_8d434a4901f381 381
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 365
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_20e6f7049d0fc8::t_b72b4470453ba2 93,402
+  s_20e6f7049d0fc8::t_38d3e0997367ee 97
+  s_20e6f7049d0fc8::t_b64a26461a4040 67-70
+  s_20e6f7049d0fc8::t_734a4b39f0f9a5 15,368-370,381,383,400-401,547
+  s_20e6f7049d0fc8::t_874f00c6eb988c 73-76,90-92,94-96,98-100,102-106
+  s_20e6f7049d0fc8::t_6e6ab50f7312e3 77-89,101
+  s_20e6f7049d0fc8::t_6b78470684a8bf 71-72
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,12,26,105,115,216-219,253,257-259
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 240
+  s_20e6f7049d0fc8::t_168d029f174347 237-238,254-255
+  s_20e6f7049d0fc8::t_8d434a4901f381 256
+  s_20e6f7049d0fc8::t_b5865f8d420cbd 3,246
+apps/docs/content/docs/guide/webhook-docker.mdx
+  s_20e6f7049d0fc8::t_9d2ff86297269a 44
+  s_20e6f7049d0fc8::t_da55710ef3be80 38,40,128
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 123-124
+apps/docs/content/docs/project/security.mdx
+  s_20e6f7049d0fc8::t_da55710ef3be80 2,8,35-36,40
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_20e6f7049d0fc8::t_168d029f174347 405-406,422-423
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,12,26,384-387,421,425-427
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 408
+  s_20e6f7049d0fc8::t_8d434a4901f381 424
+  s_20e6f7049d0fc8::t_52fddb690acfef 3
+apps/docs/content/docs/reference/index.mdx
+  s_20e6f7049d0fc8::t_f000c6c2a98413 3,10-12
+packages/runtime/src/hosts/azure-devops/tests/workspace.test.ts
+  s_20e6f7049d0fc8::t_884320a23bbc52 22,35
+  s_20e6f7049d0fc8::t_8bf37d1a4ffffe 36-45,49
+packages/runtime/src/hosts/bitbucket/publication.ts
+  s_20e6f7049d0fc8::t_b72b4470453ba2 42
+  s_20e6f7049d0fc8::t_38d3e0997367ee 174,179
+  s_20e6f7049d0fc8::t_25751adf83b54b 21,36-38,40,44,48,53,87-89,129-131,133,135,137,159-161,163-164,166,175-177,199-201,209,214,267-269,272
+apps/docs/content/docs/concepts/index.mdx
+  s_20e6f7049d0fc8::t_8d434a4901f381 2
+  s_20e6f7049d0fc8::t_fc7ee9f2d4cf8c 1,3-57
+apps/docs/content/docs/recipes/index.mdx
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 10
+  s_20e6f7049d0fc8::t_1ff6d83c135313 8,25,56,76,80,83,86,90
+packages/runtime/src/hosts/bitbucket/tests/event.test.ts
+  s_20e6f7049d0fc8::t_3662ed90015047 40-45,51-64
+  s_20e6f7049d0fc8::t_85ab5d2b6299ec 46-50
+apps/docs/content/docs/reference/cli.mdx
+  s_20e6f7049d0fc8::t_47762e6073eb9e 23,207
+  s_20e6f7049d0fc8::t_a09516ef91518f 2
+packages/runtime/src/hosts/bitbucket/markdown.ts
+  s_20e6f7049d0fc8::t_25751adf83b54b 1-3,5-31
+  s_20e6f7049d0fc8::t_b72b4470453ba2 4
+apps/docs/scripts/sync-recipes.ts
+  s_20e6f7049d0fc8::t_e6d76a89590833 140-152,605
+  s_20e6f7049d0fc8::t_6f102a8f2884dc 4,637-644
+  s_20e6f7049d0fc8::t_7eac059b098587 541,559,573-574,577-579
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 16,32,40,52,72,83,243,411,428,459
+  s_20e6f7049d0fc8::t_8dc0479aaffe8b 413
+  s_20e6f7049d0fc8::t_cd634aa9de72c7 500,506-508
+  s_20e6f7049d0fc8::t_549706e4c3f06e 505
+  s_20e6f7049d0fc8::t_778285fd33a91e 575-576,602
+  s_20e6f7049d0fc8::t_9624993e28bb5d 603
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_20e6f7049d0fc8::t_168d029f174347 276-277,292-293
+  s_20e6f7049d0fc8::t_8d434a4901f381 294
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,95,144,255-258,291,295-297
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 279
+apps/docs/content/docs/index.mdx
+  s_20e6f7049d0fc8::t_89a351a465aeae 6,8,10,12-21,23,27,29-31,34,36-41,43,45,47,49,51-55,57,59,61,65-69
+apps/docs/nginx.conf
+  s_20e6f7049d0fc8::t_20743f159b8197 20,22,24,26,28,30-42
+  s_20e6f7049d0fc8::t_45b936eee5b302 21,23,25,27,29
+packages/runtime/src/host-run/trusted-runtime.ts
+  s_20e6f7049d0fc8::t_a8e8eb4067beaf 1,15-22
+apps/docs/content/docs/recipes/ci-triage-command.mdx
+  s_20e6f7049d0fc8::t_168d029f174347 180-181,197-198
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,64,159-162,178,182,184-186,196,200-202
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 183
+  s_20e6f7049d0fc8::t_8d434a4901f381 199
+  s_20e6f7049d0fc8::t_f1f6f2bbbf74fa 179
+packages/cli/README.md
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 50,57,66,68
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 15,47-48
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_20e6f7049d0fc8::t_9d65d38cf9a0f4 72,122-123,142,167-168,187-188,191,197
+  s_20e6f7049d0fc8::t_47762e6073eb9e 3,6,18,24-28,40,74-76,210-212
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 163
+  s_20e6f7049d0fc8::t_9ea853631a4af8 44,143,198
+packages/runtime/README.md
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 10,22,33,44-45,47
+skills/pipr-setup/SKILL.md
+  s_20e6f7049d0fc8::t_d7cab01d6312a1 3,16,18,48,50,59-62,65-66,77-78,108,118
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 7,11,22,42
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_20e6f7049d0fc8::t_8d434a4901f381 170
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 154
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,130-133,167,171-173
+  s_20e6f7049d0fc8::t_168d029f174347 151-152,168-169
+apps/docs/src/routes/docs/{$}[.]md.ts
+  s_20e6f7049d0fc8::t_40154d33ab75f0 2
+  s_20e6f7049d0fc8::t_00b625c8291621 10-17
+apps/docs/content/docs/guide/index.mdx
+  s_20e6f7049d0fc8::t_89a351a465aeae 3,6,8,10,12-17,19,21,23,25-30,32,34,36,38-41
+apps/docs/content/docs/concepts/meta.json
+  s_20e6f7049d0fc8::t_8d434a4901f381 1-7
+packages/sdk/README.md
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 9,18,27
+apps/docs/content/docs/recipes/default-review.mdx
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,12,26,121-124,158,162-164
+  s_20e6f7049d0fc8::t_8d434a4901f381 161
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 145
+  s_20e6f7049d0fc8::t_168d029f174347 142-143,159-160
+  s_20e6f7049d0fc8::t_dde7087e7b09d4 3
+packages/runtime/src/hosts/bitbucket/tests/workspace.test.ts
+  s_20e6f7049d0fc8::t_6c2fa7d2022410 39
+packages/runtime/src/config/recipes/dependency-risk.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 39
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,106,239-242,258,262,264-266,276,280-282
+  s_20e6f7049d0fc8::t_8d434a4901f381 279
+  s_20e6f7049d0fc8::t_168d029f174347 260-261,277-278
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 263
+  s_20e6f7049d0fc8::t_8ab67c9634297c 259
+docs/adr/README.md
+  s_20e6f7049d0fc8::t_c1c6f48b061a83 1-12
+packages/runtime/src/config/tests/init.test.ts
+  s_20e6f7049d0fc8::t_6f102a8f2884dc 13,41-51
+apps/docs/content/docs/guide/local-runs.mdx
+  s_20e6f7049d0fc8::t_47762e6073eb9e 2-3,6,188,213,221,223-224,226-229,231
+  s_20e6f7049d0fc8::t_968abb4616dcc7 10-11,48-49,69-70,100-101,161-162,169,192-193,214-215
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 219-220
+  s_20e6f7049d0fc8::t_ff7760165a17e7 170
+apps/docs/content/docs/reference/architecture.mdx
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 12-13,26-27,35,40
+  s_20e6f7049d0fc8::t_de1b5959dbce7a 41,58,60,85
+packages/runtime/src/hosts/git.ts
+  s_20e6f7049d0fc8::t_a8e8eb4067beaf 8-14,20-38
+  s_20e6f7049d0fc8::t_6c2fa7d2022410 47-52
+  s_20e6f7049d0fc8::t_60b97bb03d62d1 39-40
+packages/runtime/src/hosts/tests/git.test.ts
+  s_20e6f7049d0fc8::t_c17fd79bf41491 92
+  s_20e6f7049d0fc8::t_8d434a4901f381 107-110
+  s_20e6f7049d0fc8::t_8131a211216d80 5,76-91,93-106
+apps/docs/content/docs/recipes/meta.json
+  s_20e6f7049d0fc8::t_e0950f55a2ef8b 20
+  s_20e6f7049d0fc8::t_58fe1737c6e9b5 15,21-23,26
+packages/runtime/src/config/recipes/changelog-draft.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 32
+packages/evals/README.md
+  s_20e6f7049d0fc8::t_8dd95b56bf62ea 73
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 29,45,65,84,101
+apps/docs/content/docs/guide/quickstart.mdx
+  s_20e6f7049d0fc8::t_89a351a465aeae 171-174,279,304
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 246
+  s_20e6f7049d0fc8::t_ba72e66176c6c2 226-234
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 48
+  s_20e6f7049d0fc8::t_968abb4616dcc7 76-77,119-120,142,191-192,265-266,283
+  s_20e6f7049d0fc8::t_9d2ff86297269a 49
+  s_20e6f7049d0fc8::t_8d434a4901f381 300
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 212-213,299
+  s_20e6f7049d0fc8::t_7e8403282eb02d 143
+  s_20e6f7049d0fc8::t_25e5d9bb101af5 284
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,12,26,63,121-124,157,161-163
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 145
+  s_20e6f7049d0fc8::t_168d029f174347 142-143,158-159
+  s_20e6f7049d0fc8::t_8d434a4901f381 160
+  s_20e6f7049d0fc8::t_152528ca60cebf 3
+CONTRIBUTING.md
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 24-25
+packages/runtime/src/review/tests/review.test.ts
+  s_20e6f7049d0fc8::t_9a4ce24fcdb475 35
+skills/pipr-setup/references/config-patterns.md
+  s_20e6f7049d0fc8::t_d7cab01d6312a1 9-10,16-17,38,169
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 1,5,19,81,99,139
+packages/sdk/src/types/manifest.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 7
+packages/runtime/src/config/recipes/pr-briefing.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 64,113
+packages/runtime/src/config/recipes/pr-hygiene.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 6,74,84
+apps/docs/content/docs/guide/github-action.mdx
+  s_20e6f7049d0fc8::t_c3e96cb76ccc8b 126
+  s_20e6f7049d0fc8::t_9d65d38cf9a0f4 10-11,63-64,98,137-138,149-150,174-175,198
+  s_20e6f7049d0fc8::t_8d434a4901f381 199,211
+  s_20e6f7049d0fc8::t_0051514b6a41ac 131
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 14-15,51,67-68,210
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 213
+  s_20e6f7049d0fc8::t_700396c3052ba0 52,99,112-113,121-125,127-130,132-134
+docs/research/archive/code-host-adapter-guideline.md
+  s_20e6f7049d0fc8::t_c1c6f48b061a83 1-715
+docs/research/README.md
+  s_20e6f7049d0fc8::t_171e6839257096 9-10
+  s_20e6f7049d0fc8::t_fbd7c5c11487ae 1-8
+  s_20e6f7049d0fc8::t_c1c6f48b061a83 11-14
+apps/docs/vite.config.ts
+  s_20e6f7049d0fc8::t_9a629c1ada060f 55-56,59-60
+  s_20e6f7049d0fc8::t_1736c683f60ff4 57-58
+packages/e2e/README.md
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 67
+  s_20e6f7049d0fc8::t_6862c9f4b1572c 9
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 47-49
+apps/docs/content/docs/concepts/trust-security.mdx
+  s_20e6f7049d0fc8::t_968abb4616dcc7 103-104,127-128,140-141,153-154
+  s_20e6f7049d0fc8::t_402c094bee3964 1-102,105-126,129-139,142-152,155-166
+apps/docs/content/docs/guide/meta.json
+  s_20e6f7049d0fc8::t_58fe1737c6e9b5 19
+  s_20e6f7049d0fc8::t_ff8c2530520fe4 10,20-22
+apps/docs/src/routes/docs/$.tsx
+  s_20e6f7049d0fc8::t_549706e4c3f06e 1-2,140-157
+  s_20e6f7049d0fc8::t_40154d33ab75f0 19
+  s_20e6f7049d0fc8::t_efb2ab5a28bde3 3
+  s_20e6f7049d0fc8::t_a1f6379c8acb72 27-29
+packages/runtime/src/config/recipes/interactive-ask.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 50
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 27
+  s_20e6f7049d0fc8::t_8d434a4901f381 251,255
+  s_20e6f7049d0fc8::t_9d65d38cf9a0f4 12-13,31,76-77,114-115,145-146,185-186,203-204,225-226,250
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 156,159
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 35-36,254
+  s_20e6f7049d0fc8::t_6dfc1598527504 2,32
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_20e6f7049d0fc8::t_168d029f174347 663-664,680-681
+  s_20e6f7049d0fc8::t_ee77a786c97e2b 8,26,88,98,177,642-645,661,665,667-669,679,683-685
+  s_20e6f7049d0fc8::t_02b6b05ffc6df3 666
+  s_20e6f7049d0fc8::t_8d434a4901f381 682
+  s_20e6f7049d0fc8::t_fbf54699dd7397 662
+docs/live-provider-runs.md
+  s_20e6f7049d0fc8::t_f1ef6f8f695e79 12
+  s_20e6f7049d0fc8::t_a195dac2cc06d3 1-10,13-36
+  s_20e6f7049d0fc8::t_8058b30ac13e69 11
+apps/docs/content/docs/project/contributing.mdx
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 41,84
+apps/docs/src/lib/docs-routes.ts
+  s_20e6f7049d0fc8::t_40154d33ab75f0 1-16
+apps/docs/content/docs/project/development.mdx
+  s_20e6f7049d0fc8::t_9d65d38cf9a0f4 10-11,40-41,85-86,150-151,176-177,221-222,279-280
+  s_20e6f7049d0fc8::t_402c094bee3964 1-9,12-13,16-29,32-39,42-74,77-84,87-149,152-167,170-175,178-191,194-204,207-214,217-220,223-239,241-244,247-278,281-315
+  s_20e6f7049d0fc8::t_8d434a4901f381 14-15,30-31,75-76,168-169,192-193,205-206,245-246
+  s_20e6f7049d0fc8::t_9d2ff86297269a 215-216,240
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 68-69
+  s_20e6f7049d0fc8::t_9d65d38cf9a0f4 84-85
+  s_20e6f7049d0fc8::t_7de508b97733c9 2
+apps/docs/package.json
+  s_20e6f7049d0fc8::t_c3658186ff10df 13-15,20
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 31
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 281-282,522
+  s_20e6f7049d0fc8::t_47762e6073eb9e 304,306,319,321,329
+  s_20e6f7049d0fc8::t_01dbc25dbe083c 2,66,163,298,489,523
+packages/runtime/src/config/recipes/rich-review.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 6,75
+apps/docs/content/docs/project/meta.json
+  s_20e6f7049d0fc8::t_02b53b8ef461d6 6
+  s_20e6f7049d0fc8::t_f000c6c2a98413 3
+packages/runtime/src/config/official-github-workflow.ts
+  s_20e6f7049d0fc8::t_6f102a8f2884dc 1-69
+apps/docs/src/routes/__root.tsx
+  s_20e6f7049d0fc8::t_8610b104732bca 21-22
+apps/docs/content/docs/guide/bitbucket.mdx
+  s_20e6f7049d0fc8::t_8d434a4901f381 89,91-92,94-101,105
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 10-11,43-44,104
+  s_20e6f7049d0fc8::t_782b551cf63165 18-40
+  s_20e6f7049d0fc8::t_26a8cdbf45f9b3 107
+  s_20e6f7049d0fc8::t_d236b30cb91ed9 90
+  s_20e6f7049d0fc8::t_2f1646976c5eb3 93
+  s_20e6f7049d0fc8::t_2fc36d6b436e4d 88
+packages/cli/package.json
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 4
+apps/docs/content/docs/concepts/comments.mdx
+  s_20e6f7049d0fc8::t_402c094bee3964 1-13,16-46,49-61,64-121,124-130,133-137,139-172,175-194,196-205,208-243,246-260,263-276,279-290,293-300
+  s_20e6f7049d0fc8::t_5ce6823f80bde6 122-123
+  s_20e6f7049d0fc8::t_8d434a4901f381 195
+  s_20e6f7049d0fc8::t_33dd6fad731052 206
+  s_20e6f7049d0fc8::t_0051514b6a41ac 138
+  s_20e6f7049d0fc8::t_968abb4616dcc7 14-15,47-48,62-63,131-132,173-174,207,244-245,261-262,277-278,291-292
+apps/docs/content/docs/meta.json
+  s_20e6f7049d0fc8::t_8d434a4901f381 3
+packages/sdk/src/review-contract.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 47,53,68,73
+packages/runtime/src/config/init.ts
+  s_20e6f7049d0fc8::t_6f102a8f2884dc 168-172
+  s_20e6f7049d0fc8::t_6b27dc749d84f0 4
+SECURITY.md
+  s_20e6f7049d0fc8::t_1f841e5803ee5e 34-35,39
+  s_20e6f7049d0fc8::t_a9c5200d038ba8 1
+packages/sdk/src/internal.ts
+  s_20e6f7049d0fc8::t_9b1dbc8b51ec4a 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "a3c140de18b6bbad948a06f4d7a5455f43c6b292",
+  "prompts": {},
+  "sessions": {
+    "s_20e6f7049d0fc8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f63-2f6f-7e83-84c0-27acc706cb5b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
