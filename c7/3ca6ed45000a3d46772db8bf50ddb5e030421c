@@ -1,0 +1,19 @@
+packages/e2e/pi-contract.test.ts
+  s_20e6f7049d0fc8::t_75e8905970ea6a 1,8-37,39-47,54-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "c73ca6ed45000a3d46772db8bf50ddb5e030421c",
+  "prompts": {},
+  "sessions": {
+    "s_20e6f7049d0fc8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f63-2f6f-7e83-84c0-27acc706cb5b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
