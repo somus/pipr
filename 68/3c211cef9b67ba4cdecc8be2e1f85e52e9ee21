@@ -1,0 +1,30 @@
+release-please-config.json
+  s_20e6f7049d0fc8::t_113fbe6cac3807 59-60
+  s_20e6f7049d0fc8::t_6783b030d7e71b 57-58
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_20e6f7049d0fc8::t_94813d0322082a 7,16,110-121
+  s_20e6f7049d0fc8::t_e42a0559b69a8c 122-123
+packages/runtime/src/review/comment-branding.ts
+  s_20e6f7049d0fc8::t_113fbe6cac3807 14,19
+  s_20e6f7049d0fc8::t_2d2ccf74414efc 16
+  s_20e6f7049d0fc8::t_0bb900b6897b84 15
+packages/runtime/src/hosts/bitbucket/markdown.ts
+  s_20e6f7049d0fc8::t_2d2ccf74414efc 34
+  s_20e6f7049d0fc8::t_113fbe6cac3807 2,24,32-33,35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "683c211cef9b67ba4cdecc8be2e1f85e52e9ee21",
+  "prompts": {},
+  "sessions": {
+    "s_20e6f7049d0fc8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f63-2f6f-7e83-84c0-27acc706cb5b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
