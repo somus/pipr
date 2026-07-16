@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { mainCommentAttributionTextPattern } from "../../review/comment-branding.js";
 
 const htmlMetadataPattern = /^<!--\s*(pipr:[^>\r\n]+?)\s*-->$/gm;
 const markdownMetadataPattern = /^\[pipr-metadata-[A-Za-z0-9_-]+-\d+\]: # "([A-Za-z0-9_-]+)"$/gm;
@@ -20,7 +21,7 @@ export function renderBitbucketMarkdown(body: string): string {
 }
 
 export function normalizeBitbucketMarkdown(body: string): string {
-  return body.replace(markdownMetadataPattern, (line, encoded: string) => {
+  const normalizedMetadata = body.replace(markdownMetadataPattern, (line, encoded: string) => {
     try {
       const metadata = Buffer.from(encoded, "base64url").toString();
       return metadata.startsWith("pipr:") ? `<!-- ${metadata} -->` : line;
@@ -28,4 +29,8 @@ export function normalizeBitbucketMarkdown(body: string): string {
       return line;
     }
   });
+  return normalizedMetadata
+    .split("\n")
+    .map((line) => (mainCommentAttributionTextPattern.test(line) ? `<sub>${line}</sub>` : line))
+    .join("\n");
 }
