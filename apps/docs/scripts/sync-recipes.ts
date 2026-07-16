@@ -1,8 +1,10 @@
 import { access, mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderOfficialGithubWorkflow } from "../../../packages/runtime/src/config/official-github-workflow.js";
-import { listOfficialInitRecipes } from "../../../packages/runtime/src/config/recipes.js";
+import {
+  listOfficialInitRecipes,
+  renderOfficialGithubWorkflow,
+} from "@usepipr/runtime/internal/docs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const docsDir = path.resolve(here, "../content/docs/recipes");
