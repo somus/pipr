@@ -11,6 +11,7 @@ type PackageJson = {
   files?: string[];
   bin?: Record<string, string>;
   dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
   scripts?: Record<string, string>;
 };
 
@@ -72,10 +73,16 @@ for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) 
 }
 
 const cliPackage = await readJson<PackageJson>("packages/cli/package.json");
+const docsPackage = await readJson<PackageJson>("apps/docs/package.json");
 const selfReviewPackage = await readJson<PackageJson>(".pipr/package.json");
 const selfReviewSdkVersion = selfReviewPackage.dependencies?.["@usepipr/sdk"];
 const selfReviewLock = await readText(".pipr/bun.lock");
 assert.equal(cliPackage.bin?.pipr, "./dist/main.mjs", "@usepipr/cli bin must point at dist");
+assert.equal(
+  docsPackage.devDependencies?.["@usepipr/runtime"],
+  "workspace:*",
+  "private docs workspace must use the local @usepipr/runtime workspace package",
+);
 assert(
   selfReviewSdkVersion && /^\d+\.\d+\.\d+$/.test(selfReviewSdkVersion),
   ".pipr/package.json @usepipr/sdk dependency must pin a published stable version",

@@ -431,6 +431,18 @@ describe("check-release-metadata", () => {
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
 
+  it("rejects a registry runtime dependency in the private docs workspace", () => {
+    const repository = copyRepositoryFixture();
+    const packagePath = path.join(repository, "apps/docs/package.json");
+    const pkg = JSON.parse(readFileSync(packagePath, "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
+    pkg.devDependencies["@usepipr/runtime"] = "0.0.0";
+    write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
   it("rejects Release Please dogfood SDK bumps", () => {
     const repository = copyRepositoryFixture();
     const configPath = path.join(repository, "release-please-config.json");
