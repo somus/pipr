@@ -35,13 +35,13 @@ Download the Compose file and environment template from the same Pipr release ta
 ```bash
 cd /srv/pipr/deployment
 curl --fail --location --output compose.yml \
-  https://raw.githubusercontent.com/somus/pipr/v0.4.0/deploy/webhook/compose.yml # x-release-please-version
+  https://raw.githubusercontent.com/somus/pipr/v0.4.1/deploy/webhook/compose.yml # x-release-please-version
 curl --fail --location --output .env \
-  https://raw.githubusercontent.com/somus/pipr/v0.4.0/deploy/webhook/.env.example # x-release-please-version
+  https://raw.githubusercontent.com/somus/pipr/v0.4.1/deploy/webhook/.env.example # x-release-please-version
 chmod 600 .env
 ```
 
-The Compose file pins `ghcr.io/somus/pipr:v0.4.0`. Keep the file and image on the same release so the documented CLI contract matches the container. {/* x-release-please-version */}
+The Compose file pins `ghcr.io/somus/pipr:v0.4.1`. Keep the file and image on the same release so the documented CLI contract matches the container. {/* x-release-please-version */}
 
 ## 3. Prepare the trusted checkout
 

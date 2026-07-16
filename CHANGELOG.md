@@ -4,6 +4,28 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.4.1](https://github.com/somus/pipr/compare/v0.4.0...v0.4.1) (2026-07-16)
+
+
+### Features
+
+* **runtime:** bound serialized review findings ([#82](https://github.com/somus/pipr/issues/82)) ([c1dfd01](https://github.com/somus/pipr/commit/c1dfd01d52ccf2365b378d3e874b05d300919fef))
+* tighten inline review comments ([#84](https://github.com/somus/pipr/issues/84)) ([f989120](https://github.com/somus/pipr/commit/f98912050950b0e5c78be8d3242beb47f7c65b42))
+
+
+### Bug Fixes
+
+* enforce frozen config dependency installs ([#74](https://github.com/somus/pipr/issues/74)) ([f9725e5](https://github.com/somus/pipr/commit/f9725e5a7fb195c46716ad789d0e2d49f9d54d3b))
+* harden Azure and Bitbucket adapters ([#78](https://github.com/somus/pipr/issues/78)) ([9eacbac](https://github.com/somus/pipr/commit/9eacbac10a6007f6c5259e6e841b7988256f86bb))
+* harden Pi workspace isolation ([#75](https://github.com/somus/pipr/issues/75)) ([d744e4e](https://github.com/somus/pipr/commit/d744e4eb98a5d1e6bebf8828c20a576cef9ba4e6))
+* pin Pi container dependencies ([#86](https://github.com/somus/pipr/issues/86)) ([0604029](https://github.com/somus/pipr/commit/06040296450d07ab83ac75023f035edcdac42eeb))
+* **runtime:** parse git paths with nul delimiters ([#81](https://github.com/somus/pipr/issues/81)) ([3162092](https://github.com/somus/pipr/commit/3162092d349d3ea509d0f231561e3b1407f9b0bf))
+
+
+### Performance Improvements
+
+* **runtime:** reuse Pi workspace across attempts ([3677317](https://github.com/somus/pipr/commit/36773172d9c744fa26ed992123b24f64ed92fa41))
+
 ## [0.4.0](https://github.com/somus/pipr/compare/v0.3.8...v0.4.0) (2026-07-13)
 
 
