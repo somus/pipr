@@ -63,13 +63,21 @@ function runCommand(command: string[], cwd: string): string {
   return result.stdout.toString();
 }
 
-async function readDockerfilePiVersion(cwd: string): Promise<string> {
+const piPackageNames = ["pi-coding-agent", "pi-ai", "pi-tui", "pi-agent-core"] as const;
+
+export async function readDockerfilePiVersion(cwd: string): Promise<string> {
   const dockerfile = await Bun.file(`${cwd}/Dockerfile`).text();
-  const match = dockerfile.match(/@earendil-works\/pi-coding-agent@([^\s\\]+)/);
-  if (!match?.[1]) {
-    throw new Error("Dockerfile does not pin @earendil-works/pi-coding-agent");
+  const versions = piPackageNames.map((packageName) => {
+    const match = dockerfile.match(new RegExp(`@earendil-works/${packageName}@([^\\s\\\\]+)`));
+    if (!match?.[1]) {
+      throw new Error(`Dockerfile does not pin @earendil-works/${packageName}`);
+    }
+    return match[1];
+  });
+  if (new Set(versions).size !== 1) {
+    throw new Error(`Dockerfile Pi package versions must match: ${versions.join(", ")}`);
   }
-  return match[1];
+  return versions[0];
 }
 
 function assertContainsAll(haystack: string, needles: readonly string[], label: string): void {
