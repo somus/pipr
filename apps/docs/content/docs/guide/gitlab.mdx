@@ -15,6 +15,26 @@ pipr init --adapters gitlab
 
 The command creates `.gitlab-ci.yml` with a merge-request job that runs the Pipr container through `pipr host-run --host gitlab`.
 
+### Generated GitLab CI pipeline
+
+The generated `.gitlab-ci.yml` runs only for merge request pipelines and fetches full Git history:
+
+```yaml
+pipr:
+  image:
+    name: ghcr.io/somus/pipr:v0.4.0 # x-release-please-version
+    entrypoint: [""]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  variables:
+    GIT_DEPTH: "0"
+    PIPR_CODE_HOST: "gitlab"
+  script:
+    - pipr host-run --host gitlab --config-dir .pipr
+```
+
+GitLab provides the project and merge request coordinates as predefined CI variables. Store `GITLAB_TOKEN` and the configured model-provider key as masked CI/CD variables; don't write their values in `.gitlab-ci.yml`.
+
 Configure these masked CI/CD variables in GitLab:
 
 | Variable | Purpose |
@@ -71,5 +91,19 @@ The GitLab.com adapter supports:
 - reply-driven verification and discussion resolution;
 - individual and aggregate external commit statuses;
 - stale-head rejection before writes.
+
+## GitLab review output
+
+GitLab displays the task summary as a merge-request note, publishes validated findings as discussions, and records external commit statuses.
+
+<img
+  alt="GitLab merge request showing a Pipr review summary and successful external status for the event-relay retry change"
+  src="/images/pipr/providers/gitlab-review.png"
+/>
+
+<img
+  alt="GitLab merge request diff showing a Pipr discussion with a native suggestion for duplicate webhook delivery"
+  src="/images/pipr/providers/gitlab-inline.png"
+/>
 
 GitLab Dedicated and Self-Managed compatibility isn't part of this release.

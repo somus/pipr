@@ -1,5 +1,5 @@
 ---
-title: "Custom Tasks"
+title: "Custom tasks"
 description: "Build custom Review Tasks with Diff Manifest reads, Pi calls, review state, comments, and checks."
 ---
 
@@ -8,6 +8,8 @@ Custom tasks are how you build your own review workflows on the Pipr core. A Rev
 Use a custom task when `pipr.review(...)` is too small for the workflow. Common reasons include multiple Pi calls, command-specific input, custom schemas, extra checks, custom logging, or a main-comment-only task.
 
 ## Building blocks
+
+Custom workflows compose config, agents, tasks, entrypoints, and runtime-owned publication.
 
 ### Config blocks
 
@@ -22,11 +24,15 @@ A workflow composes four pieces, all registered in `.pipr/config.ts`:
 
 Every recipe in [Recipes](/docs/recipes) is these same blocks arranged differently, so any recipe page doubles as a worked example for this guide.
 
-For the full concept map, see [Concepts](/docs/guide/concepts).
+For the full concept map, see [How Pipr works](/docs/concepts).
 
 ## Task shape
 
+Define one typed handler that gathers context and emits one final result.
+
 ### Example task
+
+This task builds a scoped manifest, runs a typed agent, and emits validated review output.
 
 ```ts twoslash
 // @include: pipr-security-agent
@@ -67,6 +73,8 @@ Do not call GitHub APIs from task code. Pipr owns publication.
 
 ## Task context
 
+The task context exposes provider-neutral change data and Pipr-owned runtime operations.
+
 ### Context object
 
 Task handlers receive provider-neutral context:
@@ -103,6 +111,8 @@ Important methods:
 
 ## Diff Manifest first
 
+Build the Diff Manifest before model execution so every inline finding can use an authoritative range.
+
 ### Build changed-code context
 
 The Diff Manifest is the authoritative model of changed files and valid inline ranges:
@@ -132,6 +142,8 @@ Path scope filters the manifest. When a task passes the scoped `result.inlineFin
 
 ## Agent outputs
 
+Use structured output when the task must map model data into validated findings or custom Markdown.
+
 ### Review schema
 
 Use `pipr.schemas.review` for agents that directly produce publishable review output:
@@ -141,10 +153,10 @@ Use `pipr.schemas.review` for agents that directly produce publishable review ou
 const securityAgent = pipr.agent({
   name: "security",
   model,
-  instructions: "Review the pull request for security issues only.",
+  instructions: "Review the change request for security issues only.",
   output: pipr.schemas.review,
   prompt: () => pipr.prompt`
-    Review this pull request for security issues only.
+    Review this change request for security issues only.
   `,
 });
 ```
@@ -170,6 +182,8 @@ Map custom output into `ctx.comment(...)` yourself.
 
 ## Prior review state
 
+Read prior Pipr-owned findings when a rerun needs to preserve or reassess open issues.
+
 ### Read prior state
 
 Use prior state when a task should avoid repeating known findings:
@@ -185,6 +199,8 @@ const result = await ctx.pi.run(reviewer, { manifest, prior });
 Prior state includes previous inline finding ids, status, path, range id, side, and lines for the same task scope. Pipr also passes matching open prior locations to default review agents.
 
 ## Checks
+
+Task checks publish provider-native statuses independently from the process exit code.
 
 ### Branch protection checks
 
@@ -205,6 +221,8 @@ const task = pipr.task({
 Use checks for merge gates. Use comments for reviewer-facing detail.
 
 ## Command input
+
+Command tasks receive parsed arguments and respond through the command handle.
 
 ### Typed command args
 
@@ -229,7 +247,11 @@ pipr.command({
 
 ## Task design rules
 
+Keep provider parsing, raw diffs, model execution policy, and publication inside Pipr-owned runtime boundaries.
+
 ### Review task rules
+
+Apply these rules to keep orchestration deterministic and publication runtime-owned.
 
 - Keep task code deterministic around selection, path scope, and output mapping.
 - Let Pi analyze code; let Pipr validate findings and publish.

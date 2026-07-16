@@ -26,7 +26,7 @@ that variable in a trusted shell before running live evals. The committed script
 do not auto-load `.pipr/.env` because live eval code executes from the checked-out
 branch. Do not commit provider keys or Evalite output.
 
-## Suite Layout
+## Suite layout
 
 The eval package separates fixtures, live suite selection, and scoring.
 
@@ -42,7 +42,7 @@ The eval package separates fixtures, live suite selection, and scoring.
 | `src/scoring.ts` | Deterministic scoring functions used by live and fake Pi evals. |
 | `src/fake-pi.ts` | Fake Pi output for deterministic prompt-contract smoke tests. |
 
-## Gate Design
+## Gate design
 
 Keep hard gates small and stable. Add a case to `livePromptGateCaseIds` only
 when the expected behavior is unambiguous and repeated live runs are stable.
@@ -62,7 +62,7 @@ quality:
 - `cleanSuppression`: harmless or out-of-scope changes that should stay quiet.
 - `safetyHygiene`: prompt-injection lures and forbidden output checks.
 
-## Suggested Fix Policy
+## Suggested fix policy
 
 Suggested fixes are optional. They are only useful when the replacement is
 small, exact, and directly fixes the defect named by the comment body.
@@ -70,7 +70,7 @@ small, exact, and directly fixes the defect named by the comment body.
 The prompt asks the model to omit suggestions that are identical to the changed
 lines, only add or remove trailing blank lines, require broad/generated/uncertain
 changes, or invent secret, environment, or config wiring. Runtime publication
-policy still validates emitted suggestions before GitHub publishing.
+policy still validates emitted suggestions before code host publication.
 
 Expected suggested-fix behavior uses two modes:
 
@@ -81,7 +81,7 @@ Expected suggested-fix behavior uses two modes:
 `if-present-exact` lets a valid finding pass when the model omits an optional
 fix. The recall scorer owns missing findings.
 
-## Scoring Rules
+## Scoring rules
 
 Scorers are intentionally narrow so one mistake does not hide another.
 
@@ -98,7 +98,7 @@ Scorers are intentionally narrow so one mistake does not hide another.
 Keep expected body keywords minimal and tied to the defect. Prefer one or two
 words that prove the model identified the risk over broad prose expectations.
 
-## Runtime Testing Export
+## Runtime testing export
 
 Evals import review validation helpers from
 `@usepipr/runtime/internal/review-testing`. That export is intentionally narrow:

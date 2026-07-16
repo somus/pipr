@@ -12,16 +12,17 @@
     "fix-suggestions",
     "multi-agent-review",
     "pr-briefing",
-    "---[ShieldCheck]Security & Quality---",
+    "---[ShieldCheck]Security and quality---",
     "security-sast",
     "quality-gate",
     "diff-diagnostics",
-    "pr-hygiene",
     "dependency-risk",
-    "---[Terminal]Commands & Tools---",
+    "---[ClipboardCheck]Change management---",
+    "pr-hygiene",
+    "changelog-draft",
+    "---[Terminal]Commands and tools---",
     "ci-triage-command",
     "interactive-ask",
-    "plugin-tool-review",
-    "changelog-draft"
+    "plugin-tool-review"
   ]
 }

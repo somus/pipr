@@ -7,7 +7,7 @@
 
   <h1>Pipr</h1>
 
-  <p><strong>Code-owned AI review for GitHub pull requests.</strong></p>
+  <p><strong>Code-owned AI review across code hosts.</strong></p>
 
   <p>
     <a href="https://github.com/somus/pipr/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/somus/pipr/actions/workflows/ci.yml/badge.svg"></a>
@@ -18,15 +18,13 @@
   </p>
 </div>
 
-Pipr runs AI pull request review from your repository. It loads `.pipr/config.ts`, builds a deterministic Diff Manifest, runs Pi for structured review output, validates findings against commentable ranges, and publishes one Main Review Comment plus capped Inline Review Comments.
+Pipr runs AI review from your repository. It loads `.pipr/config.ts`, builds a deterministic Diff Manifest, runs Pi for structured review output, validates findings against commentable ranges, and publishes one Main Review Comment plus capped Inline Review Comments.
 
 GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud are supported delivery targets. They use Code Host Adapters, so `.pipr/config.ts` stays provider-neutral.
 
 ## Why Pipr
 
-Most code review tools specialize: one finds security issues, another writes PR summaries, another gates merges. Running several of them creates overlapping comments, duplicated model spend, and scattered policy.
-
-Pipr keeps one lean runtime and lets you compose the review workflow in TypeScript:
+Pipr keeps the review runtime and policy in your repository. Compose the workflow in TypeScript:
 
 - `pipr.review(...)` for a tuned default review
 - `pipr init --recipe <id>` starters for security SAST, PR briefings, quality gates, dependency risk, and more
@@ -85,6 +83,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/work/_temp/_github_home/.bun/install/cache
+          key: pipr-bun-${{ hashFiles('.pipr/bun.lock') }}
       - uses: somus/pipr@v0.4.0 # x-release-please-version
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -97,7 +99,7 @@ See [Quickstart](https://pipr.run/docs/guide/quickstart) for the full first-run 
 
 ## Configuration
 
-`pipr init` creates `.pipr/config.ts`. The default config registers one review task that runs on pull request events, on `@pipr review`, and from local `pipr review --base <ref>` commands:
+`pipr init` creates `.pipr/config.ts`. The default config registers one review task that runs on change request events, on `@pipr review`, and from local `pipr review --base <ref>` commands:
 
 ```ts
 import { definePipr } from "@usepipr/sdk";
@@ -114,7 +116,7 @@ export default definePipr((pipr) => {
     name: "reviewer",
     model,
     instructions: `
-      Review the pull request diff for correctness, security,
+      Review the change request diff for correctness, security,
       maintainability, and test coverage.
       Return only actionable findings that target valid diff ranges.
     `,
@@ -142,16 +144,16 @@ Pipr adds bounded change request metadata, the tool contract, and the output sch
 
 | Goal | Page |
 | --- | --- |
-| Understand Pipr's core model | [Concepts](https://pipr.run/docs/guide/concepts) |
+| Understand Pipr's core model | [How Pipr works](https://pipr.run/docs/concepts) |
 | Add Pipr to a GitHub repository | [Quickstart](https://pipr.run/docs/guide/quickstart) |
 | Configure models, scopes, commands, and publication | [Configuration](https://pipr.run/docs/guide/configuration) |
 | Start from a generated review workflow | [Recipes](https://pipr.run/docs/recipes) |
-| Build custom tasks and agents | [Custom Tasks](https://pipr.run/docs/guide/custom-tasks) |
-| Look up CLI flags | [CLI Reference](https://pipr.run/docs/reference/cli) |
-| Look up SDK types and options | [Pipr SDK Reference](https://pipr.run/docs/reference/sdk-reference) |
-| Understand runtime and publication behavior | [Runtime Guide](https://pipr.run/docs/guide/runtime) |
+| Build custom tasks and agents | [Custom tasks](https://pipr.run/docs/guide/custom-tasks) |
+| Look up CLI flags | [CLI reference](https://pipr.run/docs/reference/cli) |
+| Look up SDK types and options | [Pipr SDK reference](https://pipr.run/docs/reference/sdk-reference) |
+| Understand runtime and publication behavior | [Runtime flow](https://pipr.run/docs/concepts/runtime) |
 | Contribute to Pipr | [Contributing](https://pipr.run/docs/project/contributing) |
-| Report vulnerabilities | [Security Policy](https://pipr.run/docs/project/security) |
+| Report vulnerabilities | [Security policy](https://pipr.run/docs/project/security) |
 | Read release history | [Changelog](https://pipr.run/docs/project/changelog) |
 
 Project language lives in [docs/CONTEXT.md](docs/CONTEXT.md). Architecture decisions live in [docs/adr](docs/adr).
@@ -164,6 +166,7 @@ Project language lives in [docs/CONTEXT.md](docs/CONTEXT.md). Architecture decis
 | [`@usepipr/runtime`](packages/runtime) | Config loading, diff creation, task execution, validation, and publication planning. |
 | [`@usepipr/cli`](packages/cli) | `pipr` binary and command-line entrypoint. |
 | [`@pipr/e2e`](packages/e2e) | Private local Action and container test harness. |
+| [`@pipr/evals`](packages/evals) | Private prompt-evaluation suite for review behavior. |
 | [`@pipr/docs`](apps/docs) | Fumadocs site source for `https://pipr.run/docs`. |
 
 ## Status

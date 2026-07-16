@@ -3,7 +3,7 @@ import type { OfficialInitRecipe } from "./types.js";
 export const defaultReviewRecipe = {
   id: "default-review",
   title: "Default Review",
-  description: "General pull request review with bounded inline comments.",
+  description: "General change request review with bounded inline comments.",
   sourceTools: ["pipr"],
   configTs: `import { definePipr } from "@usepipr/sdk";
 

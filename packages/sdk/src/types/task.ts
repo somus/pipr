@@ -194,7 +194,7 @@ export type ToolRunOptions<Input> = {
   signal?: AbortSignal;
 };
 
-/** Definition used to register a task for pull request actions. */
+/** Definition used to register a task for change request actions. */
 export type ChangeRequestRegistrationOptions<Input> = {
   actions: readonly ChangeRequestAction[];
   task: Task<Input>;

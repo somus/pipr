@@ -6,7 +6,7 @@ checks, fake Pi runs, and fixture scenarios.
 This workspace package is for Pipr maintainers. It is not part of the public
 SDK or CLI surface.
 
-## Technical Notes
+## Technical notes
 
 - `pipr-e2e-check` builds the local Action image, verifies the Pi CLI contract,
   runs fixture assertions, and runs every local `act` scenario.
@@ -44,8 +44,9 @@ harness. To run only those smoke tests:
 bun run --cwd packages/evals eval:deterministic
 ```
 
-Run live prompt evals explicitly when model credentials are available. The
-scripts load `.pipr/.env`, or you can export `DEEPSEEK_API_KEY`:
+Run live prompt evals explicitly when model credentials are available. Export
+`DEEPSEEK_API_KEY` from a trusted shell; the committed eval scripts do not load
+`.pipr/.env` from the checked-out branch:
 
 ```bash
 bun run eval:prompts
@@ -63,5 +64,5 @@ For suite layout and scoring rationale, see
 
 ## Docs
 
-- [Development](https://pipr.run/docs/reference/development)
+- [Development](https://pipr.run/docs/project/development)
 - [GitHub Action](https://pipr.run/docs/guide/github-action)

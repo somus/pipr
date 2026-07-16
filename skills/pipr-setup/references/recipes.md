@@ -1,13 +1,15 @@
-# Pipr Recipe Selection
+# Pipr recipe selection
 
 Choose the smallest recipe that matches the requested workflow, then customize `.pipr/config.ts`.
 
-## Starter Recipes
+## Starter recipes
 
 | Recipe | Use When | Main Customization Points |
 | --- | --- | --- |
-| `default-review` | The user wants a bounded general pull request reviewer. | Review instructions, inline cap, command pattern, path scope. |
+| `default-review` | The user wants a bounded general change request reviewer. | Review instructions, inline cap, command pattern, path scope. |
 | `bug-hunter` | The user wants correctness defects, edge cases, races, regressions, and missing tests. | Excluded docs paths, fallback model, inline cap. |
+| `rich-review` | The user wants a structured review with grouped findings and explicit coverage. | Finding categories, summary format, inline cap. |
+| `fix-suggestions` | The user wants concise, exact suggested replacements when a finding has a small fix. | Suggested-fix policy, inline cap, review scope. |
 | `security-sast` | The user wants concrete security findings with severity, category, and attack path. | Risk categories, required check policy, security path scopes. |
 | `quality-gate` | The user wants a merge gate for blocking correctness, reliability, security, or test risks. | Required check name, fail criteria, auto-resolve policy. |
 | `diff-diagnostics` | The workflow maps diagnostics into Pipr Inline Review Comments. | Diagnostic schema, path and range mapping, external diagnostic source. |
@@ -20,7 +22,7 @@ Choose the smallest recipe that matches the requested workflow, then customize `
 | `interactive-ask` | Reviewers need a free-form `@pipr ask <question...>` command. | Command permission, prompt boundaries, prior review usage. |
 | `changelog-draft` | Maintainers want release-note style command responses. | Changelog format, audience, release channels. |
 
-## Selection Rules
+## Selection rules
 
 - Start from `default-review` unless another row directly matches the user's main workflow.
 - Prefer one custom task over multiple independent tasks when the final output should be one coherent Main Review Comment.
@@ -29,7 +31,7 @@ Choose the smallest recipe that matches the requested workflow, then customize `
 - Prefer `plugin-tool-review` only when the interview identifies durable context or external lookup tools that cannot fit in prompt instructions.
 - Combine recipes by editing config, not by running `pipr init` repeatedly. `pipr init` is a starter, not a merger.
 
-## Init Commands
+## Init commands
 
 ```bash
 pipr init

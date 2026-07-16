@@ -30,7 +30,7 @@ export default definePipr((pipr) => {
     name: "ci-triage",
     model,
     instructions: \`
-      Diagnose CI failures using only the pasted log excerpt, pull request
+      Diagnose CI failures using only the pasted log excerpt, change request
       metadata, prior review state, and repository evidence. Identify the first
       actionable failure and separate it from downstream cascade errors. Use
       status "insufficient-context" when the excerpt cannot support a diagnosis.

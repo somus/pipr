@@ -36,7 +36,7 @@ describe("Bitbucket Cloud workspace", () => {
       });
       expect(git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.head);
       const log = await Bun.file(fixture.log).text();
-      expect(log).toContain(`fetch --no-tags --depth=1 origin ${fixture.head}`);
+      expect(log).toContain(`fetch --no-tags origin ${fixture.head}`);
       expect(log).not.toContain("Authorization: Basic");
     } finally {
       await rm(fixture.root, { recursive: true, force: true });

@@ -21,8 +21,8 @@ Run the repository gate before opening or updating a pull request:
 mise run check
 ```
 
-Run the Action gate after editing any GitHub Action behavior, Docker packaging,
-workflow fixtures, Pi CLI mapping, or PR event handling:
+Run the Action gate after editing GitHub Action behavior, Docker packaging,
+workflow fixtures, Pi CLI mapping, or GitHub pull request event handling:
 
 ```bash
 mise run check-actions

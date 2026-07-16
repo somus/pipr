@@ -1,7 +1,7 @@
 {
   "name": "@usepipr/runtime",
   "version": "0.4.0",
-  "description": "Runtime package for pipr pull request review automation",
+  "description": "Runtime package for Pipr code host review automation",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -34,13 +34,17 @@
       "types": "./dist/internal/review-testing.d.mts",
       "default": "./dist/internal/review-testing.mjs"
     },
+    "./internal/docs": {
+      "types": "./dist/internal/docs.d.mts",
+      "default": "./dist/internal/docs.mjs"
+    },
     "./runtime-tools-extension": {
       "types": "./dist/pi/runtime-tools-extension.d.mts",
       "default": "./dist/pi/runtime-tools-extension.mjs"
     }
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/internal/testing.ts src/internal/review-testing.ts src/pi/runtime-tools-extension.ts --dts --format esm --out-dir dist",
+    "build": "tsdown src/index.ts src/internal/testing.ts src/internal/review-testing.ts src/internal/docs.ts src/pi/runtime-tools-extension.ts --dts --format esm --out-dir dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test --timeout 60000",
     "test:config-init": "bun test --timeout 60000 src/config/tests/init.test.ts",

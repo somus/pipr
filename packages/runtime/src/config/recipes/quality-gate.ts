@@ -77,7 +77,7 @@ export default definePipr((pipr) => {
     tools: pipr.tools.readOnly,
     retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "7m",
-    prompt: () => "Run the required quality gate for this pull request.",
+    prompt: () => "Run the required quality gate for this change request.",
   });
 
   const task = pipr.task({

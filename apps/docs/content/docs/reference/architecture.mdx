@@ -9,6 +9,8 @@ For a broader introduction, see [Pipr](/docs). For the public TypeScript API, se
 
 ## Package map
 
+Each workspace package owns a distinct public or runtime boundary.
+
 | Area | Responsibility |
 | --- | --- |
 | `packages/sdk` | Public TypeScript config builder, schemas, review contracts, prompt helpers, and generated declaration source. |
@@ -21,6 +23,8 @@ The package root public surfaces stay small. Runtime internals stay behind domai
 
 ## Runtime flow
 
+The runtime keeps provider parsing and publication around a shared review pipeline.
+
 1. Load the trusted TypeScript config.
 2. Parse the code host change request or command event through an adapter.
 3. Build the Diff Manifest from local git state.
@@ -28,10 +32,12 @@ The package root public surfaces stay small. Runtime internals stay behind domai
 5. Call Pi through `ctx.pi.run()`.
 6. Emit exactly one final output from the task.
 7. For review output, validate structured findings against the Diff Manifest and build the Main Review Comment and Inline Review Comments.
-8. For command response output, build a normal pull request issue comment keyed to the source command comment.
+8. For command response output, build a normal change-request comment keyed to the source command comment.
 9. Publish comments through the code host adapter after stale-head checks.
 
 ## Data flow
+
+Data moves from native event input to validated provider-neutral output.
 
 ```text
 .pipr/config.ts
@@ -49,9 +55,9 @@ The Diff Manifest is the central contract between git state, model-visible conte
 
 ## Trust boundaries
 
-For GitHub Action pull request runs, Pipr loads `.pipr/config.ts` and local imports from the base commit. The pull request head is reviewed, but PR-authored config changes cannot change the current run's executable review settings.
+For hosted change-request runs, Pipr loads `.pipr/config.ts` and local imports from the base commit. The proposed head is reviewed, but proposed config changes cannot change the current run's executable review settings.
 
-Provider backend, model, API-key env, and provider options come from the trusted base config, not pull request code.
+Provider backend, model, API-key env, and provider options come from the trusted base config, not proposed change request code.
 
 Pi receives a read-only workspace copy. The official Docker Action seals the copy under the root supervisor, then runs Pi as UID and GID `1000`. Pi can use only read-only built-in tools and Pipr-owned Diff Read Tools for condensed manifest runs.
 
@@ -76,7 +82,7 @@ Review Tasks may:
 Review Tasks may not:
 
 - write code host comments directly
-- choose provider secrets at runtime from pull request code
+- choose provider secrets at runtime from proposed change request code
 - publish invalid inline ranges
 - bypass stale-head checks
 - mutate the Pi workspace

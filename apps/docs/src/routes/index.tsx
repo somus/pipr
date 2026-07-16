@@ -84,8 +84,7 @@ const moreInfoLinks = [
     title: "Quickstart",
     description: (
       <>
-        Install the CLI, create <InlineCode>.pipr/config.ts</InlineCode>, and run the first GitHub
-        review.
+        Install the CLI, create <InlineCode>.pipr/config.ts</InlineCode>, and run your first review.
       </>
     ),
     path: "guide/quickstart",
@@ -148,13 +147,13 @@ function Hero() {
         </a>
       </div>
       <p className="mt-5 max-w-2xl font-mono text-sm leading-6 text-fd-muted-foreground">
-        pull request review runtime
+        change request review runtime
       </p>
       <p className="pipr-heading pipr-text-pretty mt-8 max-w-2xl text-xl font-semibold leading-8 tracking-normal text-fd-foreground sm:text-2xl sm:leading-9">
-        Composable review workflows, one output.
+        Repository-owned review policy, one validated runtime.
       </p>
       <p className="mt-4 max-w-2xl font-mono text-xs leading-5 text-fd-muted-foreground">
-        Platform support: GitHub pull requests only today; other code hosts coming soon.
+        GitHub · GitLab.com · Azure DevOps Services · Bitbucket Cloud
       </p>
     </header>
   );
@@ -274,7 +273,7 @@ function Footer() {
   return (
     <footer className="mt-20 flex flex-wrap items-center justify-between gap-4 border-t border-fd-border pt-8 text-sm">
       <span className="font-mono text-xs uppercase tracking-[0.14em] text-fd-muted-foreground">
-        Pipr 2026
+        Pipr
       </span>
       <nav
         className="ml-auto flex flex-wrap items-center justify-end gap-x-5 gap-y-2"

@@ -1,60 +1,41 @@
 ---
 title: "Guide"
-description: "Install Pipr, configure review tasks, and understand how runs publish comments."
+description: "Install Pipr, configure a code host, run reviews, and troubleshoot delivery."
 ---
 
-Use this section when you are adding Pipr to a repository, changing how it reviews pull requests, or debugging what it publishes.
+Use the guide for setup and operational tasks. For runtime explanations, read [Concepts](/docs/concepts); for exact flags and types, use [Reference](/docs/reference).
 
-Pipr supports GitHub pull requests, GitLab.com merge requests, Azure DevOps Services pull requests, and Bitbucket Cloud pull requests.
+## Start with your code host
 
-Pipr is a lean core you build on: start with the default review, then compose recipes, custom tasks, commands, and plugins in the same `.pipr/config.ts` as your needs grow. The [Build on the core](/docs#build-on-the-core) ladder shows which page matches each level.
+Choose the setup that matches where your change requests run.
 
-## First run
-
-Follow this path for the first successful pull request review.
-
-1. Install the CLI from the GitHub Release installer.
-2. Run `pipr init` in the repository root.
-3. Add the provider secret used by `.pipr/config.ts`.
-4. Review the generated GitHub workflow and commit the files.
-5. Open or update a pull request and check the Main Review Comment.
-6. Use local review commands while tuning config.
-
-## Setup success checklist
-
-Use this checklist before changing reviewer instructions. It catches the most common first-run setup failures.
-
-| Check | Command or place to inspect | Expected result |
+| Code host | Guide | Delivery path |
 | --- | --- | --- |
-| CLI installed | `pipr --version` | A Pipr release version prints. |
-| Config loads | `pipr check` | The runtime plan validates. |
-| Plan matches intent | `pipr inspect` | Models, tasks, commands, and publication limits match `.pipr/config.ts`. |
-| Provider secret exists | GitHub repository Actions secrets | The secret name matches `pipr.secret({ name })`. |
-| Workflow has full history | `.github/workflows/pipr.yml` | `actions/checkout` uses `fetch-depth: 0`. |
-| Workflow can write expected output | Workflow `permissions` block | Permissions match the enabled comment and check features. |
-| First PR output appears | Pull request conversation and Files changed tab | Pipr publishes a Main Review Comment and any valid Inline Review Comments. |
+| GitHub | [Quickstart](/docs/guide/quickstart) | Docker Action |
+| GitLab.com | [GitLab](/docs/guide/gitlab) | GitLab CI or trusted webhook runner |
+| Azure DevOps Services | [Azure DevOps](/docs/guide/azure-devops) | Trusted service-hook runner |
+| Bitbucket Cloud | [Bitbucket Cloud](/docs/guide/bitbucket) | Trusted repository-webhook runner |
 
-If a check fails, use [Troubleshooting](/docs/guide/troubleshooting#first-run-failure-ladder) before changing task code.
+Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for a persistent GitLab, Azure DevOps, or Bitbucket worker.
 
-## Pages
+## Configure review behavior
 
-Pick the page based on the job you are doing.
+These pages change what Pipr runs and publishes.
 
-| Page | Use it for |
+| Task | Page |
 | --- | --- |
-| [Quickstart](/docs/guide/quickstart) | The shortest path from install to the first review. |
-| [GitHub Action](/docs/guide/github-action) | Workflow YAML, permissions, outputs, dry runs, and command events. |
-| [GitLab](/docs/guide/gitlab) | GitLab CI and trusted webhook setup. |
-| [Azure DevOps](/docs/guide/azure-devops) | Trusted service-hook setup and Azure permissions. |
-| [Bitbucket Cloud](/docs/guide/bitbucket) | Trusted webhook runner, API-token scopes, events, and publication behavior. |
-| [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) | Run one trusted repository worker with Docker Compose, persistent queue state, health checks, and graceful shutdown. |
-| [Local Runs](/docs/guide/local-runs) | Running review tasks locally without publishing comments. |
-| [Comments and Findings](/docs/guide/comments) | Main comments, inline comments, dropped findings, prior state, and verifier replies. |
-| [Troubleshooting](/docs/guide/troubleshooting) | Symptom-first fixes for setup, config, Action, model, and publication failures. |
-| [Configuration](/docs/guide/configuration) | Common config examples, models, limits, schemas, retry, and inspect patterns. |
-| [Entrypoints](/docs/guide/entrypoints) | Change request triggers, `@pipr` commands, local review, and permissions. |
-| [Custom Tasks](/docs/guide/custom-tasks) | Building task handlers with `ctx.change`, `ctx.pi`, `ctx.review`, `ctx.comment`, and `ctx.check`. |
-| [Runtime Guide](/docs/guide/runtime) | Run modes, Diff Manifest, Pi execution, validation, publication, and failure behavior. |
-| [Trust and Security](/docs/guide/trust-security) | Base-commit config, read-only Pi workspace, secret handling, and fork behavior. |
+| Configure models, paths, limits, retries, and checks | [Configuration](/docs/guide/configuration) |
+| Select change request, command, and local triggers | [Entrypoints](/docs/guide/entrypoints) |
+| Build task handlers with runtime context | [Custom tasks](/docs/guide/custom-tasks) |
+| Start from a complete generated configuration | [Recipes](/docs/recipes) |
 
-For starter configs, use [Recipes](/docs/recipes). For exact API names and flags, use [Reference](/docs/reference).
+## Run and diagnose Pipr
+
+Use these pages after the provider and review policy are configured.
+
+| Task | Page |
+| --- | --- |
+| Run review tasks without publishing | [Local runs](/docs/guide/local-runs) |
+| Diagnose setup, model, and publication failures | [Troubleshooting](/docs/guide/troubleshooting) |
+| Understand published comments and findings | [Comments and findings](/docs/concepts/comments) |
+| Inspect security and trust boundaries | [Trust and security](/docs/concepts/trust-security) |

@@ -35,13 +35,13 @@ Download the Compose file and environment template from the same Pipr release ta
 ```bash
 cd /srv/pipr/deployment
 curl --fail --location --output compose.yml \
-  https://raw.githubusercontent.com/somus/pipr/v0.3.8/deploy/webhook/compose.yml
+  https://raw.githubusercontent.com/somus/pipr/v0.4.0/deploy/webhook/compose.yml # x-release-please-version
 curl --fail --location --output .env \
-  https://raw.githubusercontent.com/somus/pipr/v0.3.8/deploy/webhook/.env.example
+  https://raw.githubusercontent.com/somus/pipr/v0.4.0/deploy/webhook/.env.example # x-release-please-version
 chmod 600 .env
 ```
 
-The Compose file pins `ghcr.io/somus/pipr:v0.3.8`. Keep the file and image on the same release so the documented CLI contract matches the container.
+The Compose file pins `ghcr.io/somus/pipr:v0.4.0`. Keep the file and image on the same release so the documented CLI contract matches the container. {/* x-release-please-version */}
 
 ## 3. Prepare the trusted checkout
 
@@ -120,7 +120,9 @@ docker compose up --detach
 
 ## Next steps
 
+Finish setup in the matching provider guide, then review the worker's trust boundary.
+
 - [Configure the GitLab webhook](/docs/guide/gitlab#commands-and-reply-verification) to select events and authenticate deliveries.
 - [Configure Azure DevOps service hooks](/docs/guide/azure-devops#commands-and-reply-verification) to bind one worker to one subscription.
 - [Configure Bitbucket Cloud webhooks](/docs/guide/bitbucket#configure-the-runner) to set event and API-token requirements.
-- [Review the trust model](/docs/guide/trust-security) before accepting events from untrusted contributors.
+- [Review the trust model](/docs/concepts/trust-security) before accepting events from untrusted contributors.

@@ -36,7 +36,7 @@ export default definePipr((pipr) => {
       compatibility, or CVE claims that are not evidenced in the change.
     \`,
     output: dependencyOutput,
-    prompt: () => "Review the dependency-related changes in this pull request.",
+    prompt: () => "Review the dependency-related changes in this change request.",
   });
 
   const task = pipr.task({

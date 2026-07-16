@@ -6,22 +6,19 @@
   "pages": [
     "---[Rocket]Start---",
     "index",
-    "concepts",
     "quickstart",
+    "---[GitPullRequest]Providers---",
     "github-action",
     "gitlab",
     "azure-devops",
     "bitbucket",
-    "webhook-docker",
-    "local-runs",
-    "troubleshooting",
     "---[Settings]Configure---",
     "configuration",
     "entrypoints",
     "custom-tasks",
-    "---[Play]Run---",
-    "runtime",
-    "comments",
-    "trust-security"
+    "---[ServerCog]Run and deploy---",
+    "local-runs",
+    "webhook-docker",
+    "troubleshooting"
   ]
 }

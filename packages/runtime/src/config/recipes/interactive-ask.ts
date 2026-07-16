@@ -47,7 +47,7 @@ export default definePipr((pipr) => {
   pipr.command({
     pattern: "@pipr ask <question...>",
     permission: "read",
-    description: "Ask a question about this pull request.",
+    description: "Ask a question about this change request.",
     parse: (args) => ({ question: args.question ?? "" }),
     task,
   });

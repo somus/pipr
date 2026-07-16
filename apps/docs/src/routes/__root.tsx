@@ -18,7 +18,8 @@ export const Route = createRootRoute({
       },
       {
         name: "description",
-        content: "Documentation for Pipr, code-owned AI review for GitHub pull requests.",
+        content:
+          "Documentation for Pipr, code-owned AI review for GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud.",
       },
     ],
     links: [

@@ -7,13 +7,40 @@ Run Pipr on Bitbucket Cloud through a trusted repository-webhook runner. Bitbuck
 
 ## Initialize the adapter
 
+Generate the Bitbucket worker environment template with the repository config.
+
 ```bash
 pipr init --adapters bitbucket
 ```
 
 The command creates `bitbucket.pipr.env.example`. Copy its variable names into the trusted runner's secret store and leave the checked-in example values empty.
 
+## Optional pull request pipeline
+
+Use Bitbucket Pipelines only for same-repository pull requests whose authors are trusted with pipeline variables. Pull request pipelines use source-controlled `bitbucket-pipelines.yml`, so a contributor who can change that file can replace the review command before Pipr starts. Fork pull requests don't trigger this pipeline; use the trusted webhook runner when the pipeline trust boundary is not sufficient.
+
+Add `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, and the configured model-provider key as secured repository variables. Then add this pull request pipeline:
+
+```yaml
+image: ghcr.io/somus/pipr:v0.4.0 # x-release-please-version
+
+clone:
+  depth: full
+
+pipelines:
+  pull-requests:
+    "**":
+      - step:
+          name: Pipr review
+          script:
+            - pipr host-run --host bitbucket
+```
+
+Bitbucket supplies `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, and `BITBUCKET_PR_ID` to the step. This pipeline handles automatic reviews only. Use the webhook runner for `@pipr` commands and reply verification.
+
 ## Configure the runner
+
+Provide a review token, a separate permission token, the webhook secret, and the model credential.
 
 ```bash
 export BITBUCKET_WORKSPACE="your-workspace"
@@ -58,8 +85,24 @@ Bitbucket Cloud's public REST API does not document directly applicable suggesti
 
 The public REST endpoint accepts added ranges as `start_to` plus `to` and deleted ranges as `start_from` plus `from`. Live Cloud probes created and returned both forms with the expected three-line context.
 
+## Bitbucket review output
+
+Bitbucket displays the task summary in the pull request conversation, anchors findings to source or destination lines, and publishes source-commit statuses. Pipr emits Markdown-only Bitbucket comments because Bitbucket Cloud does not support arbitrary HTML in Markdown.
+
+<img
+  alt="Bitbucket pull request overview showing the successful Pipr review build status for the event-relay retry change"
+  src="/images/pipr/providers/bitbucket-review.png"
+/>
+
+<img
+  alt="Bitbucket pull request diff showing a Pipr inline comment with fenced replacement code for duplicate webhook delivery"
+  src="/images/pipr/providers/bitbucket-inline.png"
+/>
+
 ## Next steps
 
+Use these pages to tune review policy and validate the trust boundary.
+
 - [Configure Pipr](/docs/guide/configuration) to select Review Tasks and command permission levels.
-- [Review the trust model](/docs/guide/trust-security) before accepting untrusted pull requests.
+- [Review the trust model](/docs/concepts/trust-security) before accepting untrusted pull requests.
 - [Use local runs](/docs/guide/local-runs) to validate `.pipr/config.ts` before enabling webhooks.

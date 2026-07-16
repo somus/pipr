@@ -7,7 +7,7 @@ publication planning.
 Most users should interact with this package through the `pipr` CLI or a code
 host integration. Repository configs should import from `@usepipr/sdk`.
 
-## Technical Notes
+## Technical notes
 
 - The package root exports command APIs for init, hosted runs, dry runs,
   config checks, plan inspection, and local review.
@@ -19,7 +19,7 @@ host integration. Repository configs should import from `@usepipr/sdk`.
   eval package review scoring.
 - The build emits ESM and declaration files to `dist`.
 
-## Source Map
+## Source map
 
 | Path | Responsibility |
 | --- | --- |
@@ -30,7 +30,7 @@ host integration. Repository configs should import from `@usepipr/sdk`.
 | `src/review` | Task execution, agent prompts, validation, comments, and publication plans |
 | `src/hosts` | Code host adapters and local-run integration |
 
-## Local Checks
+## Local checks
 
 ```bash
 bun run --cwd packages/runtime test:config-init
@@ -41,7 +41,7 @@ bun run --cwd packages/runtime check
 
 ## Docs
 
-- [Runtime Guide](https://pipr.run/docs/guide/runtime)
-- [Comments and Findings](https://pipr.run/docs/guide/comments)
+- [Runtime flow](https://pipr.run/docs/concepts/runtime)
+- [Comments and findings](https://pipr.run/docs/concepts/comments)
 - [Architecture](https://pipr.run/docs/reference/architecture)
-- [Trust and Security](https://pipr.run/docs/guide/trust-security)
+- [Trust and security](https://pipr.run/docs/concepts/trust-security)
