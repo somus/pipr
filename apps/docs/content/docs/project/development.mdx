@@ -3,9 +3,15 @@ title: "Development"
 description: "Repo setup, local e2e checks, Docker image release, and npm release workflow."
 ---
 
+Use this reference when you are changing Pipr itself. Run the focused check for the surface you changed, then run the repository gate before pushing.
+
 ## Setup
 
+Install the pinned toolchain and run the repository gate before pushing broad changes.
+
 ### Install dependencies
+
+Install the workspace dependencies and repository hooks through mise.
 
 ```bash
 mise run install
@@ -21,6 +27,8 @@ Run the repository gate:
 
 ### Repository gate
 
+Run the canonical repository check before pushing.
+
 ```bash
 mise run check
 ```
@@ -28,6 +36,8 @@ mise run check
 This runs release metadata checks, script tests, package builds, lint, typecheck, tests, format check, and Fallow. It does not run the full docs Vite build.
 
 ## Docs app
+
+Develop the Fumadocs app through its workspace scripts and keep generated output out of source edits.
 
 ### Local dev server
 
@@ -63,6 +73,8 @@ When moving or adding pages:
 
 ### Page changes
 
+Keep navigation, metadata, links, and generated output aligned when pages move.
+
 - update the nearest `meta.json`
 - keep frontmatter titles and descriptions useful
 - use `/docs/...` links for internal docs routes
@@ -70,6 +82,8 @@ When moving or adding pages:
 - run `bun run --cwd apps/docs typegen` before typecheck or build
 
 ## Local Action e2e
+
+Use the Action gate for Docker packaging, event handling, workflow fixtures, and Pi CLI integration.
 
 ### Action gate
 
@@ -133,6 +147,8 @@ bun run --cwd packages/evals eval:full:export
 
 ## CI Docker e2e
 
+The CI container lane exercises the built image directly without local `act` orchestration.
+
 ### CI container check
 
 CI does not run `act`. The CI workflow builds a local single-platform Docker image with `load: true`, tags it as `pipr-action:e2e`, and runs:
@@ -149,12 +165,16 @@ To run the same check locally:
 
 ### Local container check
 
+Build and exercise the same container contract outside CI.
+
 ```bash
 docker build -t pipr-action:e2e .
 PIPR_ACTION_IMAGE=pipr-action:e2e bun run --cwd packages/e2e check:container
 ```
 
 ## Docker image release
+
+Release workflows publish the verified Action image and retain immutable version tags.
 
 ### Action metadata
 
@@ -170,6 +190,8 @@ The Docker image is published only by the release workflow:
 
 ### Release workflow
 
+Only the release workflow publishes the verified image.
+
 ```text
 .github/workflows/release.yml
 ```
@@ -180,6 +202,8 @@ The GHCR image name is:
 
 ### GHCR image
 
+All immutable and moving tags use this image name.
+
 ```text
 ghcr.io/somus/pipr
 ```
@@ -188,11 +212,13 @@ ghcr.io/somus/pipr
 
 Publishing uses the tags:
 
-- release tag, such as `v0.4.0` # x-release-please-version
-- release version, such as `0.4.0` # x-release-please-version
+- release tag, such as `v0.4.0` {/* x-release-please-version */}
+- release version, such as `0.4.0` {/* x-release-please-version */}
 - `latest`
 
 ## npm and binary release
+
+GitHub Releases and npm trusted publishing distribute the CLI and public packages from one release tag.
 
 ### Release artifacts
 
@@ -211,11 +237,13 @@ Required release setup:
 - GHCR package write access through `GITHUB_TOKEN`
 - `PIPR_RELEASE_PLEASE_TOKEN` configured with permission to create release pull requests and releases
 
-The Release Please workflow opens changelog and version pull requests from Conventional Commits on `main`. The publish workflow runs on `release.published`. The release tag must look like `v0.1.0`, and root, SDK, runtime, and CLI package versions must match the tag without the leading `v`. The workflow grants `id-token: write` and uses npm trusted publishing, so it does not need an `NPM_TOKEN` secret.
+The Release Please workflow opens changelog and version pull requests from Conventional Commits on `main`. The publish workflow runs on `release.published`. The release tag must look like `v0.4.0`, and root, SDK, runtime, and CLI package versions must match the tag without the leading `v`. The workflow grants `id-token: write` and uses npm trusted publishing, so it does not need an `NPM_TOKEN` secret. {/* x-release-please-version */}
 
 Configure trusted publishing through npm package settings, or with npm 11.15.0 or newer after the package exists:
 
 ### Trusted publishing
+
+Configure npm's GitHub trusted publisher after the packages exist.
 
 ```bash
 npm trust github @usepipr/sdk --repo somus/pipr --file .github/workflows/release.yml --allow-publish
@@ -249,6 +277,8 @@ NPM_CONFIG_CACHE=/private/tmp/pipr-npm-cache npm pack --dry-run --json --workspa
 
 ## GitHub push checklist
 
+Run the full gate, add the Action gate when required, and publish releases only from matching semver tags.
+
 ### Before pushing
 
 Before pushing a public branch:
@@ -279,7 +309,7 @@ git push -u origin main
 Publish a GitHub Release from a semver tag when the package is ready:
 
 ```bash
-gh release create v0.1.0 --draft --title v0.1.0 --generate-notes
+gh release create v0.4.0 --draft --title v0.4.0 --generate-notes # x-release-please-version
 ```
 
 The release workflow starts when the release is published.

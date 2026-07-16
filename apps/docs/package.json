@@ -10,12 +10,14 @@
     "preview": "mkdir -p .cache && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite preview",
     "recipes:sync": "bun scripts/sync-recipes.ts",
     "recipes:check": "bun scripts/sync-recipes.ts --check",
-    "test": "bun run recipes:check && bun test scripts/tests src",
+    "content:check": "bun scripts/check-content.ts",
+    "links:check": "bun scripts/check-content.ts --external",
+    "test": "bun run recipes:check && bun run content:check && bun test scripts/tests src",
     "typegen": "mkdir -p .cache && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage fumadocs-mdx && tsr generate",
     "typecheck": "bun run typegen && tsc --noEmit",
     "lint": "biome lint .",
     "format:check": "biome format .",
-    "check": "bun run recipes:check && bun run lint && bun run typecheck",
+    "check": "bun run recipes:check && bun run content:check && bun run lint && bun run typecheck",
     "postinstall": "bun run typegen"
   },
   "dependencies": {

@@ -1,58 +1,19 @@
 import { access, mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderOfficialGithubWorkflow } from "../../../packages/runtime/src/config/official-github-workflow.js";
 import { listOfficialInitRecipes } from "../../../packages/runtime/src/config/recipes.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const docsDir = path.resolve(here, "../content/docs/recipes");
 const publicDir = path.resolve(here, "../public");
 const mode = process.argv.includes("--check") ? "check" : "sync";
-const defaultWorkflowActionRef = "somus/pipr@v0.4.0"; // x-release-please-version
-
-function starterWorkflow(recipe: (typeof recipes)[number]): string {
-  const lines = [
-    "name: pipr",
-    "",
-    "on:",
-    "  pull_request:",
-    "  issue_comment:",
-    "    types: [created]",
-    "  pull_request_review_comment:",
-    "    types: [created]",
-    "",
-    "permissions:",
-    "  contents: write",
-    "  pull-requests: write",
-    "  issues: write",
-    "  checks: write",
-    "",
-    "jobs:",
-    "  review:",
-    "    runs-on: ubuntu-latest",
-    "    steps:",
-    "      - uses: actions/checkout@v6",
-    "        with:",
-    "          fetch-depth: 0",
-    `      - uses: ${defaultWorkflowActionRef} # x-release-please-version`,
-    "        env:",
-    `          DEEPSEEK_API_KEY: ${githubExpression("secrets.DEEPSEEK_API_KEY")}`,
-    `          GITHUB_TOKEN: ${githubExpression("github.token")}`,
-  ];
-
-  for (const secret of recipe.workflowEnvSecrets ?? []) {
-    lines.push(`          ${secret.env}: ${githubExpression(`secrets.${secret.secret}`)}`);
-  }
-
-  lines.push("");
-  return lines.join("\n");
-}
-
 const recipes = listOfficialInitRecipes();
 const expected = new Map<string, string>();
 const recipeDescriptions = new Map([
   [
     "default-review",
-    "Start with one general pull request reviewer that runs from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
+    "Start with one general change request reviewer that runs from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
   ],
   [
     "bug-hunter",
@@ -68,7 +29,7 @@ const recipeDescriptions = new Map([
   ],
   [
     "multi-agent-review",
-    "Run specialist security, test, and maintainability agents, then merge their output through an aggregator into one concise pull request review.",
+    "Run specialist security, test, and maintainability agents, then merge their output through an aggregator into one concise change request review.",
   ],
   [
     "pr-briefing",
@@ -76,7 +37,7 @@ const recipeDescriptions = new Map([
   ],
   [
     "security-sast",
-    "Review pull request changes for concrete security risks, severity, category, and attack path before publishing validated inline findings.",
+    "Review change request changes for concrete security risks, severity, category, and attack path before publishing validated inline findings.",
   ],
   [
     "quality-gate",
@@ -88,7 +49,7 @@ const recipeDescriptions = new Map([
   ],
   [
     "pr-hygiene",
-    "Check pull requests for operational hygiene such as tests, documentation updates, lockfile changes, generated files, and change size.",
+    "Check change requests for operational hygiene such as tests, documentation updates, lockfile changes, generated files, and change size.",
   ],
   [
     "dependency-risk",
@@ -108,7 +69,7 @@ const recipeDescriptions = new Map([
   ],
   [
     "changelog-draft",
-    "Draft release-note style changelog entries from pull request changes and publish them as a command response comment.",
+    "Draft release-note style changelog entries from change request changes and publish them as a command response comment.",
   ],
 ] satisfies Array<[string, string]>);
 
@@ -119,7 +80,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "bug-hunter",
-    "Pipr publishes bug-focused review output with bounded inline comments. Use the command entrypoint when maintainers want to rerun the bug review on a risky pull request.",
+    "Pipr publishes bug-focused review output with bounded inline comments. Use the command entrypoint when maintainers want to rerun the bug review on a risky change request.",
   ],
   [
     "rich-review",
@@ -176,25 +137,19 @@ const recipeExpectedOutputs = new Map([
 ] satisfies Array<[string, string]>);
 
 const recipeSampleOutputs = new Map(
-  [
-    "default-review",
-    "bug-hunter",
-    "security-sast",
-    "quality-gate",
-    "diff-diagnostics",
-    "pr-hygiene",
-    "dependency-risk",
-    "multi-agent-review",
-    "pr-briefing",
-    "interactive-ask",
-    "changelog-draft",
-    "plugin-tool-review",
-  ].map((recipeId) => [
-    recipeId,
-    {
-      image: `/images/pipr/recipes/${recipeId}.png`,
-    },
-  ]),
+  recipes.map((recipe) => {
+    const expectedOutput = recipeExpectedOutputs.get(recipe.id);
+    if (!expectedOutput) {
+      throw new Error(`Missing expected output for recipe ${recipe.id}`);
+    }
+    return [
+      recipe.id,
+      {
+        image: `/images/pipr/recipes/${recipe.id}.png`,
+        alt: `GitHub pull request showing ${recipe.title}. ${expectedOutput}`,
+      },
+    ];
+  }),
 );
 
 const recipeNotes = new Map([
@@ -285,7 +240,7 @@ Diff Diagnostics models reviewdog-style output: the agent emits diagnostics, the
     "pr-hygiene",
     `## Recipe notes
 
-PR Hygiene reviews the shape of the pull request: tests, docs, lockfiles, generated files, and size. It reads both \`changedFiles\` and the Diff Manifest so it can reason about file-level signals and changed code.
+PR Hygiene reviews the shape of the change request: tests, docs, lockfiles, generated files, and size. It reads both \`changedFiles\` and the Diff Manifest so it can reason about file-level signals and changed code.
 
 - Customize the instructions with your repository's release-note, migration, generated-code, and test expectations.
 - Keep the check non-required until maintainers agree which hygiene findings must block merge.
@@ -453,9 +408,9 @@ description: "Canonical starter configs generated by \`pipr init --recipe\`."
 
 {/* This file is generated by apps/docs/scripts/sync-recipes.ts. */}
 
-Recipes are checked-in starter configs for common review workflows. Each one is a workflow you would otherwise run a separate review tool for — security SAST, PR briefings, quality gates, dependency risk, CI triage — built from the same Pipr building blocks and published through the same validated pipeline. The code shown here is generated from Pipr's official runtime recipe registry, so it matches what \`pipr init\` writes.
+Recipes are checked-in starter configs for common review workflows, including security analysis, reviewer briefings, quality gates, dependency review, and CI triage. They use the same Pipr task, validation, and publication pipeline. The code shown here is generated from Pipr's official runtime recipe registry, so it matches what \`pipr init\` writes.
 
-Recipes are starting points, not modes. Every recipe is plain \`.pipr/config.ts\` code, so you can combine several in one config, edit the instructions, or use one as the template for your own workflow.
+Every recipe is editable \`.pipr/config.ts\` code. You can combine tasks in one config, change the instructions, or use a recipe as the starting point for your own workflow.
 
 \`\`\`bash
 pipr init --recipe security-sast
@@ -470,7 +425,7 @@ Choose by the review job first, then tune noise after the first successful run.
 
 | Goal | Start with | Default noise level |
 | --- | --- | --- |
-| General pull request review | [Default Review](/docs/recipes/default-review) | Balanced inline comments |
+| General change request review | [Default Review](/docs/recipes/default-review) | Balanced inline comments |
 | Structured general review | [Structured Review](/docs/recipes/rich-review) | Severity and category metadata |
 | Exact suggested fixes | [Fix Suggestions](/docs/recipes/fix-suggestions) | Command-triggered patch suggestions |
 | Real bug detection | [Bug Hunter](/docs/recipes/bug-hunter) | Focused inline comments |
@@ -501,7 +456,7 @@ Tune generated recipes in the config before changing runtime code.
 - Change the model provider and \`apiKey\` secret name before committing the config.
 - Run \`pipr inspect\` after edits to confirm models, tasks, commands, and tools.
 - Use \`--adapters none\` when you want only the \`.pipr\` config files.
-- Use a local run before opening a pull request when the recipe adds custom commands or tasks.
+- Use a local run before opening a change request when the recipe adds custom commands or tasks.
 - Tune instructions first, then limits. Runtime limits are guardrails; prompts define what the reviewer treats as actionable.
 
 ## Tune review noise
@@ -542,17 +497,18 @@ function renderMeta(): string {
         "fix-suggestions",
         "multi-agent-review",
         "pr-briefing",
-        "---[ShieldCheck]Security & Quality---",
+        "---[ShieldCheck]Security and quality---",
         "security-sast",
         "quality-gate",
         "diff-diagnostics",
-        "pr-hygiene",
         "dependency-risk",
-        "---[Terminal]Commands & Tools---",
+        "---[ClipboardCheck]Change management---",
+        "pr-hygiene",
+        "changelog-draft",
+        "---[Terminal]Commands and tools---",
         "ci-triage-command",
         "interactive-ask",
         "plugin-tool-review",
-        "changelog-draft",
       ],
     },
     null,
@@ -582,7 +538,7 @@ description: "${escapeFrontmatter(description)}"
 
 {/* This file is generated by apps/docs/scripts/sync-recipes.ts. */}
 
-This page shows the generated config for ${recipe.title}. The code matches what \`${command}\` writes.
+This page shows the generated config for ${recipe.title}. The code and GitHub workflow match what \`${command}\` writes.
 
 ## Use when
 
@@ -600,7 +556,7 @@ pipr check
 
 ## Generated files
 
-The recipe writes the config, any supporting \`.pipr\` files, and the GitHub workflow:
+The recipe writes the config, any supporting \`.pipr\` files, and the GitHub delivery workflow:
 
 <RecipeFileExplorer files={${JSON.stringify(fileTree, null, 2)}}>
 ${filePanes}
@@ -614,7 +570,13 @@ ${recipeExpectedOutput(recipe)}
 
 ${extraSections}
 
-Shared setup, local type support, and provider tuning notes live on the [Recipes](/docs/recipes#common-setup) page.
+## Next steps
+
+Use these pages to adapt the generated recipe or select another delivery target.
+
+- Use [Recipes setup](/docs/recipes#common-setup) for local types and shared tuning guidance.
+- Use [Configuration](/docs/guide/configuration) to combine this recipe with other tasks.
+- Use [Code host guides](/docs/guide#start-with-your-code-host) when delivery runs outside GitHub.
 `;
 }
 
@@ -637,8 +599,10 @@ function recipeSampleOutput(recipe: (typeof recipes)[number]): string {
 
   return `## Sample output
 
+This GitHub capture shows the recipe's native review or command output.
+
 <img
-  alt="${recipe.title} sample Pipr pull request output from github-actions bot"
+  alt="${sample.alt}"
   src="${sample.image}"
 />`;
 }
@@ -670,7 +634,14 @@ function recipeFiles(
       lang: recipeFileLanguage(file.relativePath),
       path: path.posix.join(".pipr", file.relativePath),
     })),
-    { code: starterWorkflow(recipe), lang: "yaml", path: ".github/workflows/pipr.yml" },
+    {
+      code: renderOfficialGithubWorkflow({
+        recipe: recipe.id,
+        includeReleasePleaseVersionMarker: true,
+      }),
+      lang: "yaml",
+      path: ".github/workflows/pipr.yml",
+    },
   ];
 }
 
@@ -683,10 +654,6 @@ function recipeFileLanguage(filePath: string): string {
     return "yaml";
   }
   return "ts";
-}
-
-function githubExpression(expression: string): string {
-  return `$${["{{ ", expression, " }}"].join("")}`;
 }
 
 function escapeFrontmatter(value: string): string {

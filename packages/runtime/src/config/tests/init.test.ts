@@ -10,6 +10,7 @@ import {
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { initOfficialMinimalProject } from "../init.js";
+import { renderOfficialGithubWorkflow } from "../official-github-workflow.js";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import {
   listOfficialInitRecipes,
@@ -37,6 +38,17 @@ const defaultInitFiles = [
 ];
 
 describe("initOfficialMinimalProject", () => {
+  it("renders the same non-minimal GitHub workflow used by recipe docs", () => {
+    const runtimeWorkflow = renderOfficialGithubWorkflow({ recipe: "security-sast" });
+    const documentedWorkflow = renderOfficialGithubWorkflow({
+      recipe: "security-sast",
+      includeReleasePleaseVersionMarker: true,
+    });
+
+    expect(documentedWorkflow.replace(" # x-release-please-version", "")).toBe(runtimeWorkflow);
+    expect(runtimeWorkflow).toContain("actions/cache@v4");
+  });
+
   it("creates the official minimal .pipr tree and validates it", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
 

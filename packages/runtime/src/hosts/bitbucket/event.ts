@@ -4,7 +4,7 @@ import type { CodeHostEvent, LoadedChangeRequest } from "../types.js";
 import { bitbucketRepositorySchema } from "./schema.js";
 
 const webhookSchema = z.looseObject({
-  actor: z.looseObject({ nickname: z.string().min(1) }),
+  actor: z.looseObject({ nickname: z.string().min(1).optional() }),
   repository: bitbucketRepositorySchema,
   pullrequest: z.looseObject({
     id: z.number().int().positive(),
@@ -76,6 +76,7 @@ function commentEvent(
   eventKey: string,
   workspace: string,
 ): CodeHostEvent {
+  if (!hook.actor.nickname) throw new Error("Bitbucket comment event actor is missing a nickname");
   const common = {
     eventName: eventKey,
     action: "created",

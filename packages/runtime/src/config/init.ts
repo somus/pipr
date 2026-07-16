@@ -1,6 +1,7 @@
 import { lstat, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { assertBunAvailable } from "./config-deps.js";
+import { renderOfficialGithubWorkflow } from "./official-github-workflow.js";
 import { isPathContained, resolveContainedConfigDir } from "./paths.js";
 import { loadRuntimeProject } from "./project.js";
 import {
@@ -40,7 +41,6 @@ type StarterFile = {
   contents: string;
 };
 
-const defaultWorkflowActionRef = "somus/pipr@v0.4.0"; // x-release-please-version
 const defaultGitLabImageRef = "ghcr.io/somus/pipr:v0.4.0"; // x-release-please-version
 const defaultSdkVersion = "0.4.0"; // x-release-please-version
 
@@ -165,7 +165,11 @@ async function starterFiles(
   if (adapters.includes("github")) {
     files.push({
       relativePath: path.join(".github", "workflows", "pipr.yml"),
-      contents: starterWorkflow(relativeConfigDir.split(path.sep).join("/"), recipe, minimal),
+      contents: renderOfficialGithubWorkflow({
+        relativeConfigDir: relativeConfigDir.split(path.sep).join("/"),
+        recipe,
+        minimal,
+      }),
     });
   }
   if (adapters.includes("gitlab")) {
@@ -346,52 +350,4 @@ async function maybeLstat(
   } catch {
     return undefined;
   }
-}
-
-function starterWorkflow(relativeConfigDir: string, recipe?: string, minimal = false): string {
-  const lines = [
-    "name: pipr",
-    "",
-    "on:",
-    "  pull_request:",
-    "  issue_comment:",
-    "    types: [created]",
-    "  pull_request_review_comment:",
-    "    types: [created]",
-    "",
-    "permissions:",
-    "  contents: write",
-    "  pull-requests: write",
-    "  issues: write",
-    "  checks: write",
-    "",
-    "jobs:",
-    "  review:",
-    "    runs-on: ubuntu-latest",
-    "    steps:",
-    "      - uses: actions/checkout@v6",
-    "        with:",
-    "          fetch-depth: 0",
-  ];
-  if (!minimal) {
-    lines.push(
-      "      - uses: actions/cache@v4",
-      "        with:",
-      "          path: /home/runner/work/_temp/_github_home/.bun/install/cache",
-      `          key: pipr-bun-${["{{ ", `hashFiles('${relativeConfigDir}/bun.lock')`, " }}"].join("")}`,
-    );
-  }
-  lines.push(`      - uses: ${defaultWorkflowActionRef}`);
-  lines.push("        env:");
-  lines.push(`          DEEPSEEK_API_KEY: $${["{{ ", "secrets.DEEPSEEK_API_KEY", " }}"].join("")}`);
-  lines.push(`          GITHUB_TOKEN: $${["{{ ", "github.token", " }}"].join("")}`);
-  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
-    lines.push(`          ${secret.env}: $${["{{ ", `secrets.${secret.secret}`, " }}"].join("")}`);
-  }
-  if (relativeConfigDir !== ".pipr") {
-    lines.push("        with:");
-    lines.push(`          config-dir: ${relativeConfigDir}`);
-  }
-  lines.push("");
-  return lines.join("\n");
 }

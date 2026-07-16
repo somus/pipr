@@ -1,7 +1,7 @@
 {
   "name": "@usepipr/runtime",
   "version": "0.4.0",
-  "description": "Runtime package for pipr pull request review automation",
+  "description": "Runtime package for Pipr code host review automation",
   "type": "module",
   "license": "MIT",
   "repository": {

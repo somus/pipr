@@ -6,7 +6,7 @@ publication settings.
 
 This is the package user configs import directly.
 
-## Technical Notes
+## Technical notes
 
 - The package root exports `definePipr`, `definePlugin`, `z`, schemas, prompt
   helpers, review parsers, and public config, task, diff, schema, and agent
@@ -15,7 +15,7 @@ This is the package user configs import directly.
   import from the package root.
 - The build emits ESM and declaration files to `dist`.
 
-## Local Checks
+## Local checks
 
 ```bash
 bun run --cwd packages/sdk check
@@ -24,5 +24,5 @@ bun run --cwd packages/sdk build
 
 ## Docs
 
-- [Pipr SDK Reference](https://pipr.run/docs/reference/sdk-reference)
+- [Pipr SDK reference](https://pipr.run/docs/reference/sdk-reference)
 - [Configuration](https://pipr.run/docs/guide/configuration)

@@ -9,6 +9,8 @@ An Entrypoint only selects work. The selected Review Task still decides which Ag
 
 ## `pipr.review` entrypoints
 
+The review helper registers hosted change-request, command, and local entrypoints around one task.
+
 ### Default review entrypoints
 
 The quickest setup sets a publication cap and uses `pipr.review(...)`:
@@ -44,6 +46,8 @@ pipr.review({
 
 ## Change request actions
 
+Select only the native lifecycle actions that should start automatic review.
+
 ### Supported actions
 
 Supported public action names are:
@@ -68,9 +72,11 @@ pipr.on.changeRequest({
 
 ## Commands
 
+Register explicit comment patterns for maintainer-triggered work.
+
 ### Command registration
 
-Commands run from pull request issue comments and must start with `@pipr`:
+Commands run from native change-request comments and must start with `@pipr`:
 
 ```ts twoslash
 // @include: pipr-security-task
@@ -109,11 +115,13 @@ pipr.command({
 });
 ```
 
-Command responses are normal pull request issue comments keyed to the source command comment. They do not update the Main Review Comment and do not publish Inline Review Comments.
+Command responses are normal change-request comments keyed to the source command comment. They do not update the Main Review Comment and do not publish Inline Review Comments.
 
 Use `ctx.command?.reply(...)` only for command response workflows. Use `ctx.comment(...)` when the task should contribute review output to the Main Review Comment or Inline Review Comments.
 
 ## Command grammar
+
+Named and rest captures convert command text into typed task input.
 
 ### Named captures
 
@@ -134,6 +142,8 @@ const pattern = "@pipr ask <question...>";
 The rest capture must be the final required position. This keeps command parsing deterministic.
 
 ## Permissions
+
+Set the minimum repository permission that may trigger each command.
 
 ### Permission ladder
 
@@ -160,6 +170,8 @@ pipr.command({
 
 ## Local review
 
+Local review calls change-request tasks from git state without dispatching native code-host events.
+
 ### Register local tasks
 
 Local review runs without GitHub publication:
@@ -180,7 +192,7 @@ Run it with:
 pipr review --base origin/main
 ```
 
-`pipr review` runs every unique task registered through `pipr.on.changeRequest(...)`. It ignores configured action filters because there is no local pull request event action.
+`pipr review` runs every unique task registered through `pipr.on.changeRequest(...)`. It ignores configured action filters because there is no local change request event action.
 
 ### CI-only tasks
 
@@ -203,11 +215,15 @@ See [Local Runs](/docs/guide/local-runs) for base/head behavior.
 
 ## Event selection checklist
 
+Match entrypoints to the workflow's cost, trust boundary, and intended operator.
+
 ### Choose an entrypoint
+
+Use this table to match the trigger to the intended operator and publication behavior.
 
 | Need | Entrypoint |
 | --- | --- |
-| Automatic review on pull request updates | `changeRequest: ["opened", "updated"]` |
+| Automatic review on change request updates | `changeRequest: ["opened", "updated"]` |
 | Manual reviewer rerun | `command: { pattern: "@pipr review" }` |
 | Free-form maintainer question | `pipr.command({ pattern: "@pipr ask <question...>" })` |
 | Local preflight before pushing | Register change-request tasks and run `pipr review` |

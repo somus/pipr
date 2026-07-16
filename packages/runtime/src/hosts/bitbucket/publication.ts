@@ -18,6 +18,7 @@ import {
 } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
 import type { BitbucketClient, BitbucketComment } from "./client.js";
+import { normalizeBitbucketMarkdown, renderBitbucketMarkdown } from "./markdown.js";
 
 export async function publishBitbucketPlan(options: {
   client: BitbucketClient;
@@ -32,25 +33,24 @@ export async function publishBitbucketPlan(options: {
   );
   const owned = comments.filter((comment) => comment.user?.uuid === owner.uuid);
   const existingMain = owned.find((comment) =>
-    comment.content.raw.includes(mainMarker(options.change.change.number)),
+    normalizeBitbucketMarkdown(comment.content.raw).includes(
+      mainMarker(options.change.change.number),
+    ),
   );
+  const mainComment = renderBitbucketMarkdown(options.plan.mainComment);
   const main = existingMain
-    ? await options.client.updateComment(
-        options.change.change.number,
-        existingMain.id,
-        options.plan.mainComment,
-      )
+    ? await options.client.updateComment(options.change.change.number, existingMain.id, mainComment)
     : await options.client.createComment(options.change.change.number, {
-        content: { raw: options.plan.mainComment },
+        content: { raw: mainComment },
       });
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
-    existingBodies: owned.map((comment) => comment.content.raw),
+    existingBodies: owned.map((comment) => normalizeBitbucketMarkdown(comment.content.raw)),
     existingLocations: bitbucketInlineLocations(owned),
     location: bitbucketInlineLocation,
     publish: (item) =>
       options.client.createComment(options.change.change.number, {
-        content: { raw: item.body },
+        content: { raw: renderBitbucketMarkdown(item.body) },
         inline: bitbucketInline(item),
       }),
   });
@@ -84,7 +84,9 @@ function bitbucketInlineLocations(comments: BitbucketComment[]): InlinePublicati
 function bitbucketInlineLocationFromComment(
   comment: BitbucketComment,
 ): InlinePublicationLocation | undefined {
-  const marker = extractInlineFindingMarkerRecords([comment.content.raw])[0];
+  const marker = extractInlineFindingMarkerRecords([
+    normalizeBitbucketMarkdown(comment.content.raw),
+  ])[0];
   const inline = comment.inline;
   if (!marker || !inline?.path) return undefined;
   return nativeInlineLocation({
@@ -124,12 +126,15 @@ export async function publishBitbucketCommandResponse(options: {
   await assertCurrentEndpoints(options.client, options.change);
   const { owner, comments } = await loadBitbucketWriteState(options.client, options.change);
   const existing = comments.find(
-    (comment) => comment.user?.uuid === owner.uuid && comment.content.raw.includes(response.marker),
+    (comment) =>
+      comment.user?.uuid === owner.uuid &&
+      normalizeBitbucketMarkdown(comment.content.raw).includes(response.marker),
   );
+  const responseBody = renderBitbucketMarkdown(response.body);
   const comment = existing
-    ? await options.client.updateComment(options.change.change.number, existing.id, response.body)
+    ? await options.client.updateComment(options.change.change.number, existing.id, responseBody)
     : await options.client.createComment(options.change.change.number, {
-        content: { raw: response.body },
+        content: { raw: responseBody },
       });
   return { action: existing ? ("updated" as const) : ("created" as const), id: comment.id };
 }
@@ -151,11 +156,14 @@ export async function loadBitbucketPriorReviewState(options: {
 }): Promise<PriorReviewState | undefined> {
   const comments = await loadBitbucketOwnedComments(options);
   const body = comments.find((comment) =>
-    comment.content.raw.includes(mainMarker(options.change.change.number)),
+    normalizeBitbucketMarkdown(comment.content.raw).includes(
+      mainMarker(options.change.change.number),
+    ),
   )?.content.raw;
-  const state = extractPriorReviewState(body, options.change.change.number);
+  const normalizedBody = body ? normalizeBitbucketMarkdown(body) : undefined;
+  const state = extractPriorReviewState(normalizedBody, options.change.change.number);
   if (!state) return undefined;
-  const bodies = comments.map((comment) => comment.content.raw);
+  const bodies = comments.map((comment) => normalizeBitbucketMarkdown(comment.content.raw));
   return applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
 }
 
@@ -163,9 +171,12 @@ export async function loadBitbucketPriorMainComment(options: {
   client: BitbucketClient;
   change: ChangeRequestEventContext;
 }) {
-  return (await loadBitbucketOwnedComments(options)).find((comment) =>
-    comment.content.raw.includes(mainMarker(options.change.change.number)),
+  const body = (await loadBitbucketOwnedComments(options)).find((comment) =>
+    normalizeBitbucketMarkdown(comment.content.raw).includes(
+      mainMarker(options.change.change.number),
+    ),
   )?.content.raw;
+  return body ? normalizeBitbucketMarkdown(body) : undefined;
 }
 
 async function loadBitbucketOwnedComments(options: {
@@ -185,7 +196,9 @@ export async function loadBitbucketInlineThreadContexts(options: {
   const owner = await authenticatedBitbucketOwner(options.client);
   const comments = await options.client.listComments(options.change.change.number);
   return comments.flatMap((root) => {
-    const marker = extractInlineFindingMarkerRecords([root.content.raw])[0];
+    const marker = extractInlineFindingMarkerRecords([
+      normalizeBitbucketMarkdown(root.content.raw),
+    ])[0];
     if (!marker || root.user?.uuid !== owner.uuid || root.parent) return [];
     const replies = comments.filter((comment) => comment.parent?.id === root.id);
     return [
@@ -193,12 +206,12 @@ export async function loadBitbucketInlineThreadContexts(options: {
         findingId: marker.id,
         findingHeadSha: marker.head,
         parentCommentId: root.id,
-        parentBody: root.content.raw,
+        parentBody: normalizeBitbucketMarkdown(root.content.raw),
         threadId: root.id,
         threadResolved: root.resolution !== undefined,
         comments: [root, ...replies].map((comment) => ({
           id: comment.id,
-          body: comment.content.raw,
+          body: normalizeBitbucketMarkdown(comment.content.raw),
           authorLogin: comment.user?.nickname,
         })),
       },
@@ -251,10 +264,12 @@ async function publishBitbucketThreadAction(
     const reply = threadActionReply(action);
     if (
       !replies.some(
-        (comment) => comment.user?.uuid === ownerUuid && comment.content.raw.includes(reply.marker),
+        (comment) =>
+          comment.user?.uuid === ownerUuid &&
+          normalizeBitbucketMarkdown(comment.content.raw).includes(reply.marker),
       )
     ) {
-      await client.replyToComment(changeNumber, root.id, reply.body);
+      await client.replyToComment(changeNumber, root.id, renderBitbucketMarkdown(reply.body));
     }
     if (action.kind === "resolve" && root.resolution === undefined) {
       await client.resolveComment(changeNumber, root.id);

@@ -54,7 +54,7 @@ export default definePipr((pipr) => {
     name: "fix-suggestions",
     model,
     instructions: \`
-      Find directly applicable fixes for this pull request. Return an item only
+      Find directly applicable fixes for this change request. Return an item only
       when an exact patch can resolve the reported defect; otherwise omit the
       entire item. Prioritize correctness, missing tests, type safety, and small
       maintainability improvements. Do not report broad refactors, style
@@ -64,7 +64,7 @@ export default definePipr((pipr) => {
     tools: pipr.tools.readOnly,
     retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "7m",
-    prompt: () => "Find exact suggested changes for this pull request.",
+    prompt: () => "Find exact suggested changes for this change request.",
   });
 
   const verifier = pipr.agent({
@@ -143,7 +143,7 @@ export default definePipr((pipr) => {
   pipr.command({
     pattern: "@pipr improve",
     permission: "write",
-    description: "Find exact suggested fixes for this pull request.",
+    description: "Find exact suggested fixes for this change request.",
     task,
   });
 });

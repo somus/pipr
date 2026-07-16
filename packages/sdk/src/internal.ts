@@ -27,7 +27,7 @@ export {
   readSdkDeclarationSourceWithChunk,
 } from "./standalone-declaration.js";
 
-/** Stable identifier for pipr's built-in pull request review output schema. */
+/** Stable identifier for Pipr's built-in change request review output schema. */
 export const reviewOutputSchemaId = "core/pr-review";
 
 /** Returns whether a tool is one of pipr's built-in read-only tools. */

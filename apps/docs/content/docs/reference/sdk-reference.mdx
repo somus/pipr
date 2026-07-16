@@ -1,5 +1,5 @@
 ---
-title: "Pipr SDK Reference"
+title: "Pipr SDK reference"
 description: "Public SDK imports, builder methods, task context, schemas, tools, and entrypoints."
 ---
 
@@ -28,7 +28,7 @@ The SDK maps directly to Pipr's runtime primitives. Use this table to choose the
 | Review Output | `ctx.comment(...)`, `ctx.command?.reply(...)`, `CommentValue` |
 | Publication | `pipr.config({ publication })`, Pipr runtime validation and code host adapters |
 
-For the narrative model, see [Concepts](/docs/guide/concepts).
+For the narrative model, see [How Pipr works](/docs/concepts).
 
 ## `definePipr`
 
@@ -63,7 +63,7 @@ Use `id` only when you configure the same provider and model with different API 
 
 ## Review recipe
 
-`pipr.reviewer(...)` creates the default structured pull request reviewer. `pipr.review(...)` wires that reviewer into change request and command entrypoints.
+`pipr.reviewer(...)` creates the default structured change request reviewer. `pipr.review(...)` wires that reviewer into change request and command entrypoints.
 
 ```ts
 import { defaultReviewEntrypoints } from "@usepipr/sdk";
@@ -160,7 +160,7 @@ const security = pipr.agent({
   instructions: "Review only security issues.",
   output: pipr.schemas.review,
   prompt: () => pipr.prompt`
-    Review this pull request for exploitable security issues.
+    Review this change request for exploitable security issues.
   `,
   retry: {
     invalidOutput: 1,
@@ -278,6 +278,8 @@ Use `ctx.platform.id === "local"` inside a task when the task should run in both
 
 ## Task context
 
+Task handlers use this context to read change data, run Pi, publish results, and report status.
+
 | Property | Purpose |
 | --- | --- |
 | `ctx.run.id` | Stable id for the selected Review Run, not the process attempt. |
@@ -293,15 +295,15 @@ Use `ctx.platform.id === "local"` inside a task when the task should run in both
 
 `ctx.change.diffManifest(...)` returns commentable file ranges. Findings must reference those ranges by `rangeId`.
 
-`ctx.command.reply(...)` emits a normal pull request issue comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
+`ctx.command.reply(...)` emits a normal change-request comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
 
 When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. The manifest is filtered to matching files, the prompt carries the path scope, and Pipr drops findings from that scoped Pi result when `result.inlineFindings` is passed directly to `ctx.comment(...)`. If a task maps, spreads, or clones the returned finding array, Pipr treats the transformed findings as task-authored output and applies normal Diff Manifest range validation.
 
 <auto-type-table path="packages/sdk/src/index.ts" name="TaskContext" />
 
-## Check Runs
+## Code-host statuses
 
-Task-level `check` controls individual GitHub Check Runs and aggregate participation:
+Task-level `check` controls individual code-host statuses and aggregate participation:
 
 ```ts
 const task = pipr.task({
@@ -314,9 +316,9 @@ const task = pipr.task({
 });
 ```
 
-When `check` is an object, the individual task Check Run is enabled by default. `required` defaults to `true`. Use `check: false` to opt a task out of both its individual Check Run and the aggregate Check Run. A task without `check` does not get an individual Check Run, but still participates in the aggregate when aggregate checks are enabled.
+When `check` is an object, the individual task status is enabled by default. `required` defaults to `true`. Use `check: false` to opt a task out of both its individual status and the aggregate status. A task without `check` does not get an individual status, but still participates in the aggregate when aggregate statuses are enabled.
 
-The workflow job check is usually the branch protection gate. Enable the aggregate Check Run only when you explicitly want one Pipr-owned Check Run across multiple tasks:
+Enable the aggregate status only when you want one Pipr-owned result across multiple tasks:
 
 ```ts
 pipr.config({
@@ -324,7 +326,7 @@ pipr.config({
 });
 ```
 
-Checks publish only on GitHub `pull_request` Action runs. They do not publish for `issue_comment`, local runs, or dry runs. `ctx.check.pass/fail/neutral(...)` can be called at most once per task. `ctx.check.fail(...)` fails the task Check Run but does not fail the Action process by itself.
+Statuses publish for supported change-request events when the selected adapter exposes status publication. GitHub uses Check Runs, GitLab uses external commit statuses, Azure DevOps uses pull request statuses, and Bitbucket uses source-commit statuses. They do not publish for command responses, local runs, or dry runs. `ctx.check.pass/fail/neutral(...)` can be called at most once per task. A failed task status does not fail the delivery process by itself.
 
 ## Global config
 
@@ -484,7 +486,7 @@ export default definePipr((pipr) => {
 });
 ```
 
-Use `pipr.schemas.review` when an agent directly returns publishable Inline Review Comments. `suggestedFix` is optional exact replacement code for the selected range and is rendered as a GitHub suggested change.
+Use `pipr.schemas.review` when an agent directly returns publishable Inline Review Comments. `suggestedFix` is optional exact replacement code for the selected range. GitHub and GitLab render it as a native suggestion; Azure DevOps and Bitbucket render fenced replacement code.
 
 The `z` export is the recommended typed path for JSON-Schema-representable schemas. Generated `.pipr/types` include a standalone Zod authoring subset so `pipr init` projects type-check without installing `zod`; use `pipr.jsonSchema<T>()` for advanced JSON Schema shapes or when a Zod helper is outside that generated subset.
 
@@ -516,6 +518,8 @@ pipr.prompt`
 `pipr.json(value, { pretty, maxCharacters })` renders bounded JSON and throws if it exceeds `maxCharacters`.
 
 ## Runtime limits
+
+Set global execution limits through `pipr.config(...)`.
 
 ```ts
 pipr.config({

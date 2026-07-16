@@ -320,7 +320,7 @@ describe("CLI package bundled skills", () => {
     expect(skillPath.exitCode, `${skillPath.stdout}\n${skillPath.stderr}`).toBe(0);
     expect(
       readFileSync(path.join(skillPath.stdout.trim(), "references/recipes.md"), "utf8"),
-    ).toContain("Pipr Recipe Selection");
+    ).toContain("Pipr recipe selection");
   }, 30000);
 });
 

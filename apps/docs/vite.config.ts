@@ -52,6 +52,12 @@ export default defineConfig(({ command, isPreview }) => ({
       development: false,
     },
   },
+  optimizeDeps: {
+    include: [
+      "fumadocs-twoslash > @base-ui/react > use-sync-external-store/shim",
+      "fumadocs-twoslash > @base-ui/react > use-sync-external-store/shim/with-selector",
+    ],
+  },
   ssr: {
     external: ["@takumi-rs/image-response"],
   },

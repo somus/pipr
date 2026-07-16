@@ -1,4 +1,6 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { GithubIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { staticFunctionMiddleware } from "@tanstack/start-static-server-functions";
 import browserCollections from "collections/browser";
@@ -14,6 +16,7 @@ import {
 } from "fumadocs-ui/layouts/docs/page";
 import { Suspense } from "react";
 import { getMDXComponents } from "@/components/mdx";
+import { getLegacyDocRedirect } from "@/lib/docs-routes";
 import { baseOptions } from "@/lib/layout.shared";
 import { appName, gitConfig } from "@/lib/shared";
 import { getPageImage, slugsToMarkdownPath, source } from "@/lib/source";
@@ -21,6 +24,9 @@ import { getPageImage, slugsToMarkdownPath, source } from "@/lib/source";
 export const Route = createFileRoute("/docs/$")({
   loader: async ({ params }) => {
     const slugs = params._splat?.split("/") ?? [];
+    const redirectTo = getLegacyDocRedirect(slugs);
+    if (redirectTo) throw redirect({ href: redirectTo, statusCode: 308 });
+
     const data = await loader({ data: slugs });
     await clientLoader.preload(data.path);
     return data;
@@ -131,7 +137,24 @@ function Page() {
   const { pageTree, path, markdownUrl } = useFumadocsLoader(Route.useLoaderData());
 
   return (
-    <DocsLayout {...baseOptions()} tree={pageTree}>
+    <DocsLayout
+      {...baseOptions()}
+      githubUrl={undefined}
+      sidebar={{
+        footer: (
+          <a
+            className="inline-flex w-full items-center gap-2 rounded-lg border bg-fd-secondary/50 px-3 py-2 text-fd-muted-foreground transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring"
+            href={`https://github.com/${gitConfig.user}/${gitConfig.repo}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <HugeiconsIcon icon={GithubIcon} size={16} strokeWidth={1.8} aria-hidden="true" />
+            <span>GitHub</span>
+          </a>
+        ),
+      }}
+      tree={pageTree}
+    >
       <Link to={markdownUrl} hidden />
       <Suspense>{clientLoader.useContent(path, { markdownUrl, path })}</Suspense>
     </DocsLayout>

@@ -19,6 +19,7 @@ describe("Azure DevOps workspace checkout", () => {
       await Bun.write(path.join(seed, "fixture.ts"), "export const value = 1;\n");
       git(seed, ["add", "fixture.ts"]);
       git(seed, ["commit", "-m", "base"]);
+      const baseSha = git(seed, ["rev-parse", "HEAD"]).trim();
       git(seed, ["branch", "-M", "main"]);
       git(seed, ["remote", "add", "origin", origin]);
       git(seed, ["push", "origin", "main"]);
@@ -31,10 +32,21 @@ describe("Azure DevOps workspace checkout", () => {
 
       await ensureAzureDevOpsHeadCheckout({ rootDir: workspace, change: changeAt(headSha) });
       expect(git(workspace, ["rev-parse", "HEAD"]).trim()).toBe(headSha);
+      expect(git(workspace, ["merge-base", baseSha, headSha]).trim()).toBe(baseSha);
+
+      await Bun.write(path.join(seed, "fixture.ts"), "export const value = 3;\n");
+      git(seed, ["commit", "-am", "updated head"]);
+      const updatedHeadSha = git(seed, ["rev-parse", "HEAD"]).trim();
+      git(seed, ["push", "origin", "feature"]);
+      await ensureAzureDevOpsHeadCheckout({
+        rootDir: workspace,
+        change: changeAt(updatedHeadSha),
+      });
+      expect(git(workspace, ["merge-base", baseSha, updatedHeadSha]).trim()).toBe(baseSha);
 
       await rename(origin, `${origin}.offline`);
       await expect(
-        ensureAzureDevOpsHeadCheckout({ rootDir: workspace, change: changeAt(headSha) }),
+        ensureAzureDevOpsHeadCheckout({ rootDir: workspace, change: changeAt(updatedHeadSha) }),
       ).resolves.toBeUndefined();
     } finally {
       await rm(root, { recursive: true, force: true });

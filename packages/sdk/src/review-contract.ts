@@ -44,13 +44,13 @@ export const reviewFindingSchema: ZodSchema<ReviewFinding> = z.strictObject({
   suggestedFix: nonEmptyStringSchema.optional(),
 });
 
-/** Zod schema for pipr's core pull request review result. */
+/** Zod schema for Pipr's core change request review result. */
 export const reviewResultSchema: ZodSchema<ReviewResult> = z.strictObject({
   summary: reviewSummarySchema,
   inlineFindings: z.array(reviewFindingSchema),
 });
 
-/** Parses model output for pipr's main pull request review schema. */
+/** Parses model output for Pipr's main change request review schema. */
 export function parseReviewResult(value: unknown): ReviewResult {
   return reviewResultSchema.parse(value) as ReviewResult;
 }
@@ -65,12 +65,12 @@ export function parseReviewFinding(value: unknown): ReviewFinding {
   return reviewFindingSchema.parse(value) as ReviewFinding;
 }
 
-/** Returns a small valid example for the main pull request review schema. */
+/** Returns a small valid example for the main change request review schema. */
 export function reviewSchemaExample(): ReviewResult {
   return {
     summary: {
       title: "Optional concise review title.",
-      body: "Concise pull request review summary.",
+      body: "Concise change request review summary.",
     },
     inlineFindings: [
       {

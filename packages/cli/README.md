@@ -12,6 +12,7 @@ The binary exposes these command groups:
 
 - `pipr init`
 - `pipr host-run`
+- `pipr webhook serve`
 - `pipr check`
 - `pipr dry-run`
 - `pipr inspect`
@@ -43,17 +44,17 @@ npm install -g @usepipr/cli@latest
 bun install -g @usepipr/cli@latest
 ```
 
-`pipr update` updates only the local CLI executable. It does not update GitHub
-Action workflow pins.
+`pipr update` updates only the local CLI executable. It does not update a
+repository's generated integration files.
 
-## Technical Notes
+## Technical notes
 
 - Package build emits `dist/main.mjs`.
 - Release binary builds run through `packages/cli/build-release.ts`.
 - The package publishes the `pipr` bin through npm and release artifacts through
   GitHub Releases.
 
-## Local Checks
+## Local checks
 
 ```bash
 bun run --cwd packages/cli check
@@ -62,6 +63,6 @@ bun run build:release:cli
 
 ## Docs
 
-- [CLI Reference](https://pipr.run/docs/reference/cli)
+- [CLI reference](https://pipr.run/docs/reference/cli)
 - [Quickstart](https://pipr.run/docs/guide/quickstart)
-- [Local Runs](https://pipr.run/docs/guide/local-runs)
+- [Local runs](https://pipr.run/docs/guide/local-runs)

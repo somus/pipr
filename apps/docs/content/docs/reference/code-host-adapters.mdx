@@ -1,5 +1,5 @@
 ---
-title: "Code Host Adapters"
+title: "Code host adapters"
 description: "Provider-neutral adapter boundary for code host integrations."
 ---
 
@@ -65,6 +65,8 @@ type ChangeRequestEventContext = {
 
 ## Ownership split
 
+Core runtime and adapter responsibilities meet at a deliberately narrow contract.
+
 | Core runtime owns | Code host adapter owns |
 | --- | --- |
 | Config loading and validation | Native event parsing |
@@ -78,6 +80,8 @@ type ChangeRequestEventContext = {
 Core imports no GitHub modules. GitHub is one adapter implementation.
 
 ## Current adapters
+
+Each adapter implements the same event, checkout, publication, status, and permission boundaries with native provider APIs.
 
 ### GitHub
 

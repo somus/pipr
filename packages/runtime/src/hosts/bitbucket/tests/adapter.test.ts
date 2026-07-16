@@ -12,6 +12,7 @@ import {
 import type { CodeHostStatusState, RepositoryPermission } from "../../types.js";
 import { createBitbucketHostAdapter } from "../adapter.js";
 import type { BitbucketClient, BitbucketComment, BitbucketPullRequest } from "../client.js";
+import { normalizeBitbucketMarkdown } from "../markdown.js";
 
 describe("Bitbucket Cloud adapter", () => {
   it("publishes idempotent main, multiline inline, commands, resolution, and statuses", async () => {
@@ -63,6 +64,46 @@ describe("Bitbucket Cloud adapter", () => {
       adapter.statuses?.upsert({ change, name: "review", state: "success" }),
     ).resolves.toEqual({ id: "pipr-review", name: "review" });
     expect(client.statusBodies[0]).toMatchObject({ state: "SUCCESSFUL", refname: "feature" });
+    for (const comment of client.comments) {
+      expect(comment.content.raw).not.toContain("<!--");
+      expect(comment.content.raw).not.toMatch(/<\/?[A-Za-z][^>]*>/);
+    }
+  });
+
+  it("publishes Markdown-only comments while preserving hidden publication metadata", async () => {
+    const client = new FakeBitbucketClient();
+    const adapter = createBitbucketHostAdapter({ client });
+    const plan = publicationPlan();
+    const inlineItem = plan.inlineItems[0];
+    if (!inlineItem) throw new Error("Expected inline fixture");
+    inlineItem.body = [
+      renderInlineFindingMarker(inlineItem.findingId, inlineItem.reviewedHeadSha),
+      "Fix",
+      "",
+      "<details>",
+      "<summary>Rationale</summary>",
+      "",
+      "The retry can duplicate a delivery.",
+      "",
+      "</details>",
+    ].join("\n");
+
+    await adapter.publication?.publish({ change, plan });
+
+    const published = client.createdBodies.map((body) => (body.content as { raw: string }).raw);
+    expect(published).toHaveLength(2);
+    for (const body of published) {
+      expect(body).not.toContain("<!--");
+      expect(body).not.toMatch(/<\/?[A-Za-z][^>]*>/);
+      expect(body).toContain("[pipr-metadata-");
+    }
+    expect(published[0]).toContain("# Pipr Review");
+    expect(published[1]).toContain("### Rationale");
+
+    await expect(adapter.publication?.publish({ change, plan })).resolves.toMatchObject({
+      mainComment: { action: "updated" },
+      inlineComments: { skipped: 1 },
+    });
   });
 
   it("fails stale endpoints before writes and declares native limits", async () => {
@@ -324,7 +365,9 @@ class FakeBitbucketClient implements BitbucketClient {
   createComment = async (_id: number, body: Record<string, unknown>) => {
     if (
       this.failCommentBodyOnce &&
-      (body.content as { raw?: string }).raw?.includes(this.failCommentBodyOnce)
+      normalizeBitbucketMarkdown((body.content as { raw?: string }).raw ?? "").includes(
+        this.failCommentBodyOnce,
+      )
     ) {
       this.failCommentBodyOnce = undefined;
       throw new Error("controlled Bitbucket comment failure");
@@ -335,8 +378,9 @@ class FakeBitbucketClient implements BitbucketClient {
     }
     this.createdBodies.push(body);
     const content = body.content as { raw: string };
+    const normalizedContent = normalizeBitbucketMarkdown(content.raw);
     if (!body.inline && !body.parent) {
-      if (content.raw.includes("pipr:command-response")) this.commandCreates += 1;
+      if (normalizedContent.includes("pipr:command-response")) this.commandCreates += 1;
       else this.mainCreates += 1;
     }
     const comment: BitbucketComment = {
@@ -353,8 +397,9 @@ class FakeBitbucketClient implements BitbucketClient {
     const comment = this.comments.find((item) => item.id === commentId);
     if (!comment) throw new Error("missing");
     comment.content.raw = content;
-    if (content.includes("pipr:command-response")) this.commandUpdates += 1;
-    else this.mainUpdates += 1;
+    if (normalizeBitbucketMarkdown(content).includes("pipr:command-response")) {
+      this.commandUpdates += 1;
+    } else this.mainUpdates += 1;
     return comment;
   };
   replyToComment = async (id: number, commentId: string, content: string) =>
@@ -499,7 +544,7 @@ async function createBitbucketConformanceHarness(): Promise<CodeHostAdapterConfo
     ownedReplyBodies: () =>
       client.comments
         .filter((comment) => comment.parent && comment.user?.uuid === "{bot}")
-        .map((comment) => comment.content.raw),
+        .map((comment) => normalizeBitbucketMarkdown(comment.content.raw)),
     writes: () => ({
       mainCreates: client.mainCreates,
       mainUpdates: client.mainUpdates,

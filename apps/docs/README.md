@@ -12,11 +12,20 @@ reader-friendly adaptations that link back to those source files.
 
 ## Commands
 
+Run the canonical docs gate from the repository root:
+
+```bash
+bun run check:docs
+```
+
+Use app-scoped commands while developing the docs site:
+
 ```bash
 bun run --cwd apps/docs dev
 bun run --cwd apps/docs typegen
 bun run --cwd apps/docs typecheck
-bun run build:docs
+bun run --cwd apps/docs test
+bun run --cwd apps/docs build
 ```
 
 ## Dokploy
@@ -36,4 +45,4 @@ Nginx. The existing root `Dockerfile` remains the Pipr Action image.
 ## Docs
 
 - [Hosted Docs](https://pipr.run/docs)
-- [Development](https://pipr.run/docs/reference/development)
+- [Development](https://pipr.run/docs/project/development)

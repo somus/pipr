@@ -1,9 +1,9 @@
 ---
 title: "Troubleshooting"
-description: "Common Pipr setup, config, Action, model, and publication failures."
+description: "Diagnose Pipr setup, config, delivery, model, and publication failures."
 ---
 
-Start with the narrowest command that can reproduce the failure. Fix local config errors before debugging GitHub publication.
+Start with the narrowest command that can reproduce the failure. Fix local config errors before debugging code-host delivery.
 
 ```bash
 pipr check
@@ -15,22 +15,20 @@ For GitHub Action behavior, set `PIPR_DRY_RUN=1` or use `pipr dry-run --event <p
 
 ## First-run failure ladder
 
-Follow this order for a new setup. It separates config failures from GitHub publication failures.
+Follow this order for a new setup. It separates config failures from provider delivery and publication failures.
 
 | Step | Check | Fix |
 | --- | --- | --- |
 | 1. Config load | Run `pipr check`. | Fix `.pipr/config.ts`, local imports, duplicate ids, or invalid command patterns. |
 | 2. Runtime plan | Run `pipr inspect`. | Confirm the selected model, task, entrypoints, commands, and publication limits. |
-| 3. Provider secret | Compare `pipr.secret({ name })` with workflow `env`. | Add the matching GitHub Actions secret and pass it to the Action. |
-| 4. Checkout depth | Inspect `.github/workflows/pipr.yml`. | Set `actions/checkout` to `fetch-depth: 0`. |
-| 5. Workflow permissions | Inspect the workflow `permissions` block. | Grant the permissions for the comments, checks, and verifier features you enabled. |
-| 6. Fork behavior | Check whether the PR comes from a fork. | Follow GitHub's secret availability rules. If the provider secret is unavailable, rerun from a trusted branch or adjust the workflow policy. |
-| 7. Stale head | Compare the reviewed head with the current PR head. | Rerun the workflow on the latest commit. |
+| 3. Provider secret | Compare `pipr.secret({ name })` with the delivery environment. | Add the matching secret to the CI job or trusted worker. |
+| 4. Delivery config | Inspect the generated workflow or webhook worker arguments. | Confirm the host, repository, workspace, and event configuration. |
+| 5. Provider permissions | Inspect the bot token, workflow, or runner identity. | Grant only the comment, status, and verifier permissions for the features you enabled. |
+| 6. Untrusted changes | Check whether the change comes from a fork or can edit CI configuration. | Use a trusted webhook runner when the proposed change can access or alter the delivery job. |
+| 7. Stale head | Compare the reviewed head with the current change request head. | Rerun the workflow on the latest commit. |
 | 8. Dropped findings | Read the `dropped-findings` output. | Fix the prompt or mapper so findings use exact Diff Manifest paths, range ids, sides, and lines. |
 
 ## Choose the diagnostic
-
-### Symptom table
 
 Use the symptom to pick the first diagnostic command.
 
@@ -39,23 +37,19 @@ Use the symptom to pick the first diagnostic command.
 | Config does not load | `pipr check` |
 | Runtime plan looks wrong | `pipr inspect` |
 | Local review cannot find a base | `pipr review --base <ref>` |
-| GitHub Action does not publish | GitHub Action logs and workflow permissions |
+| Hosted run does not publish | CI or trusted-worker logs and provider permissions |
 | Command comment is ignored | Event type, command pattern, and commenter permission |
 | Findings are dropped | Action `dropped-findings` output |
 | Pi output is invalid | Task logs and model output repair metadata |
-| Publication stopped after a new commit | Current pull request head SHA |
+| Publication stopped after a new commit | Current change request head SHA |
 
 ## Config does not load
-
-### Run config check
 
 Run `pipr check` from the repository root:
 
 ```bash
 pipr check
 ```
-
-### Common causes
 
 Common causes:
 
@@ -75,22 +69,20 @@ Expected result: `pipr check` exits successfully before you try a model run.
 
 ## Provider env var is missing
 
-### GitHub secret
+Match the secret name in trusted config to the variable exposed by the delivery environment.
 
-GitHub Action runs require configured provider env vars before Pi execution. Check the env var name in `.pipr/config.ts`, then add the matching GitHub Actions secret and pass it through the workflow:
+### GitHub secret example
+
+Every hosted run requires its configured model-provider env vars before Pi execution. For GitHub, add the matching Actions secret and pass it through the workflow:
 
 ```yaml
 env:
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
-### Local validation
-
 Locally, export the same env var or run `pipr check` without `--require-env` when you only need config validation.
 
 ## Local review cannot find a base
-
-### Required base
 
 `pipr review` requires an explicit base because Pipr needs a comparison point for the Diff Manifest.
 
@@ -100,8 +92,6 @@ pipr review --base origin/main
 
 Fetch the remote branch when the ref is missing:
 
-### Missing refs
-
 ```bash
 git fetch origin main
 ```
@@ -109,8 +99,6 @@ git fetch origin main
 Use `--head` only when reviewing something other than `HEAD`.
 
 ## GitHub Action does not publish
-
-### Workflow checks
 
 Check the workflow before changing task code.
 
@@ -131,6 +119,8 @@ Expected result: the Action reaches the publication step and records `publicatio
 
 ## Command comment is ignored
 
+Confirm the native event, command pattern, arguments, and actor permission before changing task code.
+
 ### Event requirements
 
 Command comments are parsed only from `issue_comment.created` events on pull requests. Edited comments do not trigger command parsing.
@@ -148,6 +138,8 @@ Common causes:
 Use [Entrypoints](/docs/guide/entrypoints) for command grammar and permission details.
 
 ## Findings are dropped
+
+Inspect dropped-finding metadata to identify which authoritative range constraint failed.
 
 ### Dropped output
 
@@ -168,9 +160,11 @@ Dropped findings are exposed in the Action `dropped-findings` output and in publ
 
 ### Fix range mapping
 
-Fix the agent prompt or output mapping so findings use the exact Diff Manifest path, range id, side, and line numbers. For scoped Pi runs, pass `result.inlineFindings` directly when Pipr should enforce the same `paths` filter on publication. See [Comments and Findings](/docs/guide/comments#dropped-findings).
+Fix the agent prompt or output mapping so findings use the exact Diff Manifest path, range id, side, and line numbers. For scoped Pi runs, pass `result.inlineFindings` directly when Pipr should enforce the same `paths` filter on publication. See [Comments and findings](/docs/concepts/comments#dropped-findings).
 
 ## Pi output is invalid
+
+Structured output must match the declared schema after the bounded repair attempt.
 
 ### Repair attempt
 
@@ -190,13 +184,17 @@ If invalid output persists:
 
 ## Stale head before publication
 
+Rerun against the latest proposed commit when the reviewed head no longer matches the change request.
+
 ### Rerun latest commit
 
-Pipr checks the current pull request head before writing comments. If the head changed after review execution, publication stops before writes.
+Pipr checks the current change request head before writing comments. If the head changed after review execution, publication stops before writes.
 
 Rerun the workflow on the latest commit. This prevents Pipr from publishing comments for an older diff.
 
 ## Verifier cannot resolve a thread
+
+Thread replies and resolution require adapter support and sufficient native permissions.
 
 ### Permission failures
 
@@ -206,10 +204,9 @@ If the API call fails, Pipr records the error in `publication.metadata.inlineRes
 
 ## Next steps
 
-### Related pages
-
 Use these pages when the first diagnostic identifies the failing area.
 
 - [GitHub Action](/docs/guide/github-action) covers workflow events, permissions, outputs, dry runs, and forks.
-- [Comments and Findings](/docs/guide/comments) covers dropped findings, inline caps, dedupe, and verifier replies.
-- [Local Runs](/docs/guide/local-runs) covers `--base`, `--head`, local secrets, and local output.
+- [GitLab](/docs/guide/gitlab), [Azure DevOps](/docs/guide/azure-devops), and [Bitbucket Cloud](/docs/guide/bitbucket) cover trusted workers, credentials, and native publication.
+- [Comments and findings](/docs/concepts/comments) covers dropped findings, inline caps, dedupe, and verifier replies.
+- [Local runs](/docs/guide/local-runs) covers `--base`, `--head`, local secrets, and local output.

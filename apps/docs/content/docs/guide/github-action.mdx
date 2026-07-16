@@ -7,7 +7,11 @@ The GitHub workflow runs `pipr host-run --host github` inside the prebuilt Pipr 
 
 ## Workflow
 
+Use the generated workflow so events, checkout depth, caching, permissions, and secrets stay aligned with `pipr init`.
+
 ### Example workflow
+
+The default workflow handles automatic reviews, commands, and verifier replies.
 
 ```yaml
 name: pipr
@@ -44,6 +48,8 @@ jobs:
 
 ## Events
 
+The workflow listens only for events that can start configured tasks or verifier work.
+
 | Event | Why Pipr listens |
 | --- | --- |
 | `pull_request` | Runs configured change request tasks on actions such as opened, synchronize, reopened, and ready for review. |
@@ -54,7 +60,11 @@ The config still decides which tasks run. The workflow delivers events to `pipr 
 
 ## Trusted options
 
+The Action reads its trusted settings from workflow inputs and the base-commit config.
+
 ### Config directory
+
+Use the default unless the repository deliberately stores Pipr config elsewhere.
 
 | Option | Default | Purpose |
 | --- | --- | --- |
@@ -85,6 +95,8 @@ Pipr does not scan repository or model-generated text for unknown credentials. U
 
 ## Pinning
 
+Pin the Action to the released version you intend to run.
+
 ### Release tag
 
 Use the release tag you trust in production:
@@ -97,6 +109,8 @@ Use `somus/pipr@main` only when you intentionally want the current main-branch A
 
 ## Outputs
 
+The Action exposes rendered review and publication metadata for diagnostics and integrations.
+
 | Output | Description |
 | --- | --- |
 | `main-comment` | Rendered Main Review Comment body, command response body, or command help body. |
@@ -104,7 +118,23 @@ Use `somus/pipr@main` only when you intentionally want the current main-branch A
 | `dropped-findings` | JSON array of Review Findings dropped during validation. |
 | `publication` | JSON publication result for main and inline comments. On command-response runs, this is `{ action, id }` for the response issue comment. On `pull_request_review_comment` verifier runs, this contains verifier thread action errors such as `inlineResolutionErrors`. |
 
+## GitHub review output
+
+GitHub displays the task summary in the pull request conversation and validated findings on the changed lines they target.
+
+<img
+  alt="GitHub Actions check summary showing the successful Pipr review workflow for the event-relay retry change"
+  src="/images/pipr/providers/github-review.png"
+/>
+
+<img
+  alt="GitHub pull request diff showing Pipr's native suggestion to retry only 5xx provider failures"
+  src="/images/pipr/providers/github-inline.png"
+/>
+
 ## Trust model
+
+GitHub pull request runs separate trusted base policy from proposed head code.
 
 ### Base branch config
 
@@ -115,6 +145,8 @@ For pull request Action runs, Pipr loads `.pipr/config.ts` and local imports fro
 The root Pipr supervisor owns and seals a workspace copy, then starts Pi as UID and GID `1000`. Unix permissions prevent Pi from restoring write access to the copy. Pi receives only `read`, `grep`, `find`, and `ls`; condensed Diff Manifest runs may also receive Pipr Diff Read Tools over bounded diff data and base/head snapshots.
 
 ## Dry run
+
+Dry runs validate event parsing and trusted config without model execution or publication.
 
 ### Action dry run
 
@@ -139,6 +171,8 @@ pipr dry-run --host github --event path/to/github-event.json
 
 ## Command comments
 
+GitHub comment events dispatch configured commands and verifier replies.
+
 ### Pull request commands
 
 `issue_comment` events are used for `@pipr` commands on pull requests. Pipr checks that the comment targets a pull request, fetches pull request metadata, checks the commenter permission, parses command arguments, and then starts the task.
@@ -161,6 +195,8 @@ Command permission defaults to `write`.
 
 ## Forks
 
+Fork reviews retain base-commit policy but follow GitHub's secret availability rules.
+
 ### Secret availability
 
 GitHub decides which secrets are available for forked pull requests. If the provider secret is unavailable and the selected config requires it, Pipr fails before running Pi. Keep secrets in GitHub Actions secrets and reference them with `pipr.secret({ name: "ENV_NAME" })`; do not put raw keys in config.
@@ -171,7 +207,9 @@ The trusted config still comes from the base commit. A fork can propose changes 
 
 ## Related docs
 
+Continue with setup, runtime, or adapter details.
+
 - [Quickstart](/docs/guide/quickstart)
-- [Runtime Guide](/docs/guide/runtime)
+- [Runtime flow](/docs/concepts/runtime)
 - [Code Host Adapters](/docs/reference/code-host-adapters)
 - [Configuration](/docs/guide/configuration)

@@ -3,7 +3,7 @@ import type { OfficialInitRecipe } from "./types.js";
 export const prHygieneRecipe = {
   id: "pr-hygiene",
   title: "PR Hygiene",
-  description: "Danger-style PR hygiene checks for tests, docs, lockfiles, and size.",
+  description: "Change request hygiene checks for tests, docs, lockfiles, and size.",
   sourceTools: ["Danger JS"],
   configTs: `import { definePipr, z } from "@usepipr/sdk";
 import type { ReviewFinding } from "@usepipr/sdk";
@@ -71,7 +71,7 @@ export default definePipr((pipr) => {
     name: "pr-hygiene",
     model,
     instructions: \`
-      Review pull request hygiene, not code correctness. Evaluate tests, docs,
+      Review change request hygiene, not code correctness. Evaluate tests, docs,
       lockfiles, generated files, and change size. Return exactly one policy
       check for each policy, using not-applicable when it does not apply. Ground
       evidence in changed files or counts. Use policy attention for file-level
@@ -81,7 +81,7 @@ export default definePipr((pipr) => {
     tools: pipr.tools.readOnly,
     retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "6m",
-    prompt: () => "Check this pull request for repository hygiene and merge readiness.",
+    prompt: () => "Check this change request for repository hygiene and merge readiness.",
   });
 
   const task = pipr.task({

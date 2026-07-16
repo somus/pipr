@@ -1,0 +1,7 @@
+{
+  "title": "How Pipr works",
+  "description": "The Pipr runtime, review output, and trust model.",
+  "icon": "Waypoints",
+  "root": true,
+  "pages": ["index", "runtime", "comments", "trust-security"]
+}

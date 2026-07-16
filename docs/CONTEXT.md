@@ -1,4 +1,4 @@
-# Pipr Product Language
+# Pipr product language
 
 Use these terms consistently in product docs, code comments, issues, and pull requests.
 
@@ -9,7 +9,7 @@ The code review automation product that reviews code host change requests throug
 _Avoid_: legacy product names
 
 **Pipr Core**:
-The lean runtime surface Pipr owns: diff modeling, Pi execution, review validation, and comment publishing. Every review workflow — default review, recipes, custom tasks, commands, plugins — is composed on top of this core in user config, so one tool replaces a stack of single-purpose review bots.
+The lean runtime surface Pipr owns: diff modeling, Pi execution, review validation, and comment publishing. Default review, recipes, custom tasks, commands, and plugins compose on top of this core in user config.
 _Avoid_: framework, all-in-one review bot, per-workflow runtime forks
 
 **Pipr Configuration**:
@@ -17,7 +17,7 @@ The repository-local TypeScript config under `.pipr/config.ts`.
 _Avoid_: legacy configuration roots, `.pi/`
 
 **Trusted Base Config**:
-The `.pipr/config.ts` and local imports loaded from the change request base commit for GitHub Action runs.
+The `.pipr/config.ts` and local imports loaded from the change request base commit for hosted runs.
 _Avoid_: PR-authored runtime settings
 
 **Code Host Adapter**:
@@ -26,7 +26,7 @@ GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud are supported.
 _Avoid_: GitHub runtime, provider-specific user config
 
 **Change Request**:
-The provider-neutral review target. GitHub maps this to a pull request; future providers can map it to their native merge request or change request object.
+The provider-neutral review target. GitHub, Bitbucket Cloud, and Azure DevOps Services map this to a pull request; GitLab.com maps it to a merge request.
 _Avoid_: GitHub-only pull request when describing core runtime
 
 **TypeScript Config**:
@@ -70,7 +70,7 @@ A Pipr-attached Pi tool for bounded reads over trusted Diff Manifest data and ba
 _Avoid_: plugin tool, GitHub API tool, shell access
 
 **Review Finding**:
-An actionable issue found in a pull request and anchored to a validated diff range.
+An actionable issue found in a change request and anchored to a validated diff range.
 _Avoid_: nit, alert
 
 **Main Review Comment**:

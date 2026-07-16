@@ -1,20 +1,22 @@
-# Pipr Config Patterns
+# Pipr config patterns
 
 Use these patterns when customizing `.pipr/config.ts`.
 
-## CLI Commands
+## CLI commands
 
 | Command | Use |
 | --- | --- |
-| `pipr init` | Create `.pipr/config.ts`, `.pipr/package.json`, `.pipr/bun.lock`, `.pipr/tsconfig.json`, `.pipr/.gitignore`, and the GitHub workflow. |
+| `pipr init` | Create `.pipr/config.ts`, `.pipr/package.json`, `.pipr/bun.lock`, `.pipr/tsconfig.json`, `.pipr/.gitignore`, and the default GitHub workflow. |
+| `pipr init --adapters <list>` | Generate selected adapter artifacts for `github`, `gitlab`, `azure-devops`, or `bitbucket`; use `none` to skip adapter files. |
 | `pipr init --minimal` | Create only `.pipr/config.ts`; editor types come from a repo-root `@usepipr/sdk` install. |
 | `pipr inspect` | Print models, agents, tasks, commands, tools, publication settings, checks, and limits. |
 | `pipr check` | Type-load config and validate the runtime plan. |
 | `pipr check --require-env` | Also require configured provider env vars. |
 | `pipr review --base <ref>` | Run change-request tasks locally without publishing comments. |
-| `pipr dry-run --event <path>` | Load a GitHub event and config without model calls or publication. |
+| `pipr dry-run --host <host> --event <path>` | Load a native provider event and config without model calls or publication. |
+| `pipr webhook serve --host <host> --workspace <path> --repository <id>` | Run trusted webhook ingress for GitLab, Azure DevOps, or Bitbucket. |
 
-## Model And Review Basics
+## Model and review basics
 
 ```ts
 import { definePipr } from "@usepipr/sdk";
@@ -33,7 +35,7 @@ export default definePipr((pipr) => {
     id: "review",
     model,
     instructions: `
-      Review the pull request diff for correctness, security,
+      Review the change request diff for correctness, security,
       maintainability, and test coverage.
       Return only actionable findings that target valid diff ranges.
     `,
@@ -76,7 +78,7 @@ Use a final rest capture for free-form command text:
 pipr.command({ pattern: "@pipr ask <question...>", permission: "read", task });
 ```
 
-## Path Scopes
+## Path scopes
 
 Use `paths` to filter the Diff Manifest and publishable Inline Review Comments:
 
@@ -94,7 +96,7 @@ pipr.review({
 
 For custom tasks, pass the same path scope to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`.
 
-## Custom Tasks
+## Custom tasks
 
 Use `pipr.agent`, `pipr.task`, and `pipr.on.changeRequest` when `pipr.review(...)` is too small.
 
@@ -134,7 +136,7 @@ Task rules:
 - Use `ctx.command.reply(...)` for command response workflows.
 - Use `local: false` only for tasks that should never run through `pipr review`.
 
-## Checks And Publication
+## Checks and publication
 
 ```ts
 pipr.config({
@@ -164,4 +166,4 @@ Use only secret names in config:
 apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" })
 ```
 
-Add matching GitHub Actions secret mappings in `.github/workflows/pipr.yml`. Never commit raw provider keys, local `.env` values, or personal credentials.
+Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab uses masked CI/CD variables; Azure DevOps and Bitbucket webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.

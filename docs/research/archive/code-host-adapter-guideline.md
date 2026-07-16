@@ -1,10 +1,15 @@
-# Code Host Adapter Guideline for GitLab, Bitbucket Cloud, and Azure DevOps
+# Historical code host adapter guideline for GitLab, Bitbucket Cloud, and Azure DevOps
 
-Status: Research guideline
+Status: Archived research
 Researched: 2026-07-12
-Target: Pipr runtime and CI integration planning
+Implementation status: Implemented in v0.4.0
 
-## Recommendation
+This document records the research and implementation plan that informed Pipr's
+v0.4.0 GitLab.com, Azure DevOps Services, and Bitbucket Cloud support. It is
+retained for historical context and does not describe pending work. For current
+behavior, use the product documentation and runtime source.
+
+## Historical recommendation
 
 Implement the three providers on top of one strengthened `CodeHostAdapter` contract, then build thin provider modules for native event parsing, repository coordinates, API access, checkout, publication, inline location mapping, permissions, and status reporting. Do not implement three copies of the review runtime. Diff construction, Pi execution, Review Finding validation, marker generation, stale-head policy, deduplication, and publication planning should remain in Pipr Core.
 
@@ -105,11 +110,13 @@ The Azure UI rendered a fenced `suggestion` reply as ordinary code and exposed n
 
 ### Fixture lifecycle
 
-GitLab cleanup completed after its validation. The disposable Bitbucket repository and restored Azure DevOps organization remain temporarily available for maintainer inspection after the completed live checks. Remove both when that inspection is complete. No provider account identifiers, private repository URLs, credentials, or captured analytics data are committed here.
+The disposable fixtures used for this research were temporary and are no longer
+part of the supported test environment. No provider account identifiers, private
+repository URLs, credentials, or captured analytics data are recorded here.
 
 ## Current Pipr boundary
 
-Pipr already has the right high-level ownership rule in [ADR 0001](../adr/0001-pipr-owns-pr-runtime-pi-owns-agent-execution.md) and [ADR 0005](../adr/0005-pipr-owned-comment-publishing.md): Pipr Core owns deterministic review behavior, while a Code Host Adapter owns native events, permissions, checkout, publication, and inline mapping.
+Pipr already has the right high-level ownership rule in [ADR 0001](../../adr/0001-pipr-owns-pr-runtime-pi-owns-agent-execution.md) and [ADR 0005](../../adr/0005-pipr-owned-comment-publishing.md): Pipr Core owns deterministic review behavior, while a Code Host Adapter owns native events, permissions, checkout, publication, and inline mapping.
 
 The implementation is partially ready:
 
@@ -578,7 +585,7 @@ Provider delivery protections:
 
 The ingress is required for `@pipr` commands and comment-reply verification because native GitLab, Bitbucket, and Azure PR pipeline triggers do not run a repository pipeline for a new review comment.
 
-## Implementation sequence
+## Historical implementation sequence
 
 This ordering lets one implementation effort build the shared seam once, then add providers without repeatedly changing core contracts.
 
@@ -598,7 +605,7 @@ This ordering lets one implementation effort build the shared seam once, then ad
 
 8. **Update product docs and language.** Replace GitHub-only claims in runtime, comments, trust/security, troubleshooting, and quickstart docs. Keep provider-specific installation pages separate while sharing one conceptual runtime guide.
 
-## Verification strategy
+## Historical verification strategy
 
 ### Unit and contract fixtures
 

@@ -1,7 +1,7 @@
 {
   "name": "@usepipr/cli",
   "version": "0.4.0",
-  "description": "Command line interface for pipr pull request review automation",
+  "description": "Command-line interface for Pipr code host review automation",
   "type": "module",
   "license": "MIT",
   "repository": {

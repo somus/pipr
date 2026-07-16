@@ -61,7 +61,7 @@ export default definePipr((pipr) => {
     tools: pipr.tools.readOnly,
     retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "7m",
-    prompt: () => "Prepare a maintainer briefing for this pull request.",
+    prompt: () => "Prepare a maintainer briefing for this change request.",
   });
 
   const task = pipr.task({
@@ -110,7 +110,7 @@ export default definePipr((pipr) => {
   pipr.command({
     pattern: "@pipr describe",
     permission: "read",
-    description: "Generate a reviewer briefing for this pull request.",
+    description: "Generate a reviewer briefing for this change request.",
     task,
   });
 });

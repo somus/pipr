@@ -1,11 +1,11 @@
 ---
-title: "Security Policy"
+title: "Security policy"
 description: "Report vulnerabilities and understand Pipr's security scope."
 ---
 
 Use this policy to report vulnerabilities in Pipr. Do not open a public issue for security reports. The canonical source is [SECURITY.md](https://github.com/somus/pipr/blob/main/SECURITY.md).
 
-For the runtime trust model, including base-commit config, read-only Pi execution, secret handling, and publication guarantees, see [Trust and Security](/docs/guide/trust-security).
+For the runtime trust model, including base-commit config, read-only Pi execution, secret handling, and publication guarantees, see [Trust and security](/docs/concepts/trust-security).
 
 ## Supported versions
 
@@ -32,12 +32,12 @@ Include:
 
 Relevant security areas include:
 
-- GitHub Action execution
-- pull request trust boundaries
+- CI and trusted webhook-runner execution
+- change request trust boundaries
 - provider secret handling
 - Pi tool access
 - Diff Manifest path handling
-- GitHub comment publishing
+- code-host comment and status publishing
 - package release and Docker Action publishing
 
 Do not include raw provider keys, tokens, private repository contents, or other sensitive data in the report unless GitHub Security Advisories requires it for reproduction.

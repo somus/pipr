@@ -5,21 +5,36 @@ export async function ensureCodeHostHeadCheckout(options: {
   fetchRemote?: string;
   fetchEnv?: NodeJS.ProcessEnv;
 }): Promise<void> {
-  if (!(await hasGitCommit(options.rootDir, options.headSha))) {
-    const remote = options.fetchRemote ?? "origin";
-    try {
-      await fetchGit(options.rootDir, remote, options.headSha, options.fetchEnv);
-    } catch {
-      await fetchGit(options.rootDir, remote, options.fetchRef, options.fetchEnv);
-    }
-    if (!(await hasGitCommit(options.rootDir, options.headSha))) {
-      throw new Error(
-        `Code host did not provide reviewed commit ${options.headSha} from ${options.fetchRef}`,
-      );
-    }
-  }
+  await ensureCodeHostCommit({
+    rootDir: options.rootDir,
+    commitSha: options.headSha,
+    fetchRef: options.fetchRef,
+    fetchRemote: options.fetchRemote,
+    fetchEnv: options.fetchEnv,
+  });
   if ((await runGit(options.rootDir, ["rev-parse", "HEAD"])).trim() !== options.headSha) {
     await runGit(options.rootDir, ["checkout", "--detach", options.headSha]);
+  }
+}
+
+export async function ensureCodeHostCommit(options: {
+  rootDir: string;
+  commitSha: string;
+  fetchRef: string;
+  fetchRemote?: string;
+  fetchEnv?: NodeJS.ProcessEnv;
+}): Promise<void> {
+  if (await hasGitCommit(options.rootDir, options.commitSha)) return;
+  const remote = options.fetchRemote ?? "origin";
+  try {
+    await fetchGit(options.rootDir, remote, options.commitSha, options.fetchEnv);
+  } catch {
+    await fetchGit(options.rootDir, remote, options.fetchRef, options.fetchEnv);
+  }
+  if (!(await hasGitCommit(options.rootDir, options.commitSha))) {
+    throw new Error(
+      `Code host did not provide commit ${options.commitSha} from ${options.fetchRef}`,
+    );
   }
 }
 
@@ -29,7 +44,12 @@ async function fetchGit(
   ref: string,
   env?: NodeJS.ProcessEnv,
 ): Promise<void> {
-  await runGit(rootDir, ["fetch", "--no-tags", "--depth=1", remote, ref], env);
+  const shallow = (await runGit(rootDir, ["rev-parse", "--is-shallow-repository"], env)).trim();
+  await runGit(
+    rootDir,
+    ["fetch", "--no-tags", ...(shallow === "true" ? ["--unshallow"] : []), remote, ref],
+    env,
+  );
 }
 
 async function hasGitCommit(rootDir: string, sha: string): Promise<boolean> {

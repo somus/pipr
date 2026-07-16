@@ -4,7 +4,7 @@ export type PathFilter = {
   exclude?: string[];
 };
 
-/** Side of a pull request diff that a commentable range belongs to. */
+/** Side of a change request diff that a commentable range belongs to. */
 export type ReviewSide = "RIGHT" | "LEFT";
 
 /** Kind of line span represented by a Diff Manifest commentable range. */

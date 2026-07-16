@@ -1,3 +1,4 @@
+import { ensureCodeHostCommit } from "../hosts/git.js";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
@@ -11,6 +12,14 @@ export async function loadTrustedRuntimeForEvent(
   event: ChangeRequestEventContext,
   log: RuntimeLog,
 ): Promise<TrustedRuntimeProject> {
+  await logPhase(log, "fetch trusted base", async () =>
+    ensureCodeHostCommit({
+      rootDir: options.rootDir,
+      commitSha: event.change.base.sha,
+      fetchRef: event.change.base.ref ?? event.change.base.sha,
+      fetchEnv: options.env,
+    }),
+  );
   const trustedRuntime = await logPhase(log, "load trusted config", async () =>
     loadRuntimeProjectFromGitCommit({
       rootDir: options.rootDir,

@@ -3,7 +3,7 @@ import type { OfficialInitRecipe } from "./types.js";
 export const structuredReviewRecipe = {
   id: "rich-review",
   title: "Structured Review",
-  description: "General pull request review with severity and category metadata.",
+  description: "General change request review with severity and category metadata.",
   sourceTools: ["CodeRabbit", "Qodo Merge", "Greptile"],
   configTs: `import { definePipr, z } from "@usepipr/sdk";
 import type { ReviewFinding } from "@usepipr/sdk";
@@ -72,7 +72,7 @@ export default definePipr((pipr) => {
     name: "reviewer",
     model,
     instructions: \`
-      Review the pull request diff for correctness, security, reliability,
+      Review the change request diff for correctness, security, reliability,
       performance, test coverage, maintainability, and documentation risks.
       Return only actionable findings that target valid diff ranges. Assign
       severity by merge impact: critical for exploitable, data-loss, or widespread

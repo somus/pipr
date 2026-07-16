@@ -37,6 +37,31 @@ describe("Bitbucket Cloud events", () => {
     ).resolves.toEqual({ kind: "ignored", reason: "pull request is a draft" });
   });
 
+  it("accepts pull request webhooks whose actor omits the legacy nickname", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-event-"));
+    try {
+      const eventPath = path.join(directory, "event.json");
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          actor: { display_name: "Developer" },
+          repository,
+          pullrequest: { id: 7 },
+        }),
+      );
+      await expect(
+        parseBitbucketEvent({
+          eventPath,
+          env: { BITBUCKET_EVENT_KEY: "pullrequest:updated" },
+          workspace: "/workspace",
+          loadChangeRequest: async () => loaded,
+        }),
+      ).resolves.toMatchObject({ kind: "change-request", change: { action: "updated" } });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("ignores draft webhook pull requests without loading them", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-event-"));
     try {

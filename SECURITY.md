@@ -1,4 +1,4 @@
-# Security Policy
+# Security policy
 
 Use this policy to report vulnerabilities in Pipr. Do not open a public issue
 for security reports.
@@ -31,12 +31,12 @@ Include:
 
 Relevant security areas include:
 
-- GitHub Action execution
-- pull request trust boundaries
+- hosted integration and webhook execution
+- change request trust boundaries
 - provider secret handling
 - Pi tool access
 - Diff Manifest path handling
-- GitHub comment publishing
+- code host comment publishing
 - package release and Docker Action publishing
 
 Do not include raw provider keys, tokens, private repository contents, or other

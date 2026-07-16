@@ -1,11 +1,13 @@
 ---
-title: "Local Runs"
-description: "Run Pipr review tasks locally without publishing GitHub comments."
+title: "Local runs"
+description: "Run Pipr review tasks locally without publishing code-host comments."
 ---
 
-Local runs execute the same change-request Review Tasks without using GitHub publication APIs. They are useful before committing config changes, debugging reviewer prompts, and validating a recipe in a branch.
+Local runs execute the same change-request Review Tasks without using a code host's publication APIs. Use them before committing config changes, while debugging reviewer prompts, or when validating a recipe in a branch.
 
 ## Commands
+
+Choose a base and optional head based on whether you are reviewing working-tree changes or committed refs.
 
 ### Review working tree
 
@@ -43,6 +45,8 @@ pipr review --base origin/main --pi-executable /path/to/pi
 
 ## What local runs do
 
+Local review exercises config, diff construction, Pi execution, and rendering while keeping provider publication disabled.
+
 ### Runtime steps
 
 Local runs:
@@ -61,6 +65,8 @@ Local runs:
 Local runs do not publish Main Review Comments, Inline Review Comments, command response comments, or Check Runs.
 
 ## Base and head
+
+The base selects the comparison point; the optional head selects committed content instead of the working tree.
 
 ### Required base
 
@@ -90,6 +96,8 @@ pipr review --base origin/main --head feature-branch
 ```
 
 ## Local task selection
+
+Local review runs each unique change-request task unless the task explicitly opts out.
 
 ### Review recipe
 
@@ -150,11 +158,15 @@ Use `ctx.platform.id === "local"` when a task should still run locally but rende
 
 ## Output
 
+Local review separates progress logs from the rendered or structured task result.
+
 ### Stdout and stderr
 
 During local review, Pipr writes progress logs to stderr and the final review output to stdout. The default stdout format is Markdown without Pipr's internal comment marker, followed by any local inline finding drafts. `--json` keeps the full structured result, including review metadata, inline drafts, dropped findings, task checks, provider models, and repair metadata.
 
 ## Environment
+
+Provide model credentials through the trusted local process environment.
 
 ### Provider secrets
 
@@ -173,9 +185,11 @@ bun --env-file=.pipr/.env packages/cli/src/main.ts review --base origin/main
 
 ### Source checkout trust
 
-Unlike GitHub Action pull request runs, local review loads `.pipr/config.ts` from the current workspace. Run it only on branches whose config and task code you trust, because those tasks can access exported env vars and Bun-loaded `.env` values through `ctx.secret(...)`.
+Unlike hosted change-request runs, local review loads `.pipr/config.ts` from the current workspace. Run it only on branches whose config and task code you trust, because those tasks can access exported env vars and Bun-loaded `.env` values through `ctx.secret(...)`.
 
 ## Config validation
+
+Check the runtime plan before spending model quota.
 
 ### Check and inspect
 
@@ -196,18 +210,22 @@ pipr check --require-env
 
 `pipr inspect` prints the registered models, agents, tasks, commands, tools, publication settings, and limits.
 
-## Local versus Action runs
+## Local versus hosted runs
+
+Local and hosted runs share task behavior but differ in config trust, diff source, secrets, and publication.
 
 ### Behavior matrix
 
-| Behavior | Local run | GitHub Action run |
-| --- | --- | --- |
-| Config source | Local workspace | Base commit for pull request events |
-| Diff source | Working tree by default, or local git refs with `--head` | Checked-out pull request head and base |
-| Comments | Disabled | Enabled when publication succeeds |
-| Commands | Not dispatched | Run from `issue_comment.created` |
-| Provider secrets | Exported env vars or Bun-loaded `.env` files | GitHub Actions secrets |
-| Logs | Human-readable stderr | Structured Action logs |
-| Best use | Config iteration and prompt debugging | Production pull request review |
+Use the hosted path when the result must reach the code host.
 
-Use [GitHub Action](/docs/guide/github-action) for production event behavior.
+| Behavior | Local run | Hosted change-request run |
+| --- | --- | --- |
+| Config source | Local workspace | Trusted base commit |
+| Diff source | Working tree by default, or local git refs with `--head` | Exact change-request head and base |
+| Comments | Disabled | Enabled when publication succeeds |
+| Commands | Not dispatched | Run from native comment events through the selected adapter |
+| Provider secrets | Exported env vars or Bun-loaded `.env` files | CI or trusted-worker secret store |
+| Logs | Human-readable stderr | CI or trusted-worker logs |
+| Best use | Config iteration and prompt debugging | Production change-request review |
+
+Use the [GitHub](/docs/guide/github-action), [GitLab](/docs/guide/gitlab), [Azure DevOps](/docs/guide/azure-devops), or [Bitbucket Cloud](/docs/guide/bitbucket) guide for production delivery behavior.

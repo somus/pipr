@@ -29,7 +29,7 @@ export default definePipr((pipr) => {
     model,
     instructions: \`
       Draft one concise, release-facing changelog entry grounded in changed
-      behavior and pull request intent. Use category "internal" when there is no
+      behavior and change request intent. Use category "internal" when there is no
       user-visible effect. Mention breaking behavior only when the repository
       evidence proves it. Do not invent issue IDs, versions, release claims, or
       behavior not supported by the change. Do not edit files.
