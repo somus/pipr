@@ -1,0 +1,25 @@
+packages/runtime/src/internal/docs.ts
+  s_20e6f7049d0fc8::t_972fe13711f9ad 1-3
+packages/runtime/package.json
+  s_20e6f7049d0fc8::t_972fe13711f9ad 37-40,47
+apps/docs/package.json
+  s_20e6f7049d0fc8::t_972fe13711f9ad 55-56
+apps/docs/scripts/sync-recipes.ts
+  s_20e6f7049d0fc8::t_972fe13711f9ad 4-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "05839bacb66d1b7cc321844f1086976342a60cc0",
+  "prompts": {},
+  "sessions": {
+    "s_20e6f7049d0fc8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5f63-2f6f-7e83-84c0-27acc706cb5b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
