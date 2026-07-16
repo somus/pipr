@@ -1,3 +1,5 @@
+import { lstat } from "node:fs/promises";
+
 export type ActAssertionMode = "full" | "condensed" | "orchestrator";
 
 type ReviewCommentPayload = {
@@ -20,6 +22,11 @@ type TelemetryEvent = {
   phase?: string;
   promptKind?: string;
   time: number;
+  workspace?: string;
+  home?: string;
+  sessionDir?: string;
+  tmp?: string;
+  providerId?: string;
 };
 
 const mainCommentMarkerPrefix = "<!-- pipr:main-comment change=1 version=1 state=";
@@ -37,6 +44,9 @@ export async function assertActFixture(options: {
   }
   if (options.mode === "condensed") {
     assertActCondensedFixture(fixture);
+    if (options.telemetryPath) {
+      await assertCondensedPiWorkspace(options.telemetryPath);
+    }
     return;
   }
   assertActOrchestratorFixture(fixture);
@@ -65,6 +75,33 @@ export function assertActCondensedFixture(fixture: PublicationFixture): void {
   );
   assertEqual((fixture.reviewCommentPayloads ?? []).length, 0, "unexpected inline payloads");
   assertEqual((fixture.reviewComments ?? []).length, 0, "unexpected inline comments");
+}
+
+export async function assertCondensedPiWorkspace(telemetryPath: string): Promise<void> {
+  const starts = (await readTelemetryEvents(telemetryPath))
+    .filter((event) => event.phase === "start" && event.promptKind === "condensed")
+    .toSorted((left, right) => left.time - right.time);
+  assertEqual(starts.length, 4, "unexpected condensed Pi attempt count");
+  assertEqual(
+    starts.map((event) => event.providerId).join(","),
+    [
+      "deepseek/deepseek-v4-pro",
+      "deepseek/deepseek-v4-pro",
+      "deepseek/deepseek-v4-fallback",
+      "deepseek/deepseek-v4-fallback",
+    ].join(","),
+    "unexpected retry, fallback, and repair provider order",
+  );
+  const first = starts[0];
+  assert(first !== undefined, "condensed Pi telemetry missing attempts");
+  const workspace = requiredTelemetryPath(first, "workspace");
+  const workspaces = starts.map((event) => requiredTelemetryPath(event, "workspace"));
+  assertEqual(new Set(workspaces).size, 1, "Pi retry, fallback, or repair workspace changed");
+  for (const key of ["home", "sessionDir", "tmp"] as const) {
+    const paths = starts.map((event) => requiredTelemetryPath(event, key));
+    assertEqual(new Set(paths).size, starts.length, `Pi attempts reused ${key}`);
+  }
+  assert(!(await pathExists(workspace)), "shared Pi workspace was not cleaned up");
 }
 
 export function assertActOrchestratorFixture(fixture: PublicationFixture): void {
@@ -158,18 +195,26 @@ function assertInlinePayload(inline: ReviewCommentPayload, expectedHeadSha: stri
 }
 
 async function assertParallelPiCalls(telemetryPath: string): Promise<void> {
-  const events = (
+  const events = await readTelemetryEvents(telemetryPath);
+  const fullStarts = events.filter(
+    (event) => event.phase === "start" && event.promptKind === "full",
+  );
+  assert(fullStarts.length >= 2, `expected at least 2 full Pi calls, got ${fullStarts.length}`);
+  assert(
+    new Set(fullStarts.map((event) => requiredTelemetryPath(event, "workspace"))).size >= 2,
+    "parallel task Pi calls reused a workspace",
+  );
+  assert(maxActiveCalls(events) >= 2, "task Pi calls did not overlap");
+}
+
+async function readTelemetryEvents(telemetryPath: string): Promise<TelemetryEvent[]> {
+  return (
     await Promise.all(
       [...new Bun.Glob("*.jsonl").scanSync({ cwd: telemetryPath })].map(async (file) =>
         readTelemetryFile(`${telemetryPath}/${file}`),
       ),
     )
   ).flat();
-  const fullStarts = events.filter(
-    (event) => event.phase === "start" && event.promptKind === "full",
-  );
-  assert(fullStarts.length >= 2, `expected at least 2 full Pi calls, got ${fullStarts.length}`);
-  assert(maxActiveCalls(events) >= 2, "task Pi calls did not overlap");
 }
 
 async function readTelemetryFile(path: string): Promise<TelemetryEvent[]> {
@@ -197,6 +242,27 @@ function maxActiveCalls(events: TelemetryEvent[]): number {
     }
   }
   return maxActive;
+}
+
+function requiredTelemetryPath(
+  event: TelemetryEvent,
+  key: "workspace" | "home" | "sessionDir" | "tmp",
+): string {
+  const value = event[key];
+  assert(typeof value === "string" && value.length > 0, `Pi telemetry missing ${key}`);
+  return value;
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await lstat(target);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && Reflect.get(error, "code") === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function assertEqual<T>(actual: T, expected: T, message: string): void {

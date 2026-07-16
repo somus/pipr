@@ -12,7 +12,14 @@ import {
   piThinkingLevels,
 } from "../contract.js";
 import { toPiProviderInvocation } from "../provider.js";
-import { buildPiArgs, createReadOnlyWorkspace, type PiRunOptions, runPi } from "../runner.js";
+import {
+  buildPiArgs,
+  createReadOnlyWorkspace,
+  createScopedPiRunner,
+  type PiRunOptions,
+  runPi,
+  withPiRunWorkspace,
+} from "../runner.js";
 import { piRuntimeReadToolNames } from "../runtime-tools.js";
 
 describe("Pi contract", () => {
@@ -273,6 +280,58 @@ describe("buildPiArgs", () => {
     }
   });
 
+  it("reuses a prepared workspace while isolating attempt state", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi.sh");
+    let preparedWorkspace: string | undefined;
+    try {
+      await Bun.write(path.join(workspace, "marker.txt"), "snapshot\n");
+      await Bun.write(
+        piExecutable,
+        [
+          "#!/bin/sh",
+          'printf "CWD=%s\\n" "$PWD"',
+          'printf "HOME=%s\\n" "$HOME"',
+          'printf "SESSION=%s\\n" "$PI_CODING_AGENT_SESSION_DIR"',
+          'printf "TMP=%s\\n" "$TMPDIR"',
+        ].join("\n"),
+      );
+      await chmod(piExecutable, 0o755);
+      preparedWorkspace = await createReadOnlyWorkspace(workspace);
+      const scopedRunner = createScopedPiRunner({
+        sourceWorkspace: workspace,
+        workspace: preparedWorkspace,
+      });
+
+      await Bun.write(path.join(workspace, "marker.txt"), "changed after snapshot\n");
+      const first = await scopedRunner({
+        workspace,
+        piExecutable,
+        prompt: "First attempt.",
+        ...deepseekRunOptions(),
+      });
+      const second = await scopedRunner({
+        workspace,
+        piExecutable,
+        prompt: "Second attempt.",
+        ...deepseekRunOptions(),
+      });
+
+      expect(envLine(first.stdout, "CWD")).toBe(envLine(second.stdout, "CWD"));
+      expect(envLine(first.stdout, "CWD")).not.toBe(workspace);
+      for (const key of ["HOME", "SESSION", "TMP"]) {
+        expect(envLine(first.stdout, key)).not.toBe(envLine(second.stdout, key));
+      }
+      expect(await Bun.file(path.join(preparedWorkspace, "marker.txt")).text()).toBe("snapshot\n");
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+      if (preparedWorkspace) {
+        await chmodTree(preparedWorkspace, 0o755);
+        await rm(preparedWorkspace, { recursive: true, force: true });
+      }
+    }
+  });
+
   it("does not leak unrelated parent env vars into Pi", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
     const piExecutable = path.join(workspace, "fake-pi.sh");
@@ -317,6 +376,23 @@ describe("buildPiArgs", () => {
     }
   });
 
+  it("rejects scoped calls without the matching sandbox identity", async () => {
+    const base = deepseekRunOptions();
+    const scopedRunner = createScopedPiRunner({
+      sourceWorkspace: "/source",
+      workspace: "/snapshot",
+      processIdentity: { uid: 1000, gid: 1000 },
+    });
+
+    await expect(
+      scopedRunner({
+        workspace: "/source",
+        prompt: "Review this diff.",
+        ...base,
+      }),
+    ).rejects.toThrow("scoped Pi runner cannot be used with a different sandbox identity");
+  });
+
   it("rejects incomplete or root Pi sandbox identities", async () => {
     const base = deepseekRunOptions();
     await expect(
@@ -356,6 +432,46 @@ describe("buildPiArgs", () => {
       expect(result.exitCode).toBe(0);
     } finally {
       getuid.mockRestore();
+    }
+  });
+
+  it("keeps per-attempt workspaces when workspace scoping runs as non-root", async () => {
+    const getuid = spyOn(process, "getuid").mockReturnValue(1000);
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi.sh");
+    try {
+      await Bun.write(piExecutable, '#!/bin/sh\nprintf "CWD=%s\\n" "$PWD"\n');
+      await chmod(piExecutable, 0o755);
+      const base = deepseekRunOptions();
+      const env = {
+        ...base.env,
+        PIPR_PI_SANDBOX_UID: "1000",
+        PIPR_PI_SANDBOX_GID: "1000",
+      };
+
+      const workspaces = await withPiRunWorkspace({ workspace, env }, async (piRunner) => {
+        const first = await piRunner({
+          workspace,
+          piExecutable,
+          prompt: "First attempt.",
+          ...base,
+          env,
+        });
+        const second = await piRunner({
+          workspace,
+          piExecutable,
+          prompt: "Second attempt.",
+          ...base,
+          env,
+        });
+        return [envLine(first.stdout, "CWD"), envLine(second.stdout, "CWD")];
+      });
+
+      expect(workspaces[0]).not.toBe(workspaces[1]);
+      expect(workspaces).not.toContain(workspace);
+    } finally {
+      getuid.mockRestore();
+      await rm(workspace, { recursive: true, force: true });
     }
   });
 
@@ -1140,6 +1256,14 @@ function expectPiExtension(args: string[], extensionPath: string): void {
 
 function expectPiTools(args: string[]): string {
   return args[args.indexOf("--tools") + 1] ?? "";
+}
+
+function envLine(output: string, name: string): string {
+  const line = output.split("\n").find((value) => value.startsWith(`${name}=`));
+  if (!line) {
+    throw new Error(`missing ${name} in fake Pi output`);
+  }
+  return line.slice(name.length + 1);
 }
 
 async function runFakePiWithToolOptions(

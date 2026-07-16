@@ -102,6 +102,8 @@ await writeFile(tempProbe, "ok");
 await rm(tempProbe);
 
 Bun.env.PIPR_ACT_PI_CALL_DIR = ${JSON.stringify(callsDir)};
+Bun.env.PIPR_ACT_INVALID_FIRST_OUTPUT = ${JSON.stringify(envValue("PIPR_ACT_INVALID_FIRST_OUTPUT") ?? "")};
+Bun.env.PIPR_ACT_FAIL_PRIMARY_PROVIDER = ${JSON.stringify(envValue("PIPR_ACT_FAIL_PRIMARY_PROVIDER") ?? "")};
 const proc = Bun.spawn([${JSON.stringify(piExecutable)}, ...Bun.argv.slice(2)], {
   stdin: "inherit",
   stdout: "inherit",
