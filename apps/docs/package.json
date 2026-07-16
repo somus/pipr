@@ -53,6 +53,6 @@
     "serve": "14.2.6",
     "tailwindcss": "4.3.2",
     "typescript": "catalog:",
-    "@usepipr/runtime": "0.4.0"
+    "@usepipr/runtime": "workspace:*"
   }
 }
