@@ -8,6 +8,9 @@
       "@usepipr/sdk": ["./packages/sdk/src/index.ts"],
       "@usepipr/sdk/internal": ["./packages/sdk/src/internal.ts"],
       "@usepipr/runtime": ["./packages/runtime/src/index.ts"],
+      "@usepipr/runtime/internal/action-result": [
+        "./packages/runtime/src/internal/action-result.ts"
+      ],
       "@usepipr/runtime/internal/review-testing": [
         "./packages/runtime/src/internal/review-testing.ts"
       ],
