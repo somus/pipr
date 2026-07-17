@@ -57,7 +57,7 @@ Run docs-only checks:
 bun run check:docs
 ```
 
-Turbo runs docs type generation once before the dependent test, typecheck, and build tasks.
+Turbo runs docs type generation once before the dependent generated test, typecheck, and build tasks. The app-scoped commands also generate their prerequisites when run directly.
 
 ### Docs build
 
@@ -183,7 +183,7 @@ PIPR_ACTION_IMAGE=pipr-action:e2e bun run --cwd packages/e2e check:container
 `check:container` verifies the Pi contract and runs direct-container equivalents of the dry-run, full, condensed, and orchestrator scenarios.
 After those checks, CI reuses the image for `check:actions dry-run`, which verifies the real `action.yml` entrypoint through `act`.
 
-The Dockerfile builds only the Action packages. Docs output is validated by the docs deployment path, not by the Action image build.
+The default Docker target builds the Action packages. The separate `evals` target adds the eval package for scheduled model-quality checks; docs output stays in the docs deployment path.
 
 To run the same check locally:
 

@@ -68,7 +68,63 @@ describe("presentGitHubActionResult", () => {
     );
     expect(dryRun.output).toEqual([]);
   });
+
+  it("presents command and verifier results through the same sink", async () => {
+    const help = recordingPresenter();
+    await presentGitHubActionResult(
+      {
+        ...loadedResultContext(),
+        kind: "command-help",
+        reason: "missing question",
+        body: "usage body",
+      } as HostRunCommandResult,
+      help.sink,
+    );
+    expect(help.info.at(-1)).toBe("pipr command help: missing question");
+    expect(help.output).toEqual([["main-comment", "usage body"]]);
+
+    const response = recordingPresenter();
+    await presentGitHubActionResult(
+      {
+        ...loadedResultContext(),
+        kind: "command-response",
+        command: "ask",
+        response: { body: "answer body" },
+        publication: { action: "created", id: "9" },
+      } as HostRunCommandResult,
+      response.sink,
+    );
+    expect(response.info.at(-1)).toBe("pipr command 'ask' published response comment (created)");
+    expect(response.output).toEqual([
+      ["main-comment", "answer body"],
+      ["publication", '{"action":"created","id":"9"}'],
+    ]);
+
+    const verifier = recordingPresenter();
+    await presentGitHubActionResult(
+      {
+        ...loadedResultContext(),
+        kind: "verifier",
+        errors: ["thread is stale"],
+      } as HostRunCommandResult,
+      verifier.sink,
+    );
+    expect(verifier.warning).toEqual(["pipr inline resolution failed: thread is stale"]);
+    expect(verifier.output).toEqual([
+      ["publication", '{"inlineResolutionErrors":["thread is stale"]}'],
+    ]);
+  });
 });
+
+function loadedResultContext() {
+  return {
+    event: {
+      change: { number: 7 },
+      repository: { slug: "somus/pipr" },
+    },
+    configSource: "/workspace/.pipr/config.ts",
+  };
+}
 
 function recordingPresenter() {
   const info: string[] = [];

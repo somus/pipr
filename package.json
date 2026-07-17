@@ -27,7 +27,7 @@
   "scripts": {
     "build": "bun run build:packages",
     "build:packages": "turbo run build --filter=@usepipr/sdk --filter=@usepipr/runtime --filter=@usepipr/cli",
-    "build:docs": "turbo run build --filter=@pipr/docs",
+    "build:docs": "turbo run build:generated --filter=@pipr/docs",
     "build:all": "turbo run build",
     "typecheck": "turbo run typecheck //#typecheck:root",
     "typecheck:root": "tsc --noEmit",
@@ -60,7 +60,7 @@
     "check:quality": "turbo run //#check:release-metadata:root //#check:conventional-commit:root //#check:scripts:root //#check:runtime-test-split:root //#typecheck:root //#format:check:root //#fallow:packages:root",
     "check:quality:docs": "turbo run //#format:check:docs-root //#fallow:docs:root",
     "check:packages": "bun run build:packages && turbo run lint typecheck test format:check --filter='!@pipr/docs' && bun run check:quality",
-    "check:docs": "turbo run lint typecheck test build format:check --filter=@pipr/docs && bun run check:quality:docs",
+    "check:docs": "turbo run lint typecheck:generated test:generated build:generated format:check --filter=@pipr/docs && bun run check:quality:docs",
     "check": "bun run check:packages && bun run check:docs",
     "check:actions": "bun run --cwd packages/e2e check:actions",
     "eval:prompts": "bun run --cwd packages/evals eval"

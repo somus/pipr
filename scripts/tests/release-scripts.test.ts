@@ -194,6 +194,11 @@ describe("changed-scope", () => {
 
 describe("developer checks", () => {
   it("serializes docs type generation through the Turbo graph", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as {
+      scripts?: Record<string, string>;
+    };
     const packageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "apps/docs/package.json"), "utf8"),
     ) as { scripts?: Record<string, string> };
@@ -201,11 +206,15 @@ describe("developer checks", () => {
       tasks?: Record<string, { dependsOn?: string[] }>;
     };
 
-    expect(packageJson.scripts?.build).not.toContain("typegen");
-    expect(packageJson.scripts?.typecheck).not.toContain("typegen");
-    expect(turbo.tasks?.build?.dependsOn).toContain("typegen");
-    expect(turbo.tasks?.typecheck?.dependsOn).toContain("typegen");
-    expect(turbo.tasks?.test?.dependsOn).toContain("typegen");
+    expect(packageJson.scripts?.build).toContain("typegen");
+    expect(packageJson.scripts?.typecheck).toContain("typegen");
+    expect(packageJson.scripts?.test).toContain("typegen");
+    expect(rootPackageJson.scripts?.["check:docs"]).toContain("build:generated");
+    expect(rootPackageJson.scripts?.["check:docs"]).toContain("typecheck:generated");
+    expect(rootPackageJson.scripts?.["check:docs"]).toContain("test:generated");
+    expect(turbo.tasks?.["build:generated"]?.dependsOn).toContain("typegen");
+    expect(turbo.tasks?.["typecheck:generated"]?.dependsOn).toContain("typegen");
+    expect(turbo.tasks?.["test:generated"]?.dependsOn).toContain("typegen");
   });
 
   it("runs the runtime CI package gate once", () => {
@@ -367,6 +376,10 @@ export default definePipr((pipr) => {
 
     expect(runScript("scripts/verify-release-artifacts.ts", [releaseDir])).toBe(0);
 
+    write(path.join(releaseDir, "SHA256SUMS"), `${"0".repeat(64)}  ${releaseTargets[0].outfile}\n`);
+    expect(runScript("scripts/verify-release-artifacts.ts", [releaseDir])).not.toBe(0);
+
+    write(path.join(releaseDir, "SHA256SUMS"), `${lines.join("\n")}\n`);
     write(path.join(releaseDir, "pipr-stale"), "stale\n");
     expect(runScript("scripts/verify-release-artifacts.ts", [releaseDir])).not.toBe(0);
   });

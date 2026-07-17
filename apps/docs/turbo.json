@@ -2,13 +2,14 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    "build": {
+    "build:generated": {
+      "dependsOn": ["^build", "typegen"],
+      "outputs": [".output/**"]
+    },
+    "typecheck:generated": {
       "dependsOn": ["^build", "typegen"]
     },
-    "typecheck": {
-      "dependsOn": ["^build", "typegen"]
-    },
-    "test": {
+    "test:generated": {
       "dependsOn": ["^build", "typegen"]
     },
     "typegen": {
