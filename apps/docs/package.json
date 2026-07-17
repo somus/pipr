@@ -5,7 +5,7 @@
   "sideEffects": false,
   "scripts": {
     "dev": "bun run typegen && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite dev",
-    "build": "bun run typegen && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite build",
+    "build": "NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite build",
     "start": "serve .output/public --config serve.json",
     "preview": "mkdir -p .cache && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite preview",
     "recipes:sync": "bun scripts/sync-recipes.ts",
@@ -13,8 +13,9 @@
     "content:check": "bun scripts/check-content.ts",
     "links:check": "bun scripts/check-content.ts --external",
     "test": "bun run recipes:check && bun run content:check && bun test scripts/tests src",
+    "test:browser": "playwright test",
     "typegen": "mkdir -p .cache && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage fumadocs-mdx && tsr generate",
-    "typecheck": "bun run typegen && tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
     "format:check": "biome format .",
     "check": "bun run recipes:check && bun run content:check && bun run lint && bun run typecheck",
@@ -39,12 +40,14 @@
     "vite": "8.1.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "4.3.2",
     "@tanstack/router-cli": "1.167.18",
     "@types/mdx": "2.0.14",
     "@types/node": "catalog:",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@usepipr/runtime": "workspace:*",
     "@vitejs/plugin-react": "6.0.3",
     "fumadocs-twoslash": "3.3.0",
     "fumadocs-typescript": "5.3.0",
@@ -52,7 +55,6 @@
     "nitro": "3.0.260610-beta",
     "serve": "14.2.6",
     "tailwindcss": "4.3.2",
-    "typescript": "catalog:",
-    "@usepipr/runtime": "workspace:*"
+    "typescript": "catalog:"
   }
 }

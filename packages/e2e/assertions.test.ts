@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -14,25 +14,26 @@ import { prepareScenarioWorktree, scenarios } from "./scenarios.ts";
 
 const headSha = "head-sha";
 
-await assertDryRunScenarioPreparation();
-await assertActionMetadataRendering();
-await assertCondensedWorkspaceTelemetry();
+test("validates Action scenario assertions", async () => {
+  await assertDryRunScenarioPreparation();
+  await assertActionMetadataRendering();
+  await assertDockerE2eRunsActSmoke();
+  await assertCondensedWorkspaceTelemetry();
 
-await assertActFullFixture(validFullFixture(), headSha);
-expect(() => assertActCondensedFixture(validCondensedFixture())).not.toThrow();
-expect(() => assertActOrchestratorFixture(validOrchestratorFixture())).not.toThrow();
+  await assertActFullFixture(validFullFixture(), headSha);
+  expect(() => assertActCondensedFixture(validCondensedFixture())).not.toThrow();
+  expect(() => assertActOrchestratorFixture(validOrchestratorFixture())).not.toThrow();
 
-for (const [message, fixture] of fullFailureFixtures()) {
-  await expectFailure(message, fixture);
-}
-for (const [message, fixture] of condensedFailureFixtures()) {
-  expectCondensedFailure(message, fixture);
-}
-for (const [message, fixture] of orchestratorFailureFixtures()) {
-  expectOrchestratorFailure(message, fixture);
-}
-
-console.log("act fixture assertion tests ok");
+  for (const [message, fixture] of fullFailureFixtures()) {
+    await expectFailure(message, fixture);
+  }
+  for (const [message, fixture] of condensedFailureFixtures()) {
+    expectCondensedFailure(message, fixture);
+  }
+  for (const [message, fixture] of orchestratorFailureFixtures()) {
+    expectOrchestratorFailure(message, fixture);
+  }
+});
 
 async function assertDryRunScenarioPreparation(): Promise<void> {
   expect(scenarios["dry-run"].baseSample).toBeTruthy();
@@ -42,6 +43,12 @@ async function assertDryRunScenarioPreparation(): Promise<void> {
   } finally {
     prepared.cleanup();
   }
+}
+
+async function assertDockerE2eRunsActSmoke(): Promise<void> {
+  const source = await Bun.file(new URL("../../scripts/docker-e2e.ts", import.meta.url)).text();
+  expect(source).toContain('"check:actions", "dry-run"');
+  expect(source).toContain('PIPR_SKIP_ACTION_IMAGE_BUILD: "1"');
 }
 
 async function assertActionMetadataRendering(): Promise<void> {

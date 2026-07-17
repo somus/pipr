@@ -1,6 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, afterEach, describe, expect, it } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp as createTemporaryDirectory, mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runtimeVersion } from "../../shared/version.js";
@@ -14,7 +14,21 @@ import {
   writeThirdPartyPiprProject,
 } from "./helpers/third-party-config.js";
 
-useLocalInitSdk();
+const cleanupLocalInitSdk = await useLocalInitSdk();
+afterAll(cleanupLocalInitSdk);
+const temporaryDirectories = new Set<string>();
+afterEach(async () => {
+  await Promise.all(
+    [...temporaryDirectories].map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+  temporaryDirectories.clear();
+});
+
+async function mkdtemp(prefix: string): Promise<string> {
+  const directory = await createTemporaryDirectory(prefix);
+  temporaryDirectories.add(directory);
+  return directory;
+}
 
 describe("loadTypescriptConfig installable deps", () => {
   it("loads config that imports a third-party dep from .pipr/package.json and bun.lock", async () => {

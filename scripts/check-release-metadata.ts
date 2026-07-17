@@ -20,6 +20,7 @@ const rootPackage = await readJson<PackageJson>("package.json");
 const releasePleaseConfig = await readText("release-please-config.json");
 const ciWorkflow = await readText(".github/workflows/ci.yml");
 const dockerImageWorkflow = await readText(".github/workflows/docker-image.yml");
+const evalsWorkflow = await readText(".github/workflows/evals.yml");
 const releaseWorkflow = await readText(".github/workflows/release.yml");
 const releasePleaseWorkflow = await readText(".github/workflows/release-please.yml");
 const selfReviewWorkflow = await readText(".github/workflows/pipr.yml");
@@ -43,6 +44,7 @@ const shaExpression = githubExpression("github.sha");
 const workflowSources = {
   ".github/workflows/ci.yml": ciWorkflow,
   ".github/workflows/docker-image.yml": dockerImageWorkflow,
+  ".github/workflows/evals.yml": evalsWorkflow,
   ".github/workflows/release.yml": releaseWorkflow,
   ".github/workflows/release-please.yml": releasePleaseWorkflow,
   ".github/workflows/pipr.yml": selfReviewWorkflow,
@@ -219,6 +221,26 @@ for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) 
 assert(
   releaseWorkflow.includes("dist/release/SHA256SUMS"),
   "release workflow must upload SHA256SUMS",
+);
+for (const asset of [
+  "pipr-linux-x64",
+  "pipr-linux-arm64",
+  "pipr-darwin-x64",
+  "pipr-darwin-arm64",
+]) {
+  assert(
+    releaseWorkflow.includes(`dist/release/${asset}`),
+    `release workflow must upload exact asset ${asset}`,
+  );
+}
+assert(
+  !releaseWorkflow.includes("dist/release/pipr-*"),
+  "release workflow must not upload release assets through a glob",
+);
+assert(
+  releaseWorkflow.indexOf("bun run check:release-artifacts") <
+    releaseWorkflow.indexOf("npm publish --access public"),
+  "release workflow must verify exact CLI assets before publishing packages",
 );
 const dogfoodUpdateStep = "name: Open dogfood SDK update PR";
 assert(

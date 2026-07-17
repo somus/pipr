@@ -26,6 +26,12 @@ run(["bun", "run", "--cwd", "packages/e2e", "check:container"], {
   ...process.env,
   PIPR_ACTION_IMAGE: image,
 });
+console.log(`Running real Action metadata smoke with act: ${image}`);
+run(["bun", "run", "--cwd", "packages/e2e", "check:actions", "dry-run"], {
+  ...process.env,
+  PIPR_ACTION_IMAGE: image,
+  PIPR_SKIP_ACTION_IMAGE_BUILD: "1",
+});
 
 function run(command: string[], env = process.env): void {
   const result = Bun.spawnSync(command, {

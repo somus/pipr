@@ -102,7 +102,7 @@ export async function initOfficialMinimalProject(
 
   if (!minimal) {
     await assertBunAvailable();
-    const install = Bun.spawn(["bun", "install", "--ignore-scripts"], {
+    const install = Bun.spawn(initInstallCommand(), {
       cwd: projectDir,
       env: process.env,
       stdout: "pipe",
@@ -128,6 +128,12 @@ export async function initOfficialMinimalProject(
 
   await loadRuntimeProject({ rootDir: options.rootDir, configDir });
   return { configDir, ...result };
+}
+
+function initInstallCommand(env: NodeJS.ProcessEnv = process.env): string[] {
+  const command = ["bun", "install", "--ignore-scripts"];
+  if (env.PIPR_INTERNAL_INIT_OFFLINE === "1") command.push("--offline");
+  return command;
 }
 
 async function starterFiles(
@@ -246,21 +252,25 @@ function starterBitbucketWebhookEnvironment(recipe?: string): string {
   return lines.join("\n");
 }
 
-function starterPackageJson(): string {
-  return `${JSON.stringify(
-    {
-      private: true,
-      dependencies: {
-        "@usepipr/sdk": process.env.PIPR_INTERNAL_INIT_SDK_VERSION ?? defaultSdkVersion,
-      },
-      devDependencies: {
-        "@types/bun": defaultTypesBunVersion,
-        typescript: defaultTypescriptVersion,
-      },
+export function officialInitPackageManifest(env: NodeJS.ProcessEnv = process.env): {
+  private: true;
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
+} {
+  return {
+    private: true,
+    dependencies: {
+      "@usepipr/sdk": env.PIPR_INTERNAL_INIT_SDK_VERSION ?? defaultSdkVersion,
     },
-    null,
-    2,
-  )}\n`;
+    devDependencies: {
+      "@types/bun": env.PIPR_INTERNAL_INIT_TYPES_BUN_VERSION ?? defaultTypesBunVersion,
+      typescript: env.PIPR_INTERNAL_INIT_TYPESCRIPT_VERSION ?? defaultTypescriptVersion,
+    },
+  };
+}
+
+function starterPackageJson(): string {
+  return `${JSON.stringify(officialInitPackageManifest(), null, 2)}\n`;
 }
 
 async function writeTargets(

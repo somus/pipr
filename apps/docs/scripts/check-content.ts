@@ -7,8 +7,8 @@ import { getLegacyDocRedirect } from "../src/lib/docs-routes.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../..");
-const docsDir = path.join(repoRoot, "apps/docs/content/docs");
-const publicDir = path.join(repoRoot, "apps/docs/public");
+const docsDir = process.env.PIPR_DOCS_CONTENT_DIR ?? path.join(repoRoot, "apps/docs/content/docs");
+const publicDir = process.env.PIPR_DOCS_PUBLIC_DIR ?? path.join(repoRoot, "apps/docs/public");
 const externalMode = process.argv.includes("--external");
 const errors: string[] = [];
 

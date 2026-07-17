@@ -1,7 +1,22 @@
-import { describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, it } from "bun:test";
+import { mkdtemp as createTemporaryDirectory, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+
+const temporaryDirectories = new Set<string>();
+afterEach(async () => {
+  await Promise.all(
+    [...temporaryDirectories].map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+  temporaryDirectories.clear();
+});
+
+async function mkdtemp(prefix: string): Promise<string> {
+  const directory = await createTemporaryDirectory(prefix);
+  temporaryDirectories.add(directory);
+  return directory;
+}
+
 import type { DiffManifest, ModelProfile, PiprBuilder, Reviewer, TaskContext } from "../index.js";
 import {
   defaultReviewActions,

@@ -3,7 +3,7 @@ import {
   maxInlineFindingBodyCharacters,
   maxInlineFindingBodyLines,
 } from "@usepipr/runtime/internal/review-testing";
-import type { PiprEvalExpected } from "./cases.js";
+import type { PiprEvalExpected, PiprEvalExpectedFinding } from "./cases.js";
 import type { EvalDiffRange, EvalInlineFinding, PiprEvalOutput } from "./runner.js";
 import { piprEvalForbiddenOutputText } from "./runner.js";
 
@@ -165,10 +165,7 @@ export function scoreExpectedInlineSelection(
   if (expectedSelections.length === 0) {
     return 1;
   }
-  const recalled = expectedSelections.flatMap((finding) => {
-    const actual = output.inlineFindings.find((item) => expectedFindingMatches(finding, item));
-    return actual ? [{ finding, actual }] : [];
-  });
+  const recalled = recalledExpectedFindings(output, expectedSelections);
   if (recalled.length === 0) {
     return 1;
   }
@@ -222,10 +219,7 @@ export function scoreExpectedSuggestedFixBehavior(
   if (expectedFindings.length === 0) {
     return 1;
   }
-  const recalled = expectedFindings.flatMap((finding) => {
-    const actual = output.inlineFindings.find((item) => expectedFindingMatches(finding, item));
-    return actual ? [{ finding, actual }] : [];
-  });
+  const recalled = recalledExpectedFindings(output, expectedFindings);
   if (recalled.length === 0) {
     return 1;
   }
@@ -233,6 +227,16 @@ export function scoreExpectedSuggestedFixBehavior(
     expectedSuggestedFixMatches(finding, actual),
   );
   return matched.length / recalled.length;
+}
+
+function recalledExpectedFindings(
+  output: PiprEvalOutput,
+  findings: readonly PiprEvalExpectedFinding[],
+): Array<{ finding: PiprEvalExpectedFinding; actual: EvalInlineFinding }> {
+  return findings.flatMap((finding) => {
+    const actual = output.inlineFindings.find((item) => expectedFindingMatches(finding, item));
+    return actual ? [{ finding, actual }] : [];
+  });
 }
 
 export function scoreFindingCountBudget(

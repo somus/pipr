@@ -52,6 +52,13 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
   --filter=@usepipr/runtime \
   --filter=@usepipr/sdk
 
+FROM build AS evals
+COPY --chown=bun:bun packages/evals packages/evals
+RUN mkdir -p packages/evals/evalite-export \
+  && chown -R bun:bun packages/evals
+WORKDIR /opt/pipr/packages/evals
+CMD ["bun", "run", "eval:full:export"]
+
 FROM base AS runtime-base
 COPY --from=prod-deps --chown=bun:bun /opt/pipr/package.json /opt/pipr/bun.lock ./
 COPY --from=prod-deps --chown=bun:bun /opt/pipr/node_modules node_modules
