@@ -30,6 +30,7 @@ export type PiprEvalCaseMode = "deterministic" | "live";
 export type PiprEvalCase = {
   id: string;
   description: string;
+  reviewer?: "custom";
   baseFiles: Record<string, string>;
   deletedFiles?: string[];
   headFiles: Record<string, string>;
@@ -64,6 +65,168 @@ function multiHunkHead(): string {
 }
 
 const promptEvalCases: PiprEvalCase[] = [
+  {
+    id: "custom-review-policy-contract",
+    description: "Applies the review policy to a custom categorized reviewer.",
+    reviewer: "custom",
+    modes: ["deterministic"],
+    baseFiles: {
+      [reviewTargetPath]: `export function displayName(input: string | null): string {
+  return input?.trim() || "Anonymous";
+}
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `export function displayName(input: string | null): string {
+  return input!.trim() || "Anonymous";
+}
+`,
+    },
+    expected: {
+      findings: [
+        {
+          line: 2,
+          path: reviewTargetPath,
+          keywords: ["null"],
+        },
+      ],
+      maxInlineFindings: 1,
+      requirePiCall: true,
+    },
+  },
+  {
+    id: "custom-review-bun-runtime-clean",
+    description:
+      "Does not report Node compatibility APIs as portability defects in a Bun-only project.",
+    reviewer: "custom",
+    modes: ["live"],
+    baseFiles: {
+      "package.json": `{
+  "private": true,
+  "scripts": { "start": "bun src/review-target.ts" },
+  "engines": { "bun": "1.3.14" }
+}
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `import { spawnSync } from "node:child_process";
+
+export function runTool(command: string, args: string[]): number {
+  return spawnSync(command, args, { stdio: "inherit" }).status ?? 1;
+}
+`,
+    },
+    expected: {
+      findings: [],
+      maxInlineFindings: 0,
+      requirePiCall: true,
+    },
+  },
+  {
+    id: "custom-review-current-callers-clean",
+    description:
+      "Does not report impossible future misuse when current callers satisfy the typed contract.",
+    reviewer: "custom",
+    modes: ["live"],
+    baseFiles: {
+      [reviewTargetPath]: `export function rightLocation(end: number) {
+  return { side: "RIGHT" as const, end };
+}
+
+export function leftLocation(end: number) {
+  return { side: "LEFT" as const, end };
+}
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `type NativeLocation =
+  | { rightEnd: number; leftEnd?: never }
+  | { rightEnd?: never; leftEnd: number };
+
+export function nativeLocation(location: NativeLocation) {
+  return location.rightEnd !== undefined
+    ? { side: "RIGHT" as const, end: location.rightEnd }
+    : { side: "LEFT" as const, end: location.leftEnd };
+}
+
+export function rightLocation(end: number) {
+  return nativeLocation({ rightEnd: end });
+}
+
+export function leftLocation(end: number) {
+  return nativeLocation({ leftEnd: end });
+}
+`,
+    },
+    expected: {
+      findings: [],
+      maxInlineFindings: 0,
+      requirePiCall: true,
+    },
+  },
+  {
+    id: "custom-review-zod-equivalence-clean",
+    description:
+      "Does not recommend replacing Zod 4 looseObject with its equivalent passthrough form.",
+    reviewer: "custom",
+    modes: ["live"],
+    baseFiles: {
+      "package.json": `{
+  "private": true,
+  "dependencies": { "zod": "4.3.6" }
+}
+`,
+      [reviewTargetPath]: `import { z } from "zod";
+
+export const responseSchema = z.object({ value: z.string() }).passthrough();
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `import { z } from "zod";
+
+export const responseSchema = z.looseObject({ value: z.string() });
+`,
+    },
+    expected: {
+      findings: [],
+      maxInlineFindings: 0,
+      requirePiCall: true,
+    },
+  },
+  {
+    id: "custom-review-parser-evidence-clean",
+    description:
+      "Does not contradict a delimiter parser whose implementation and test preserve later tabs.",
+    reviewer: "custom",
+    modes: ["live"],
+    baseFiles: {
+      [reviewTargetPath]: `export function parseNumstat(record: string): string {
+  return record.split("\\t").at(-1) ?? "";
+}
+`,
+    },
+    headFiles: {
+      [reviewTargetPath]: `export function parseNumstat(record: string): string {
+  const firstTab = record.indexOf("\\t");
+  const secondTab = record.indexOf("\\t", firstTab + 1);
+  if (firstTab === -1 || secondTab === -1) throw new Error("invalid numstat record");
+  return record.slice(secondTab + 1);
+}
+`,
+      "src/review-target.test.ts": `import { expect, test } from "bun:test";
+import { parseNumstat } from "./review-target";
+
+test("preserves tabs inside the path", () => {
+  expect(parseNumstat("3\\t2\\tsrc/plain\\tname.ts")).toBe("src/plain\\tname.ts");
+});
+`,
+    },
+    expected: {
+      findings: [],
+      maxInlineFindings: 0,
+      requirePiCall: true,
+    },
+  },
   {
     id: "correctness-null-regression",
     description: "Reports a changed null handling regression.",

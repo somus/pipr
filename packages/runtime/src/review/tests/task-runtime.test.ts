@@ -1269,7 +1269,7 @@ describe("runTaskRuntime", () => {
       "Each finding's path, rangeId, and side must identify one Diff Manifest commentable range",
     );
     expect(observedPrompt).toContain("Treat 700 as a hard ceiling, not a target");
-    expect(observedPrompt).toContain("Inline finding bodies are final code-review comments");
+    expect(observedPrompt).toContain("Finding bodies must be publication-ready review prose");
     expect(observedPrompt).toContain(
       "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
     );
@@ -1370,14 +1370,14 @@ describe("runTaskRuntime", () => {
         observedPrompt,
         "Select the smallest contiguous line span that makes the inline comment understandable",
       ),
-    ).toBe(1);
+    ).toBe(0);
     expect(
       countOccurrences(
         observedPrompt,
         "select the relevant declaration or signature line instead of the enclosing body",
       ),
-    ).toBe(1);
-    expect(countOccurrences(observedPrompt, "Inline Review Selection Policy:")).toBe(1);
+    ).toBe(0);
+    expect(countOccurrences(observedPrompt, "Inline Review Selection Policy:")).toBe(0);
     expect(result.mainComment).toContain('{"ok":true}');
   });
 

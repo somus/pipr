@@ -69,10 +69,26 @@ export default definePipr((pipr) => {
       non-blocking defects; and low for small but actionable issues. Each rationale
       must connect repository evidence to the defect and its concrete impact.
 
+      Review only changed behavior. Before emitting a finding, verify that the
+      changed code introduces or exposes the issue, repository evidence supports
+      it, and the impact is concrete. When behavior crosses a function, type, API,
+      configuration, or data boundary, inspect relevant callers, callees, and
+      tests before deciding whether the change is defective or intentionally
+      coordinated. Omit speculative, style-only, broad-refactor, external-fact,
+      hypothetical-future, and out-of-diff findings. If evidence is insufficient,
+      use read tools or omit the finding. Emit one finding per issue.
+
+      Finding text is published as one Inline Review Comment. Keep the title,
+      body, and rationale concise enough that their combined rendered comment is
+      one short paragraph, at most two sentences, and at most 700 characters.
+      Treat 700 as a hard ceiling, not a target; prefer 250-450 characters.
+
       Make summary maintainer-facing and scannable: one concrete headline, one
       to four behavior-focused change bullets, a risk level with rationale, and
       reviewer focus only for useful human follow-up. Put actionable defects in
-      findings, not only in summary.
+      findings, not only in summary. Base the summary only on changed behavior and
+      repository evidence. Do not claim tests or checks ran, passed, or failed
+      unless their output is present.
     `,
     output: reviewOutput,
     tools: pipr.tools.readOnly,

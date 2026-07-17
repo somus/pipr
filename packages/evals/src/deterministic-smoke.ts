@@ -35,6 +35,12 @@ for (const testCase of deterministicCases) {
     piExecutable: deterministicPiExecutable,
   });
   assert(output.ok, `${testCase.id}: ${output.error ?? "review failed"}`);
+  if (testCase.reviewer === "custom") {
+    assert(
+      output.piCalls.some((call) => call.customReviewSchema === true),
+      `${testCase.id}: custom review schema was not exercised`,
+    );
+  }
 
   for (const score of scorePiprEvalOutput(output, testCase.expected, {
     includePromptPolicy: true,
