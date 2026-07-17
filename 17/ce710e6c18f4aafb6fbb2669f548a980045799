@@ -5,6 +5,7 @@ apps/docs/content/docs/reference/sdk-reference.mdx
   s_cbad4ddbc56275::t_86c509147ba633 492
 packages/runtime/src/config/recipes/rich-review.ts
   s_cbad4ddbc56275::t_19fe4edfd01a09 77-82,86
+  s_cbad4ddbc56275::t_5500a69a2fea41 83
 packages/evals/src/runner.ts
   s_cbad4ddbc56275::t_2c684f206b12b1 41
   s_cbad4ddbc56275::t_a9d880e08f1de9 414
@@ -32,6 +33,7 @@ packages/evals/src/deterministic-smoke.ts
   s_cbad4ddbc56275::t_2c684f206b12b1 38-43
 apps/docs/content/docs/recipes/rich-review.mdx
   s_cbad4ddbc56275::t_88a3927ec3c9db 108-113,117
+  s_cbad4ddbc56275::t_5500a69a2fea41 114
 packages/evals/src/fake-pi.ts
   s_cbad4ddbc56275::t_2c684f206b12b1 263
   s_cbad4ddbc56275::t_19fe4edfd01a09 159,265
