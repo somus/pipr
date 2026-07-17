@@ -18,6 +18,7 @@ test("validates Action scenario assertions", async () => {
   await assertDryRunScenarioPreparation();
   await assertActionMetadataRendering();
   await assertDockerE2eRunsActSmoke();
+  await assertActBindsPreparedGitWorkspace();
   await assertCondensedWorkspaceTelemetry();
 
   await assertActFullFixture(validFullFixture(), headSha);
@@ -49,6 +50,11 @@ async function assertDockerE2eRunsActSmoke(): Promise<void> {
   const source = await Bun.file(new URL("../../scripts/docker-e2e.ts", import.meta.url)).text();
   expect(source).toContain('"check:actions", "dry-run"');
   expect(source).toContain('PIPR_SKIP_ACTION_IMAGE_BUILD: "1"');
+}
+
+async function assertActBindsPreparedGitWorkspace(): Promise<void> {
+  const source = await Bun.file(new URL("./run.ts", import.meta.url)).text();
+  expect(source).toContain('"--bind"');
 }
 
 async function assertActionMetadataRendering(): Promise<void> {

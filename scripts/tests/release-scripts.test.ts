@@ -520,6 +520,20 @@ describe("check-release-metadata", () => {
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
 
+  it("rejects a missing release artifact verification step", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace(
+        "      - run: bun run check:release-artifacts\n",
+        "",
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
   it("rejects unsafe authenticated release PR pushes", () => {
     const repository = copyRepositoryFixture();
     const workflowPath = path.join(repository, ".github/workflows/release-please.yml");

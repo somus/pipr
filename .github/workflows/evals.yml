@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           test -n "$DEEPSEEK_API_KEY"
           mkdir -p packages/evals/evalite-export
-          chmod 777 packages/evals/evalite-export
+          chmod 755 packages/evals/evalite-export
           docker run --rm \
             --env DEEPSEEK_API_KEY \
             --mount "type=bind,source=$PWD/packages/evals/evalite-export,target=/opt/pipr/packages/evals/evalite-export" \

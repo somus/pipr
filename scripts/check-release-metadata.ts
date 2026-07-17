@@ -237,9 +237,10 @@ assert(
   !releaseWorkflow.includes("dist/release/pipr-*"),
   "release workflow must not upload release assets through a glob",
 );
+const releaseArtifactCheckIndex = releaseWorkflow.indexOf("bun run check:release-artifacts");
 assert(
-  releaseWorkflow.indexOf("bun run check:release-artifacts") <
-    releaseWorkflow.indexOf("npm publish --access public"),
+  releaseArtifactCheckIndex !== -1 &&
+    releaseArtifactCheckIndex < releaseWorkflow.indexOf("npm publish --access public"),
   "release workflow must verify exact CLI assets before publishing packages",
 );
 const dogfoodUpdateStep = "name: Open dogfood SDK update PR";

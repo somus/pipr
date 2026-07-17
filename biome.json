@@ -8,6 +8,7 @@
       "!**/.turbo",
       "!**/.fallow",
       "!**/coverage",
+      "!apps/docs/.cache",
       "!apps/docs/.source",
       "!apps/docs/.output",
       "!apps/docs/.tanstack",
