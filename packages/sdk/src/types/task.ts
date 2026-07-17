@@ -38,7 +38,6 @@ export type CommentValue =
 /** Prior inline finding persisted by earlier pipr review state. */
 export type PriorInlineFinding = {
   id: string;
-  issueKey?: string;
   status: "open" | "resolved";
   path: string;
   rangeId: string;

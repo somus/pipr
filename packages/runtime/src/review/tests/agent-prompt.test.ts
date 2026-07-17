@@ -124,7 +124,6 @@ describe("renderAgentPrompt", () => {
       findings: [
         {
           id: "fnd_prior",
-          issueKey: "http-client-bun-sleep-portability",
           status: "open",
           path: "src/a.ts",
           rangeId: "range-1",
@@ -136,7 +135,6 @@ describe("renderAgentPrompt", () => {
         },
         {
           id: "fnd_resolved",
-          issueKey: "http-client-bun-sleep-portability",
           anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
           status: "resolved",
           path: "src/a.ts",
@@ -153,9 +151,8 @@ describe("renderAgentPrompt", () => {
 
     expect(prompt).toContain("Prior locations are hints, not evidence that an issue remains");
     expect(prompt).toContain("If current evidence is insufficient, omit the finding");
-    expect(prompt).toContain('"status": "resolved"');
-    expect(prompt).toContain('"issueKey": "http-client-bun-sleep-portability"');
-    expect(prompt).toContain("reuse its exact issueKey");
+    expect(prompt).not.toContain('"status": "resolved"');
+    expect(prompt).not.toContain("issueKey");
   });
 
   it("includes suggestedFix rules for custom schemas that can emit suggestions", async () => {

@@ -4,7 +4,6 @@ export { definePipr, definePlugin } from "./builder.js";
 export { md } from "./prompt.js";
 export type { ReviewFinding, ReviewResult, ReviewSummary } from "./review-contract.js";
 export {
-  issueKeySchema,
   parseReviewFinding,
   parseReviewResult,
   parseReviewSummary,

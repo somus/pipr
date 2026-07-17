@@ -288,7 +288,7 @@ Task handlers use this context to read change data, run Pi, publish results, and
 | `ctx.change` | Provider-neutral change request metadata plus diff helpers. |
 | `ctx.pi.run(agent, input, options?)` | Execute a Pi-backed agent and validate structured output. |
 | `ctx.command` | Present only for command-triggered tasks. Includes `name`, `line`, parsed `arguments`, and `reply(markdown)`. |
-| `ctx.review.prior()` | Read prior review state: `main?`, `reviewedHeadSha?`, and `inlineFindings[]` with `id`, optional `issueKey`, `status`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. |
+| `ctx.review.prior()` | Read prior review state: `main?`, `reviewedHeadSha?`, and `inlineFindings[]` with `id`, `status`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. |
 | `ctx.check.pass/fail/neutral(summary?)` | Set one explicit task check result. Check failure does not fail the Action process by itself. |
 | `ctx.comment(value)` | Emit the selected run's final Main Review Comment markdown and Inline Review Comments. |
 | `ctx.log` | Write runtime logs. |

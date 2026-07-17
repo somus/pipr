@@ -20,6 +20,7 @@ import {
 import { reviewFindingSchema } from "./contract.js";
 import {
   buildPriorReviewState,
+  countFindingFingerprints,
   findingIdFor,
   findingIdSchema,
   inlineFindingMarker,
@@ -255,6 +256,7 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
   reviewState?: PriorReviewState;
 }): InlinePublicationItem[] {
   const seenFindingIds = new Set<string>();
+  const fingerprintCounts = countFindingFingerprints(options.publishableFindings);
   return inlinePublicationItemsSchema.parse(
     options.publishableFindings.flatMap(
       ({ finding: publishableFinding, range, previousPath, anchorFingerprint }) => {
@@ -267,6 +269,8 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
               options.reviewState.findings,
               publishableFinding,
               anchorFingerprint,
+              fingerprintCounts,
+              previousPath,
             )
           : undefined;
         if (

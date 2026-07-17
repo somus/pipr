@@ -43,9 +43,7 @@ export function buildCommentPublishingPlan(
     validated: options.validated,
     manifest: options.manifest,
   }).map((item) => {
-    const fingerprint = item.finding.issueKey
-      ? selectedCodeFingerprint(item.finding, item.range)
-      : undefined;
+    const fingerprint = selectedCodeFingerprint(item.finding, item.range);
     return fingerprint ? { ...item, anchorFingerprint: fingerprint } : item;
   });
   const reviewState = buildPriorReviewState({

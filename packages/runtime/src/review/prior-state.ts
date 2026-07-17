@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { issueKeySchema, type ReviewFinding } from "@usepipr/sdk";
+import type { ReviewFinding } from "@usepipr/sdk";
 import { defaultMaxStoredFindings } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import { firstNonEmptyLine } from "../commands/grammar.js";
@@ -20,7 +20,6 @@ const priorFindingStatusSchema = z.enum(["open", "resolved"]);
 
 const priorFindingRecordSchema = z.strictObject({
   id: findingIdSchema,
-  issueKey: issueKeySchema.optional(),
   anchorFingerprint: z
     .string()
     .regex(/^[a-f0-9]{64}$/)
@@ -59,11 +58,14 @@ type BuildFindingRecordOptions = {
   usedPriorIds: Set<string>;
   reviewedHeadSha: string;
   anchorFingerprint?: string;
+  previousPath?: string;
+  fingerprintCounts: Map<string, number>;
 };
 
 type PriorFindingInput = {
   finding: ReviewFinding;
   anchorFingerprint?: string;
+  previousPath?: string;
 };
 
 export function buildPriorReviewState(options: {
@@ -84,8 +86,9 @@ export function buildPriorReviewState(options: {
   const usedPriorIds = new Set<string>();
   const stats = accumulateReviewStats(scopedPriorState?.stats, options.stats);
   const findings = options.findings.map((item) => item.finding);
+  const fingerprintCounts = countFindingFingerprints(options.findings);
 
-  for (const { finding, anchorFingerprint } of options.findings) {
+  for (const { finding, anchorFingerprint, previousPath } of options.findings) {
     const record = buildFindingRecord({
       finding,
       findings,
@@ -93,6 +96,8 @@ export function buildPriorReviewState(options: {
       usedPriorIds,
       reviewedHeadSha: options.reviewedHeadSha,
       anchorFingerprint,
+      previousPath,
+      fingerprintCounts,
     });
     nextFindings.set(record.id, record);
   }
@@ -113,7 +118,7 @@ function buildFindingRecord(options: BuildFindingRecordOptions): PriorFindingRec
   markPriorFindingUsed(options.usedPriorIds, prior);
   return {
     id: selection.id,
-    ...findingIdentity(options.finding, options.anchorFingerprint),
+    ...findingIdentity(options.anchorFingerprint),
     status: selection.status,
     path: options.finding.path,
     rangeId: options.finding.rangeId,
@@ -132,6 +137,8 @@ function selectPriorFindingRecord(options: BuildFindingRecordOptions): {
     [...options.priorFindings.values()],
     options.finding,
     options.anchorFingerprint,
+    options.fingerprintCounts,
+    options.previousPath,
   );
   if (resolvedMatch) {
     return { id: resolvedMatch.id, status: "resolved" };
@@ -157,11 +164,9 @@ function markPriorFindingUsed(
 }
 
 function findingIdentity(
-  finding: ReviewFinding,
   anchorFingerprint: string | undefined,
-): Pick<PriorFindingRecord, "issueKey" | "anchorFingerprint"> {
+): Pick<PriorFindingRecord, "anchorFingerprint"> {
   return {
-    ...(finding.issueKey ? { issueKey: finding.issueKey } : {}),
     ...(anchorFingerprint ? { anchorFingerprint } : {}),
   };
 }
@@ -229,19 +234,43 @@ export function matchFindingRecord(
 
 export function matchResolvedFindingRecord(
   records: PriorFindingRecord[],
-  finding: ReviewFinding,
+  finding: Pick<ReviewFinding, "path">,
   anchorFingerprint: string | undefined,
+  currentFingerprintCounts?: Map<string, number>,
+  previousPath?: string,
 ): PriorFindingRecord | undefined {
-  if (!finding.issueKey || !anchorFingerprint) {
+  if (
+    !anchorFingerprint ||
+    (currentFingerprintCounts?.get(findingFingerprintKey(finding.path, anchorFingerprint)) ?? 1) !==
+      1
+  ) {
     return undefined;
   }
   const candidates = records.filter(
     (record) =>
-      record.status === "resolved" &&
-      record.issueKey === finding.issueKey &&
-      record.anchorFingerprint === anchorFingerprint,
+      record.anchorFingerprint === anchorFingerprint &&
+      (record.path === finding.path || record.path === previousPath),
   );
-  return candidates.length === 1 ? candidates[0] : undefined;
+  return candidates.length === 1 && candidates[0]?.status === "resolved"
+    ? candidates[0]
+    : undefined;
+}
+
+export function countFindingFingerprints(
+  findings: Iterable<Pick<PriorFindingInput, "finding" | "anchorFingerprint">>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const { finding, anchorFingerprint } of findings) {
+    if (anchorFingerprint) {
+      const key = findingFingerprintKey(finding.path, anchorFingerprint);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function findingFingerprintKey(path: string, anchorFingerprint: string): string {
+  return `${path}\0${anchorFingerprint}`;
 }
 
 export function renderMainCommentMarker(options: {

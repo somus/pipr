@@ -155,7 +155,6 @@ Each finding must target a valid Diff Manifest range:
 import type { ReviewFinding } from "@usepipr/sdk";
 
 const finding: ReviewFinding = {
-  issueKey: "pi-runner-missing-timeout",
   body: "The timeout is not applied to this subprocess call.",
   path: "packages/runtime/src/pi/runner.ts",
   rangeId: "rng_...",
@@ -215,7 +214,7 @@ State tracks:
 - reviewed head SHA
 - task scope
 - finding ids
-- stable issue keys and selected-code fingerprints when supplied
+- normalized selected-code fingerprints
 - path and range
 - side and lines
 - status
@@ -240,13 +239,13 @@ Tasks can read prior state:
 const prior = await ctx.review.prior();
 ```
 
-Default review flows pass open findings and keyed resolved findings back to the reviewer. Reuse the exact `issueKey` when the same concern returns with different wording or at a moved location.
+Default review flows pass matching open findings back to the reviewer. Resolved-finding suppression is internal to Pipr and does not add fields to reviewer output or recipe schemas.
 
 ## Deduplication
 
 Stable finding and location keys prevent reruns from creating repeated inline comments.
 
-When a Pipr-owned native thread is resolved, Pipr records that status even if no Pipr resolution reply was posted. A later review suppresses the same `issueKey` while the selected source lines remain unchanged. Changing those lines makes the concern publishable again; nearby edits and line movement do not.
+When a Pipr-owned native thread is resolved, Pipr records that status even if no Pipr resolution reply was posted. A later review suppresses a finding when its normalized selected source is an unambiguous match for one resolved finding. Changing those lines makes the concern publishable again; nearby edits and line movement do not. Pipr publishes ambiguous matches instead of risking suppression of a distinct concern.
 
 ### Dedup keys
 
@@ -255,7 +254,7 @@ Pipr dedupes Inline Review Comments before publication.
 Deduplication uses:
 
 - stable finding id
-- stable issue key and selected-code fingerprint for resolved findings
+- unique normalized selected-code fingerprint for resolved findings
 - reviewed head SHA
 - Pipr-owned same-head location overlap
 

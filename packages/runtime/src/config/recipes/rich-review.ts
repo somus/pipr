@@ -5,7 +5,7 @@ export const structuredReviewRecipe = {
   title: "Structured Review",
   description: "General change request review with severity and category metadata.",
   sourceTools: ["CodeRabbit", "Qodo Merge", "Greptile"],
-  configTs: `import { definePipr, issueKeySchema, z } from "@usepipr/sdk";
+  configTs: `import { definePipr, z } from "@usepipr/sdk";
 import type { ReviewFinding } from "@usepipr/sdk";
 
 type ReviewSummary = {
@@ -17,7 +17,6 @@ type ReviewSummary = {
 };
 
 const categorizedFindingSchema = z.strictObject({
-  issueKey: issueKeySchema.optional(),
   title: z.string().regex(/^[^\\r\\n]+$/),
   severity: z.enum(["critical", "high", "medium", "low"]),
   category: z.enum([
@@ -82,9 +81,6 @@ export default definePipr((pipr) => {
       must connect repository evidence to the defect and its concrete impact.
       Keep each finding title to one line and its body concise. Put supporting
       evidence and reasoning in rationale instead of appending it to the body.
-      Set issueKey to a stable lowercase slug naming the affected symbol or
-      behavior and defect. Reuse an exact prior issueKey for the same concern.
-
       Make summary maintainer-facing and scannable: one concrete headline, one
       to four behavior-focused change bullets, a risk level with rationale, and
       reviewer focus only for useful human follow-up. Put actionable defects in
@@ -106,7 +102,6 @@ export default definePipr((pipr) => {
         const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
         const category = finding.category.replaceAll("-", " ");
         return {
-          ...(finding.issueKey ? { issueKey: finding.issueKey } : {}),
           body: [
             \`**\${severity} \${category}:** \${escapeInlineCommentHtml(finding.title)}\`,
             "",
