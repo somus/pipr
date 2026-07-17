@@ -1,0 +1,32 @@
+packages/e2e/assertions.test.ts
+  s_fbd3eab021fa2a::t_28fe937607d17d 21,55-57
+  s_fbd3eab021fa2a::t_bb04b606bc3dba 58-59
+.github/workflows/evals.yml
+  s_fbd3eab021fa2a::t_26414f5411cfa9 32
+scripts/tests/release-scripts.test.ts
+  s_fbd3eab021fa2a::t_d7d7356e364ceb 523-536
+packages/e2e/run.ts
+  s_fbd3eab021fa2a::t_26414f5411cfa9 52
+scripts/check-release-metadata.ts
+  s_fbd3eab021fa2a::t_bdc30c2be7c5c8 240,242-243
+apps/docs/content/docs/project/development.mdx
+  s_fbd3eab021fa2a::t_bdc30c2be7c5c8 36
+biome.json
+  s_fbd3eab021fa2a::t_9452efc00809fb 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "7ad7b34c6d521714aa0253acf7fa20291e0bd420",
+  "prompts": {},
+  "sessions": {
+    "s_fbd3eab021fa2a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7190-79e7-7143-8187-a62c7803adfa",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
