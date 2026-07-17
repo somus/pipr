@@ -44,7 +44,13 @@ export function buildCommentPublishingPlan(
     manifest: options.manifest,
   }).map((item) => {
     const fingerprint = selectedCodeFingerprint(item.finding, item.range);
-    return fingerprint ? { ...item, anchorFingerprint: fingerprint } : item;
+    return fingerprint
+      ? {
+          ...item,
+          anchorFingerprint: fingerprint,
+          issueFingerprint: findingIssueFingerprint(item.finding),
+        }
+      : item;
   });
   const reviewState = buildPriorReviewState({
     priorState: options.priorReviewState,
@@ -98,4 +104,17 @@ function selectedCodeFingerprint(
     return undefined;
   }
   return new Bun.CryptoHasher("sha256").update(selected).digest("hex");
+}
+
+function findingIssueFingerprint(finding: ReviewFinding): string {
+  const normalized = finding.body
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[^\p{L}\p{N}_]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  const identity = normalized || finding.body.normalize("NFKC").toLowerCase().trim();
+  return new Bun.CryptoHasher("sha256").update(identity).digest("hex");
 }

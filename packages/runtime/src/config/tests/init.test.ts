@@ -342,6 +342,7 @@ describe("initOfficialMinimalProject", () => {
     expect(result.inlineCommentDrafts).toHaveLength(1);
     expect(result.publicationPlan.reviewState.findings[0]).toMatchObject({
       anchorFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      issueFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
     expect(result.inlineCommentDrafts[0]?.body).toContain(
       [

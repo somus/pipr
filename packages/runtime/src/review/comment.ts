@@ -83,6 +83,7 @@ export type PublishableInlineFinding = {
   range: CommentableRange;
   previousPath?: string;
   anchorFingerprint?: string;
+  issueFingerprint?: string;
 };
 
 const threadActionSchema = z.strictObject({
@@ -259,7 +260,13 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
   const fingerprintCounts = countFindingFingerprints(options.publishableFindings);
   return inlinePublicationItemsSchema.parse(
     options.publishableFindings.flatMap(
-      ({ finding: publishableFinding, range, previousPath, anchorFingerprint }) => {
+      ({
+        finding: publishableFinding,
+        range,
+        previousPath,
+        anchorFingerprint,
+        issueFingerprint,
+      }) => {
         const findingId = findingIdFor(publishableFinding, options.reviewState);
         const stateRecord = options.reviewState
           ? matchFindingRecord(options.reviewState, publishableFinding)
@@ -269,6 +276,7 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
               options.reviewState.findings,
               publishableFinding,
               anchorFingerprint,
+              issueFingerprint,
               fingerprintCounts,
               previousPath,
             )

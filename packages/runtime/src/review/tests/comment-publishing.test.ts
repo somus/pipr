@@ -245,9 +245,10 @@ describe("buildCommentPublishingPlan", () => {
       throw new Error("test fixture missing persisted prior review state");
     }
     expect(persisted.findings[0]?.anchorFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(persisted.findings[0]?.issueFingerprint).toMatch(/^[a-f0-9]{64}$/);
 
     const currentFinding = {
-      ...finding("Rephrased portability concern.", "range-moved", 20),
+      ...finding("**PORTABILITY concern**", "range-moved", 20),
       path: "src/moved.ts",
     };
     const movedManifest: DiffManifest = {
@@ -321,6 +322,7 @@ describe("buildCommentPublishingPlan", () => {
             ...priorFindingRecord("fnd_existing"),
             status: "resolved",
             anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
             lastCommentedHeadSha: "old-head",
           },
         ],
@@ -359,6 +361,7 @@ describe("buildCommentPublishingPlan", () => {
             ...priorFindingRecord("fnd_existing"),
             status: "resolved",
             anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
             lastCommentedHeadSha: "old-head",
           },
         ],
@@ -372,10 +375,40 @@ describe("buildCommentPublishingPlan", () => {
     );
   });
 
+  it("publishes a different concern on the same selected code", () => {
+    const currentFinding = finding("Error handling concern.", "range-1", 10);
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [
+          {
+            ...priorFindingRecord("fnd_existing"),
+            status: "resolved",
+            anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
+            lastCommentedHeadSha: "old-head",
+          },
+        ],
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toHaveLength(1);
+    expect(publishing.publicationPlan.reviewState.findings).toContainEqual(
+      expect.objectContaining({ status: "open", lastSeenHeadSha: "head" }),
+    );
+  });
+
   it("publishes ambiguous current concerns that select the same resolved code", () => {
     const currentFindings = [
       finding("Portability concern.", "range-1", 10),
-      finding("Error handling concern.", "range-1", 10),
+      finding("**PORTABILITY CONCERN**", "range-1", 10),
     ];
     const publishing = buildCommentPublishingPlan({
       event,
@@ -391,6 +424,7 @@ describe("buildCommentPublishingPlan", () => {
             ...priorFindingRecord("fnd_existing"),
             status: "resolved",
             anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
             lastCommentedHeadSha: "old-head",
           },
         ],
@@ -410,6 +444,7 @@ describe("buildCommentPublishingPlan", () => {
       ...priorFindingRecord("fnd_prior_1"),
       status: "resolved" as const,
       anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+      issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
       lastCommentedHeadSha: "old-head",
     };
     const publishing = buildCommentPublishingPlan({

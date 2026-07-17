@@ -24,6 +24,10 @@ const priorFindingRecordSchema = z.strictObject({
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
+  issueFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   status: priorFindingStatusSchema,
   path: z.string().min(1),
   rangeId: z.string().min(1),
@@ -58,6 +62,7 @@ type BuildFindingRecordOptions = {
   usedPriorIds: Set<string>;
   reviewedHeadSha: string;
   anchorFingerprint?: string;
+  issueFingerprint?: string;
   previousPath?: string;
   fingerprintCounts: Map<string, number>;
 };
@@ -65,6 +70,7 @@ type BuildFindingRecordOptions = {
 type PriorFindingInput = {
   finding: ReviewFinding;
   anchorFingerprint?: string;
+  issueFingerprint?: string;
   previousPath?: string;
 };
 
@@ -88,7 +94,7 @@ export function buildPriorReviewState(options: {
   const findings = options.findings.map((item) => item.finding);
   const fingerprintCounts = countFindingFingerprints(options.findings);
 
-  for (const { finding, anchorFingerprint, previousPath } of options.findings) {
+  for (const { finding, anchorFingerprint, issueFingerprint, previousPath } of options.findings) {
     const record = buildFindingRecord({
       finding,
       findings,
@@ -96,6 +102,7 @@ export function buildPriorReviewState(options: {
       usedPriorIds,
       reviewedHeadSha: options.reviewedHeadSha,
       anchorFingerprint,
+      issueFingerprint,
       previousPath,
       fingerprintCounts,
     });
@@ -118,7 +125,7 @@ function buildFindingRecord(options: BuildFindingRecordOptions): PriorFindingRec
   markPriorFindingUsed(options.usedPriorIds, prior);
   return {
     id: selection.id,
-    ...findingIdentity(options.anchorFingerprint),
+    ...findingIdentity(options.anchorFingerprint, options.issueFingerprint),
     status: selection.status,
     path: options.finding.path,
     rangeId: options.finding.rangeId,
@@ -137,6 +144,7 @@ function selectPriorFindingRecord(options: BuildFindingRecordOptions): {
     [...options.priorFindings.values()],
     options.finding,
     options.anchorFingerprint,
+    options.issueFingerprint,
     options.fingerprintCounts,
     options.previousPath,
   );
@@ -165,9 +173,11 @@ function markPriorFindingUsed(
 
 function findingIdentity(
   anchorFingerprint: string | undefined,
-): Pick<PriorFindingRecord, "anchorFingerprint"> {
+  issueFingerprint: string | undefined,
+): Pick<PriorFindingRecord, "anchorFingerprint" | "issueFingerprint"> {
   return {
     ...(anchorFingerprint ? { anchorFingerprint } : {}),
+    ...(issueFingerprint ? { issueFingerprint } : {}),
   };
 }
 
@@ -236,19 +246,23 @@ export function matchResolvedFindingRecord(
   records: PriorFindingRecord[],
   finding: Pick<ReviewFinding, "path">,
   anchorFingerprint: string | undefined,
+  issueFingerprint: string | undefined,
   currentFingerprintCounts?: Map<string, number>,
   previousPath?: string,
 ): PriorFindingRecord | undefined {
   if (
     !anchorFingerprint ||
-    (currentFingerprintCounts?.get(findingFingerprintKey(finding.path, anchorFingerprint)) ?? 1) !==
-      1
+    !issueFingerprint ||
+    (currentFingerprintCounts?.get(
+      findingFingerprintKey(finding.path, anchorFingerprint, issueFingerprint),
+    ) ?? 1) !== 1
   ) {
     return undefined;
   }
   const candidates = records.filter(
     (record) =>
       record.anchorFingerprint === anchorFingerprint &&
+      record.issueFingerprint === issueFingerprint &&
       (record.path === finding.path || record.path === previousPath),
   );
   return candidates.length === 1 && candidates[0]?.status === "resolved"
@@ -257,20 +271,24 @@ export function matchResolvedFindingRecord(
 }
 
 export function countFindingFingerprints(
-  findings: Iterable<Pick<PriorFindingInput, "finding" | "anchorFingerprint">>,
+  findings: Iterable<Pick<PriorFindingInput, "finding" | "anchorFingerprint" | "issueFingerprint">>,
 ): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const { finding, anchorFingerprint } of findings) {
-    if (anchorFingerprint) {
-      const key = findingFingerprintKey(finding.path, anchorFingerprint);
+  for (const { finding, anchorFingerprint, issueFingerprint } of findings) {
+    if (anchorFingerprint && issueFingerprint) {
+      const key = findingFingerprintKey(finding.path, anchorFingerprint, issueFingerprint);
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
   }
   return counts;
 }
 
-function findingFingerprintKey(path: string, anchorFingerprint: string): string {
-  return `${path}\0${anchorFingerprint}`;
+function findingFingerprintKey(
+  path: string,
+  anchorFingerprint: string,
+  issueFingerprint: string,
+): string {
+  return `${path}\0${anchorFingerprint}\0${issueFingerprint}`;
 }
 
 export function renderMainCommentMarker(options: {
