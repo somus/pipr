@@ -156,7 +156,7 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
     "diff manifest prompt is missing strict subrange guidance",
   );
   assert(
-    prompt.includes("Inline finding bodies are final code-review comments") &&
+    prompt.includes("Finding bodies must be publication-ready review prose") &&
       prompt.includes("Treat 700 as a hard ceiling, not a target"),
     "review policy is missing inline body budget rule",
   );
@@ -181,6 +181,21 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
 function promptEvalReview() {
   const manifest = parsePromptJson("\nManifest:");
   const findings = markerReviews.flatMap((review) => promptEvalFinding(manifest, review));
+  if (prompt.includes("Schema ID: eval/categorized-review.")) {
+    return {
+      summary:
+        findings.length === 0
+          ? "No actionable findings in the scoped source change."
+          : "Found actionable review findings in the scoped source change.",
+      findings: findings.map((finding) => ({
+        title: "Actionable changed-code defect",
+        severity: "medium",
+        category: "correctness",
+        rationale: "The changed implementation and contract support this finding.",
+        ...finding,
+      })),
+    };
+  }
   return {
     summary: {
       body:
@@ -245,8 +260,9 @@ async function recordPromptEvalCall(systemPrompt: string): Promise<void> {
     file,
     JSON.stringify(
       {
+        customReviewSchema: prompt.includes("Schema ID: eval/categorized-review."),
         inlineFindingBodyPolicy:
-          prompt.includes("Inline finding bodies are final code-review comments") &&
+          prompt.includes("Finding bodies must be publication-ready review prose") &&
           prompt.includes("Treat 700 as a hard ceiling, not a target"),
         reviewPolicy: prompt.includes("Review Policy:"),
         schemaOnlySystemPrompt: systemPrompt.includes(

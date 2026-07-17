@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Agent, Schema } from "@usepipr/sdk";
 import { type AgentRunContext, renderAgentPrompt } from "../agent/agent-prompt.js";
+import type { PreparedDiffManifestContext } from "../agent/diff-manifest-context.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
 import type { PriorReviewState } from "../prior-state.js";
 import { reviewResultSchemaId } from "../review.js";
@@ -40,6 +41,280 @@ const customSuggestedFixSchema: Schema<unknown> = {
   },
 };
 
+const customReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/custom-review",
+  jsonSchema: {
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            body: { type: "string" },
+            path: { type: "string" },
+            rangeId: { type: "string" },
+            side: { enum: ["RIGHT", "LEFT"] },
+            startLine: { type: "number" },
+            endLine: { type: "number" },
+          },
+        },
+      },
+    },
+  },
+};
+
+const reviewFindingDefinition = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    severity: { enum: ["high", "low"] },
+    body: { type: "string" },
+    path: { type: "string" },
+    rangeId: { type: "string" },
+    side: { enum: ["RIGHT", "LEFT"] },
+    startLine: { type: "number" },
+    endLine: { type: "number" },
+  },
+};
+
+const referencedCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/referenced-custom-review",
+  jsonSchema: {
+    $defs: {
+      finding: reviewFindingDefinition,
+    },
+    type: "object",
+    properties: {
+      risks: {
+        type: "array",
+        items: { $ref: "#/$defs/finding" },
+      },
+    },
+  },
+};
+
+const composedCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/composed-custom-review",
+  jsonSchema: {
+    $defs: {
+      content: {
+        type: "object",
+        properties: {
+          body: { type: "string" },
+        },
+      },
+      location: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          rangeId: { type: "string" },
+          side: { enum: ["RIGHT", "LEFT"] },
+          startLine: { type: "number" },
+          endLine: { type: "number" },
+        },
+      },
+      finding: {
+        allOf: [{ $ref: "#/$defs/content" }, { $ref: "#/$defs/location" }],
+      },
+    },
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: { $ref: "#/$defs/finding" },
+      },
+    },
+  },
+};
+
+const composedAlternativeCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/composed-alternative-custom-review",
+  jsonSchema: {
+    $defs: {
+      content: {
+        type: "object",
+        properties: {
+          body: { type: "string" },
+          path: { type: "string" },
+        },
+      },
+      rightLocation: {
+        type: "object",
+        properties: {
+          rangeId: { type: "string" },
+          side: { const: "RIGHT" },
+          startLine: { type: "number" },
+          endLine: { type: "number" },
+        },
+      },
+      leftLocation: {
+        type: "object",
+        properties: {
+          rangeId: { type: "string" },
+          side: { const: "LEFT" },
+          startLine: { type: "number" },
+          endLine: { type: "number" },
+        },
+      },
+      finding: {
+        allOf: [
+          { $ref: "#/$defs/content" },
+          {
+            anyOf: [{ $ref: "#/$defs/rightLocation" }, { $ref: "#/$defs/leftLocation" }],
+          },
+        ],
+      },
+    },
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: { $ref: "#/$defs/finding" },
+      },
+    },
+  },
+};
+
+const requiredPatternCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/required-pattern-custom-review",
+  jsonSchema: {
+    $defs: {
+      finding: {
+        type: "object",
+        required: ["body", "path", "rangeId", "side", "startLine", "endLine"],
+        patternProperties: {
+          "^body$": { type: "string" },
+          "^path$": { type: "string" },
+          "^rangeId$": { type: "string" },
+          "^side$": { enum: ["RIGHT", "LEFT"] },
+          "^startLine$": { type: "number" },
+          "^endLine$": { type: "number" },
+        },
+      },
+    },
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: { $ref: "#/$defs/finding" },
+      },
+    },
+  },
+};
+
+const patternOnlyCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/pattern-only-custom-review",
+  jsonSchema: {
+    type: "object",
+    patternProperties: {
+      "^body$": { type: "string" },
+      "^path$": { type: "string" },
+      "^rangeId$": { type: "string" },
+      "^side$": { enum: ["RIGHT", "LEFT"] },
+      "^startLine$": { type: "number" },
+      "^endLine$": { type: "number" },
+    },
+  },
+};
+
+const arrayPointerCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/array-pointer-custom-review",
+  jsonSchema: {
+    $defs: {
+      variants: {
+        anyOf: [reviewFindingDefinition, { type: "string" }],
+      },
+    },
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: { $ref: "#/$defs/variants/anyOf/0" },
+      },
+    },
+  },
+};
+
+const nonReviewSchemaWithUnusedFindingDefinition: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/non-review-with-unused-finding-definition",
+  jsonSchema: {
+    $defs: {
+      unusedFinding: reviewFindingDefinition,
+    },
+    type: "object",
+    properties: {
+      ok: { type: "boolean" },
+    },
+  },
+};
+
+const tupleRestCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/tuple-rest-custom-review",
+  jsonSchema: {
+    $defs: {
+      finding: reviewFindingDefinition,
+    },
+    type: "array",
+    items: [{ type: "string" }],
+    additionalItems: { $ref: "#/$defs/finding" },
+  },
+};
+
+const nonObjectSchemaWithFindingProperties: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/non-object-with-finding-properties",
+  jsonSchema: {
+    type: "string",
+    properties: reviewFindingDefinition.properties,
+  },
+};
+
+const constantScalarSchemaWithFindingProperties: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/constant-scalar-with-finding-properties",
+  jsonSchema: {
+    const: "ok",
+    properties: reviewFindingDefinition.properties,
+  },
+};
+
+const scalarEnumSchemaWithFindingProperties: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/scalar-enum-with-finding-properties",
+  jsonSchema: {
+    enum: ["ok", "error"],
+    properties: reviewFindingDefinition.properties,
+  },
+};
+
+const scalarAnyOfSchemaWithFindingProperties: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/scalar-any-of-with-finding-properties",
+  jsonSchema: {
+    anyOf: [{ type: "string" }, { type: "number" }],
+    properties: reviewFindingDefinition.properties,
+  },
+};
+
+const scalarOneOfSchemaWithFindingProperties: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/scalar-one-of-with-finding-properties",
+  jsonSchema: {
+    oneOf: [{ type: "string" }, { type: "number" }],
+    properties: reviewFindingDefinition.properties,
+  },
+};
+
 describe("renderAgentPrompt", () => {
   it("includes bounded untrusted change request context for every agent", async () => {
     const description = "d".repeat(4100);
@@ -69,7 +344,7 @@ describe("renderAgentPrompt", () => {
       "Do not claim tests or checks ran, passed, or failed unless their output is present",
     );
     expect(prompt).toContain("Do not leave actionable defects or test gaps only in the summary.");
-    expect(prompt).toContain("Inline finding bodies are final code-review comments");
+    expect(prompt).toContain("Finding bodies must be publication-ready review prose");
     expect(prompt).toContain(
       `at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters.`,
     );
@@ -109,11 +384,157 @@ describe("renderAgentPrompt", () => {
     ).toHaveLength(1);
   });
 
+  it("includes review policy for custom outputs containing review findings", async () => {
+    const prompt = await renderTestPrompt(customReviewSchema, {}, undefined, true);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Review only changed behavior.");
+    expect(prompt).toContain("repository evidence supports it");
+    expect(prompt).toContain("Omit speculative, style-only, broad refactor");
+    expect(prompt).toContain(`at most ${maxInlineFindingBodyCharacters} characters`);
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
+  it("includes review policy for custom finding definitions with additional metadata", async () => {
+    const prompt = await renderTestPrompt(referencedCustomReviewSchema, {}, undefined, true);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
+  it("includes review policy for composed custom finding definitions", async () => {
+    const prompt = await renderTestPrompt(composedCustomReviewSchema, {}, undefined, true);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
+  it("includes review policy when composed finding locations have alternatives", async () => {
+    const prompt = await renderTestPrompt(
+      composedAlternativeCustomReviewSchema,
+      {},
+      undefined,
+      true,
+    );
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
+  it("includes review policy for finding fields declared through required", async () => {
+    const prompt = await renderTestPrompt(requiredPatternCustomReviewSchema, {}, undefined, true);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
+  it("includes review policy for finding fields declared through patterns", async () => {
+    const prompt = await renderTestPrompt(patternOnlyCustomReviewSchema, {}, undefined, true);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
+  it("includes review policy for local references through schema arrays", async () => {
+    const prompt = await renderTestPrompt(arrayPointerCustomReviewSchema, {}, undefined, true);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
+  it("includes review policy for tuple rest finding definitions", async () => {
+    const prompt = await renderTestPrompt(tupleRestCustomReviewSchema, {}, undefined, true);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
   it("does not include review policy for non-review outputs", async () => {
     const prompt = await renderTestPrompt(unknownSchema);
 
     expect(prompt).not.toContain("Review Policy:");
     expect(prompt).not.toContain("Report only actionable defects");
+  });
+
+  it("does not include inline selection policy for non-review outputs", async () => {
+    const prompt = await renderTestPrompt(unknownSchema, {}, undefined, true);
+
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
+    expect(prompt).not.toContain(
+      "Select the smallest contiguous line span that makes the inline comment understandable",
+    );
+  });
+
+  it("ignores unused review-shaped schema definitions", async () => {
+    const prompt = await renderTestPrompt(
+      nonReviewSchemaWithUnusedFindingDefinition,
+      {},
+      undefined,
+      true,
+    );
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
+  });
+
+  it("ignores review-shaped properties on non-object schemas", async () => {
+    const prompt = await renderTestPrompt(
+      nonObjectSchemaWithFindingProperties,
+      {},
+      undefined,
+      true,
+    );
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
+  });
+
+  it("ignores review-shaped properties on scalar const schemas", async () => {
+    const prompt = await renderTestPrompt(
+      constantScalarSchemaWithFindingProperties,
+      {},
+      undefined,
+      true,
+    );
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
+  });
+
+  it("ignores review-shaped properties on scalar enum schemas", async () => {
+    const prompt = await renderTestPrompt(
+      scalarEnumSchemaWithFindingProperties,
+      {},
+      undefined,
+      true,
+    );
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
+  });
+
+  it("ignores review-shaped properties on scalar anyOf schemas", async () => {
+    const prompt = await renderTestPrompt(
+      scalarAnyOfSchemaWithFindingProperties,
+      {},
+      undefined,
+      true,
+    );
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
+  });
+
+  it("ignores review-shaped properties on scalar oneOf schemas", async () => {
+    const prompt = await renderTestPrompt(
+      scalarOneOfSchemaWithFindingProperties,
+      {},
+      undefined,
+      true,
+    );
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
   });
 
   it("treats prior finding locations as hints rather than current evidence", async () => {
@@ -156,9 +577,10 @@ describe("renderAgentPrompt", () => {
   });
 
   it("includes suggestedFix rules for custom schemas that can emit suggestions", async () => {
-    const prompt = await renderTestPrompt(customSuggestedFixSchema);
+    const prompt = await renderTestPrompt(customSuggestedFixSchema, {}, undefined, true);
 
     expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
     expect(prompt).toContain("`suggestedFix` is exact replacement code for the selected range.");
     expect(prompt).toContain(
       "the finding body must describe the defect that `suggestedFix` directly fixes",
@@ -233,6 +655,7 @@ async function renderTestPrompt(
   output: Schema<unknown>,
   change: { description?: string } = {},
   priorReviewState?: PriorReviewState,
+  withDiffManifest = false,
 ): Promise<string> {
   const agent: Agent<unknown, unknown> = {
     kind: "pipr.agent",
@@ -278,5 +701,11 @@ async function renderTestPrompt(
       },
     },
     runtime: { priorReviewState },
+    diffManifest: withDiffManifest
+      ? ({
+          body: "Test Diff Manifest",
+          runtimeToolNames: [],
+        } as unknown as PreparedDiffManifestContext)
+      : undefined,
   });
 }

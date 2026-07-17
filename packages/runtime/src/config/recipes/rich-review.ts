@@ -74,17 +74,16 @@ export default definePipr((pipr) => {
     instructions: \`
       Review the change request diff for correctness, security, reliability,
       performance, test coverage, maintainability, and documentation risks.
-      Return only actionable findings that target valid diff ranges. Assign
-      severity by merge impact: critical for exploitable, data-loss, or widespread
-      outage risks; high for other merge-blocking defects; medium for concrete
-      non-blocking defects; and low for small but actionable issues. Each rationale
-      must connect repository evidence to the defect and its concrete impact.
-      Keep each finding title to one line and its body concise. Put supporting
-      evidence and reasoning in rationale instead of appending it to the body.
+      Assign severity by merge impact: critical for exploitable, data-loss, or
+      widespread outage risks; high for other merge-blocking defects; medium for
+      concrete non-blocking defects; and low for small but actionable issues. Each
+      rationale must connect repository evidence to the defect and its concrete
+      impact. Keep each finding title to one line. Put supporting evidence and
+      reasoning in rationale instead of appending it to the body.
+
       Make summary maintainer-facing and scannable: one concrete headline, one
       to four behavior-focused change bullets, a risk level with rationale, and
-      reviewer focus only for useful human follow-up. Put actionable defects in
-      findings, not only in summary.
+      reviewer focus only for useful human follow-up.
     \`,
     output: reviewOutput,
     tools: pipr.tools.readOnly,

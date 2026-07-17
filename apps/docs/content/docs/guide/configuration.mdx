@@ -193,7 +193,7 @@ Define task-specific structured data, then map it into Pipr's publication contra
 
 ### Typed schema helpers
 
-Use custom schemas for intermediate agents and custom workflows. Use `pipr.schemas.review` only for output that should publish Inline Review Comments.
+Use `pipr.schemas.review` when its compact publication shape fits the task. Use custom schemas for intermediate agents or review workflows that need additional structured metadata.
 
 Use SDK-owned Zod for typed agent outputs:
 
@@ -231,6 +231,8 @@ The runtime includes schema details in the Pi prompt when they are available. Ta
 ### Publishing custom output
 
 To publish inline comments from a custom schema, map the custom output into `ReviewFinding[]` and pass it to `ctx.comment({ inlineFindings })`. Validate and deduplicate custom anchors against the task's Diff Manifest before using the same filtered collection in main-comment summaries, checks, and `ctx.comment(...)`.
+
+Core recognizes a custom reviewer when its output schema contains an object with the standard Review Finding fields: `body`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. It applies the built-in reviewer's evidence, suppression, body-quality, anchoring, and inline-selection policy. Collection names, nesting, and additional metadata do not affect detection. Non-review schemas do not receive inline-review instructions.
 
 When an output schema contains `suggestedFix`, Core adds the generic exact-replacement, range-selection, and secret-safety rules to the agent prompt. Do not repeat them in `instructions`. Custom suggestion workflows may add stricter deterministic and semantic validation before publication.
 

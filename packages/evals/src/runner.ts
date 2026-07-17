@@ -38,6 +38,7 @@ const evalDiffRangeSchema = z.object({
 });
 
 const evalPiCallSchema = z.object({
+  customReviewSchema: z.boolean().optional(),
   inlineFindingBodyPolicy: z.boolean(),
   reviewPolicy: z.boolean(),
   schemaOnlySystemPrompt: z.boolean(),
@@ -308,7 +309,10 @@ async function prepareFixture(
   run("git", ["init", "--quiet"], rootDir);
   run("git", ["config", "user.email", "pipr-evals@example.invalid"], rootDir);
   run("git", ["config", "user.name", "Pipr Evals"], rootDir);
-  await writeFiles(rootDir, { ".pipr/config.ts": configTs(), ...testCase.baseFiles });
+  await writeFiles(rootDir, {
+    ".pipr/config.ts": configTs(testCase.reviewer),
+    ...testCase.baseFiles,
+  });
   run("git", ["add", "."], rootDir);
   run("git", ["commit", "--quiet", "-m", "base"], rootDir);
   const baseSha = run("git", ["rev-parse", "HEAD"], rootDir).trim();
@@ -335,7 +339,10 @@ async function writeFiles(rootDir: string, files: Record<string, string>): Promi
   }
 }
 
-function configTs(): string {
+function configTs(reviewer: PiprEvalCase["reviewer"]): string {
+  if (reviewer === "custom") {
+    return customReviewConfigTs();
+  }
   return `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
@@ -358,6 +365,81 @@ export default definePipr((pipr) => {
     \`,
     timeout: "2m",
   });
+});
+`;
+}
+
+function customReviewConfigTs(): string {
+  return `import { definePipr, z } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+    options: { thinking: "high" },
+  });
+
+  pipr.config({ publication: { maxInlineComments: 3 } });
+
+  const output = pipr.schema({
+    id: "eval/categorized-review",
+    schema: z.strictObject({
+      summary: z.string(),
+      findings: z.array(z.strictObject({
+        title: z.string(),
+        severity: z.enum(["high", "medium", "low"]),
+        category: z.enum(["correctness", "security", "test-coverage"]),
+        rationale: z.string(),
+        body: z.string(),
+        path: z.string(),
+        rangeId: z.string(),
+        side: z.enum(["RIGHT", "LEFT"]),
+        startLine: z.number().int().positive(),
+        endLine: z.number().int().positive(),
+        suggestedFix: z.string().optional(),
+      })),
+    }),
+  });
+
+  const reviewer = pipr.agent({
+    name: "prompt-eval-reviewer",
+    model,
+    instructions: \`
+      Review the pull request diff for correctness, security, and test coverage.
+      Return only actionable findings that target valid diff ranges.
+    \`,
+    output,
+    tools: pipr.tools.readOnly,
+    retry: { invalidOutput: 1, transientFailure: 1 },
+    timeout: "2m",
+    prompt: () => "Review this change with category metadata.",
+  });
+
+  const task = pipr.task({
+    name: "prompt-eval-review",
+    async run(ctx) {
+      const manifest = await ctx.change.diffManifest({
+        compressed: true,
+        paths: { include: ["src/**"] },
+      });
+      const result = await ctx.pi.run(reviewer, { manifest });
+      await ctx.comment({
+        main: result.summary,
+        inlineFindings: result.findings.map((finding) => ({
+          body: finding.body,
+          path: finding.path,
+          rangeId: finding.rangeId,
+          side: finding.side,
+          startLine: finding.startLine,
+          endLine: finding.endLine,
+          ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
+        })),
+      });
+    },
+  });
+
+  pipr.on.changeRequest({ actions: ["opened", "updated"], task });
 });
 `;
 }

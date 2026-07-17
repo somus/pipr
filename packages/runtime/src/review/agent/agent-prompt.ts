@@ -7,6 +7,7 @@ import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
 import type { PriorReviewState } from "../prior-state.js";
 import { reviewResultSchemaId, reviewSchemaExample } from "../review.js";
 import type { PreparedDiffManifestContext } from "./diff-manifest-context.js";
+import { schemaContainsReviewFinding } from "./review-schema.js";
 
 export type AgentToolResolution = {
   customTools: AgentTool[];
@@ -154,7 +155,7 @@ function outputPrompt(schema: Schema<unknown>): string {
     lines.push(
       "For inlineFindings, use only fields shown in the schema. Each finding's path, rangeId, and side must identify one Diff Manifest commentable range, and its startLine and endLine must select a valid span within that range. If no valid span applies, omit the finding.",
       ...inlineSelectionPromptLines(),
-      `For inlineFindings.body, write the exact inline comment body. Use one short paragraph, at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters. Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target; prefer 250-450 characters when possible.`,
+      "For inlineFindings.body, write the exact inline comment body.",
     );
   } else if (schemaMentionsField(schema.jsonSchema, "suggestedFix")) {
     lines.splice(2, 0, ...suggestedFixRules);
@@ -166,7 +167,11 @@ function customInlineSelectionPrompt(
   schema: Schema<unknown>,
   diffManifest: PreparedDiffManifestContext | undefined,
 ): string | undefined {
-  if (!diffManifest || schema.id === reviewResultSchemaId) {
+  if (
+    !diffManifest ||
+    schema.id === reviewResultSchemaId ||
+    !schemaContainsReviewFinding(schema.jsonSchema)
+  ) {
     return undefined;
   }
   return promptSection("Inline Review Selection Policy", inlineSelectionPromptLines().join("\n"));
@@ -205,7 +210,7 @@ function schemaMentionsField(value: unknown, fieldName: string): boolean {
 }
 
 function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
-  if (schema.id !== reviewResultSchemaId) {
+  if (schema.id !== reviewResultSchemaId && !schemaContainsReviewFinding(schema.jsonSchema)) {
     return undefined;
   }
   return promptSection(
@@ -215,10 +220,10 @@ function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
       "Report only actionable defects, security risks, regressions, or meaningful test gaps.",
       "Before emitting a finding, verify that the changed code introduces or exposes the issue, repository evidence supports it, and the impact is concrete. If any part is uncertain, omit it.",
       "When changed behavior crosses a function, type, API, configuration, or data boundary, inspect relevant callers, callees, and tests before deciding whether the change is defective or intentionally coordinated.",
-      "Put each actionable issue in inlineFindings. Do not leave actionable defects or test gaps only in the summary.",
-      "Base the summary only on changed behavior and evidence available in the Diff Manifest or read tools. Do not claim tests or checks ran, passed, or failed unless their output is present.",
-      "Inline finding bodies are final code-review comments, not analysis notes.",
-      `State the concrete defect and user-visible or runtime impact directly. Keep each body to one short paragraph, at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters.`,
+      "Put each actionable issue in the schema's finding collection. Do not leave actionable defects or test gaps only in the summary.",
+      "When the output includes a summary, base it only on changed behavior and evidence available in the Diff Manifest or read tools. Do not claim tests or checks ran, passed, or failed unless their output is present.",
+      "Finding bodies must be publication-ready review prose, not analysis notes.",
+      `State the concrete defect and user-visible or runtime impact directly. Keep each body to one short paragraph, at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters. Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target; prefer 250-450 characters when possible.`,
       "Do not include step-by-step reasoning, broad context, praise, restated diff, alternatives, or code snippets unless they are necessary to identify the defect.",
       "Never copy a secret-looking literal from changed code into the review summary, inline finding body, or suggestedFix. Describe only the secret kind and location.",
       "Omit speculative, style-only, broad refactor, external-fact, and out-of-diff findings.",

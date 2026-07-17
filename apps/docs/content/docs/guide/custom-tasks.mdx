@@ -161,7 +161,9 @@ const securityAgent = pipr.agent({
 });
 ```
 
-Core adds the review candidate gate, contract tracing, summary grounding, and schema-aware `suggestedFix` rules for `pipr.schemas.review`. Keep only repository-specific review policy in agent instructions.
+Core adds the review candidate gate, contract tracing, summary grounding, and schema-aware `suggestedFix` rules for `pipr.schemas.review`.
+
+Custom output receives the same policy when its schema contains an object with the standard Review Finding fields: `body`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. Collection names, nesting, and additional metadata do not affect detection. Keep only repository-specific review policy in agent instructions.
 
 ### Intermediate schemas
 
@@ -178,7 +180,7 @@ const summarySchema = pipr.schema({
 });
 ```
 
-Map custom output into `ctx.comment(...)` yourself.
+Map custom output into `ctx.comment(...)` yourself. Custom schemas without the Review Finding fields remain ordinary structured outputs. They do not receive inline-review selection instructions.
 
 ## Prior review state
 
