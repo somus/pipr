@@ -10,7 +10,7 @@ import {
 import { runtimeVersion } from "../../shared/version.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import { initOfficialMinimalProject, officialInitPackageManifest } from "../init.js";
+import { officialInitPackageManifest } from "../init.js";
 import { renderOfficialGithubWorkflow } from "../official-github-workflow.js";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import {
@@ -19,7 +19,10 @@ import {
   supportedOfficialInitRecipes,
 } from "../recipes.js";
 import { defaultTypesBunVersion, defaultTypescriptVersion } from "../scaffold-versions.js";
-import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
+import {
+  initOfficialMinimalProjectWithLocalDependencies as initOfficialMinimalProject,
+  useLocalInitSdk,
+} from "./helpers/local-init-sdk.js";
 
 const cleanupLocalInitSdk = await useLocalInitSdk();
 afterAll(cleanupLocalInitSdk);

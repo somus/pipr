@@ -1,9 +1,15 @@
-import { cp, mkdtemp, realpath, rm } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  type InitOfficialMinimalProjectOptions,
+  type InitOfficialMinimalProjectResult,
+  initOfficialMinimalProject as initOfficialMinimalProjectSource,
+} from "../../init.js";
 
 type SharedInitDependencies = {
   dependencyRoot: string;
+  typescriptFixture: string;
   users: number;
   previousEnvironment: {
     sdk: string | undefined;
@@ -39,6 +45,31 @@ export async function useLocalInitSdk(): Promise<() => Promise<void>> {
   };
 }
 
+export async function initOfficialMinimalProjectWithLocalDependencies(
+  options: InitOfficialMinimalProjectOptions,
+): Promise<InitOfficialMinimalProjectResult> {
+  if (options.minimal !== true) {
+    const shared = await sharedInitDependencies;
+    if (!shared) {
+      throw new Error("Local init dependencies were not initialized");
+    }
+    const configDir = path.resolve(options.rootDir, options.configDir ?? ".pipr");
+    const typescriptLink = path.join(configDir, "typescript-local");
+    await mkdir(configDir, { recursive: true });
+    if (!(await pathExists(typescriptLink))) {
+      await symlink(shared.typescriptFixture, typescriptLink, "dir");
+    }
+  }
+  return initOfficialMinimalProjectSource(options);
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  return access(target).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function createSharedInitDependencies(): Promise<SharedInitDependencies> {
   const previousEnvironment = {
     sdk: process.env.PIPR_INTERNAL_INIT_SDK_VERSION,
@@ -59,9 +90,9 @@ async function createSharedInitDependencies(): Promise<SharedInitDependencies> {
   await Bun.write(typescriptPackageJsonPath, `${JSON.stringify(typescriptPackageJson, null, 2)}\n`);
   process.env.PIPR_INTERNAL_INIT_SDK_VERSION = `file:${path.join(fixtureRoot, "sdk")}`;
   process.env.PIPR_INTERNAL_INIT_TYPES_BUN_VERSION = `file:${path.join(fixtureRoot, "types-bun")}`;
-  process.env.PIPR_INTERNAL_INIT_TYPESCRIPT_VERSION = `file:${typescriptFixture}`;
+  process.env.PIPR_INTERNAL_INIT_TYPESCRIPT_VERSION = "file:./typescript-local";
   process.env.PIPR_INTERNAL_INIT_OFFLINE = "1";
-  return { dependencyRoot, users: 0, previousEnvironment };
+  return { dependencyRoot, typescriptFixture, users: 0, previousEnvironment };
 }
 
 function restoreEnvironment(name: string, value: string | undefined): void {

@@ -5,10 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { runtimeVersion } from "../../shared/version.js";
 import { installConfigDependencies } from "../config-deps.js";
-import { initOfficialMinimalProject } from "../init.js";
 import { defaultTypesBunVersion, defaultTypescriptVersion } from "../scaffold-versions.js";
 import { loadTypescriptConfig, prepareConfigDirectory } from "../ts-loader.js";
-import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
+import {
+  initOfficialMinimalProjectWithLocalDependencies as initOfficialMinimalProject,
+  useLocalInitSdk,
+} from "./helpers/local-init-sdk.js";
 import {
   writeThirdPartyPackageManifest,
   writeThirdPartyPiprProject,

@@ -2,10 +2,12 @@ import { afterAll, afterEach, describe, expect, it } from "bun:test";
 import { access, mkdtemp as createTemporaryDirectory, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { initOfficialMinimalProject } from "../init.js";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import { loadTypescriptConfig } from "../ts-loader.js";
-import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
+import {
+  initOfficialMinimalProjectWithLocalDependencies as initOfficialMinimalProject,
+  useLocalInitSdk,
+} from "./helpers/local-init-sdk.js";
 
 const cleanupLocalInitSdk = await useLocalInitSdk();
 afterAll(cleanupLocalInitSdk);
