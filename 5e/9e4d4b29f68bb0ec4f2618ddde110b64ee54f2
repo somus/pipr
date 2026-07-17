@@ -1,0 +1,131 @@
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_c535aab79d040b::t_4035906e53844b 199
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_c535aab79d040b::t_cd3f87a29453af 662-672
+packages/runtime/src/hosts/gitlab/tests/adapter.test.ts
+  s_c535aab79d040b::t_7212e1ee14e937 279
+  s_c535aab79d040b::t_cd3f87a29453af 578-584
+packages/runtime/src/hosts/bitbucket/tests/adapter.test.ts
+  s_c535aab79d040b::t_cd3f87a29453af 559-565
+  s_c535aab79d040b::t_7212e1ee14e937 305
+packages/sdk/src/types/task.ts
+  s_c535aab79d040b::t_84882f7c691ef0 41
+packages/runtime/src/review/comment.ts
+  s_c535aab79d040b::t_df41ae43850cc3 84,175,259-260,296-297
+  s_c535aab79d040b::t_082efba4c15862 28
+  s_c535aab79d040b::t_f13139aeed420a 261-295
+packages/runtime/src/review/prior-state.ts
+  s_c535aab79d040b::t_c358574ec1f870 55-57,59-63,89,94,99,110,131-135,141-144,154,156,163,177-188
+  s_c535aab79d040b::t_54c4bd784f60b2 97
+  s_c535aab79d040b::t_53269bd38fb756 58
+  s_c535aab79d040b::t_df41ae43850cc3 64-68,71,86,88,91,95
+  s_c535aab79d040b::t_79b19a526b425f 189,245,356-375,377-383
+  s_c535aab79d040b::t_964038fa10907c 24-27,376
+  s_c535aab79d040b::t_ebb12b04653e8d 111-130,136-140,145-153,155,157-162,164-171,173-175
+  s_c535aab79d040b::t_d497185d08370e 176
+  s_c535aab79d040b::t_d010dc7b6e11c8 2,23,230-244
+  s_c535aab79d040b::t_28ffaef8295e7b 172
+  s_c8c0ce2f824e4f::t_3baaa36667bb06 190,246
+packages/runtime/src/hosts/bitbucket/publication.ts
+  s_c535aab79d040b::t_79b19a526b425f 5,168-185
+apps/docs/content/docs/concepts/runtime.mdx
+  s_c535aab79d040b::t_4035906e53844b 224
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_c535aab79d040b::t_3b7f95e428c92c 116-117,140
+  s_c535aab79d040b::t_b30c2a8bfb5c73 39,51
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_c535aab79d040b::t_79b19a526b425f 5,176-186
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_c535aab79d040b::t_5e9db4bb13ed8f 725-731,742
+packages/runtime/src/config/recipes/rich-review.ts
+  s_c535aab79d040b::t_df41ae43850cc3 8,20
+  s_c535aab79d040b::t_e40c6444d15171 85-86,109
+packages/runtime/src/review/tests/publish.test.ts
+  s_c535aab79d040b::t_d1e30e139ef0c8 355
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_c535aab79d040b::t_79b19a526b425f 6,197-212
+packages/runtime/src/hosts/github/publication-prior-state.ts
+  s_c535aab79d040b::t_79b19a526b425f 3,26-40
+  s_c535aab79d040b::t_7f1799d340c9da 25,48-51,86-103
+  s_c8c0ce2f824e4f::t_b6088733b03678 104-105
+packages/runtime/src/review/tests/comment.test.ts
+  s_c535aab79d040b::t_7212e1ee14e937 98,124
+packages/runtime/src/config/tests/init.test.ts
+  s_c535aab79d040b::t_439b8aca735588 319,344-347
+  s_c535aab79d040b::t_e9a360c12e055c 205
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_c535aab79d040b::t_2b0a193427ce9e 291
+packages/runtime/src/review/tests/comment-publishing.test.ts
+  s_c535aab79d040b::t_563f60e1df10e3 231,254,257,274-278,280,287-293,295-300
+  s_c535aab79d040b::t_964038fa10907c 329
+  s_c535aab79d040b::t_f13139aeed420a 244-247
+  s_c535aab79d040b::t_cc355a16283188 251-252
+  s_c535aab79d040b::t_1ecc8a6b989d6d 255,258-263,271-273,279
+  s_c535aab79d040b::t_81f94182f2bf6a 264-270
+  s_c535aab79d040b::t_8624ce0146bc51 232-243,248-250,253,256,281-286,294
+  s_c535aab79d040b::t_944ff19e3886cf 301-328,330-340
+packages/runtime/src/review/comment-publishing.ts
+  s_c535aab79d040b::t_082efba4c15862 1-7,84-98,100-102
+  s_c535aab79d040b::t_df41ae43850cc3 45,53
+  s_c535aab79d040b::t_f13139aeed420a 46-49
+  s_c535aab79d040b::t_81f94182f2bf6a 99
+  s_c535aab79d040b::t_3c49733eca9907 103
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_c535aab79d040b::t_964038fa10907c 140
+  s_c535aab79d040b::t_5e9db4bb13ed8f 127,137-139,141-149,156-158
+packages/runtime/src/hosts/azure-devops/tests/adapter.test.ts
+  s_c535aab79d040b::t_cd3f87a29453af 825-833
+  s_c535aab79d040b::t_7212e1ee14e937 467
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_c535aab79d040b::t_84882f7c691ef0 156,246-252,260,262-263,276
+packages/sdk/src/tests/index.test.ts
+  s_c535aab79d040b::t_88663f3e5f9835 1005
+  s_c535aab79d040b::t_964038fa10907c 1019-1021
+  s_c535aab79d040b::t_e9a360c12e055c 1022-1027
+packages/sdk/src/review-contract.ts
+  s_c535aab79d040b::t_24eb988f666e15 30
+  s_c535aab79d040b::t_84882f7c691ef0 84
+  s_c535aab79d040b::t_c89a9dd6775c47 12,31-34,44
+apps/docs/content/docs/concepts/comments.mdx
+  s_c535aab79d040b::t_2b0a193427ce9e 158,218,243,249-250,258
+packages/runtime/src/review/task/task-output.ts
+  s_c535aab79d040b::t_84882f7c691ef0 321
+packages/runtime/src/hosts/tests/conformance.ts
+  s_c535aab79d040b::t_cd3f87a29453af 64,314-333
+  s_c535aab79d040b::t_233bc312a017dd 466-481
+  s_6c677c3541e969::t_1ff3e7f26c0613 334-336
+packages/sdk/src/index.ts
+  s_c535aab79d040b::t_168b430ada4eb3 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "5e9e4d4b29f68bb0ec4f2618ddde110b64ee54f2",
+  "prompts": {},
+  "sessions": {
+    "s_6c677c3541e969": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6ff1-39b9-7e13-8e64-dd05b4dd485c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_c535aab79d040b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7060-ac32-7c80-ae32-2ac7719eab62",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_c8c0ce2f824e4f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6fd5-f7b0-7d22-9e6a-fdb4a1c9a732",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
