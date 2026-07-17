@@ -1,6 +1,6 @@
 {
   "name": "pipr",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Code-owned AI review across code hosts",
   "private": true,
   "type": "module",

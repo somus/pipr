@@ -41,8 +41,8 @@ type StarterFile = {
   contents: string;
 };
 
-const defaultGitLabImageRef = "ghcr.io/somus/pipr:v0.4.1"; // x-release-please-version
-const defaultSdkVersion = "0.4.1"; // x-release-please-version
+const defaultGitLabImageRef = "ghcr.io/somus/pipr:v0.4.2"; // x-release-please-version
+const defaultSdkVersion = "0.4.2"; // x-release-please-version
 
 function resolveOfficialInitAdapters(adapters?: readonly string[]): OfficialInitAdapter[] {
   if (adapters === undefined) {

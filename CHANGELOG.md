@@ -4,6 +4,14 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.4.2](https://github.com/somus/pipr/compare/v0.4.1...v0.4.2) (2026-07-17)
+
+
+### Bug Fixes
+
+* **runtime:** apply review policy to custom schemas ([#89](https://github.com/somus/pipr/issues/89)) ([bd134bf](https://github.com/somus/pipr/commit/bd134bf5a2d6ac7eba6e8e74823e3145a09fd21a))
+* suppress resolved findings across heads ([#88](https://github.com/somus/pipr/issues/88)) ([63cf68f](https://github.com/somus/pipr/commit/63cf68fe8b8cdc3bb353a8eee1b6dbe7d5482eb6))
+
 ## [0.4.1](https://github.com/somus/pipr/compare/v0.4.0...v0.4.1) (2026-07-16)
 
 
