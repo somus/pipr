@@ -1,0 +1,96 @@
+.pipr/config.ts
+  s_cbad4ddbc56275::t_94eb8575f6a8bc 72-85,89-91
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_cbad4ddbc56275::t_44eb7a723753b8 491
+  s_cbad4ddbc56275::t_86c509147ba633 492
+packages/runtime/src/config/recipes/rich-review.ts
+  s_cbad4ddbc56275::t_19fe4edfd01a09 77-82,86
+packages/evals/src/runner.ts
+  s_cbad4ddbc56275::t_2c684f206b12b1 41
+  s_cbad4ddbc56275::t_a9d880e08f1de9 414
+  s_cbad4ddbc56275::t_f0b09fcbc6fe0b 312-315,342-345,372-413,416-442
+  s_6c677c3541e969::t_f504ae89c343fe 415,443-446
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_cbad4ddbc56275::t_9bb9dd35a48e1d 266-283,460-483
+  s_cbad4ddbc56275::t_cad683e76d21d3 44-67,371,373-378
+  s_cbad4ddbc56275::t_e44bf4f96de281 284-301,484-507
+  s_cbad4ddbc56275::t_19cd7ed9f30552 4,427,436-441,511,515-516,635,681-684,686
+  s_cbad4ddbc56275::t_ad10ecf81c03fa 211-229,410-416
+  s_cbad4ddbc56275::t_e6271c1fe1988e 685
+  s_cbad4ddbc56275::t_19fe4edfd01a09 331
+  s_cbad4ddbc56275::t_466c94ecb51a0f 183-210,403-409
+  s_cbad4ddbc56275::t_31840632e47711 244-256,417-423
+  s_cbad4ddbc56275::t_2de139121d7548 134-167,169-182,391-402
+  s_cbad4ddbc56275::t_39a3d37f5e1cdc 257-265,448-459
+  s_cbad4ddbc56275::t_5fb5bf87629b0a 99-133,230-234,236-243,384-387,389-390,424,442-447,508-510,512-514
+  s_cbad4ddbc56275::t_7b00febba0dbc4 82-86,88-98,379-383,388,425
+  s_cbad4ddbc56275::t_c00491e399e830 68-81,87,235
+  s_cbad4ddbc56275::t_8c8bea0f9f5be0 168
+  s_cbad4ddbc56275::t_75152576a1fe47 372,426,557,560
+  s_c8c0ce2f824e4f::t_22a00abb47bcf0 428
+packages/evals/src/deterministic-smoke.ts
+  s_cbad4ddbc56275::t_2c684f206b12b1 38-43
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_cbad4ddbc56275::t_88a3927ec3c9db 108-113,117
+packages/evals/src/fake-pi.ts
+  s_cbad4ddbc56275::t_2c684f206b12b1 263
+  s_cbad4ddbc56275::t_19fe4edfd01a09 159,265
+  s_cbad4ddbc56275::t_f0b09fcbc6fe0b 184-198
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_cbad4ddbc56275::t_44eb7a723753b8 164-166,183
+apps/docs/content/docs/guide/configuration.mdx
+  s_cbad4ddbc56275::t_86c509147ba633 196
+  s_cbad4ddbc56275::t_44eb7a723753b8 235
+  s_6c677c3541e969::t_b892ba45e9c51b 236
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_cbad4ddbc56275::t_da15abe840d98a 158,226
+  s_cbad4ddbc56275::t_3dc73174be5447 170-174
+  s_cbad4ddbc56275::t_b753ce7086435f 213
+  s_cbad4ddbc56275::t_0d6ed93f88615b 10
+  s_cbad4ddbc56275::t_ea0fab3f5564dc 223-224
+  s_cbad4ddbc56275::t_19fe4edfd01a09 225
+packages/runtime/src/review/tests/task-runtime.test.ts
+  s_cbad4ddbc56275::t_19fe4edfd01a09 1272
+  s_cbad4ddbc56275::t_c30cf9ce8376bc 1373
+  s_cbad4ddbc56275::t_278459d56c4b4e 1379-1380
+packages/runtime/src/review/agent/review-schema.ts
+  s_cbad4ddbc56275::t_5eee8bdb880f8c 91,96
+  s_cbad4ddbc56275::t_caac7ff07bc20b 93,98
+  s_cbad4ddbc56275::t_0d6ed93f88615b 1-90,92,94-95,97,99-251
+packages/evals/src/cases.ts
+  s_cbad4ddbc56275::t_e209eefe826982 99-100,127-128,169-170,198-199
+  s_cbad4ddbc56275::t_2c684f206b12b1 33,68-96
+  s_cbad4ddbc56275::t_1459be45a7b901 97-98,101-126,129-168,171-197,200-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "17ce710e6c18f4aafb6fbb2669f548a980045799",
+  "prompts": {},
+  "sessions": {
+    "s_6c677c3541e969": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6ff1-39b9-7e13-8e64-dd05b4dd485c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_c8c0ce2f824e4f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6fd5-f7b0-7d22-9e6a-fdb4a1c9a732",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_cbad4ddbc56275": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f705d-7b2f-7ef2-b337-a1ccfad48bd6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
