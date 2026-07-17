@@ -242,8 +242,8 @@ function pathScopePrompt(paths: PathFilter | undefined): string | undefined {
 }
 
 function priorFindingsPrompt(state: PriorReviewState | undefined): string | undefined {
-  const openFindings = state?.findings.filter((finding) => finding.status === "open") ?? [];
-  if (openFindings.length === 0) {
+  const findings = state?.findings.filter((finding) => finding.status === "open") ?? [];
+  if (findings.length === 0) {
     return undefined;
   }
   return [
@@ -251,8 +251,9 @@ function priorFindingsPrompt(state: PriorReviewState | undefined): string | unde
     JSON.stringify(
       {
         reviewedHeadSha: state?.reviewedHeadSha,
-        findings: openFindings.map((finding) => ({
+        findings: findings.map((finding) => ({
           id: finding.id,
+          status: finding.status,
           path: finding.path,
           rangeId: finding.rangeId,
           side: finding.side,

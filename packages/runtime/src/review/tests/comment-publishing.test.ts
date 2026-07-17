@@ -228,6 +228,258 @@ describe("buildCommentPublishingPlan", () => {
     expect(publishing.publicationPlan.mainComment).not.toContain("- Prior finding.");
   });
 
+  it("does not republish a resolved issue when its selected code is unchanged", () => {
+    const initialFinding = finding("Portability concern.", "range-1", 10);
+    const initial = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [initialFinding] },
+      manifest,
+      metadata: metadata({ validFindings: 1 }),
+    });
+    const persisted = extractPriorReviewState(
+      initial.publicationPlan.mainComment,
+      event.change.number,
+    );
+    if (!persisted) {
+      throw new Error("test fixture missing persisted prior review state");
+    }
+    expect(persisted.findings[0]?.anchorFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(persisted.findings[0]?.issueFingerprint).toMatch(/^[a-f0-9]{64}$/);
+
+    const currentFinding = {
+      ...finding("**PORTABILITY concern**", "range-moved", 20),
+      path: "src/moved.ts",
+    };
+    const movedManifest: DiffManifest = {
+      ...manifest,
+      files: manifest.files.map((file) => ({
+        ...file,
+        path: "src/moved.ts",
+        previousPath: "src/a.ts",
+        commentableRanges: file.commentableRanges.map((range) =>
+          range.id === "range-1"
+            ? {
+                ...range,
+                id: "range-moved",
+                path: "src/moved.ts",
+                startLine: 20,
+                endLine: 20,
+                preview: "fail()  \r\n",
+              }
+            : range,
+        ),
+      })),
+    };
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest: movedManifest,
+      priorReviewState: {
+        ...persisted,
+        findings: persisted.findings.map((finding) => ({
+          ...finding,
+          status: "resolved" as const,
+          lastCommentedHeadSha: "old-head",
+        })),
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toEqual([]);
+    expect(publishing.publicationPlan.reviewState.findings).toContainEqual(
+      expect.objectContaining({
+        id: persisted.findings[0]?.id,
+        status: "resolved",
+        lastSeenHeadSha: "head",
+      }),
+    );
+  });
+
+  it("does not persist an empty concern identity", () => {
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [finding("   ", "range-1", 10)] },
+      manifest,
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toEqual([]);
+    expect(publishing.publicationPlan.reviewState.findings).toEqual([]);
+  });
+
+  it("republishes a resolved issue when its selected code changes", () => {
+    const currentFinding = finding("Portability concern.", "range-1", 10);
+    const changedManifest: DiffManifest = {
+      ...manifest,
+      files: manifest.files.map((file) => ({
+        ...file,
+        commentableRanges: file.commentableRanges.map((range) =>
+          range.id === "range-1" ? { ...range, preview: "portableSleep()" } : range,
+        ),
+      })),
+    };
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest: changedManifest,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [
+          {
+            ...priorFindingRecord("fnd_existing"),
+            status: "resolved",
+            anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
+            lastCommentedHeadSha: "old-head",
+          },
+        ],
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toHaveLength(1);
+    expect(publishing.publicationPlan.reviewState.findings[0]).toMatchObject({ status: "open" });
+  });
+
+  it("publishes identical selected code from an unrelated path", () => {
+    const currentFinding = { ...finding("Different concern.", "range-1", 10), path: "src/b.ts" };
+    const otherPathManifest: DiffManifest = {
+      ...manifest,
+      files: manifest.files.map((file) => ({
+        ...file,
+        path: "src/b.ts",
+        commentableRanges: file.commentableRanges.map((range) => ({
+          ...range,
+          path: "src/b.ts",
+        })),
+      })),
+    };
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest: otherPathManifest,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [
+          {
+            ...priorFindingRecord("fnd_existing"),
+            status: "resolved",
+            anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
+            lastCommentedHeadSha: "old-head",
+          },
+        ],
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toHaveLength(1);
+    expect(publishing.publicationPlan.reviewState.findings).toContainEqual(
+      expect.objectContaining({ path: "src/b.ts", status: "open" }),
+    );
+  });
+
+  it("publishes a different concern on the same selected code", () => {
+    const currentFinding = finding("Error handling concern.", "range-1", 10);
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [
+          {
+            ...priorFindingRecord("fnd_existing"),
+            status: "resolved",
+            anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
+            lastCommentedHeadSha: "old-head",
+          },
+        ],
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toHaveLength(1);
+    expect(publishing.publicationPlan.reviewState.findings).toContainEqual(
+      expect.objectContaining({ status: "open", lastSeenHeadSha: "head" }),
+    );
+  });
+
+  it("publishes ambiguous current concerns that select the same resolved code", () => {
+    const currentFindings = [
+      finding("Portability concern.", "range-1", 10),
+      finding("**PORTABILITY CONCERN**", "range-1", 10),
+    ];
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: currentFindings },
+      manifest,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [
+          {
+            ...priorFindingRecord("fnd_existing"),
+            status: "resolved",
+            anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
+            lastCommentedHeadSha: "old-head",
+          },
+        ],
+      },
+      metadata: metadata({ validFindings: currentFindings.length }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toHaveLength(2);
+    expect(publishing.publicationPlan.reviewState.findings).toContainEqual(
+      expect.objectContaining({ id: "fnd_existing", status: "resolved" }),
+    );
+  });
+
+  it("publishes when multiple resolved findings have the same selected code", () => {
+    const currentFinding = finding("Portability concern.", "range-1", 10);
+    const resolvedFinding = {
+      ...priorFindingRecord("fnd_prior_1"),
+      status: "resolved" as const,
+      anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+      issueFingerprint: "b7f0aa536a14f921817a528b4894277a4cca0e11b2adb0f593763b105b09d2f8",
+      lastCommentedHeadSha: "old-head",
+    };
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [resolvedFinding, { ...resolvedFinding, id: "fnd_prior_2" }],
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toHaveLength(1);
+    expect(publishing.publicationPlan.reviewState.findings).toContainEqual(
+      expect.objectContaining({ status: "open", lastSeenHeadSha: "head" }),
+    );
+  });
+
   it("does not carry prior findings from another selected task scope", () => {
     const publishing = buildCommentPublishingPlan({
       event,

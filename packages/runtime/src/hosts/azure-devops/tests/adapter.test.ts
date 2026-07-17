@@ -464,7 +464,7 @@ function publicationPlan() {
     main: "Summary.",
     inlineItems: [inlineItem],
     reviewState: buildPriorReviewState({
-      findings: [inlineItem.finding],
+      findings: [{ finding: inlineItem.finding }],
       reviewedHeadSha: "head",
       selectedTasks: ["review"],
     }),
@@ -821,6 +821,15 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
         content: body,
         author: { uniqueName: "developer@example.com" },
       });
+    },
+    setFirstInlineResolved(resolved) {
+      const thread = client.threads.find(
+        (item) =>
+          item.threadContext?.filePath &&
+          item.comments[0]?.author?.uniqueName === "pipr@example.com",
+      );
+      if (!thread) throw new Error("Azure DevOps conformance thread not found");
+      thread.status = resolved ? "fixed" : "active";
     },
     ownedReplyBodies: () =>
       client.threads.flatMap((thread) =>

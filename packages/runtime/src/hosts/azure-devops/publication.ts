@@ -3,6 +3,7 @@ import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../..
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
+  applyNativeThreadResolutions,
   applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
   extractPriorReviewState,
@@ -193,14 +194,22 @@ export async function loadAzureDevOpsPriorReviewState(options: {
   const state = extractPriorReviewState(body, options.change.change.number);
   if (!state) return undefined;
   const owner = await authenticatedAzureOwner(options.client);
-  const bodies = ownedThreadComments(
-    await options.client.listThreads(
-      azureCoordinates(options.change).repositoryId,
-      options.change.change.number,
-    ),
-    owner.uniqueName,
-  ).map((comment) => comment.content);
-  return applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
+  const threads = await options.client.listThreads(
+    azureCoordinates(options.change).repositoryId,
+    options.change.change.number,
+  );
+  const bodies = ownedThreadComments(threads, owner.uniqueName).map((comment) => comment.content);
+  const markerState = applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
+  return applyNativeThreadResolutions(
+    markerState,
+    threads.flatMap((thread) => {
+      const root = thread.comments[0];
+      const marker = root ? extractInlineFindingMarkerRecords([root.content])[0] : undefined;
+      return root && marker && root.author?.uniqueName === owner.uniqueName
+        ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved: isResolved(thread) }]
+        : [];
+    }),
+  );
 }
 
 export async function loadAzureDevOpsPriorMainComment(options: {

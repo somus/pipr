@@ -1,4 +1,10 @@
-import type { ChangeRequestEventContext, DiffManifest, ValidatedReview } from "../types.js";
+import type {
+  ChangeRequestEventContext,
+  CommentableRange,
+  DiffManifest,
+  ReviewFinding,
+  ValidatedReview,
+} from "../types.js";
 import {
   buildPublicationPlan,
   type InlineCommentDraft,
@@ -36,10 +42,19 @@ export function buildCommentPublishingPlan(
   const publishableInlineFindings = preparePublishableInlineFindings({
     validated: options.validated,
     manifest: options.manifest,
+  }).map((item) => {
+    const fingerprint = selectedCodeFingerprint(item.finding, item.range);
+    return fingerprint
+      ? {
+          ...item,
+          anchorFingerprint: fingerprint,
+          issueFingerprint: findingIssueFingerprint(item.finding),
+        }
+      : item;
   });
   const reviewState = buildPriorReviewState({
     priorState: options.priorReviewState,
-    findings: publishableInlineFindings.map((item) => item.finding),
+    findings: publishableInlineFindings,
     reviewedHeadSha: options.event.change.head.sha,
     selectedTasks: options.metadata.selectedTasks,
     stats: options.metadata.stats,
@@ -69,4 +84,40 @@ export function buildCommentPublishingPlan(
     publicationPlan,
     inlineCommentDrafts: publicationPlan.inlineItems,
   };
+}
+
+function selectedCodeFingerprint(
+  finding: ReviewFinding,
+  range: CommentableRange,
+): string | undefined {
+  if (range.preview === undefined) {
+    return undefined;
+  }
+  const lines = range.preview.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
+  const startOffset = finding.startLine - range.startLine;
+  const endOffset = finding.endLine - range.startLine + 1;
+  if (startOffset < 0 || endOffset > lines.length) {
+    return undefined;
+  }
+  const selected = lines
+    .slice(startOffset, endOffset)
+    .map((line) => line.trimEnd())
+    .join("\n");
+  return new Bun.CryptoHasher("sha256").update(selected).digest("hex");
+}
+
+function findingIssueFingerprint(finding: ReviewFinding): string | undefined {
+  const normalized = finding.body
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[^\p{L}\p{N}_]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  const identity = normalized || finding.body.normalize("NFKC").toLowerCase().trim();
+  if (!identity) {
+    return undefined;
+  }
+  return new Bun.CryptoHasher("sha256").update(identity).digest("hex");
 }

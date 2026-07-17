@@ -20,11 +20,13 @@ import {
 import { reviewFindingSchema } from "./contract.js";
 import {
   buildPriorReviewState,
+  countFindingFingerprints,
   findingIdFor,
   findingIdSchema,
   inlineFindingMarker,
   mainCommentMarker,
   matchFindingRecord,
+  matchResolvedFindingRecord,
   type PriorReviewState,
   priorReviewStateSchema,
   renderInlineFindingMarker,
@@ -80,6 +82,8 @@ export type PublishableInlineFinding = {
   finding: ReviewFinding;
   range: CommentableRange;
   previousPath?: string;
+  anchorFingerprint?: string;
+  issueFingerprint?: string;
 };
 
 const threadActionSchema = z.strictObject({
@@ -170,7 +174,7 @@ export function buildPublicationPlan(options: BuildPublicationPlanOptions): Publ
   const reviewState =
     options.reviewState ??
     buildPriorReviewState({
-      findings: options.inlineItems.map((item) => item.finding),
+      findings: options.inlineItems.map((item) => ({ finding: item.finding })),
       reviewedHeadSha: options.metadata.reviewedHeadSha,
       selectedTasks: options.metadata.selectedTasks,
     });
@@ -253,36 +257,56 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
   reviewState?: PriorReviewState;
 }): InlinePublicationItem[] {
   const seenFindingIds = new Set<string>();
+  const fingerprintCounts = countFindingFingerprints(options.publishableFindings);
   return inlinePublicationItemsSchema.parse(
-    options.publishableFindings.flatMap(({ finding: publishableFinding, range, previousPath }) => {
-      const findingId = findingIdFor(publishableFinding, options.reviewState);
-      const stateRecord = options.reviewState
-        ? matchFindingRecord(options.reviewState, publishableFinding)
-        : undefined;
-      if (
-        seenFindingIds.has(findingId) ||
-        stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha
-      ) {
-        return [];
-      }
-      seenFindingIds.add(findingId);
-      const marker = inlineFindingMarker(findingId, options.reviewedHeadSha);
-      return [
-        inlinePublicationItemSchema.parse({
-          finding: publishableFinding,
-          range,
-          path: publishableFinding.path,
-          previousPath,
-          side: publishableFinding.side,
-          startLine: publishableFinding.startLine,
-          endLine: publishableFinding.endLine,
-          marker,
-          findingId,
-          reviewedHeadSha: options.reviewedHeadSha,
-          body: renderInlineBody(publishableFinding, findingId, options.reviewedHeadSha),
-        }),
-      ];
-    }),
+    options.publishableFindings.flatMap(
+      ({
+        finding: publishableFinding,
+        range,
+        previousPath,
+        anchorFingerprint,
+        issueFingerprint,
+      }) => {
+        const findingId = findingIdFor(publishableFinding, options.reviewState);
+        const stateRecord = options.reviewState
+          ? matchFindingRecord(options.reviewState, publishableFinding)
+          : undefined;
+        const resolvedRecord = options.reviewState
+          ? matchResolvedFindingRecord(
+              options.reviewState.findings,
+              publishableFinding,
+              anchorFingerprint,
+              issueFingerprint,
+              fingerprintCounts,
+              previousPath,
+            )
+          : undefined;
+        if (
+          seenFindingIds.has(findingId) ||
+          resolvedRecord !== undefined ||
+          stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha
+        ) {
+          return [];
+        }
+        seenFindingIds.add(findingId);
+        const marker = inlineFindingMarker(findingId, options.reviewedHeadSha);
+        return [
+          inlinePublicationItemSchema.parse({
+            finding: publishableFinding,
+            range,
+            path: publishableFinding.path,
+            previousPath,
+            side: publishableFinding.side,
+            startLine: publishableFinding.startLine,
+            endLine: publishableFinding.endLine,
+            marker,
+            findingId,
+            reviewedHeadSha: options.reviewedHeadSha,
+            body: renderInlineBody(publishableFinding, findingId, options.reviewedHeadSha),
+          }),
+        ];
+      },
+    ),
   );
 }
 

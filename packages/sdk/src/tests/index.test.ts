@@ -1015,6 +1015,9 @@ describe("review schema exports", () => {
     expect(parseReviewFinding(finding)).toEqual(finding);
     expect(parseReviewResult(result)).toEqual(result);
     expect(reviewFindingSchema.safeParse({ ...finding, startLine: 0 }).success).toBe(false);
+    expect(reviewFindingSchema.safeParse({ ...finding, issueKey: "internal-only" }).success).toBe(
+      false,
+    );
     expect(
       reviewResultSchema.safeParse({ summary, inlineFindings: [{ ...finding, side: "BOTH" }] })
         .success,

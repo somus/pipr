@@ -26,7 +26,6 @@ export type ReviewResult = {
 
 const nonEmptyStringSchema = z.string().min(1);
 const positiveIntegerSchema = z.number().int().positive();
-
 /** Zod schema for a review summary. */
 export const reviewSummarySchema: ZodSchema<ReviewSummary> = z.strictObject({
   title: nonEmptyStringSchema.optional(),
