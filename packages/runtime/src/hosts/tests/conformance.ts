@@ -61,6 +61,7 @@ export type CodeHostAdapterConformanceHarness = {
   failNextInline(): void;
   seedForeignInline(): void;
   seedForeignReply(body: string): void;
+  setFirstInlineResolved(resolved: boolean): void;
   ownedReplyBodies(): string[];
   writes(): ObservedWrites;
   anchors(): ObservedInlineAnchor[];
@@ -310,6 +311,29 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
+    it("loads native inline resolution into prior review state", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        await requiredPublication(harness.adapter).publish({
+          change: harness.change,
+          plan: publicationPlan(harness.change),
+        });
+        const loadPriorReviewState = requiredMethod(
+          harness.adapter.comments?.loadPriorReviewState,
+          "prior review state loading",
+        );
+
+        harness.setFirstInlineResolved(true);
+        await expect(loadPriorReviewState({ change: harness.change })).resolves.toMatchObject({
+          findings: [expect.objectContaining({ status: "resolved" }), expect.anything()],
+        });
+
+        harness.setFirstInlineResolved(false);
+        await expect(loadPriorReviewState({ change: harness.change })).resolves.toMatchObject({
+          findings: [expect.objectContaining({ status: "open" }), expect.anything()],
+        });
+      });
+    });
+
     it("ignores foreign reply markers and escapes nested markers in bot replies", async () => {
       await withHarness(options.createHarness, async (harness) => {
         const { publication, context } = await publishAndLoadFirstInlineContext(harness);
@@ -439,6 +463,22 @@ function publicationPlan(change: ChangeRequestEventContext, findingSuffix = "") 
     event: change,
     main: "Summary.",
     inlineItems: items,
+    reviewState: {
+      version: 1,
+      reviewedHeadSha: change.change.head.sha,
+      selectedTasks: ["review"],
+      findings: items.map((item) => ({
+        id: item.findingId,
+        status: "open",
+        path: item.path,
+        rangeId: item.finding.rangeId,
+        side: item.side,
+        startLine: item.startLine,
+        endLine: item.endLine,
+        firstSeenHeadSha: change.change.head.sha,
+        lastSeenHeadSha: change.change.head.sha,
+      })),
+    },
     metadata: {
       runtimeVersion,
       reviewedHeadSha: change.change.head.sha,

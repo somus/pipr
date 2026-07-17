@@ -318,6 +318,7 @@ export function priorReviewForTask(
     inlineFindings:
       priorReviewState?.findings.map((finding) => ({
         id: finding.id,
+        ...(finding.issueKey ? { issueKey: finding.issueKey } : {}),
         status: finding.status,
         path: finding.path,
         rangeId: finding.rangeId,

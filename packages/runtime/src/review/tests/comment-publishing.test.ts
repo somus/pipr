@@ -228,6 +228,116 @@ describe("buildCommentPublishingPlan", () => {
     expect(publishing.publicationPlan.mainComment).not.toContain("- Prior finding.");
   });
 
+  it("does not republish a resolved issue when its selected code is unchanged", () => {
+    const issueKey = "http-client-bun-sleep-portability";
+    const initialFinding = {
+      ...finding("Portability concern.", "range-1", 10),
+      issueKey,
+    };
+    const initial = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [initialFinding] },
+      manifest,
+      metadata: metadata({ validFindings: 1 }),
+    });
+    const persisted = extractPriorReviewState(
+      initial.publicationPlan.mainComment,
+      event.change.number,
+    );
+    if (!persisted) {
+      throw new Error("test fixture missing persisted prior review state");
+    }
+    expect(persisted.findings[0]?.issueKey).toBe(issueKey);
+    expect(persisted.findings[0]?.anchorFingerprint).toMatch(/^[a-f0-9]{64}$/);
+
+    const currentFinding = {
+      ...finding("Rephrased portability concern.", "range-moved", 20),
+      issueKey,
+    };
+    const movedManifest: DiffManifest = {
+      ...manifest,
+      files: manifest.files.map((file) => ({
+        ...file,
+        commentableRanges: file.commentableRanges.map((range) =>
+          range.id === "range-1"
+            ? {
+                ...range,
+                id: "range-moved",
+                startLine: 20,
+                endLine: 20,
+                preview: "fail()  \r\n",
+              }
+            : range,
+        ),
+      })),
+    };
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest: movedManifest,
+      priorReviewState: {
+        ...persisted,
+        findings: persisted.findings.map((finding) => ({
+          ...finding,
+          status: "resolved" as const,
+          lastCommentedHeadSha: "old-head",
+        })),
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toEqual([]);
+    expect(publishing.publicationPlan.reviewState.findings).toContainEqual(
+      expect.objectContaining({
+        id: persisted.findings[0]?.id,
+        status: "resolved",
+        lastSeenHeadSha: "head",
+      }),
+    );
+  });
+
+  it("republishes a resolved issue when its selected code changes", () => {
+    const currentFinding = {
+      ...finding("Portability concern.", "range-1", 10),
+      issueKey: "http-client-bun-sleep-portability",
+    };
+    const changedManifest: DiffManifest = {
+      ...manifest,
+      files: manifest.files.map((file) => ({
+        ...file,
+        commentableRanges: file.commentableRanges.map((range) =>
+          range.id === "range-1" ? { ...range, preview: "portableSleep()" } : range,
+        ),
+      })),
+    };
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [currentFinding] },
+      manifest: changedManifest,
+      priorReviewState: {
+        version: 1,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [
+          {
+            ...priorFindingRecord("fnd_existing"),
+            status: "resolved",
+            issueKey: "http-client-bun-sleep-portability",
+            anchorFingerprint: "86448157c1881ef7d519d770d26477f8aae2b01f20054b52b9c4773b0cd05447",
+            lastCommentedHeadSha: "old-head",
+          },
+        ],
+      },
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toHaveLength(1);
+    expect(publishing.publicationPlan.reviewState.findings[0]).toMatchObject({ status: "open" });
+  });
+
   it("does not carry prior findings from another selected task scope", () => {
     const publishing = buildCommentPublishingPlan({
       event,

@@ -1002,6 +1002,7 @@ describe("review schema exports", () => {
   it("parse valid and invalid review contracts", () => {
     const summary = { body: "Looks good." };
     const finding = {
+      issueKey: "http-client-bun-sleep-portability",
       body: "Issue.",
       path: "src/example.ts",
       rangeId: "rng_1",
@@ -1015,6 +1016,15 @@ describe("review schema exports", () => {
     expect(parseReviewFinding(finding)).toEqual(finding);
     expect(parseReviewResult(result)).toEqual(result);
     expect(reviewFindingSchema.safeParse({ ...finding, startLine: 0 }).success).toBe(false);
+    expect(
+      reviewFindingSchema.safeParse({ ...finding, issueKey: "Not a stable key" }).success,
+    ).toBe(false);
+    expect(reviewFindingSchema.safeParse({ ...finding, issueKey: "a".repeat(128) }).success).toBe(
+      true,
+    );
+    expect(reviewFindingSchema.safeParse({ ...finding, issueKey: "a".repeat(129) }).success).toBe(
+      false,
+    );
     expect(
       reviewResultSchema.safeParse({ summary, inlineFindings: [{ ...finding, side: "BOTH" }] })
         .success,

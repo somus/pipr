@@ -95,7 +95,7 @@ describe("comments", () => {
       main: "Summary.",
       inlineItems: [...singleLine, ...multiline],
       reviewState: buildPriorReviewState({
-        findings: [finding, multilineFinding],
+        findings: [{ finding }, { finding: multilineFinding }],
         reviewedHeadSha: "head",
         selectedTasks: ["review"],
       }),
@@ -121,7 +121,7 @@ describe("comments", () => {
       main: "Summary body.\n\nTests passed.",
       inlineItems: [],
       reviewState: buildPriorReviewState({
-        findings: [finding],
+        findings: [{ finding }],
         reviewedHeadSha: "head",
         selectedTasks: ["review"],
       }),

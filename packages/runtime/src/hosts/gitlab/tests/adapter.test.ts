@@ -276,7 +276,7 @@ function publicationPlan() {
     main: "Summary.",
     inlineItems: [inlineItem],
     reviewState: buildPriorReviewState({
-      findings: [finding],
+      findings: [{ finding }],
       reviewedHeadSha: "head",
       selectedTasks: ["review"],
     }),
@@ -574,6 +574,13 @@ async function createGitLabConformanceHarness(): Promise<CodeHostAdapterConforma
         body,
         author: { id: 2, username: "developer" },
       });
+    },
+    setFirstInlineResolved(resolved) {
+      const root = client.discussions.find(
+        (item) => item.notes[0]?.author?.username === "pipr-bot" && item.notes[0]?.position,
+      )?.notes[0];
+      if (!root) throw new Error("GitLab conformance discussion not found");
+      root.resolved = resolved;
     },
     ownedReplyBodies: () =>
       client.discussions.flatMap((item) =>

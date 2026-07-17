@@ -1,5 +1,6 @@
 import {
   applyInlineFindingMarkers,
+  applyNativeThreadResolutions,
   applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
   extractPriorReviewState,
@@ -21,15 +22,22 @@ export async function loadGitHubPriorReviewState(options: {
   if (!state) {
     return undefined;
   }
-  const inlineBodies = (
-    await options.client.listReviewComments({
-      repo: options.change.repository.slug,
-      pullRequestNumber: options.change.change.number,
-    })
-  )
-    .filter((comment) => comment.authorLogin === ownerLogin)
-    .map((comment) => comment.body ?? "");
-  return applyResolvedFindingMarkers(applyInlineFindingMarkers(state, inlineBodies), inlineBodies);
+  const { ownerComments, threadByCommentId } = await loadOwnedReviewThreads(options, ownerLogin);
+  const inlineBodies = ownerComments.map((comment) => comment.body ?? "");
+  const markerState = applyResolvedFindingMarkers(
+    applyInlineFindingMarkers(state, inlineBodies),
+    inlineBodies,
+  );
+  return applyNativeThreadResolutions(
+    markerState,
+    ownerComments.flatMap((comment) => {
+      const marker = extractInlineFindingMarkerRecords([comment.body ?? ""])[0];
+      const thread = threadByCommentId.get(comment.id);
+      return marker && thread
+        ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved: thread.isResolved }]
+        : [];
+    }),
+  );
 }
 
 export async function loadGitHubInlineThreadContexts(options: {
@@ -37,16 +45,10 @@ export async function loadGitHubInlineThreadContexts(options: {
   change: ChangeRequestEventContext;
 }): Promise<InlineThreadContext[]> {
   const ownerLogin = await options.client.getAuthenticatedUserLogin();
-  const comments = await options.client.listReviewComments({
-    repo: options.change.repository.slug,
-    pullRequestNumber: options.change.change.number,
-  });
-  const ownerComments = comments.filter((comment) => comment.authorLogin === ownerLogin);
-  const threads = await options.client.listReviewThreads({
-    repo: options.change.repository.slug,
-    pullRequestNumber: options.change.change.number,
-  });
-  const threadByCommentId = reviewThreadByCommentId(threads);
+  const { comments, ownerComments, threadByCommentId } = await loadOwnedReviewThreads(
+    options,
+    ownerLogin,
+  );
   const commentById = new Map(comments.map((comment) => [comment.id, comment]));
 
   return ownerComments.flatMap((comment) => {
@@ -79,6 +81,26 @@ export async function loadGitHubInlineThreadContexts(options: {
       },
     ];
   });
+}
+
+async function loadOwnedReviewThreads(
+  options: {
+    client: GitHubPublicationClient;
+    change: ChangeRequestEventContext;
+  },
+  ownerLogin: string,
+) {
+  const coordinates = {
+    repo: options.change.repository.slug,
+    pullRequestNumber: options.change.change.number,
+  };
+  const comments = await options.client.listReviewComments(coordinates);
+  const threads = await options.client.listReviewThreads(coordinates);
+  return {
+    comments,
+    ownerComments: comments.filter((comment) => comment.authorLogin === ownerLogin),
+    threadByCommentId: reviewThreadByCommentId(threads),
+  };
 }
 
 export async function loadGitHubPriorMainComment(options: {

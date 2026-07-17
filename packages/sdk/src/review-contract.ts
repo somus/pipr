@@ -9,6 +9,7 @@ export type ReviewSummary = {
 
 /** One inline review finding targeting a Diff Manifest commentable range. */
 export type ReviewFinding = {
+  issueKey?: string;
   body: string;
   path: string;
   rangeId: string;
@@ -26,6 +27,11 @@ export type ReviewResult = {
 
 const nonEmptyStringSchema = z.string().min(1);
 const positiveIntegerSchema = z.number().int().positive();
+export const issueKeySchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/);
 
 /** Zod schema for a review summary. */
 export const reviewSummarySchema: ZodSchema<ReviewSummary> = z.strictObject({
@@ -35,6 +41,7 @@ export const reviewSummarySchema: ZodSchema<ReviewSummary> = z.strictObject({
 
 /** Zod schema for one inline review finding. */
 export const reviewFindingSchema: ZodSchema<ReviewFinding> = z.strictObject({
+  issueKey: issueKeySchema.optional(),
   body: nonEmptyStringSchema,
   path: nonEmptyStringSchema,
   rangeId: nonEmptyStringSchema,
@@ -74,6 +81,7 @@ export function reviewSchemaExample(): ReviewResult {
     },
     inlineFindings: [
       {
+        issueKey: "example-unsafe-return",
         body: "Specific issue and why it matters.",
         path: "src/example.ts",
         rangeId: "rng_example",

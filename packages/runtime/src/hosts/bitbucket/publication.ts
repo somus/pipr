@@ -2,6 +2,7 @@ import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../..
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
+  applyNativeThreadResolutions,
   applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
   extractPriorReviewState,
@@ -164,7 +165,24 @@ export async function loadBitbucketPriorReviewState(options: {
   const state = extractPriorReviewState(normalizedBody, options.change.change.number);
   if (!state) return undefined;
   const bodies = comments.map((comment) => normalizeBitbucketMarkdown(comment.content.raw));
-  return applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
+  const markerState = applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
+  return applyNativeThreadResolutions(
+    markerState,
+    comments.flatMap((comment) => {
+      const marker = !comment.parent
+        ? extractInlineFindingMarkerRecords([normalizeBitbucketMarkdown(comment.content.raw)])[0]
+        : undefined;
+      return marker
+        ? [
+            {
+              findingId: marker.id,
+              findingHeadSha: marker.head,
+              resolved: comment.resolution !== undefined,
+            },
+          ]
+        : [];
+    }),
+  );
 }
 
 export async function loadBitbucketPriorMainComment(options: {

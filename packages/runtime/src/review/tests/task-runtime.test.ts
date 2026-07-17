@@ -722,7 +722,13 @@ describe("runTaskRuntime", () => {
     const result = await runRuntime({
       plan,
       priorMainComment,
-      priorReviewState: priorReviewStateForTasks(["review"]),
+      priorReviewState: {
+        ...priorReviewStateForTasks(["review"]),
+        findings: priorReviewStateForTasks(["review"]).findings.map((finding) => ({
+          ...finding,
+          issueKey: "http-client-bun-sleep-portability",
+        })),
+      },
     });
 
     expect(result.mainComment).not.toContain("Old review summary.");
@@ -733,6 +739,7 @@ describe("runTaskRuntime", () => {
       inlineFindings: [
         {
           id: "fnd_existing",
+          issueKey: "http-client-bun-sleep-portability",
           status: "open",
           path: "src/a.ts",
           rangeId: "range-1",

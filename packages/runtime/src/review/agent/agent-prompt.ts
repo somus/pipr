@@ -153,6 +153,7 @@ function outputPrompt(schema: Schema<unknown>): string {
     );
     lines.push(
       "For inlineFindings, use only fields shown in the schema. Each finding's path, rangeId, and side must identify one Diff Manifest commentable range, and its startLine and endLine must select a valid span within that range. If no valid span applies, omit the finding.",
+      "Set issueKey to a stable lowercase slug naming the affected symbol or behavior and defect. Keep it stable when wording, lines, or ranges move, and reuse an exact prior issueKey for the same concern.",
       ...inlineSelectionPromptLines(),
       `For inlineFindings.body, write the exact inline comment body. Use one short paragraph, at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters. Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target; prefer 250-450 characters when possible.`,
     );
@@ -242,8 +243,13 @@ function pathScopePrompt(paths: PathFilter | undefined): string | undefined {
 }
 
 function priorFindingsPrompt(state: PriorReviewState | undefined): string | undefined {
-  const openFindings = state?.findings.filter((finding) => finding.status === "open") ?? [];
-  if (openFindings.length === 0) {
+  const findings =
+    state?.findings.filter(
+      (finding) =>
+        finding.status === "open" ||
+        (finding.issueKey !== undefined && finding.anchorFingerprint !== undefined),
+    ) ?? [];
+  if (findings.length === 0) {
     return undefined;
   }
   return [
@@ -251,8 +257,10 @@ function priorFindingsPrompt(state: PriorReviewState | undefined): string | unde
     JSON.stringify(
       {
         reviewedHeadSha: state?.reviewedHeadSha,
-        findings: openFindings.map((finding) => ({
+        findings: findings.map((finding) => ({
           id: finding.id,
+          status: finding.status,
+          ...(finding.issueKey ? { issueKey: finding.issueKey } : {}),
           path: finding.path,
           rangeId: finding.rangeId,
           side: finding.side,
@@ -265,6 +273,7 @@ function priorFindingsPrompt(state: PriorReviewState | undefined): string | unde
     ),
     "Prior locations are hints, not evidence that an issue remains. Re-check them against the current diff and repository context.",
     "If a prior finding still applies, emit one current inline finding for the same issue. If it no longer applies, omit it. If current evidence is insufficient, omit the finding.",
+    "When a current concern is the same as a keyed prior finding, reuse its exact issueKey. Pipr suppresses resolved concerns only while their selected code is unchanged; report the keyed concern again when that code materially changes.",
   ].join("\n");
 }
 

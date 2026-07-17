@@ -196,7 +196,7 @@ const result = await ctx.pi.run(reviewer, { manifest, prior });
 
 ### Prior fields
 
-Prior state includes previous inline finding ids, status, path, range id, side, and lines for the same task scope. Pipr also passes matching open prior locations to default review agents.
+Prior state includes previous inline finding IDs, optional stable issue keys, status, path, range ID, side, and lines for the same task scope. Pipr passes matching open findings and keyed resolved findings to default review agents. When a concern matches a prior resolved finding, reuse its exact `issueKey`; Pipr suppresses it while the normalized selected code is unchanged and makes it publishable again when that code changes.
 
 ## Checks
 

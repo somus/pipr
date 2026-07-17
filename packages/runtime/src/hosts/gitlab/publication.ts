@@ -2,6 +2,7 @@ import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../..
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
+  applyNativeThreadResolutions,
   applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
   extractPriorReviewState,
@@ -172,7 +173,17 @@ export async function loadGitLabPriorReviewState(options: {
   const bodies = discussionNotes(discussions)
     .filter((note) => note.author?.username === owner.username)
     .map((note) => note.body);
-  return applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
+  const markerState = applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
+  return applyNativeThreadResolutions(
+    markerState,
+    discussions.flatMap((discussion) => {
+      const root = discussion.notes[0];
+      const marker = root ? extractInlineFindingMarkerRecords([root.body])[0] : undefined;
+      return root && marker && root.author?.username === owner.username
+        ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved: root.resolved ?? false }]
+        : [];
+    }),
+  );
 }
 
 export async function loadGitLabPriorMainComment(options: {

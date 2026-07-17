@@ -659,6 +659,17 @@ async function createGitHubConformanceHarness(): Promise<CodeHostAdapterConforma
       });
       thread.commentIds.push(id);
     },
+    setFirstInlineResolved(resolved) {
+      const thread = client.threads.find((item) =>
+        item.commentIds.some((id) =>
+          client.reviewComments.some(
+            (comment) => comment.id === id && comment.authorLogin === "pipr-bot" && comment.path,
+          ),
+        ),
+      );
+      if (!thread) throw new Error("GitHub conformance thread not found");
+      thread.isResolved = resolved;
+    },
     ownedReplyBodies: () =>
       client.reviewComments
         .filter((comment) => comment.authorLogin === "pipr-bot" && !comment.path)

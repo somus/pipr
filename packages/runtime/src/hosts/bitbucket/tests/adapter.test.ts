@@ -302,7 +302,7 @@ function publicationPlan() {
     main: "Summary",
     inlineItems: [item],
     reviewState: buildPriorReviewState({
-      findings: [item.finding],
+      findings: [{ finding: item.finding }],
       reviewedHeadSha: "head",
       selectedTasks: ["review"],
     }),
@@ -555,6 +555,13 @@ async function createBitbucketConformanceHarness(): Promise<CodeHostAdapterConfo
         user: { uuid: "{developer}", nickname: "developer" },
         parent: { id: root.id },
       });
+    },
+    setFirstInlineResolved(resolved) {
+      const root = client.comments.find(
+        (comment) => comment.inline && comment.user?.uuid === "{bot}",
+      );
+      if (!root) throw new Error("Bitbucket conformance thread not found");
+      root.resolution = resolved ? { type: "resolution" } : undefined;
     },
     ownedReplyBodies: () =>
       client.comments

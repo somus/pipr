@@ -352,6 +352,7 @@ describe("publishGitHubPublicationPlan", () => {
 
   it("loads resolved markers into prior review state", async () => {
     const { client, finding, publicationPlan } = staleResolutionFixture({ resolved: false });
+    client.reviewThreads = [];
     client.issueComments.push({
       id: 20,
       body: publicationPlan.mainComment,

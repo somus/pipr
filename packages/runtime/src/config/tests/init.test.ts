@@ -202,6 +202,7 @@ describe("initOfficialMinimalProject", () => {
     const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
 
     expect(configTs).toContain("reviewSummarySchema");
+    expect(configTs).toContain("issueKey: issueKeySchema.optional()");
     expect(configTs).toContain("changeSummary: z.array(z.string()).min(1).max(4)");
     expect(configTs).toContain("reviewerFocus: z.array(z.string()).max(4)");
     expect(configTs).toContain("summaryTable(result.summary)");
@@ -315,6 +316,7 @@ describe("initOfficialMinimalProject", () => {
         },
         findings: [
           {
+            issueKey: "request-handler-skipped-fallback",
             title: "Fallback **value** is skipped",
             severity: "medium",
             category: "correctness",
@@ -339,6 +341,10 @@ describe("initOfficialMinimalProject", () => {
     expect(result.mainComment).toContain("No special reviewer focus.");
     expect(result.mainComment).not.toContain("<summary>Finding rationales</summary>");
     expect(result.inlineCommentDrafts).toHaveLength(1);
+    expect(result.publicationPlan.reviewState.findings[0]).toMatchObject({
+      issueKey: "request-handler-skipped-fallback",
+      anchorFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
     expect(result.inlineCommentDrafts[0]?.body).toContain(
       [
         "**Medium correctness:** Fallback **value** is skipped",
