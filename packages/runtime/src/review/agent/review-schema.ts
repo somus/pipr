@@ -130,6 +130,14 @@ function alternativePropertyMasks(
 function reviewFindingPropertyMask(schema: Record<string, unknown>): number {
   let mask = 0;
   const properties = isRecord(schema.properties) ? schema.properties : {};
+  const patternProperties = isRecord(schema.patternProperties) ? schema.patternProperties : {};
+  const propertyPatterns = Object.keys(patternProperties).flatMap((pattern): RegExp[] => {
+    try {
+      return [new RegExp(pattern)];
+    } catch {
+      return [];
+    }
+  });
   const required = new Set(
     Array.isArray(schema.required)
       ? schema.required.filter(
@@ -138,7 +146,11 @@ function reviewFindingPropertyMask(schema: Record<string, unknown>): number {
       : [],
   );
   for (const [index, propertyName] of reviewFindingPropertyNames.entries()) {
-    if (propertyName in properties || required.has(propertyName)) {
+    if (
+      propertyName in properties ||
+      required.has(propertyName) ||
+      propertyPatterns.some((pattern) => pattern.test(propertyName))
+    ) {
       mask |= 1 << index;
     }
   }

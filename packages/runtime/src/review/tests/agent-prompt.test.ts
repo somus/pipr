@@ -208,6 +208,22 @@ const requiredPatternCustomReviewSchema: Schema<unknown> = {
   },
 };
 
+const patternOnlyCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/pattern-only-custom-review",
+  jsonSchema: {
+    type: "object",
+    patternProperties: {
+      "^body$": { type: "string" },
+      "^path$": { type: "string" },
+      "^rangeId$": { type: "string" },
+      "^side$": { enum: ["RIGHT", "LEFT"] },
+      "^startLine$": { type: "number" },
+      "^endLine$": { type: "number" },
+    },
+  },
+};
+
 const arrayPointerCustomReviewSchema: Schema<unknown> = {
   ...unknownSchema,
   id: "test/array-pointer-custom-review",
@@ -407,6 +423,13 @@ describe("renderAgentPrompt", () => {
 
   it("includes review policy for finding fields declared through required", async () => {
     const prompt = await renderTestPrompt(requiredPatternCustomReviewSchema, {}, undefined, true);
+
+    expect(prompt).toContain("Review Policy:");
+    expect(prompt).toContain("Inline Review Selection Policy:");
+  });
+
+  it("includes review policy for finding fields declared through patterns", async () => {
+    const prompt = await renderTestPrompt(patternOnlyCustomReviewSchema, {}, undefined, true);
 
     expect(prompt).toContain("Review Policy:");
     expect(prompt).toContain("Inline Review Selection Policy:");
