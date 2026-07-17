@@ -96,17 +96,17 @@ function selectedCodeFingerprint(
   const lines = range.preview.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
   const startOffset = finding.startLine - range.startLine;
   const endOffset = finding.endLine - range.startLine + 1;
+  if (startOffset < 0 || endOffset > lines.length) {
+    return undefined;
+  }
   const selected = lines
     .slice(startOffset, endOffset)
     .map((line) => line.trimEnd())
     .join("\n");
-  if (startOffset < 0 || endOffset > lines.length) {
-    return undefined;
-  }
   return new Bun.CryptoHasher("sha256").update(selected).digest("hex");
 }
 
-function findingIssueFingerprint(finding: ReviewFinding): string {
+function findingIssueFingerprint(finding: ReviewFinding): string | undefined {
   const normalized = finding.body
     .normalize("NFKC")
     .toLowerCase()
@@ -116,5 +116,8 @@ function findingIssueFingerprint(finding: ReviewFinding): string {
     .trim()
     .replace(/\s+/g, " ");
   const identity = normalized || finding.body.normalize("NFKC").toLowerCase().trim();
+  if (!identity) {
+    return undefined;
+  }
   return new Bun.CryptoHasher("sha256").update(identity).digest("hex");
 }

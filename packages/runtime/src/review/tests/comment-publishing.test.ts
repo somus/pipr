@@ -297,6 +297,19 @@ describe("buildCommentPublishingPlan", () => {
     );
   });
 
+  it("does not persist an empty concern identity", () => {
+    const publishing = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [finding("   ", "range-1", 10)] },
+      manifest,
+      metadata: metadata({ validFindings: 1 }),
+    });
+
+    expect(publishing.inlineCommentDrafts).toEqual([]);
+    expect(publishing.publicationPlan.reviewState.findings).toEqual([]);
+  });
+
   it("republishes a resolved issue when its selected code changes", () => {
     const currentFinding = finding("Portability concern.", "range-1", 10);
     const changedManifest: DiffManifest = {
