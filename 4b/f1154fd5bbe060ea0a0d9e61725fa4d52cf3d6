@@ -1,0 +1,33 @@
+scripts/tests/release-scripts.test.ts
+  s_fbd3eab021fa2a::t_95d96dccdad500 197-199
+  s_fbd3eab021fa2a::t_636acb0670e249 200-201,209-217,379-382
+apps/docs/playwright.config.ts
+  s_fbd3eab021fa2a::t_842b018cbf333a 5
+package.json
+  s_fbd3eab021fa2a::t_636acb0670e249 30,63
+apps/docs/package.json
+  s_fbd3eab021fa2a::t_636acb0670e249 8-9,16-17,20-21
+apps/docs/content/docs/project/development.mdx
+  s_fbd3eab021fa2a::t_636acb0670e249 60,186
+packages/runtime/src/host-run/tests/action-result.test.ts
+  s_fbd3eab021fa2a::t_636acb0670e249 71-116,119-127
+  s_fbd3eab021fa2a::t_8f3f67c310311b 128
+apps/docs/turbo.json
+  s_fbd3eab021fa2a::t_636acb0670e249 5-7,9,12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "4bf1154fd5bbe060ea0a0d9e61725fa4d52cf3d6",
+  "prompts": {},
+  "sessions": {
+    "s_fbd3eab021fa2a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7190-79e7-7143-8187-a62c7803adfa",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
