@@ -1,0 +1,22 @@
+packages/runtime/src/review/comment-publishing.ts
+  s_c535aab79d040b::t_a31b343e7c21c9 99-101,109,119-121
+packages/runtime/src/review/tests/comment-publishing.test.ts
+  s_c535aab79d040b::t_a863d3503a7242 300,309-310
+  s_c535aab79d040b::t_a31b343e7c21c9 301-308,311-312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "5d0c6c47d7e30141aa74400077b7b3a76449f3ef",
+  "prompts": {},
+  "sessions": {
+    "s_c535aab79d040b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7060-ac32-7c80-ae32-2ac7719eab62",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
