@@ -220,17 +220,28 @@ describe("diff manifest parsing", () => {
     });
   });
 
-  it("excludes removed, lock, and generated files from inline ranges", async () => {
+  it("excludes removed, lock, and generated files before generating patch content", async () => {
     await withGitRepo(async (repo) => {
       await mkdir(path.join(repo, "src"), { recursive: true });
       await mkdir(path.join(repo, "dist"), { recursive: true });
+      await Bun.write(
+        path.join(repo, ".gitattributes"),
+        `${[
+          "src/deleted.ts diff=pipr-excluded",
+          "bun.lock diff=pipr-excluded",
+          "dist/out.js diff=pipr-excluded",
+        ].join("\n")}\n`,
+      );
+      git(repo, "config", "diff.pipr-excluded.textconv", "false");
       await Bun.write(path.join(repo, "src/deleted.ts"), "old\n");
+      await Bun.write(path.join(repo, "src/included.ts"), "before\n");
       await Bun.write(path.join(repo, "bun.lock"), "lock-v1\n");
       await Bun.write(path.join(repo, "dist/out.js"), "generated-v1\n");
       commitAll(repo, "base");
       const baseSha = git(repo, "rev-parse", "HEAD");
 
       await rm(path.join(repo, "src/deleted.ts"));
+      await Bun.write(path.join(repo, "src/included.ts"), "after\n");
       await Bun.write(path.join(repo, "bun.lock"), "lock-v2\n");
       await Bun.write(path.join(repo, "dist/out.js"), "generated-v2\n");
       commitAll(repo, "head");
@@ -254,6 +265,39 @@ describe("diff manifest parsing", () => {
         hunks: [],
         commentableRanges: [],
       });
+      expect(changedFile(manifest, "src/included.ts")?.commentableRanges).toEqual(
+        expect.arrayContaining([expect.objectContaining({ preview: "after" })]),
+      );
+    });
+  });
+
+  it("excludes both sides of a generated rename before generating an empty patch", async () => {
+    await withGitRepo(async (repo) => {
+      await mkdir(path.join(repo, "src"), { recursive: true });
+      await mkdir(path.join(repo, "dist"), { recursive: true });
+      await Bun.write(
+        path.join(repo, ".gitattributes"),
+        `${["src/old.ts diff=pipr-excluded", "dist/new.ts diff=pipr-excluded"].join("\n")}\n`,
+      );
+      git(repo, "config", "diff.pipr-excluded.textconv", "false");
+      await Bun.write(path.join(repo, "src/old.ts"), makeNumberedLines("line", 20));
+      commitAll(repo, "base");
+      const baseSha = git(repo, "rev-parse", "HEAD");
+
+      await rename(path.join(repo, "src/old.ts"), path.join(repo, "dist/new.ts"));
+      commitAll(repo, "head");
+      const headSha = git(repo, "rev-parse", "HEAD");
+
+      expect(buildDiffManifest({ cwd: repo, baseSha, headSha }).files).toMatchObject([
+        {
+          path: "dist/new.ts",
+          previousPath: "src/old.ts",
+          status: "renamed",
+          excludedReason: "generated or build output",
+          hunks: [],
+          commentableRanges: [],
+        },
+      ]);
     });
   });
 

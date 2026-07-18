@@ -39,13 +39,13 @@ export function buildDiffManifest(options: BuildDiffManifestOptions): DiffManife
     buildDiffArgs(["--name-status", "-z", "--find-renames"], mergeBaseSha, diffHead),
     options.cwd,
   );
+  const files = parseNameStatus(nameStatus);
   const diffStats = getDiffStats(options.cwd, mergeBaseSha, diffHead);
-  const preExcludedFiles = getPreExcludedFiles(diffStats);
+  const preExcludedFiles = getPreExcludedFiles(files, diffStats);
   const rawPatch = parseRawPatch(
     runGit(buildUnifiedDiffArgs(mergeBaseSha, diffHead, preExcludedFiles), options.cwd),
   );
 
-  const files = parseNameStatus(nameStatus);
   const parsedDiff = parseUnifiedDiff(rawPatch.patch, rawPatch.filePaths);
   for (const file of files) {
     const stats = diffStats.get(file.path);
@@ -131,11 +131,24 @@ function getDiffStats(
   return stats;
 }
 
-function getPreExcludedFiles(stats: Map<string, DiffStat>): Map<string, string> {
+function getPreExcludedFiles(
+  files: readonly DiffFile[],
+  stats: Map<string, DiffStat>,
+): Map<string, string> {
   const excluded = new Map<string, string>();
   for (const [filePath, stat] of stats) {
     if (stat.excludedReason) {
       excluded.set(filePath, stat.excludedReason);
+    }
+  }
+  for (const file of files) {
+    const excludedReason = excluded.get(file.path) ?? getPathExcludedReason(file);
+    if (!excludedReason) {
+      continue;
+    }
+    excluded.set(file.path, excludedReason);
+    if (file.previousPath) {
+      excluded.set(file.previousPath, excludedReason);
     }
   }
   return excluded;
@@ -276,6 +289,20 @@ function parseFileStatus(rawStatus: string): FileStatus {
 }
 
 function getExcludedReason(file: DiffFile): string | undefined {
+  const pathExcludedReason = getPathExcludedReason(file);
+  if (pathExcludedReason) {
+    return pathExcludedReason;
+  }
+  if (file.additions + file.deletions > maxInlineChangedLines) {
+    return "oversized diff";
+  }
+  if (commentableRangeLineCount(file.commentableRanges) > maxCommentableRangeLines) {
+    return "oversized diff";
+  }
+  return undefined;
+}
+
+function getPathExcludedReason(file: Pick<DiffFile, "path" | "status">): string | undefined {
   if (file.status === "removed") {
     return "removed file";
   }
@@ -284,12 +311,6 @@ function getExcludedReason(file: DiffFile): string | undefined {
   }
   if (generatedPattern.test(file.path)) {
     return "generated or build output";
-  }
-  if (file.additions + file.deletions > maxInlineChangedLines) {
-    return "oversized diff";
-  }
-  if (commentableRangeLineCount(file.commentableRanges) > maxCommentableRangeLines) {
-    return "oversized diff";
   }
   return undefined;
 }
