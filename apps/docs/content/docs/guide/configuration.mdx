@@ -131,6 +131,8 @@ Limit manifest size before model execution while preserving authoritative ranges
 
 Pipr sends the full Diff Manifest while it fits configured limits. When it is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools for range-scoped context.
 
+Pipr also enforces a fixed 16 MiB construction limit after excluding binary, removed, lock, generated-output, and oversized files. If the remaining reviewable patch exceeds the limit, the review fails before Pi runs instead of producing a partial Diff Manifest.
+
 ```ts twoslash
 // @include: pipr-builder
 pipr.config({

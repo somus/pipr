@@ -382,6 +382,21 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
+  it("fails pull request host runs before Pi when aggregate patch output exceeds 16 MiB", async () => {
+    const workspace = await createCommandWorkspace({
+      aggregatePatchOver16MiB: true,
+      checkoutBaseBeforeRun: true,
+    });
+    try {
+      await expect(runPullRequestAction(workspace)).rejects.toThrow(
+        "Diff Manifest construction exceeded aggregate patch limit before parsing; limit=16777216 bytes",
+      );
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("logs bounded Pi failure snippets without leaking secret env values", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const logs = memoryRuntimeLogSink();
