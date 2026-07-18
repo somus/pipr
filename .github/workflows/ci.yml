@@ -29,9 +29,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
       - name: Check PR title
-        run: bun scripts/check-conventional-commit.ts --title "$PIPR_PR_TITLE"
+        run: bun scripts/check-conventional-commit.ts --title "$PIPR_PR_TITLE" --range "$PIPR_BASE_SHA..$PIPR_HEAD_SHA"
         env:
           PIPR_PR_TITLE: ${{ github.event.pull_request.title }}
+          PIPR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PIPR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       - name: Check commit subjects
         run: bun scripts/check-conventional-commit.ts --range "$PIPR_BASE_SHA..$PIPR_HEAD_SHA"
         env:

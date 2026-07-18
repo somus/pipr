@@ -18,11 +18,19 @@ if (args[0] === "--message") {
   }
   await checkTemporaryMessage(message, checkGeneratedOrConventionalFile);
 } else if (args[0] === "--title") {
-  const title = args.slice(1).join(" ");
+  const rangeIndex = args.indexOf("--range", 1);
+  const title = args.slice(1, rangeIndex === -1 ? undefined : rangeIndex).join(" ");
   if (!title) {
     throw new Error("--title requires a value");
   }
   await checkTemporaryMessage(title, runConventionalCommitCheck);
+  if (rangeIndex !== -1) {
+    const range = args[rangeIndex + 1];
+    if (!range || args[rangeIndex + 2]) {
+      throw new Error("--range requires one git revision range");
+    }
+    checkDogfoodOnlyTitle(title, range);
+  }
 } else if (args[0] === "--range") {
   const range = args[1];
   if (!range) {
@@ -49,6 +57,25 @@ async function checkRange(range: string): Promise<void> {
   const subjects = result.stdout.toString().split("\n").filter(Boolean);
   for (const subject of subjects) {
     await checkTemporaryMessage(subject, checkGeneratedOrConventionalFile);
+  }
+}
+
+function checkDogfoodOnlyTitle(title: string, range: string): void {
+  const result = Bun.spawnSync(["git", "diff", "--name-only", range], {
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.toString().trim() || `git diff failed for ${range}`);
+  }
+
+  const changedFiles = result.stdout.toString().split("\n").filter(Boolean);
+  if (
+    changedFiles.length > 0 &&
+    changedFiles.every((file) => file.startsWith(".pipr/")) &&
+    !/^chore(?:\([^)]+\))?: .+/.test(title)
+  ) {
+    throw new Error("dogfood-only changes must use a non-breaking chore PR title");
   }
 }
 
@@ -107,6 +134,6 @@ function isMissingExecutableError(error: unknown): boolean {
 
 function usage(): never {
   throw new Error(
-    "usage: check-conventional-commit.ts <commit-msg-file> | --message <subject> | --title <title> | --range <base..head>",
+    "usage: check-conventional-commit.ts <commit-msg-file> | --message <subject> | --title <title> [--range <base..head>] | --range <base..head>",
   );
 }
