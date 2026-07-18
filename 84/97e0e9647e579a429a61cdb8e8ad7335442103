@@ -1,0 +1,19 @@
+.pipr/config.ts
+  s_49ee0ec12235f4::t_4d1373c1c4606a 42-45,97-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "8497e0e9647e579a429a61cdb8e8ad7335442103",
+  "prompts": {},
+  "sessions": {
+    "s_49ee0ec12235f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7387-dd84-7933-b0d8-da24de954b3d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
