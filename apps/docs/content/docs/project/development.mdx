@@ -59,6 +59,12 @@ bun run check:docs
 
 Turbo runs docs type generation once before the dependent generated test, typecheck, and build tasks. The app-scoped commands also generate their prerequisites when run directly.
 
+Validate the deployed Nginx image, including legacy redirects and the hosted install script:
+
+```bash
+bun run docker:docs-e2e
+```
+
 ### Docs build
 
 Run the full docs build only when validating docs deployment output:

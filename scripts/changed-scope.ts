@@ -76,6 +76,9 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
     return (
       file.startsWith("apps/docs/") ||
       file.startsWith("docs/") ||
+      file === "Dockerfile.docs" ||
+      file === "install.sh" ||
+      file === "scripts/docs-docker-e2e.ts" ||
       file.startsWith("packages/sdk/src/") ||
       file === "packages/sdk/tsconfig.json" ||
       file === "packages/runtime/src/config/recipes.ts" ||
@@ -120,9 +123,11 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
     file === "packages/e2e/package.json" ||
     file === "packages/e2e/action-fixture.ts" ||
     file === "packages/e2e/action-metadata.ts" ||
+    file === "packages/e2e/action-run-plan.ts" ||
     file === "packages/e2e/assertions.ts" ||
     file === "packages/e2e/check.ts" ||
     file === "packages/e2e/container-check.ts" ||
+    file === "packages/e2e/docker-e2e-plan.ts" ||
     file === "packages/e2e/fake-pi" ||
     file === "packages/e2e/pi-contract.ts" ||
     file === "packages/e2e/run.ts" ||

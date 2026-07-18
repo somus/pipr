@@ -31,6 +31,20 @@ const excludedFixturePaths = new Set([
   "node_modules",
 ]);
 
+type Workflow = {
+  on: {
+    schedule?: Array<{ cron: string }>;
+    workflow_dispatch?: unknown;
+  };
+  jobs: Record<
+    string,
+    {
+      steps?: Array<{ "continue-on-error"?: boolean; run?: string }>;
+      strategy?: { matrix?: { include?: Array<{ name?: string }> } };
+    }
+  >;
+};
+
 let tempDir: string;
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "pipr-scripts-"));
@@ -144,6 +158,9 @@ describe("changed-scope", () => {
 
   it("includes package inputs consumed by docs", () => {
     for (const file of [
+      "Dockerfile.docs",
+      "install.sh",
+      "scripts/docs-docker-e2e.ts",
       "packages/sdk/src/index.ts",
       "packages/sdk/src/types/task.ts",
       "packages/sdk/tsconfig.json",
@@ -165,9 +182,11 @@ describe("changed-scope", () => {
     for (const file of [
       "packages/e2e/action-fixture.ts",
       "packages/e2e/action-metadata.ts",
+      "packages/e2e/action-run-plan.ts",
       "packages/e2e/assertions.ts",
       "packages/e2e/check.ts",
       "packages/e2e/container-check.ts",
+      "packages/e2e/docker-e2e-plan.ts",
       "packages/e2e/fake-pi",
       "packages/e2e/package.json",
       "packages/e2e/pi-contract.ts",
@@ -218,19 +237,23 @@ describe("developer checks", () => {
   });
 
   it("runs the runtime CI package gate once", () => {
-    const workflow = readFileSync(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
-    expect(workflow).toContain("          - name: runtime\n");
-    expect(workflow).not.toContain("          - name: runtime-init\n");
-    expect(workflow).not.toContain("          - name: runtime-config\n");
-    expect(workflow).not.toContain("          - name: runtime-core\n");
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const matrix = workflow.jobs.packages?.strategy?.matrix?.include ?? [];
+    expect(matrix.filter((entry) => entry.name === "runtime")).toHaveLength(1);
+    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-init");
+    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-config");
+    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-core");
   });
 
   it("runs scheduled live evals in an advisory container lane", () => {
-    const workflow = readFileSync(path.join(repoRoot, ".github/workflows/evals.yml"), "utf8");
+    const workflow = parseWorkflow(".github/workflows/evals.yml");
     const dockerfile = readFileSync(path.join(repoRoot, "Dockerfile"), "utf8");
-    expect(workflow).toContain("schedule:");
-    expect(workflow).toContain("continue-on-error: true");
-    expect(workflow).toContain("--target evals");
+    expect(workflow.on.schedule).toEqual([{ cron: "17 3 * * 1" }]);
+    expect(workflow.on).toHaveProperty("workflow_dispatch");
+    const advisory = workflow.jobs.advisory;
+    expect(advisory).toBeDefined();
+    expect(advisory?.steps?.some((step) => step["continue-on-error"] === true)).toBe(true);
+    expect(advisory?.steps?.some((step) => step.run?.includes("--target evals"))).toBe(true);
     expect(dockerfile).toContain("FROM build AS evals");
     expect(dockerfile).toContain('CMD ["bun", "run", "eval:full:export"]');
   });
@@ -437,12 +460,6 @@ describe("CLI package bundled skills", () => {
 });
 
 describe("install.sh", () => {
-  it("is published by the docs image at the hosted install URL path", () => {
-    expect(readFileSync(path.join(repoRoot, "Dockerfile.docs"), "utf8")).toContain(
-      "COPY install.sh /usr/share/nginx/html/install.sh",
-    );
-  });
-
   it("uses the hosted install URL in docs and generated recipe sources", () => {
     const oldInstallUrl = "https://raw.githubusercontent.com/somus/pipr/main/install.sh";
     const checkedFiles = [
@@ -739,6 +756,10 @@ function run(
   }
 }
 
+function parseWorkflow(relativePath: string): Workflow {
+  return Bun.YAML.parse(readFileSync(path.join(repoRoot, relativePath), "utf8")) as Workflow;
+}
+
 function git(cwd: string, ...args: string[]): string {
   const result = Bun.spawnSync(["git", ...args], {
     cwd,
@@ -891,7 +912,6 @@ function bumpReleaseFixture(repository: string, version: string): void {
     "action.yml",
     "README.md",
     "packages/runtime/src/config/init.ts",
-    "packages/runtime/src/config/tests/init.test.ts",
     "packages/cli/src/tests/main.test.ts",
     "apps/docs/scripts/sync-recipes.ts",
   ]) {

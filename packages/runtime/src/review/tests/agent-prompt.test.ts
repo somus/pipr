@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Agent, Schema } from "@usepipr/sdk";
+import type { Agent, JsonObject, Schema } from "@usepipr/sdk";
 import { type AgentRunContext, renderAgentPrompt } from "../agent/agent-prompt.js";
 import type { PreparedDiffManifestContext } from "../agent/diff-manifest-context.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
@@ -77,7 +77,7 @@ const reviewFindingDefinition = {
     startLine: { type: "number" },
     endLine: { type: "number" },
   },
-};
+} satisfies JsonObject;
 
 const referencedCustomReviewSchema: Schema<unknown> = {
   ...unknownSchema,
@@ -315,7 +315,64 @@ const scalarOneOfSchemaWithFindingProperties: Schema<unknown> = {
   },
 };
 
+const singleSchemaKeywords = [
+  "additionalItems",
+  "additionalProperties",
+  "contains",
+  "else",
+  "if",
+  "items",
+  "then",
+  "unevaluatedProperties",
+] as const;
+const schemaArrayKeywords = ["allOf", "anyOf", "oneOf", "prefixItems"] as const;
+const schemaMapKeywords = ["dependentSchemas", "patternProperties", "properties"] as const;
+
+function customSchemaThroughKeyword(keyword: string, child: JsonObject): Schema<unknown> {
+  const keywordValue = schemaArrayKeywords.includes(keyword as never)
+    ? [child]
+    : schemaMapKeywords.includes(keyword as never)
+      ? { nested: child }
+      : child;
+  return {
+    ...unknownSchema,
+    id: `test/custom-review-${keyword}`,
+    jsonSchema: { type: "object", [keyword]: keywordValue },
+  };
+}
+
 describe("renderAgentPrompt", () => {
+  for (const keyword of [...singleSchemaKeywords, ...schemaArrayKeywords, ...schemaMapKeywords]) {
+    it(`includes each review policy once when a finding is reachable through ${keyword}`, async () => {
+      const prompt = await renderTestPrompt(
+        customSchemaThroughKeyword(keyword, reviewFindingDefinition),
+        {},
+        undefined,
+        true,
+      );
+
+      expect(prompt).toContain("Review Policy:");
+      expect(prompt).toContain("Inline Review Selection Policy:");
+      expect(prompt.match(/^Review Policy:/gm)).toHaveLength(1);
+      expect(prompt.match(/^Inline Review Selection Policy:/gm)).toHaveLength(1);
+    });
+
+    it(`omits review policy when ${keyword} reaches only a scalar schema`, async () => {
+      const prompt = await renderTestPrompt(
+        customSchemaThroughKeyword(keyword, {
+          type: "string",
+          properties: reviewFindingDefinition.properties,
+        }),
+        {},
+        undefined,
+        true,
+      );
+
+      expect(prompt).not.toContain("Review Policy:");
+      expect(prompt).not.toContain("Inline Review Selection Policy:");
+    });
+  }
+
   it("includes bounded untrusted change request context for every agent", async () => {
     const description = "d".repeat(4100);
     const prompt = await renderTestPrompt(unknownSchema, { description });
