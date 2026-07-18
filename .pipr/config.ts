@@ -39,6 +39,10 @@ const reviewSummarySchema = z.strictObject({
   reviewerFocus: z.array(z.string()).max(4),
 });
 
+function escapeInlineCommentHtml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
 export default definePipr((pipr) => {
   const model = pipr.model({
     provider: "deepseek",
@@ -90,7 +94,18 @@ export default definePipr((pipr) => {
         const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
         const category = finding.category.replaceAll("-", " ");
         return {
-          body: `**${severity} ${category}:** ${finding.title}. ${finding.body} ${finding.rationale}`,
+          body: [
+            `**${severity} ${category}:** ${escapeInlineCommentHtml(finding.title)}`,
+            "",
+            escapeInlineCommentHtml(finding.body),
+            "",
+            "<details>",
+            "<summary>Rationale</summary>",
+            "",
+            escapeInlineCommentHtml(finding.rationale),
+            "",
+            "</details>",
+          ].join("\n"),
           path: finding.path,
           rangeId: finding.rangeId,
           side: finding.side,
