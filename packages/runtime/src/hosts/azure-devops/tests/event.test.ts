@@ -30,6 +30,46 @@ describe("Azure DevOps event parser", () => {
     });
   });
 
+  it("rejects invalid pipeline coordinates before loading the pull request", async () => {
+    const validEnv: NodeJS.ProcessEnv = {
+      SYSTEM_COLLECTIONURI: "https://dev.azure.com/org/",
+      SYSTEM_TEAMPROJECT: "project",
+      BUILD_REPOSITORY_ID: "repo-id",
+      SYSTEM_PULLREQUEST_PULLREQUESTID: "7",
+    };
+    let loadCalls = 0;
+    const loadChangeRequest = async () => {
+      loadCalls += 1;
+      throw new Error("invalid coordinates must not load the pull request");
+    };
+    for (const name of [
+      "SYSTEM_COLLECTIONURI",
+      "SYSTEM_TEAMPROJECT",
+      "BUILD_REPOSITORY_ID",
+      "SYSTEM_PULLREQUEST_PULLREQUESTID",
+    ] as const) {
+      for (const value of [undefined, ""]) {
+        await expect(
+          parseAzureDevOpsEvent({
+            env: { ...validEnv, [name]: value },
+            workspace: "/workspace",
+            loadChangeRequest,
+          }),
+        ).rejects.toThrow(`${name} is required for Azure DevOps pipeline events`);
+      }
+    }
+    for (const value of ["0", "-1", "1.5", "nope"]) {
+      await expect(
+        parseAzureDevOpsEvent({
+          env: { ...validEnv, SYSTEM_PULLREQUEST_PULLREQUESTID: value },
+          workspace: "/workspace",
+          loadChangeRequest,
+        }),
+      ).rejects.toThrow("SYSTEM_PULLREQUEST_PULLREQUESTID must be a positive integer");
+    }
+    expect(loadCalls).toBe(0);
+  });
+
   it("ignores draft branch-policy pull requests", async () => {
     await expect(
       parseAzureDevOpsEvent({

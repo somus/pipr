@@ -60,7 +60,7 @@
         },
         {
           "type": "generic",
-          "path": "packages/runtime/src/config/tests/init.test.ts"
+          "path": "packages/runtime/src/config/tests/init-project.test.ts"
         },
         {
           "type": "generic",

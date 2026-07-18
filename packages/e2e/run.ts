@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { join } from "node:path";
 import { renderActActionMetadata } from "./action-metadata.ts";
+import { actArguments, containerArchitecture } from "./action-run-plan.ts";
 import {
   actionFixtureScript,
   envValue,
@@ -17,7 +18,6 @@ import {
 
 const actionImage = envValue("PIPR_ACTION_IMAGE") ?? "pipr-action:act";
 const runnerImage = envValue("PIPR_ACT_RUNNER_IMAGE") ?? "catthehacker/ubuntu:act-latest";
-const containerArchitecture = process.arch === "arm64" ? "linux/arm64" : "linux/amd64";
 const githubToken = githubExpression("github.token");
 const githubWorkspace = githubExpression("github.workspace");
 const githubHeadSha = githubExpression("github.event.pull_request.head.sha");
@@ -39,20 +39,11 @@ try {
   ensureActRunnerImage();
   run(
     "act",
-    [
-      "pull_request",
-      "-W",
-      `.github/workflows/${scenario.workflowFile}`,
-      "-e",
-      scenario.eventFile,
-      "-P",
-      `ubuntu-latest=${runnerImage}`,
-      "--container-architecture",
-      containerArchitecture,
-      "--bind",
-      "--pull=false",
-      "--rm",
-    ],
+    actArguments({
+      eventFile: scenario.eventFile,
+      runnerImage,
+      workflowFile: scenario.workflowFile,
+    }),
     prepared.worktree,
   );
 } finally {

@@ -38,4 +38,5 @@ jobs:
         if: always()
         env:
           EVAL_OUTCOME: ${{ steps.evals.outcome }}
-        run: echo "Live prompt eval outcome: $EVAL_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Live prompt eval outcome: $EVAL_OUTCOME" >> "$GITHUB_STEP_SUMMARY"

@@ -197,6 +197,40 @@ describe("GitLab event parser", () => {
     });
   });
 
+  it("rejects invalid pipeline coordinates before loading the change request", async () => {
+    const validEnv: NodeJS.ProcessEnv = {
+      CI_PROJECT_ID: "42",
+      CI_PROJECT_PATH: "group/project",
+      CI_MERGE_REQUEST_IID: "7",
+    };
+    let loadCalls = 0;
+    const loadChangeRequest = async () => {
+      loadCalls += 1;
+      throw new Error("invalid coordinates must not load the change request");
+    };
+    for (const name of ["CI_PROJECT_ID", "CI_PROJECT_PATH", "CI_MERGE_REQUEST_IID"] as const) {
+      for (const value of [undefined, ""]) {
+        await expect(
+          parseGitLabEvent({
+            env: { ...validEnv, [name]: value },
+            workspace: "/workspace",
+            loadChangeRequest,
+          }),
+        ).rejects.toThrow(`${name} is required for GitLab pipeline events`);
+      }
+    }
+    for (const value of ["0", "-1", "1.5", "nope"]) {
+      await expect(
+        parseGitLabEvent({
+          env: { ...validEnv, CI_MERGE_REQUEST_IID: value },
+          workspace: "/workspace",
+          loadChangeRequest,
+        }),
+      ).rejects.toThrow("CI_MERGE_REQUEST_IID must be a positive integer");
+    }
+    expect(loadCalls).toBe(0);
+  });
+
   it("ignores draft merge requests loaded by GitLab pipelines", async () => {
     await expect(
       parseGitLabEvent({

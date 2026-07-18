@@ -31,6 +31,20 @@ const excludedFixturePaths = new Set([
   "node_modules",
 ]);
 
+type Workflow = {
+  on: {
+    schedule?: Array<{ cron: string }>;
+    workflow_dispatch?: unknown;
+  };
+  jobs: Record<
+    string,
+    {
+      steps?: Array<{ "continue-on-error"?: boolean; run?: string }>;
+      strategy?: { matrix?: { include?: Array<{ name?: string }> } };
+    }
+  >;
+};
+
 let tempDir: string;
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "pipr-scripts-"));
@@ -183,6 +197,9 @@ describe("changed-scope", () => {
 
   it("includes package inputs consumed by docs", () => {
     for (const file of [
+      "Dockerfile.docs",
+      "install.sh",
+      "scripts/docs-docker-e2e.ts",
       "packages/sdk/src/index.ts",
       "packages/sdk/src/types/task.ts",
       "packages/sdk/tsconfig.json",
@@ -204,9 +221,11 @@ describe("changed-scope", () => {
     for (const file of [
       "packages/e2e/action-fixture.ts",
       "packages/e2e/action-metadata.ts",
+      "packages/e2e/action-run-plan.ts",
       "packages/e2e/assertions.ts",
       "packages/e2e/check.ts",
       "packages/e2e/container-check.ts",
+      "packages/e2e/docker-e2e-plan.ts",
       "packages/e2e/fake-pi",
       "packages/e2e/package.json",
       "packages/e2e/pi-contract.ts",
@@ -257,19 +276,23 @@ describe("developer checks", () => {
   });
 
   it("runs the runtime CI package gate once", () => {
-    const workflow = readFileSync(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
-    expect(workflow).toContain("          - name: runtime\n");
-    expect(workflow).not.toContain("          - name: runtime-init\n");
-    expect(workflow).not.toContain("          - name: runtime-config\n");
-    expect(workflow).not.toContain("          - name: runtime-core\n");
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const matrix = workflow.jobs.packages?.strategy?.matrix?.include ?? [];
+    expect(matrix.filter((entry) => entry.name === "runtime")).toHaveLength(1);
+    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-init");
+    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-config");
+    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-core");
   });
 
   it("runs scheduled live evals in an advisory container lane", () => {
-    const workflow = readFileSync(path.join(repoRoot, ".github/workflows/evals.yml"), "utf8");
+    const workflow = parseWorkflow(".github/workflows/evals.yml");
     const dockerfile = readFileSync(path.join(repoRoot, "Dockerfile"), "utf8");
-    expect(workflow).toContain("schedule:");
-    expect(workflow).toContain("continue-on-error: true");
-    expect(workflow).toContain("--target evals");
+    expect(workflow.on.schedule).toEqual([{ cron: "17 3 * * 1" }]);
+    expect(workflow.on).toHaveProperty("workflow_dispatch");
+    const advisory = workflow.jobs.advisory;
+    expect(advisory).toBeDefined();
+    expect(advisory?.steps?.some((step) => step["continue-on-error"] === true)).toBe(true);
+    expect(advisory?.steps?.some((step) => step.run?.includes("--target evals"))).toBe(true);
     expect(dockerfile).toContain("FROM build AS evals");
     expect(dockerfile).toContain('CMD ["bun", "run", "eval:full:export"]');
   });
@@ -315,6 +338,12 @@ describe("sync-release-lockfile", () => {
     expect(readFileSync(path.join(repository, ".github/workflows/pipr.yml"), "utf8")).toContain(
       "uses: somus/pipr@v0.1.1",
     );
+    const initProjectTests = readFileSync(
+      path.join(repository, "packages/runtime/src/config/tests/init-project.test.ts"),
+      "utf8",
+    );
+    expect(initProjectTests).toContain("uses: somus/pipr@v0.1.1");
+    expect(initProjectTests).toContain("ghcr.io/somus/pipr:v0.1.1");
   });
 });
 
@@ -476,12 +505,6 @@ describe("CLI package bundled skills", () => {
 });
 
 describe("install.sh", () => {
-  it("is published by the docs image at the hosted install URL path", () => {
-    expect(readFileSync(path.join(repoRoot, "Dockerfile.docs"), "utf8")).toContain(
-      "COPY install.sh /usr/share/nginx/html/install.sh",
-    );
-  });
-
   it("uses the hosted install URL in docs and generated recipe sources", () => {
     const oldInstallUrl = "https://raw.githubusercontent.com/somus/pipr/main/install.sh";
     const checkedFiles = [
@@ -528,6 +551,18 @@ describe("install.sh", () => {
 });
 
 describe("check-release-metadata", () => {
+  it("rejects missing Release Please extra files", () => {
+    const repository = copyRepositoryFixture();
+    const configPath = path.join(repository, "release-please-config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+      packages: { ".": { "extra-files": Array<{ path: string }> } };
+    };
+    config.packages["."]["extra-files"].push({ path: "missing-release-file.ts" });
+    write(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
   it("rejects a stale webhook deployment image pin", () => {
     const repository = copyRepositoryFixture();
     const composePath = path.join(repository, "deploy/webhook/compose.yml");
@@ -778,6 +813,10 @@ function run(
   }
 }
 
+function parseWorkflow(relativePath: string): Workflow {
+  return Bun.YAML.parse(readFileSync(path.join(repoRoot, relativePath), "utf8")) as Workflow;
+}
+
 function git(cwd: string, ...args: string[]): string {
   const result = Bun.spawnSync(["git", ...args], {
     cwd,
@@ -905,6 +944,9 @@ function copyRepositoryFixture(): string {
 }
 
 function bumpReleaseFixture(repository: string, version: string): void {
+  const previousVersion = (
+    JSON.parse(readFileSync(path.join(repository, "package.json"), "utf8")) as { version: string }
+  ).version;
   for (const relativePath of [
     "package.json",
     "packages/sdk/package.json",
@@ -926,15 +968,18 @@ function bumpReleaseFixture(repository: string, version: string): void {
     write(filePath, `${JSON.stringify(pkg, null, 2)}\n`);
   }
 
-  for (const relativePath of [
-    "action.yml",
-    "README.md",
-    "packages/runtime/src/config/init.ts",
-    "packages/runtime/src/config/tests/init.test.ts",
-    "packages/cli/src/tests/main.test.ts",
-    "apps/docs/scripts/sync-recipes.ts",
-  ]) {
+  const releasePleaseConfig = JSON.parse(
+    readFileSync(path.join(repository, "release-please-config.json"), "utf8"),
+  ) as {
+    packages: {
+      ".": { "extra-files": Array<{ type: string; path: string; glob?: boolean }> };
+    };
+  };
+  const genericFiles = releasePleaseConfig.packages["."]["extra-files"].filter(
+    (extraFile) => extraFile.type === "generic" && !extraFile.glob,
+  );
+  for (const { path: relativePath } of genericFiles) {
     const filePath = path.join(repository, relativePath);
-    write(filePath, readFileSync(filePath, "utf8").replaceAll("0.1.0", version));
+    write(filePath, readFileSync(filePath, "utf8").replaceAll(previousVersion, version));
   }
 }

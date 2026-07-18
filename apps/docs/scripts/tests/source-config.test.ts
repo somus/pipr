@@ -21,28 +21,6 @@ describe("docs source config", () => {
     expect(getLegacyDocRedirect(["reference", "development"])).toBe("/docs/project/development");
   });
 
-  it("keeps static hosting redirects aligned with application aliases", async () => {
-    const nginx = await readFile(new URL("../../nginx.conf", import.meta.url), "utf8");
-    const aliases = [
-      ["guide/concepts", "concepts"],
-      ["guide/runtime", "concepts/runtime"],
-      ["guide/comments", "concepts/comments"],
-      ["guide/trust-security", "concepts/trust-security"],
-      ["reference/development", "project/development"],
-    ] as const;
-
-    for (const [legacy, canonical] of aliases) {
-      expect(nginx).toContain(`location = /docs/${legacy} { return 308 /docs/${canonical}; }`);
-      expect(nginx).toContain(`location = /docs/${legacy}/ { return 308 /docs/${canonical}; }`);
-      expect(nginx).toContain(
-        `location = /docs/${legacy}.md { return 308 /docs/${canonical}.md; }`,
-      );
-      expect(nginx).toContain(
-        `location = /og/docs/${legacy}/image.webp { return 308 /og/docs/${canonical}/image.webp; }`,
-      );
-    }
-  });
-
   it("gives every recipe screenshot descriptive alt text", async () => {
     for (const recipe of supportedOfficialInitRecipes) {
       const source = await readFile(

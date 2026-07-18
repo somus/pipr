@@ -47,6 +47,7 @@
     "build:release:cli": "bun packages/cli/build-release.ts",
     "check:release-artifacts": "bun scripts/verify-release-artifacts.ts",
     "docker:e2e": "bun scripts/docker-e2e.ts",
+    "docker:docs-e2e": "bun scripts/docs-docker-e2e.ts",
     "sync:release-lockfile": "bun scripts/sync-release-lockfile.ts",
     "hooks-install": "hk install --mise",
     "check:runtime-test-split": "turbo run //#check:runtime-test-split:root",

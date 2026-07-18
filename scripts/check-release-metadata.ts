@@ -15,9 +15,14 @@ type PackageJson = {
   scripts?: Record<string, string>;
 };
 
+type ReleasePleaseConfig = {
+  packages: Record<string, { "extra-files"?: Array<{ path: string; glob?: boolean }> }>;
+};
+
 const rootDir = path.resolve(import.meta.dirname, "..");
 const rootPackage = await readJson<PackageJson>("package.json");
 const releasePleaseConfig = await readText("release-please-config.json");
+const parsedReleasePleaseConfig = JSON.parse(releasePleaseConfig) as ReleasePleaseConfig;
 const ciWorkflow = await readText(".github/workflows/ci.yml");
 const dockerImageWorkflow = await readText(".github/workflows/docker-image.yml");
 const evalsWorkflow = await readText(".github/workflows/evals.yml");
@@ -49,6 +54,17 @@ const workflowSources = {
   ".github/workflows/release-please.yml": releasePleaseWorkflow,
   ".github/workflows/pipr.yml": selfReviewWorkflow,
 };
+
+for (const packageConfig of Object.values(parsedReleasePleaseConfig.packages)) {
+  for (const extraFile of packageConfig["extra-files"] ?? []) {
+    if (!extraFile.glob) {
+      assert(
+        await Bun.file(path.join(rootDir, extraFile.path)).exists(),
+        `Release Please extra file does not exist: ${extraFile.path}`,
+      );
+    }
+  }
+}
 
 for (const [workflowPath, workflow] of Object.entries(workflowSources)) {
   assertThirdPartyActionsPinned(workflowPath, workflow);

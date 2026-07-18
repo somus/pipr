@@ -20,6 +20,40 @@ describe("Bitbucket Cloud events", () => {
     ).resolves.toMatchObject({ kind: "change-request", change: { action: "opened" } });
   });
 
+  it("rejects invalid pipeline coordinates before loading the pull request", async () => {
+    const validEnv: NodeJS.ProcessEnv = {
+      BITBUCKET_WORKSPACE: "workspace",
+      BITBUCKET_REPO_SLUG: "repository",
+      BITBUCKET_PR_ID: "7",
+    };
+    let loadCalls = 0;
+    const loadChangeRequest = async () => {
+      loadCalls += 1;
+      throw new Error("invalid coordinates must not load the pull request");
+    };
+    for (const name of ["BITBUCKET_WORKSPACE", "BITBUCKET_REPO_SLUG", "BITBUCKET_PR_ID"] as const) {
+      for (const value of [undefined, ""]) {
+        await expect(
+          parseBitbucketEvent({
+            env: { ...validEnv, [name]: value },
+            workspace: "/workspace",
+            loadChangeRequest,
+          }),
+        ).rejects.toThrow(`${name} is required for Bitbucket events`);
+      }
+    }
+    for (const value of ["0", "-1", "1.5", "nope"]) {
+      await expect(
+        parseBitbucketEvent({
+          env: { ...validEnv, BITBUCKET_PR_ID: value },
+          workspace: "/workspace",
+          loadChangeRequest,
+        }),
+      ).rejects.toThrow("BITBUCKET_PR_ID must be a positive integer");
+    }
+    expect(loadCalls).toBe(0);
+  });
+
   it("ignores draft pipeline pull requests", async () => {
     await expect(
       parseBitbucketEvent({

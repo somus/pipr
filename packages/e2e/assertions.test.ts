@@ -4,27 +4,59 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { renderActActionMetadata } from "./action-metadata.ts";
+import { actArguments } from "./action-run-plan.ts";
 import {
   assertActCondensedFixture,
   assertActFullFixture,
   assertActOrchestratorFixture,
   assertCondensedPiWorkspace,
 } from "./assertions.ts";
+import { createDockerE2EPlan } from "./docker-e2e-plan.ts";
 import { prepareScenarioWorktree, scenarios } from "./scenarios.ts";
 
 const headSha = "head-sha";
 
-test("validates Action scenario assertions", async () => {
+test("prepares the dry-run scenario with distinct base and head commits", async () => {
   await assertDryRunScenarioPreparation();
-  await assertActionMetadataRendering();
-  await assertDockerE2eRunsActSmoke();
-  await assertActBindsPreparedGitWorkspace();
-  await assertCondensedWorkspaceTelemetry();
+});
 
+test("renders local Action metadata for the selected image and fixture entrypoint", async () => {
+  await assertActionMetadataRendering();
+});
+
+test("runs every real Action scenario against the docker:e2e image", () => {
+  const plan = createDockerE2EPlan("pipr-action:test");
+  expect(plan.at(-1)).toEqual({
+    command: ["bun", "run", "--cwd", "packages/e2e", "check:actions"],
+    env: {
+      PIPR_ACTION_IMAGE: "pipr-action:test",
+      PIPR_SKIP_ACTION_IMAGE_BUILD: "1",
+    },
+    label: "Running all real Action scenarios with act: pipr-action:test",
+  });
+});
+
+test("uses the prepared Git worktree as the act workspace", () => {
+  expect(
+    actArguments({
+      eventFile: "event.json",
+      runnerImage: "runner:test",
+      workflowFile: "fixture.yml",
+    }),
+  ).toContain("--bind");
+});
+
+test("validates condensed Pi workspace telemetry and cleanup", async () => {
+  await assertCondensedWorkspaceTelemetry();
+});
+
+test("accepts valid publication fixtures", async () => {
   await assertActFullFixture(validFullFixture(), headSha);
   expect(() => assertActCondensedFixture(validCondensedFixture())).not.toThrow();
   expect(() => assertActOrchestratorFixture(validOrchestratorFixture())).not.toThrow();
+});
 
+test("rejects invalid publication fixtures with actionable errors", async () => {
   for (const [message, fixture] of fullFailureFixtures()) {
     await expectFailure(message, fixture);
   }
@@ -44,17 +76,6 @@ async function assertDryRunScenarioPreparation(): Promise<void> {
   } finally {
     prepared.cleanup();
   }
-}
-
-async function assertDockerE2eRunsActSmoke(): Promise<void> {
-  const source = await Bun.file(new URL("../../scripts/docker-e2e.ts", import.meta.url)).text();
-  expect(source).toContain('"check:actions", "dry-run"');
-  expect(source).toContain('PIPR_SKIP_ACTION_IMAGE_BUILD: "1"');
-}
-
-async function assertActBindsPreparedGitWorkspace(): Promise<void> {
-  const source = await Bun.file(new URL("./run.ts", import.meta.url)).text();
-  expect(source).toContain('"--bind"');
 }
 
 async function assertActionMetadataRendering(): Promise<void> {

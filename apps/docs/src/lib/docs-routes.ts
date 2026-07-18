@@ -1,6 +1,6 @@
-import { docsRoute } from "./shared";
+import { docsRoute } from "./shared.js";
 
-const legacyDocSlugs: Record<string, readonly string[]> = {
+export const legacyDocSlugs: Record<string, readonly string[]> = {
   "guide/concepts": ["concepts"],
   "guide/runtime": ["concepts", "runtime"],
   "guide/comments": ["concepts", "comments"],

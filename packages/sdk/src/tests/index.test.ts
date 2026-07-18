@@ -40,51 +40,6 @@ import {
 } from "../internal.js";
 
 describe("definePipr", () => {
-  it("exposes typed Diff Manifest commentable ranges", () => {
-    const manifest: DiffManifest = {
-      baseSha: "base",
-      headSha: "head",
-      mergeBaseSha: "merge",
-      files: [
-        {
-          path: "src/example.ts",
-          status: "modified",
-          additions: 1,
-          deletions: 0,
-          hunks: [
-            {
-              hunkIndex: 1,
-              header: "@@ -1 +1 @@",
-              oldStart: 1,
-              oldLines: 1,
-              newStart: 1,
-              newLines: 1,
-              contentHash: "abcdef123456",
-            },
-          ],
-          commentableRanges: [
-            {
-              id: "rng_example",
-              path: "src/example.ts",
-              side: "RIGHT",
-              startLine: 1,
-              endLine: 1,
-              kind: "added",
-              hunkIndex: 1,
-              hunkHeader: "@@ -1 +1 @@",
-              hunkContentHash: "abcdef123456",
-            },
-          ],
-        },
-      ],
-    };
-
-    const range = manifest.files[0]?.commentableRanges[0];
-
-    expect(range?.id).toBe("rng_example");
-    expect(range?.side).toBe("RIGHT");
-  });
-
   it("registers models, agents, tasks, events, commands, and tools", () => {
     const factory = definePipr((pipr) => {
       const model = pipr.model({
@@ -1069,6 +1024,46 @@ function expectExplicitReviewerRejectsConstructionFields(
 }
 
 void expectExplicitReviewerRejectsConstructionFields;
+
+const diffManifestContract: DiffManifest = {
+  baseSha: "base",
+  headSha: "head",
+  mergeBaseSha: "merge",
+  files: [
+    {
+      path: "src/example.ts",
+      status: "modified",
+      additions: 1,
+      deletions: 0,
+      hunks: [
+        {
+          hunkIndex: 1,
+          header: "@@ -1 +1 @@",
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          contentHash: "abcdef123456",
+        },
+      ],
+      commentableRanges: [
+        {
+          id: "rng_example",
+          path: "src/example.ts",
+          side: "RIGHT",
+          startLine: 1,
+          endLine: 1,
+          kind: "added",
+          hunkIndex: 1,
+          hunkHeader: "@@ -1 +1 @@",
+          hunkContentHash: "abcdef123456",
+        },
+      ],
+    },
+  ],
+};
+
+void diffManifestContract;
 
 function validReviewFinding(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
