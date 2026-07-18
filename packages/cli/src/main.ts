@@ -30,9 +30,9 @@ async function writeGitHubActionsFailure(error: unknown, message: string): Promi
     setOutput: core.setOutput,
   };
   if (error instanceof PublicationError) {
-    await presentGitHubActionPublicationError(error, message, presenter);
+    await presentGitHubActionPublicationError(error, presenter);
   } else {
-    await presentGitHubActionError(message, presenter);
+    await presentGitHubActionError(presenter);
   }
   core.setFailed(message);
 }

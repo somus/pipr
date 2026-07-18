@@ -68,10 +68,9 @@ export type GitHubActionJsonResultV1 =
 
 type GitHubActionJsonInput =
   | HostRunCommandResult
-  | { kind: "error"; message: string }
+  | { kind: "error" }
   | {
       kind: "publication-error";
-      message: string;
       publication: PublicationError["result"];
     };
 
@@ -143,20 +142,15 @@ export async function presentGitHubActionResult(
 
 export async function presentGitHubActionPublicationError(
   error: PublicationError,
-  sanitizedMessage: string,
   presenter: GitHubActionResultPresenter,
 ): Promise<void> {
-  await setResultOutput(
-    { kind: "publication-error", message: sanitizedMessage, publication: error.result },
-    presenter,
-  );
+  await setResultOutput({ kind: "publication-error", publication: error.result }, presenter);
 }
 
 export async function presentGitHubActionError(
-  sanitizedMessage: string,
   presenter: GitHubActionResultPresenter,
 ): Promise<void> {
-  await setResultOutput({ kind: "error", message: sanitizedMessage }, presenter);
+  await setResultOutput({ kind: "error" }, presenter);
 }
 
 function serializeGitHubActionJsonV1(input: GitHubActionJsonInput): GitHubActionJsonResultV1 {

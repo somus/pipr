@@ -303,7 +303,7 @@ async function writeFixture(fixturePath: string, fixture: GitHubPublicationFixtu
 main().catch(async (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof PublicationError) {
-    await presentGitHubActionPublicationError(error, message, {
+    await presentGitHubActionPublicationError(error, {
       info,
       warning: info,
       setOutput,

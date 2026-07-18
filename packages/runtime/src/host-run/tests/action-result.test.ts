@@ -144,7 +144,7 @@ describe("presentGitHubActionResult", () => {
 
   it("presents generic failures as versioned output", async () => {
     const calls = recordingPresenter();
-    await presentGitHubActionError("config failed with provider-secret", calls.sink);
+    await presentGitHubActionError(calls.sink);
 
     expect(calls.output).toEqual([
       [
@@ -240,7 +240,6 @@ describe("presentGitHubActionResult", () => {
           inlineResolutionErrors: [],
         },
       }),
-      "inline publication failed with provider-secret",
       calls.sink,
     );
 
@@ -259,14 +258,13 @@ describe("presentGitHubActionResult", () => {
         }),
       ],
     ]);
-    expect(calls.output[0]?.[1]).not.toMatch(/trusted|fnd_private|PRRT_private|provider-secret/);
+    expect(calls.output[0]?.[1]).not.toMatch(/trusted|fnd_private|PRRT_private/);
   });
 
   it("presents publication failures without partial metadata", async () => {
     const calls = recordingPresenter();
     await presentGitHubActionPublicationError(
       new PublicationError("head changed", undefined),
-      "head changed",
       calls.sink,
     );
 
