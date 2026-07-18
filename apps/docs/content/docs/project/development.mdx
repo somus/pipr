@@ -205,7 +205,7 @@ Release workflows publish the verified Action image and retain immutable version
 The checked-in Action metadata uses the published image directly:
 
 ```text
-docker://ghcr.io/somus/pipr:v0.4.2 # x-release-please-version
+docker://ghcr.io/somus/pipr:v0.4.3 # x-release-please-version
 ```
 
 Local `act` fixtures rewrite that metadata to the `PIPR_ACTION_IMAGE` value so Action checks still exercise the freshly built local image.
@@ -236,8 +236,8 @@ ghcr.io/somus/pipr
 
 Publishing uses the tags:
 
-- release tag, such as `v0.4.2` {/* x-release-please-version */}
-- release version, such as `0.4.2` {/* x-release-please-version */}
+- release tag, such as `v0.4.3` {/* x-release-please-version */}
+- release version, such as `0.4.3` {/* x-release-please-version */}
 - `latest`
 
 ## npm and binary release
@@ -261,7 +261,7 @@ Required release setup:
 - GHCR package write access through `GITHUB_TOKEN`
 - `PIPR_RELEASE_PLEASE_TOKEN` configured with permission to create release pull requests and releases
 
-The Release Please workflow opens changelog and version pull requests from Conventional Commits on `main`. The publish workflow runs on `release.published`. The release tag must look like `v0.4.2`, and root, SDK, runtime, and CLI package versions must match the tag without the leading `v`. The workflow grants `id-token: write` and uses npm trusted publishing, so it does not need an `NPM_TOKEN` secret. {/* x-release-please-version */}
+The Release Please workflow opens changelog and version pull requests from Conventional Commits on `main`. The publish workflow runs on `release.published`. The release tag must look like `v0.4.3`, and root, SDK, runtime, and CLI package versions must match the tag without the leading `v`. The workflow grants `id-token: write` and uses npm trusted publishing, so it does not need an `NPM_TOKEN` secret. {/* x-release-please-version */}
 
 Configure trusted publishing through npm package settings, or with npm 11.15.0 or newer after the package exists:
 
@@ -333,7 +333,7 @@ git push -u origin main
 Publish a GitHub Release from a semver tag when the package is ready:
 
 ```bash
-gh release create v0.4.2 --draft --title v0.4.0 --generate-notes # x-release-please-version
+gh release create v0.4.3 --draft --title v0.4.0 --generate-notes # x-release-please-version
 ```
 
 The release workflow starts when the release is published.

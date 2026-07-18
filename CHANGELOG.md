@@ -4,6 +4,14 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.4.3](https://github.com/somus/pipr/compare/v0.4.2...v0.4.3) (2026-07-18)
+
+
+### Bug Fixes
+
+* **config:** collapse dogfood inline rationales ([#93](https://github.com/somus/pipr/issues/93)) ([9b646b5](https://github.com/somus/pipr/commit/9b646b55d8da223e9f5bb7709d82296adacf6a5d))
+* **runtime:** pre-exclude discarded diff content ([#95](https://github.com/somus/pipr/issues/95)) ([8847418](https://github.com/somus/pipr/commit/8847418249b59841d42227eaf4d513828a834de0))
+
 ## [0.4.2](https://github.com/somus/pipr/compare/v0.4.1...v0.4.2) (2026-07-17)
 
 
