@@ -1,0 +1,35 @@
+apps/docs/content/docs/guide/configuration.mdx
+  s_c205757d191597::t_c5941545d5fe96 134-135
+packages/runtime/src/diff/tests/diff.test.ts
+  s_c205757d191597::t_7228d2ee6e31c8 6,209
+  s_c205757d191597::t_2e9fada8ee2679 206-208,210-218
+packages/runtime/src/host-run/tests/commands-fixtures.ts
+  s_c205757d191597::t_7228d2ee6e31c8 18,114
+  s_c205757d191597::t_77a684fe61a515 71,113,115
+packages/runtime/src/tests/helpers/aggregate-reviewable-patch.ts
+  s_c205757d191597::t_7228d2ee6e31c8 1-13
+packages/runtime/src/diff/diff.ts
+  s_c205757d191597::t_7ffba300736ac3 46-48,76-86
+  s_c205757d191597::t_e239d18eadd277 12,27
+  s_c205757d191597::t_da1082a70149c9 87-88
+packages/runtime/src/diff/git.ts
+  s_c205757d191597::t_e239d18eadd277 1-7,16-18
+packages/runtime/src/host-run/tests/commands-change-request.test.ts
+  s_c205757d191597::t_77a684fe61a515 385-399
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "3968bd2396d89303d42973154ef1bcc122e84cf7",
+  "prompts": {},
+  "sessions": {
+    "s_c205757d191597": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7437-3177-7f82-81ee-c98166ebae51",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
