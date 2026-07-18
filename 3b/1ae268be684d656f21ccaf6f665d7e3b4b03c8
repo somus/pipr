@@ -1,0 +1,45 @@
+apps/docs/nginx.conf
+  s_fc4b468ce19e5f::t_e5b3c86894a53c 4
+scripts/tests/runtime-import-boundary.test.ts
+  s_fc4b468ce19e5f::t_11d553f128533f 18-23
+  s_fc4b468ce19e5f::t_4564f7fe1310e1 35
+  s_fc4b468ce19e5f::t_6c1fea1f004b60 2-3,30-34,36-47
+  s_c8c0ce2f824e4f::t_5349fbf7bb43e4 48
+scripts/tests/release-scripts.test.ts
+  s_fc4b468ce19e5f::t_6c1fea1f004b60 554-565
+  s_fc4b468ce19e5f::t_db746fad2bb822 341-346,947-949,971-981,983
+release-please-config.json
+  s_fc4b468ce19e5f::t_ebc1f98d28e130 63
+scripts/check-release-metadata.ts
+  s_fc4b468ce19e5f::t_e5b3c86894a53c 18-21,25,58-67
+  s_fc4b468ce19e5f::t_c9b74a52fb8a60 68
+apps/docs/content/docs/project/development.mdx
+  s_fc4b468ce19e5f::t_ebc1f98d28e130 179,190
+scripts/check-runtime-import-boundary.ts
+  s_fc4b468ce19e5f::t_3b304f34f0240c 5-9
+  s_fc4b468ce19e5f::t_e5b3c86894a53c 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "3b1ae268be684d656f21ccaf6f665d7e3b4b03c8",
+  "prompts": {},
+  "sessions": {
+    "s_c8c0ce2f824e4f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6fd5-f7b0-7d22-9e6a-fdb4a1c9a732",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_fc4b468ce19e5f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f73ba-0f1f-7a12-9d3b-03369133017e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
