@@ -2,7 +2,11 @@
 import path from "node:path";
 import ts from "typescript";
 
-const forbiddenPatterns = [/hosts\/github/, /shared\/github/, /^@octokit\/rest(?:\/|$)/];
+const forbiddenPatterns = [
+  /hosts\/(?:azure-devops|bitbucket|github|gitlab|local)(?:\/|$)/,
+  /shared\/github(?:\/|$)/,
+  /^@octokit\/rest(?:\/|$)/,
+];
 
 export function forbiddenRuntimeImports(source: string, fileName = "source.ts"): string[] {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
@@ -45,7 +49,7 @@ export async function checkRuntimeImportBoundary(root: string): Promise<string[]
   const violations: string[] = [];
   const glob = new Bun.Glob("**/*.ts");
   for await (const relativePath of glob.scan({ cwd: reviewRoot, onlyFiles: true })) {
-    if (relativePath.includes("/tests/") || relativePath.endsWith(".test.ts")) continue;
+    if (relativePath.split("/").includes("tests") || relativePath.endsWith(".test.ts")) continue;
     const fileName = path.join(reviewRoot, relativePath);
     violations.push(...forbiddenRuntimeImports(await Bun.file(fileName).text(), fileName));
   }

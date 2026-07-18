@@ -176,7 +176,7 @@ The scheduled `Live prompt evals` workflow builds the pinned `evals` Docker targ
 
 ## CI Docker e2e
 
-The CI container lane exercises the built image directly, then runs the dry-run workflow through `act` and the checked-in Action metadata.
+The CI container lane exercises the built image directly, then runs every checked-in Action scenario through `act` and the real Action metadata.
 
 ### CI container check
 
@@ -187,7 +187,7 @@ PIPR_ACTION_IMAGE=pipr-action:e2e bun run --cwd packages/e2e check:container
 ```
 
 `check:container` verifies the Pi contract and runs direct-container equivalents of the dry-run, full, condensed, and orchestrator scenarios.
-After those checks, CI reuses the image for `check:actions dry-run`, which verifies the real `action.yml` entrypoint through `act`.
+After those checks, CI reuses the image for `check:actions`, which verifies the dry-run, full, condensed, and orchestrator scenarios through the real `action.yml` entrypoint and `act`.
 
 The default Docker target builds the Action packages. The separate `evals` target adds the eval package for scheduled model-quality checks; docs output stays in the docs deployment path.
 

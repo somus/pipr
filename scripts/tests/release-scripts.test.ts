@@ -338,6 +338,12 @@ describe("sync-release-lockfile", () => {
     expect(readFileSync(path.join(repository, ".github/workflows/pipr.yml"), "utf8")).toContain(
       "uses: somus/pipr@v0.1.1",
     );
+    const initProjectTests = readFileSync(
+      path.join(repository, "packages/runtime/src/config/tests/init-project.test.ts"),
+      "utf8",
+    );
+    expect(initProjectTests).toContain("uses: somus/pipr@v0.1.1");
+    expect(initProjectTests).toContain("ghcr.io/somus/pipr:v0.1.1");
   });
 });
 
@@ -545,6 +551,18 @@ describe("install.sh", () => {
 });
 
 describe("check-release-metadata", () => {
+  it("rejects missing Release Please extra files", () => {
+    const repository = copyRepositoryFixture();
+    const configPath = path.join(repository, "release-please-config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+      packages: { ".": { "extra-files": Array<{ path: string }> } };
+    };
+    config.packages["."]["extra-files"].push({ path: "missing-release-file.ts" });
+    write(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
   it("rejects a stale webhook deployment image pin", () => {
     const repository = copyRepositoryFixture();
     const composePath = path.join(repository, "deploy/webhook/compose.yml");
@@ -926,6 +944,9 @@ function copyRepositoryFixture(): string {
 }
 
 function bumpReleaseFixture(repository: string, version: string): void {
+  const previousVersion = (
+    JSON.parse(readFileSync(path.join(repository, "package.json"), "utf8")) as { version: string }
+  ).version;
   for (const relativePath of [
     "package.json",
     "packages/sdk/package.json",
@@ -947,14 +968,18 @@ function bumpReleaseFixture(repository: string, version: string): void {
     write(filePath, `${JSON.stringify(pkg, null, 2)}\n`);
   }
 
-  for (const relativePath of [
-    "action.yml",
-    "README.md",
-    "packages/runtime/src/config/init.ts",
-    "packages/cli/src/tests/main.test.ts",
-    "apps/docs/scripts/sync-recipes.ts",
-  ]) {
+  const releasePleaseConfig = JSON.parse(
+    readFileSync(path.join(repository, "release-please-config.json"), "utf8"),
+  ) as {
+    packages: {
+      ".": { "extra-files": Array<{ type: string; path: string; glob?: boolean }> };
+    };
+  };
+  const genericFiles = releasePleaseConfig.packages["."]["extra-files"].filter(
+    (extraFile) => extraFile.type === "generic" && !extraFile.glob,
+  );
+  for (const { path: relativePath } of genericFiles) {
     const filePath = path.join(repository, relativePath);
-    write(filePath, readFileSync(filePath, "utf8").replaceAll("0.1.0", version));
+    write(filePath, readFileSync(filePath, "utf8").replaceAll(previousVersion, version));
   }
 }
