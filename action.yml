@@ -11,12 +11,8 @@ inputs:
 outputs:
   main-comment:
     description: Rendered Main Review Comment body, command response body, or command help body
-  inline-comments:
-    description: JSON array of Inline Review Comment publication items
-  dropped-findings:
-    description: JSON array of Review Findings dropped during validation
-  publication:
-    description: JSON publication result for review, command response, or verifier publication
+  result:
+    description: Versioned JSON summary for every Pipr Action outcome
 runs:
   using: docker
   image: docker://ghcr.io/somus/pipr:v0.4.3 # x-release-please-version

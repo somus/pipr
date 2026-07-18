@@ -295,15 +295,15 @@ Build only the host binary:
 bun run build:release:cli --host --outfile /tmp/pipr
 ```
 
-### Package dry runs
+### Package archives
 
-Check packages before publishing:
+Build the npm tarballs and verify their required files and exclusions before publishing:
 
 ```bash
-NPM_CONFIG_CACHE=/private/tmp/pipr-npm-cache npm pack --dry-run --json --workspace @usepipr/sdk
-NPM_CONFIG_CACHE=/private/tmp/pipr-npm-cache npm pack --dry-run --json --workspace @usepipr/runtime
-NPM_CONFIG_CACHE=/private/tmp/pipr-npm-cache npm pack --dry-run --json --workspace @usepipr/cli
+bun run check:npm-tarballs
 ```
+
+The command writes the verified archives to `dist/npm/`, checks their required package files and entrypoints, confirms the CLI executable mode, and rejects source, test, and private files.
 
 ## GitHub push checklist
 

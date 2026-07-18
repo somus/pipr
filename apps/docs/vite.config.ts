@@ -58,6 +58,18 @@ export default defineConfig(({ command, isPreview }) => ({
       "fumadocs-twoslash > @base-ui/react > use-sync-external-store/shim/with-selector",
     ],
   },
+  environments: {
+    ssr: {
+      resolve: {
+        external: ["react", "react-dom"],
+      },
+    },
+    nitro: {
+      resolve: {
+        external: ["react", "react-dom"],
+      },
+    },
+  },
   ssr: {
     external: ["@takumi-rs/image-response"],
   },
@@ -85,6 +97,10 @@ export default defineConfig(({ command, isPreview }) => ({
           enabled: true,
           crawlLinks: true,
         },
+      },
+
+      prerender: {
+        failOnError: true,
       },
 
       pages: [
@@ -121,6 +137,7 @@ export default defineConfig(({ command, isPreview }) => ({
       : []),
   ],
   resolve: {
+    dedupe: ["react", "react-dom"],
     tsconfigPaths: true,
     alias: {
       tslib: "tslib/tslib.es6.js",

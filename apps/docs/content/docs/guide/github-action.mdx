@@ -85,7 +85,7 @@ Use the generated permission block unless you have intentionally disabled the ma
 | Review thread resolution | Resolve GitHub review threads for findings the verifier marks fixed | `contents: write` and `pull-requests: write` |
 | Task or aggregate Check Runs | Create and update GitHub Check Runs when checks are enabled | `checks: write` |
 
-Command help is exposed through the `main-comment` output. If GitHub denies verifier cleanup or the API fails, the review still succeeds and records the issue in `publication.metadata.inlineResolutionErrors`.
+Command help is exposed through the `main-comment` output. If GitHub denies verifier cleanup or the API fails, the review still succeeds and increments `result.publication.inlineResolutionErrorCount`.
 
 ### Secret redaction
 
@@ -109,14 +109,14 @@ Use `somus/pipr@main` only when you intentionally want the current main-branch A
 
 ## Outputs
 
-The Action exposes rendered review and publication metadata for diagnostics and integrations.
+The Action exposes one stable structured summary for diagnostics and integrations.
 
 | Output | Description |
 | --- | --- |
 | `main-comment` | Rendered Main Review Comment body, command response body, or command help body. |
-| `inline-comments` | JSON array of Inline Review Comment publication items. |
-| `dropped-findings` | JSON array of Review Findings dropped during validation. |
-| `publication` | JSON publication result for main and inline comments. On command-response runs, this is `{ action, id }` for the response issue comment. On `pull_request_review_comment` verifier runs, this contains verifier thread action errors such as `inlineResolutionErrors`. |
+| `result` | Versioned JSON summary for review, ignored, dry-run, command-help, command-response, verifier, publication-error, and other fatal error outcomes. |
+
+Parse `result`, check `formatVersion`, then branch on `kind`. Review results contain marker-free `mainComment`, public `inlineFindings`, dropped findings, task checks, provider model names, repair status, publication counts, and publication error counts. Pipr does not expose raw publication errors, Diff Manifests, publication plans, internal markers or finding identity, trusted configuration state, or provider credential metadata through Action outputs.
 
 ## GitHub review output
 

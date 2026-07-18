@@ -46,6 +46,7 @@
     "fallow:docs:root": "fallow --fail-on-issues --format compact --workspace @pipr/docs",
     "build:release:cli": "bun packages/cli/build-release.ts",
     "check:release-artifacts": "bun scripts/verify-release-artifacts.ts",
+    "check:npm-tarballs": "bun scripts/verify-npm-tarballs.ts",
     "docker:e2e": "bun scripts/docker-e2e.ts",
     "docker:docs-e2e": "bun scripts/docs-docker-e2e.ts",
     "sync:release-lockfile": "bun scripts/sync-release-lockfile.ts",

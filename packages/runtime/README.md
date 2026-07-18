@@ -8,6 +8,8 @@ unsupported.
 Use the `pipr` CLI or a code host integration to run Pipr. Repository configs
 should import only from `@usepipr/sdk`.
 
+Executing this npm package requires Bun 1.3.14 or newer.
+
 ## Technical notes
 
 - The package root exports command APIs for init, hosted runs, dry runs,

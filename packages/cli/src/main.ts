@@ -1,6 +1,10 @@
 #!/usr/bin/env bun
 import * as core from "@actions/core";
 import { PublicationError } from "@usepipr/runtime";
+import {
+  presentGitHubActionError,
+  presentGitHubActionPublicationError,
+} from "@usepipr/runtime/internal/action-result";
 import { runMain } from "./runner.js";
 import { sanitizeTerminalMessage } from "./terminal-output.js";
 
@@ -8,21 +12,27 @@ const env = process.env;
 
 runMain({ env }).catch((error) => handleFatalError(error, env));
 
-function handleFatalError(error: unknown, env: NodeJS.ProcessEnv): void {
+async function handleFatalError(error: unknown, env: NodeJS.ProcessEnv): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   const sanitizedMessage = sanitizeTerminalMessage(message);
   if (env.GITHUB_ACTIONS !== "true") {
     console.error(`error: ${sanitizedMessage}`);
     process.exit(1);
   }
-  writeGitHubActionsFailure(error, sanitizedMessage);
+  await writeGitHubActionsFailure(error, sanitizedMessage);
   process.exitCode = 1;
 }
 
-function writeGitHubActionsFailure(error: unknown, message: string): void {
-  if (error instanceof PublicationError && error.result) {
-    core.setOutput("publication", JSON.stringify(error.result));
-    core.error(`pipr publication metadata: ${JSON.stringify(error.result)}`);
+async function writeGitHubActionsFailure(error: unknown, message: string): Promise<void> {
+  const presenter = {
+    info: core.info,
+    warning: core.warning,
+    setOutput: core.setOutput,
+  };
+  if (error instanceof PublicationError) {
+    await presentGitHubActionPublicationError(error, presenter);
+  } else {
+    await presentGitHubActionError(presenter);
   }
   core.setFailed(message);
 }

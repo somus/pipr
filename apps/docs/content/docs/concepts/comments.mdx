@@ -41,7 +41,7 @@ This shape keeps review finite: one summary, bounded inline issues, and explicit
 
 ### Debug outputs
 
-Hosted-run outputs also include publication metadata, inline drafts, and dropped findings for debugging.
+GitHub Action outputs include a versioned structured summary with public inline findings, dropped findings, task checks, and sanitized publication counts and errors. See [GitHub Action outputs](/docs/guide/github-action#outputs) for the complete output contract.
 
 ## Task output types
 
@@ -175,7 +175,7 @@ Pipr records invalid or duplicate findings instead of publishing them at unverif
 
 ### Drop reasons
 
-Pipr drops invalid findings and continues the review. Dropped findings appear in hosted-run output and publication metadata.
+Pipr drops invalid findings and continues the review. GitHub Action review results expose them as `result.droppedFindings`; the runtime also records their counts in internal publication metadata.
 
 | Reason | Fix |
 | --- | --- |
@@ -274,7 +274,7 @@ The verifier can run after a new commit or when a user replies to a Pipr-owned I
 
 When the verifier marks a finding fixed, Pipr can reply and resolve the native review thread when the adapter and permissions allow. When the finding is still valid, Pipr can reply with a short explanation and leave the thread open.
 
-Thread cleanup failures are recorded in `publication.metadata.inlineResolutionErrors` and do not make the review itself fail.
+Thread cleanup failures increment the GitHub Action's `result.publication.inlineResolutionErrorCount` and do not make the review itself fail. The runtime keeps the detailed errors in internal publication metadata.
 
 ## Command responses
 

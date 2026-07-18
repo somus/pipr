@@ -149,19 +149,11 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: bun run build:release:cli
       - run: bun run check:release-artifacts
-      - run: npm pack --dry-run --json
-        working-directory: packages/sdk
-      - run: npm pack --dry-run --json
-        working-directory: packages/runtime
-      - run: npm pack --dry-run --json
-        working-directory: packages/cli
+      - run: bun run check:npm-tarballs
       - run: bun run docker:e2e
-      - run: npm publish --access public
-        working-directory: packages/sdk
-      - run: npm publish --access public
-        working-directory: packages/runtime
-      - run: npm publish --access public
-        working-directory: packages/cli
+      - run: npm publish "dist/npm/usepipr-sdk-${{ steps.version.outputs.version }}.tgz" --access public
+      - run: npm publish "dist/npm/usepipr-runtime-${{ steps.version.outputs.version }}.tgz" --access public
+      - run: npm publish "dist/npm/usepipr-cli-${{ steps.version.outputs.version }}.tgz" --access public
       - run: |
           gh release upload "$PIPR_RELEASE_TAG" \
             dist/release/pipr-linux-x64 \
