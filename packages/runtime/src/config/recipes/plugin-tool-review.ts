@@ -3,22 +3,55 @@ import type { OfficialInitRecipe } from "./types.js";
 const r2MemoryTs = `import { S3Client } from "bun";
 import { definePlugin, type SecretRef, type TaskContext, z } from "@usepipr/sdk";
 
+export const memoryLimits = {
+  subjectCharacters: 120,
+  bodyCharacters: 4000,
+  tagCount: 12,
+  tagCharacters: 50,
+  queryCharacters: 500,
+  resultDefault: 5,
+  resultMinimum: 1,
+  resultMaximum: 20,
+  searchObjectMaximum: 2000,
+} as const;
+
+const memorySource = z.strictObject({
+  kind: z.enum(["maintainer-command", "agent-tool"]),
+  runId: z.string().min(1).max(200),
+  platform: z.string().min(1).max(50),
+  changeRequestNumber: z.number().int().nonnegative().optional(),
+  headSha: z.string().min(1).max(200),
+});
+
 const memoryItem = z.strictObject({
-  subject: z.string(),
-  body: z.string(),
-  tags: z.array(z.string()).optional(),
-  updatedAt: z.string().optional(),
+  id: z.string().uuid().optional(),
+  subject: z.string().trim().min(1).max(memoryLimits.subjectCharacters),
+  body: z.string().trim().min(1).max(memoryLimits.bodyCharacters),
+  tags: z
+    .array(z.string().trim().min(1).max(memoryLimits.tagCharacters))
+    .max(memoryLimits.tagCount)
+    .optional(),
+  source: memorySource.optional(),
+  updatedAt: z.string().max(50).optional(),
 });
 
 const memorySearchInput = z.strictObject({
-  query: z.string(),
-  limit: z.number().optional(),
+  query: z.string().trim().min(1).max(memoryLimits.queryCharacters),
+  limit: z
+    .number()
+    .int()
+    .min(memoryLimits.resultMinimum)
+    .max(memoryLimits.resultMaximum)
+    .optional(),
 });
 
 const memoryStoreInput = z.strictObject({
-  subject: z.string(),
-  body: z.string(),
-  tags: z.array(z.string()).optional(),
+  subject: z.string().trim().min(1).max(memoryLimits.subjectCharacters),
+  body: z.string().trim().min(1).max(memoryLimits.bodyCharacters),
+  tags: z
+    .array(z.string().trim().min(1).max(memoryLimits.tagCharacters))
+    .max(memoryLimits.tagCount)
+    .optional(),
 });
 
 type MemoryItem = ReturnType<typeof memoryItem.parse>;
@@ -56,6 +89,7 @@ export function r2MemoryPlugin(options: R2MemoryOptions) {
       schema: z.strictObject({
         stored: z.boolean(),
         key: z.string(),
+        id: z.string().uuid(),
       }),
     });
 
@@ -78,12 +112,15 @@ export function r2MemoryPlugin(options: R2MemoryOptions) {
         input: storeInput,
         output: storeOutput,
         async run({ input, ctx, signal }) {
-          return await storeMemory(input, ctx, options, signal);
+          return await storeMemory(input, ctx, options, "agent-tool", signal);
         },
         toModelOutput(output) {
           return output;
         },
       }),
+      curate(input: MemoryStoreInput, ctx: TaskContext, signal?: AbortSignal) {
+        return storeMemory(input, ctx, options, "maintainer-command", signal);
+      },
     };
   });
 }
@@ -96,22 +133,42 @@ async function searchMemory(
 ): Promise<{ memories: MemoryItem[] }> {
   signal?.throwIfAborted();
   const bucket = r2Bucket(ctx, options);
-  const listed = await bucket.list({ prefix: memoryPrefix(ctx, options) + "/", maxKeys: 200 });
   const memories: MemoryItem[] = [];
+  let continuationToken: string | undefined;
+  let scannedObjects = 0;
 
-  for (const object of listed.contents ?? []) {
+  do {
     signal?.throwIfAborted();
-    try {
-      const value = memoryItem.parse(await bucket.file(object.key).json());
-      if (matchesMemory(value, input.query)) {
-        memories.push(value);
-      }
-    } catch {
-      // Ignore malformed or concurrently deleted memory objects.
-    }
-  }
+    const listed = await bucket.list({
+      prefix: memoryPrefix(ctx, options) + "/",
+      maxKeys: 200,
+      continuationToken,
+    });
 
-  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 5), 1), 20);
+    const objects = (listed.contents ?? []).slice(
+      0,
+      memoryLimits.searchObjectMaximum - scannedObjects,
+    );
+    scannedObjects += objects.length;
+    for (const object of objects) {
+      signal?.throwIfAborted();
+      try {
+        const value = memoryItem.parse(await bucket.file(object.key).json());
+        if (matchesMemory(value, input.query)) {
+          memories.push(value);
+        }
+      } catch {
+        // Ignore malformed or concurrently deleted memory objects.
+      }
+    }
+
+    continuationToken = listed.isTruncated ? listed.nextContinuationToken : undefined;
+  } while (continuationToken && scannedObjects < memoryLimits.searchObjectMaximum);
+
+  const limit = Math.min(
+    Math.max(Math.trunc(input.limit ?? memoryLimits.resultDefault), memoryLimits.resultMinimum),
+    memoryLimits.resultMaximum,
+  );
   return {
     memories: memories
       .sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""))
@@ -123,14 +180,53 @@ async function storeMemory(
   input: MemoryStoreInput,
   ctx: TaskContext,
   options: R2MemoryOptions,
+  sourceKind: "maintainer-command" | "agent-tool",
   signal?: AbortSignal,
-): Promise<{ stored: boolean; key: string }> {
+): Promise<{ stored: boolean; key: string; id: string }> {
   signal?.throwIfAborted();
   const bucket = r2Bucket(ctx, options);
-  const entry: MemoryItem = { ...input, updatedAt: new Date().toISOString() };
-  const key = memoryKey(input.subject, ctx, options);
+  const parsedInput = memoryStoreInput.parse(input);
+  const curatedKey =
+    sourceKind === "maintainer-command"
+      ? memoryPrefix(ctx, options) +
+        "/maintainer-command/" +
+        encodeURIComponent(ctx.run.id) +
+        ".json"
+      : undefined;
+
+  const id = curatedKey ? await stableCommandMemoryId(ctx.run.id) : crypto.randomUUID();
+  const entry = memoryItem.parse({
+    ...parsedInput,
+    id,
+    source: {
+      kind: sourceKind,
+      runId: ctx.run.id,
+      platform: ctx.platform.id,
+      changeRequestNumber: ctx.change.number,
+      headSha: ctx.change.head.sha,
+    },
+    updatedAt: new Date().toISOString(),
+  });
+  const key = curatedKey ?? memoryKey(id, parsedInput.subject, ctx, options);
   await bucket.write(key, JSON.stringify(entry, null, 2), { type: "application/json" });
-  return { stored: true, key };
+  return { stored: true, key, id };
+}
+
+async function stableCommandMemoryId(runId: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode("pipr-memory/maintainer-command/" + runId),
+    ),
+  );
+  digest[6] = (digest[6]! & 0x0f) | 0x50;
+  digest[8] = (digest[8]! & 0x3f) | 0x80;
+  const hex = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join(
+    "-",
+  );
 }
 
 function r2Bucket(ctx: TaskContext, options: R2MemoryOptions): S3Client {
@@ -161,14 +257,26 @@ function cleanPathSegment(value: string): string {
   );
 }
 
-function memoryKey(subject: string, ctx: TaskContext, options: R2MemoryOptions): string {
+function memoryKey(
+  id: string,
+  subject: string,
+  ctx: TaskContext,
+  options: R2MemoryOptions,
+): string {
   const slug = subject
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 60);
   return (
-    memoryPrefix(ctx, options) + "/" + new Date().toISOString() + "-" + (slug || "memory") + ".json"
+    memoryPrefix(ctx, options) +
+    "/" +
+    new Date().toISOString() +
+    "-" +
+    id +
+    "-" +
+    (slug || "memory") +
+    ".json"
   );
 }
 
@@ -187,10 +295,10 @@ export const pluginToolReviewRecipe = {
   id: "plugin-tool-review",
   title: "Plugin Tool Review",
   description:
-    "Typed R2-backed memory plugin for reviewer agents that need durable project context.",
+    "Typed R2-backed memory plugin with search-only review and explicit maintainer curation.",
   sourceTools: ["Cloudflare R2", "Reviewer memory"],
   configTs: `import { definePipr } from "@usepipr/sdk";
-import { r2MemoryPlugin } from "./r2-memory";
+import { memoryLimits, r2MemoryPlugin } from "./r2-memory";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -242,8 +350,44 @@ export default definePipr((pipr) => {
     },
   });
 
+  const rememberTask = pipr.task<{ lesson: string }>({
+    name: "remember-review-memory",
+    async run(ctx, input) {
+      if (!ctx.command) {
+        throw new Error("remember-review-memory is a command-only task");
+      }
+      const lesson = input.lesson.trim();
+      if (lesson.length === 0) {
+        await ctx.command.reply("Usage: @pipr remember <lesson...>");
+        return;
+      }
+      if (lesson.length > memoryLimits.bodyCharacters) {
+        await ctx.command.reply(
+          "Reviewer memory must be " + memoryLimits.bodyCharacters + " characters or fewer.",
+        );
+        return;
+      }
+      const stored = await memory.curate(
+        {
+          subject: lesson.slice(0, memoryLimits.subjectCharacters),
+          body: lesson,
+          tags: ["maintainer-curated"],
+        },
+        ctx,
+      );
+      await ctx.command.reply("Stored reviewer memory \`" + stored.id + "\`.");
+    },
+  });
+
   pipr.on.changeRequest({ actions: ["opened", "updated"], task });
   pipr.command({ pattern: "@pipr memory-review", permission: "write", task });
+  pipr.command({
+    pattern: "@pipr remember <lesson...>",
+    permission: "write",
+    description: "Store an explicit maintainer-curated reviewer lesson.",
+    parse: (args) => ({ lesson: args.lesson ?? "" }),
+    task: rememberTask,
+  });
 });
 `,
   files: [{ relativePath: "r2-memory.ts", contents: r2MemoryTs }],
@@ -257,7 +401,9 @@ export default definePipr((pipr) => {
 
 This recipe uses Bun's S3-compatible client against Cloudflare R2. R2 credentials are declared with \`pipr.secret(...)\`, then resolved inside tool execution with \`ctx.secret(...)\`. The generated GitHub workflow maps \`PIPR_R2_MEMORY_BUCKET\`, \`PIPR_R2_MEMORY_ENDPOINT\`, \`PIPR_R2_MEMORY_ACCESS_KEY_ID\`, and \`PIPR_R2_MEMORY_SECRET_ACCESS_KEY\` repository secrets into matching runtime environment variables.
 
-R2 is object storage, not a search index. The sample lists recent JSON memory objects under \`prefix/repository-owner/repository-name\` and filters them locally, which is enough for small reviewer-memory sets. Change \`prefix\` in \`.pipr/config.ts\` when multiple repositories share one bucket; Pipr still adds the repository scope below it. The generated reviewer treats memory as untrusted historical context and requires current repository evidence for findings. It only searches memory by default. The store tool is available for explicit customization, but full review summaries are not persisted automatically.
+R2 is object storage, not a search index. The sample paginates up to 2,000 JSON memory objects under \`prefix/repository-owner/repository-name\` and filters them locally, which keeps each search bounded and is enough for small reviewer-memory sets. Change \`prefix\` in \`.pipr/config.ts\` when multiple repositories share one bucket; Pipr still adds the repository scope below it. The generated defaults cap subjects at 120 characters, bodies at 4,000 characters, tags at 12 entries of 50 characters, queries at 500 characters, and results at 20. Existing entries without ids or provenance remain readable when they satisfy those bounds.
+
+The generated reviewer treats memory as untrusted historical context and requires current repository evidence for findings. It only searches memory by default. A repository user with write permission can store one bounded, provenance-bearing lesson with \`@pipr remember <lesson...>\`; re-delivery of the same command run deterministically reuses its stored object and UUID. Full review summaries and human feedback are not persisted automatically; feedback collection, eval generation, scheduling, and proposal pull requests remain user-owned extensions.
 
 `,
 } as const satisfies OfficialInitRecipe;

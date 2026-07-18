@@ -1260,18 +1260,52 @@ describe("initOfficialMinimalProject: generated recipes", () => {
         "review-aggregator",
       ]),
     );
-    expect(inspectRuntimePlan(pluginTool.plan, ".pipr/config.ts").tools).toEqual([
-      "r2_memory_search",
-      "r2_memory_store",
+    const pluginInspection = inspectRuntimePlan(pluginTool.plan, ".pipr/config.ts");
+    expect(pluginInspection.tools).toEqual(["r2_memory_search", "r2_memory_store"]);
+    expect(pluginInspection.commands).toEqual([
+      {
+        pattern: "@pipr memory-review",
+        task: "memory-assisted-review",
+        permission: "write",
+      },
+      {
+        pattern: "@pipr remember <lesson...>",
+        task: "remember-review-memory",
+        permission: "write",
+      },
     ]);
-    expect(pluginConfig).toContain('import { r2MemoryPlugin } from "./r2-memory";');
+    expect(pluginConfig).toContain('import { memoryLimits, r2MemoryPlugin } from "./r2-memory";');
     expect(pluginConfig).not.toContain("new S3Client");
     expect(pluginConfig).not.toContain("memory.store.run");
+    expect(pluginConfig).toContain("tools: [...pipr.tools.readOnly, memory.search]");
+    expect(pluginConfig).toContain("await memory.curate(");
     expect(pluginMemory).toContain('import { S3Client } from "bun";');
+    expect(pluginMemory).toContain("export const memoryLimits");
+    expect(pluginMemory).toContain("subjectCharacters: 120");
+    expect(pluginMemory).toContain("bodyCharacters: 4000");
+    expect(pluginMemory).toContain("tagCount: 12");
+    expect(pluginMemory).toContain("tagCharacters: 50");
+    expect(pluginMemory).toContain("queryCharacters: 500");
+    expect(pluginMemory).toContain("resultMinimum: 1");
+    expect(pluginMemory).toContain("resultMaximum: 20");
+    expect(pluginMemory).toContain("searchObjectMaximum: 2000");
     expect(pluginMemory).toContain("export function r2MemoryPlugin");
-    expect(pluginMemory).toContain("bucket.list({ prefix: memoryPrefix(ctx, options)");
+    expect(pluginMemory).toContain("crypto.randomUUID()");
+    expect(pluginMemory).toContain("memoryStoreInput.parse(input)");
+    expect(pluginMemory).toContain('sourceKind: "maintainer-command" | "agent-tool"');
+    expect(pluginMemory).toContain("changeRequestNumber: ctx.change.number");
+    expect(pluginMemory).toContain("curate(input: MemoryStoreInput, ctx: TaskContext");
+    expect(pluginMemory).toContain("prefix: memoryPrefix(ctx, options) +");
+    expect(pluginMemory).toContain("maxKeys: 200");
+    expect(pluginMemory).toContain("continuationToken");
+    expect(pluginMemory).toContain("listed.nextContinuationToken");
+    expect(pluginMemory).toContain("scannedObjects < memoryLimits.searchObjectMaximum");
     expect(pluginMemory).toContain("[ctx.repository.owner, ctx.repository.name]");
-    expect(pluginMemory).toContain("memoryKey(input.subject, ctx, options)");
+    expect(pluginMemory).toContain("memoryKey(id, parsedInput.subject, ctx, options)");
+    expect(pluginMemory).toContain('"/maintainer-command/"');
+    expect(pluginMemory).toContain("encodeURIComponent(ctx.run.id)");
+    expect(pluginMemory).toContain("await stableCommandMemoryId(ctx.run.id)");
+    expect(pluginMemory).toContain("digest[6] = (digest[6]! & 0x0f) | 0x50");
     expect(inspectRuntimePlan(command.plan, ".pipr/config.ts").commands).toEqual([
       {
         pattern: "@pipr ask <question...>",
@@ -1279,6 +1313,49 @@ describe("initOfficialMinimalProject: generated recipes", () => {
         permission: "read",
       },
     ]);
+  });
+
+  it("rejects invalid curated memory before storage or Pi execution", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-plugin-tool-"));
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "plugin-tool-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    let piRuns = 0;
+    const runRemember = (lesson: string, sourceCommentId: number) =>
+      runTaskRuntime({
+        workspace: rootDir,
+        config: project.settings.config,
+        event: eventContext(),
+        plan: project.plan,
+        taskName: "remember-review-memory",
+        taskInput: { lesson },
+        commandInvocation: {
+          name: "remember",
+          line: `@pipr remember ${lesson}`,
+          arguments: { lesson },
+          sourceCommentId: String(sourceCommentId),
+        },
+        diffManifestBuilder: () => reviewTestManifest(),
+        piRunner: async () => {
+          piRuns += 1;
+          throw new Error("curated memory validation must not run Pi");
+        },
+      });
+
+    const empty = await runRemember("   ", 301);
+    const oversized = await runRemember("x".repeat(4001), 302);
+    if (empty.kind !== "command-response" || oversized.kind !== "command-response") {
+      throw new Error("expected curated memory command responses");
+    }
+    expect(empty.commandResponse.body).toBe("Usage: @pipr remember <lesson...>");
+    expect(oversized.commandResponse.body).toBe(
+      "Reviewer memory must be 4000 characters or fewer.",
+    );
+    expect(piRuns).toBe(0);
   });
 
   it("gives the multi-agent aggregator diff context for independent revalidation", async () => {
