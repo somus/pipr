@@ -1,0 +1,20 @@
+packages/runtime/src/config/tests/init-recipes.test.ts
+  s_3848226860af38::t_ae4fcdf81cfd64 1424-1429,1431,1434-1435,1449-1450
+  s_3848226860af38::t_4a502fee07761b 1361-1423,1430,1432-1433,1436-1448,1451-1457
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "7600b9f77c0187d12d2b09f74a1edd63884e5c44",
+  "prompts": {},
+  "sessions": {
+    "s_3848226860af38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f75d9-c79d-7d80-8a75-db25dbaeb64a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
