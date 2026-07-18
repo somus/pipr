@@ -1358,6 +1358,103 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(piRuns).toBe(0);
   });
 
+  it("stores valid curated memory with stable identity and provenance", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-plugin-tool-"));
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "plugin-tool-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const writes: Array<{ path: string; body: unknown }> = [];
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        if (request.method !== "PUT") {
+          return new Response("Method not allowed", { status: 405 });
+        }
+        writes.push({
+          path: new URL(request.url).pathname,
+          body: JSON.parse(await request.text()),
+        });
+        return new Response(null, { status: 200, headers: { ETag: '"test-etag"' } });
+      },
+    });
+    const lesson = "Validate persisted reviewer guidance against the current diff.";
+    const commandInvocation = {
+      name: "remember",
+      line: `@pipr remember ${lesson}`,
+      arguments: { lesson },
+      sourceCommentId: "401",
+    } as const;
+    const runRemember = () =>
+      runTaskRuntime({
+        workspace: rootDir,
+        config: project.settings.config,
+        event: eventContext(),
+        plan: project.plan,
+        taskName: "remember-review-memory",
+        taskInput: { lesson },
+        commandInvocation,
+        env: {
+          PIPR_R2_MEMORY_BUCKET: "memory-bucket",
+          PIPR_R2_MEMORY_ENDPOINT: `http://127.0.0.1:${server.port}`,
+          PIPR_R2_MEMORY_ACCESS_KEY_ID: "test-access-key",
+          PIPR_R2_MEMORY_SECRET_ACCESS_KEY: "test-secret-key",
+        },
+        diffManifestBuilder: () => reviewTestManifest(),
+        piRunner: async () => {
+          throw new Error("curated memory storage must not run Pi");
+        },
+      });
+
+    try {
+      const first = await runRemember();
+      const second = await runRemember();
+      if (first.kind !== "command-response" || second.kind !== "command-response") {
+        throw new Error("expected curated memory command responses");
+      }
+      const id = first.commandResponse.body.match(
+        /^Stored reviewer memory `([0-9a-f-]{36})`\.$/,
+      )?.[1];
+      expect(id).toBeDefined();
+      expect(second.commandResponse.body).toBe(first.commandResponse.body);
+      expect(writes).toHaveLength(2);
+      const firstWrite = writes[0];
+      const secondWrite = writes[1];
+      if (!firstWrite || !secondWrite) {
+        throw new Error("expected two curated memory writes");
+      }
+      expect(firstWrite.path).toBe(
+        `/memory-bucket/pipr-memory/local/pipr/maintainer-command/${encodeURIComponent(
+          (firstWrite.body as { source: { runId: string } }).source.runId,
+        )}.json`,
+      );
+      expect(secondWrite.path).toBe(firstWrite.path);
+      expect(firstWrite.body).toEqual({
+        id,
+        subject: lesson,
+        body: lesson,
+        tags: ["maintainer-curated"],
+        source: {
+          kind: "maintainer-command",
+          runId: expect.any(String),
+          platform: "github",
+          changeRequestNumber: 1,
+          headSha: "head",
+        },
+        updatedAt: expect.any(String),
+      });
+      expect(secondWrite.body).toEqual({
+        ...(firstWrite.body as object),
+        updatedAt: expect.any(String),
+      });
+    } finally {
+      server.stop(true);
+    }
+  });
+
   it("gives the multi-agent aggregator diff context for independent revalidation", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-multi-agent-"));
 
