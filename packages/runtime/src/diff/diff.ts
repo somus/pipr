@@ -9,7 +9,7 @@ import type {
   ReviewSide,
 } from "../types.js";
 import { parseDiffManifest } from "../types.js";
-import { runGit } from "./git.js";
+import { GitOutputLimitError, runGit } from "./git.js";
 
 type DiffFile = DiffManifestFile;
 type ParsedUnifiedDiffFile = Pick<DiffManifestFile, "hunks" | "commentableRanges">;
@@ -24,6 +24,7 @@ const lockFilePattern =
 const generatedPattern = /(^|\/)(dist|build|coverage|vendor)\//;
 const maxInlineChangedLines = 1000;
 const maxCommentableRangeLines = 5000;
+const maxAggregatePatchBytes = 16 * 1024 * 1024;
 
 export type BuildDiffManifestOptions = {
   cwd: string;
@@ -42,8 +43,9 @@ export function buildDiffManifest(options: BuildDiffManifestOptions): DiffManife
   const files = parseNameStatus(nameStatus);
   const diffStats = getDiffStats(options.cwd, mergeBaseSha, diffHead);
   const preExcludedFiles = getPreExcludedFiles(files, diffStats);
-  const rawPatch = parseRawPatch(
-    runGit(buildUnifiedDiffArgs(mergeBaseSha, diffHead, preExcludedFiles), options.cwd),
+  const rawPatch = loadRawPatch(
+    buildUnifiedDiffArgs(mergeBaseSha, diffHead, preExcludedFiles),
+    options.cwd,
   );
 
   const parsedDiff = parseUnifiedDiff(rawPatch.patch, rawPatch.filePaths);
@@ -69,6 +71,19 @@ export function buildDiffManifest(options: BuildDiffManifestOptions): DiffManife
     mergeBaseSha,
     files,
   });
+}
+
+function loadRawPatch(args: string[], cwd: string): ReturnType<typeof parseRawPatch> {
+  try {
+    return parseRawPatch(runGit(args, cwd, maxAggregatePatchBytes));
+  } catch (error) {
+    if (error instanceof GitOutputLimitError) {
+      throw new Error(
+        `Diff Manifest construction exceeded aggregate patch limit before parsing; limit=${error.limitBytes} bytes`,
+      );
+    }
+    throw error;
+  }
 }
 
 export function parseNameStatus(output: string): DiffFile[] {

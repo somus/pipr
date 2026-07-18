@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { writeAggregateReviewablePatchOver16MiB } from "../../tests/helpers/aggregate-reviewable-patch.js";
 import { buildDiffManifest, parseNameStatus, parseUnifiedDiff } from "../diff.js";
 import { runGit } from "../git.js";
 
@@ -199,6 +200,19 @@ describe("diff manifest parsing", () => {
       expect(file?.additions).toBe(1200);
       expect(file?.deletions).toBe(0);
       expect(file?.commentableRanges).toEqual([]);
+    });
+  });
+
+  it("rejects aggregate reviewable patch output above 16 MiB before parsing", async () => {
+    await withGitRepo(async (repo) => {
+      const baseSha = await commitFile(repo, "seed.txt", "base\n", "base");
+      await writeAggregateReviewablePatchOver16MiB(repo);
+      commitAll(repo, "aggregate patch");
+      const headSha = git(repo, "rev-parse", "HEAD");
+
+      expect(() => buildDiffManifest({ cwd: repo, baseSha, headSha })).toThrow(
+        "Diff Manifest construction exceeded aggregate patch limit before parsing; limit=16777216 bytes",
+      );
     });
   });
 

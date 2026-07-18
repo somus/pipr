@@ -15,6 +15,7 @@ import type {
 } from "../../hosts/types.js";
 import { renderInlineFindingMarker } from "../../review/prior-state.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
+import { writeAggregateReviewablePatchOver16MiB } from "../../tests/helpers/aggregate-reviewable-patch.js";
 import {
   type RuntimeLogSink,
   runHostRunCommandWithDependencies as runHostRun,
@@ -67,6 +68,7 @@ export async function writeFailingPiExecutable(piExecutable: string): Promise<vo
 
 export async function createCommandWorkspace(
   options: {
+    aggregatePatchOver16MiB?: boolean;
     baseConfigTs?: string;
     checkoutBaseBeforeRun?: boolean;
     headConfigTs?: string;
@@ -108,6 +110,9 @@ export async function createCommandWorkspace(
     options.headConfigTs ?? headOnlyConfigTs(),
   );
   await Bun.write(path.join(rootDir, "src", "a.ts"), "export const value = 2;\n");
+  if (options.aggregatePatchOver16MiB) {
+    await writeAggregateReviewablePatchOver16MiB(rootDir);
+  }
   runGit(rootDir, ["add", "."]);
   runGit(rootDir, ["commit", "--no-verify", "-m", "head"]);
   const headSha = runGit(rootDir, ["rev-parse", "HEAD"]).trim();
