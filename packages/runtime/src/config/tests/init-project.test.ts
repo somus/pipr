@@ -150,9 +150,19 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(await fileExists(path.join(rootDir, ".pipr", "tsconfig.json"))).toBe(false);
     expect(await fileExists(path.join(rootDir, ".pipr", "package.json"))).toBe(false);
     expect(await fileExists(path.join(rootDir, ".pipr", ".gitignore"))).toBe(false);
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tools).toEqual([
-      "r2_memory_search",
-      "r2_memory_store",
+    const inspection = inspectRuntimePlan(project.plan, ".pipr/config.ts");
+    expect(inspection.tools).toEqual(["r2_memory_search", "r2_memory_store"]);
+    expect(inspection.commands).toEqual([
+      {
+        pattern: "@pipr memory-review",
+        task: "memory-assisted-review",
+        permission: "write",
+      },
+      {
+        pattern: "@pipr remember <lesson...>",
+        task: "remember-review-memory",
+        permission: "write",
+      },
     ]);
   });
 

@@ -67,7 +67,7 @@ const recipeDescriptions = new Map([
   ],
   [
     "plugin-tool-review",
-    "Define a typed Pipr plugin with R2-backed memory search and store tools, then let reviewer agents recall durable project context across reviews.",
+    "Define a typed R2-backed memory plugin, let reviewers search durable project context, and let maintainers explicitly curate bounded lessons with `@pipr remember`.",
   ],
   [
     "changelog-draft",
@@ -130,7 +130,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "plugin-tool-review",
-    "Pipr lets reviewer agents search untrusted historical memory, requires current repository evidence, then publishes the normal review output from the task.",
+    "Pipr lets reviewer agents search untrusted historical memory while write-permission maintainers explicitly store bounded, provenance-bearing lessons with `@pipr remember`.",
   ],
   [
     "changelog-draft",
@@ -288,11 +288,12 @@ Multi-agent Review runs specialist agents for security, tests, and maintainabili
     "plugin-tool-review",
     `## Recipe notes
 
-Plugin Tool Review demonstrates a typed Pipr plugin with R2-backed memory tools. The reviewer treats search results as untrusted historical context and must verify every finding against the current repository. \`r2_memory_store\` remains available for explicit customization when you decide what memory is safe to persist.
+Plugin Tool Review demonstrates a typed Pipr plugin with R2-backed memory tools. The reviewer treats search results as untrusted historical context and must verify every finding against the current repository. A repository user with write permission can explicitly store one bounded lesson with \`@pipr remember <lesson...>\`; the reviewer still receives only \`r2_memory_search\` by default.
 
-- Start with search-only reviewer behavior; add store calls only for curated, non-sensitive project knowledge.
+- Use \`@pipr remember\` only for curated, non-sensitive project knowledge; each new entry carries a stable id and Change Request provenance.
+- The generated limits cap subjects at 120 characters, bodies at 4,000 characters, tags at 12 entries of 50 characters, queries at 500 characters, and results at 20.
 - Keep the R2 bucket shared only when repository-scoped prefixes are acceptable for your organization.
-- Add more plugin tools when the agent needs stable project context that must not be copied into every prompt.
+- Build automatic feedback collection, eval generation, schedules, and proposal pull requests outside Pipr Core, then require maintainer approval before storage.
 - Never publish memory-only findings or persist full source, personal data, credentials, or secrets.
 `,
   ],
