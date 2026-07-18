@@ -1,0 +1,27 @@
+packages/runtime/src/host-run/tests/action-result.test.ts
+  s_18b7586067e73e::t_bfba08ec92893a 147,261
+packages/e2e/action-fixture.ts
+  s_18b7586067e73e::t_1e2929e255e30f 306
+packages/cli/src/main.ts
+  s_18b7586067e73e::t_bfba08ec92893a 33,35
+packages/runtime/src/internal/action-result.ts
+  s_18b7586067e73e::t_bfba08ec92893a 71,147,153
+packages/runtime/src/review/tests/main-comment-envelope.test.ts
+  s_18b7586067e73e::t_bfba08ec92893a 1-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d9b8a8c75228668b3ab901b71fc2517d1cd5e886",
+  "prompts": {},
+  "sessions": {
+    "s_18b7586067e73e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f760f-77e3-7a32-911e-5297ea651054",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
