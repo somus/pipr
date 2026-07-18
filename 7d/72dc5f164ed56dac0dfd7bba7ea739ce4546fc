@@ -1,0 +1,24 @@
+scripts/check-conventional-commit.ts
+  s_c68249e2315063::t_640a61d237fe71 21-22,27-33,63-81,137
+.github/workflows/ci.yml
+  s_c68249e2315063::t_449bc5f5d98ae8 32,35-36
+scripts/tests/release-scripts.test.ts
+  s_c68249e2315063::t_f3a079cba50ff1 84-96
+  s_c68249e2315063::t_9f65f25777a3c4 97-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "7d72dc5f164ed56dac0dfd7bba7ea739ce4546fc",
+  "prompts": {},
+  "sessions": {
+    "s_c68249e2315063": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f73df-f987-7af3-b3fd-71306bfb62f2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
