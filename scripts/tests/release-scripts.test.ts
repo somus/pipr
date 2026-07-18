@@ -95,6 +95,45 @@ describe("check-conventional-commit", () => {
     ).not.toBe(0);
   });
 
+  it("rejects release-triggering titles for dogfood-only changes", () => {
+    const repository = changedScopeRepository(".pipr/config.ts");
+    const base = git(repository, "rev-parse", "HEAD~1");
+
+    expect(
+      runScript(
+        path.join(repoRoot, "scripts/check-conventional-commit.ts"),
+        ["--title", "fix(config): tune dogfood review", "--range", `${base}..HEAD`],
+        repository,
+      ),
+    ).not.toBe(0);
+  });
+
+  it("accepts chore titles for dogfood-only changes", () => {
+    const repository = changedScopeRepository(".pipr/config.ts");
+    const base = git(repository, "rev-parse", "HEAD~1");
+
+    expect(
+      runScript(
+        path.join(repoRoot, "scripts/check-conventional-commit.ts"),
+        ["--title", "chore(dogfood): tune review", "--range", `${base}..HEAD`],
+        repository,
+      ),
+    ).toBe(0);
+  });
+
+  it("accepts release-triggering titles when product files change", () => {
+    const repository = changedScopeRepository("packages/runtime/src/index.ts");
+    const base = git(repository, "rev-parse", "HEAD~1");
+
+    expect(
+      runScript(
+        path.join(repoRoot, "scripts/check-conventional-commit.ts"),
+        ["--title", "fix(runtime): tune review", "--range", `${base}..HEAD`],
+        repository,
+      ),
+    ).toBe(0);
+  });
+
   it("checks every commit subject in a range", () => {
     const repository = path.join(tempDir, "repo");
     run("git", ["init", repository]);
