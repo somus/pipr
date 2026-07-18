@@ -1,0 +1,158 @@
+packages/cli/src/main.ts
+  s_18b7586067e73e::t_2c38f845f25ec2 15,22,26,32
+  s_18b7586067e73e::t_78da5c01b891c5 4-7,27-31,33-35
+apps/docs/scripts/tests/build.test.ts
+  s_18b7586067e73e::t_9daff8e1b66b3d 1-16
+scripts/tests/release-scripts.test.ts
+  s_18b7586067e73e::t_09aa1a2c161e49 589,597-602
+  s_18b7586067e73e::t_402d956af4ca61 605-606,608-621
+  s_c8c0ce2f824e4f::t_676f9b01df4ca9 603-604,607
+packages/runtime/src/review/main-comment-envelope.ts
+  s_18b7586067e73e::t_21d9216099d293 33
+  s_18b7586067e73e::t_0c615907efd504 1-32,34-92
+packages/runtime/src/host-run/tests/action-result.test.ts
+  s_18b7586067e73e::t_21d9216099d293 187
+  s_18b7586067e73e::t_8519093f9b3d79 147,150-153,155,243,253,274-277
+  s_18b7586067e73e::t_eff8907a4a2a98 97-99,116-117,123,219-221,225,239,256-257,325,365-369,371-373,381
+  s_18b7586067e73e::t_04acad2f7752e5 158-165,168-177
+  s_18b7586067e73e::t_42b7b02806b453 2,4-7,100,102-106,108-115,118-122,127,131-133,136,142,156,194-200,209-212,222-224,226-238,240-242,244-252,254-255,258-261,263
+  s_18b7586067e73e::t_38c2c1344475cf 74-88,101,107,370
+  s_18b7586067e73e::t_1d363bf065fe65 264-272
+  s_18b7586067e73e::t_a7f345ff8b02d7 262
+  s_18b7586067e73e::t_402d956af4ca61 3,143-146,148-149,154
+  s_18b7586067e73e::t_7ef63d51f5afc9 166-167,178-186
+  s_18b7586067e73e::t_ed934a73669c22 157
+action.yml
+  s_18b7586067e73e::t_2c38f845f25ec2 14-15
+packages/sdk/LICENSE
+  s_18b7586067e73e::t_b96a2d171f0885 1-21
+package.json
+  s_18b7586067e73e::t_b96a2d171f0885 49
+scripts/check-release-metadata.ts
+  s_18b7586067e73e::t_724ce643e6c0f8 12,79-84,100,106-116,245,248-258
+  s_18b7586067e73e::t_0262f180213651 282
+  s_18b7586067e73e::t_78da5c01b891c5 243-244,246-247
+packages/cli/README.md
+  s_18b7586067e73e::t_6ff698735b5678 9-12
+packages/runtime/src/review/task/task-output.ts
+  s_18b7586067e73e::t_d3f0b1709b4f02 11,13
+packages/runtime/package.json
+  s_18b7586067e73e::t_b96a2d171f0885 20-21,23-25
+apps/docs/content/docs/concepts/comments.mdx
+  s_18b7586067e73e::t_78da5c01b891c5 178
+  s_18b7586067e73e::t_cc97afe8bd473d 277
+  s_18b7586067e73e::t_0b1ba9d2454a2a 44
+packages/cli/src/runner.ts
+  s_18b7586067e73e::t_a6a8bf21cf484c 492,522-538,541,544-548,552-554
+  s_18b7586067e73e::t_bbb7994e680593 15-16,18
+  s_18b7586067e73e::t_cc97afe8bd473d 17,503,540
+packages/runtime/LICENSE
+  s_18b7586067e73e::t_b96a2d171f0885 1-21
+apps/docs/package.json
+  s_18b7586067e73e::t_2bc03d200e7f45 9-10
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_18b7586067e73e::t_78da5c01b891c5 118
+  s_18b7586067e73e::t_49db13a007c487 29,42,146,159
+  s_18b7586067e73e::t_cc97afe8bd473d 203
+packages/runtime/README.md
+  s_18b7586067e73e::t_6ff698735b5678 10-11
+packages/e2e/assertions.test.ts
+  s_18b7586067e73e::t_1d363bf065fe65 98-102
+apps/docs/content/docs/project/development.mdx
+  s_18b7586067e73e::t_129bee2182f385 298,303,306
+  s_18b7586067e73e::t_d0cdbbb50be7da 300
+  s_18b7586067e73e::t_74d7a2e5d270de 307
+apps/docs/content/docs/guide/quickstart.mdx
+  s_18b7586067e73e::t_49db13a007c487 244,261
+  s_18b7586067e73e::t_78da5c01b891c5 260
+  s_18b7586067e73e::t_6ff698735b5678 66-67
+packages/cli/src/tests/main.test.ts
+  s_18b7586067e73e::t_0f236f60319964 549
+  s_18b7586067e73e::t_7ef63d51f5afc9 504-506,539-542,1145
+  s_18b7586067e73e::t_0e6c3bafd11f2e 495,497-499,501-503,530-538,543,545
+  s_18b7586067e73e::t_402d956af4ca61 470,507-529,784-804,806,1038,1067-1068,1113-1144,1146-1147,1149-1151
+  s_18b7586067e73e::t_7e64c158596bb2 805,807
+  s_18b7586067e73e::t_6e946e2009c915 1064
+  s_18b7586067e73e::t_0262f180213651 1069-1071,1148
+  s_18b7586067e73e::t_9d96eb626f79d5 544
+  s_18b7586067e73e::t_7dbb6e474d9ec5 808-810
+  s_18b7586067e73e::t_ef0ce32ce05420 1152-1153
+  s_18b7586067e73e::t_6dd16e15844fcb 811-812
+packages/runtime/src/internal/action-result.ts
+  s_18b7586067e73e::t_0b1ba9d2454a2a 18-21,169,223-227,233
+  s_18b7586067e73e::t_78da5c01b891c5 38,71,155-161,168
+  s_18b7586067e73e::t_4d4b4ebe6e6513 198,208,212-222,228-232,234-235,238-239
+  s_18b7586067e73e::t_562096a03cf497 4,12-17,22-24,27-30,33-37,39-48,50-70,72-77,84,98,102,108,114,133,136,140-154,162-167,170-187,189-193,195-197,199-202,205-207,209-211,240-248
+  s_18b7586067e73e::t_3aa925e1d817dc 203
+  s_18b7586067e73e::t_cc97afe8bd473d 25-26,31-32,49,134,188,194,204,236-237,249
+  s_18b7586067e73e::t_cbd7e333e50d81 261-262
+  s_18b7586067e73e::t_d3f0b1709b4f02 2-3,250-260
+packages/sdk/package.json
+  s_18b7586067e73e::t_b96a2d171f0885 20-21
+apps/docs/content/docs/guide/local-runs.mdx
+  s_18b7586067e73e::t_7ec9d4991cc135 165
+apps/docs/content/docs/guide/github-action.mdx
+  s_18b7586067e73e::t_78da5c01b891c5 117
+  s_18b7586067e73e::t_cc97afe8bd473d 88,119
+  s_18b7586067e73e::t_49db13a007c487 112,118
+apps/docs/content/docs/concepts/runtime.mdx
+  s_18b7586067e73e::t_78da5c01b891c5 224,230
+packages/e2e/action-fixture.ts
+  s_18b7586067e73e::t_2c38f845f25ec2 6-8,304-310,312
+  s_18b7586067e73e::t_90852556c48878 5
+packages/cli/package.json
+  s_18b7586067e73e::t_b96a2d171f0885 20-21,23-25
+apps/docs/vite.config.ts
+  s_18b7586067e73e::t_e8a48bdc8ec704 140
+  s_18b7586067e73e::t_b1b0aa15026e18 61-72,104
+  s_18b7586067e73e::t_3940ef1c1363b7 102-103
+  s_3848226860af38::t_c61b176ca19cd8 105
+packages/cli/LICENSE
+  s_18b7586067e73e::t_b96a2d171f0885 1-21
+scripts/verify-npm-tarballs.ts
+  s_18b7586067e73e::t_09250120271b9e 54-58,66-69,128-132,138-142,173-177
+  s_18b7586067e73e::t_324e16213a01bf 1-53,59-65,70-127,133-137,143-166,168-169,186-205
+  s_18b7586067e73e::t_7a7dd09e75536f 167,170-172,178-185
+apps/docs/scripts/build.ts
+  s_18b7586067e73e::t_2bc03d200e7f45 1-38
+apps/docs/content/docs/reference/cli.mdx
+  s_18b7586067e73e::t_6ff698735b5678 42-43
+scripts/tests/npm-tarballs.test.ts
+  s_18b7586067e73e::t_d8a5904ce86dbd 1-61
+README.md
+  s_18b7586067e73e::t_6ff698735b5678 49-50
+.github/workflows/release.yml
+  s_18b7586067e73e::t_fcf51e2dfedea6 152,154-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "bcc10d4fd88cea90fb18073277cd9b2158a86768",
+  "prompts": {},
+  "sessions": {
+    "s_18b7586067e73e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f760f-77e3-7a32-911e-5297ea651054",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_3848226860af38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f75d9-c79d-7d80-8a75-db25dbaeb64a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_c8c0ce2f824e4f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6fd5-f7b0-7d22-9e6a-fdb4a1c9a732",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
