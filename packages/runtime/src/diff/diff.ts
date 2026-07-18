@@ -11,8 +11,11 @@ import type {
 import { parseDiffManifest } from "../types.js";
 import { GitOutputLimitError, runGit } from "./git.js";
 
-type DiffFile = DiffManifestFile;
-type ParsedUnifiedDiffFile = Pick<DiffManifestFile, "hunks" | "commentableRanges">;
+type DiffFile = Omit<DiffManifestFile, "hunks" | "commentableRanges"> & {
+  hunks: DiffHunk[];
+  commentableRanges: CommentableRange[];
+};
+type ParsedUnifiedDiffFile = Pick<DiffFile, "hunks" | "commentableRanges">;
 type DiffStat = {
   additions: number;
   deletions: number;
@@ -330,7 +333,7 @@ function getPathExcludedReason(file: Pick<DiffFile, "path" | "status">): string 
   return undefined;
 }
 
-function commentableRangeLineCount(ranges: CommentableRange[]): number {
+function commentableRangeLineCount(ranges: readonly CommentableRange[]): number {
   return ranges.reduce((total, range) => total + range.endLine - range.startLine + 1, 0);
 }
 

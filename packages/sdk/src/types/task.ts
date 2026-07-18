@@ -17,7 +17,7 @@ import type {
   SecretOptions,
   SecretRef,
 } from "./config.js";
-import type { DiffManifest, DiffManifestOptions, PathFilter } from "./manifest.js";
+import type { ChangedFile, DiffManifest, DiffManifestOptions, PathFilter } from "./manifest.js";
 import type {
   JsonPromptOptions,
   Markdown,
@@ -73,13 +73,13 @@ export type TaskDefinition<Input> = {
   run: TaskHandler<Input>;
 };
 
-/** Registered task that can be selected by change-request and command entrypoints. */
+declare const taskHandleBrand: unique symbol;
+
+/** Opaque registered task handle selected by change-request and command entrypoints. */
 export type Task<Input = void> = {
   readonly kind: "pipr.task";
   readonly name: string;
-  readonly check?: TaskCheckOptions;
-  readonly local?: false;
-  readonly handler: TaskHandler<Input>;
+  readonly [taskHandleBrand]: (input: Input) => Input;
 };
 
 /** Options shared by command registrations. */
@@ -99,7 +99,7 @@ export type CommandRegistrationOptions<Input> = CommandOptions<Input> & {
 export type ReviewerOptions = {
   name?: string;
   model: ModelProfile;
-  fallbacks?: ModelProfile[];
+  fallbacks?: readonly ModelProfile[];
   instructions: PromptSource;
   prompt?: (
     input: DefaultReviewInput,
@@ -194,10 +194,10 @@ export type ToolRunOptions<Input> = {
   signal?: AbortSignal;
 };
 
-/** Definition used to register a task for change request actions. */
-export type ChangeRequestRegistrationOptions<Input> = {
+/** Definition used to register an inputless task for change request actions. */
+export type ChangeRequestRegistrationOptions = {
   actions: readonly ChangeRequestAction[];
-  task: Task<Input>;
+  task: Task<void>;
 };
 
 /** Handle for reporting task check status from inside a task. */
@@ -212,7 +212,7 @@ export type PiprBuilder = {
   readonly tools: BuiltinToolCatalog;
   readonly schemas: BuiltinSchemaCatalog;
   readonly on: {
-    changeRequest<Input = void>(options: ChangeRequestRegistrationOptions<Input>): void;
+    changeRequest(options: ChangeRequestRegistrationOptions): void;
   };
   secret(options: SecretOptions): SecretRef;
   model(options: ModelOptions): ModelProfile;
@@ -260,7 +260,7 @@ export type PlatformInfo = {
 /** Change-request context available inside tasks. */
 export type ChangeRequestContext = ChangeRequestInfo & {
   diffManifest(options?: DiffManifestOptions): Promise<DiffManifest>;
-  changedFiles(): Promise<Array<{ path: string; previousPath?: string; status: string }>>;
+  changedFiles(): Promise<readonly ChangedFile[]>;
   currentHeadSha(): Promise<string>;
 };
 
@@ -271,7 +271,7 @@ export type PiRunner = {
     input: Input,
     options?: {
       model?: ModelProfile;
-      fallbacks?: ModelProfile[];
+      fallbacks?: readonly ModelProfile[];
       instructions?: PromptSource;
       timeout?: DurationInput;
       paths?: PathFilter;

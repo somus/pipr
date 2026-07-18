@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { Agent, JsonObject, Schema } from "@usepipr/sdk";
+import type { JsonObject, Schema } from "@usepipr/sdk";
+import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import { type AgentRunContext, renderAgentPrompt } from "../agent/agent-prompt.js";
 import type { PreparedDiffManifestContext } from "../agent/diff-manifest-context.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
@@ -664,8 +665,7 @@ describe("renderAgentPrompt", () => {
       platform: { id: "github" },
     };
     const originalPromptContext = structuredClone(promptContext);
-    const agent: Agent<unknown, unknown> = {
-      kind: "pipr.agent",
+    const agent: RuntimeAgent = {
       name: "mutating-agent",
       definition: {
         instructions: "Review.",
@@ -682,9 +682,6 @@ describe("renderAgentPrompt", () => {
           context.platform = { id: "mutated" };
           return "Review.";
         },
-      },
-      extend() {
-        throw new Error("unused");
       },
     };
 
@@ -714,16 +711,12 @@ async function renderTestPrompt(
   priorReviewState?: PriorReviewState,
   withDiffManifest = false,
 ): Promise<string> {
-  const agent: Agent<unknown, unknown> = {
-    kind: "pipr.agent",
+  const agent: RuntimeAgent = {
     name: "reviewer",
     definition: {
       instructions: "Review.",
       output,
       prompt: () => "Review this change.",
-    },
-    extend() {
-      throw new Error("unused");
     },
   };
 

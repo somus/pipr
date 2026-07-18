@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtemp as createTemporaryDirectory, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const temporaryDirectories = new Set<string>();
 afterEach(async () => {
@@ -17,7 +18,18 @@ async function mkdtemp(prefix: string): Promise<string> {
   return directory;
 }
 
-import type { DiffManifest, ModelProfile, PiprBuilder, Reviewer, TaskContext } from "../index.js";
+import type {
+  Agent,
+  AgentTool,
+  ChangedFile,
+  DiffManifest,
+  ModelProfile,
+  PiprBuilder,
+  PromptText,
+  Reviewer,
+  Task,
+  TaskContext,
+} from "../index.js";
 import {
   defaultReviewActions,
   defaultReviewEntrypoints,
@@ -97,6 +109,114 @@ describe("definePipr", () => {
     expect(plan.changeRequestTriggers[0]).toMatchObject({ actions: ["opened"] });
     expect(plan.commands[0]).toMatchObject({ pattern: "@pipr review", permission: "write" });
     expect(plan.tools[0]?.name).toBe("custom_tool");
+  });
+
+  it("keeps executable definitions off public handles", () => {
+    let handles: { task?: Task; agent?: Agent; tool?: AgentTool } = {};
+    const factory = definePipr((pipr) => {
+      const tool = pipr.tool({
+        name: "lookup",
+        description: "Look up a value.",
+        input: pipr.schemas.summary,
+        output: pipr.schemas.summary,
+        run: ({ input }) => input,
+      });
+      const agent = pipr.agent({
+        name: "reviewer",
+        instructions: "Review.",
+        output: pipr.schemas.review,
+        tools: [tool],
+        prompt: () => "Review.",
+      });
+      const task = pipr.task({ name: "review", run() {} });
+      handles = { task, agent, tool };
+    });
+
+    buildPiprPlan(factory);
+
+    expect(Object.keys(handles.task ?? {})).toEqual(["kind", "name"]);
+    expect(Object.keys(handles.agent ?? {})).toEqual(["kind", "name", "extend"]);
+    expect(Object.keys(handles.tool ?? {})).toEqual(["kind", "name"]);
+  });
+
+  it("rejects copied task and agent handles", () => {
+    expect(() =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          const task = pipr.task({ name: "review", run() {} });
+          pipr.on.changeRequest({ actions: ["opened"], task: { ...task } as Task });
+        }),
+      ),
+    ).toThrow("Expected a task handle created by pipr.task");
+
+    let copiedAgent: Agent | undefined;
+    const plan = buildPiprPlan(
+      definePipr((pipr) => {
+        const agent = pipr.agent({
+          name: "reviewer",
+          instructions: "Review.",
+          output: pipr.schemas.review,
+          prompt: () => "Review.",
+        });
+        copiedAgent = { ...agent } as Agent;
+      }),
+    );
+
+    expect(() => plan.resolveAgent(copiedAgent as Agent)).toThrow(
+      "Expected an agent handle created by pipr.agent",
+    );
+  });
+
+  it("resolves agents from a separately bundled SDK module", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-sdk-copy-"));
+    const sdkSource = path.join(import.meta.dirname, "..", "index.ts");
+    const entrypoint = path.join(directory, "entry.ts");
+    await writeFile(entrypoint, `export * from ${JSON.stringify(sdkSource)};\n`);
+    const result = await Bun.build({
+      entrypoints: [entrypoint],
+      format: "esm",
+      target: "bun",
+    });
+    expect(result.success).toBe(true);
+    const output = result.outputs[0];
+    if (!output) {
+      throw new Error("SDK test bundle produced no output");
+    }
+    const modulePath = path.join(directory, "sdk.mjs");
+    await writeFile(modulePath, await output.text());
+    const internalModule = pathToFileURL(path.join(import.meta.dirname, "..", "internal.ts")).href;
+    const verificationPath = path.join(directory, "verify.mjs");
+    await writeFile(
+      verificationPath,
+      [
+        `import { buildPiprPlan } from ${JSON.stringify(internalModule)};`,
+        'import * as sdk from "./sdk.mjs";',
+        "let agent;",
+        "const factory = sdk.definePipr((pipr) => {",
+        "  agent = pipr.agent({",
+        '    name: "foreign-reviewer",',
+        '    instructions: "Review.",',
+        "    output: pipr.schemas.review,",
+        '    prompt: () => "Review.",',
+        "  });",
+        "});",
+        "const plan = buildPiprPlan(factory);",
+        'if (plan.resolveAgent(agent).name !== "foreign-reviewer") {',
+        '  throw new Error("foreign agent did not resolve through its runtime plan");',
+        "}",
+      ].join("\n"),
+    );
+    const verification = Bun.spawn([process.execPath, verificationPath], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exitCode, stderr] = await Promise.all([
+      verification.exited,
+      new Response(verification.stderr).text(),
+    ]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
   });
 
   it("rejects async config callbacks", () => {
@@ -369,9 +489,7 @@ describe("definePipr", () => {
         pi: {
           async run(_agent, _input, options) {
             runTimeout = options?.timeout;
-            return { summary: { body: "Done." }, inlineFindings: [] } as Awaited<
-              ReturnType<typeof _agent.definition.output.parse>
-            >;
+            return { summary: { body: "Done." }, inlineFindings: [] } as never;
           },
         },
         review: {
@@ -748,7 +866,10 @@ describe("definePipr", () => {
         change: fakeChange(),
         pi: {
           async run(agent) {
-            return agent.definition.output.parse({ summary: "Done.", findings: ["A"] }) as never;
+            return plan.resolveAgent(agent).definition.output.parse({
+              summary: "Done.",
+              findings: ["A"],
+            }) as never;
           },
         },
         review: {
@@ -914,6 +1035,69 @@ describe("definePipr", () => {
   });
 });
 
+describe("prompt rendering", () => {
+  const serializationError = "Prompt value must be JSON-serializable";
+
+  it("rejects unsupported JSON values consistently", () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const symbolKey = Symbol("hidden");
+    const transformedMap = Object.defineProperty({}, "toJSON", {
+      value: () => new Map([["key", "value"]]),
+    });
+    const transformedArray = Object.defineProperty({}, "toJSON", {
+      value: () => Object.assign(["value"], { metadata: "hidden" }),
+    });
+    const unsupported = [
+      () => undefined,
+      Symbol("value"),
+      1n,
+      circular,
+      { nested: () => undefined },
+      { nested: Symbol("value") },
+      { nested: 1n },
+      { nested: undefined },
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      { nested: Number.NaN },
+      { nested: Number.POSITIVE_INFINITY },
+      { nested: Number.NEGATIVE_INFINITY },
+      Object.assign(["value"], { metadata: "hidden" }),
+      new Map([["key", "value"]]),
+      new Set(["value"]),
+      { [symbolKey]: "hidden" },
+      {
+        toJSON() {
+          throw new Error("custom serialization failure");
+        },
+      },
+      transformedMap,
+      transformedArray,
+    ];
+
+    for (const value of unsupported) {
+      expect(() => renderPromptJson(value)).toThrow(serializationError);
+      expect(() => interpolatePromptValue(value)).toThrow(serializationError);
+    }
+    expect(() => renderPromptJson(undefined)).toThrow(serializationError);
+  });
+
+  it("preserves supported prompt rendering and nullish interpolation", () => {
+    const transformedValue = Object.defineProperty({}, "toJSON", {
+      value: () => ({ ok: true }),
+    });
+
+    expect(interpolatePromptValue(undefined).value).toBe("");
+    expect(interpolatePromptValue(null).value).toBe("");
+    expect(interpolatePromptValue("raw").value).toBe("raw");
+    expect(renderPromptJson(null).value).toBe("null");
+    expect(renderPromptJson({ ok: true }).value).toBe('{\n  "ok": true\n}');
+    expect(renderPromptJson(transformedValue).value).toBe('{\n  "ok": true\n}');
+    expect(interpolatePromptValue(transformedValue).value).toBe('{\n  "ok": true\n}');
+  });
+});
+
 describe("standalone SDK declarations", () => {
   it("keeps declaration utilities out of the public SDK root implementation", async () => {
     const builderSource = await readFile(
@@ -1025,6 +1209,103 @@ function expectExplicitReviewerRejectsConstructionFields(
 
 void expectExplicitReviewerRejectsConstructionFields;
 
+function expectChangeRequestTasksRequireVoidInput(pipr: PiprBuilder): void {
+  const changeRequestTask = pipr.task({ name: "review", run() {} });
+  pipr.on.changeRequest({ actions: ["opened"], task: changeRequestTask });
+
+  const commandTask = pipr.task<{ question: string }>({ name: "ask", run() {} });
+  pipr.command({
+    pattern: "@pipr ask <question...>",
+    parse: (arguments_) => ({ question: arguments_.question ?? "" }),
+    task: commandTask,
+  });
+
+  // @ts-expect-error change-request entrypoints do not provide task input.
+  pipr.on.changeRequest({ actions: ["opened"], task: commandTask });
+}
+
+void expectChangeRequestTasksRequireVoidInput;
+
+function expectOpaqueHandles(task: Task, agent: Agent, tool: AgentTool): void {
+  task.name;
+  agent.name;
+  agent.extend({ instructions: "Additional instructions." });
+  tool.name;
+
+  // @ts-expect-error task execution is available only through the internal runtime seam.
+  task.handler;
+  // @ts-expect-error task runtime settings are not part of the public handle.
+  task.check;
+  // @ts-expect-error task runtime settings are not part of the public handle.
+  task.local;
+  // @ts-expect-error agent definitions are available only through the internal runtime seam.
+  agent.definition;
+  // @ts-expect-error tool definitions are available only through the internal runtime seam.
+  tool.input;
+  // @ts-expect-error tool definitions are available only through the internal runtime seam.
+  tool.output;
+  // @ts-expect-error tool callbacks are available only through the internal runtime seam.
+  tool.run;
+  // @ts-expect-error tool callbacks are available only through the internal runtime seam.
+  tool.toModelOutput;
+}
+
+void expectOpaqueHandles;
+
+function expectReadonlySdkCollections(
+  pipr: PiprBuilder,
+  model: ModelProfile,
+  context: TaskContext,
+  manifest: DiffManifest,
+): void {
+  const paths = { include: ["src/**"], exclude: ["**/*.test.ts"] } as const;
+  const fallbacks = [model] as const;
+
+  void context.change.diffManifest({ paths });
+  pipr.reviewer({ model, fallbacks, instructions: "Review." });
+
+  // @ts-expect-error Diff Manifest files are runtime-owned readonly collections.
+  manifest.files.push();
+  // @ts-expect-error Diff Manifest hunks are runtime-owned readonly collections.
+  manifest.files[0]?.hunks.push();
+  // @ts-expect-error Diff Manifest ranges are runtime-owned readonly collections.
+  manifest.files[0]?.commentableRanges.push();
+}
+
+void expectReadonlySdkCollections;
+
+async function expectNamedChangedFiles(context: TaskContext): Promise<void> {
+  const files = await context.change.changedFiles();
+  const first: ChangedFile | undefined = files[0];
+  void first;
+
+  // @ts-expect-error changed files are runtime-owned readonly collections.
+  files.push({ path: "src/example.ts", status: "modified" });
+  // @ts-expect-error changed file status must use FileStatus.
+  const invalid: ChangedFile = { path: "src/example.ts", status: "changed" };
+  void invalid;
+}
+
+void expectNamedChangedFiles;
+
+function renderPromptJson(value: unknown): PromptText {
+  return withPiprBuilder((pipr) => pipr.json(value));
+}
+
+function interpolatePromptValue(value: unknown): PromptText {
+  return withPiprBuilder((pipr) => pipr.prompt`${value}`);
+}
+
+function withPiprBuilder<T>(callback: (pipr: PiprBuilder) => T): T {
+  let result: T | undefined;
+  buildPiprPlan(
+    definePipr((pipr) => {
+      result = callback(pipr);
+    }),
+  );
+  return result as T;
+}
+
 const diffManifestContract: DiffManifest = {
   baseSha: "base",
   headSha: "head",
@@ -1118,8 +1399,8 @@ function fakeTaskContext(): TaskContext {
     platform: { id: "local" },
     change: fakeChange(),
     pi: {
-      async run(agent) {
-        return agent.definition.output.parse({ summary: { body: "Done." }, inlineFindings: [] });
+      async run() {
+        throw new Error("fake task context cannot run agents");
       },
     },
     review: {

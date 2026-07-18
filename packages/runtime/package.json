@@ -1,7 +1,7 @@
 {
   "name": "@usepipr/runtime",
   "version": "0.4.3",
-  "description": "Runtime package for Pipr code host review automation",
+  "description": "Internal Pipr runtime; unsupported for user imports",
   "type": "module",
   "license": "MIT",
   "repository": {

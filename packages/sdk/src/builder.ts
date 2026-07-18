@@ -1,16 +1,25 @@
 import { z } from "zod";
 import { assertSupportedCommandRestCapture } from "./command-grammar.js";
-import {
-  builtinReadOnlyToolBrand,
-  configFactoryBrand,
-  type InternalPiprConfigFactory,
-} from "./internal-contract.js";
+import { configFactoryBrand, type InternalPiprConfigFactory } from "./internal-contract.js";
 import { stripCommonIndent } from "./prompt.js";
-import { renderPromptValue } from "./prompt-render.js";
+import { renderPromptValue, serializePromptJson } from "./prompt-render.js";
 import type { ReviewResult } from "./review-contract.js";
-import type { RuntimePlan } from "./runtime-contract.js";
+import type {
+  RuntimeAgent,
+  RuntimeAgentTool,
+  RuntimePlan,
+  RuntimeTask,
+} from "./runtime-contract.js";
+import {
+  createAgentHandle,
+  createBuiltinReadOnlyToolHandle,
+  createTaskHandle,
+  createToolHandle,
+  runtimeAgentForHandle,
+  runtimeTaskForHandle,
+} from "./runtime-handles.js";
 import { jsonSchema, schema, schemas } from "./schema.js";
-import type { Agent, AgentDefinition, AgentTool, BuiltinToolCatalog } from "./types/agent.js";
+import type { Agent, BuiltinToolCatalog } from "./types/agent.js";
 import type {
   AggregateCheckOptions,
   AutoResolveOptions,
@@ -67,24 +76,19 @@ export function definePlugin<Handle>(setup: (builder: PiprBuilder) => Handle): P
 
 function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
   const models: ModelProfile[] = [];
-  const agents: Agent[] = [];
-  const tasks: Task<unknown>[] = [];
+  const agents: RuntimeAgent[] = [];
+  const tasks: RuntimeTask[] = [];
   const changeRequestTriggers: RuntimePlan["changeRequestTriggers"] = [];
   const commands: RuntimePlan["commands"] = [];
-  const tools: AgentTool[] = [];
+  const tools: RuntimeAgentTool[] = [];
   const publication: RuntimePlan["publication"] = {};
+  const readOnlyTool = createBuiltinReadOnlyToolHandle();
   let checks: ChecksOptions | undefined;
   let limits: RuntimeLimits | undefined;
 
   const api: PiprBuilder = {
     tools: {
-      readOnly: [
-        {
-          kind: "pipr.tool",
-          name: "readOnly",
-          [builtinReadOnlyToolBrand]: true,
-        } as AgentTool,
-      ],
+      readOnly: [readOnlyTool.handle],
     } satisfies BuiltinToolCatalog,
     schemas,
     on: {
@@ -94,7 +98,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
         }
         changeRequestTriggers.push({
           actions: [...options.actions],
-          task: options.task as Task<unknown>,
+          task: runtimeTaskForHandle(options.task),
         });
       },
     },
@@ -127,23 +131,17 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       return profile;
     },
     agent(definition) {
-      const agent = createAgent(definition);
-      agents.push(agent);
-      return agent;
+      const agent = createAgentHandle(definition);
+      agents.push(agent.record);
+      return agent.handle;
     },
     task(definition) {
       if (!definition.name || typeof definition.run !== "function") {
         throw new Error("pipr.task requires { name, run }");
       }
-      const task = {
-        kind: "pipr.task" as const,
-        name: definition.name,
-        check: definition.check,
-        ...(definition.local === false ? { local: false as const } : {}),
-        handler: definition.run,
-      };
-      tasks.push(task as Task<unknown>);
-      return task;
+      const task = createTaskHandle(definition);
+      tasks.push(task.record);
+      return task.handle;
     },
     reviewer(options) {
       return createReviewer(api, options);
@@ -176,7 +174,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
         permission: options.permission ?? "write",
         description: options.description,
         parse: options.parse as ((arguments_: Record<string, string>) => unknown) | undefined,
-        task: options.task as Task<unknown>,
+        task: runtimeTaskForHandle(options.task),
       });
     },
     use(plugin) {
@@ -190,13 +188,9 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       if (!run) {
         throw new Error(`Tool '${definition.name}' must define run`);
       }
-      const tool = {
-        kind: "pipr.tool" as const,
-        ...definition,
-        run,
-      };
-      tools.push(tool);
-      return tool;
+      const tool = createToolHandle({ ...definition, run });
+      tools.push(tool.record);
+      return tool.handle;
     },
     schema,
     jsonSchema,
@@ -221,7 +215,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       };
     },
     json(value, options) {
-      const text = JSON.stringify(value, null, options?.pretty === false ? 0 : 2);
+      const text = serializePromptJson(value, options?.pretty !== false);
       if (options?.maxCharacters !== undefined && text.length > options.maxCharacters) {
         throw new Error(`JSON prompt value exceeded ${options.maxCharacters} characters`);
       }
@@ -242,6 +236,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       );
       assertModelIdentity(models);
       return {
+        resolveAgent: runtimeAgentForHandle,
         models,
         agents,
         tasks,
@@ -526,7 +521,7 @@ function reviewChangeRequestEntrypoint(
 function reviewCommandEntrypoint(options: ReviewRecipeOptions):
   | {
       pattern: string;
-      options: CommandOptions<unknown>;
+      options: CommandOptions<void>;
     }
   | undefined {
   const entrypoint = options.entrypoints?.command;
@@ -647,30 +642,6 @@ function assertDiffManifestLimitConflicts(
       }
     }
   }
-}
-
-function createAgent<Input, Output>(
-  definition: AgentDefinition<Input, Output>,
-): Agent<Input, Output> {
-  return {
-    kind: "pipr.agent",
-    name: definition.name,
-    definition,
-    extend(patch) {
-      return createAgent({
-        ...definition,
-        ...patch,
-        instructions:
-          patch.instructions === undefined
-            ? definition.instructions
-            : {
-                kind: "pipr.prompt",
-                value:
-                  `${renderPromptValue(definition.instructions)}\n\n${renderPromptValue(patch.instructions)}`.trim(),
-              },
-      });
-    },
-  };
 }
 
 function assertUnique(values: string[], label: string): void {

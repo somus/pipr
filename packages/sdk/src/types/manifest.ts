@@ -1,7 +1,7 @@
 /** Include/exclude path filter for scoped reviews and Diff Manifest projection. */
 export type PathFilter = {
-  include?: string[];
-  exclude?: string[];
+  include?: readonly string[];
+  exclude?: readonly string[];
 };
 
 /** Side of a change request diff that a commentable range belongs to. */
@@ -12,6 +12,13 @@ export type RangeKind = "added" | "deleted" | "context" | "mixed";
 
 /** File lifecycle status in a Diff Manifest. */
 export type FileStatus = "added" | "modified" | "removed" | "renamed";
+
+/** One changed file returned without its Diff Manifest hunks and ranges. */
+export type ChangedFile = {
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly status: FileStatus;
+};
 
 /** Commentable line range that can anchor an Inline Review Comment. */
 export type CommentableRange = {
@@ -47,10 +54,10 @@ export type DiffManifestFile = {
   language?: string;
   additions: number;
   deletions: number;
-  hunks: DiffHunk[];
-  commentableRanges: CommentableRange[];
-  signals?: string[];
-  changedSymbols?: string[];
+  hunks: readonly DiffHunk[];
+  commentableRanges: readonly CommentableRange[];
+  signals?: readonly string[];
+  changedSymbols?: readonly string[];
   excludedReason?: string;
 };
 
@@ -59,7 +66,7 @@ export type DiffManifest = {
   baseSha: string;
   headSha: string;
   mergeBaseSha: string;
-  files: DiffManifestFile[];
+  files: readonly DiffManifestFile[];
 };
 
 /** Options for projecting a Diff Manifest for task or prompt use. */

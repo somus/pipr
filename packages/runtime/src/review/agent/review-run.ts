@@ -1,7 +1,11 @@
 import { Buffer } from "node:buffer";
-import type { Agent, AgentTool, DurationInput, TaskContext } from "@usepipr/sdk";
-import type { RuntimePlan } from "@usepipr/sdk/internal";
-import { isBuiltinReadOnlyTool } from "@usepipr/sdk/internal";
+import type { DurationInput, TaskContext } from "@usepipr/sdk";
+import {
+  isBuiltinReadOnlyTool,
+  type RuntimeAgent,
+  type RuntimeAgentTool,
+  type RuntimePlan,
+} from "@usepipr/sdk/internal";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
@@ -33,7 +37,7 @@ export type PiRunStats = {
 };
 
 export type RunReviewAgentOptions = {
-  agent: Agent;
+  agent: RuntimeAgent;
   input: unknown;
   runOptions: Parameters<TaskContext["pi"]["run"]>[2];
   toolMode?: "read-only" | "none";
@@ -236,16 +240,16 @@ async function runPiWithTransientRetries(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-function retrySettings(agent: Agent): RetrySettings {
+function retrySettings(agent: RuntimeAgent): RetrySettings {
   return retrySettingsSchema.parse({
     invalidOutput: agent.definition.retry?.invalidOutput ?? 1,
     transientFailure: agent.definition.retry?.transientFailure ?? 0,
   });
 }
 
-function resolveAgentTools(agent: Agent, plan: RuntimePlan): AgentToolResolution {
-  const customTools: AgentTool[] = [];
-  const unsupported: AgentTool[] = [];
+function resolveAgentTools(agent: RuntimeAgent, plan: RuntimePlan): AgentToolResolution {
+  const customTools: RuntimeAgentTool[] = [];
+  const unsupported: RuntimeAgentTool[] = [];
   const registeredTools = new Set(plan.tools);
   for (const tool of agent.definition.tools ?? []) {
     if (isBuiltinReadOnlyTool(tool)) {
@@ -267,7 +271,10 @@ function resolveAgentTools(agent: Agent, plan: RuntimePlan): AgentToolResolution
   return { customTools };
 }
 
-function isRunnableCustomTool(tool: AgentTool, registeredTools: Set<AgentTool>): boolean {
+function isRunnableCustomTool(
+  tool: RuntimeAgentTool,
+  registeredTools: Set<RuntimeAgentTool>,
+): boolean {
   return (
     registeredTools.has(tool) &&
     Boolean(tool.input) &&
@@ -282,7 +289,7 @@ function selectProviders(
     config: PiprConfig;
     provider: ProviderConfig;
   },
-  agent: Agent,
+  agent: RuntimeAgent,
   runOptions: Parameters<TaskContext["pi"]["run"]>[2],
 ): ProviderConfig[] {
   if (runtime.providerOverride) {
@@ -356,7 +363,7 @@ function customToolsForRun(
   };
 }
 
-function customToolDefinition(tool: AgentTool): PiCustomToolDefinition {
+function customToolDefinition(tool: RuntimeAgentTool): PiCustomToolDefinition {
   const { input, output, run } = tool;
   if (!input || !output || !run) {
     throw new Error(`Custom Pi tool '${tool.name}' is missing input, output, or run`);
@@ -469,7 +476,7 @@ function assertSuccessfulPiResult(result: PiRunResult, log: RuntimeLog | undefin
   throw new Error(`Pi agent failed with exit ${result.exitCode}`);
 }
 
-function parseAgentOutput(output: string, agent: Agent): ParseAgentResult {
+function parseAgentOutput(output: string, agent: RuntimeAgent): ParseAgentResult {
   let lastError = "";
   for (const payload of jsonPayloadCandidates(output)) {
     try {

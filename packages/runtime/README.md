@@ -1,11 +1,12 @@
 # @usepipr/runtime
 
-`@usepipr/runtime` owns Pipr's config loading, hosted and local command
-execution, Diff Manifest creation, Pi execution, review validation, and
-publication planning.
+`@usepipr/runtime` is an internal package that owns Pipr's config loading,
+hosted and local command execution, Diff Manifest creation, Pi execution,
+review validation, and publication planning. Direct user imports are
+unsupported.
 
-Most users should interact with this package through the `pipr` CLI or a code
-host integration. Repository configs should import from `@usepipr/sdk`.
+Use the `pipr` CLI or a code host integration to run Pipr. Repository configs
+should import only from `@usepipr/sdk`.
 
 ## Technical notes
 

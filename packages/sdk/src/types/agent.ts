@@ -1,8 +1,8 @@
 import type { ReviewResult, ReviewSummary } from "../review-contract.js";
 import type { DurationInput, ModelProfile } from "./config.js";
-import type { PromptSource, PromptValue } from "./prompt.js";
+import type { PromptSource } from "./prompt.js";
 import type { Schema } from "./schema.js";
-import type { ChangeRequestInfo, PlatformInfo, RepositoryInfo, ToolRunOptions } from "./task.js";
+import type { ChangeRequestInfo, PlatformInfo, RepositoryInfo } from "./task.js";
 
 /** Built-in tool catalog exposed on the pipr builder. */
 export type BuiltinToolCatalog = {
@@ -15,15 +15,13 @@ export type BuiltinSchemaCatalog = {
   readonly summary: Schema<ReviewSummary>;
 };
 
-/** Tool definition available to Pi agents at runtime. */
+declare const agentToolHandleBrand: unique symbol;
+
+/** Opaque tool handle available to Pi agents. */
 export type AgentTool<Input = unknown, Output = unknown> = {
   readonly kind: "pipr.tool";
   readonly name: string;
-  readonly description?: string;
-  readonly input?: Schema<Input>;
-  readonly output?: Schema<Output>;
-  run?(options: ToolRunOptions<Input>): Output | Promise<Output>;
-  toModelOutput?(output: Output): PromptValue;
+  readonly [agentToolHandleBrand]: readonly [Input, Output];
 };
 
 /** Context passed to an agent prompt function. */
@@ -38,7 +36,7 @@ export type AgentPromptContext = {
 export type AgentDefinition<Input, Output> = {
   name?: string;
   model?: ModelProfile;
-  fallbacks?: ModelProfile[];
+  fallbacks?: readonly ModelProfile[];
   instructions: PromptSource;
   prompt(input: Input, context: AgentPromptContext): PromptSource | Promise<PromptSource>;
   output: Schema<Output>;
@@ -55,10 +53,12 @@ export type AgentExtension<Input, Output> = Partial<AgentDefinition<Input, Outpu
   instructions?: PromptSource;
 };
 
-/** Registered Pi agent with typed input and output. */
+declare const agentHandleBrand: unique symbol;
+
+/** Opaque registered Pi agent with typed input and output. */
 export type Agent<Input = unknown, Output = unknown> = {
   readonly kind: "pipr.agent";
   readonly name?: string;
-  readonly definition: AgentDefinition<Input, Output>;
+  readonly [agentHandleBrand]: (input: Input) => Output;
   extend(patch: AgentExtension<Input, Output>): Agent<Input, Output>;
 };

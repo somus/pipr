@@ -163,7 +163,7 @@ Project language lives in [docs/CONTEXT.md](docs/CONTEXT.md). Architecture decis
 | Package | Role |
 | --- | --- |
 | [`@usepipr/sdk`](packages/sdk) | Public TypeScript authoring SDK for `.pipr/config.ts`. |
-| [`@usepipr/runtime`](packages/runtime) | Config loading, diff creation, task execution, validation, and publication planning. |
+| [`@usepipr/runtime`](packages/runtime) | Internal runtime used by Pipr tooling; direct user imports are unsupported. |
 | [`@usepipr/cli`](packages/cli) | `pipr` binary and command-line entrypoint. |
 | [`@pipr/e2e`](packages/e2e) | Private local Action and container test harness. |
 | [`@pipr/evals`](packages/evals) | Private prompt-evaluation suite for review behavior. |

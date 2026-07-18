@@ -39,6 +39,7 @@ export type {
   SecretRef,
 } from "./types/config.js";
 export type {
+  ChangedFile,
   CommentableRange,
   DiffHunk,
   DiffManifest,

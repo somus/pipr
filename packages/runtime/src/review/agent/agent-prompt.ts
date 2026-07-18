@@ -1,5 +1,5 @@
-import type { Agent, AgentPromptContext, AgentTool, PathFilter, Schema } from "@usepipr/sdk";
-import { renderPromptValue } from "@usepipr/sdk/internal";
+import type { AgentPromptContext, PathFilter, Schema } from "@usepipr/sdk";
+import { type RuntimeAgent, type RuntimeAgentTool, renderPromptValue } from "@usepipr/sdk/internal";
 import { compact } from "lodash-es";
 import { piReadOnlyToolNames } from "../../pi/contract.js";
 import { isRecord } from "../../shared/record.js";
@@ -10,7 +10,7 @@ import type { PreparedDiffManifestContext } from "./diff-manifest-context.js";
 import { schemaContainsReviewFinding } from "./review-schema.js";
 
 export type AgentToolResolution = {
-  customTools: AgentTool[];
+  customTools: RuntimeAgentTool[];
 };
 
 export type PluginToolExecutionContext = {
@@ -44,7 +44,7 @@ export type PreparedAgentContext = {
 
 export async function renderAgentPrompt(
   options: {
-    agent: Agent;
+    agent: RuntimeAgent;
     input: unknown;
     runOptions?: {
       paths?: PathFilter;
@@ -102,13 +102,12 @@ function changeRequestPrompt(change: AgentRunContext["prompt"]["change"]): strin
   ].join("\n");
 }
 
-function renderAgentDefinitionPrompt<Input>(
-  agent: Agent<Input, unknown>,
+function renderAgentDefinitionPrompt(
+  agent: RuntimeAgent,
   input: unknown,
   context: AgentPromptContext,
 ) {
-  // Runtime input was selected by the user task that called ctx.pi.run for this agent.
-  return agent.definition.prompt(input as Input, { ...context });
+  return agent.definition.prompt(input, { ...context });
 }
 
 function promptSection(title: string, body: string | undefined): string | undefined {

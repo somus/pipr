@@ -1,5 +1,5 @@
-import type { Agent, DiffManifestOptions, SecretRef, Task, TaskContext } from "@usepipr/sdk";
-import type { RuntimePlan } from "@usepipr/sdk/internal";
+import type { Agent, DiffManifestOptions, SecretRef, TaskContext } from "@usepipr/sdk";
+import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/diff.js";
@@ -64,7 +64,7 @@ export type RunTaskRuntimeOptions = {
   providerOverride?: ProviderConfig;
   taskName?: string;
   taskInput?: unknown;
-  selectedTasks?: readonly Task<unknown>[];
+  selectedTasks?: readonly RuntimeTask[];
   emptyTasksReason?: string;
   trustedConfigSha?: string;
   trustedConfigHash?: string;
@@ -505,7 +505,7 @@ function createTaskContext(
     pi: {
       async run(agent, input, runOptions) {
         const result = await runReviewAgent({
-          agent,
+          agent: options.plan.resolveAgent(agent),
           input,
           runOptions,
           runtime: {
@@ -537,7 +537,10 @@ function createTaskContext(
   return taskContext;
 }
 
-function agentOutputForTaskContext<Output>(_agent: Agent<unknown, Output>, value: unknown): Output {
+function agentOutputForTaskContext<Input, Output>(
+  _agent: Agent<Input, Output>,
+  value: unknown,
+): Output {
   // The agent output schema was parsed by runReviewAgent before TaskContext resolves.
   return value as Output;
 }

@@ -1,5 +1,4 @@
-import type { Task } from "@usepipr/sdk";
-import type { RuntimePlan } from "@usepipr/sdk/internal";
+import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter, CodeHostStatus, CodeHostStatusState } from "../hosts/types.js";
 import type { RuntimeCheckSink, RuntimeTaskCheckResult } from "../review/task/task-runtime.js";
 import type { RuntimeLog } from "../shared/logging.js";
@@ -10,7 +9,7 @@ export const genericCheckFailureSummary = "pipr failed; see runner logs for deta
 export type StartedRuntimeChecks = {
   event: ChangeRequestEventContext;
   adapter: CodeHostAdapter;
-  tasks: Task<unknown>[];
+  tasks: RuntimeTask[];
   outcomes: Map<string, RuntimeTaskCheckResult>;
   taskRuns: Map<string, CodeHostStatus>;
   aggregate?: CodeHostStatus;
@@ -29,7 +28,7 @@ export async function startRuntimeChecks(options: {
   event: ChangeRequestEventContext;
   plan: RuntimePlan;
   taskName?: string;
-  selectedTasks: Task<unknown>[];
+  selectedTasks: RuntimeTask[];
   log?: RuntimeLog;
 }): Promise<StartedRuntimeChecks | undefined> {
   if (!canStartRuntimeChecks(options)) {
@@ -210,7 +209,7 @@ async function updateCheckRunOrError(
 }
 
 function taskCheckResultForFinalization(
-  task: Task<unknown>,
+  task: RuntimeTask,
   result: RuntimeTaskCheckResult | undefined,
   options: FinalizeRuntimeCheckOptions,
 ): RuntimeTaskCheckResult {
@@ -227,7 +226,7 @@ function taskCheckResultForFinalization(
 }
 
 function aggregateCheckConclusion(
-  tasks: Task<unknown>[],
+  tasks: RuntimeTask[],
   results: RuntimeTaskCheckResult[],
   options: { skipped?: boolean; forceFailureSummary?: string },
 ): { conclusion: Exclude<CodeHostStatusState, "pending">; summary: string } {
@@ -251,7 +250,7 @@ function aggregateCheckConclusion(
     : { conclusion: "success", summary: "All required pipr tasks completed." };
 }
 
-function taskCheckSettings(task: Task<unknown>): {
+function taskCheckSettings(task: RuntimeTask): {
   individual: boolean;
   aggregate: boolean;
   name: string;

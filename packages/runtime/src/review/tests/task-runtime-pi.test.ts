@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import type { AgentTool } from "@usepipr/sdk";
 import { extractPriorReviewState } from "../prior-state.js";
 import {
   config,
   deepseekModel,
   defaultReviewAgent,
   defaultReviewPlan,
-  expectCustomToolRejected,
   expectOnlyInsideFinding,
   fallbackConfig,
   fallbackReviewPlan,
@@ -501,25 +501,27 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(observedToolResult).toEqual({ body: "Remember this." });
   });
 
-  it("fails closed when a custom tool forges the readOnly name", async () => {
-    const plan = testPlan((pipr) => {
-      registerPiReviewTask(
-        pipr,
-        defaultReviewAgent(pipr, { tools: [{ kind: "pipr.tool", name: "readOnly" }] }),
-      );
-    });
-
-    await expectCustomToolRejected(plan, "readOnly");
+  it("fails closed when a custom tool forges the readOnly name", () => {
+    expect(() =>
+      testPlan((pipr) => {
+        registerPiReviewTask(
+          pipr,
+          defaultReviewAgent(pipr, {
+            tools: [{ kind: "pipr.tool", name: "readOnly" } as AgentTool],
+          }),
+        );
+      }),
+    ).toThrow("Expected a tool handle created by pipr.tool");
   });
 
-  it("fails closed when an agent copies a registered custom tool handle", async () => {
-    const plan = testPlan((pipr) => {
-      const customTool = memoryTool(pipr);
-      const copiedTool = { ...customTool };
-      registerPiReviewTask(pipr, defaultReviewAgent(pipr, { tools: [copiedTool] }));
-    });
-
-    await expectCustomToolRejected(plan, "custom_tool");
+  it("fails closed when an agent copies a registered custom tool handle", () => {
+    expect(() =>
+      testPlan((pipr) => {
+        const customTool = memoryTool(pipr);
+        const copiedTool = { ...customTool } as AgentTool;
+        registerPiReviewTask(pipr, defaultReviewAgent(pipr, { tools: [copiedTool] }));
+      }),
+    ).toThrow("Expected a tool handle created by pipr.tool");
   });
 
   it("renders custom task details through ctx.comment markdown", async () => {

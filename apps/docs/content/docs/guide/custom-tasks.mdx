@@ -101,12 +101,12 @@ Important methods:
 | Method | Use |
 | --- | --- |
 | `ctx.change.diffManifest(options)` | Build full or condensed changed-code context. |
-| `ctx.change.changedFiles(options)` | Inspect changed file paths without running Pi. |
+| `ctx.change.changedFiles()` | Inspect changed file paths without running Pi. |
 | `ctx.pi.run(agent, input, options)` | Run a typed Pi agent. |
 | `ctx.review.prior()` | Load prior Pipr review state for the current task scope. |
 | `ctx.comment(value)` | Emit the final review comment output. |
 | `ctx.command?.reply(markdown)` | Emit a command response for command-triggered tasks. |
-| `ctx.check(value)` | Emit an explicit task check outcome. |
+| `ctx.check.pass/fail/neutral(summary?)` | Emit an explicit task check outcome. |
 | `ctx.log.info(...)` | Write runtime logs. |
 
 ## Diff Manifest first

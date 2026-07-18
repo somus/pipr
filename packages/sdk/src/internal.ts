@@ -1,12 +1,17 @@
 import {
-  builtinReadOnlyToolBrand,
   type ConfigFactoryValue,
   configFactoryBrand,
   type InternalPiprConfigFactory,
 } from "./internal-contract.js";
-import type { AgentTool } from "./types/agent.js";
+import type { RuntimeAgentTool } from "./runtime-contract.js";
 
-export type { RuntimePlan } from "./runtime-contract.js";
+export type {
+  RuntimeAgent,
+  RuntimeAgentDefinition,
+  RuntimeAgentTool,
+  RuntimePlan,
+  RuntimeTask,
+} from "./runtime-contract.js";
 export { defaultMaxStoredFindings, maxStoredFindingsLimit } from "./types/config.js";
 
 import type { RuntimePlan } from "./runtime-contract.js";
@@ -31,8 +36,8 @@ export {
 export const reviewOutputSchemaId = "core/pr-review";
 
 /** Returns whether a tool is one of pipr's built-in read-only tools. */
-export function isBuiltinReadOnlyTool(tool: AgentTool): boolean {
-  return Reflect.get(tool, builtinReadOnlyToolBrand) === true;
+export function isBuiltinReadOnlyTool(tool: RuntimeAgentTool): boolean {
+  return tool.builtinReadOnly === true;
 }
 
 /** Checks that an unknown value is a pipr configuration factory. */

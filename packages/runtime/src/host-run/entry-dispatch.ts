@@ -1,5 +1,5 @@
-import type { ChangeRequestAction, Task } from "@usepipr/sdk";
-import type { RuntimePlan } from "@usepipr/sdk/internal";
+import type { ChangeRequestAction } from "@usepipr/sdk";
+import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
 import { uniqBy } from "lodash-es";
 import {
   commandPatternPrefixMatches,
@@ -62,7 +62,7 @@ export type PlanCommandResolution =
 export type RuntimeEntryDispatch =
   | {
       kind: "change-request";
-      tasks: Task<unknown>[];
+      tasks: RuntimeTask[];
       taskName?: string;
     }
   | PlanCommandResolution;
@@ -90,21 +90,21 @@ export function selectRuntimeTasks(options: {
   plan: RuntimePlan;
   event: { action?: string };
   taskName?: string;
-}): Task<unknown>[] {
+}): RuntimeTask[] {
   if (options.taskName) {
     return options.plan.tasks.filter((task) => task.name === options.taskName);
   }
   return selectChangeRequestTasks(options.plan, options.event);
 }
 
-export function selectLocalReviewTasks(plan: RuntimePlan): Task<unknown>[] {
+export function selectLocalReviewTasks(plan: RuntimePlan): RuntimeTask[] {
   return uniqBy(
     plan.changeRequestTriggers.map((trigger) => trigger.task),
     (task) => task.name,
   ).filter((task) => task.local !== false);
 }
 
-function selectChangeRequestTasks(plan: RuntimePlan, event: { action?: string }): Task<unknown>[] {
+function selectChangeRequestTasks(plan: RuntimePlan, event: { action?: string }): RuntimeTask[] {
   if (!changeRequestActions.includes(event.action as ChangeRequestAction)) {
     return [];
   }

@@ -517,7 +517,7 @@ pipr.prompt`
 `;
 ```
 
-`pipr.json(value, { pretty, maxCharacters })` renders bounded JSON and throws if it exceeds `maxCharacters`.
+`pipr.json(value, { pretty, maxCharacters })` renders bounded JSON and throws if the value is not fully JSON-serializable or exceeds `maxCharacters`.
 
 ## Runtime limits
 
@@ -594,30 +594,16 @@ const reviewer = pipr.agent({
   name: "owner-aware-review",
   model,
   output: pipr.schemas.review,
-  tools: pipr.tools.readOnly,
-  instructions: "Review with the precomputed owner policy context.",
-  prompt: (input: { manifest: unknown; ownerPolicies: unknown }) => pipr.prompt`
-    ${pipr.section("Owner Policies", pipr.json(input.ownerPolicies))}
-  `,
+  tools: [...pipr.tools.readOnly, ownerTools.tool],
+  instructions: "Use owner_lookup when ownership policy is relevant to the review.",
+  prompt: () => "Review this change request.",
 });
 
 const ownerReview = pipr.task({
   name: "owner-aware-review",
   async run(ctx) {
     const manifest = await ctx.change.diffManifest({ compressed: true });
-    const ownerPolicies = await Promise.all(
-      manifest.files.map(async (file) => {
-        const output = await ownerTools.tool.run?.({
-          input: { path: file.path },
-          ctx,
-        });
-        if (!output) {
-          throw new Error("owner_lookup returned no output");
-        }
-        return ownerTools.tool.toModelOutput?.(output) ?? output;
-      }),
-    );
-    const review = await ctx.pi.run(reviewer, { manifest, ownerPolicies });
+    const review = await ctx.pi.run(reviewer, { manifest });
     await ctx.comment({
       main: review.summary.body,
       inlineFindings: review.inlineFindings,
@@ -628,4 +614,4 @@ const ownerReview = pipr.task({
 pipr.on.changeRequest({ actions: ["opened", "updated"], task: ownerReview });
 ```
 
-Plugin setup runs during config loading. Runtime effects still belong in tasks and tools.
+Plugin setup runs during config loading. Runtime effects still belong in tasks and tools. Task, agent, and tool values are opaque handles; expose a separate plugin operation when task code needs callable behavior.

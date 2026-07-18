@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import { type Agent, definePipr, type ReviewResult } from "@usepipr/sdk";
+import { type Agent, definePipr, type ReviewResult, type TaskHandler } from "@usepipr/sdk";
 import { buildPiprPlan } from "@usepipr/sdk/internal";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest, PiprConfig, ProviderConfig, ReviewFinding } from "../../types.js";
@@ -108,7 +108,7 @@ export function testPlan(configure: (pipr: PiprApi) => void) {
 export function singleTaskPlan(options: {
   name?: string;
   check?: Parameters<PiprApi["task"]>[0]["check"];
-  run: Parameters<PiprApi["task"]>[0]["run"];
+  run: TaskHandler<void>;
 }) {
   return testPlan((pipr) => {
     const task = pipr.task({
@@ -338,15 +338,6 @@ export function memoryTool(pipr: PiprApi) {
       return input;
     },
   });
-}
-
-export async function expectCustomToolRejected(
-  plan: RunTaskRuntimeOptions["plan"],
-  toolName: string,
-): Promise<void> {
-  await expect(runRuntime({ plan, piRunner: noFindingsPiRunner() })).rejects.toThrow(
-    `unregistered or invalid custom Pi tools: ${toolName}`,
-  );
 }
 
 export async function runRuntime(options: CommandRunRuntimeOptions): Promise<ReviewRuntimeResult>;

@@ -1,4 +1,5 @@
-import type { Agent, ModelProfile, Schema } from "@usepipr/sdk";
+import type { ModelProfile, Schema } from "@usepipr/sdk";
+import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import type { InlineThreadContext } from "../hosts/types.js";
 import type { RuntimeLog } from "../shared/logging.js";
@@ -298,12 +299,8 @@ function verifierResponseBody(response: string | undefined): string | undefined 
   return body && body.length > 0 ? body : undefined;
 }
 
-function internalVerifierAgent(
-  provider: ProviderConfig,
-  config: PiprConfig,
-): Agent<VerifierInput, VerifierOutput> {
+function internalVerifierAgent(provider: ProviderConfig, config: PiprConfig): RuntimeAgent {
   return {
-    kind: "pipr.agent",
     name: "pipr-internal-verifier",
     definition: {
       model: modelProfile(provider),
@@ -324,19 +321,14 @@ function internalVerifierAgent(
       ]
         .filter(Boolean)
         .join("\n"),
-      prompt: (input) => {
+      prompt: (value) => {
+        const input = value as VerifierInput;
         const { manifest: _manifest, ...verifierPromptInput } = input;
         return JSON.stringify(verifierPromptInput, null, 2);
       },
       tools: [],
       timeout: "2m",
       retry: { invalidOutput: 1, transientFailure: 0 },
-    },
-    extend(patch) {
-      return { ...this, definition: { ...this.definition, ...patch } } as Agent<
-        VerifierInput,
-        VerifierOutput
-      >;
     },
   };
 }

@@ -69,6 +69,24 @@ describe("runTaskRuntime: selection and identity", () => {
     expect(seen).toEqual(["updated", "ready"]);
   });
 
+  it("passes undefined to change-request tasks", async () => {
+    let observedInput: unknown = "unset";
+    const plan = testPlan((pipr) => {
+      const task = pipr.task({
+        name: "review",
+        async run(ctx, input) {
+          observedInput = input;
+          await ctx.comment("Review complete.");
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+
+    await runRuntime({ plan });
+
+    expect(observedInput).toBeUndefined();
+  });
+
   it("passes command task input to the selected task", async () => {
     let observedInput: unknown;
     const plan = testPlan((pipr) => {

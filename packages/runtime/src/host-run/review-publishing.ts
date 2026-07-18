@@ -1,4 +1,4 @@
-import type { Task } from "@usepipr/sdk";
+import type { RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import { publicationPlanForHostCapabilities } from "../review/comment.js";
 import { type RuntimeCommandInvocation, runTaskRuntime } from "../review/task/task-runtime.js";
@@ -22,7 +22,7 @@ export async function runTrustedReviewAndPublish(options: {
   event: ChangeRequestEventContext;
   taskName?: string;
   taskInput?: unknown;
-  selectedTasks: Task<unknown>[];
+  selectedTasks: RuntimeTask[];
   commandInvocation?: RuntimeCommandInvocation;
   log: RuntimeLog;
 }): Promise<TrustedReviewAndPublishResult> {
