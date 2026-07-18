@@ -586,10 +586,35 @@ describe("check-release-metadata", () => {
     write(
       workflowPath,
       readFileSync(workflowPath, "utf8").replace(
-        "      - run: npm publish --access public\n        working-directory: packages/runtime\n",
+        '      - run: npm publish "dist/npm/usepipr-runtime-${{ steps.version.outputs.version }}.tgz" --access public\n',
         "",
       ),
     );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects missing npm tarball verification", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace("      - run: bun run check:npm-tarballs\n", ""),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects npm tarball verification after package publication", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    const verificationStep = "      - run: bun run check:npm-tarballs\n";
+    const firstPublish =
+      '      - run: npm publish "dist/npm/usepipr-sdk-${{ steps.version.outputs.version }}.tgz" --access public\n';
+    const workflow = readFileSync(workflowPath, "utf8")
+      .replace(verificationStep, "")
+      .replace(firstPublish, `${firstPublish}${verificationStep}`);
+    write(workflowPath, workflow);
 
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });

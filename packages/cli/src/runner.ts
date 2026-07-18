@@ -12,7 +12,10 @@ import {
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
-import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
+import {
+  presentGitHubActionResult,
+  stripPiprMainCommentMarkers,
+} from "@usepipr/runtime/internal/action-result";
 import { Command, CommanderError } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
@@ -486,7 +489,7 @@ function formatLocalLogValue(value: unknown): string {
 
 function writeLocalReviewResult(result: LocalReviewResult, json: boolean): void {
   if (json) {
-    console.log(JSON.stringify(localReviewJson(result), null, 2));
+    console.log(JSON.stringify(serializeLocalReviewJsonV1(result), null, 2));
     return;
   }
   if (result.kind === "skipped") {
@@ -497,11 +500,7 @@ function writeLocalReviewResult(result: LocalReviewResult, json: boolean): void 
 }
 
 function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }>): string {
-  const mainComment = result.mainComment
-    .split("\n")
-    .filter((line) => !line.startsWith("<!-- pipr:main-comment "))
-    .join("\n")
-    .trimStart();
+  const mainComment = stripPiprMainCommentMarkers(result.mainComment);
   const inlineFindings = result.inlineCommentDrafts.map((draft, index) => {
     const range =
       draft.startLine === draft.endLine
@@ -520,19 +519,39 @@ function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }
 
 const localReviewJsonFormatVersion = 1 as const;
 
-function localReviewJson(result: LocalReviewResult) {
-  return {
+type LocalReviewJsonCommonV1 = {
+  formatVersion: typeof localReviewJsonFormatVersion;
+  mainComment: string;
+  inlineFindings: LocalReviewResult["inlineCommentDrafts"][number]["finding"][];
+  droppedFindings: LocalReviewResult["validated"]["droppedFindings"];
+  taskChecks: LocalReviewResult["taskChecks"];
+  provider: Pick<LocalReviewResult["provider"], "id" | "provider" | "model">;
+  providerModels: string[];
+  repairAttempted: boolean;
+};
+
+type LocalReviewJsonResultV1 =
+  | (LocalReviewJsonCommonV1 & { kind: "review" })
+  | (LocalReviewJsonCommonV1 & { kind: "skipped"; skipReason?: string });
+
+function serializeLocalReviewJsonV1(result: LocalReviewResult): LocalReviewJsonResultV1 {
+  const common: LocalReviewJsonCommonV1 = {
     formatVersion: localReviewJsonFormatVersion,
-    kind: result.kind,
-    ...(result.kind === "skipped" ? { skipReason: result.skipReason } : {}),
-    mainComment: result.mainComment,
-    inlineFindings: result.inlineCommentDrafts,
+    mainComment: stripPiprMainCommentMarkers(result.mainComment),
+    inlineFindings: result.inlineCommentDrafts.map((draft) => draft.finding),
     droppedFindings: result.validated.droppedFindings,
     taskChecks: result.taskChecks,
-    provider: result.provider,
+    provider: {
+      id: result.provider.id,
+      provider: result.provider.provider,
+      model: result.provider.model,
+    },
     providerModels: result.publicationPlan.metadata.providerModels ?? [result.provider.model],
     repairAttempted: result.repairAttempted,
   };
+  return result.kind === "skipped"
+    ? { ...common, kind: "skipped", skipReason: result.skipReason }
+    : { ...common, kind: "review" };
 }
 
 async function runDryRun(options: CliOptions): Promise<void> {

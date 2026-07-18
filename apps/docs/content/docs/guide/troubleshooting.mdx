@@ -26,7 +26,7 @@ Follow this order for a new setup. It separates config failures from provider de
 | 5. Provider permissions | Inspect the bot token, workflow, or runner identity. | Grant only the comment, status, and verifier permissions for the features you enabled. |
 | 6. Untrusted changes | Check whether the change comes from a fork or can edit CI configuration. | Use a trusted webhook runner when the proposed change can access or alter the delivery job. |
 | 7. Stale head | Compare the reviewed head with the current change request head. | Rerun the workflow on the latest commit. |
-| 8. Dropped findings | Read the `dropped-findings` output. | Fix the prompt or mapper so findings use exact Diff Manifest paths, range ids, sides, and lines. |
+| 8. Dropped findings | Read `droppedFindings` from the Action `result` output. | Fix the prompt or mapper so findings use exact Diff Manifest paths, range ids, sides, and lines. |
 
 ## Choose the diagnostic
 
@@ -39,7 +39,7 @@ Use the symptom to pick the first diagnostic command.
 | Local review cannot find a base | `pipr review --base <ref>` |
 | Hosted run does not publish | CI or trusted-worker logs and provider permissions |
 | Command comment is ignored | Event type, command pattern, and commenter permission |
-| Findings are dropped | Action `dropped-findings` output |
+| Findings are dropped | `droppedFindings` in the Action `result` output |
 | Pi output is invalid | Task logs and model output repair metadata |
 | Publication stopped after a new commit | Current change request head SHA |
 
@@ -115,7 +115,7 @@ If `PIPR_DRY_RUN=1` is set, Pipr stops before model execution and publication by
 
 ### Expected result
 
-Expected result: the Action reaches the publication step and records `publication` metadata.
+Expected result: the Action reaches the publication step and records a review result. Inspect `result.publication` for publication counts and errors.
 
 ## Command comment is ignored
 
@@ -143,7 +143,7 @@ Inspect dropped-finding metadata to identify which authoritative range constrain
 
 ### Dropped output
 
-Pipr drops invalid findings and continues the review. Read the Action `dropped-findings` output first.
+Pipr drops invalid findings and continues the review. Read `droppedFindings` from the Action `result` output first.
 
 ### Common reasons
 
@@ -156,7 +156,7 @@ Common reasons:
 - The file was excluded as generated, binary, removed, lockfile, or too large for inline review.
 - The finding duplicates another current finding.
 
-Dropped findings are exposed in the Action `dropped-findings` output and in publication metadata.
+Dropped findings are exposed in `droppedFindings` within the Action `result` output.
 
 ### Fix range mapping
 
@@ -200,7 +200,7 @@ Thread replies and resolution require adapter support and sufficient native perm
 
 The verifier can reply to Pipr-owned Inline Review Comments and resolve GitHub review threads when permissions allow.
 
-If the API call fails, Pipr records the error in `publication.metadata.inlineResolutionErrors` and keeps the review run successful. Check that the workflow grants `contents: write` and `pull-requests: write`.
+If the API call fails, Pipr increments `result.publication.inlineResolutionErrorCount` and keeps the review run successful. Check that the workflow grants `contents: write` and `pull-requests: write`.
 
 ## Next steps
 

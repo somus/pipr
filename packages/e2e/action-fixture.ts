@@ -2,7 +2,10 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PublicationError } from "@usepipr/runtime";
-import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
+import {
+  presentGitHubActionPublicationError,
+  presentGitHubActionResult,
+} from "@usepipr/runtime/internal/action-result";
 import {
   createGitHubHostAdapter,
   createKnownSecretRedactor,
@@ -298,11 +301,15 @@ async function writeFixture(fixturePath: string, fixture: GitHubPublicationFixtu
 }
 
 main().catch(async (error: unknown) => {
-  if (error instanceof PublicationError && error.result) {
-    await setOutput("publication", JSON.stringify(error.result));
-    logError(`pipr publication metadata: ${JSON.stringify(error.result)}`);
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof PublicationError) {
+    await presentGitHubActionPublicationError(error, message, {
+      info,
+      warning: info,
+      setOutput,
+    });
   }
-  setFailed(error instanceof Error ? error.message : String(error));
+  setFailed(message);
   process.exitCode = 1;
 });
 

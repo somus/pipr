@@ -7,6 +7,8 @@ publication planning.
 Most users should interact with this package through the `pipr` CLI or a code
 host integration. Repository configs should import from `@usepipr/sdk`.
 
+Executing this npm package requires Bun 1.3.14 or newer.
+
 ## Technical notes
 
 - The package root exports command APIs for init, hosted runs, dry runs,

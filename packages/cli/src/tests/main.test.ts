@@ -467,7 +467,7 @@ describe("pipr CLI", () => {
   });
 
   it("prints local review JSON when requested", async () => {
-    const workspace = await createLocalReviewWorkspace({ taskLog: true });
+    const workspace = await createLocalReviewWorkspace({ taskLog: true, findings: true });
     try {
       const result = await runCli(
         [
@@ -492,18 +492,61 @@ describe("pipr CLI", () => {
         kind: string;
         mainComment: string;
         inlineFindings: unknown[];
+        droppedFindings: unknown[];
         taskChecks: unknown[];
+        provider: Record<string, unknown>;
+        providerModels: string[];
+        repairAttempted: boolean;
       };
-      expect(json.formatVersion).toBe(1);
-      expect(json.kind).toBe("review");
-      expect(json.mainComment).toContain("<!-- pipr:main-comment ");
-      expect(json.mainComment).toContain("No findings.");
-      expect(json.inlineFindings).toEqual([]);
-      expect(json.taskChecks).toEqual([{ taskName: "review", conclusion: "success" }]);
+      expect(json).toEqual({
+        formatVersion: 1,
+        kind: "review",
+        mainComment: expect.stringContaining(
+          "One finding.\n<!-- pipr:header:hidden -->\nTask marker example.",
+        ),
+        inlineFindings: [
+          {
+            body: "Use the reviewed value.",
+            path: "src/a.ts",
+            rangeId: expect.stringMatching(/^rng_/),
+            side: "RIGHT",
+            startLine: 1,
+            endLine: 1,
+          },
+        ],
+        droppedFindings: [
+          {
+            finding: {
+              body: "Invalid location.",
+              path: "src/a.ts",
+              rangeId: "rng_missing",
+              side: "RIGHT",
+              startLine: 1,
+              endLine: 1,
+            },
+            reason: expect.any(String),
+          },
+        ],
+        taskChecks: [{ taskName: "review", conclusion: "success" }],
+        provider: {
+          id: "deepseek/deepseek-v4-pro",
+          provider: "deepseek",
+          model: "deepseek-v4-pro",
+        },
+        providerModels: ["deepseek-v4-pro"],
+        repairAttempted: false,
+      });
+      expect(json.mainComment).not.toContain("<!-- pipr:main-comment ");
+      expect(json.mainComment).not.toContain("<!-- pipr:stats:start -->");
+      expect(json.mainComment).not.toContain("<!-- pipr:stats:end -->");
+      expect(json.mainComment).toContain("<!-- pipr:header:hidden -->");
+      expect(JSON.stringify(json)).not.toMatch(
+        /apiKeyEnv|diffManifest|findingId|"marker":|publicationPlan|reviewedHeadSha|"range"/,
+      );
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
-  });
+  }, 30000);
 
   it("prints the format version for skipped local review JSON", async () => {
     const workspace = await createLocalReviewWorkspace({ local: false });
@@ -738,6 +781,35 @@ describe("pipr CLI", () => {
     }
   });
 
+  it("writes a versioned result for generic GitHub Actions failures", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
+    const githubOutputPath = path.join(workspace, "github-output.txt");
+    try {
+      await Bun.write(githubOutputPath, "");
+
+      const result = await runCli(
+        ["check"],
+        { GITHUB_ACTIONS: "true", GITHUB_OUTPUT: githubOutputPath },
+        workspace,
+      );
+      const output = await Bun.file(githubOutputPath).text();
+      const serializedResult = output
+        .split("\n")
+        .find((line) => line.startsWith('{"formatVersion":1'));
+
+      expect(result.exitCode).toBe(1);
+      expect(serializedResult).toBeDefined();
+      expect(JSON.parse(serializedResult ?? "null")).toEqual({
+        formatVersion: 1,
+        kind: "error",
+        message: "Pipr failed; see the Action log for details.",
+      });
+      expect(`${result.stdout}\n${result.stderr}`).toContain("No Pipr config found");
+    } finally {
+      await removeWorkspace(workspace);
+    }
+  });
+
   it("checks the repo root dogfood config", async () => {
     const result = await runCli(["check"], {}, repoRoot);
 
@@ -963,7 +1035,7 @@ async function runHostRunWithGitWorkspace(options: {
 }
 
 async function createLocalReviewWorkspace(
-  options: { taskLog?: boolean; local?: boolean } = {},
+  options: { taskLog?: boolean; local?: boolean; findings?: boolean } = {},
 ): Promise<{
   rootDir: string;
   baseSha: string;
@@ -989,12 +1061,14 @@ async function createLocalReviewWorkspace(
   await runCommand("git", ["add", "."], rootDir);
   await runCommand("git", ["commit", "--no-verify", "-m", "head"], rootDir);
   const headSha = (await runCommand("git", ["rev-parse", "HEAD"], rootDir)).trim();
-  const piExecutable = path.join(rootDir, "fake-pi.sh");
+  const piExecutable = path.join(rootDir, options.findings ? "fake-pi.ts" : "fake-pi.sh");
   await Bun.write(
     piExecutable,
-    ["#!/bin/sh", 'printf "1\\n" >> "$(dirname "$0")/pi-called"', noFindingsJsonCommand()].join(
-      "\n",
-    ),
+    options.findings
+      ? reviewFindingsExecutable()
+      : ["#!/bin/sh", 'printf "1\\n" >> "$(dirname "$0")/pi-called"', noFindingsJsonCommand()].join(
+          "\n",
+        ),
   );
   await chmod(piExecutable, 0o755);
   return { rootDir, baseSha, headSha, piExecutable };
@@ -1034,6 +1108,47 @@ function localReviewConfig(options: { taskLog?: boolean; local?: boolean }): str
 
 function noFindingsJsonCommand(): string {
   return 'printf \'%s\\n\' \'{"summary":{"body":"No findings."},"inlineFindings":[]}\'';
+}
+
+function reviewFindingsExecutable(): string {
+  return [
+    "#!/usr/bin/env bun",
+    'const promptArg = process.argv.at(-1) ?? "";',
+    'const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;',
+    'const label = "\\nManifest:";',
+    "const start = prompt.indexOf(label);",
+    'if (start === -1) throw new Error("missing Diff Manifest");',
+    "const content = prompt.slice(start + label.length);",
+    "const markers = [",
+    '  "\\n\\nCondensed manifest helper tools:",',
+    '  "\\n\\nInstructions:",',
+    '  "\\n\\nRun Instructions:",',
+    '  "\\n\\nPrior pipr findings:",',
+    '  "\\n\\nPrompt:",',
+    "]",
+    "  .map((marker) => content.indexOf(marker))",
+    "  .filter((index) => index !== -1);",
+    "const end = markers.length > 0 ? Math.min(...markers) : content.length;",
+    "const manifest = JSON.parse(content.slice(0, end).trim());",
+    'const file = manifest.files.find((item) => item.path === "src/a.ts");',
+    'const range = file?.commentableRanges.find((item) => item.side === "RIGHT");',
+    'if (!range) throw new Error("missing RIGHT range");',
+    "const finding = {",
+    '  body: "Use the reviewed value.",',
+    "  path: range.path,",
+    "  rangeId: range.id,",
+    "  side: range.side,",
+    "  startLine: range.startLine,",
+    "  endLine: range.startLine,",
+    "};",
+    "console.log(JSON.stringify({",
+    '  summary: { body: "One finding.\\n<!-- pipr:header:hidden -->\\nTask marker example." },',
+    "  inlineFindings: [",
+    "    finding,",
+    '    { ...finding, body: "Invalid location.", rangeId: "rng_missing" },',
+    "  ],",
+    "}));",
+  ].join("\n");
 }
 
 async function countLines(filePath: string): Promise<number> {

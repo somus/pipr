@@ -6,6 +6,10 @@ delegates runtime behavior to `@usepipr/runtime`.
 Use this package when installing Pipr through npm. The release installer and
 GitHub Releases publish compiled CLI binaries for supported platforms.
 
+The npm package executes with Bun and requires Bun 1.3.14 or newer. Compiled
+GitHub Release binaries are self-contained and do not require a system Bun
+installation.
+
 ## Commands
 
 The binary exposes these command groups:

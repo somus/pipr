@@ -95,6 +95,11 @@ async function assertActionMetadataRendering(): Promise<void> {
   expect(rendered).not.toContain("image: docker://ghcr.io/somus/pipr:main");
   expect(rendered).toContain("inputs:");
   expect(rendered).toContain("outputs:");
+  expect(rendered).toContain("  main-comment:");
+  expect(rendered).toContain("  result:");
+  expect(rendered).not.toContain("  inline-comments:");
+  expect(rendered).not.toContain("  dropped-findings:");
+  expect(rendered).not.toContain("  publication:");
   expect(rendered).toContain("args:");
   expect(rendered).toContain("    - host-run");
   expect(rendered).not.toContain("    - action");

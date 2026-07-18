@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun run typegen && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite dev",
     "build": "bun run typegen && bun run build:generated",
-    "build:generated": "NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite build",
+    "build:generated": "bun scripts/build.ts",
+    "build:vite": "NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite build",
     "start": "serve .output/public --config serve.json",
     "preview": "mkdir -p .cache && NODE_OPTIONS=--localstorage-file=.cache/node-localstorage vite preview",
     "recipes:sync": "bun scripts/sync-recipes.ts",

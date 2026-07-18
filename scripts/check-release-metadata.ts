@@ -9,6 +9,7 @@ type PackageJson = {
   private?: boolean;
   publishConfig?: { access?: string };
   files?: string[];
+  engines?: { bun?: string };
   bin?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -75,7 +76,12 @@ for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) 
   assert.equal(pkg.version, rootPackage.version, `${pkg.name} version must match root`);
   assert.notEqual(pkg.private, true, `${pkg.name} must be publishable`);
   assert.equal(pkg.publishConfig?.access, "public", `${pkg.name} must publish publicly`);
-  assert.deepEqual(pkg.files, ["dist"], `${pkg.name} must publish dist only`);
+  assert.deepEqual(pkg.files, ["dist", "LICENSE"], `${pkg.name} must publish dist and LICENSE`);
+  assert.equal(
+    await readText(path.join(packagePath, "LICENSE")),
+    await readText("LICENSE"),
+    `${pkg.name} LICENSE must match the root license`,
+  );
 
   for (const [name, range] of Object.entries(pkg.dependencies ?? {})) {
     assert(!range.startsWith("workspace:"), `${pkg.name} dependency ${name} uses ${range}`);
@@ -91,11 +97,23 @@ for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) 
 }
 
 const cliPackage = await readJson<PackageJson>("packages/cli/package.json");
+const runtimePackage = await readJson<PackageJson>("packages/runtime/package.json");
 const docsPackage = await readJson<PackageJson>("apps/docs/package.json");
 const selfReviewPackage = await readJson<PackageJson>(".pipr/package.json");
 const selfReviewSdkVersion = selfReviewPackage.dependencies?.["@usepipr/sdk"];
 const selfReviewLock = await readText(".pipr/bun.lock");
 assert.equal(cliPackage.bin?.pipr, "./dist/main.mjs", "@usepipr/cli bin must point at dist");
+assert.equal(cliPackage.engines?.bun, ">=1.3.14", "@usepipr/cli must declare the Bun baseline");
+assert.equal(
+  runtimePackage.engines?.bun,
+  ">=1.3.14",
+  "@usepipr/runtime must declare the Bun baseline",
+);
+assert.equal(
+  rootPackage.scripts?.["check:npm-tarballs"],
+  "bun scripts/verify-npm-tarballs.ts",
+  "root package scripts must expose npm tarball verification",
+);
 assert.equal(
   docsPackage.devDependencies?.["@usepipr/runtime"],
   "workspace:*",
@@ -222,16 +240,22 @@ assert(
   !releaseWorkflow.includes(`sha-${shaExpression}`),
   "release workflow must not publish sha tag",
 );
-for (const packagePath of ["packages/sdk", "packages/runtime", "packages/cli"]) {
-  assertMatches(
-    releaseWorkflow,
-    workflowStepPattern("npm pack --dry-run --json", packagePath),
-    `release workflow must dry-run pack ${packagePath}`,
-  );
-  assertMatches(
-    releaseWorkflow,
-    workflowStepPattern("npm publish --access public", packagePath),
-    `release workflow must publish ${packagePath}`,
+const npmTarballCheckIndex = releaseWorkflow.indexOf("bun run check:npm-tarballs");
+const firstPackagePublishIndex = releaseWorkflow.indexOf('npm publish "dist/npm/');
+assert(
+  npmTarballCheckIndex !== -1 && npmTarballCheckIndex < firstPackagePublishIndex,
+  "release workflow must verify actual npm tarballs before publishing packages",
+);
+assert(
+  !releaseWorkflow.includes("npm pack --dry-run"),
+  "release workflow must not rely on npm pack dry runs",
+);
+for (const packageName of ["sdk", "runtime", "cli"]) {
+  assert(
+    releaseWorkflow.includes(
+      `npm publish "dist/npm/usepipr-${packageName}-${releaseVersionExpression}.tgz" --access public`,
+    ),
+    `release workflow must publish the verified @usepipr/${packageName} tarball`,
   );
 }
 assert(
@@ -255,8 +279,7 @@ assert(
 );
 const releaseArtifactCheckIndex = releaseWorkflow.indexOf("bun run check:release-artifacts");
 assert(
-  releaseArtifactCheckIndex !== -1 &&
-    releaseArtifactCheckIndex < releaseWorkflow.indexOf("npm publish --access public"),
+  releaseArtifactCheckIndex !== -1 && releaseArtifactCheckIndex < firstPackagePublishIndex,
   "release workflow must verify exact CLI assets before publishing packages",
 );
 const dogfoodUpdateStep = "name: Open dogfood SDK update PR";
@@ -433,19 +456,6 @@ function bunWorkspaceBlock(lockfile: string, workspace: string, nextWorkspace: s
   return lockfile.slice(start, end);
 }
 
-function assertMatches(value: string, pattern: RegExp, message: string): void {
-  assert(pattern.test(value), message);
-}
-
-function workflowStepPattern(command: string, workingDirectory: string): RegExp {
-  return new RegExp(
-    `-\\s+run:\\s+${escapeRegExp(command)}\\s+working-directory:\\s+${escapeRegExp(
-      workingDirectory,
-    )}`,
-    "m",
-  );
-}
-
 function assertThirdPartyActionsPinned(workflowPath: string, workflow: string): void {
   for (const line of workflow.split(/\r?\n/)) {
     const match = line.match(/^\s*(?:-\s*)?uses:\s+([^@\s]+)@([^\s#]+)/);
@@ -461,8 +471,4 @@ function assertThirdPartyActionsPinned(workflowPath: string, workflow: string): 
       `${workflowPath} must pin ${action} to a full commit SHA`,
     );
   }
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
