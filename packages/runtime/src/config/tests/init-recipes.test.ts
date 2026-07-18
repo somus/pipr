@@ -1300,6 +1300,9 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(pluginMemory).toContain("continuationToken");
     expect(pluginMemory).toContain("listed.nextContinuationToken");
     expect(pluginMemory).toContain("scannedObjects < memoryLimits.searchObjectMaximum");
+    expect(pluginMemory).toContain("skippedObjects: z.number().int().nonnegative()");
+    expect(pluginMemory).toContain("skippedObjects += 1");
+    expect(pluginMemory).toContain("skippedObjects,");
     expect(pluginMemory).toContain("[ctx.repository.owner, ctx.repository.name]");
     expect(pluginMemory).toContain("memoryKey(id, parsedInput.subject, ctx, options)");
     expect(pluginMemory).toContain('"/maintainer-command/"');

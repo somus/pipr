@@ -78,6 +78,7 @@ export function r2MemoryPlugin(options: R2MemoryOptions) {
       id: "memory/search-output",
       schema: z.strictObject({
         memories: z.array(memoryItem),
+        skippedObjects: z.number().int().nonnegative(),
       }),
     });
     const storeInput = pipr.schema({
@@ -130,12 +131,13 @@ async function searchMemory(
   ctx: TaskContext,
   options: R2MemoryOptions,
   signal?: AbortSignal,
-): Promise<{ memories: MemoryItem[] }> {
+): Promise<{ memories: MemoryItem[]; skippedObjects: number }> {
   signal?.throwIfAborted();
   const bucket = r2Bucket(ctx, options);
   const memories: MemoryItem[] = [];
   let continuationToken: string | undefined;
   let scannedObjects = 0;
+  let skippedObjects = 0;
 
   do {
     signal?.throwIfAborted();
@@ -158,7 +160,8 @@ async function searchMemory(
           memories.push(value);
         }
       } catch {
-        // Ignore malformed or concurrently deleted memory objects.
+        // Exclude malformed or concurrently deleted objects and report the count.
+        skippedObjects += 1;
       }
     }
 
@@ -173,6 +176,7 @@ async function searchMemory(
     memories: memories
       .sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""))
       .slice(0, limit),
+    skippedObjects,
   };
 }
 
@@ -401,7 +405,7 @@ export default definePipr((pipr) => {
 
 This recipe uses Bun's S3-compatible client against Cloudflare R2. R2 credentials are declared with \`pipr.secret(...)\`, then resolved inside tool execution with \`ctx.secret(...)\`. The generated GitHub workflow maps \`PIPR_R2_MEMORY_BUCKET\`, \`PIPR_R2_MEMORY_ENDPOINT\`, \`PIPR_R2_MEMORY_ACCESS_KEY_ID\`, and \`PIPR_R2_MEMORY_SECRET_ACCESS_KEY\` repository secrets into matching runtime environment variables.
 
-R2 is object storage, not a search index. The sample paginates up to 2,000 JSON memory objects under \`prefix/repository-owner/repository-name\` and filters them locally, which keeps each search bounded and is enough for small reviewer-memory sets. Change \`prefix\` in \`.pipr/config.ts\` when multiple repositories share one bucket; Pipr still adds the repository scope below it. The generated defaults cap subjects at 120 characters, bodies at 4,000 characters, tags at 12 entries of 50 characters, queries at 500 characters, and results at 20. Existing entries without ids or provenance remain readable when they satisfy those bounds.
+R2 is object storage, not a search index. The sample paginates up to 2,000 JSON memory objects under \`prefix/repository-owner/repository-name\` and filters them locally, which keeps each search bounded and is enough for small reviewer-memory sets. Change \`prefix\` in \`.pipr/config.ts\` when multiple repositories share one bucket; Pipr still adds the repository scope below it. The generated defaults cap subjects at 120 characters, bodies at 4,000 characters, tags at 12 entries of 50 characters, queries at 500 characters, and results at 20. Existing entries without ids or provenance remain readable when they satisfy those bounds. Search results include \`skippedObjects\`, the number of malformed, unavailable, or over-limit objects excluded during that search, so upgrades do not hide incompatible entries without a diagnostic.
 
 The generated reviewer treats memory as untrusted historical context and requires current repository evidence for findings. It only searches memory by default. A repository user with write permission can store one bounded, provenance-bearing lesson with \`@pipr remember <lesson...>\`; re-delivery of the same command run deterministically reuses its stored object and UUID. Full review summaries and human feedback are not persisted automatically; feedback collection, eval generation, scheduling, and proposal pull requests remain user-owned extensions.
 
