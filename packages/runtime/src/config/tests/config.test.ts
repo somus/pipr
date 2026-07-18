@@ -1,13 +1,29 @@
-import { describe, expect, it } from "bun:test";
-import { access, mkdir, mkdtemp } from "node:fs/promises";
+import { afterAll, afterEach, describe, expect, it } from "bun:test";
+import { access, mkdtemp as createTemporaryDirectory, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { initOfficialMinimalProject } from "../init.js";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import { loadTypescriptConfig } from "../ts-loader.js";
-import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
+import {
+  initOfficialMinimalProjectWithLocalDependencies as initOfficialMinimalProject,
+  useLocalInitSdk,
+} from "./helpers/local-init-sdk.js";
 
-useLocalInitSdk();
+const cleanupLocalInitSdk = await useLocalInitSdk();
+afterAll(cleanupLocalInitSdk);
+const temporaryDirectories = new Set<string>();
+afterEach(async () => {
+  await Promise.all(
+    [...temporaryDirectories].map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+  temporaryDirectories.clear();
+});
+
+async function mkdtemp(prefix: string): Promise<string> {
+  const directory = await createTemporaryDirectory(prefix);
+  temporaryDirectories.add(directory);
+  return directory;
+}
 
 describe("loadRuntimeProject", () => {
   it("requires an initialized TypeScript config", async () => {

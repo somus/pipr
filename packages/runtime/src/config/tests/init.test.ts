@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, readdir, symlink } from "node:fs/promises";
+import { afterAll, afterEach, describe, expect, it } from "bun:test";
+import { mkdtemp as createTemporaryDirectory, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -7,9 +7,10 @@ import {
   type ReviewRuntimeResult,
   runTaskRuntime,
 } from "../../review/task/task-runtime.js";
+import { runtimeVersion } from "../../shared/version.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import { initOfficialMinimalProject } from "../init.js";
+import { officialInitPackageManifest } from "../init.js";
 import { renderOfficialGithubWorkflow } from "../official-github-workflow.js";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import {
@@ -18,9 +19,26 @@ import {
   supportedOfficialInitRecipes,
 } from "../recipes.js";
 import { defaultTypesBunVersion, defaultTypescriptVersion } from "../scaffold-versions.js";
-import { useLocalInitSdk } from "./helpers/local-init-sdk.js";
+import {
+  initOfficialMinimalProjectWithLocalDependencies as initOfficialMinimalProject,
+  useLocalInitSdk,
+} from "./helpers/local-init-sdk.js";
 
-useLocalInitSdk();
+const cleanupLocalInitSdk = await useLocalInitSdk();
+afterAll(cleanupLocalInitSdk);
+const temporaryDirectories = new Set<string>();
+afterEach(async () => {
+  await Promise.all(
+    [...temporaryDirectories].map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+  temporaryDirectories.clear();
+});
+
+async function mkdtemp(prefix: string): Promise<string> {
+  const directory = await createTemporaryDirectory(prefix);
+  temporaryDirectories.add(directory);
+  return directory;
+}
 
 const configCoreInitFiles = [path.join(".pipr", "config.ts")];
 
@@ -38,6 +56,17 @@ const defaultInitFiles = [
 ];
 
 describe("initOfficialMinimalProject", () => {
+  it("keeps published dependency versions in the production scaffold manifest", () => {
+    expect(officialInitPackageManifest({})).toEqual({
+      private: true,
+      dependencies: { "@usepipr/sdk": runtimeVersion },
+      devDependencies: {
+        "@types/bun": defaultTypesBunVersion,
+        typescript: defaultTypescriptVersion,
+      },
+    });
+  });
+
   it("renders the same non-minimal GitHub workflow used by recipe docs", () => {
     const runtimeWorkflow = renderOfficialGithubWorkflow({ recipe: "security-sast" });
     const documentedWorkflow = renderOfficialGithubWorkflow({
@@ -70,8 +99,8 @@ describe("initOfficialMinimalProject", () => {
     );
     expect(packageJson.dependencies).toMatchObject({ "@usepipr/sdk": expect.any(String) });
     expect(packageJson.devDependencies).toMatchObject({
-      "@types/bun": defaultTypesBunVersion,
-      typescript: defaultTypescriptVersion,
+      "@types/bun": expect.stringMatching(/^file:/),
+      typescript: expect.stringMatching(/^file:/),
     });
     expect(await Bun.file(path.join(rootDir, ".pipr", "bun.lock")).text()).toContain(
       '"lockfileVersion"',

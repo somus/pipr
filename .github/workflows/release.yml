@@ -148,6 +148,7 @@ jobs:
           grep -q "image: docker://ghcr.io/somus/pipr:v${version}" action.yml
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: bun run build:release:cli
+      - run: bun run check:release-artifacts
       - run: npm pack --dry-run --json
         working-directory: packages/sdk
       - run: npm pack --dry-run --json
@@ -161,7 +162,14 @@ jobs:
         working-directory: packages/runtime
       - run: npm publish --access public
         working-directory: packages/cli
-      - run: gh release upload "$PIPR_RELEASE_TAG" dist/release/pipr-* dist/release/SHA256SUMS --clobber
+      - run: |
+          gh release upload "$PIPR_RELEASE_TAG" \
+            dist/release/pipr-linux-x64 \
+            dist/release/pipr-linux-arm64 \
+            dist/release/pipr-darwin-x64 \
+            dist/release/pipr-darwin-arm64 \
+            dist/release/SHA256SUMS \
+            --clobber
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0

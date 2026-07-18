@@ -49,6 +49,7 @@ try {
       `ubuntu-latest=${runnerImage}`,
       "--container-architecture",
       containerArchitecture,
+      "--bind",
       "--pull=false",
       "--rm",
     ],

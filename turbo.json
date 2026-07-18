@@ -32,6 +32,7 @@
       "outputs": []
     },
     "//#fallow:docs:root": {
+      "dependsOn": ["@pipr/docs#typegen"],
       "outputs": []
     },
     "//#check:release-metadata:root": {

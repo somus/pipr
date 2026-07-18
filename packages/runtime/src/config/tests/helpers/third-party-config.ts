@@ -2,15 +2,37 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 export async function writeThirdPartyPackageManifest(rootDir: string): Promise<void> {
-  await mkdir(path.join(rootDir, ".pipr"), { recursive: true });
+  const configDir = path.join(rootDir, ".pipr");
+  const dependencyDir = path.join(configDir, "fixtures", "config-dependency");
+  await mkdir(dependencyDir, { recursive: true });
   await Bun.write(
-    path.join(rootDir, ".pipr", "package.json"),
+    path.join(dependencyDir, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "pipr-config-dependency",
+        version: "1.0.0",
+        type: "module",
+        exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await Bun.write(
+    path.join(dependencyDir, "index.js"),
+    "export const splitValues = (values) => values.map((value) => [value]);\n",
+  );
+  await Bun.write(
+    path.join(dependencyDir, "index.d.ts"),
+    "export declare const splitValues: <T>(values: T[]) => T[][];\n",
+  );
+  await Bun.write(
+    path.join(configDir, "package.json"),
     `${JSON.stringify(
       {
         private: true,
         dependencies: {
-          "@usepipr/sdk": "0.1.3",
-          "lodash-es": "4.17.23",
+          "pipr-config-dependency": "file:./fixtures/config-dependency",
         },
       },
       null,
@@ -28,10 +50,10 @@ export async function writeThirdPartyPiprProject(
     path.join(rootDir, ".pipr", "config.ts"),
     [
       'import { definePipr } from "@usepipr/sdk";',
-      'import { chunk } from "lodash-es";',
+      'import { splitValues } from "pipr-config-dependency";',
       "",
       "export default definePipr((pipr) => {",
-      "  void chunk;",
+      "  void splitValues;",
       "  const model = pipr.model({",
       '    provider: "deepseek",',
       '    model: "deepseek-v4-pro",',

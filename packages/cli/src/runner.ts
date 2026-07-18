@@ -1,7 +1,6 @@
 import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
-  type HostRunCommandResult,
   type RuntimeLogRecord,
   type RuntimeLogSink,
   runDryRunCommand,
@@ -13,6 +12,7 @@ import {
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
+import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
 import { Command, CommanderError } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
@@ -184,7 +184,13 @@ async function runHostRun(options: CliOptions): Promise<void> {
     logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
   });
   if (isGitHubAction) {
-    writeGitHubActionResult(result);
+    await presentGitHubActionResult(result, {
+      info: core.info,
+      warning: core.warning,
+      setOutput(name, value) {
+        core.setOutput(name, value);
+      },
+    });
     return;
   }
   if (result.kind === "ignored") {
@@ -259,133 +265,6 @@ const githubActionLogWriters = {
   error: core.error,
   debug: core.debug,
 } satisfies Record<RuntimeLogRecord["level"], (message: string) => void>;
-
-function writeGitHubActionResult(result: HostRunCommandResult): void {
-  if (result.kind === "ignored") {
-    core.info(`pipr ignored event: ${result.reason}`);
-    return;
-  }
-  writeLoadedGitHubActionResult(result);
-}
-
-type LoadedGitHubActionResult = Exclude<HostRunCommandResult, { kind: "ignored" }>;
-type PublishedGitHubActionResult = Exclude<LoadedGitHubActionResult, { kind: "dry-run" }>;
-type CommandGitHubActionResult = Extract<
-  PublishedGitHubActionResult,
-  { kind: "command-help" | "command-response" }
->;
-type ReviewWorkflowGitHubActionResult = Exclude<
-  PublishedGitHubActionResult,
-  CommandGitHubActionResult
->;
-
-function writeLoadedGitHubActionResult(result: LoadedGitHubActionResult): void {
-  core.info(
-    `pipr loaded change #${result.event.change.number} for ${result.event.repository.slug}`,
-  );
-  core.info(`pipr config source: ${result.configSource}`);
-  if (result.kind === "dry-run") {
-    writeDryRunGitHubActionResult(result);
-    return;
-  }
-  writePublishedGitHubActionResult(result);
-}
-
-function writePublishedGitHubActionResult(result: PublishedGitHubActionResult): void {
-  if (result.kind === "command-help" || result.kind === "command-response") {
-    writeCommandGitHubActionResult(result);
-    return;
-  }
-  writeReviewWorkflowGitHubActionResult(result);
-}
-
-function writeCommandGitHubActionResult(result: CommandGitHubActionResult): void {
-  switch (result.kind) {
-    case "command-help":
-      writeCommandHelpGitHubActionResult(result);
-      break;
-    case "command-response":
-      writeCommandResponseGitHubActionResult(result);
-      break;
-    default:
-      result satisfies never;
-  }
-}
-
-function writeReviewWorkflowGitHubActionResult(result: ReviewWorkflowGitHubActionResult): void {
-  switch (result.kind) {
-    case "review":
-      writeReviewGitHubActionResult(result);
-      break;
-    case "verifier":
-      writeVerifierGitHubActionResult(result);
-      break;
-    default:
-      result satisfies never;
-  }
-}
-
-function writeDryRunGitHubActionResult(
-  result: Extract<HostRunCommandResult, { kind: "dry-run" }>,
-): void {
-  void result;
-  core.info("PIPR_DRY_RUN=1; stopping before review runtime, model, or GitHub publishing calls");
-}
-
-function writeCommandHelpGitHubActionResult(
-  result: Extract<HostRunCommandResult, { kind: "command-help" }>,
-): void {
-  core.info(`pipr command help: ${result.reason}`);
-  core.setOutput("main-comment", result.body);
-}
-
-function writeCommandResponseGitHubActionResult(
-  result: Extract<HostRunCommandResult, { kind: "command-response" }>,
-): void {
-  core.info(
-    `pipr command '${result.command}' published response comment (${result.publication.action})`,
-  );
-  core.setOutput("main-comment", result.response.body);
-  core.setOutput("publication", JSON.stringify(result.publication));
-}
-
-function writeVerifierGitHubActionResult(
-  result: Extract<HostRunCommandResult, { kind: "verifier" }>,
-): void {
-  core.info(
-    `pipr verifier processed review comment reply with ${result.errors.length} publication error(s)`,
-  );
-  warnInlineResolutionErrors(result.errors);
-  core.setOutput("publication", JSON.stringify({ inlineResolutionErrors: result.errors }));
-}
-
-function writeReviewGitHubActionResult(
-  result: Extract<HostRunCommandResult, { kind: "review" }>,
-): void {
-  core.info(
-    `pipr review produced ${result.review.validated.validFindings.length} valid inline finding(s), ` +
-      `${result.review.validated.droppedFindings.length} dropped finding(s)`,
-  );
-  core.info(
-    `pipr published main comment (${result.publication.mainComment.action}) and ` +
-      `${result.publication.inlineComments.posted} inline comment(s); ` +
-      `${result.publication.inlineComments.skipped} skipped`,
-  );
-  warnInlineResolutionErrors(result.publication.metadata.inlineResolutionErrors);
-  if (result.review.repairAttempted) {
-    core.info("pipr repaired reviewer JSON once before validation");
-  }
-  core.setOutput("main-comment", result.review.mainComment);
-  core.setOutput("inline-comments", JSON.stringify(result.review.inlineCommentDrafts));
-  core.setOutput("dropped-findings", JSON.stringify(result.review.validated.droppedFindings));
-  core.setOutput("publication", JSON.stringify(result.publication));
-}
-
-function warnInlineResolutionErrors(errors: string[]): void {
-  for (const error of errors) {
-    core.warning(`pipr inline resolution failed: ${error}`);
-  }
-}
 
 async function runInit(options: CliOptions): Promise<void> {
   const result = await runInitCommand({

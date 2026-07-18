@@ -18,25 +18,11 @@ const sourceRoot = path.resolve(import.meta.dirname, "../..");
 const releaseDir = path.join(sourceRoot, "dist", "release");
 const cliEntrypoint = path.join(sourceRoot, "packages", "cli", "src", "main.ts");
 
-const sdkRuntimeExports = [
-  "definePipr",
-  "definePlugin",
-  "jsonSchema",
-  "md",
-  "parseReviewFinding",
-  "parseReviewResult",
-  "parseReviewSummary",
-  "reviewFindingSchema",
-  "reviewResultSchema",
-  "reviewSchemaExample",
-  "reviewSummarySchema",
-  "schema",
-  "schemas",
-  "z",
-];
-
 await run("bun", ["run", "--cwd", "packages/sdk", "build"]);
 await run("bun", ["run", "--cwd", "packages/runtime", "build"]);
+if (!process.argv.includes("--host")) {
+  await rm(releaseDir, { recursive: true, force: true });
+}
 await mkdir(releaseDir, { recursive: true });
 
 const define = {
@@ -95,14 +81,7 @@ async function bundledSdkModule(): Promise<string> {
   try {
     const entrypoint = path.join(tempRoot, "entry.ts");
     const sdkSource = path.join(sourceRoot, "packages", "sdk", "src", "index.ts");
-    await Bun.write(
-      entrypoint,
-      [
-        `import * as sdk from ${JSON.stringify(sdkSource)};`,
-        ...sdkRuntimeExports.map((name) => `export const ${name} = sdk.${name};`),
-        "",
-      ].join("\n"),
-    );
+    await Bun.write(entrypoint, `export * from ${JSON.stringify(sdkSource)};\n`);
     const result = await Bun.build({
       entrypoints: [entrypoint],
       format: "esm",

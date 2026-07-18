@@ -75,12 +75,8 @@ jobs:
         include:
           - name: sdk
             command: bunx turbo run build lint typecheck test format:check --filter=@usepipr/sdk
-          - name: runtime-init
-            command: bunx turbo run build lint typecheck format:check --filter=@usepipr/runtime && bun run --cwd packages/runtime test:config-init
-          - name: runtime-config
-            command: bunx turbo run build lint typecheck format:check --filter=@usepipr/runtime && bun run --cwd packages/runtime test:config-loader
-          - name: runtime-core
-            command: bunx turbo run build lint typecheck format:check --filter=@usepipr/runtime && bun run --cwd packages/runtime test:core
+          - name: runtime
+            command: bunx turbo run build lint typecheck test format:check --filter=@usepipr/runtime
           - name: cli
             command: bunx turbo run build lint typecheck test format:check --filter=@usepipr/cli
           - name: e2e
@@ -128,6 +124,8 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run check:docs
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run --cwd apps/docs test:browser
 
   docker-e2e:
     needs: changes

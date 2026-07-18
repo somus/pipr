@@ -234,10 +234,10 @@ export default definePipr((pipr) => {
 `;
 
 const dryRunConfig = `import { definePipr } from "@usepipr/sdk";
-import { chunk } from "lodash-es";
+import { splitValues } from "pipr-config-dependency";
 
 export default definePipr((pipr) => {
-  void chunk;
+  void splitValues;
   const model = pipr.model({
     provider: "deepseek",
     model: "deepseek-v4-pro",
@@ -260,11 +260,7 @@ export const scenarios: Record<ScenarioName, Scenario> = {
     config: dryRunConfig,
     configPackage: {
       dependencies: {
-        "@usepipr/sdk": "0.1.3",
-        "lodash-es": "4.17.23",
-      },
-      devDependencies: {
-        "@types/bun": "1.3.14",
+        "pipr-config-dependency": "file:./fixtures/config-dependency",
       },
     },
     baseSample: "dry-run base fixture\n",
@@ -395,6 +391,7 @@ async function writeScenarioConfig(worktree: string, scenario: Scenario): Promis
     await writeWorktreeFile(worktree, ".pipr/config.ts", scenario.config);
   }
   if (scenario.configPackage) {
+    await writeLocalConfigDependency(worktree);
     await writeWorktreeFile(
       worktree,
       ".pipr/package.json",
@@ -414,6 +411,34 @@ async function writeScenarioConfig(worktree: string, scenario: Scenario): Promis
       );
     }
   }
+}
+
+async function writeLocalConfigDependency(worktree: string): Promise<void> {
+  const packageDir = ".pipr/fixtures/config-dependency";
+  await writeWorktreeFile(
+    worktree,
+    `${packageDir}/package.json`,
+    `${JSON.stringify(
+      {
+        name: "pipr-config-dependency",
+        version: "1.0.0",
+        type: "module",
+        exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeWorktreeFile(
+    worktree,
+    `${packageDir}/index.js`,
+    "export const splitValues = (values) => values.map((value) => [value]);\n",
+  );
+  await writeWorktreeFile(
+    worktree,
+    `${packageDir}/index.d.ts`,
+    "export declare const splitValues: <T>(values: T[]) => T[][];\n",
+  );
 }
 
 const starterTsconfig = `{

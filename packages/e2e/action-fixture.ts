@@ -2,47 +2,36 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PublicationError } from "@usepipr/runtime";
+import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
 import {
   createGitHubHostAdapter,
   createKnownSecretRedactor,
   type GitHubPublicationClient,
-  type HostRunCommandResult,
   runHostRunCommandWithDependencies,
 } from "@usepipr/runtime/internal/testing";
 import { type ActAssertionMode, assertActFixture } from "./assertions.ts";
 
-type LoadedActionResult = Exclude<HostRunCommandResult, { kind: "ignored" }>;
 type FixtureReviewComment = Awaited<
   ReturnType<GitHubPublicationClient["listReviewComments"]>
 >[number];
 type FixtureReviewThread = Awaited<
   ReturnType<GitHubPublicationClient["listReviewThreads"]>
 >[number];
-type ActionResultHandlers = {
-  [Kind in HostRunCommandResult["kind"]]: (
-    result: Extract<HostRunCommandResult, { kind: Kind }>,
-  ) => Promise<void> | void;
-};
 type ActionFixtureOptions = Parameters<typeof runHostRunCommandWithDependencies>[0];
 type ActionFixtureContext = {
   fixturePath: string;
   options: ActionFixtureOptions;
 };
 
-const actionResultHandlers: ActionResultHandlers = {
-  ignored: handleIgnoredActionResult,
-  "dry-run": handleDryRunActionResult,
-  "command-help": handleCommandHelpActionResult,
-  "command-response": handleCommandResponseActionResult,
-  review: handleReviewActionResult,
-  verifier: handleVerifierActionResult,
-};
-
 async function main(): Promise<void> {
   assertHostRunCommand(process.argv[2] ?? "host-run");
   const context = await actionFixtureContext();
   const result = await runHostRunCommandWithDependencies(context.options);
-  await handleActionResult(result);
+  await presentGitHubActionResult(result, {
+    info,
+    warning: info,
+    setOutput,
+  });
   if (result.kind === "review") {
     await recordDroppedFindings(context.fixturePath, result.review.validated.droppedFindings);
   }
@@ -140,10 +129,6 @@ function envValue(name: string): string | undefined {
   return Bun.env[name];
 }
 
-async function handleActionResult(result: HostRunCommandResult): Promise<void> {
-  await actionResultHandlers[result.kind](result as never);
-}
-
 async function assertConfiguredFixture(fixturePath: string): Promise<void> {
   const mode = envValue("PIPR_ACT_ASSERTION") as ActAssertionMode | undefined;
   if (!mode) {
@@ -154,73 +139,6 @@ async function assertConfiguredFixture(fixturePath: string): Promise<void> {
     mode,
     telemetryPath: envValue("PIPR_ACT_TELEMETRY_PATH"),
   });
-}
-
-function handleIgnoredActionResult(
-  result: Extract<HostRunCommandResult, { kind: "ignored" }>,
-): void {
-  info(`pipr ignored event: ${result.reason}`);
-}
-
-function handleDryRunActionResult(
-  result: Extract<HostRunCommandResult, { kind: "dry-run" }>,
-): void {
-  logActionContext(result);
-  info("PIPR_DRY_RUN=1; stopping before review runtime, model, or GitHub publishing calls");
-}
-
-async function handleCommandHelpActionResult(
-  result: Extract<HostRunCommandResult, { kind: "command-help" }>,
-): Promise<void> {
-  logActionContext(result);
-  info(`pipr command help: ${result.reason}`);
-  await setOutput("main-comment", result.body);
-}
-
-async function handleReviewActionResult(
-  result: Extract<HostRunCommandResult, { kind: "review" }>,
-): Promise<void> {
-  logActionContext(result);
-  info(
-    `pipr review produced ${result.review.validated.validFindings.length} valid inline finding(s), ` +
-      `${result.review.validated.droppedFindings.length} dropped finding(s)`,
-  );
-  info(
-    `pipr published main comment (${result.publication.mainComment.action}) and ` +
-      `${result.publication.inlineComments.posted} inline comment(s); ` +
-      `${result.publication.inlineComments.skipped} skipped`,
-  );
-  if (result.review.repairAttempted) {
-    info("pipr repaired reviewer JSON once before validation");
-  }
-  await setOutput("main-comment", result.review.mainComment);
-  await setOutput("inline-comments", JSON.stringify(result.review.inlineCommentDrafts));
-  await setOutput("dropped-findings", JSON.stringify(result.review.validated.droppedFindings));
-  await setOutput("publication", JSON.stringify(result.publication));
-}
-
-async function handleCommandResponseActionResult(
-  result: Extract<HostRunCommandResult, { kind: "command-response" }>,
-): Promise<void> {
-  logActionContext(result);
-  info(
-    `pipr command '${result.command}' published response comment (${result.publication.action})`,
-  );
-  await setOutput("main-comment", result.response.body);
-  await setOutput("publication", JSON.stringify(result.publication));
-}
-
-async function handleVerifierActionResult(
-  result: Extract<HostRunCommandResult, { kind: "verifier" }>,
-): Promise<void> {
-  logActionContext(result);
-  info(`pipr verifier processed review comment reply with ${result.errors.length} error(s)`);
-  await setOutput("publication", JSON.stringify({ inlineResolutionErrors: result.errors }));
-}
-
-function logActionContext(result: LoadedActionResult): void {
-  info(`pipr loaded change #${result.event.change.number} for ${result.event.repository.slug}`);
-  info(`pipr config source: ${result.configSource}`);
 }
 
 function fixturePublicationClient(fixturePath: string): GitHubPublicationClient {

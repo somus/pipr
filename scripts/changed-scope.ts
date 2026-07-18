@@ -80,6 +80,9 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
       file === "packages/sdk/tsconfig.json" ||
       file === "packages/runtime/src/config/recipes.ts" ||
       file.startsWith("packages/runtime/src/config/recipes/") ||
+      file === "packages/runtime/src/config/official-github-workflow.ts" ||
+      file === "packages/runtime/src/internal/docs.ts" ||
+      file === "packages/runtime/package.json" ||
       file.endsWith(".md") ||
       [
         "package.json",
@@ -109,6 +112,7 @@ function matchesScope(selectedScope: Scope, file: string): boolean {
       ".github/workflows/ci.yml",
     ].includes(file) ||
     file === "scripts/docker-e2e.ts" ||
+    file.startsWith("skills/") ||
     file.startsWith("deploy/webhook/") ||
     file.startsWith("packages/cli/") ||
     file.startsWith("packages/runtime/") ||

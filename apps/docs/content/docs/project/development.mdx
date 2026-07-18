@@ -33,7 +33,7 @@ Run the canonical repository check before pushing.
 mise run check
 ```
 
-This runs release metadata checks, script tests, package builds, lint, typecheck, tests, format check, and Fallow. It does not run the full docs Vite build.
+This runs release metadata checks, script tests, package builds, lint, typecheck, tests, the full docs Vite build, format check, and Fallow. It does not download Chromium or run the browser smoke.
 
 ## Docs app
 
@@ -54,10 +54,10 @@ bun run --cwd apps/docs dev
 Run docs-only checks:
 
 ```bash
-bun run --cwd apps/docs typegen
-bun run --cwd apps/docs typecheck
-bun run --cwd apps/docs test
+bun run check:docs
 ```
+
+Turbo runs docs type generation once before the dependent generated test, typecheck, and build tasks. The app-scoped commands also generate their prerequisites when run directly.
 
 ### Docs build
 
@@ -66,6 +66,8 @@ Run the full docs build only when validating docs deployment output:
 ```bash
 bun run build:docs
 ```
+
+CI installs Chromium and runs `bun run --cwd apps/docs test:browser` against the built docs output. Keep this smoke focused on hydration and critical routes; the canonical local gate does not download a browser.
 
 Public docs content lives under `apps/docs/content/docs`. Generated files such as `.source`, `.output`, `.tanstack`, and `src/routeTree.gen.ts` are ignored.
 
@@ -79,7 +81,20 @@ Keep navigation, metadata, links, and generated output aligned when pages move.
 - keep frontmatter titles and descriptions useful
 - use `/docs/...` links for internal docs routes
 - keep source-only repo notes out of Fumadocs content
-- run `bun run --cwd apps/docs typegen` before typecheck or build
+- run `bun run check:docs` after content or route changes
+
+## Focused package tests
+
+Use the package-level commands while iterating, then run the canonical gate before pushing.
+
+```bash
+bun run --cwd packages/runtime test:config-init
+bun run --cwd packages/runtime test:config-loader
+bun run --cwd packages/runtime test:core
+bun run --cwd packages/e2e test
+```
+
+The runtime CI lane runs the complete runtime test task once. The three runtime commands remain the faster local seams for init, config loading, and core behavior.
 
 ## Local Action e2e
 
@@ -101,6 +116,12 @@ This command:
 - verifies the installed Pi CLI contract
 - runs fixture self-tests
 - runs all local `act` scenarios
+
+Pass a scenario name to run one fixture while iterating:
+
+```bash
+bun run --cwd packages/e2e check:actions dry-run
+```
 
 ### Environment knobs
 
@@ -145,21 +166,24 @@ bun run --cwd packages/evals eval:full:export
 
 `eval:prompts` runs focused live gates for recall, suppression, safety, and suggested-fix behavior. `eval:full` is the broader advisory suite, and `eval:full:export` writes `packages/evals/evalite-export/results.json`. Live evals are nondeterministic and are not part of `mise run check`.
 
+The scheduled `Live prompt evals` workflow builds the pinned `evals` Docker target and runs `eval:full:export` as an advisory step. Model-quality failures stay visible in the workflow summary without blocking deterministic CI; image build failures still fail the workflow as infrastructure regressions.
+
 ## CI Docker e2e
 
-The CI container lane exercises the built image directly without local `act` orchestration.
+The CI container lane exercises the built image directly, then runs the dry-run workflow through `act` and the checked-in Action metadata.
 
 ### CI container check
 
-CI does not run `act`. The CI workflow builds a local single-platform Docker image with `load: true`, tags it as `pipr-action:e2e`, and runs:
+The CI workflow builds a local single-platform Docker image, tags it as `pipr-action:e2e`, and runs:
 
 ```bash
 PIPR_ACTION_IMAGE=pipr-action:e2e bun run --cwd packages/e2e check:container
 ```
 
 `check:container` verifies the Pi contract and runs direct-container equivalents of the dry-run, full, condensed, and orchestrator scenarios.
+After those checks, CI reuses the image for `check:actions dry-run`, which verifies the real `action.yml` entrypoint through `act`.
 
-The Dockerfile builds only the Action packages. Docs output is validated by the docs deployment path, not by the Action image build.
+The default Docker target builds the Action packages. The separate `evals` target adds the eval package for scheduled model-quality checks; docs output stays in the docs deployment path.
 
 To run the same check locally:
 

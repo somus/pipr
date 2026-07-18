@@ -113,6 +113,16 @@ describe("check-conventional-commit", () => {
 });
 
 describe("changed-scope", () => {
+  it("includes bundled skills in the CLI build cache inputs", () => {
+    const config = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/cli/turbo.json"), "utf8"),
+    ) as { extends?: string[]; tasks?: { build?: { inputs?: string[] } } };
+
+    expect(config.extends).toEqual(["//"]);
+    expect(config.tasks?.build?.inputs).toContain("$TURBO_DEFAULT$");
+    expect(config.tasks?.build?.inputs).toContain("$TURBO_ROOT$/skills/**");
+  });
+
   it("fails open when a push base commit is unavailable", () => {
     const repository = changedScopeRepository("README.md");
     const head = git(repository, "rev-parse", "HEAD");
@@ -139,6 +149,9 @@ describe("changed-scope", () => {
       "packages/sdk/tsconfig.json",
       "packages/runtime/src/config/recipes.ts",
       "packages/runtime/src/config/recipes/default-review.ts",
+      "packages/runtime/src/config/official-github-workflow.ts",
+      "packages/runtime/src/internal/docs.ts",
+      "packages/runtime/package.json",
     ]) {
       expect(scopeChanged("docs", file)).toBe(true);
     }
@@ -164,6 +177,7 @@ describe("changed-scope", () => {
       "packages/e2e/webhook-health-fixture.ts",
       "deploy/webhook/compose.yml",
       "scripts/docker-e2e.ts",
+      "skills/pipr-setup/SKILL.md",
     ]) {
       expect(scopeChanged("docker", file)).toBe(true);
     }
@@ -176,6 +190,50 @@ describe("changed-scope", () => {
       expect(scopeChanged("docker", file)).toBe(false);
     }
   }, 15000);
+});
+
+describe("developer checks", () => {
+  it("serializes docs type generation through the Turbo graph", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as {
+      scripts?: Record<string, string>;
+    };
+    const packageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "apps/docs/package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+    const turbo = JSON.parse(readFileSync(path.join(repoRoot, "apps/docs/turbo.json"), "utf8")) as {
+      tasks?: Record<string, { dependsOn?: string[] }>;
+    };
+
+    expect(packageJson.scripts?.build).toContain("typegen");
+    expect(packageJson.scripts?.typecheck).toContain("typegen");
+    expect(packageJson.scripts?.test).toContain("typegen");
+    expect(rootPackageJson.scripts?.["check:docs"]).toContain("build:generated");
+    expect(rootPackageJson.scripts?.["check:docs"]).toContain("typecheck:generated");
+    expect(rootPackageJson.scripts?.["check:docs"]).toContain("test:generated");
+    expect(turbo.tasks?.["build:generated"]?.dependsOn).toContain("typegen");
+    expect(turbo.tasks?.["typecheck:generated"]?.dependsOn).toContain("typegen");
+    expect(turbo.tasks?.["test:generated"]?.dependsOn).toContain("typegen");
+  });
+
+  it("runs the runtime CI package gate once", () => {
+    const workflow = readFileSync(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
+    expect(workflow).toContain("          - name: runtime\n");
+    expect(workflow).not.toContain("          - name: runtime-init\n");
+    expect(workflow).not.toContain("          - name: runtime-config\n");
+    expect(workflow).not.toContain("          - name: runtime-core\n");
+  });
+
+  it("runs scheduled live evals in an advisory container lane", () => {
+    const workflow = readFileSync(path.join(repoRoot, ".github/workflows/evals.yml"), "utf8");
+    const dockerfile = readFileSync(path.join(repoRoot, "Dockerfile"), "utf8");
+    expect(workflow).toContain("schedule:");
+    expect(workflow).toContain("continue-on-error: true");
+    expect(workflow).toContain("--target evals");
+    expect(dockerfile).toContain("FROM build AS evals");
+    expect(dockerfile).toContain('CMD ["bun", "run", "eval:full:export"]');
+  });
 });
 
 describe("sync-release-lockfile", () => {
@@ -262,6 +320,40 @@ describe("release checksums", () => {
     expect(readFileSync(path.join(skillPath.stdout.trim(), "SKILL.md"), "utf8")).toContain(
       "name: pipr-setup",
     );
+
+    const configWorkspace = path.join(tempDir, "standalone-sdk-config");
+    writeCreatingDirs(
+      path.join(configWorkspace, ".pipr/config.ts"),
+      `import {
+  defaultReviewActions,
+  defaultReviewEntrypoints,
+  definePipr,
+} from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+  pipr.review({
+    id: "review",
+    model,
+    entrypoints: {
+      ...defaultReviewEntrypoints,
+      changeRequest: defaultReviewActions,
+    },
+    instructions: "Review the change.",
+  });
+});
+`,
+    );
+    const standaloneCheck = executableResult(binaryPath, ["check"], configWorkspace, {
+      PIPR_UPDATE_NOTICE: "0",
+    });
+    expect(standaloneCheck.exitCode, `${standaloneCheck.stdout}\n${standaloneCheck.stderr}`).toBe(
+      0,
+    );
   }, 30000);
 
   it("keeps updater asset names aligned with release targets", () => {
@@ -270,6 +362,26 @@ describe("release checksums", () => {
       .sort();
     expect(releaseAssetNames).toEqual(releaseTargets.map((target) => target.outfile).sort());
     expect(new Set(releaseAssetNames).size).toBe(releaseTargets.length);
+  });
+
+  it("accepts only the exact checksummed release artifact set", () => {
+    const releaseDir = path.join(tempDir, "release-artifacts");
+    mkdirSync(releaseDir);
+    const lines = releaseTargets.map(({ outfile }, index) => {
+      const contents = `binary-${index}\n`;
+      write(path.join(releaseDir, outfile), contents);
+      return `${createHash("sha256").update(contents).digest("hex")}  ${outfile}`;
+    });
+    write(path.join(releaseDir, "SHA256SUMS"), `${lines.sort().join("\n")}\n`);
+
+    expect(runScript("scripts/verify-release-artifacts.ts", [releaseDir])).toBe(0);
+
+    write(path.join(releaseDir, "SHA256SUMS"), `${"0".repeat(64)}  ${releaseTargets[0].outfile}\n`);
+    expect(runScript("scripts/verify-release-artifacts.ts", [releaseDir])).not.toBe(0);
+
+    write(path.join(releaseDir, "SHA256SUMS"), `${lines.join("\n")}\n`);
+    write(path.join(releaseDir, "pipr-stale"), "stale\n");
+    expect(runScript("scripts/verify-release-artifacts.ts", [releaseDir])).not.toBe(0);
   });
 });
 
@@ -401,6 +513,20 @@ describe("check-release-metadata", () => {
       workflowPath,
       readFileSync(workflowPath, "utf8").replace(
         "      - run: npm publish --access public\n        working-directory: packages/runtime\n",
+        "",
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects a missing release artifact verification step", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace(
+        "      - run: bun run check:release-artifacts\n",
         "",
       ),
     );

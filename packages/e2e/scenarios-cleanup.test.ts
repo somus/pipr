@@ -1,11 +1,11 @@
-import { expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { prepareScenarioWorktree, scenarios } from "./scenarios.ts";
 
-await assertScenarioCleanupHandlesRestrictivePermissions();
-
-console.log("scenario cleanup tests ok");
+test("cleans scenario worktrees with restrictive permissions", async () => {
+  await assertScenarioCleanupHandlesRestrictivePermissions();
+});
 
 async function assertScenarioCleanupHandlesRestrictivePermissions(): Promise<void> {
   const prepared = await prepareScenarioWorktree(scenarios.full);

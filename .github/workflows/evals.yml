@@ -1,0 +1,41 @@
+name: Live prompt evals
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-prompt-evals
+  cancel-in-progress: false
+
+jobs:
+  advisory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Build pinned eval container
+        run: docker build --target evals --tag pipr-evals:advisory .
+      - name: Run broad live eval suite
+        id: evals
+        continue-on-error: true
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEEPSEEK_API_KEY"
+          mkdir -p packages/evals/evalite-export
+          chmod 755 packages/evals/evalite-export
+          docker run --rm \
+            --env DEEPSEEK_API_KEY \
+            --mount "type=bind,source=$PWD/packages/evals/evalite-export,target=/opt/pipr/packages/evals/evalite-export" \
+            pipr-evals:advisory
+      - name: Record advisory result
+        if: always()
+        env:
+          EVAL_OUTCOME: ${{ steps.evals.outcome }}
+        run: echo "Live prompt eval outcome: $EVAL_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
