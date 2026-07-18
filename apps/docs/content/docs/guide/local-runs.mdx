@@ -164,6 +164,12 @@ Local review separates progress logs from the rendered or structured task result
 
 During local review, Pipr writes progress logs to stderr and the final review output to stdout. The default stdout format is Markdown without Pipr's internal comment marker, followed by any local inline finding drafts. `--json` keeps the full structured result, including review metadata, inline drafts, dropped findings, task checks, provider models, and repair metadata.
 
+### JSON format version
+
+Every `pipr review --json` result, including skipped results, contains the top-level integer `formatVersion`. The current value is `1`, independent of the Pipr CLI version. Check this field before reading other properties, and reject values your script doesn't support.
+
+Pipr keeps the current format version when it adds backward-compatible fields, so ignore unknown fields when you parse a supported version. Pipr increments `formatVersion` when a change requires you to parse existing fields differently.
+
 ## Environment
 
 Provide model credentials through the trusted local process environment.

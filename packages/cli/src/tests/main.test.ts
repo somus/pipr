@@ -488,16 +488,47 @@ describe("pipr CLI", () => {
       expect(result.stderr).toContain("pipr local review complete");
       expect(result.stderr).not.toContain('{"level":');
       const json = JSON.parse(result.stdout) as {
+        formatVersion: number;
         kind: string;
         mainComment: string;
         inlineFindings: unknown[];
         taskChecks: unknown[];
       };
+      expect(json.formatVersion).toBe(1);
       expect(json.kind).toBe("review");
       expect(json.mainComment).toContain("<!-- pipr:main-comment ");
       expect(json.mainComment).toContain("No findings.");
       expect(json.inlineFindings).toEqual([]);
       expect(json.taskChecks).toEqual([{ taskName: "review", conclusion: "success" }]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("prints the format version for skipped local review JSON", async () => {
+    const workspace = await createLocalReviewWorkspace({ local: false });
+    try {
+      const result = await runCli(
+        [
+          "review",
+          "--base",
+          workspace.baseSha,
+          "--pi-executable",
+          workspace.piExecutable,
+          "--json",
+        ],
+        { DEEPSEEK_API_KEY: "provider-key" },
+        workspace.rootDir,
+      );
+
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      const json = JSON.parse(result.stdout) as {
+        formatVersion: number;
+        kind: string;
+      };
+      expect(json.formatVersion).toBe(1);
+      expect(json.kind).toBe("skipped");
+      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(0);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -931,7 +962,9 @@ async function runHostRunWithGitWorkspace(options: {
   }
 }
 
-async function createLocalReviewWorkspace(options: { taskLog?: boolean } = {}): Promise<{
+async function createLocalReviewWorkspace(
+  options: { taskLog?: boolean; local?: boolean } = {},
+): Promise<{
   rootDir: string;
   baseSha: string;
   headSha: string;
@@ -944,8 +977,8 @@ async function createLocalReviewWorkspace(options: { taskLog?: boolean } = {}): 
   await runCommand("git", ["config", "core.hooksPath", "/dev/null"], rootDir);
   await runCommand("git", ["config", "commit.gpgsign", "false"], rootDir);
   await initWorkspaceConfig(rootDir);
-  if (options.taskLog) {
-    await Bun.write(path.join(rootDir, ".pipr", "config.ts"), localReviewConfigWithTaskLog());
+  if (options.taskLog || options.local === false) {
+    await Bun.write(path.join(rootDir, ".pipr", "config.ts"), localReviewConfig(options));
   }
   await mkdir(path.join(rootDir, "src"));
   await Bun.write(path.join(rootDir, "src/a.ts"), "export const value = 1;\n");
@@ -967,7 +1000,7 @@ async function createLocalReviewWorkspace(options: { taskLog?: boolean } = {}): 
   return { rootDir, baseSha, headSha, piExecutable };
 }
 
-function localReviewConfigWithTaskLog(): string {
+function localReviewConfig(options: { taskLog?: boolean; local?: boolean }): string {
   return [
     'import { definePipr } from "@usepipr/sdk";',
     "",
@@ -986,8 +1019,9 @@ function localReviewConfigWithTaskLog(): string {
     "  });",
     "  const task = pipr.task({",
     '    name: "review",',
+    ...(options.local === false ? ["    local: false,"] : []),
     "    async run(ctx) {",
-    '      ctx.log.info("running local review");',
+    ...(options.taskLog ? ['      ctx.log.info("running local review");'] : []),
     "      const manifest = await ctx.change.diffManifest({ compressed: true });",
     "      const result = await ctx.pi.run(reviewer, { manifest });",
     "      await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });",

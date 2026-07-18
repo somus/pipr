@@ -518,8 +518,11 @@ function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }
     : [mainComment.trimEnd(), "", "## Inline Findings", "", inlineFindings.join("\n\n")].join("\n");
 }
 
+const localReviewJsonFormatVersion = 1 as const;
+
 function localReviewJson(result: LocalReviewResult) {
   return {
+    formatVersion: localReviewJsonFormatVersion,
     kind: result.kind,
     ...(result.kind === "skipped" ? { skipReason: result.skipReason } : {}),
     mainComment: result.mainComment,
