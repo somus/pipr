@@ -1,0 +1,24 @@
+apps/docs/content/docs/guide/local-runs.mdx
+  s_0030a856e1f7c1::t_0a6d0de755f155 167-170,172
+  s_0030a856e1f7c1::t_9c7ae8e224d836 171
+packages/cli/src/tests/main.test.ts
+  s_0030a856e1f7c1::t_30e7ab20fa5528 491,497,508-536,965-967,980-981,1003,1022,1024
+packages/cli/src/runner.ts
+  s_0030a856e1f7c1::t_1fa1fc999a02e3 521-522,525
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "dd69ae2d8af30fa0a21c04d4cf4fd819381044c2",
+  "prompts": {},
+  "sessions": {
+    "s_0030a856e1f7c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7592-40dc-7ea0-b5e8-9e57f6f22784",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
