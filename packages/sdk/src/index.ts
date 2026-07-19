@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export { definePipr, definePlugin } from "./builder.js";
 export { md } from "./prompt.js";
+export type { PiprResult, PiprRunSummary } from "./result.js";
+export { parsePiprResult, piprResultSchema } from "./result.js";
 export type { ReviewFinding, ReviewResult, ReviewSummary } from "./review-contract.js";
 export {
   parseReviewFinding,

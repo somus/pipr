@@ -1,3 +1,4 @@
+import { commandStatusText } from "../publication.js";
 import type { CodeHostAdapter } from "../types.js";
 import {
   type AzureDevOpsClient,
@@ -65,6 +66,13 @@ export function createAzureDevOpsHostAdapter(
     publication: {
       publish: ({ plan, change }) => publishAzureDevOpsPlan({ client, plan, change }),
       publishCommandResponse: (args) => publishAzureDevOpsCommandResponse({ client, ...args }),
+      publishCommandStatus: (args) =>
+        publishAzureDevOpsCommandResponse({
+          client,
+          ...args,
+          body: commandStatusText(args),
+          allowHeadDrift: true,
+        }),
       publishThreadActions: (args) => publishAzureDevOpsThreadActions({ client, ...args }),
     },
     comments: {

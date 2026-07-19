@@ -292,7 +292,7 @@ export async function expectVerifierReplyPublished(
     logSink?: RuntimeLogSink;
     secretRedactor?: SecretRedactor;
   },
-): Promise<void> {
+) {
   const eventPath = path.join(workspace.rootDir, "event.json");
   await writeReviewCommentEvent(eventPath, options.event);
   const result = await runReviewCommentAction(workspace, {
@@ -306,8 +306,10 @@ export async function expectVerifierReplyPublished(
     errors: [],
     event: { coordinates: { provider: "github", owner: "local", repository: "pipr" } },
   });
+  if (result.kind !== "verifier") throw new Error("expected verifier result");
   expect(publication.reviewReplies).toHaveLength(1);
   await expectPiCalled(workspace);
+  return result;
 }
 
 export async function verifierRunIdFromReplyAction(
@@ -789,10 +791,13 @@ export function recordingCommandPublicationClient(
   const client = fakeGitHubPublicationClient(workspace, issueComments);
   client.createIssueComment = async (options) => {
     writes.created.push(options.body);
+    issueComments.push({ id: 10, body: options.body, authorLogin: "github-actions[bot]" });
     return { id: 10 };
   };
   client.updateIssueComment = async (options) => {
     writes.updated.push(options.body);
+    const existing = issueComments.find((comment) => comment.id === options.commentId);
+    if (existing) existing.body = options.body;
     return { id: options.commentId };
   };
   return { client, writes };

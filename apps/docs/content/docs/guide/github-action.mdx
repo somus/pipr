@@ -116,7 +116,9 @@ The Action exposes one stable structured summary for diagnostics and integration
 | `main-comment` | Rendered Main Review Comment body, command response body, or command help body. |
 | `result` | Versioned JSON summary for review, ignored, dry-run, command-help, command-response, verifier, publication-error, and other fatal error outcomes. |
 
-Parse `result`, check `formatVersion`, then branch on `kind`. Review results contain marker-free `mainComment`, public `inlineFindings`, dropped findings, task checks, provider model names, repair status, publication counts, and publication error counts. Pipr does not expose raw publication errors, Diff Manifests, publication plans, internal markers or finding identity, trusted configuration state, or provider credential metadata through Action outputs.
+Parse `result`, require `formatVersion: 2`, then branch on `kind`. Review, command-response, and verifier results include a bounded `run` summary with reviewed refs, selected tasks, elapsed time, models, agent-run count, tokens, cost, and usage completeness. Review publication is `{ state: "completed", ...counts }`.
+
+Pipr Result V2 does not expose raw errors, Diff Manifests, publication plans, internal markers or finding identity, native comment IDs, trusted configuration state, or provider credential metadata. V1 output is not supported.
 
 ## GitHub review output
 

@@ -1,3 +1,4 @@
+import type { PiprRunSummary } from "@usepipr/sdk";
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
 import type { PublicationResult } from "../review/publication-result.js";
@@ -96,6 +97,7 @@ export type HostRunCommandResult =
     }
   | {
       kind: "command-response";
+      run: PiprRunSummary;
       event: ChangeRequestEventContext;
       configSource: string;
       command: string;
@@ -106,6 +108,7 @@ export type HostRunCommandResult =
     }
   | {
       kind: "verifier";
+      run: PiprRunSummary;
       event: ChangeRequestEventContext;
       configSource: string;
       errors: string[];
@@ -125,6 +128,7 @@ export type TrustedReviewAndPublishResult =
     }
   | {
       kind: "command-response";
+      run: PiprRunSummary;
       response: {
         commandName: string;
         body: string;

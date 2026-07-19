@@ -28,6 +28,8 @@ Follow this order for a new setup. It separates config failures from provider de
 | 7. Stale head | Compare the reviewed head with the current change request head. | Rerun the workflow on the latest commit. |
 | 8. Dropped findings | Read `droppedFindings` from the Action `result` output. | Fix the prompt or mapper so findings use exact Diff Manifest paths, range ids, sides, and lines. |
 
+For webhook workers, run `pipr webhook status --database <path>` to inspect recent queue attempts and safe result kinds. Add `--json` when you need full delivery IDs or omission reasons; `invalid` identifies one corrupted stored result without preventing the remaining rows from loading.
+
 ## Choose the diagnostic
 
 Use the symptom to pick the first diagnostic command.

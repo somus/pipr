@@ -115,6 +115,18 @@ async function dispatchIssueCommentCommand(
   prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>,
   log: RuntimeLog,
 ): Promise<HostRunCommandResult> {
+  const runnable = await resolveRunnableCommand(adapter, prepared, log);
+  if (runnable.kind !== "matched") {
+    return runnable;
+  }
+  return await runCommandLifecycle(options, adapter, prepared, runnable.invocation, log);
+}
+
+async function resolveRunnableCommand(
+  adapter: CodeHostAdapter,
+  prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>,
+  log: RuntimeLog,
+): Promise<HostRunCommandResult | Extract<PlanCommandResolution, { kind: "matched" }>> {
   const requiredPermission =
     prepared.resolution.kind === "matched"
       ? prepared.resolution.invocation.requiredPermission
@@ -165,44 +177,114 @@ async function dispatchIssueCommentCommand(
   if (parsedResolution.kind !== "matched") {
     return { kind: "ignored", reason: "command dispatch did not resolve to a runnable task" };
   }
+  return parsedResolution;
+}
 
-  await prepareTrustedHeadCheckout(
-    options,
-    adapter,
-    prepared.trustedRuntime.settings.config,
-    prepared.event,
-    log,
-  );
-  const dispatch = dispatchRuntimeEntry({
-    kind: "change-request",
-    plan: prepared.trustedRuntime.plan,
-    event: prepared.event,
-    taskName: parsedResolution.invocation.taskName,
-  });
-  const completed = await runTrustedReviewAndPublish({
-    options,
-    adapter,
-    trustedRuntime: prepared.trustedRuntime,
-    event: prepared.event,
-    taskName: parsedResolution.invocation.taskName,
-    taskInput: parsedResolution.invocation.inputs,
-    selectedTasks: dispatch.kind === "change-request" ? dispatch.tasks : [],
-    commandInvocation: {
-      name: parsedResolution.invocation.commandName,
-      line: parsedResolution.invocation.line,
-      arguments: parsedResolution.invocation.arguments,
-      sourceCommentId: prepared.comment.commentId,
-    },
-    log,
-  });
-  return await issueCommentCommandResult({
-    adapter,
-    completed,
-    event: prepared.event,
-    commandName: parsedResolution.invocation.commandName,
+async function runCommandLifecycle(
+  options: HostRunCommandDependencyOptions,
+  adapter: CodeHostAdapter,
+  prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>,
+  invocation: Extract<PlanCommandResolution, { kind: "matched" }>["invocation"],
+  log: RuntimeLog,
+): Promise<HostRunCommandResult> {
+  const status = adapter.publication?.publishCommandStatus;
+  if (!status) {
+    throw new Error("command status publication is not available for this code host");
+  }
+  const statusOptions = {
+    change: prepared.event,
     sourceCommentId: prepared.comment.commentId,
-    configSource: prepared.trustedRuntime.settings.source,
-  });
+    commandName: invocation.commandName,
+    reviewedHeadSha: prepared.event.change.head.sha,
+  };
+  await status({ ...statusOptions, state: "accepted" });
+  try {
+    await prepareTrustedHeadCheckout(
+      options,
+      adapter,
+      prepared.trustedRuntime.settings.config,
+      prepared.event,
+      log,
+    );
+    const dispatch = dispatchRuntimeEntry({
+      kind: "change-request",
+      plan: prepared.trustedRuntime.plan,
+      event: prepared.event,
+      taskName: invocation.taskName,
+    });
+    await status({ ...statusOptions, state: "running" });
+    const completed = await runTrustedReviewAndPublish({
+      options,
+      adapter,
+      trustedRuntime: prepared.trustedRuntime,
+      event: prepared.event,
+      taskName: invocation.taskName,
+      taskInput: invocation.inputs,
+      selectedTasks: dispatch.kind === "change-request" ? dispatch.tasks : [],
+      commandInvocation: {
+        name: invocation.commandName,
+        line: invocation.line,
+        arguments: invocation.arguments,
+        sourceCommentId: prepared.comment.commentId,
+      },
+      log,
+    });
+    const result = await issueCommentCommandResult({
+      adapter,
+      completed,
+      event: prepared.event,
+      commandName: invocation.commandName,
+      sourceCommentId: prepared.comment.commentId,
+      configSource: prepared.trustedRuntime.settings.source,
+    });
+    if (result.kind === "review") {
+      await status({ ...statusOptions, state: "completed" });
+    }
+    return result;
+  } catch (error) {
+    await publishCommandFailureStatus({
+      adapter,
+      prepared,
+      status,
+      statusOptions,
+      error,
+      log,
+    });
+    throw error;
+  }
+}
+
+async function publishCommandFailureStatus(options: {
+  adapter: CodeHostAdapter;
+  prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>;
+  status: NonNullable<NonNullable<CodeHostAdapter["publication"]>["publishCommandStatus"]>;
+  statusOptions: {
+    change: ChangeRequestEventContext;
+    sourceCommentId: string;
+    commandName: string;
+    reviewedHeadSha: string;
+  };
+  error: unknown;
+  log: RuntimeLog;
+}): Promise<void> {
+  try {
+    const current = await options.adapter.events.loadChangeRequest({
+      repository: options.prepared.comment.repository,
+      changeNumber: options.prepared.comment.changeNumber,
+      workspace: options.prepared.comment.workspace,
+      eventName: options.prepared.comment.eventName,
+      action: options.prepared.comment.action,
+      rawAction: options.prepared.comment.rawAction,
+    });
+    const state =
+      current.change.head.sha === options.prepared.event.change.head.sha ? "failed" : "superseded";
+    await options.status({ ...options.statusOptions, state });
+  } catch (statusError) {
+    options.log.warning("command terminal status publication failed", {
+      error: statusError instanceof Error ? statusError.message : String(statusError),
+      originalError: options.error instanceof Error ? options.error.message : String(options.error),
+    });
+  }
 }
 
 async function issueCommentCommandResult(options: {
@@ -254,6 +336,7 @@ async function publishCommandResponseHostRunResult(options: {
   });
   return {
     kind: "command-response",
+    run: options.completed.run,
     event: options.event,
     command: options.completed.response.commandName,
     configSource: options.configSource,

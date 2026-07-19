@@ -1,9 +1,11 @@
+import type { PiprRunSummary } from "@usepipr/sdk";
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
-import { resolveProvider } from "../review/agent/review-run.js";
+import { type PiRunStats, resolveProvider } from "../review/agent/review-run.js";
 import { isPiprThreadActionReplyBody } from "../review/prior-state.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { stableReviewRunId } from "../review/run-identity.js";
+import { reviewStatsForRuns } from "../review/task/task-output.js";
 import { runInternalVerifier } from "../review/verifier.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
@@ -52,6 +54,7 @@ export async function runReviewCommentReplyHostRunCommand(
   });
   return {
     kind: "verifier",
+    run: result.run,
     event: prepared.event,
     configSource: prepared.trustedRuntime.settings.source,
     errors: publication?.errors ?? [],
@@ -156,6 +159,19 @@ async function runReviewCommentVerifier(
     config,
     config.publication.autoResolve.model ?? config.defaultProvider,
   );
+  const started = Date.now();
+  const piRuns: PiRunStats[] = [];
+  const runId = stableReviewRunId({
+    event,
+    selectedTasks: ["pipr-internal-verifier"],
+    trustedConfigSha: trustedRuntime.trustedConfigSha,
+    trustedConfigHash: trustedRuntime.trustedConfigHash,
+    verifierInvocation: {
+      mode: "user-reply",
+      commentId: reply.commentId,
+      parentCommentId: reply.parentCommentId,
+    },
+  });
   const threadContexts =
     (await adapter.comments?.loadInlineThreadContexts?.({ change: event })) ?? [];
   log.notice("verifier start", {
@@ -191,24 +207,61 @@ async function runReviewCommentVerifier(
       },
       respondWhenStillValid: config.publication.autoResolve.userReplies.respondWhenStillValid,
     },
-    runId: stableReviewRunId({
-      event,
-      selectedTasks: ["pipr-internal-verifier"],
-      trustedConfigSha: trustedRuntime.trustedConfigSha,
-      trustedConfigHash: trustedRuntime.trustedConfigHash,
-      verifierInvocation: {
-        mode: "user-reply",
-        commentId: reply.commentId,
-        parentCommentId: reply.parentCommentId,
-      },
-    }),
+    runId,
+    piRunSink(run) {
+      piRuns.push(run);
+    },
+  });
+  const durationMs = Date.now() - started;
+  const stats = reviewStatsForRuns(piRuns, durationMs);
+  const run = verifierRunSummary({
+    event,
+    runId,
+    durationMs,
+    providerModels: result.providerModels,
+    fallbackModel: verifierProvider.model,
+    stats,
   });
   return {
     ...result,
+    run,
     threadActions: redactThreadActions({
       threadActions: result.threadActions,
       redactor: options.secretRedactor,
     }),
+  };
+}
+
+function verifierRunSummary(options: {
+  event: ChangeRequestEventContext;
+  runId: string;
+  durationMs: number;
+  providerModels: string[];
+  fallbackModel: string;
+  stats: ReturnType<typeof reviewStatsForRuns>;
+}): PiprRunSummary {
+  const stats: Partial<NonNullable<ReturnType<typeof reviewStatsForRuns>>> = options.stats ?? {};
+  const {
+    agentRuns = 0,
+    inputTokens = 0,
+    outputTokens = 0,
+    costUsd = 0,
+    usageStatus = "unavailable",
+  } = stats;
+  const models = options.providerModels.length ? options.providerModels : [options.fallbackModel];
+  return {
+    id: options.runId,
+    trigger: "verifier",
+    baseSha: options.event.change.base.sha,
+    headSha: options.event.change.head.sha,
+    tasks: ["pipr-internal-verifier"],
+    durationMs: options.durationMs,
+    models,
+    agentRuns,
+    inputTokens,
+    outputTokens,
+    costUsd,
+    usageStatus,
   };
 }
 

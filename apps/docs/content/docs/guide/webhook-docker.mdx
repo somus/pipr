@@ -23,7 +23,8 @@ Create separate directories for deployment configuration, the trusted checkout, 
 
 ```bash
 sudo install -d -o "$USER" -g "$USER" /srv/pipr/deployment
-sudo install -d -o 1000 -g 1000 /srv/pipr/repository /srv/pipr/state
+sudo install -d -o 1000 -g 1000 /srv/pipr/repository
+sudo install -d -m 700 -o 1000 -g 1000 /srv/pipr/state
 ```
 
 The Compose service runs Pipr and Pi as UID and GID `1000`. Keep both mounted directories writable by that identity so Pipr can update the checkout and SQLite queue without running the container as root. Pi still receives only read tools and a mode-bit-protected workspace copy, but this deployment does not provide the Docker Action's separate process identity boundary.

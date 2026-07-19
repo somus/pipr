@@ -101,11 +101,28 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
     const result = await runRuntime({
       plan,
     });
+    if (result.kind !== "review") {
+      throw new Error(`expected review, received ${result.kind}`);
+    }
 
     expect(result.mainComment).toContain("Review summary.");
     expect(result.review.summary.body).toBe("Review summary.");
     expect(result.validated.review.summary.body).toBe("Review summary.");
     expect(result.inlineCommentDrafts.map((item) => item.finding.body)).toEqual(["inline body"]);
+    expect(result.run).toMatchObject({
+      trigger: "change-request",
+      baseSha: "base",
+      headSha: "head",
+      tasks: ["review"],
+      models: ["deepseek-v4-pro"],
+      agentRuns: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+      usageStatus: "unavailable",
+    });
+    expect(result.run.id).toBeString();
+    expect(result.run.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("redacts known runtime secrets before building the publication plan", async () => {
@@ -200,6 +217,14 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
     });
     expect(result).toMatchObject({
       kind: "command-response",
+      run: {
+        trigger: "command",
+        baseSha: "base",
+        headSha: "head",
+        tasks: ["ask"],
+        agentRuns: 0,
+        usageStatus: "unavailable",
+      },
       commandResponse: {
         commandName: "ask",
         body: "Answer: what changed?",
