@@ -14,10 +14,10 @@ ENV TMPDIR=/tmp
 ENV PIPR_PI_SANDBOX_UID=1000
 ENV PIPR_PI_SANDBOX_GID=1000
 RUN bun add -g \
-  @earendil-works/pi-coding-agent@0.80.3 \
-  @earendil-works/pi-ai@0.80.3 \
-  @earendil-works/pi-tui@0.80.3 \
-  @earendil-works/pi-agent-core@0.80.3 \
+  @earendil-works/pi-coding-agent@0.80.10 \
+  @earendil-works/pi-ai@0.80.10 \
+  @earendil-works/pi-tui@0.80.10 \
+  @earendil-works/pi-agent-core@0.80.10 \
   && PI_OFFLINE=1 PI_TELEMETRY=0 pi --help >/dev/null
 
 WORKDIR /opt/pipr
