@@ -77,6 +77,8 @@ The reverse proxy should restrict request size and access before forwarding to t
 
 Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run this command from the versioned Pipr image with persistent state and a container health check.
 
+Inspect recent outcomes with `pipr webhook status --database /var/lib/pipr/webhooks.sqlite`; add `--json` to read safe Pipr Result V2 bodies and omission reasons.
+
 ## Supported behavior
 
 The GitLab.com adapter supports:

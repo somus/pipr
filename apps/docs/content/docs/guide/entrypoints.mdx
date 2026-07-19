@@ -115,7 +115,9 @@ pipr.command({
 });
 ```
 
-Command responses are normal change-request comments keyed to the source command comment. They do not update the Main Review Comment and do not publish Inline Review Comments.
+Command responses are normal change-request comments keyed to the source command comment. Pipr creates that comment as `accepted`, updates it to `running` before task execution, then replaces it with the final response. Failures become `failed`, while a head change during execution becomes `superseded`. A retry of the same source comment updates this owned comment instead of adding another.
+
+Lifecycle status updates may finish after the proposed head changes so users can see what happened. The final model-generated response keeps the reviewed-head stale guard and is never published against a newer diff.
 
 Use `ctx.command?.reply(...)` only for command response workflows. Use `ctx.comment(...)` when the task should contribute review output to the Main Review Comment or Inline Review Comments.
 

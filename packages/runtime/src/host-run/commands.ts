@@ -165,6 +165,7 @@ export async function runLocalReviewCommand(
       : undefined,
     log,
     taskLog: options.taskLog,
+    trigger: "local",
   });
   if (result.kind === "command-response") {
     throw new Error("command response result is only supported for issue_comment commands");

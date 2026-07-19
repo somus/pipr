@@ -1,8 +1,8 @@
 import type { ChangeRequestEventContext } from "../../types.js";
+import { commandResponseBody, commandStatusBody } from "../publication.js";
+import type { CommandLifecycleState } from "../types.js";
 import type { GitHubIssueComment, GitHubPublicationClient } from "./publication-client.js";
 import { assertCurrentHeadSha, findOwnedIssueComment } from "./publication-shared.js";
-
-const commandResponseMarker = "pipr:command-response";
 
 export async function publishGitHubCommandResponse(options: {
   client: GitHubPublicationClient;
@@ -11,33 +11,74 @@ export async function publishGitHubCommandResponse(options: {
   commandName: string;
   body: string;
 }): Promise<{ action: "created" | "updated"; id: string }> {
-  await assertCurrentHeadSha(options.client, options.change, options.change.change.head.sha);
-
-  const ownerLogin = await options.client.getAuthenticatedUserLogin();
-  const marker = renderCommandResponseMarker({
-    changeNumber: options.change.change.number,
-    sourceCommentId: options.sourceCommentId,
-    commandName: options.commandName,
+  return await publishGitHubCommandComment({
+    client: options.client,
+    change: options.change,
+    guardHead: true,
+    comment: commandResponseBody({
+      changeNumber: options.change.change.number,
+      sourceCommentId: String(options.sourceCommentId),
+      commandName: options.commandName,
+      reviewedHeadSha: options.change.change.head.sha,
+      body: options.body,
+    }),
   });
-  const body = [marker, "", options.body, ""].join("\n");
+}
+
+export async function publishGitHubCommandStatus(options: {
+  client: GitHubPublicationClient;
+  change: ChangeRequestEventContext;
+  sourceCommentId: number;
+  commandName: string;
+  state: CommandLifecycleState;
+  reviewedHeadSha: string;
+  currentHeadSha?: string;
+}): Promise<{ action: "created" | "updated"; id: string }> {
+  return await publishGitHubCommandComment({
+    client: options.client,
+    change: options.change,
+    guardHead: false,
+    comment: commandStatusBody({
+      changeNumber: options.change.change.number,
+      sourceCommentId: String(options.sourceCommentId),
+      commandName: options.commandName,
+      state: options.state,
+      reviewedHeadSha: options.reviewedHeadSha,
+      currentHeadSha: options.currentHeadSha,
+    }),
+  });
+}
+
+async function publishGitHubCommandComment(options: {
+  client: GitHubPublicationClient;
+  change: ChangeRequestEventContext;
+  guardHead: boolean;
+  comment: { marker: string; body: string };
+}): Promise<{ action: "created" | "updated"; id: string }> {
+  if (options.guardHead) {
+    await assertCurrentHeadSha(options.client, options.change, options.change.change.head.sha);
+  }
+  const ownerLogin = await options.client.getAuthenticatedUserLogin();
   const comments = await options.client.listIssueComments({
     repo: options.change.repository.slug,
     issueNumber: options.change.change.number,
   });
-  await assertCurrentHeadSha(options.client, options.change, options.change.change.head.sha);
-  const existing = findCommandResponseComment(comments, marker, ownerLogin);
+  if (options.guardHead) {
+    await assertCurrentHeadSha(options.client, options.change, options.change.change.head.sha);
+  }
+  const existing = findCommandResponseComment(comments, options.comment.marker, ownerLogin);
   if (existing) {
     const updated = await options.client.updateIssueComment({
       repo: options.change.repository.slug,
       commentId: existing.id,
-      body,
+      body: options.comment.body,
     });
     return { action: "updated", id: String(updated.id) };
   }
   const created = await options.client.createIssueComment({
     repo: options.change.repository.slug,
     issueNumber: options.change.change.number,
-    body,
+    body: options.comment.body,
   });
   return { action: "created", id: String(created.id) };
 }
@@ -48,12 +89,4 @@ function findCommandResponseComment(
   ownerLogin: string,
 ): GitHubIssueComment | undefined {
   return findOwnedIssueComment(comments, ownerLogin, (firstLine) => firstLine === marker);
-}
-
-function renderCommandResponseMarker(options: {
-  changeNumber: number;
-  sourceCommentId: number;
-  commandName: string;
-}): string {
-  return `<!-- ${commandResponseMarker} change=${options.changeNumber} source=${options.sourceCommentId} command=${options.commandName} -->`;
 }

@@ -1,6 +1,6 @@
 ---
 title: "CLI reference"
-description: "Pipr CLI commands for version checks, updates, init, host runs, config validation, dry runs, inspect, and local review."
+description: "Pipr CLI commands for version checks, updates, init, host runs, webhook worker management, config validation, dry runs, inspect, and local review."
 ---
 
 The CLI is the local and Action entrypoint for Pipr.
@@ -118,6 +118,26 @@ Options:
 `PIPR_WEBHOOK_SECRET` is required. Azure workers also require `AZURE_DEVOPS_ORGANIZATION`, `AZURE_DEVOPS_PROJECT`, and `PIPR_AZURE_SUBSCRIPTION_ID`. Bitbucket workers require `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, and `BITBUCKET_API_TOKEN`; command permission checks also require the separate workspace-admin permission credential documented in the [Bitbucket Cloud guide](/docs/guide/bitbucket). Provider credentials and model keys remain in the runner environment.
 
 `GET /healthz` returns `200 OK` while the HTTP server can accept deliveries. It does not inspect provider credentials or run model work. See [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for the supported Compose deployment.
+
+## `pipr webhook status`
+
+Inspect persisted webhook outcomes from a local SQLite queue:
+
+```bash
+pipr webhook status
+pipr webhook status --database /var/lib/pipr/webhooks.sqlite --limit 50
+pipr webhook status --database /var/lib/pipr/webhooks.sqlite --json
+```
+
+Options:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--database <path>` | `.pipr/webhooks.sqlite` | Existing SQLite delivery database to inspect. |
+| `--limit <count>` | `20` | Maximum rows to return, from 1 through 200. |
+| `--json` | false | Emit a versioned envelope with full IDs, metadata, safe parsed Pipr Results, and omission reasons. |
+
+The default output is a table of delivery ID, host, queue status, attempts, result kind, short run ID, and last update time. An existing database with no deliveries prints `No webhook deliveries found.` A missing database fails without creating one. Result bodies can be omitted as `size-limit` or `retention`; invalid legacy or corrupted JSON is reported as `invalid` without stopping the query.
 
 ## `pipr check`
 

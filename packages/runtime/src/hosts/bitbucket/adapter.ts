@@ -6,6 +6,7 @@ import {
   loadBitbucketPriorMainComment,
   loadBitbucketPriorReviewState,
   publishBitbucketCommandResponse,
+  publishBitbucketCommandStatus,
   publishBitbucketPlan,
   publishBitbucketThreadActions,
 } from "./publication.js";
@@ -62,6 +63,7 @@ export function createBitbucketHostAdapter(
     publication: {
       publish: ({ change, plan }) => publishBitbucketPlan({ client, change, plan }),
       publishCommandResponse: (args) => publishBitbucketCommandResponse({ client, ...args }),
+      publishCommandStatus: (args) => publishBitbucketCommandStatus({ client, ...args }),
       publishThreadActions: (args) => publishBitbucketThreadActions({ client, ...args }),
     },
     comments: {

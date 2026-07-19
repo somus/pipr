@@ -191,11 +191,20 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           : { ...common, ...noFindingsPiResult() };
       },
     });
+    if (result.kind !== "review") throw new Error(`expected review, received ${result.kind}`);
 
     expect(result.publicationPlan.metadata.stats).toEqual({
       models: ["primary-response-model", "fallback-response-model"],
       agentRuns: 3,
       durationMs: expect.any(Number),
+      inputTokens: 600,
+      outputTokens: 60,
+      costUsd: 0.006,
+      usageStatus: "complete",
+    });
+    expect(result.run).toMatchObject({
+      models: ["primary-response-model", "fallback-response-model"],
+      agentRuns: 3,
       inputTokens: 600,
       outputTokens: 60,
       costUsd: 0.006,
@@ -228,8 +237,15 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           : { ...telemetry, ...noFindingsPiResult() };
       },
     });
+    if (result.kind !== "review") throw new Error(`expected review, received ${result.kind}`);
 
     expect(result.publicationPlan.metadata.stats).toMatchObject({
+      inputTokens: Number.MAX_SAFE_INTEGER,
+      outputTokens: 3,
+      costUsd: 0.003,
+      usageStatus: "partial",
+    });
+    expect(result.run).toMatchObject({
       inputTokens: Number.MAX_SAFE_INTEGER,
       outputTokens: 3,
       costUsd: 0.003,

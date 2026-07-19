@@ -27,8 +27,17 @@ export {
   runLocalReviewCommand,
   runValidateCommand,
 } from "./host-run/commands.js";
-export type { WebhookHost } from "./host-run/webhook-server.js";
-export { runWebhookServer } from "./host-run/webhook-server.js";
+export {
+  stripPiprMainCommentMarkers,
+  toPiprErrorResult,
+  toPiprResult,
+} from "./host-run/result.js";
+export type { WebhookHost, WebhookStatus } from "./host-run/webhook-server.js";
+export {
+  formatWebhookDeliveryId,
+  readWebhookStatus,
+  runWebhookServer,
+} from "./host-run/webhook-server.js";
 export type { PublicationResult } from "./review/publication-result.js";
 export { PublicationError } from "./review/publication-result.js";
 export type {

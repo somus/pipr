@@ -11,7 +11,10 @@ import {
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
-  commandResponseBody,
+  type CommandResponsePublicationOptions,
+  type CommandStatusPublicationOptions,
+  commandResponsePublication,
+  commandStatusPublication,
   completeHostPublication,
   nativeInlineLocation,
   publishUnseenInlineItems,
@@ -126,35 +129,54 @@ function gitLabInlineLocation(item: InlinePublicationItem): InlinePublicationLoc
   };
 }
 
-export async function publishGitLabCommandResponse(options: {
+export async function publishGitLabCommandResponse(
+  options: CommandResponsePublicationOptions<GitLabClient>,
+) {
+  return await publishGitLabCommandComment({
+    client: options.client,
+    change: options.change,
+    ...commandResponsePublication(options),
+  });
+}
+
+export async function publishGitLabCommandStatus(
+  options: CommandStatusPublicationOptions<GitLabClient>,
+) {
+  return await publishGitLabCommandComment({
+    client: options.client,
+    change: options.change,
+    ...commandStatusPublication(options),
+  });
+}
+
+async function publishGitLabCommandComment(options: {
   client: GitLabClient;
   change: ChangeRequestEventContext;
-  sourceCommentId: string;
-  commandName: string;
-  body: string;
+  guardHead: boolean;
+  comment: { marker: string; body: string };
 }) {
   const { projectId } = gitLabCoordinates(options.change);
   const owner = await options.client.currentUser();
-  const response = commandResponseBody({
-    changeNumber: options.change.change.number,
-    sourceCommentId: options.sourceCommentId,
-    commandName: options.commandName,
-    body: options.body,
-  });
   const existing = ownedNote(
     await options.client.listNotes(projectId, options.change.change.number),
     owner.username,
-    response.marker,
+    options.comment.marker,
   );
-  await assertCurrentHead(options.client, projectId, options.change);
+  if (options.guardHead) {
+    await assertCurrentHead(options.client, projectId, options.change);
+  }
   const note = existing
     ? await options.client.updateNote(
         projectId,
         options.change.change.number,
         existing.id,
-        response.body,
+        options.comment.body,
       )
-    : await options.client.createNote(projectId, options.change.change.number, response.body);
+    : await options.client.createNote(
+        projectId,
+        options.change.change.number,
+        options.comment.body,
+      );
   return { action: existing ? ("updated" as const) : ("created" as const), id: note.id };
 }
 

@@ -13,6 +13,7 @@ import {
   loadGitHubPriorMainComment,
   loadGitHubPriorReviewState,
   publishGitHubCommandResponse,
+  publishGitHubCommandStatus,
   publishGitHubPublicationPlan,
   publishGitHubThreadActions,
 } from "./publication.js";
@@ -102,6 +103,17 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
           sourceCommentId: Number(options.sourceCommentId),
           commandName: options.commandName,
           body: options.body,
+        });
+      },
+      publishCommandStatus(options) {
+        return publishGitHubCommandStatus({
+          client: publicationClient,
+          change: options.change,
+          sourceCommentId: Number(options.sourceCommentId),
+          commandName: options.commandName,
+          state: options.state,
+          reviewedHeadSha: options.reviewedHeadSha,
+          currentHeadSha: options.currentHeadSha,
         });
       },
       publishThreadActions(options) {

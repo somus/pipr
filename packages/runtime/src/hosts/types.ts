@@ -35,6 +35,8 @@ export type CommandResponsePublicationResult = {
   id: NativeId;
 };
 
+export type CommandLifecycleState = "accepted" | "running" | "completed" | "failed" | "superseded";
+
 export type InlineThreadContext = {
   findingId: string;
   findingHeadSha: string;
@@ -124,6 +126,14 @@ export type CodeHostPublication = {
     sourceCommentId: NativeId;
     commandName: string;
     body: string;
+  }): Promise<CommandResponsePublicationResult>;
+  publishCommandStatus?(options: {
+    change: ChangeRequestEventContext;
+    sourceCommentId: NativeId;
+    commandName: string;
+    state: CommandLifecycleState;
+    reviewedHeadSha: string;
+    currentHeadSha?: string;
   }): Promise<CommandResponsePublicationResult>;
   publishThreadActions?(options: {
     change: ChangeRequestEventContext;

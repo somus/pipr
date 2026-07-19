@@ -217,7 +217,7 @@ For review output, Pipr turns that output into a provider-neutral `PublicationPl
 - dropped finding metadata
 - run metadata
 
-Command response output publishes a normal change-request comment keyed by the source command comment. Rerunning the same source command updates the previous bot response.
+Command response output publishes a normal change-request comment keyed to the source command comment. Rerunning the same source command updates the previous bot response. Pipr writes `accepted` before checkout and `running` before task execution, then replaces that same comment with the response or a `completed`, `failed`, or `superseded` terminal state. The final model response remains subject to the stale-head guard.
 
 ### Comment updates and state
 
@@ -241,6 +241,7 @@ The runtime records or stops each failure according to whether safe publication 
 | Pi returns invalid JSON after repair | Task fails and metadata records failure. |
 | Finding targets invalid range | Finding is dropped, run continues. |
 | Stale head before publication | Publication stops before writes. |
+| Command stale head before completion | Final command response is skipped and the comment transitions to `superseded`; operational status updates still reflect the latest lifecycle state when safe. |
 | Comment API failure | Publication metadata is emitted and the hosted run fails. |
 | Stale review-thread cleanup failure | Publication metadata records the cleanup error and the Action continues. |
 

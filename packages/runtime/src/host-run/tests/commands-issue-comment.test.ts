@@ -14,6 +14,7 @@ import {
   expectReviewRanAtHead,
   failingGitHubClient,
   failingGitHubPublishingClient,
+  fakeGitHubClient,
   githubAdapterWithCapabilities,
   issueCommentEnv,
   recordingCommandPublicationClient,
@@ -21,6 +22,7 @@ import {
   reviewConfigTs,
   runIssueCommentCommand,
   runTestHostCommand,
+  writeFailingPiExecutable,
   writeIssueCommentEvent,
   writePiExecutable,
 } from "./commands-fixtures.js";
@@ -272,14 +274,172 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         response: {
           body: "The change updates command output.",
         },
-        publication: { action: "created", id: "10" },
+        publication: { action: "updated", id: "10" },
       });
       expect(publication.writes.created).toHaveLength(1);
       expect(publication.writes.created[0]).toContain(
         "<!-- pipr:command-response change=1 source=123 command=ask -->",
       );
-      expect(publication.writes.created[0]).toContain("The change updates command output.");
-      expect(publication.writes.updated).toEqual([]);
+      expect(publication.writes.created[0]).toContain("state=accepted");
+      expect(publication.writes.updated).toHaveLength(2);
+      expect(publication.writes.updated[0]).toContain("state=running");
+      expect(publication.writes.updated[1]).toContain("state=completed");
+      expect(publication.writes.updated[1]).toContain("The change updates command output.");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("publishes failed lifecycle state after task execution fails", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: askConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    try {
+      await writeFailingPiExecutable(workspace.piExecutable);
+
+      await expect(
+        runIssueCommentCommand(
+          workspace,
+          "@pipr ask what changed?",
+          "read",
+          undefined,
+          publication.client,
+        ),
+      ).rejects.toThrow("Pi agent failed");
+
+      expect(publication.writes.created[0]).toContain("state=accepted");
+      expect(publication.writes.updated[0]).toContain("state=running");
+      expect(publication.writes.updated[1]).toContain("state=failed");
+      expect(publication.writes.updated[1]).not.toContain("model exploded");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("publishes superseded when the reviewed head changes before a final response", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: askConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const eventPath = path.join(workspace.rootDir, "event.json");
+    const publication = recordingCommandPublicationClient(workspace);
+    publication.client.getPullRequestHeadSha = async () => "new-head";
+    const commandClient = fakeGitHubClient(workspace, "read");
+    const loadChangeRequest = commandClient.getPullRequest.bind(commandClient);
+    let loads = 0;
+    commandClient.getPullRequest = async (options) => {
+      loads += 1;
+      const loaded = await loadChangeRequest(options);
+      return loads === 1
+        ? loaded
+        : { ...loaded, change: { ...loaded.change, head: { sha: "new-head" } } };
+    };
+    try {
+      await writePiExecutable(workspace.piExecutable, '{"body":"Current answer."}');
+      await writeIssueCommentEvent(eventPath, "@pipr ask what changed?");
+      await expect(
+        runTestHostCommand({
+          rootDir: workspace.rootDir,
+          configDir: ".pipr",
+          eventPath,
+          dryRun: false,
+          env: issueCommentEnv(workspace.rootDir, eventPath),
+          githubClient: commandClient,
+          githubPublicationClient: publication.client,
+          piExecutable: workspace.piExecutable,
+        }),
+      ).rejects.toThrow(/head changed/i);
+
+      expect(publication.writes.updated.at(-1)).toContain("state=superseded");
+      expect(publication.writes.updated.at(-1)).toContain("current=new-head");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("stops before Pi when the accepted status cannot be created", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: askConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    publication.client.createIssueComment = async () => {
+      throw new Error("command acknowledgement denied");
+    };
+    try {
+      await expect(
+        runIssueCommentCommand(
+          workspace,
+          "@pipr ask what changed?",
+          "read",
+          undefined,
+          publication.client,
+        ),
+      ).rejects.toThrow("command acknowledgement denied");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("fails the host run when completed status publication fails", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = recordingCommandPublicationClient(workspace);
+    const updateIssueComment = publication.client.updateIssueComment.bind(publication.client);
+    publication.client.updateIssueComment = async (options) => {
+      if (options.body.includes("state=completed")) {
+        throw new Error("terminal status denied");
+      }
+      return await updateIssueComment(options);
+    };
+    try {
+      await expect(
+        runIssueCommentCommand(
+          workspace,
+          "@pipr review --scope full",
+          "write",
+          undefined,
+          publication.client,
+        ),
+      ).rejects.toThrow("terminal status denied");
+      expect(publication.writes.updated.at(-1)).toContain("state=failed");
+      expect(await Bun.file(path.join(workspace.rootDir, "pi-called")).exists()).toBe(true);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("keeps the original task error when failed status publication also fails", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: askConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    const logs = memoryRuntimeLogSink();
+    const updateIssueComment = publication.client.updateIssueComment.bind(publication.client);
+    publication.client.updateIssueComment = async (options) => {
+      if (options.body.includes("state=failed")) {
+        throw new Error("failed status denied");
+      }
+      return await updateIssueComment(options);
+    };
+    try {
+      await writeFailingPiExecutable(workspace.piExecutable);
+
+      await expect(
+        runIssueCommentCommand(
+          workspace,
+          "@pipr ask what changed?",
+          "read",
+          undefined,
+          publication.client,
+          logs.logSink,
+        ),
+      ).rejects.toThrow("Pi agent failed");
+      expect(logs.messages.join("\n")).toContain("command terminal status publication failed");
+      expect(logs.messages.join("\n")).toContain("failed status denied");
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -323,9 +483,9 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         456,
       );
 
-      const firstRunId = commandResponsePayload(firstPublication.writes.created[0]);
-      expect(commandResponsePayload(repeatedPublication.writes.created[0])).toBe(firstRunId);
-      expect(commandResponsePayload(changedPublication.writes.created[0])).not.toBe(firstRunId);
+      const firstRunId = commandResponsePayload(firstPublication.writes.updated.at(-1));
+      expect(commandResponsePayload(repeatedPublication.writes.updated.at(-1))).toBe(firstRunId);
+      expect(commandResponsePayload(changedPublication.writes.updated.at(-1))).not.toBe(firstRunId);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -363,8 +523,10 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         publication: { action: "updated", id: "88" },
       });
       expect(publication.writes.created).toEqual([]);
-      expect(publication.writes.updated).toHaveLength(1);
-      expect(publication.writes.updated[0]).toContain("Updated answer.");
+      expect(publication.writes.updated).toHaveLength(3);
+      expect(publication.writes.updated[0]).toContain("state=accepted");
+      expect(publication.writes.updated[1]).toContain("state=running");
+      expect(publication.writes.updated[2]).toContain("Updated answer.");
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

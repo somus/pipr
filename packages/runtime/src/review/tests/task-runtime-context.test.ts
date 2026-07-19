@@ -30,6 +30,35 @@ import {
 } from "./task-runtime-fixtures.js";
 
 describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
+  it("returns Review Run metadata without exposing a false live-head task API", async () => {
+    let taskHasCurrentHeadSha = true;
+    const plan = singleTaskPlan({
+      async run(ctx) {
+        taskHasCurrentHeadSha = "currentHeadSha" in ctx.change;
+        await ctx.comment(ctx.change.head.sha);
+      },
+    });
+
+    const result = await runRuntime({ plan });
+
+    expect(taskHasCurrentHeadSha).toBe(false);
+    if (result.kind !== "review") throw new Error(`expected review, received ${result.kind}`);
+    expect(result.run).toMatchObject({
+      trigger: "change-request",
+      baseSha: "base",
+      headSha: "head",
+      tasks: ["review"],
+      models: [],
+      agentRuns: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+      usageStatus: "unavailable",
+    });
+    expect(result.run.id).toMatch(/^pipr-/);
+    expect(result.run.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
   it("applies Diff Manifest options exposed on task context", async () => {
     const manifest = reviewTestManifestWithContext();
     const plan = testPlan((pipr) => {

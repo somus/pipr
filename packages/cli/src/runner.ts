@@ -1,21 +1,23 @@
 import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
+  formatWebhookDeliveryId,
   type RuntimeLogRecord,
   type RuntimeLogSink,
+  readWebhookStatus,
   runDryRunCommand,
   runHostRunCommand,
   runInitCommand,
   runInspectCommand,
   runLocalReviewCommand,
   runValidateCommand,
+  stripPiprMainCommentMarkers,
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
+  toPiprResult,
+  type WebhookStatus,
 } from "@usepipr/runtime";
-import {
-  presentGitHubActionResult,
-  stripPiprMainCommentMarkers,
-} from "@usepipr/runtime/internal/action-result";
+import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
 import { Command, CommanderError } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
@@ -43,6 +45,7 @@ type CliOptions = {
   head?: string;
   piExecutable?: string;
   json?: boolean;
+  limit?: string;
 };
 
 type MainOptions = {
@@ -114,6 +117,14 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .option("--port <port>", "Listen port", "8787")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .action(runWebhookServe);
+
+  webhook
+    .command("status")
+    .description("Display persisted webhook delivery outcomes")
+    .option("--database <path>", "SQLite delivery database", ".pipr/webhooks.sqlite")
+    .option("--limit <count>", "Rows to show", "20")
+    .option("--json", "Output JSON result")
+    .action(runWebhookStatus);
 
   program
     .command("check")
@@ -232,9 +243,38 @@ async function runWebhookServe(options: CliOptions): Promise<void> {
   });
 }
 
+async function runWebhookStatus(options: CliOptions): Promise<void> {
+  const database = options.database ?? ".pipr/webhooks.sqlite";
+  const limit = webhookLimit(options.limit);
+
+  const status = await readWebhookStatus(database, { limit });
+  if (options.json === true) {
+    const envelope = {
+      formatVersion: 1,
+      deliveries: status.deliveries,
+    } satisfies WebhookStatus;
+    console.log(JSON.stringify(envelope, null, 2));
+    return;
+  }
+  if (status.deliveries.length === 0) {
+    console.log("No webhook deliveries found.");
+    return;
+  }
+
+  writeWebhookStatusTable(status, { limit });
+}
+
 function webhookHost(value: string | undefined): "gitlab" | "azure-devops" | "bitbucket" {
   if (value === "gitlab" || value === "azure-devops" || value === "bitbucket") return value;
   throw new Error("webhook serve supports --host gitlab, azure-devops, or bitbucket");
+}
+
+function webhookLimit(value: string | undefined): number {
+  const limit = Number(value ?? 20);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+    throw new Error("--limit must be an integer from 1 to 200");
+  }
+  return limit;
 }
 
 function webhookPort(value: string | undefined): number {
@@ -243,6 +283,38 @@ function webhookPort(value: string | undefined): number {
     throw new Error("--port must be an integer from 1 to 65535");
   }
   return port;
+}
+
+function writeWebhookStatusTable(
+  status: WebhookStatus,
+  _options: {
+    limit: number;
+  },
+): void {
+  const headers = ["DELIVERY", "HOST", "STATUS", "TRIES", "RESULT", "RUN", "UPDATED"];
+  const rows = status.deliveries.map((delivery) => [
+    formatWebhookDeliveryId(delivery.id),
+    delivery.host,
+    delivery.status,
+    String(delivery.attempts),
+    delivery.resultKind ?? "-",
+    delivery.runId ? formatWebhookDeliveryId(delivery.runId) : "-",
+    delivery.updatedAt,
+  ]);
+  const allRows = [headers, ...rows];
+  const columnWidths = headers.map((header, index) =>
+    Math.max(header.length, ...allRows.map((row) => row[index]?.length ?? 0)),
+  );
+
+  const renderLine = (values: string[]) =>
+    values
+      .map((value, index) => value.padEnd(columnWidths[index] + 2))
+      .join("")
+      .trimEnd();
+
+  for (const row of allRows) {
+    console.log(renderLine(row));
+  }
 }
 
 const githubActionsLogSink: RuntimeLogSink = {
@@ -489,7 +561,7 @@ function formatLocalLogValue(value: unknown): string {
 
 function writeLocalReviewResult(result: LocalReviewResult, json: boolean): void {
   if (json) {
-    console.log(JSON.stringify(serializeLocalReviewJsonV1(result), null, 2));
+    console.log(JSON.stringify(toPiprResult({ source: "local", result }), null, 2));
     return;
   }
   if (result.kind === "skipped") {
@@ -515,43 +587,6 @@ function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }
   return inlineFindings.length === 0
     ? mainComment
     : [mainComment.trimEnd(), "", "## Inline Findings", "", inlineFindings.join("\n\n")].join("\n");
-}
-
-const localReviewJsonFormatVersion = 1 as const;
-
-type LocalReviewJsonCommonV1 = {
-  formatVersion: typeof localReviewJsonFormatVersion;
-  mainComment: string;
-  inlineFindings: LocalReviewResult["inlineCommentDrafts"][number]["finding"][];
-  droppedFindings: LocalReviewResult["validated"]["droppedFindings"];
-  taskChecks: LocalReviewResult["taskChecks"];
-  provider: Pick<LocalReviewResult["provider"], "id" | "provider" | "model">;
-  providerModels: string[];
-  repairAttempted: boolean;
-};
-
-type LocalReviewJsonResultV1 =
-  | (LocalReviewJsonCommonV1 & { kind: "review" })
-  | (LocalReviewJsonCommonV1 & { kind: "skipped"; skipReason?: string });
-
-function serializeLocalReviewJsonV1(result: LocalReviewResult): LocalReviewJsonResultV1 {
-  const common: LocalReviewJsonCommonV1 = {
-    formatVersion: localReviewJsonFormatVersion,
-    mainComment: stripPiprMainCommentMarkers(result.mainComment),
-    inlineFindings: result.inlineCommentDrafts.map((draft) => draft.finding),
-    droppedFindings: result.validated.droppedFindings,
-    taskChecks: result.taskChecks,
-    provider: {
-      id: result.provider.id,
-      provider: result.provider.provider,
-      model: result.provider.model,
-    },
-    providerModels: result.publicationPlan.metadata.providerModels ?? [result.provider.model],
-    repairAttempted: result.repairAttempted,
-  };
-  return result.kind === "skipped"
-    ? { ...common, kind: "skipped", skipReason: result.skipReason }
-    : { ...common, kind: "review" };
 }
 
 async function runDryRun(options: CliOptions): Promise<void> {

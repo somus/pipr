@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import {
   access,
@@ -14,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { parsePiprResult } from "@usepipr/sdk";
 import cliPackage from "../../package.json" with { type: "json" };
 import { embeddedSdkDeclaration, readSdkDeclarationModules } from "../release/sdk-declaration.js";
 import { runMain } from "../runner.js";
@@ -202,6 +204,7 @@ describe("pipr CLI", () => {
     const hostRun = await runCli(["host-run", "--help"]);
     const dryRun = await runCli(["dry-run", "--help"]);
     const webhook = await runCli(["webhook", "serve", "--help"]);
+    const webhookStatus = await runCli(["webhook", "status", "--help"]);
 
     expect(result.exitCode).toBe(0);
     expect(action.exitCode).toBe(1);
@@ -232,9 +235,146 @@ describe("pipr CLI", () => {
     expect(action.stderr).toContain("unknown command 'action'");
     expect(webhook.stdout).toContain("--database <path>");
     expect(webhook.stdout).toContain("--repository <repository>");
+    expect(webhookStatus.stdout).toContain("--database <path>");
+    expect(webhookStatus.stdout).toContain("--limit <count>");
+    expect(webhookStatus.stdout).toContain("--json");
     expect(hostRun.stdout).toContain("--host <host>");
     expect(hostRun.stdout).toContain("--event <path>");
     expect(dryRun.stdout).toContain("--host <host>");
+  });
+
+  it("fails without creating a missing webhook status database", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-webhook-status-"));
+    try {
+      const database = path.join(workspace, "webhooks.sqlite");
+      const result = await runCli(["webhook", "status", "--database", database]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("ENOENT");
+      await expect(access(database)).rejects.toThrow();
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("prints no deliveries for an empty webhook status database", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-webhook-status-"));
+    const database = path.join(workspace, "webhooks.sqlite");
+    try {
+      new Database(database, { create: true, strict: true }).close();
+      const result = await runCli(["webhook", "status", "--database", database]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe("No webhook deliveries found.\n");
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("prints an empty versioned webhook status envelope with --json", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-webhook-status-"));
+    const database = path.join(workspace, "webhooks.sqlite");
+    try {
+      new Database(database, { create: true, strict: true }).close();
+      const result = await runCli(["webhook", "status", "--database", database, "--json"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({ formatVersion: 1, deliveries: [] });
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("prints webhook delivery status in table and JSON formats", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-webhook-status-"));
+    const database = path.join(workspace, "webhooks.sqlite");
+    try {
+      const databaseHandle = new Database(database, { create: true, strict: true });
+      databaseHandle.exec(`
+        CREATE TABLE webhook_deliveries (
+          id TEXT PRIMARY KEY,
+          host TEXT NOT NULL,
+          payload TEXT,
+          event_name TEXT,
+          status TEXT NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          error TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          result_kind TEXT,
+          result_json TEXT,
+          result_omitted_reason TEXT,
+          run_id TEXT
+        );
+      `);
+      const persistedResult = {
+        formatVersion: 2,
+        kind: "verifier",
+        run: {
+          id: "run-full-id",
+          trigger: "verifier",
+          baseSha: "base",
+          headSha: "head",
+          tasks: ["pipr-internal-verifier"],
+          durationMs: 10,
+          models: ["model"],
+          agentRuns: 1,
+          inputTokens: 10,
+          outputTokens: 2,
+          costUsd: 0.001,
+          usageStatus: "complete",
+        },
+        publication: { state: "completed", inlineResolutionErrorCount: 0 },
+      };
+      databaseHandle.exec(
+        "INSERT INTO webhook_deliveries (id, host, payload, status, result_kind, result_json, run_id, attempts, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        [
+          "delivery-very-long-id-123456",
+          "gitlab",
+          "{}",
+          "completed",
+          "verifier",
+          JSON.stringify(persistedResult),
+          "run-full-id",
+          1,
+        ],
+      );
+      databaseHandle.close();
+
+      const table = await runCli(["webhook", "status", "--database", database]);
+      const json = await runCli(["webhook", "status", "--database", database, "--json"]);
+
+      expect(table.exitCode).toBe(0);
+      expect(json.exitCode).toBe(0);
+      expect(table.stdout).toContain("DELIVERY");
+      expect(table.stdout).toContain("gitlab");
+      expect(table.stdout).toContain("verifier");
+      expect(table.stdout).toContain("run-full-id");
+      expect(JSON.parse(json.stdout)).toEqual({
+        formatVersion: 1,
+        deliveries: [
+          {
+            id: "delivery-very-long-id-123456",
+            host: "gitlab",
+            status: "completed",
+            attempts: 1,
+            eventName: null,
+            resultKind: "verifier",
+            runId: "run-full-id",
+            result: persistedResult,
+            resultOmittedReason: null,
+            createdAt: expect.any(String),
+            updatedAt: expect.any(String),
+          },
+        ],
+      });
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("validates webhook status --limit", async () => {
+    const result = await runCli(["webhook", "status", "--limit", "0"]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("--limit must be an integer from 1 to 200");
   });
 
   it("requires a repository before starting the webhook server", async () => {
@@ -487,55 +627,53 @@ describe("pipr CLI", () => {
       expect(result.stderr).toContain("running local review");
       expect(result.stderr).toContain("pipr local review complete");
       expect(result.stderr).not.toContain('{"level":');
-      const json = JSON.parse(result.stdout) as {
-        formatVersion: number;
-        kind: string;
-        mainComment: string;
-        inlineFindings: unknown[];
-        droppedFindings: unknown[];
-        taskChecks: unknown[];
-        provider: Record<string, unknown>;
-        providerModels: string[];
-        repairAttempted: boolean;
-      };
-      expect(json).toEqual({
-        formatVersion: 1,
-        kind: "review",
-        mainComment: expect.stringContaining(
-          "One finding.\n<!-- pipr:header:hidden -->\nTask marker example.",
-        ),
-        inlineFindings: [
-          {
-            body: "Use the reviewed value.",
+      const json = parsePiprResult(JSON.parse(result.stdout));
+      expect(json.kind).toBe("review");
+      if (json.kind !== "review") throw new Error(`expected review, received ${json.kind}`);
+      expect(json.formatVersion).toBe(2);
+      expect(json.run).toMatchObject({
+        id: expect.stringMatching(/^pipr-/),
+        trigger: "local",
+        baseSha: workspace.baseSha,
+        headSha: workspace.headSha,
+        tasks: ["review"],
+        durationMs: expect.any(Number),
+        models: ["deepseek-v4-pro"],
+        agentRuns: 1,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        usageStatus: "unavailable",
+      });
+      expect(json.mainComment).toContain(
+        "One finding.\n<!-- pipr:header:hidden -->\nTask marker example.",
+      );
+      expect(json.inlineFindings).toEqual([
+        {
+          body: "Use the reviewed value.",
+          path: "src/a.ts",
+          rangeId: expect.any(String),
+          side: "RIGHT",
+          startLine: 1,
+          endLine: 1,
+        },
+      ]);
+      expect(json.droppedFindings).toEqual([
+        {
+          finding: {
+            body: "Invalid location.",
             path: "src/a.ts",
-            rangeId: expect.stringMatching(/^rng_/),
+            rangeId: "rng_missing",
             side: "RIGHT",
             startLine: 1,
             endLine: 1,
           },
-        ],
-        droppedFindings: [
-          {
-            finding: {
-              body: "Invalid location.",
-              path: "src/a.ts",
-              rangeId: "rng_missing",
-              side: "RIGHT",
-              startLine: 1,
-              endLine: 1,
-            },
-            reason: expect.any(String),
-          },
-        ],
-        taskChecks: [{ taskName: "review", conclusion: "success" }],
-        provider: {
-          id: "deepseek/deepseek-v4-pro",
-          provider: "deepseek",
-          model: "deepseek-v4-pro",
+          reason: expect.any(String),
         },
-        providerModels: ["deepseek-v4-pro"],
-        repairAttempted: false,
-      });
+      ]);
+      expect(json.taskChecks).toEqual([{ taskName: "review", conclusion: "success" }]);
+      expect(json.repairAttempted).toBe(false);
+      expect(json.publication).toEqual({ state: "disabled" });
       expect(json.mainComment).not.toContain("<!-- pipr:main-comment ");
       expect(json.mainComment).not.toContain("<!-- pipr:stats:start -->");
       expect(json.mainComment).not.toContain("<!-- pipr:stats:end -->");
@@ -569,7 +707,7 @@ describe("pipr CLI", () => {
         formatVersion: number;
         kind: string;
       };
-      expect(json.formatVersion).toBe(1);
+      expect(json.formatVersion).toBe(2);
       expect(json.kind).toBe("skipped");
       expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(0);
     } finally {
@@ -795,14 +933,14 @@ describe("pipr CLI", () => {
       const output = await Bun.file(githubOutputPath).text();
       const serializedResult = output
         .split("\n")
-        .find((line) => line.startsWith('{"formatVersion":1'));
+        .find((line) => line.startsWith('{"formatVersion":2'));
 
       expect(result.exitCode).toBe(1);
       expect(serializedResult).toBeDefined();
       expect(JSON.parse(serializedResult ?? "null")).toEqual({
-        formatVersion: 1,
+        formatVersion: 2,
         kind: "error",
-        message: "Pipr failed; see the Action log for details.",
+        message: "Pipr failed; see logs for details.",
       });
       expect(`${result.stdout}\n${result.stderr}`).toContain("No Pipr config found");
     } finally {

@@ -162,13 +162,13 @@ Local review separates progress logs from the rendered or structured task result
 
 ### Stdout and stderr
 
-During local review, Pipr writes progress logs to stderr and the final review output to stdout. The default stdout format is Markdown without Pipr's internal comment marker, followed by any local inline findings. `--json` emits a stable structured summary containing the marker-free Main Review Comment, public Review Findings, dropped findings, task checks, public provider identity, provider models, and repair status. Runtime publication plans, Diff Manifests, provider credential metadata, and internal finding state are not part of this interface.
+During local review, Pipr writes progress logs to stderr and the final review output to stdout. The default stdout format is Markdown without Pipr's internal comment marker, followed by any local inline findings. `--json` emits Pipr Result V2 with the marker-free Main Review Comment, public Review Findings, dropped findings, task checks, repair status, a Review Run summary, and `{ "state": "disabled" }` publication metadata. Runtime publication plans, Diff Manifests, provider credential metadata, native comment IDs, and internal finding state are not part of this interface.
 
 ### JSON format version
 
-Every `pipr review --json` result, including skipped results, contains the top-level integer `formatVersion`. The current value is `1`, independent of the Pipr CLI version. Check this field before reading other properties, and reject values your script doesn't support.
+Every `pipr review --json` result, including skipped results, contains the top-level integer `formatVersion`. The current value is `2`, independent of the Pipr CLI version. Check this field before reading other properties, then branch on `kind`.
 
-Pipr keeps the current format version when it adds backward-compatible fields, so ignore unknown fields when you parse a supported version. Pipr increments `formatVersion` when a change requires you to parse existing fields differently.
+The public `parsePiprResult` parser rejects unknown fields. Update consumers when Pipr introduces a new format version instead of accepting an unvalidated object.
 
 ## Environment
 

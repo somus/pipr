@@ -81,7 +81,8 @@ COPY --chown=bun:bun packages/e2e/assertions.ts packages/e2e/assertions.ts
 COPY --chown=bun:bun packages/e2e/webhook-fetch-mock.ts packages/e2e/webhook-fetch-mock.ts
 COPY --chown=bun:bun packages/e2e/webhook-health-fixture.ts packages/e2e/webhook-health-fixture.ts
 RUN mkdir -p packages/e2e/node_modules/@usepipr \
-  && ln -sf ../../../runtime packages/e2e/node_modules/@usepipr/runtime
+  && ln -sf ../../../runtime packages/e2e/node_modules/@usepipr/runtime \
+  && ln -sf ../../../sdk packages/e2e/node_modules/@usepipr/sdk
 WORKDIR /workspace
 ENTRYPOINT ["pipr"]
 

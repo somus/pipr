@@ -10,6 +10,7 @@ import {
   loadAzureDevOpsPriorMainComment,
   loadAzureDevOpsPriorReviewState,
   publishAzureDevOpsCommandResponse,
+  publishAzureDevOpsCommandStatus,
   publishAzureDevOpsPlan,
   publishAzureDevOpsThreadActions,
 } from "./publication.js";
@@ -65,6 +66,7 @@ export function createAzureDevOpsHostAdapter(
     publication: {
       publish: ({ plan, change }) => publishAzureDevOpsPlan({ client, plan, change }),
       publishCommandResponse: (args) => publishAzureDevOpsCommandResponse({ client, ...args }),
+      publishCommandStatus: (args) => publishAzureDevOpsCommandStatus({ client, ...args }),
       publishThreadActions: (args) => publishAzureDevOpsThreadActions({ client, ...args }),
     },
     comments: {

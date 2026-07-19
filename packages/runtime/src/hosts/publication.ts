@@ -13,6 +13,26 @@ import {
   renderVerifierResponseMarker,
 } from "../review/prior-state.js";
 import { PublicationError, type PublicationResult } from "../review/publication-result.js";
+import type { ChangeRequestEventContext } from "../types.js";
+import type { CommandLifecycleState } from "./types.js";
+
+export type CommandResponsePublicationOptions<Client> = {
+  client: Client;
+  change: ChangeRequestEventContext;
+  sourceCommentId: string;
+  commandName: string;
+  body: string;
+};
+
+export type CommandStatusPublicationOptions<Client> = {
+  client: Client;
+  change: ChangeRequestEventContext;
+  sourceCommentId: string;
+  commandName: string;
+  state: CommandLifecycleState;
+  reviewedHeadSha: string;
+  currentHeadSha?: string;
+};
 
 export async function publishUnseenInlineItems(options: {
   items: InlinePublicationItem[];
@@ -85,9 +105,111 @@ export function commandResponseBody(options: {
   sourceCommentId: string;
   commandName: string;
   body: string;
+  reviewedHeadSha: string;
 }): { marker: string; body: string } {
-  const marker = `<!-- pipr:command-response change=${options.changeNumber} source=${options.sourceCommentId} command=${options.commandName} -->`;
-  return { marker, body: [marker, "", options.body, ""].join("\n") };
+  const marker = commandCommentMarker(options);
+  return {
+    marker,
+    body: [
+      marker,
+      commandStateMarker({ state: "completed", reviewedHeadSha: options.reviewedHeadSha }),
+      "",
+      options.body,
+      "",
+    ].join("\n"),
+  };
+}
+
+export function commandStatusBody(options: {
+  changeNumber: number;
+  sourceCommentId: string;
+  commandName: string;
+  state: CommandLifecycleState;
+  reviewedHeadSha: string;
+  currentHeadSha?: string;
+}): { marker: string; body: string } {
+  const marker = commandCommentMarker(options);
+  return {
+    marker,
+    body: [marker, commandStateMarker(options), "", commandStatusMessage(options), ""].join("\n"),
+  };
+}
+
+export function commandResponsePublication(options: CommandResponsePublicationOptions<unknown>): {
+  guardHead: true;
+  comment: { marker: string; body: string };
+} {
+  return {
+    guardHead: true,
+    comment: commandResponseBody({
+      changeNumber: options.change.change.number,
+      sourceCommentId: options.sourceCommentId,
+      commandName: options.commandName,
+      reviewedHeadSha: options.change.change.head.sha,
+      body: options.body,
+    }),
+  };
+}
+
+export function commandStatusPublication(options: CommandStatusPublicationOptions<unknown>): {
+  guardHead: false;
+  comment: { marker: string; body: string };
+} {
+  return {
+    guardHead: false,
+    comment: commandStatusBody({
+      changeNumber: options.change.change.number,
+      sourceCommentId: options.sourceCommentId,
+      commandName: options.commandName,
+      state: options.state,
+      reviewedHeadSha: options.reviewedHeadSha,
+      currentHeadSha: options.currentHeadSha,
+    }),
+  };
+}
+
+function commandCommentMarker(options: {
+  changeNumber: number;
+  sourceCommentId: string;
+  commandName: string;
+}): string {
+  return `<!-- pipr:command-response change=${options.changeNumber} source=${options.sourceCommentId} command=${options.commandName} -->`;
+}
+
+function commandStateMarker(options: {
+  state: CommandLifecycleState;
+  reviewedHeadSha: string;
+  currentHeadSha?: string;
+}): string {
+  const current = options.currentHeadSha ? ` current=${options.currentHeadSha}` : "";
+  return `<!-- pipr:command-state state=${options.state} head=${options.reviewedHeadSha}${current} -->`;
+}
+
+function commandStatusMessage(options: {
+  commandName: string;
+  state: CommandLifecycleState;
+  reviewedHeadSha: string;
+  currentHeadSha?: string;
+}): string {
+  const command = `\`@pipr ${options.commandName}\``;
+  const reviewedHead = `\`${options.reviewedHeadSha.slice(0, 12)}\``;
+  switch (options.state) {
+    case "accepted":
+      return `Pipr accepted ${command} for head ${reviewedHead}.`;
+    case "running":
+      return `Pipr is running ${command} for head ${reviewedHead}.`;
+    case "completed":
+      return `Pipr completed ${command} for head ${reviewedHead}.`;
+    case "failed":
+      return `Pipr could not complete ${command} for head ${reviewedHead}; see logs for details.`;
+    case "superseded":
+      return `Pipr stopped ${command} because head ${reviewedHead} was superseded by \`${(
+        options.currentHeadSha ?? "unknown"
+      ).slice(0, 12)}\`. Run the command again on the latest head.`;
+    default:
+      options.state satisfies never;
+      throw new Error("Unsupported command lifecycle state");
+  }
 }
 
 export function threadActionReply(action: ThreadAction): { body: string; marker: string } {

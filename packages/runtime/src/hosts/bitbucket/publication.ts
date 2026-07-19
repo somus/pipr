@@ -11,7 +11,10 @@ import {
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
-  commandResponseBody,
+  type CommandResponsePublicationOptions,
+  type CommandStatusPublicationOptions,
+  commandResponsePublication,
+  commandStatusPublication,
   completeHostPublication,
   nativeInlineLocation,
   publishUnseenInlineItems,
@@ -111,27 +114,47 @@ function bitbucketInlineLocation(item: InlinePublicationItem): InlinePublication
   };
 }
 
-export async function publishBitbucketCommandResponse(options: {
+export async function publishBitbucketCommandResponse(
+  options: CommandResponsePublicationOptions<BitbucketClient>,
+) {
+  return await publishBitbucketCommandComment({
+    client: options.client,
+    change: options.change,
+    ...commandResponsePublication(options),
+  });
+}
+
+export async function publishBitbucketCommandStatus(
+  options: CommandStatusPublicationOptions<BitbucketClient>,
+) {
+  return await publishBitbucketCommandComment({
+    client: options.client,
+    change: options.change,
+    ...commandStatusPublication(options),
+  });
+}
+
+async function publishBitbucketCommandComment(options: {
   client: BitbucketClient;
   change: ChangeRequestEventContext;
-  sourceCommentId: string;
-  commandName: string;
-  body: string;
+  guardHead: boolean;
+  comment: { marker: string; body: string };
 }) {
-  const response = commandResponseBody({
-    changeNumber: options.change.change.number,
-    sourceCommentId: options.sourceCommentId,
-    commandName: options.commandName,
-    body: options.body,
-  });
-  await assertCurrentEndpoints(options.client, options.change);
-  const { owner, comments } = await loadBitbucketWriteState(options.client, options.change);
+  if (options.guardHead) {
+    await assertCurrentEndpoints(options.client, options.change);
+  }
+  const { owner, comments } = await loadBitbucketWriteState(
+    options.client,
+    options.change,
+    options.change.change.head.sha,
+    options.guardHead,
+  );
   const existing = comments.find(
     (comment) =>
       comment.user?.uuid === owner.uuid &&
-      normalizeBitbucketMarkdown(comment.content.raw).includes(response.marker),
+      normalizeBitbucketMarkdown(comment.content.raw).includes(options.comment.marker),
   );
-  const responseBody = renderBitbucketMarkdown(response.body);
+  const responseBody = renderBitbucketMarkdown(options.comment.body);
   const comment = existing
     ? await options.client.updateComment(options.change.change.number, existing.id, responseBody)
     : await options.client.createComment(options.change.change.number, {
@@ -144,10 +167,13 @@ async function loadBitbucketWriteState(
   client: BitbucketClient,
   change: ChangeRequestEventContext,
   reviewedHeadSha = change.change.head.sha,
+  guardHead = true,
 ) {
   const owner = await authenticatedBitbucketOwner(client);
   const comments = await client.listComments(change.change.number);
-  await assertCurrentEndpoints(client, change, reviewedHeadSha);
+  if (guardHead) {
+    await assertCurrentEndpoints(client, change, reviewedHeadSha);
+  }
   return { owner, comments };
 }
 

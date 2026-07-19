@@ -289,7 +289,15 @@ Command responses are separate from review comments. They are change-request com
 await ctx.command?.reply("The CI failure points to the package build step.");
 ```
 
-Rerunning the same source command updates the previous Pipr response for that command.
+Pipr writes the following status updates to that same comment before the final response:
+
+- `accepted`
+- `running`
+- `completed` (on success)
+- `failed` (terminal failure)
+- `superseded` (head changed before final response can be safely posted)
+
+Rerunning the same source command updates the same Pipr-owned comment. The final model response is still subject to the reviewed-head stale check.
 
 ## Next steps
 

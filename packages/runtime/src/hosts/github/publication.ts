@@ -1,6 +1,9 @@
 export type { GitHubPublicationClient } from "./publication-client.js";
 export { createGitHubPublicationClient } from "./publication-client.js";
-export { publishGitHubCommandResponse } from "./publication-command-response.js";
+export {
+  publishGitHubCommandResponse,
+  publishGitHubCommandStatus,
+} from "./publication-command-response.js";
 export {
   loadGitHubInlineThreadContexts,
   loadGitHubPriorMainComment,

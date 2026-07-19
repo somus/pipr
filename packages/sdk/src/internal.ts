@@ -5,6 +5,7 @@ import {
 } from "./internal-contract.js";
 import type { RuntimeAgentTool } from "./runtime-contract.js";
 
+export { piprResultLimits } from "./result-limits.js";
 export type {
   RuntimeAgent,
   RuntimeAgentDefinition,

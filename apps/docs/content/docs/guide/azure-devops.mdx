@@ -104,6 +104,8 @@ Pipr rejects payloads larger than 2 MiB, bounds pending queue data to 1,000 deli
 
 Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run this command from the versioned Pipr image with persistent state and a container health check.
 
+Inspect recent outcomes with `pipr webhook status --database /var/lib/pipr/webhooks.sqlite`; add `--json` to read safe Pipr Result V2 bodies and omission reasons.
+
 ## Command permissions
 
 Pipr resolves the comment actor through Azure DevOps Identities, expands inherited group membership, and queries the Git Repositories security namespace with extended effective permissions. Explicit and inherited denies override allows. Pipr maps read, pull-request contribution, repository contribution, policy editing, and permission management into its provider-neutral `read`, `triage`, `write`, `maintain`, and `admin` levels.

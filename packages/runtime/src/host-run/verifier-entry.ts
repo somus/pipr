@@ -1,9 +1,11 @@
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
+import type { PiRunStats } from "../review/agent/review-run.js";
 import { resolveProvider } from "../review/agent/review-run.js";
 import { isPiprThreadActionReplyBody } from "../review/prior-state.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { stableReviewRunId } from "../review/run-identity.js";
+import { createPiprRunSummary } from "../review/run-summary.js";
 import { runInternalVerifier } from "../review/verifier.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
@@ -54,6 +56,7 @@ export async function runReviewCommentReplyHostRunCommand(
     kind: "verifier",
     event: prepared.event,
     configSource: prepared.trustedRuntime.settings.source,
+    run: result.run,
     errors: publication?.errors ?? [],
   };
 }
@@ -164,6 +167,19 @@ async function runReviewCommentVerifier(
     replyCommentId: reply.commentId,
     parentCommentId: reply.parentCommentId,
   });
+  const started = Date.now();
+  const piRuns: PiRunStats[] = [];
+  const runId = stableReviewRunId({
+    event,
+    selectedTasks: ["pipr-internal-verifier"],
+    trustedConfigSha: trustedRuntime.trustedConfigSha,
+    trustedConfigHash: trustedRuntime.trustedConfigHash,
+    verifierInvocation: {
+      mode: "user-reply",
+      commentId: reply.commentId,
+      parentCommentId: reply.parentCommentId,
+    },
+  });
   const result = await runInternalVerifier({
     workspace: options.rootDir,
     config,
@@ -191,20 +207,21 @@ async function runReviewCommentVerifier(
       },
       respondWhenStillValid: config.publication.autoResolve.userReplies.respondWhenStillValid,
     },
-    runId: stableReviewRunId({
-      event,
-      selectedTasks: ["pipr-internal-verifier"],
-      trustedConfigSha: trustedRuntime.trustedConfigSha,
-      trustedConfigHash: trustedRuntime.trustedConfigHash,
-      verifierInvocation: {
-        mode: "user-reply",
-        commentId: reply.commentId,
-        parentCommentId: reply.parentCommentId,
-      },
-    }),
+    runId,
+    piRunSink(run) {
+      piRuns.push(run);
+    },
   });
   return {
     ...result,
+    run: createPiprRunSummary({
+      runId,
+      trigger: "verifier",
+      event,
+      selectedTasks: ["pipr-internal-verifier"],
+      piRuns,
+      durationMs: Date.now() - started,
+    }),
     threadActions: redactThreadActions({
       threadActions: result.threadActions,
       redactor: options.secretRedactor,

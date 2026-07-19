@@ -12,6 +12,7 @@ import {
   type GitHubPublicationClient,
   runHostRunCommandWithDependencies,
 } from "@usepipr/runtime/internal/testing";
+import { parsePiprResult } from "@usepipr/sdk";
 import { type ActAssertionMode, assertActFixture } from "./assertions.ts";
 
 type FixtureReviewComment = Awaited<
@@ -326,6 +327,9 @@ function setFailed(message: string): void {
 }
 
 async function setOutput(name: string, value: string): Promise<void> {
+  if (name === "result") {
+    parsePiprResult(JSON.parse(value));
+  }
   const outputPath = envValue("GITHUB_OUTPUT");
   if (!outputPath) {
     return;

@@ -257,11 +257,29 @@ export async function expectReviewCommentIgnored(
 export async function writeStillValidVerifierOutput(
   workspace: CommandWorkspace,
   response = "This still applies.",
+  usage?: { inputTokens: number; outputTokens: number; costUsd: number },
 ): Promise<void> {
+  const output = JSON.stringify({
+    findings: [{ id: "fnd_existing", status: "still-valid", response }],
+  });
+  if (!usage) {
+    await writePiExecutable(workspace.piExecutable, output);
+    return;
+  }
   await writePiExecutable(
     workspace.piExecutable,
     JSON.stringify({
-      findings: [{ id: "fnd_existing", status: "still-valid", response }],
+      type: "message_end",
+      message: {
+        role: "assistant",
+        model: "verifier-model",
+        content: [{ type: "text", text: output }],
+        usage: {
+          input: usage.inputTokens,
+          output: usage.outputTokens,
+          cost: { total: usage.costUsd },
+        },
+      },
     }),
   );
 }
@@ -292,7 +310,7 @@ export async function expectVerifierReplyPublished(
     logSink?: RuntimeLogSink;
     secretRedactor?: SecretRedactor;
   },
-): Promise<void> {
+) {
   const eventPath = path.join(workspace.rootDir, "event.json");
   await writeReviewCommentEvent(eventPath, options.event);
   const result = await runReviewCommentAction(workspace, {
@@ -308,6 +326,7 @@ export async function expectVerifierReplyPublished(
   });
   expect(publication.reviewReplies).toHaveLength(1);
   await expectPiCalled(workspace);
+  return result;
 }
 
 export async function verifierRunIdFromReplyAction(
@@ -786,13 +805,19 @@ export function recordingCommandPublicationClient(
   writes: { created: string[]; updated: string[] };
 } {
   const writes = { created: [] as string[], updated: [] as string[] };
-  const client = fakeGitHubPublicationClient(workspace, issueComments);
+  const stored = [...issueComments];
+  const client = fakeGitHubPublicationClient(workspace, stored);
+  client.listIssueComments = async () => stored;
   client.createIssueComment = async (options) => {
     writes.created.push(options.body);
-    return { id: 10 };
+    const created = { id: 10, body: options.body, authorLogin: "github-actions[bot]" };
+    stored.push(created);
+    return created;
   };
   client.updateIssueComment = async (options) => {
     writes.updated.push(options.body);
+    const existing = stored.find((comment) => comment.id === options.commentId);
+    if (existing) existing.body = options.body;
     return { id: options.commentId };
   };
   return { client, writes };

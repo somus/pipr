@@ -69,6 +69,8 @@ The review token must be an Atlassian API token created with Bitbucket scopes. T
 
 Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run this command from the versioned Pipr image with persistent state and a container health check.
 
+Inspect recent outcomes with `pipr webhook status --database /var/lib/pipr/webhooks.sqlite`; add `--json` to read safe Pipr Result V2 bodies and omission reasons.
+
 ## Supported behavior
 
 The Bitbucket Cloud adapter supports:

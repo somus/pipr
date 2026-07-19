@@ -6,6 +6,7 @@ import {
   loadGitLabPriorMainComment,
   loadGitLabPriorReviewState,
   publishGitLabCommandResponse,
+  publishGitLabCommandStatus,
   publishGitLabPlan,
   publishGitLabThreadActions,
 } from "./publication.js";
@@ -63,6 +64,7 @@ export function createGitLabHostAdapter(
     publication: {
       publish: ({ plan, change }) => publishGitLabPlan({ client, plan, change }),
       publishCommandResponse: (args) => publishGitLabCommandResponse({ client, ...args }),
+      publishCommandStatus: (args) => publishGitLabCommandStatus({ client, ...args }),
       publishThreadActions: (args) => publishGitLabThreadActions({ client, ...args }),
     },
     comments: {

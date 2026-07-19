@@ -239,10 +239,26 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
       await writeStillValidVerifierOutput(
         workspace,
         "This still applies because the unsafe path remains.",
+        { inputTokens: 50, outputTokens: 5, costUsd: 0.001 },
       );
-      await expectVerifierReplyPublished(workspace, publication, {
+      const result = await expectVerifierReplyPublished(workspace, publication, {
         githubClient: fakeGitHubClient(workspace, "write"),
         logSink: logs.logSink,
+      });
+      if (result.kind !== "verifier") {
+        throw new Error(`expected verifier, received ${result.kind}`);
+      }
+      expect(result.run).toMatchObject({
+        trigger: "verifier",
+        baseSha: workspace.baseSha,
+        headSha: workspace.headSha,
+        tasks: ["pipr-internal-verifier"],
+        models: ["verifier-model"],
+        agentRuns: 1,
+        inputTokens: 50,
+        outputTokens: 5,
+        costUsd: 0.001,
+        usageStatus: "complete",
       });
       const output = logs.messages.join("\n");
       expect(output).toContain('"eventName":"pull_request_review_comment"');

@@ -1,7 +1,8 @@
+import { piprResultLimits } from "@usepipr/sdk/internal";
 import { z } from "zod";
 
-export const maxReviewStatsModels = 20;
-const maxReviewStatsModelLength = 200;
+export const maxReviewStatsModels = piprResultLimits.runModels;
+const maxReviewStatsModelLength = piprResultLimits.runTextLength;
 const reviewStatsModelSchema = z
   .string()
   .min(1)

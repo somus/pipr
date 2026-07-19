@@ -114,9 +114,27 @@ The Action exposes one stable structured summary for diagnostics and integration
 | Output | Description |
 | --- | --- |
 | `main-comment` | Rendered Main Review Comment body, command response body, or command help body. |
-| `result` | Versioned JSON summary for review, ignored, dry-run, command-help, command-response, verifier, publication-error, and other fatal error outcomes. |
+| `result` | Schema-validated Pipr Result V2 JSON for every Action outcome. |
 
-Parse `result`, check `formatVersion`, then branch on `kind`. Review results contain marker-free `mainComment`, public `inlineFindings`, dropped findings, task checks, provider model names, repair status, publication counts, and publication error counts. Pipr does not expose raw publication errors, Diff Manifests, publication plans, internal markers or finding identity, trusted configuration state, or provider credential metadata through Action outputs.
+Parse `result`, check `formatVersion`, then branch on `kind`.
+
+`formatVersion` is currently `2`.
+
+Supported `kind` values are:
+
+- `review` for hosted review runs
+- `skipped` when an event is intentionally ignored
+- `ignored` when the event is unsupported
+- `dry-run` for `PIPR_DRY_RUN=1`
+- `command-help` for command usage output
+- `command-response` for `@pipr` replies, including command lifecycle status updates through the same source command comment
+- `verifier` for inline-thread verifier runs
+- `publication-error` for controlled publication failures
+- `error` for fatal runtime errors
+
+Review, command-response, and verifier results include a `run` summary with reviewed refs, tasks, duration, model names, agent-run count, token and cost totals, and usage completeness. Skipped runs intentionally omit `run`.
+
+Hosted review results describe completed publication counts. Pipr does not expose raw errors, Diff Manifests, publication plans, internal markers or finding identity, trusted configuration state, native comment IDs, or provider credential metadata through Action outputs.
 
 ## GitHub review output
 

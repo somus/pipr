@@ -12,7 +12,10 @@ import {
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
-  commandResponseBody,
+  type CommandResponsePublicationOptions,
+  type CommandStatusPublicationOptions,
+  commandResponsePublication,
+  commandStatusPublication,
   completeHostPublication,
   nativeInlineLocation,
   publishUnseenInlineItems,
@@ -136,36 +139,56 @@ function azureInlineLocation(item: InlinePublicationItem): InlinePublicationLoca
   };
 }
 
-export async function publishAzureDevOpsCommandResponse(options: {
+export async function publishAzureDevOpsCommandResponse(
+  options: CommandResponsePublicationOptions<AzureDevOpsClient>,
+) {
+  return await publishAzureDevOpsCommandComment({
+    client: options.client,
+    change: options.change,
+    ...commandResponsePublication(options),
+  });
+}
+
+export async function publishAzureDevOpsCommandStatus(
+  options: CommandStatusPublicationOptions<AzureDevOpsClient>,
+) {
+  return await publishAzureDevOpsCommandComment({
+    client: options.client,
+    change: options.change,
+    ...commandStatusPublication(options),
+  });
+}
+
+async function publishAzureDevOpsCommandComment(options: {
   client: AzureDevOpsClient;
   change: ChangeRequestEventContext;
-  sourceCommentId: string;
-  commandName: string;
-  body: string;
+  guardHead: boolean;
+  comment: { marker: string; body: string };
 }) {
   const coordinates = azureCoordinates(options.change);
-  const response = commandResponseBody({
-    changeNumber: options.change.change.number,
-    sourceCommentId: options.sourceCommentId,
-    commandName: options.commandName,
-    body: options.body,
-  });
-  await currentPullRequest(options.client, options.change);
-  const { owner, threads } = await loadAzureWriteState(options.client, options.change);
-  const existing = ownedRootThread(threads, owner.uniqueName, response.marker);
+  if (options.guardHead) {
+    await currentPullRequest(options.client, options.change);
+  }
+  const { owner, threads } = await loadAzureWriteState(
+    options.client,
+    options.change,
+    options.change.change.head.sha,
+    options.guardHead,
+  );
+  const existing = ownedRootThread(threads, owner.uniqueName, options.comment.marker);
   const comment = existing
     ? await options.client.updateComment(
         coordinates.repositoryId,
         options.change.change.number,
         existing.id,
         existing.comments[0]?.id ?? "",
-        response.body,
+        options.comment.body,
       )
     : (
         await options.client.createThread(
           coordinates.repositoryId,
           options.change.change.number,
-          unpositionedThread(response.body),
+          unpositionedThread(options.comment.body),
         )
       ).comments[0];
   if (!comment) throw new Error("Azure DevOps did not return the command response comment");
@@ -176,13 +199,16 @@ async function loadAzureWriteState(
   client: AzureDevOpsClient,
   change: ChangeRequestEventContext,
   reviewedHeadSha = change.change.head.sha,
+  guardHead = true,
 ) {
   const owner = await authenticatedAzureOwner(client);
   const threads = await client.listThreads(
     azureCoordinates(change).repositoryId,
     change.change.number,
   );
-  await currentPullRequest(client, change, reviewedHeadSha);
+  if (guardHead) {
+    await currentPullRequest(client, change, reviewedHeadSha);
+  }
   return { owner, threads };
 }
 

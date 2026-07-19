@@ -6,8 +6,10 @@ import {
   askCommandInvocation,
   commandTaskPlan,
   config,
+  defaultReviewAgent,
   defaultReviewPlan,
   finding,
+  noFindingsPiResult,
   priorReviewStateForTasks,
   recordingCheckSink,
   replacingRedactor,
@@ -207,6 +209,48 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
     });
     expect(result).not.toHaveProperty("publicationPlan");
     expect(result).not.toHaveProperty("review");
+  });
+
+  it("returns command run usage collected before the reply", async () => {
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const task = pipr.task({
+        name: "ask",
+        async run(ctx) {
+          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.command?.reply("Answer.");
+        },
+      });
+      pipr.command({ pattern: "@pipr ask <question...>", permission: "read", task });
+    });
+    const result = await runRuntime({
+      plan,
+      taskName: "ask",
+      commandInvocation: askCommandInvocation(),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["command-model"],
+        usage: {
+          status: "partial",
+          inputTokens: 80,
+          outputTokens: 8,
+          costUsd: 0.0008,
+        },
+      }),
+    });
+    if (result.kind !== "command-response") {
+      throw new Error(`expected command response, received ${result.kind}`);
+    }
+
+    expect(result.run).toMatchObject({
+      trigger: "command",
+      models: ["command-model"],
+      agentRuns: 1,
+      inputTokens: 80,
+      outputTokens: 8,
+      costUsd: 0.0008,
+      usageStatus: "partial",
+    });
   });
 
   it("redacts command replies before returning them for publication", async () => {

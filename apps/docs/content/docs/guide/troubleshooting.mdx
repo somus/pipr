@@ -27,6 +27,8 @@ Follow this order for a new setup. It separates config failures from provider de
 | 6. Untrusted changes | Check whether the change comes from a fork or can edit CI configuration. | Use a trusted webhook runner when the proposed change can access or alter the delivery job. |
 | 7. Stale head | Compare the reviewed head with the current change request head. | Rerun the workflow on the latest commit. |
 | 8. Dropped findings | Read `droppedFindings` from the Action `result` output. | Fix the prompt or mapper so findings use exact Diff Manifest paths, range ids, sides, and lines. |
+| 9. Command status says failed/superseded | Check command flow and event freshness. | Confirm command permission checks, source comment identity, and whether the command head advanced before completion. |
+| 10. Webhook worker retries | Inspect delivery rows with `pipr webhook status`. | Recheck signing keys, repository binding, and queue database permissions. |
 
 ## Choose the diagnostic
 
@@ -137,6 +139,22 @@ Common causes:
 
 Use [Entrypoints](/docs/guide/entrypoints) for command grammar and permission details.
 
+## Command status is failed or superseded
+
+Command flows now publish a lifecycle status to the command source comment before and during execution.
+
+When status becomes:
+
+- `accepted`: permission and argument validation succeeded, and the queue is ready.
+- `running`: work started after checkout.
+- `completed`: a command-produced review was published.
+- `failed`: execution or publication failed while the reviewed head remained current.
+- `superseded`: command head changed before a final, guarded response could be safely published.
+
+`superseded` is expected after a stale-head command, and does not indicate command infrastructure failure.
+
+For `failed`, inspect the run log for publication or model errors, then fix the underlying host/API or task issue.
+
 ## Findings are dropped
 
 Inspect dropped-finding metadata to identify which authoritative range constraint failed.
@@ -201,6 +219,22 @@ Thread replies and resolution require adapter support and sufficient native perm
 The verifier can reply to Pipr-owned Inline Review Comments and resolve GitHub review threads when permissions allow.
 
 If the API call fails, Pipr increments `result.publication.inlineResolutionErrorCount` and keeps the review run successful. Check that the workflow grants `contents: write` and `pull-requests: write`.
+
+## Webhook status query returns empty
+
+Use `pipr webhook status` to inspect trusted worker outcomes when webhooks are not completing as expected.
+
+```bash
+pipr webhook status --database /var/lib/pipr/webhooks.sqlite --limit 50
+pipr webhook status --database /var/lib/pipr/webhooks.sqlite --json
+```
+
+Expected behavior:
+
+- a missing database fails without creating one; an existing database with no rows prints `No webhook deliveries found.`
+- terminal failures store a generic safe Pipr Result and `result_kind`; trusted logs retain the actionable error
+- result bodies can report `size-limit`, `retention`, or `invalid` while preserving delivery metadata
+- repeated retries update the same delivery identity while clearing stale result fields before the next attempt
 
 ## Next steps
 

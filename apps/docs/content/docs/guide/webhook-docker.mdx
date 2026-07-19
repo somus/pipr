@@ -97,6 +97,16 @@ Inspect startup and delivery records without printing the environment:
 docker compose logs --follow webhook
 ```
 
+Inspect bounded result history from the mounted database without starting another server:
+
+```bash
+docker compose run --rm webhook webhook status \
+  --database /var/lib/pipr/webhooks.sqlite \
+  --limit 20
+```
+
+Add `--json` for the versioned envelope and parsed Pipr Result V2 bodies. Pipr keeps delivery rows for deduplication when a result is too large, evicted by the 32 MiB retention cap, or invalid.
+
 Point the provider webhook at your reverse proxy's HTTPS URL and use the event list and authentication method from the matching provider guide. The proxy should preserve provider headers, cap request bodies at 2 MiB, and forward only the webhook route to port `8787`.
 
 ## Operate the worker

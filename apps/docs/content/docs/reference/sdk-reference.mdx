@@ -15,6 +15,15 @@ Type and schema names are exported from the SDK root:
 import type { AgentTool, ReviewFinding, ReviewResult, ToolRunOptions } from "@usepipr/sdk";
 ```
 
+Pipr Result V2 is also public:
+
+```ts
+import { parsePiprResult, piprResultSchema } from "@usepipr/sdk";
+import type { PiprResult, PiprRunSummary } from "@usepipr/sdk";
+```
+
+`PiprResult` is the strict wire contract shared by Action output, local JSON, and webhook history. `parsePiprResult(value)` validates the discriminator, Review Run limits, and unknown-field rejection before returning the typed result.
+
 ## Concept map
 
 The SDK maps directly to Pipr's runtime primitives. Use this table to choose the API surface before reading individual type details.

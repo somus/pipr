@@ -1,12 +1,16 @@
 import { Database } from "bun:sqlite";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { type PiprResult, parsePiprResult } from "@usepipr/sdk";
 import { createCodeHostWebhookProtocol, type WebhookHost } from "../hosts/webhook.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
-import { runHostRunCommand } from "./commands.js";
+import { type HostRunCommandResult, runHostRunCommand } from "./commands.js";
+import { toPiprErrorResult, toPiprResult } from "./result.js";
 
 const MAX_WEBHOOK_PAYLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_WEBHOOK_RESULT_BYTES = 512 * 1024;
+const MAX_RETAINED_RESULT_BYTES = 32 * 1024 * 1024;
 
 export type { WebhookHost } from "../hosts/webhook.js";
 
@@ -17,11 +21,28 @@ export type WebhookDelivery = {
   eventName?: string;
 };
 
+export type WebhookStatus = {
+  formatVersion: 1;
+  deliveries: Array<{
+    id: string;
+    host: WebhookHost;
+    status: "pending" | "processing" | "completed" | "failed";
+    attempts: number;
+    eventName: string | null;
+    resultKind: PiprResult["kind"] | null;
+    runId: string | null;
+    result: PiprResult | null;
+    resultOmittedReason: "size-limit" | "retention" | "invalid" | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+};
+
 export type WebhookDeliveryStore = {
   enqueue(delivery: WebhookDelivery): "created" | "duplicate" | "full";
   next(): WebhookDelivery | undefined;
-  complete(id: string): void;
-  fail(id: string, error: string): void;
+  complete(id: string, result: PiprResult): void;
+  fail(id: string, result: PiprResult): void;
 };
 
 export function createWebhookIngress(options: {
@@ -88,18 +109,17 @@ async function readAuthenticatedWebhookPayload(
 
 export async function processNextWebhookDelivery(options: {
   store: WebhookDeliveryStore;
-  run: (delivery: WebhookDelivery) => Promise<unknown>;
+  run: (delivery: WebhookDelivery) => Promise<HostRunCommandResult>;
   log?: (message: string) => void;
 }): Promise<boolean> {
   const delivery = options.store.next();
   if (!delivery) return false;
   try {
-    await options.run(delivery);
-    options.store.complete(delivery.id);
+    const result = await options.run(delivery);
+    options.store.complete(delivery.id, toPiprResult({ source: "host", result }));
     options.log?.(`webhook delivery completed: ${delivery.id.slice(0, 200)}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    options.store.fail(delivery.id, message.slice(0, 1_000));
+    options.store.fail(delivery.id, toPiprErrorResult(error));
     options.log?.(
       `webhook delivery failed and was retained for retry or inspection: ${delivery.id.slice(0, 200)}`,
     );
@@ -107,9 +127,73 @@ export async function processNextWebhookDelivery(options: {
   return true;
 }
 
+export async function readWebhookStatus(
+  databasePath: string,
+  options: { limit?: number } = {},
+): Promise<WebhookStatus> {
+  const limit = options.limit ?? 20;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+    throw new Error("webhook status limit must be an integer between 1 and 200");
+  }
+  await access(databasePath);
+  const migration = new SqliteWebhookDeliveryStore(databasePath, { recoverProcessing: false });
+  migration.close();
+  const database = new Database(databasePath, { readonly: true, strict: true });
+
+  try {
+    const rows = database
+      .query(
+        `SELECT id, host, status, attempts, event_name AS eventName, result_kind AS resultKind, run_id AS runId,
+                result_json AS resultJson, result_omitted_reason AS resultOmittedReason, created_at AS createdAt, updated_at AS updatedAt
+         FROM webhook_deliveries
+         ORDER BY updated_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(limit) as Array<{
+      id: string;
+      host: WebhookHost;
+      status: "pending" | "processing" | "completed" | "failed";
+      attempts: number;
+      eventName: string | null;
+      resultKind: PiprResult["kind"] | null;
+      runId: string | null;
+      resultJson: string | null;
+      resultOmittedReason: "size-limit" | "retention" | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+
+    return {
+      formatVersion: 1,
+      deliveries: rows.map(({ resultJson, resultOmittedReason, ...row }) => {
+        const parsed = parseStoredWebhookResult(resultJson);
+        return {
+          ...row,
+          result: parsed.result,
+          resultOmittedReason: parsed.invalid ? "invalid" : resultOmittedReason,
+        };
+      }),
+    };
+  } finally {
+    database.close();
+  }
+}
+
+function parseStoredWebhookResult(resultJson: string | null): {
+  result: PiprResult | null;
+  invalid: boolean;
+} {
+  if (resultJson == null) return { result: null, invalid: false };
+  try {
+    return { result: parsePiprResult(JSON.parse(resultJson)), invalid: false };
+  } catch {
+    return { result: null, invalid: true };
+  }
+}
+
 export function createWebhookQueueProcessor(options: {
   store: WebhookDeliveryStore;
-  run: (delivery: WebhookDelivery) => Promise<unknown>;
+  run: (delivery: WebhookDelivery) => Promise<HostRunCommandResult>;
   log?: (message: string) => void;
 }) {
   let active: Promise<void> | undefined;
@@ -203,6 +287,8 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
   private readonly maxPendingDeliveries: number;
   private readonly maxRetainedPayloadBytes: number;
   private readonly maxRetainedDeliveries: number;
+  private readonly maxResultBytes: number;
+  private readonly maxRetainedResultBytes: number;
 
   constructor(
     databasePath: string,
@@ -210,12 +296,17 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
       maxPendingDeliveries?: number;
       maxRetainedPayloadBytes?: number;
       maxRetainedDeliveries?: number;
+      maxResultBytes?: number;
+      maxRetainedResultBytes?: number;
+      recoverProcessing?: boolean;
     } = {},
   ) {
     this.database = new Database(databasePath, { create: true, strict: true });
     this.maxPendingDeliveries = options.maxPendingDeliveries ?? 1_000;
     this.maxRetainedPayloadBytes = options.maxRetainedPayloadBytes ?? 32 * 1024 * 1024;
     this.maxRetainedDeliveries = options.maxRetainedDeliveries ?? 10_000;
+    this.maxResultBytes = options.maxResultBytes ?? MAX_WEBHOOK_RESULT_BYTES;
+    this.maxRetainedResultBytes = options.maxRetainedResultBytes ?? MAX_RETAINED_RESULT_BYTES;
     this.database.exec("PRAGMA journal_mode = WAL");
     this.database.transaction(() => {
       this.database.exec(`
@@ -223,7 +314,11 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           id TEXT PRIMARY KEY,
           host TEXT NOT NULL,
           payload TEXT,
+          run_id TEXT,
           event_name TEXT,
+          result_kind TEXT,
+          result_json TEXT,
+          result_omitted_reason TEXT,
           status TEXT NOT NULL,
           attempts INTEGER NOT NULL DEFAULT 0,
           error TEXT,
@@ -234,14 +329,28 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
       const columns = this.database
         .query<{ name: string }, []>("PRAGMA table_info(webhook_deliveries)")
         .all();
+      if (!columns.some((column) => column.name === "run_id")) {
+        this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN run_id TEXT");
+      }
       if (!columns.some((column) => column.name === "event_name")) {
         this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN event_name TEXT");
       }
-      this.database
-        .query(
-          "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = CASE WHEN attempts < 3 THEN error ELSE COALESCE(error, 'delivery interrupted during final attempt') END, updated_at = CURRENT_TIMESTAMP WHERE status = 'processing'",
-        )
-        .run();
+      if (!columns.some((column) => column.name === "result_kind")) {
+        this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN result_kind TEXT");
+      }
+      if (!columns.some((column) => column.name === "result_json")) {
+        this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN result_json TEXT");
+      }
+      if (!columns.some((column) => column.name === "result_omitted_reason")) {
+        this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN result_omitted_reason TEXT");
+      }
+      if (options.recoverProcessing !== false) {
+        this.database
+          .query(
+            "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = CASE WHEN attempts < 3 THEN error ELSE COALESCE(error, 'delivery interrupted during final attempt') END, updated_at = CURRENT_TIMESTAMP WHERE status = 'processing'",
+          )
+          .run();
+      }
     })();
   }
 
@@ -286,34 +395,86 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           "UPDATE webhook_deliveries SET status = 'processing', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .run(row.id);
+      this.database
+        .query(
+          "UPDATE webhook_deliveries SET run_id = NULL, result_kind = NULL, result_json = NULL, result_omitted_reason = NULL WHERE id = ?",
+        )
+        .run(row.id);
       return row.eventName ? row : { id: row.id, host: row.host, payload: row.payload };
     })();
   }
 
-  complete(id: string): void {
-    this.database.transaction(() => {
-      this.database
-        .query(
-          "UPDATE webhook_deliveries SET status = 'completed', payload = NULL, error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        )
-        .run(id);
-      this.pruneTerminalDeliveries();
-    })();
+  complete(id: string, result: PiprResult): void {
+    this.finish(id, result, "completed");
   }
 
-  fail(id: string, error: string): void {
+  fail(id: string, result: PiprResult): void {
+    this.finish(id, result, "failed");
+  }
+
+  private finish(id: string, result: PiprResult, outcome: "completed" | "failed"): void {
     this.database.transaction(() => {
+      const resultJson = JSON.stringify(result);
+      const isOmitted = Buffer.byteLength(resultJson) > this.maxResultBytes;
+      const completed = outcome === "completed" ? 1 : 0;
       this.database
         .query(
-          "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+          `UPDATE webhook_deliveries
+           SET status = CASE
+                 WHEN ? = 1 THEN 'completed'
+                 WHEN attempts < 3 THEN 'pending'
+                 ELSE 'failed'
+               END,
+               payload = CASE WHEN ? = 1 OR attempts >= 3 THEN NULL ELSE payload END,
+               error = ?,
+               run_id = ?,
+               result_kind = ?,
+               result_json = ?,
+               result_omitted_reason = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
         )
-        .run(error, id);
+        .run(
+          completed,
+          completed,
+          completed
+            ? null
+            : result.kind === "error"
+              ? result.message
+              : "Pipr failed; see logs for details.",
+          runIdFromResult(result),
+          result.kind,
+          isOmitted ? null : resultJson,
+          isOmitted ? "size-limit" : null,
+          id,
+        );
+      this.pruneTerminalResultBodies();
       this.pruneTerminalDeliveries();
     })();
   }
 
   close(): void {
     this.database.close();
+  }
+
+  private pruneTerminalResultBodies(): void {
+    const rows = this.database
+      .query<{ id: string; bytes: number }, []>(
+        "SELECT id, COALESCE(length(CAST(result_json AS BLOB)), 0) AS bytes FROM webhook_deliveries WHERE result_json IS NOT NULL ORDER BY updated_at ASC, id ASC",
+      )
+      .all();
+    let retainedBytes = rows.reduce((sum, row) => sum + row.bytes, 0);
+    if (retainedBytes <= this.maxRetainedResultBytes) return;
+
+    for (const row of rows) {
+      if (retainedBytes <= this.maxRetainedResultBytes) break;
+      retainedBytes -= row.bytes;
+      this.database
+        .query(
+          "UPDATE webhook_deliveries SET result_json = NULL, result_omitted_reason = 'retention' WHERE id = ?",
+        )
+        .run(row.id);
+    }
   }
 
   private pruneTerminalDeliveries(): void {
@@ -326,6 +487,10 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
   }
 }
 
+function runIdFromResult(result: PiprResult): string | null {
+  return "run" in result ? result.run.id : null;
+}
+
 export async function runWebhookDelivery(
   delivery: WebhookDelivery,
   options: {
@@ -334,13 +499,13 @@ export async function runWebhookDelivery(
     env?: NodeJS.ProcessEnv;
   },
   runHostRun: typeof runHostRunCommand = runHostRunCommand,
-): Promise<void> {
+): Promise<HostRunCommandResult> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-"));
   const eventPath = path.join(directory, "event.json");
   const protocol = createCodeHostWebhookProtocol(delivery.host);
   try {
     await Bun.write(eventPath, delivery.payload);
-    await runHostRun({
+    return await runHostRun({
       rootDir: options.workspace,
       configDir: options.configDir,
       host: delivery.host,
@@ -357,6 +522,11 @@ export async function runWebhookDelivery(
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+}
+
+export function formatWebhookDeliveryId(value: string): string {
+  if (value.length <= 20) return value;
+  return `${value.slice(0, 8)}…${value.slice(-8)}`;
 }
 
 const consoleRuntimeLogSink: RuntimeLogSink = {

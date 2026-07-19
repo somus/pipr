@@ -72,6 +72,7 @@ export async function runTrustedReviewAndPublish(options: {
       await finalizeRuntimeChecks(checks, {});
       return {
         kind: "command-response",
+        run: review.run,
         response: {
           commandName: review.commandResponse.commandName,
           body: review.commandResponse.body,

@@ -25,6 +25,8 @@ import type {
   DiffManifest,
   ModelProfile,
   PiprBuilder,
+  PiprResult,
+  PiprRunSummary,
   PromptText,
   Reviewer,
   Task,
@@ -36,8 +38,10 @@ import {
   definePipr,
   definePlugin,
   jsonSchema,
+  parsePiprResult,
   parseReviewFinding,
   parseReviewResult,
+  piprResultSchema,
   reviewFindingSchema,
   reviewResultSchema,
   reviewSummarySchema,
@@ -50,6 +54,110 @@ import {
   embeddedSdkDeclaration,
   readSdkDeclarationSourceWithChunk,
 } from "../internal.js";
+
+describe("Pipr Result V2", () => {
+  const run = {
+    id: "run_123",
+    trigger: "change-request",
+    baseSha: "base-sha",
+    headSha: "head-sha",
+    tasks: ["review"],
+    durationMs: 123,
+    models: ["deepseek/deepseek-v4-pro"],
+    agentRuns: 1,
+    inputTokens: 500,
+    outputTokens: 50,
+    costUsd: 0.001,
+    usageStatus: "complete",
+  } satisfies PiprRunSummary;
+
+  const finding = {
+    body: "Use the validated value.",
+    path: "src/example.ts",
+    rangeId: "rng_example",
+    side: "RIGHT",
+    startLine: 1,
+    endLine: 1,
+  } as const;
+
+  it("parses every strict V2 result discriminator through the public SDK", () => {
+    const results: PiprResult[] = [
+      {
+        formatVersion: 2,
+        kind: "review",
+        run,
+        mainComment: "Review completed.",
+        inlineFindings: [finding],
+        droppedFindings: [{ finding, reason: "outside range" }],
+        taskChecks: [{ taskName: "review", conclusion: "success" }],
+        repairAttempted: false,
+        publication: {
+          state: "completed",
+          mainComment: { action: "created" },
+          inlineComments: { posted: 1, skipped: 0, failed: 0 },
+          inlinePublicationErrorCount: 0,
+          inlineResolutionErrorCount: 0,
+        },
+      },
+      { formatVersion: 2, kind: "skipped", reason: "No task matched" },
+      { formatVersion: 2, kind: "ignored", reason: "Unsupported event" },
+      { formatVersion: 2, kind: "dry-run" },
+      {
+        formatVersion: 2,
+        kind: "command-help",
+        reason: "Missing input",
+        mainComment: "Usage",
+      },
+      {
+        formatVersion: 2,
+        kind: "command-response",
+        run: { ...run, trigger: "command" },
+        mainComment: "Done",
+        publication: { state: "completed", action: "updated" },
+      },
+      {
+        formatVersion: 2,
+        kind: "verifier",
+        run: { ...run, trigger: "verifier" },
+        publication: { state: "completed", inlineResolutionErrorCount: 1 },
+      },
+      {
+        formatVersion: 2,
+        kind: "publication-error",
+        message: "Pipr could not complete publication; see logs for details.",
+        publication: {
+          inlineComments: { posted: 1, skipped: 0, failed: 1 },
+          inlinePublicationErrorCount: 1,
+          inlineResolutionErrorCount: 0,
+        },
+      },
+      { formatVersion: 2, kind: "error", message: "Pipr failed; see logs for details." },
+    ];
+
+    expect(results.map((result) => parsePiprResult(result))).toEqual(results);
+    expect(piprResultSchema.safeParse({ ...results[1], internal: true }).success).toBe(false);
+  });
+
+  it("rejects unbounded run summaries", () => {
+    expect(() =>
+      parsePiprResult({
+        formatVersion: 2,
+        kind: "command-response",
+        run: { ...run, tasks: Array.from({ length: 201 }, (_, index) => `task-${index}`) },
+        mainComment: "Done",
+        publication: { state: "completed", action: "created" },
+      }),
+    ).toThrow();
+  });
+
+  it("omits the misleading currentHeadSha task interface from declarations", async () => {
+    const declarationSource = await readFile(
+      path.join(import.meta.dirname, "..", "types", "task.ts"),
+      "utf8",
+    );
+    expect(declarationSource).not.toContain("currentHeadSha");
+  });
+});
 
 describe("definePipr", () => {
   it("registers models, agents, tasks, events, commands, and tools", () => {
@@ -481,9 +589,6 @@ describe("definePipr", () => {
           },
           async changedFiles() {
             return [];
-          },
-          async currentHeadSha() {
-            return "head";
           },
         },
         pi: {
@@ -1116,6 +1221,8 @@ describe("standalone SDK declarations", () => {
         source: [
           'import { z } from "zod";',
           "export type Schema = z.ZodType<string>;",
+          "export type PiprResult = { formatVersion: 2; kind: 'dry-run' };",
+          "export const piprResultSchema: z.ZodType<PiprResult>;",
           "export type ReviewFinding = { body: string };",
           'export type FromRoot = import("./index.mjs").Schema;',
           "//# sourceMappingURL=index.d.mts.map",
@@ -1126,6 +1233,7 @@ describe("standalone SDK declarations", () => {
     expect(declaration).toContain('declare module "@usepipr/sdk"');
     expect(declaration).toContain("type ZodType<T = unknown");
     expect(declaration).toContain("export type Schema = ZodType<string>;");
+    expect(declaration).toContain("export const piprResultSchema: ZodType<PiprResult>;");
     expect(declaration).toContain("export type ReviewFinding = { body: string };");
     expect(declaration).not.toContain('from "zod"');
     expect(declaration).not.toContain("z.ZodType");
@@ -1369,9 +1477,6 @@ function fakeChange() {
     },
     async changedFiles() {
       return [];
-    },
-    async currentHeadSha() {
-      return "head";
     },
   };
 }
