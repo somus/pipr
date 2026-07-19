@@ -1,0 +1,170 @@
+docs/adr/0007-public-results-command-lifecycle-and-webhook-history.md
+  s_235c3957ef5234::t_f456d435a56b4f 1-21
+packages/runtime/src/hosts/types.ts
+  s_235c3957ef5234::t_1ab5d5b536f6ff 39,130-135
+  s_235c3957ef5234::t_b531e5fa07017c 38
+  s_235c3957ef5234::t_6b1929938f8c19 136
+packages/runtime/src/hosts/azure-devops/publication.ts
+  s_235c3957ef5234::t_0ba21541840629 145,154-165
+packages/runtime/src/host-run/review-publishing.ts
+  s_235c3957ef5234::t_b759d3c935046d 75
+packages/runtime/src/host-run/command-entry.ts
+  s_235c3957ef5234::t_8b191cdb0acf96 187
+  s_235c3957ef5234::t_6a1feffa62f227 190-195,198-212,214-220,223-224,228-235,237-287
+  s_235c3957ef5234::t_b759d3c935046d 339
+  s_235c3957ef5234::t_135ec12290c1a4 118-129,180-181,183-186,188-189,197,213,221-222,225-227,236
+packages/cli/src/runner.ts
+  s_235c3957ef5234::t_ececf537745389 44,116-122,241-243,245-271
+  s_235c3957ef5234::t_b531e5fa07017c 244
+  s_235c3957ef5234::t_014e0bc7ab9c36 15-16
+  s_235c3957ef5234::t_86fc030b66af67 530
+  s_235c3957ef5234::t_7c6b8eb4f2a488 272
+packages/runtime/src/hosts/bitbucket/adapter.ts
+  s_235c3957ef5234::t_0ba21541840629 66-72
+  s_235c3957ef5234::t_ecb04a308fbfee 1
+packages/runtime/src/host-run/tests/commands-fixtures.ts
+  s_235c3957ef5234::t_e1137bae59d5a4 794,799-800
+  s_235c3957ef5234::t_88a15d433afd9c 295,309,312
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_235c3957ef5234::t_ce2582f1c1cc6d 20-29,50,387,507,753,782,808,844,858,861
+  s_235c3957ef5234::t_1119c3f01abe2c 433,837
+  s_235c3957ef5234::t_b57a62dc9c7e5b 583-618,620-622
+  s_235c3957ef5234::t_81fc217f07afa9 531-551,553-580
+  s_235c3957ef5234::t_b531e5fa07017c 552
+  s_235c3957ef5234::t_4007aee7b9faba 30-49
+  s_235c3957ef5234::t_629bb4abd3bf18 82,115,121,416-422
+  s_235c3957ef5234::t_88a15d433afd9c 4,7,13,519-530,676-724
+  s_235c3957ef5234::t_9857f8c8b922af 581-582,619
+  s_235c3957ef5234::t_b54809df4ac13c 623-658
+packages/runtime/src/review/tests/task-runtime-outputs.test.ts
+  s_235c3957ef5234::t_dff6f9e534d9b3 104-106
+  s_235c3957ef5234::t_6e89ccf789ca85 112-125,220-227
+packages/runtime/src/review/task/task-runtime.ts
+  s_235c3957ef5234::t_63e674b9ea74c8 1-7,90,103,123
+  s_235c3957ef5234::t_27074fe3f08796 384-391,405-406,408-412,418-420,428,625,634
+  s_235c3957ef5234::t_02c2d92afee412 392
+  s_235c3957ef5234::t_135ec12290c1a4 393-404,407,413-417
+  s_235c3957ef5234::t_98491600807369 268,274-281,309-314,340,359
+apps/docs/content/docs/guide/github-action.mdx
+  s_235c3957ef5234::t_f456d435a56b4f 119-121
+packages/runtime/src/internal/pipr-result.ts
+  s_235c3957ef5234::t_a35863a6ed9da8 1,65,73,96,103-114
+  s_235c3957ef5234::t_4526dc99a9e1a1 25
+  s_235c3957ef5234::t_5e68cec3cf2512 2-13,18-24,35-44,48-64,66-72,74-95,97-102,115-151
+  s_235c3957ef5234::t_b531e5fa07017c 14-17,45-47
+  s_235c3957ef5234::t_80e5faf7d3e361 26-34
+apps/docs/content/docs/guide/local-runs.mdx
+  s_235c3957ef5234::t_f456d435a56b4f 165,169,171
+apps/docs/content/docs/reference/cli.mdx
+  s_235c3957ef5234::t_f456d435a56b4f 122-138
+apps/docs/content/docs/concepts/comments.mdx
+  s_235c3957ef5234::t_f456d435a56b4f 292-294
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_235c3957ef5234::t_a35863a6ed9da8 31
+  s_235c3957ef5234::t_d8c7f45b2d7148 32
+packages/runtime/src/internal/action-result.ts
+  s_235c3957ef5234::t_47619c2f322eaf 3
+  s_235c3957ef5234::t_420bf3421e4602 81-89,95,99,102
+packages/runtime/src/host-run/commands.ts
+  s_235c3957ef5234::t_27074fe3f08796 168
+packages/runtime/src/hosts/gitlab/publication.ts
+  s_235c3957ef5234::t_0ba21541840629 135,150-152
+packages/runtime/src/host-run/tests/action-result.test.ts
+  s_235c3957ef5234::t_dff6f9e534d9b3 2,90,103
+  s_235c3957ef5234::t_e3f132794c10c3 91-102,120,122,129,138,387
+  s_235c3957ef5234::t_8650565a14efc1 149,159,169,215,228-234,271-276,301,325,363,375
+  s_235c3957ef5234::t_88a15d433afd9c 239-261
+packages/sdk/src/tests/index.test.ts
+  s_235c3957ef5234::t_6cf312c5d5fb33 41,44,58-71,73-88,141
+  s_235c3957ef5234::t_4dc224ff67c9b6 72
+  s_235c3957ef5234::t_d5a66043e32406 89-140
+  s_235c3957ef5234::t_b531e5fa07017c 145-148
+  s_235c3957ef5234::t_18001d6a41f72b 143,150-152
+  s_235c3957ef5234::t_9fb5015651de9f 144,149
+  s_235c3957ef5234::t_d2b4eb9ae21f79 28-29,142
+packages/cli/src/tests/main.test.ts
+  s_235c3957ef5234::t_b531e5fa07017c 278
+  s_235c3957ef5234::t_8f8c63e5d62233 1,251-275,277,279-310
+  s_235c3957ef5234::t_f7b76acfdfddd9 276
+  s_235c3957ef5234::t_b54809df4ac13c 311,313-335
+  s_235c3957ef5234::t_2965355fade0ae 583,585,588,590-603,632,667,893,898
+  s_235c3957ef5234::t_231d284263bbc3 312
+packages/runtime/src/hosts/publication.ts
+  s_235c3957ef5234::t_75dc339927fa29 94-97,105-106
+  s_235c3957ef5234::t_1ab5d5b536f6ff 16,98-104
+  s_235c3957ef5234::t_c6460c5b844b2f 107-108
+packages/runtime/src/hosts/github/publication-command-response.ts
+  s_235c3957ef5234::t_8d2bc2b69fd61d 12,14-16,19,21,23,29-32,37,44
+  s_235c3957ef5234::t_af9001f2d6f5f9 2
+packages/runtime/src/hosts/github/adapter.ts
+  s_235c3957ef5234::t_fb3b36e3dfc8c2 108-113,115
+  s_235c3957ef5234::t_75dc339927fa29 114
+  s_235c3957ef5234::t_39df2d28ec639f 2,116-117
+apps/docs/content/docs/guide/webhook-docker.mdx
+  s_235c3957ef5234::t_a35863a6ed9da8 26-27
+packages/runtime/package.json
+  s_235c3957ef5234::t_a35863a6ed9da8 49-52,59
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_235c3957ef5234::t_97a39a5d97b4cf 208
+  s_235c3957ef5234::t_d2a017609e25cf 207,209-214
+  s_235c3957ef5234::t_f4efe941ca7d0c 194-196
+packages/runtime/src/index.ts
+  s_235c3957ef5234::t_b235d198cdae9f 30-31
+packages/runtime/src/hosts/bitbucket/publication.ts
+  s_235c3957ef5234::t_0ba21541840629 120,128-136
+packages/sdk/src/index.ts
+  s_235c3957ef5234::t_4dc224ff67c9b6 5-6
+packages/runtime/src/host-run/tests/commands-review-comment.test.ts
+  s_235c3957ef5234::t_88a15d433afd9c 243,247-251,253-260
+  s_235c3957ef5234::t_a35863a6ed9da8 252
+packages/runtime/src/hosts/azure-devops/adapter.ts
+  s_235c3957ef5234::t_0ba21541840629 69-75
+  s_235c3957ef5234::t_1e7deb84004774 1
+packages/runtime/src/hosts/tests/conformance.ts
+  s_235c3957ef5234::t_f93705376b9a90 182-223
+packages/runtime/src/hosts/gitlab/adapter.ts
+  s_235c3957ef5234::t_0ba21541840629 67-73
+  s_235c3957ef5234::t_b3be81446c9f07 1
+packages/runtime/src/host-run/verifier-entry.ts
+  s_235c3957ef5234::t_a3df119a7290c3 1,4,8,57,162-174,210-216,220,227
+  s_235c3957ef5234::t_8b191cdb0acf96 251
+  s_235c3957ef5234::t_135ec12290c1a4 217-219,221-223,235-242,244-249,252-264
+  s_235c3957ef5234::t_01ef73f35628d5 243,250
+  s_235c3957ef5234::t_ebc89eb76d14e4 265-267
+packages/runtime/src/host-run/tests/commands-issue-comment.test.ts
+  s_235c3957ef5234::t_ddb9d8a482e99b 218,226,241
+  s_235c3957ef5234::t_762c6f96f5b358 433,451,476
+  s_235c3957ef5234::t_d135df8e119038 277
+  s_235c3957ef5234::t_e1137bae59d5a4 283-288,372-375
+  s_235c3957ef5234::t_054aea41bdd98e 402-432,434-450,452-475,477-480
+  s_235c3957ef5234::t_11a834615a43de 332-334
+  s_235c3957ef5234::t_b54809df4ac13c 481-506
+docs/CONTEXT.md
+  s_235c3957ef5234::t_f456d435a56b4f 60-63
+packages/runtime/src/host-run/webhook-server.ts
+  s_235c3957ef5234::t_a35863a6ed9da8 2,318,320,352,355-368,492-499
+  s_235c3957ef5234::t_b235d198cdae9f 31-119
+  s_235c3957ef5234::t_145abe9f772e79 299-300,308-309,316-317,331-334,345-349,410,417,419,422,424-425,430,432-433,436,438-439,456-491,510,516
+  s_235c3957ef5234::t_43ebac466145aa 11,27-28,185,191-192,195,205
+  s_235c3957ef5234::t_17997f932b57ad 6,8,120
+packages/runtime/src/host-run/types.ts
+  s_235c3957ef5234::t_b759d3c935046d 1,100,111,131
+packages/sdk/src/result.ts
+  s_235c3957ef5234::t_4dc224ff67c9b6 1-165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "2110732f9f1ef2c04b556f54e7fe50be3f3df4c0",
+  "prompts": {},
+  "sessions": {
+    "s_235c3957ef5234": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f75be-0ca0-7fc2-8493-1d79e7f4a932",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
