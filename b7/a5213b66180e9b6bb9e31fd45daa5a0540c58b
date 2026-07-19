@@ -1,0 +1,89 @@
+packages/runtime/src/host-run/verifier-entry.ts
+  s_e696519bb1e0c4::t_7be0c46e9a359f 1,238,254
+  s_e696519bb1e0c4::t_a65c8834e4a555 175
+  s_e696519bb1e0c4::t_6da5f142805678 211,220
+apps/docs/content/docs/guide/local-runs.mdx
+  s_e696519bb1e0c4::t_6d55c38cdb0d6f 128,157
+packages/runtime/src/review/tests/review-run.test.ts
+  s_e696519bb1e0c4::t_1230b528d04197 84,143,190,232
+packages/runtime/src/review/tests/verifier.test.ts
+  s_e696519bb1e0c4::t_1230b528d04197 548
+packages/runtime/src/review/verifier.ts
+  s_e696519bb1e0c4::t_8e5e0788fb06ca 1,47,119,141
+packages/sdk/src/prompt-json.ts
+  s_e696519bb1e0c4::t_e606f73933bb76 1-80
+packages/sdk/src/tests/index.test.ts
+  s_e696519bb1e0c4::t_cd5cfd08ae5c8e 630-640
+  s_e696519bb1e0c4::t_6d3cc98c7cc01e 613-629,641-644,1522
+  s_e696519bb1e0c4::t_a30073badcedd5 570,991
+packages/sdk/src/prompt-render.ts
+  s_e696519bb1e0c4::t_e606f73933bb76 2,4
+  s_e696519bb1e0c4::t_54c69c8b27e1dd 15
+packages/sdk/src/result.ts
+  s_e696519bb1e0c4::t_8aaddb9f0ee456 4,6-7,87
+  s_e696519bb1e0c4::t_a841fe880969b6 5,8,11-13
+  s_e696519bb1e0c4::t_a65c8834e4a555 9-10
+packages/sdk/src/types/agent.ts
+  s_e696519bb1e0c4::t_a841fe880969b6 30
+  s_e696519bb1e0c4::t_5b2d9abd2ed651 1
+packages/runtime/src/review/agent/review-run.ts
+  s_e696519bb1e0c4::t_8e5e0788fb06ca 56,141
+  s_e696519bb1e0c4::t_a841fe880969b6 2,157-158
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_e696519bb1e0c4::t_a841fe880969b6 1,17,31
+packages/runtime/src/config/recipes/default-review.ts
+  s_e696519bb1e0c4::t_6d55c38cdb0d6f 55
+packages/runtime/src/review/tests/task-runtime-selection.test.ts
+  s_e696519bb1e0c4::t_d56300788603ad 112,124-126,134-136,168
+  s_e696519bb1e0c4::t_06e66b18c9f054 171-198
+  s_e696519bb1e0c4::t_0beb4840e9a9d8 2,113-115,123,133,143,151,161-167
+  s_e696519bb1e0c4::t_b1e0aed71c163d 169-170
+apps/docs/content/docs/recipes/default-review.mdx
+  s_e696519bb1e0c4::t_440e7e583ada7c 86,155
+packages/sdk/src/builder.ts
+  s_e696519bb1e0c4::t_be9daa75fd32d6 474
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_e696519bb1e0c4::t_6d55c38cdb0d6f 275,287
+  s_e696519bb1e0c4::t_a65c8834e4a555 286
+packages/sdk/src/types/task.ts
+  s_e696519bb1e0c4::t_be9daa75fd32d6 171
+  s_e696519bb1e0c4::t_a841fe880969b6 293-294
+  s_e696519bb1e0c4::t_c74ff469b87758 1
+apps/docs/content/docs/concepts/runtime.mdx
+  s_e696519bb1e0c4::t_6d55c38cdb0d6f 41,44
+  s_e696519bb1e0c4::t_a65c8834e4a555 42-43,73
+  s_e696519bb1e0c4::t_0e373544cf46fc 74
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_e696519bb1e0c4::t_aad5b5a070d940 656,674,695,729,741
+apps/docs/scripts/sync-recipes.ts
+  s_e696519bb1e0c4::t_6d55c38cdb0d6f 166
+packages/runtime/src/review/task/task-runtime.ts
+  s_e696519bb1e0c4::t_a65c8834e4a555 191,194
+  s_e696519bb1e0c4::t_680c133af80e29 91
+  s_e696519bb1e0c4::t_6d4cb1acbba3c5 141,193,261,278,337-364
+  s_e696519bb1e0c4::t_ba3f259fefcf41 273
+  s_e696519bb1e0c4::t_a841fe880969b6 4,192,204,246,323,436,451,551,558,614
+  s_e696519bb1e0c4::t_11d2a1f34277d6 211-212,214-221,365-374,376-381,383-390,394,396-407,409-412,415-420
+  s_e696519bb1e0c4::t_947874a9a8f8e5 213,375,382,395,408,413-414
+  s_e696519bb1e0c4::t_c952f1c688101f 336,391-393
+  s_e696519bb1e0c4::t_8e5e0788fb06ca 508,537
+  s_e696519bb1e0c4::t_645cd620e8af7e 421
+packages/sdk/src/index.ts
+  s_e696519bb1e0c4::t_a841fe880969b6 5-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "b7a5213b66180e9b6bb9e31fd45daa5a0540c58b",
+  "prompts": {},
+  "sessions": {
+    "s_e696519bb1e0c4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7906-0308-71d0-b536-059cc08b200f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
