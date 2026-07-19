@@ -388,6 +388,48 @@ describe("runHostRunCommand issue_comment dispatch", () => {
     }
   });
 
+  it("publishes superseded when the head changes before command acceptance", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: askConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const eventPath = path.join(workspace.rootDir, "event.json");
+    const publication = recordingCommandPublicationClient(workspace);
+    publication.client.getPullRequestHeadSha = async () => "new-head";
+    const commandClient = fakeGitHubClient(workspace, "read");
+    const loadChangeRequest = commandClient.getPullRequest.bind(commandClient);
+    let loads = 0;
+    commandClient.getPullRequest = async (options) => {
+      loads += 1;
+      const loaded = await loadChangeRequest(options);
+      return loads === 1
+        ? loaded
+        : { ...loaded, change: { ...loaded.change, head: { sha: "new-head" } } };
+    };
+    try {
+      await writeIssueCommentEvent(eventPath, "@pipr ask what changed?");
+      await expect(
+        runTestHostCommand({
+          rootDir: workspace.rootDir,
+          configDir: ".pipr",
+          eventPath,
+          dryRun: false,
+          env: issueCommentEnv(workspace.rootDir, eventPath),
+          githubClient: commandClient,
+          githubPublicationClient: publication.client,
+          piExecutable: workspace.piExecutable,
+        }),
+      ).rejects.toThrow(/head changed/i);
+
+      expect(publication.writes.created).toHaveLength(1);
+      expect(publication.writes.created[0]).toContain("state=superseded");
+      expect(publication.writes.created[0]).toContain("current=new-head");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("fails the host run when completed status publication fails", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const publication = recordingCommandPublicationClient(workspace);

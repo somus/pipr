@@ -190,10 +190,6 @@ async function dispatchIssueCommentCommand(
     commandName: parsedResolution.invocation.commandName,
     reviewedHeadSha: prepared.event.change.head.sha,
   };
-  await logPhase(log, "publish command accepted", async () =>
-    publishCommandStatus({ ...status, state: "accepted" }),
-  );
-
   return await executeIssueCommentCommand({
     options,
     adapter,
@@ -215,6 +211,9 @@ async function executeIssueCommentCommand(options: {
   log: RuntimeLog;
 }): Promise<HostRunCommandResult> {
   try {
+    await logPhase(options.log, "publish command accepted", async () =>
+      options.publishCommandStatus({ ...options.status, state: "accepted" }),
+    );
     await prepareTrustedHeadCheckout(
       options.options,
       options.adapter,
