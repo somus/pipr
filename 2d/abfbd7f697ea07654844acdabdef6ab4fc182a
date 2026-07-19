@@ -1,0 +1,21 @@
+Dockerfile
+  s_4d2bcfd514fa3f::t_8c29a7b4989421 17-20
+Dockerfile.docs
+  s_4d2bcfd514fa3f::t_8c29a7b4989421 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "2dabfbd7f697ea07654844acdabdef6ab4fc182a",
+  "prompts": {},
+  "sessions": {
+    "s_4d2bcfd514fa3f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7c23-8ffd-7640-afe1-1fbeb5c0a0c6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
