@@ -135,10 +135,14 @@ export function commandStatusBody(options: {
   };
 }
 
-export function shouldUpdateCommandComment(existingBody: string, nextBody: string): boolean {
-  const next = commandStateRecord(nextBody);
-  if (next?.state !== "failed" && next?.state !== "superseded") return true;
-  const existing = commandStateRecord(existingBody);
+export function shouldUpdateCommandComment(options: {
+  existingBody: string;
+  nextBody: string;
+  guardHead: boolean;
+}): boolean {
+  const next = commandStateRecord(options.nextBody);
+  if (next === undefined || next.state === "accepted" || options.guardHead) return true;
+  const existing = commandStateRecord(options.existingBody);
   return existing === undefined || existing.reviewedHeadSha === next.reviewedHeadSha;
 }
 

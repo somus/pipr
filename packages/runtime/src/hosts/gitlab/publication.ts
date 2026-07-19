@@ -166,7 +166,14 @@ async function publishGitLabCommandComment(options: {
   if (options.guardHead) {
     await assertCurrentHead(options.client, projectId, options.change);
   }
-  if (existing && !shouldUpdateCommandComment(existing.body, options.comment.body)) {
+  if (
+    existing &&
+    !shouldUpdateCommandComment({
+      existingBody: existing.body,
+      nextBody: options.comment.body,
+      guardHead: options.guardHead,
+    })
+  ) {
     return { action: "updated" as const, id: existing.id };
   }
   const note = existing

@@ -234,7 +234,7 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
-    it("keeps an older terminal status from overwriting a newer command attempt", async () => {
+    it("keeps older lifecycle states from overwriting a newer command attempt", async () => {
       await withHarness(options.createHarness, async (harness) => {
         const publication = requiredPublication(harness.adapter);
         const publishCommandStatus = requiredMethod(
@@ -270,19 +270,27 @@ export function defineCodeHostAdapterConformanceSuite(options: {
           change: currentChange,
           reviewedHeadSha: currentHeadSha,
         };
+        const publishOlderStatuses = async () => {
+          for (const status of [
+            { state: "running" as const },
+            { state: "completed" as const },
+            { state: "failed" as const },
+            { state: "superseded" as const, currentHeadSha },
+          ]) {
+            await expect(
+              publishCommandStatus({ ...originalCommand, ...status }),
+            ).resolves.toMatchObject({ action: "updated" });
+          }
+        };
+        await expect(
+          publishCommandStatus({ ...currentCommand, state: "accepted" }),
+        ).resolves.toMatchObject({ action: "updated" });
         await expect(
           publishCommandStatus({ ...currentCommand, state: "running" }),
         ).resolves.toMatchObject({ action: "updated" });
 
-        for (const terminal of [
-          { state: "failed" as const },
-          { state: "superseded" as const, currentHeadSha },
-        ]) {
-          await expect(
-            publishCommandStatus({ ...originalCommand, ...terminal }),
-          ).resolves.toMatchObject({ action: "updated" });
-        }
-        expect(harness.writes()).toMatchObject({ commandCreates: 1, commandUpdates: 1 });
+        await publishOlderStatuses();
+        expect(harness.writes()).toMatchObject({ commandCreates: 1, commandUpdates: 2 });
 
         await expect(
           publishCommandResponse({
@@ -292,14 +300,8 @@ export function defineCodeHostAdapterConformanceSuite(options: {
             body: "Current response.",
           }),
         ).resolves.toMatchObject({ action: "updated" });
-        await expect(
-          publishCommandStatus({
-            ...originalCommand,
-            state: "superseded",
-            currentHeadSha,
-          }),
-        ).resolves.toMatchObject({ action: "updated" });
-        expect(harness.writes()).toMatchObject({ commandCreates: 1, commandUpdates: 2 });
+        await publishOlderStatuses();
+        expect(harness.writes()).toMatchObject({ commandCreates: 1, commandUpdates: 3 });
       });
     });
 

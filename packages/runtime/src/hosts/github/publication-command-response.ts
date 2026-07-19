@@ -72,7 +72,13 @@ async function publishGitHubCommandComment(options: {
   }
   const existing = findCommandResponseComment(comments, options.comment.marker, ownerLogin);
   if (existing) {
-    if (!shouldUpdateCommandComment(existing.body ?? "", options.comment.body)) {
+    if (
+      !shouldUpdateCommandComment({
+        existingBody: existing.body ?? "",
+        nextBody: options.comment.body,
+        guardHead: options.guardHead,
+      })
+    ) {
       return { action: "updated", id: String(existing.id) };
     }
     const updated = await options.client.updateIssueComment({

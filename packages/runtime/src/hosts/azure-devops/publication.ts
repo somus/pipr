@@ -179,7 +179,11 @@ async function publishAzureDevOpsCommandComment(options: {
   const existing = ownedRootThread(threads, owner.uniqueName, options.comment.marker);
   if (
     existing &&
-    !shouldUpdateCommandComment(existing.comments[0]?.content ?? "", options.comment.body)
+    !shouldUpdateCommandComment({
+      existingBody: existing.comments[0]?.content ?? "",
+      nextBody: options.comment.body,
+      guardHead: options.guardHead,
+    })
   ) {
     const commentId = existing.comments[0]?.id;
     if (!commentId) throw new Error("Azure DevOps command response thread has no root comment");

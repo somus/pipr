@@ -158,10 +158,11 @@ async function publishBitbucketCommandComment(options: {
   const responseBody = renderBitbucketMarkdown(options.comment.body);
   if (
     existing &&
-    !shouldUpdateCommandComment(
-      normalizeBitbucketMarkdown(existing.content.raw),
-      options.comment.body,
-    )
+    !shouldUpdateCommandComment({
+      existingBody: normalizeBitbucketMarkdown(existing.content.raw),
+      nextBody: options.comment.body,
+      guardHead: options.guardHead,
+    })
   ) {
     return { action: "updated" as const, id: existing.id };
   }
