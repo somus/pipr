@@ -1,0 +1,21 @@
+packages/runtime/src/host-run/tests/commands-issue-comment.test.ts
+  s_235c3957ef5234::t_faef142885f73f 391-432
+packages/runtime/src/host-run/command-entry.ts
+  s_235c3957ef5234::t_fd3919f54de93d 214-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "8f09fbd6bba3b21716a59e3f853e8e8ba040ec16",
+  "prompts": {},
+  "sessions": {
+    "s_235c3957ef5234": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f75be-0ca0-7fc2-8493-1d79e7f4a932",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
