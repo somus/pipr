@@ -11,6 +11,7 @@
       "@usepipr/runtime/internal/action-result": [
         "./packages/runtime/src/internal/action-result.ts"
       ],
+      "@usepipr/runtime/internal/pipr-result": ["./packages/runtime/src/internal/pipr-result.ts"],
       "@usepipr/runtime/internal/review-testing": [
         "./packages/runtime/src/internal/review-testing.ts"
       ],
