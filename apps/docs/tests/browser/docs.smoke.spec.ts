@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import rootPackage from "../../../../package.json" with { type: "json" };
 import { inspectWebp } from "../../scripts/og-images";
 
 test("serves hydrated home and documentation routes", async ({ page }) => {
@@ -29,7 +30,7 @@ test("shows current quickstart and recipe interactions without mobile overflow",
   page,
 }) => {
   await page.goto("/docs/guide/quickstart");
-  await expect(page.getByText("PIPR_VERSION=v0.4.3")).toBeVisible();
+  await expect(page.getByText(`PIPR_VERSION=v${rootPackage.version}`)).toBeVisible();
   await expect(page.getByRole("link", { name: "Pi's Model Catalog" })).toHaveAttribute(
     "href",
     "https://pi.dev/models",
