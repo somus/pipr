@@ -125,7 +125,7 @@ const task = pipr.task({
   async run(ctx) {
     const manifest = await ctx.change.diffManifest({ compressed: true });
     const result = await ctx.pi.run(securityAgent, { manifest });
-    const local = ctx.platform.id === "local";
+    const local = ctx.run.trigger === "local";
     await ctx.comment({
       main: local
         ? `${result.summary.body}\n\n## Inline Findings\n\n${result.inlineFindings
@@ -154,7 +154,7 @@ const expensive = pipr.task({
 });
 ```
 
-Use `ctx.platform.id === "local"` when a task should still run locally but render different text. Use `local: false` when the task should not run locally at all.
+Use `ctx.run.trigger === "local"` when a task should still run locally but render different text. Use `local: false` when the task should not run locally at all.
 
 ## Output
 

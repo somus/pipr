@@ -1,6 +1,7 @@
 import type {
   Agent,
   DiffManifestOptions,
+  PiprRunContext,
   PiprRunSummary,
   SecretRef,
   TaskContext,
@@ -87,7 +88,7 @@ export type RunTaskRuntimeOptions = {
   log?: RuntimeLog;
   taskLog?: TaskContext["log"];
   secretRedactor?: SecretRedactor;
-  runTrigger?: PiprRunSummary["trigger"];
+  runTrigger?: Exclude<PiprRunContext["trigger"], "verifier">;
 };
 
 type ReviewRuntimeBaseResult = {
@@ -137,9 +138,7 @@ export type ReviewRuntimeResult =
 export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<ReviewRuntimeResult> {
   const runtimeStarted = Date.now();
   const config = parsePiprConfig(options.config);
-  const provider = options.providerOverride
-    ? parseProviderConfig(options.providerOverride)
-    : resolveProvider(config, config.defaultProvider);
+  const provider = taskRuntimeProvider(options, config);
   const diffManifest = parseDiffManifest(
     (options.diffManifestBuilder ?? buildDiffManifest)({
       cwd: options.workspace,
@@ -189,6 +188,10 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     trustedConfigHash: options.trustedConfigHash,
     commandInvocation: options.commandInvocation,
   });
+  const run: PiprRunContext = Object.freeze({
+    id: runId,
+    trigger: taskRunTrigger(options),
+  });
   const loadedPriorReviewState =
     options.priorReviewState ?? (await options.loadPriorReviewState?.());
   const priorMainComment = options.priorMainComment ?? (await options.loadPriorMainComment?.());
@@ -198,57 +201,24 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     ...options,
     priorReviewState,
     priorMainComment,
-    runId,
+    run,
     piRunSink(run: PiRunStats) {
       piRuns.push(run);
     },
   };
 
   const manifestCache = new Map<string, DiffManifest>();
-  const taskResults = await Promise.all(
-    tasks.map(async (task, taskOrder) => {
-      const output = createOutputState();
-      const started = Date.now();
-      options.log?.info("task start", { task: task.name, order: taskOrder });
-      try {
-        await task.handler(
-          createTaskContext({
-            ...runtimeOptions,
-            config,
-            provider,
-            diffManifest,
-            manifestCache,
-            output,
-            taskName: task.name,
-            taskOrder,
-          }),
-          task.name === options.taskName ? options.taskInput : undefined,
-        );
-        options.log?.info("task ok", {
-          task: task.name,
-          durationMs: Date.now() - started,
-          findings: output.findings.length,
-          providerModels: output.providerModels,
-          repairAttempted: output.repairAttempted,
-        });
-        return { taskName: task.name, output };
-      } catch (error) {
-        const check = {
-          conclusion: "failure" as const,
-          summary: genericTaskFailureSummary,
-        };
-        options.log?.error("task failed", {
-          task: task.name,
-          durationMs: Date.now() - started,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        if (options.log?.debugEnabled && error instanceof Error && error.stack) {
-          options.log.text("debug", "error stack", error.stack);
-        }
-        return { taskName: task.name, output: { ...output, check }, error };
-      }
-    }),
-  );
+  const taskResults = await executeSelectedTasks({
+    tasks,
+    runtimeOptions: options,
+    context: {
+      ...runtimeOptions,
+      config,
+      provider,
+      diffManifest,
+      manifestCache,
+    },
+  });
   const taskChecks = taskResults.map((result) =>
     runtimeTaskCheckResult(result.taskName, result.output.check ?? { conclusion: "success" }),
   );
@@ -273,7 +243,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     taskChecks,
     run: runSummary({
       options,
-      runId,
+      run,
       selectedTasks,
       durationMs: commandDurationMs,
       models: output.providerModels.length > 0 ? uniq(output.providerModels) : [provider.model],
@@ -288,10 +258,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   }
   assertReviewCommentOutput(output, options.commandInvocation !== undefined);
 
-  const main =
-    typeof output.comment.value === "string"
-      ? output.comment.value
-      : (output.comment.value.main ?? "Review completed.");
+  const main = reviewMainComment(output);
   const review = collectedReview(output, main);
   const validated = validateReviewResult(review, diffManifest, {
     expectedHeadSha: options.event.change.head.sha,
@@ -303,15 +270,12 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     provider,
     diffManifest,
     priorReviewState,
-    runId,
+    run,
     piRunSink: runtimeOptions.piRunSink,
   });
   const durationMs = Date.now() - runtimeStarted;
   const stats = reviewStatsForRuns(piRuns, durationMs);
-  const models =
-    output.providerModels.length + verifier.providerModels.length > 0
-      ? uniq([...output.providerModels, ...verifier.providerModels])
-      : [provider.model];
+  const models = reviewProviderModels(output, verifier.providerModels, provider.model);
   const redactedPublication = redactReviewPublication({
     main,
     validated,
@@ -356,7 +320,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
 
   return {
     kind: "review",
-    run: runSummary({ options, runId, selectedTasks, durationMs, models, stats }),
+    run: runSummary({ options, run, selectedTasks, durationMs, models, stats }),
     provider,
     diffManifest,
     review: redactedPublication.validated.review,
@@ -367,6 +331,92 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     taskChecks: redactedPublication.taskChecks,
     repairAttempted: output.repairAttempted,
   };
+}
+
+function taskRuntimeProvider(options: RunTaskRuntimeOptions, config: PiprConfig): ProviderConfig {
+  return options.providerOverride
+    ? parseProviderConfig(options.providerOverride)
+    : resolveProvider(config, config.defaultProvider);
+}
+
+function taskRunTrigger(
+  options: Pick<RunTaskRuntimeOptions, "commandInvocation" | "runTrigger">,
+): PiprRunContext["trigger"] {
+  if (options.runTrigger) {
+    return options.runTrigger;
+  }
+  return options.commandInvocation ? "command" : "change-request";
+}
+
+function reviewMainComment(output: OutputStateWithComment): string {
+  return typeof output.comment.value === "string"
+    ? output.comment.value
+    : (output.comment.value.main ?? "Review completed.");
+}
+
+function reviewProviderModels(
+  output: OutputState,
+  verifierModels: string[],
+  fallbackModel: string,
+): string[] {
+  return output.providerModels.length + verifierModels.length > 0
+    ? uniq([...output.providerModels, ...verifierModels])
+    : [fallbackModel];
+}
+
+type TaskExecutionResult = {
+  taskName: string;
+  output: OutputState;
+  error?: unknown;
+};
+
+async function executeSelectedTasks(options: {
+  tasks: readonly RuntimeTask[];
+  runtimeOptions: RunTaskRuntimeOptions;
+  context: Omit<Parameters<typeof createTaskContext>[0], "output" | "taskName" | "taskOrder">;
+}): Promise<TaskExecutionResult[]> {
+  return Promise.all(
+    options.tasks.map(async (task, taskOrder): Promise<TaskExecutionResult> => {
+      const output = createOutputState();
+      const started = Date.now();
+      options.runtimeOptions.log?.info("task start", { task: task.name, order: taskOrder });
+      try {
+        await task.handler(
+          createTaskContext({
+            ...options.context,
+            output,
+            taskName: task.name,
+            taskOrder,
+          }),
+          task.name === options.runtimeOptions.taskName
+            ? options.runtimeOptions.taskInput
+            : undefined,
+        );
+        options.runtimeOptions.log?.info("task ok", {
+          task: task.name,
+          durationMs: Date.now() - started,
+          findings: output.findings.length,
+          providerModels: output.providerModels,
+          repairAttempted: output.repairAttempted,
+        });
+        return { taskName: task.name, output };
+      } catch (error) {
+        const check = {
+          conclusion: "failure" as const,
+          summary: genericTaskFailureSummary,
+        };
+        options.runtimeOptions.log?.error("task failed", {
+          task: task.name,
+          durationMs: Date.now() - started,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        if (options.runtimeOptions.log?.debugEnabled && error instanceof Error && error.stack) {
+          options.runtimeOptions.log.text("debug", "error stack", error.stack);
+        }
+        return { taskName: task.name, output: { ...output, check }, error };
+      }
+    }),
+  );
 }
 
 function publishFailedRunTaskChecks(
@@ -383,7 +433,7 @@ function publishFailedRunTaskChecks(
 
 function runSummary(options: {
   options: RunTaskRuntimeOptions;
-  runId: string;
+  run: PiprRunContext;
   selectedTasks: string[];
   durationMs: number;
   models: string[];
@@ -397,14 +447,8 @@ function runSummary(options: {
     costUsd = 0,
     usageStatus = "unavailable",
   } = stats;
-  const trigger = options.options.runTrigger
-    ? options.options.runTrigger
-    : options.options.commandInvocation
-      ? "command"
-      : "change-request";
   return {
-    id: options.runId,
-    trigger,
+    ...options.run,
     baseSha: options.options.event.change.base.sha,
     headSha: options.options.event.change.head.sha,
     tasks: options.selectedTasks,
@@ -461,7 +505,7 @@ async function runSynchronizeVerifier(options: {
   provider: ProviderConfig;
   diffManifest: DiffManifest;
   priorReviewState: PriorReviewState | undefined;
-  runId: string;
+  run: PiprRunContext;
   piRunSink: (run: PiRunStats) => void;
 }): Promise<Awaited<ReturnType<typeof runInternalVerifier>>> {
   if (options.options.event.rawAction !== "synchronize") {
@@ -490,7 +534,7 @@ async function runSynchronizeVerifier(options: {
     priorReviewState: options.priorReviewState,
     threadContexts: (await options.options.loadInlineThreadContexts?.()) ?? [],
     mode: { kind: "synchronize" },
-    runId: options.runId,
+    run: options.run,
     piRunSink: options.piRunSink,
   });
 }
@@ -504,14 +548,14 @@ function createTaskContext(
     output: OutputState;
     taskName: string;
     taskOrder: number;
-    runId: string;
+    run: PiprRunContext;
     piRunSink: (run: PiRunStats) => void;
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");
   let taskContext: TaskContext;
   taskContext = {
-    run: { id: options.runId },
+    run: options.run,
     repository: {
       root: options.workspace,
       owner: repositorySlugParts.length > 1 ? repositorySlugParts[0] : undefined,
@@ -567,7 +611,7 @@ function createTaskContext(
           runtime: {
             ...options,
             taskContext,
-            runId: options.runId,
+            run: options.run,
             piRunSink: options.piRunSink,
           },
         });

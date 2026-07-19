@@ -81,7 +81,7 @@ describe("runReviewAgent", () => {
         event: eventContext(),
         provider,
         plan,
-        runId: "test-run",
+        run: { id: "test-run", trigger: "change-request" },
         log,
         piRunner: async () => ({
           exitCode: 0,
@@ -140,7 +140,7 @@ describe("runReviewAgent", () => {
         event: eventContext(),
         provider,
         plan,
-        runId: "test-run",
+        run: { id: "test-run", trigger: "change-request" },
         piRunner: async (run) => {
           prompts.push(run.prompt);
           return {
@@ -187,7 +187,7 @@ describe("runReviewAgent", () => {
         event: eventContext(),
         provider,
         plan,
-        runId: "test-run",
+        run: { id: "test-run", trigger: "change-request" },
         piRunner: async () => ({
           exitCode: 0,
           stdout: ["Based on my review:", "", "```json", '{"summary":"ok"}', "```"].join("\n"),
@@ -229,7 +229,7 @@ describe("runReviewAgent", () => {
           event: eventContext(),
           provider,
           plan,
-          runId: "test-run",
+          run: { id: "test-run", trigger: "change-request" },
           piRunner: async () => ({
             exitCode: 0,
             stdout: [
@@ -246,44 +246,6 @@ describe("runReviewAgent", () => {
         },
       }),
     ).rejects.toThrow("Pi output failed schema validation");
-  });
-
-  it("fails closed when no stable run id is supplied", async () => {
-    let piInvoked = false;
-    const factory = definePipr((pipr) => {
-      pipr.agent({
-        name: "reviewer",
-        instructions: "Review.",
-        output: outputSchema,
-        prompt: () => "Review.",
-      });
-    });
-    const plan = buildPiprPlan(factory);
-    const agent = plan.agents[0];
-    if (!agent) {
-      throw new Error("test fixture missing agent");
-    }
-
-    await expect(
-      runReviewAgent({
-        agent,
-        input: {},
-        runOptions: undefined,
-        toolMode: "none",
-        runtime: {
-          workspace: process.cwd(),
-          config,
-          event: eventContext(),
-          provider,
-          plan,
-          piRunner: async () => {
-            piInvoked = true;
-            return { exitCode: 0, stdout: "{}", stderr: "", durationMs: 1 };
-          },
-        },
-      }),
-    ).rejects.toThrow("runId is required for stable review run identity");
-    expect(piInvoked).toBe(false);
   });
 });
 

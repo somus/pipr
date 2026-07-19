@@ -1,9 +1,16 @@
 import { z } from "zod";
 import { type ReviewFinding, reviewFindingSchema } from "./review-contract.js";
 
-export type PiprRunSummary = {
-  id: string;
-  trigger: "change-request" | "command" | "verifier" | "local";
+const piprRunTriggers = ["change-request", "command", "verifier", "local"] as const;
+
+export type PiprRunTrigger = (typeof piprRunTriggers)[number];
+
+export type PiprRunContext = {
+  readonly id: string;
+  readonly trigger: PiprRunTrigger;
+};
+
+export type PiprRunSummary = PiprRunContext & {
   baseSha: string;
   headSha: string;
   tasks: string[];
@@ -77,7 +84,7 @@ const count = z.number().int().nonnegative();
 const header = { formatVersion: z.literal(2) };
 const runSummarySchema = z.strictObject({
   id: text.max(200),
-  trigger: z.enum(["change-request", "command", "verifier", "local"]),
+  trigger: z.enum(piprRunTriggers),
   baseSha: text.max(200),
   headSha: text.max(200),
   tasks: z.array(text.max(200)).max(200),

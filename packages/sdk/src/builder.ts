@@ -2,7 +2,8 @@ import { z } from "zod";
 import { assertSupportedCommandRestCapture } from "./command-grammar.js";
 import { configFactoryBrand, type InternalPiprConfigFactory } from "./internal-contract.js";
 import { stripCommonIndent } from "./prompt.js";
-import { renderPromptValue, serializePromptJson } from "./prompt-render.js";
+import { serializePromptJson } from "./prompt-json.js";
+import { renderPromptValue } from "./prompt-render.js";
 import type { ReviewResult } from "./review-contract.js";
 import type {
   RuntimeAgent,
@@ -471,6 +472,7 @@ function createReviewRecipeTask(
         typeof options.comment === "function"
           ? await options.comment(result, {
               review: { id },
+              run: context.run,
               repository: context.repository,
               change: context.change,
               platform: context.platform,

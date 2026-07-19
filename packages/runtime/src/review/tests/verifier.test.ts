@@ -545,7 +545,7 @@ async function runVerifier(options: {
     threadContexts: verifierThreadContexts(options),
     piRunner,
     mode: verifierMode(options),
-    runId: options.runId ?? "pipr-test-verifier-run",
+    run: { id: options.runId ?? "pipr-test-verifier-run", trigger: "verifier" },
   });
 }
 

@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import type { DurationInput, TaskContext } from "@usepipr/sdk";
+import type { DurationInput, PiprRunContext, TaskContext } from "@usepipr/sdk";
 import {
   isBuiltinReadOnlyTool,
   type RuntimeAgent,
@@ -53,7 +53,7 @@ export type RunReviewAgentOptions = {
     piRunner?: PiRunner;
     taskContext?: TaskContext;
     priorReviewState?: PriorReviewState;
-    runId?: string;
+    run: PiprRunContext;
     log?: RuntimeLog;
     piRunSink?: (run: PiRunStats) => void;
   };
@@ -138,10 +138,7 @@ export function resolveProvider(config: PiprConfig, providerId: string): Provide
 }
 
 function createAgentRunContext(runtime: RunReviewAgentOptions["runtime"]): AgentRunContext {
-  const runId = runtime.runId ?? runtime.taskContext?.run.id;
-  if (!runId) {
-    throw new Error("runId is required for stable review run identity");
-  }
+  const run = runtime.run;
   const repositorySlugParts = runtime.event.repository.slug.split("/");
   const repository = {
     root: runtime.workspace,
@@ -157,8 +154,8 @@ function createAgentRunContext(runtime: RunReviewAgentOptions["runtime"]): Agent
   };
   const platform = { id: runtime.event.platform.id };
   return {
-    prompt: { runId, repository, change, platform },
-    tools: { run: { id: runId }, repository, change, platform },
+    prompt: { run, repository, change, platform },
+    tools: { run, repository, change, platform },
   };
 }
 

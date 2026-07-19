@@ -1,4 +1,4 @@
-import type { ModelProfile, Schema } from "@usepipr/sdk";
+import type { ModelProfile, PiprRunContext, Schema } from "@usepipr/sdk";
 import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import type { InlineThreadContext } from "../hosts/types.js";
@@ -44,7 +44,7 @@ export type RunVerifierOptions = {
   priorReviewState?: PriorReviewState;
   threadContexts: InlineThreadContext[];
   mode: VerifierMode;
-  runId: string;
+  run: PiprRunContext;
   log?: RuntimeLog;
   piRunSink?: (run: PiRunStats) => void;
 };
@@ -116,7 +116,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         env: options.env,
         piExecutable: options.piExecutable,
         piRunner: options.piRunner,
-        runId: options.runId,
+        run: options.run,
         log: options.log,
         ...(options.piRunSink ? { piRunSink: options.piRunSink } : {}),
       },
@@ -138,7 +138,7 @@ function verifierInput(
 ) {
   return {
     manifest: options.diffManifest,
-    runId: options.runId,
+    runId: options.run.id,
     mode: options.mode.kind,
     reviewedHeadSha: prior.reviewedHeadSha,
     currentHeadSha: options.event.change.head.sha,

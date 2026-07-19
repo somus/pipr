@@ -567,7 +567,7 @@ describe("definePipr", () => {
     expect(task).toBeDefined();
     await task?.handler(
       {
-        run: { id: "test-run" },
+        run: { id: "test-run", trigger: "local" },
         repository: { root: "/tmp/repo", name: "repo" },
         platform: { id: "local" },
         change: {
@@ -608,6 +608,38 @@ describe("definePipr", () => {
     );
 
     expect(runTimeout).toBe("5m");
+  });
+
+  it("passes the Review Run context to custom review comment renderers", async () => {
+    let observedRun: unknown;
+    const factory = definePipr((pipr) => {
+      const model = pipr.model({ provider: "deepseek", model: "deepseek-v4-pro" });
+      pipr.review({
+        id: "review",
+        model,
+        instructions: "Review.",
+        entrypoints: { changeRequest: false, command: false },
+        comment(_result, context) {
+          observedRun = context.run;
+          return "Review complete.";
+        },
+      });
+    });
+
+    const task = buildPiprPlan(factory).tasks[0];
+    await task?.handler(
+      {
+        ...fakeTaskContext(),
+        pi: {
+          async run() {
+            return { summary: { body: "Done." }, inlineFindings: [] } as never;
+          },
+        },
+      },
+      undefined,
+    );
+
+    expect(observedRun).toEqual({ id: "test-run", trigger: "local" });
   });
 
   it("normalizes plugin tools to Eve-style run inputs", async () => {
@@ -956,7 +988,7 @@ describe("definePipr", () => {
 
     await task?.handler(
       {
-        run: { id: "test-run" },
+        run: { id: "test-run", trigger: "local" },
         repository: { root: "/tmp/repo", name: "repo" },
         platform: { id: "local" },
         change: fakeChange(),
@@ -1487,7 +1519,7 @@ function fakeCheck() {
 
 function fakeTaskContext(): TaskContext {
   return {
-    run: { id: "test-run" },
+    run: { id: "test-run", trigger: "local" },
     repository: { root: "/tmp/repo", name: "repo" },
     platform: { id: "local" },
     change: fakeChange(),

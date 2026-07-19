@@ -1,4 +1,4 @@
-import type { PiprRunSummary } from "@usepipr/sdk";
+import type { PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
 import { type PiRunStats, resolveProvider } from "../review/agent/review-run.js";
@@ -172,6 +172,7 @@ async function runReviewCommentVerifier(
       parentCommentId: reply.parentCommentId,
     },
   });
+  const runContext: PiprRunContext = Object.freeze({ id: runId, trigger: "verifier" });
   const threadContexts =
     (await adapter.comments?.loadInlineThreadContexts?.({ change: event })) ?? [];
   log.notice("verifier start", {
@@ -207,7 +208,7 @@ async function runReviewCommentVerifier(
       },
       respondWhenStillValid: config.publication.autoResolve.userReplies.respondWhenStillValid,
     },
-    runId,
+    run: runContext,
     piRunSink(run) {
       piRuns.push(run);
     },
@@ -216,7 +217,7 @@ async function runReviewCommentVerifier(
   const stats = reviewStatsForRuns(piRuns, durationMs);
   const run = verifierRunSummary({
     event,
-    runId,
+    run: runContext,
     durationMs,
     providerModels: result.providerModels,
     fallbackModel: verifierProvider.model,
@@ -234,7 +235,7 @@ async function runReviewCommentVerifier(
 
 function verifierRunSummary(options: {
   event: ChangeRequestEventContext;
-  runId: string;
+  run: PiprRunContext;
   durationMs: number;
   providerModels: string[];
   fallbackModel: string;
@@ -250,8 +251,7 @@ function verifierRunSummary(options: {
   } = stats;
   const models = options.providerModels.length ? options.providerModels : [options.fallbackModel];
   return {
-    id: options.runId,
-    trigger: "verifier",
+    ...options.run,
     baseSha: options.event.change.base.sha,
     headSha: options.event.change.head.sha,
     tasks: ["pipr-internal-verifier"],

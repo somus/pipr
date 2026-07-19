@@ -1,3 +1,4 @@
+import type { PiprRunContext } from "../result.js";
 import type { ReviewFinding, ReviewResult } from "../review-contract.js";
 import type {
   Agent,
@@ -167,6 +168,7 @@ export type DefaultReviewInput = {
 /** Context passed to a custom review comment renderer. */
 export type ReviewCommentContext = {
   review: { id: string };
+  run: PiprRunContext;
   repository: RepositoryInfo;
   change: ChangeRequestContext;
   platform: PlatformInfo;
@@ -288,8 +290,8 @@ export type CommandContext = {
 
 /** Context object passed to task handlers. */
 export type TaskContext = {
-  /** Stable id for the selected Review Run, not the process attempt. */
-  readonly run: { id: string };
+  /** Stable identity and trigger for the selected Review Run, not the process attempt. */
+  readonly run: PiprRunContext;
   readonly repository: RepositoryInfo;
   readonly change: ChangeRequestContext;
   readonly platform: PlatformInfo;

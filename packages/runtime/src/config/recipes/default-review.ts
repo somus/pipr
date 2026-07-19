@@ -52,7 +52,7 @@ export default definePipr((pipr) => {
           "| --- | ---: |",
           \`| Inline findings | \${result.inlineFindings.length} |\`,
           "",
-          context.platform.id === "local" ? localInlineFindingSummary : inlineFindingSummary,
+          context.run.trigger === "local" ? localInlineFindingSummary : inlineFindingSummary,
         ].join("\\n"),
         inlineFindings: result.inlineFindings,
       };

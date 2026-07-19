@@ -653,7 +653,7 @@ describe("renderAgentPrompt", () => {
 
   it("isolates top-level prompt context mutations from the prepared run context", async () => {
     const promptContext: AgentRunContext["prompt"] = {
-      runId: "run-1",
+      run: { id: "run-1", trigger: "change-request" },
       repository: { root: "/repo", name: "pipr" },
       change: {
         number: 12,
@@ -671,7 +671,7 @@ describe("renderAgentPrompt", () => {
         instructions: "Review.",
         output: unknownSchema,
         prompt(_input, context) {
-          context.runId = "mutated-run";
+          context.run = { id: "mutated-run", trigger: "command" };
           context.repository = { root: "/mutated", name: "mutated" };
           context.change = {
             title: "Mutated title",
@@ -692,7 +692,7 @@ describe("renderAgentPrompt", () => {
       agentRunContext: {
         prompt: promptContext,
         tools: {
-          run: { id: promptContext.runId },
+          run: promptContext.run,
           repository: promptContext.repository,
           change: promptContext.change,
           platform: promptContext.platform,
@@ -726,7 +726,7 @@ async function renderTestPrompt(
     agentTools: { customTools: [] },
     agentRunContext: {
       prompt: {
-        runId: "run-1",
+        run: { id: "run-1", trigger: "change-request" },
         repository: { root: "/repo", name: "pipr" },
         change: {
           number: 12,
@@ -738,7 +738,7 @@ async function renderTestPrompt(
         platform: { id: "github" },
       },
       tools: {
-        run: { id: "run-1" },
+        run: { id: "run-1", trigger: "change-request" },
         repository: { root: "/repo", name: "pipr" },
         change: {
           number: 12,

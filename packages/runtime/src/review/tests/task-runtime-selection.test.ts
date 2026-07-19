@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { PiprRunContext } from "@usepipr/sdk";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import {
   askCommandInvocation,
@@ -108,10 +109,10 @@ describe("runTaskRuntime: selection and identity", () => {
     expect(observedInput).toEqual({ finding: "FND-123" });
   });
 
-  it("uses one stable run id for task, agent prompt, and custom tool contexts", async () => {
-    let taskRunId: string | undefined;
-    let promptRunId: string | undefined;
-    let toolRunId: string | undefined;
+  it("uses one immutable run context for tasks, agent prompts, custom tools, and results", async () => {
+    let taskRun: PiprRunContext | undefined;
+    let promptRun: PiprRunContext | undefined;
+    let toolRun: PiprRunContext | undefined;
     const plan = testPlan((pipr) => {
       const customTool = pipr.tool({
         name: "custom_tool",
@@ -119,21 +120,27 @@ describe("runTaskRuntime: selection and identity", () => {
         input: pipr.schemas.summary,
         output: pipr.schemas.summary,
         async run({ ctx, input }) {
-          toolRunId = ctx.run.id;
+          toolRun = ctx.run;
+          try {
+            (ctx.run as { trigger: PiprRunContext["trigger"] }).trigger = "local";
+          } catch {}
           return input;
         },
       });
       const agent = defaultReviewAgent(pipr, {
         tools: [customTool],
         prompt(_input, context) {
-          promptRunId = context.runId;
+          promptRun = context.run;
+          try {
+            (context.run as { trigger: PiprRunContext["trigger"] }).trigger = "command";
+          } catch {}
           return "Review.";
         },
       });
       const task = pipr.task({
         name: "review",
         async run(ctx) {
-          taskRunId = ctx.run.id;
+          taskRun = ctx.run;
           const result = await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
           await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
         },
@@ -141,7 +148,7 @@ describe("runTaskRuntime: selection and identity", () => {
       pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
-    await runRuntime({
+    const result = await runRuntime({
       plan,
       piRunner: async (options) => {
         await options.customTools?.tools[0]?.execute(options.customTools.context, {
@@ -151,9 +158,44 @@ describe("runTaskRuntime: selection and identity", () => {
       },
     });
 
-    expect(taskRunId).toEqual(expect.any(String));
-    expect(promptRunId).toBe(taskRunId);
-    expect(toolRunId).toBe(taskRunId);
+    if (result.kind !== "review") {
+      throw new Error(`Expected review result, received ${result.kind}`);
+    }
+    expect(taskRun).toEqual({ id: expect.any(String), trigger: "change-request" });
+    expect(promptRun).toEqual(taskRun);
+    expect(toolRun).toEqual(taskRun);
+    expect(result.run).toMatchObject(taskRun as PiprRunContext);
+    expect(Object.isFrozen(taskRun)).toBe(true);
+  });
+
+  it("exposes local and command triggers before their final results", async () => {
+    const observed: string[] = [];
+    const plan = testPlan((pipr) => {
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          observed.push(ctx.run.trigger);
+          await ctx.comment("Review complete.");
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+
+    const local = await runRuntime({ plan, runTrigger: "local" });
+    const command = await runRuntime({
+      plan,
+      taskName: "review",
+      commandInvocation: {
+        name: "review",
+        line: "@pipr review",
+        arguments: {},
+        sourceCommentId: "comment-1",
+      },
+    });
+
+    expect(observed).toEqual(["local", "command"]);
+    expect(local.kind === "review" ? local.run.trigger : undefined).toBe("local");
+    expect(command.kind === "review" ? command.run.trigger : undefined).toBe("command");
   });
 
   it("derives stable run id from review identity inputs", async () => {
