@@ -1,0 +1,29 @@
+packages/evals/src/cases.ts
+  s_138fbeb7b2b365::t_639ce4c805b4f3 13
+packages/evals/src/tests/effectiveness.test.ts
+  s_138fbeb7b2b365::t_9d6f51fb5f1ae0 75-79,150-176,178-179
+  s_138fbeb7b2b365::t_9fd436adaad73a 84
+  s_138fbeb7b2b365::t_9b5fea8845f4de 177
+  s_138fbeb7b2b365::t_b43a0b8f6398d0 180
+packages/evals/src/scoring.ts
+  s_138fbeb7b2b365::t_639ce4c805b4f3 326,329
+packages/evals/src/effectiveness-cases.ts
+  s_138fbeb7b2b365::t_7009d1247988dd 14-16,28-49,89-90,103-123,145-153,155-158,171,175-176,191,195-196,199-225,230-231,236-237,242-243,248-251,260,274,281,283-287,295-296,304,311,325,375,377,387,392,411,419
+  s_138fbeb7b2b365::t_9b5fea8845f4de 154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "3007582b5d5d2f825a8084fac320c7a0cfea1d4d",
+  "prompts": {},
+  "sessions": {
+    "s_138fbeb7b2b365": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7c20-6d02-7c52-9dbc-837765ad8d32",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
