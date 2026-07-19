@@ -163,7 +163,7 @@ This is the baseline setup for repositories that want one trusted review path be
 
 - Keep \`publication.maxInlineComments\` low until the repository has enough review history to judge signal quality.
 - Put repository-specific review policy in \`instructions\`, not in ad hoc task code.
-- Use \`context.platform.id === "local"\` for text that appears only during local review.
+- Use \`context.run.trigger === "local"\` for text that appears only during local review.
 - Add path filters only after you know which files must not receive inline findings.
 `,
   ],

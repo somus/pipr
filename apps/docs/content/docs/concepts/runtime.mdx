@@ -38,6 +38,10 @@ Runtime tasks receive provider-neutral context:
 import type { DiffManifest } from "@usepipr/sdk";
 
 type TaskContext = {
+  run: {
+    readonly id: string;
+    readonly trigger: "change-request" | "command" | "local";
+  };
   platform: { id: string };
   repository: {
     root: string;
@@ -65,6 +69,8 @@ type TaskContext = {
   };
 };
 ```
+
+`verifier` is reserved for Pipr's internal verifier agent and tool context; task handlers receive `change-request`, `command`, or `local`.
 
 `change.number` is provider-relative: a GitHub, Azure DevOps, or Bitbucket Cloud pull request number, or a GitLab merge request IID.
 

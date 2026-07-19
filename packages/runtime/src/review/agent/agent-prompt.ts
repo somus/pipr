@@ -1,4 +1,4 @@
-import type { AgentPromptContext, PathFilter, Schema } from "@usepipr/sdk";
+import type { AgentPromptContext, PathFilter, PiprRunContext, Schema } from "@usepipr/sdk";
 import { type RuntimeAgent, type RuntimeAgentTool, renderPromptValue } from "@usepipr/sdk/internal";
 import { compact } from "lodash-es";
 import { piReadOnlyToolNames } from "../../pi/contract.js";
@@ -14,7 +14,7 @@ export type AgentToolResolution = {
 };
 
 export type PluginToolExecutionContext = {
-  run: { id: string };
+  run: PiprRunContext;
   repository: { root: string; name: string };
   change: {
     number: number;
@@ -28,7 +28,7 @@ export type PluginToolExecutionContext = {
 
 export type AgentRunContext = {
   prompt: {
-    runId: string;
+    run: PiprRunContext;
     repository: PluginToolExecutionContext["repository"];
     change: PluginToolExecutionContext["change"];
     platform: PluginToolExecutionContext["platform"];

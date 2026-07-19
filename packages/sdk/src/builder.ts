@@ -471,6 +471,7 @@ function createReviewRecipeTask(
         typeof options.comment === "function"
           ? await options.comment(result, {
               review: { id },
+              run: context.run,
               repository: context.repository,
               change: context.change,
               platform: context.platform,

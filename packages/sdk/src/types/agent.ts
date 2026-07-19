@@ -1,3 +1,4 @@
+import type { PiprRunContext } from "../result.js";
 import type { ReviewResult, ReviewSummary } from "../review-contract.js";
 import type { DurationInput, ModelProfile } from "./config.js";
 import type { PromptSource } from "./prompt.js";
@@ -26,7 +27,7 @@ export type AgentTool<Input = unknown, Output = unknown> = {
 
 /** Context passed to an agent prompt function. */
 export type AgentPromptContext = {
-  runId: string;
+  run: PiprRunContext;
   repository: RepositoryInfo;
   change: ChangeRequestInfo;
   platform: PlatformInfo;
