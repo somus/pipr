@@ -1,8 +1,6 @@
 import type { PromptText, PromptValue } from "./index.js";
 import { serializePromptJson } from "./prompt-json.js";
 
-export { serializePromptJson } from "./prompt-json.js";
-
 /** Renders a prompt source/value into plain text for Pi prompts. */
 export function renderPromptValue(value: PromptValue): string {
   if (value === undefined || value === null) {

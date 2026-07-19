@@ -2,7 +2,8 @@ import { z } from "zod";
 import { assertSupportedCommandRestCapture } from "./command-grammar.js";
 import { configFactoryBrand, type InternalPiprConfigFactory } from "./internal-contract.js";
 import { stripCommonIndent } from "./prompt.js";
-import { renderPromptValue, serializePromptJson } from "./prompt-render.js";
+import { serializePromptJson } from "./prompt-json.js";
+import { renderPromptValue } from "./prompt-render.js";
 import type { ReviewResult } from "./review-contract.js";
 import type {
   RuntimeAgent,
