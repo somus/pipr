@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { frontmatter } from "fumadocs-core/content/md/frontmatter";
 import { supportedOfficialInitAdapters } from "../../../packages/runtime/src/config/init.js";
 import { supportedOfficialInitRecipes } from "../../../packages/runtime/src/config/recipes.js";
 import { getLegacyDocRedirect } from "../src/lib/docs-routes.js";
@@ -25,8 +26,33 @@ for (const file of docFiles) {
 }
 
 for (const [route, page] of pages) {
+  checkDescription(page);
   checkInternalLinks(route, page);
   await checkImageAssets(page);
+}
+
+function checkDescription(page: { file: string; source: string }): void {
+  const description = frontmatterDescription(page.source);
+  if (!isNonEmptyString(description)) {
+    errors.push(`${relative(page.file)}: frontmatter description must be non-empty plain text`);
+    return;
+  }
+  if (hasRichDescriptionMarkup(description)) {
+    errors.push(`${relative(page.file)}: frontmatter description must be plain text`);
+  }
+}
+
+function frontmatterDescription(source: string): unknown {
+  const data = frontmatter(source).data;
+  return isRecord(data) ? data.description : undefined;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function hasRichDescriptionMarkup(value: string): boolean {
+  return value.includes("`") || /\[[^\]]+\]\([^)]+\)/.test(value);
 }
 
 checkOfficialCoverage();
@@ -295,4 +321,8 @@ function skipExternalUrl(url: string): boolean {
 
 function relative(file: string): string {
   return path.relative(repoRoot, file).split(path.sep).join("/");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

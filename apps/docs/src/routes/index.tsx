@@ -6,9 +6,30 @@ import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { piprAgentSetupPrompt } from "@/lib/agent-prompt";
 import { baseOptions } from "@/lib/layout.shared";
-import { gitConfig } from "@/lib/shared";
+import { appName, gitConfig, siteUrl } from "@/lib/shared";
+
+const landingDescription =
+  "Documentation for Pipr, code-owned AI review for GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud.";
+const landingImageUrl = siteUrl("/og/docs/image.webp");
+const landingUrl = siteUrl("/");
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    links: [{ rel: "canonical", href: landingUrl }],
+    meta: [
+      { title: appName },
+      { name: "description", content: landingDescription },
+      { property: "og:title", content: appName },
+      { property: "og:description", content: landingDescription },
+      { property: "og:url", content: landingUrl },
+      { property: "og:type", content: "website" },
+      { property: "og:image", content: landingImageUrl },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: appName },
+      { name: "twitter:description", content: landingDescription },
+      { name: "twitter:image", content: landingImageUrl },
+    ],
+  }),
   component: Home,
 });
 

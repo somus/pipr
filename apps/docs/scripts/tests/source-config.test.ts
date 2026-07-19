@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { supportedOfficialInitRecipes } from "../../../../packages/runtime/src/config/recipes";
 import { getLegacyDocRedirect } from "../../src/lib/docs-routes";
+import type { docsSearchServer } from "../../src/routes/api/search";
 import { twoslashCompilerOptions } from "../../twoslash-config";
+
+type DocsSearchServer = typeof docsSearchServer;
 
 describe("docs source config", () => {
   it("keeps twoslash SDK aliases aligned with package exports", () => {
@@ -11,6 +14,11 @@ describe("docs source config", () => {
       "@usepipr/sdk/internal": ["packages/sdk/src/internal.ts"],
     });
     expect(Object.keys(twoslashCompilerOptions.paths)).not.toContain("@usepipr/sdk/*");
+  });
+
+  it("exposes the documentation search server for focused tests", () => {
+    const searchMethod: keyof DocsSearchServer = "search";
+    expect(searchMethod).toBe("search");
   });
 
   it("keeps legacy documentation routes mapped to canonical pages", () => {
