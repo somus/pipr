@@ -1,0 +1,61 @@
+packages/evals/src/effectiveness.ts
+  s_138fbeb7b2b365::t_a29d1dfc430662 17,20-21,23-24,26,44-47,55,57-58,60,64,67,129,139,166-167,173,176-177,179-180,182,199,201-205,207-210,212,215,217,220,302,305-306,309-311,313-314,320,323-324,326-327,329
+  s_138fbeb7b2b365::t_e4796c0879d637 1-16,18-19,22,25,27-43,48-54,56,59,61-63,65-66,68-75,77-99,101-128,130-138,140-165,168-172,174-175,178,181,183-198,200,206,211,213-214,216,218-219,221-261,263-268,270-274,276-301,303-304,308,312,315-319,321-322,325,328,330-356
+  s_138fbeb7b2b365::t_bead9de7e342d6 262,307
+  s_138fbeb7b2b365::t_014079900678d2 76,100,269,275
+packages/evals/README.md
+  s_138fbeb7b2b365::t_7e6a75a4a81171 23,30-38,41-45,61-63,109-111
+  s_138fbeb7b2b365::t_f526669c636d4f 39-40
+packages/evals/src/scoring.ts
+  s_138fbeb7b2b365::t_477cc128f2ace5 301,307,311-319
+  s_4d2bcfd514fa3f::t_b3a11836f947ba 320-321
+packages/evals/src/effectiveness-cases.ts
+  s_138fbeb7b2b365::t_68050cc6a03abe 1-194,196-324
+  s_138fbeb7b2b365::t_b4df5679e4ba1f 195
+packages/evals/src/tests/effectiveness.test.ts
+  s_138fbeb7b2b365::t_301ac31e49f26d 1-52,61-82,84-97,99-100,103,106,108-116,118-119,141-157,160-165,168-174,176,179,181,183,185-199,201-220,223-226,228-230,235-284
+  s_138fbeb7b2b365::t_699f6956e25511 98,101-102,104-105,107,117,175,177-178,180,182,184,221-222
+  s_138fbeb7b2b365::t_fffd50d500f1ce 53-60,158-159,166-167
+  s_138fbeb7b2b365::t_85f84122a3a1e6 200,227
+  s_138fbeb7b2b365::t_9afb1653811288 83
+  s_138fbeb7b2b365::t_bead9de7e342d6 231-234
+  s_138fbeb7b2b365::t_03b2c0a5a9dd5c 120-140
+  s_138fbeb7b2b365::t_83c8715811ed4c 285-288
+packages/evals/src/cases.ts
+  s_138fbeb7b2b365::t_477cc128f2ace5 11,15
+packages/evals/src/runner.ts
+  s_138fbeb7b2b365::t_80fe74715c4bb4 15,18-22,60,106-109,140-144,199,231,325,331,360-363,365,371-372,383,390,395-396,426
+packages/evals/src/effectiveness-benchmark.ts
+  s_138fbeb7b2b365::t_014079900678d2 91-94
+  s_138fbeb7b2b365::t_2f18095c2816eb 1-90,95-108
+packages/evals/package.json
+  s_138fbeb7b2b365::t_875c4d155bcfb6 13
+packages/evals/src/run-local-review.ts
+  s_138fbeb7b2b365::t_0b5d7e4769e611 40
+packages/evals/src/tests/runner.test.ts
+  s_138fbeb7b2b365::t_d0949ac39e8154 2,13-15,18-48,85-93,129-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "cda9226b5edae8c8c482c5b6918bb7734a71f53d",
+  "prompts": {},
+  "sessions": {
+    "s_138fbeb7b2b365": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7c20-6d02-7c52-9dbc-837765ad8d32",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_4d2bcfd514fa3f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7c23-8ffd-7640-afe1-1fbeb5c0a0c6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
