@@ -37,6 +37,7 @@ console.log(
       validFindings: result.validated.validFindings,
       droppedFindings: result.validated.droppedFindings.map(({ reason, finding }) => ({
         reason,
+        body: finding.body,
         path: finding.path,
         rangeId: finding.rangeId,
         side: finding.side,

@@ -20,11 +20,28 @@ Use the narrowest command that covers the change.
 | `bun run --cwd packages/evals eval:dev` | Evalite watch mode for the focused live gates. | Yes |
 | `bun run --cwd packages/evals eval:full` | Broad live suite for trend checks and investigation. | Advisory |
 | `bun run --cwd packages/evals eval:full:export` | Broad live suite with JSON results in `evalite-export/results.json`. | Advisory |
+| `bun run --cwd packages/evals eval:effectiveness` | Paired, repeated live benchmark with issue-level recall, precision, clean accuracy, and funnel counts. | Advisory |
 
 Keep `DEEPSEEK_API_KEY` in the untracked `.pipr/.env`, but explicitly export only
 that variable in a trusted shell before running live evals. The committed scripts
 do not auto-load `.pipr/.env` because live eval code executes from the checked-out
 branch. Do not commit provider keys or Evalite output.
+
+The effectiveness benchmark compares the generic reviewer with a
+failure-mode-focused variant over paired positive and clean fixtures covering
+lifecycle regressions and an independent value-contract regression. It defaults
+to three balanced repetitions. Use `--repetitions 1` for a smoke run,
+`--cases <comma-separated ids>` to narrow the advisory run, or `--output <path>`
+to select the report path.
+
+Every run writes a JSON report under
+`evalite-export/effectiveness/<timestamp>.json` unless `--output` is supplied.
+The ignored report records the source revision and dirty-worktree flag, model,
+prompt hashes, fixture snapshot hashes, issue IDs, sanitized findings, and aggregate scores. It keeps
+structured model output, validation, and publication-eligible finding counts
+separate so a recall miss cannot be mistaken for a validation or publication
+drop. "Structured" starts after model output parsing and repair; the benchmark
+does not claim access to raw provider text.
 
 ## Suite layout
 
@@ -41,6 +58,9 @@ The eval package separates fixtures, live suite selection, and scoring.
 | `src/deterministic-smoke.ts` | Runs fake Pi evals without calling a model API. |
 | `src/scoring.ts` | Deterministic scoring functions used by live and fake Pi evals. |
 | `src/fake-pi.ts` | Fake Pi output for deterministic prompt-contract smoke tests. |
+| `src/effectiveness-cases.ts` | Paired positive and clean benchmark fixtures plus prompt variants. |
+| `src/effectiveness.ts` | Repeated-run orchestration, issue matching, funnel metrics, metadata, and report writing. |
+| `src/effectiveness-benchmark.ts` | Advisory live benchmark CLI. |
 
 ## Gate design
 
@@ -86,6 +106,9 @@ fix. The recall scorer owns missing findings.
 Scorers are intentionally narrow so one mistake does not hide another.
 
 - Expected finding recall matches both location and body keywords.
+- Effectiveness cases assign stable issue IDs and may provide several accepted
+  keyword sets; one complete set must match, which tolerates valid paraphrases
+  without accepting unrelated wording.
 - False-positive suppression uses location-only matching when expected findings
   exist, so wording misses are not double-penalized.
 - Expected suggested-fix behavior is neutral when the expected finding was not
