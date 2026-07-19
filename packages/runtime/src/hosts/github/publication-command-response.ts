@@ -1,7 +1,7 @@
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
-  commandResponseBody,
-  commandStatusBody,
+  commandResponsePublication,
+  commandStatusPublication,
   shouldUpdateCommandComment,
 } from "../publication.js";
 import type { CommandLifecycleState } from "../types.js";
@@ -18,12 +18,11 @@ export async function publishGitHubCommandResponse(options: {
   return await publishGitHubCommandComment({
     client: options.client,
     change: options.change,
-    guardHead: true,
-    comment: commandResponseBody({
-      changeNumber: options.change.change.number,
+    ...commandResponsePublication({
+      client: options.client,
+      change: options.change,
       sourceCommentId: String(options.sourceCommentId),
       commandName: options.commandName,
-      reviewedHeadSha: options.change.change.head.sha,
       body: options.body,
     }),
   });
@@ -41,9 +40,9 @@ export async function publishGitHubCommandStatus(options: {
   return await publishGitHubCommandComment({
     client: options.client,
     change: options.change,
-    guardHead: false,
-    comment: commandStatusBody({
-      changeNumber: options.change.change.number,
+    ...commandStatusPublication({
+      client: options.client,
+      change: options.change,
       sourceCommentId: String(options.sourceCommentId),
       commandName: options.commandName,
       state: options.state,

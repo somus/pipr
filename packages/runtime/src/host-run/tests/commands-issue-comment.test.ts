@@ -325,7 +325,11 @@ describe("runHostRunCommand issue_comment dispatch", () => {
     });
     const eventPath = path.join(workspace.rootDir, "event.json");
     const publication = recordingCommandPublicationClient(workspace);
-    publication.client.getPullRequestHeadSha = async () => "new-head";
+    let publicationHeadLoads = 0;
+    publication.client.getPullRequestHeadSha = async () => {
+      publicationHeadLoads += 1;
+      return publicationHeadLoads <= 2 ? workspace.headSha : "new-head";
+    };
     const commandClient = fakeGitHubClient(workspace, "read");
     const loadChangeRequest = commandClient.getPullRequest.bind(commandClient);
     let loads = 0;

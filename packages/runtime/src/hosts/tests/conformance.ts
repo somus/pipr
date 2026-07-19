@@ -179,7 +179,7 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
-    it("reuses one command comment while lifecycle statuses bypass stale-head guards", async () => {
+    it("reuses one command comment while later lifecycle statuses bypass stale-head guards", async () => {
       await withHarness(options.createHarness, async (harness) => {
         const publication = requiredPublication(harness.adapter);
         const publishCommandStatus = requiredMethod(
@@ -289,6 +289,9 @@ export function defineCodeHostAdapterConformanceSuite(options: {
           publishCommandStatus({ ...currentCommand, state: "running" }),
         ).resolves.toMatchObject({ action: "updated" });
 
+        await expect(
+          publishCommandStatus({ ...originalCommand, state: "accepted" }),
+        ).rejects.toThrow(/head changed|endpoints changed/i);
         await publishOlderStatuses();
         expect(harness.writes()).toMatchObject({ commandCreates: 1, commandUpdates: 2 });
 

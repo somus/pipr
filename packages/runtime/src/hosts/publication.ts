@@ -100,7 +100,7 @@ export function nativeInlineLocation(options: {
   };
 }
 
-export function commandResponseBody(options: {
+function commandResponseBody(options: {
   changeNumber: number;
   sourceCommentId: string;
   commandName: string;
@@ -120,7 +120,7 @@ export function commandResponseBody(options: {
   };
 }
 
-export function commandStatusBody(options: {
+function commandStatusBody(options: {
   changeNumber: number;
   sourceCommentId: string;
   commandName: string;
@@ -163,11 +163,11 @@ export function commandResponsePublication(options: CommandResponsePublicationOp
 }
 
 export function commandStatusPublication(options: CommandStatusPublicationOptions<unknown>): {
-  guardHead: false;
+  guardHead: boolean;
   comment: { marker: string; body: string };
 } {
   return {
-    guardHead: false,
+    guardHead: options.state === "accepted",
     comment: commandStatusBody({
       changeNumber: options.change.change.number,
       sourceCommentId: options.sourceCommentId,
