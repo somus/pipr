@@ -22,12 +22,14 @@ export function toPiprResult(input: PiprResultConversionInput): PiprResult {
   );
 }
 
-export function toPiprErrorResult(_error: unknown): PiprResult {
-  return parsePiprResult({
+export function toPiprErrorResult(_error: unknown): Extract<PiprResult, { kind: "error" }> {
+  const result = parsePiprResult({
     formatVersion: 2,
     kind: "error",
     message: genericFailureMessage,
   });
+  if (result.kind !== "error") throw new Error("Pipr error result schema returned another kind");
+  return result;
 }
 
 function localPiprResult(result: LocalReviewCommandResult): unknown {

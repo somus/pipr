@@ -345,11 +345,25 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
         this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN result_omitted_reason TEXT");
       }
       if (options.recoverProcessing !== false) {
+        const interruptedResult = toPiprErrorResult(undefined);
         this.database
           .query(
-            "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = CASE WHEN attempts < 3 THEN error ELSE COALESCE(error, 'delivery interrupted during final attempt') END, updated_at = CURRENT_TIMESTAMP WHERE status = 'processing'",
+            `UPDATE webhook_deliveries
+             SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END,
+                 payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END,
+                 error = CASE WHEN attempts < 3 THEN error ELSE ? END,
+                 run_id = NULL,
+                 result_kind = CASE WHEN attempts < 3 THEN NULL ELSE ? END,
+                 result_json = CASE WHEN attempts < 3 THEN NULL ELSE ? END,
+                 result_omitted_reason = NULL,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE status = 'processing'`,
           )
-          .run();
+          .run(
+            interruptedResult.message,
+            interruptedResult.kind,
+            JSON.stringify(interruptedResult),
+          );
       }
     })();
   }

@@ -521,6 +521,22 @@ describe("webhook runner", () => {
       const recovered = new SqliteWebhookDeliveryStore(databasePath, { maxPendingDeliveries: 1 });
       expect(recovered.enqueue({ id: "next", host: "gitlab", payload: "{}" })).toBe("created");
       recovered.close();
+
+      expect(
+        (await readWebhookStatus(databasePath)).deliveries.find(
+          (delivery) => delivery.id === "interrupted",
+        ),
+      ).toMatchObject({
+        status: "failed",
+        resultKind: "error",
+        runId: null,
+        result: {
+          formatVersion: 2,
+          kind: "error",
+          message: "Pipr failed; see logs for details.",
+        },
+        resultOmittedReason: null,
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
