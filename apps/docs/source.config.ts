@@ -5,6 +5,7 @@ import { remarkSteps } from "fumadocs-core/mdx-plugins/remark-steps";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
+import { machineReadableStringifyOptions } from "./src/lib/machine-readable.js";
 import { repoRoot, twoslashCompilerOptions } from "./twoslash-config.js";
 
 const guideTwoslashIncludes = new Map<string, string>([
@@ -120,13 +121,16 @@ export const docs = defineDocs({
   dir: "content/docs",
   docs: {
     postprocess: {
-      includeProcessedMarkdown: true,
+      includeProcessedMarkdown: machineReadableStringifyOptions,
     },
   },
 });
 
 export default defineConfig({
   mdxOptions: {
+    remarkStructureOptions: {
+      stringify: machineReadableStringifyOptions,
+    },
     rehypeCodeOptions: {
       ...rehypeCodeDefaultOptions,
       transformers: [

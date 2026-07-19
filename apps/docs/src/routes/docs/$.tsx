@@ -18,7 +18,7 @@ import { Suspense } from "react";
 import { getMDXComponents } from "@/components/mdx";
 import { getLegacyDocRedirect } from "@/lib/docs-routes";
 import { baseOptions } from "@/lib/layout.shared";
-import { appName, gitConfig } from "@/lib/shared";
+import { appName, gitConfig, siteUrl } from "@/lib/shared";
 import { getPageImage, slugsToMarkdownPath, source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
@@ -35,6 +35,7 @@ export const Route = createFileRoute("/docs/$")({
     if (!loaderData) return {};
 
     return {
+      links: [{ rel: "canonical", href: loaderData.canonicalUrl }],
       meta: [
         {
           title: `${loaderData.title} | ${appName} Docs`,
@@ -50,6 +51,10 @@ export const Route = createFileRoute("/docs/$")({
         {
           property: "og:description",
           content: loaderData.description,
+        },
+        {
+          property: "og:url",
+          content: loaderData.canonicalUrl,
         },
         {
           property: "og:image",
@@ -94,7 +99,8 @@ const loader = createServerFn({
       path: page.path,
       title: page.data.title,
       description: page.data.description,
-      imageUrl: getPageImage(page).url,
+      canonicalUrl: siteUrl(page.url),
+      imageUrl: siteUrl(getPageImage(page).url),
       markdownUrl: slugsToMarkdownPath(page.slugs).url,
       pageTree: await source.serializePageTree(source.getPageTree()),
     };

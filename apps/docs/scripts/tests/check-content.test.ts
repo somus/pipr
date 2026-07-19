@@ -39,4 +39,31 @@ describe("docs content checker", () => {
     expect(stderr).toContain("broken anchor /docs#does-not-exist");
     expect(stderr).toContain("missing image /images/does-not-exist.png");
   });
+
+  it("rejects Markdown and inline code in frontmatter descriptions", async () => {
+    const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-docs-descriptions-"));
+    temporaryDirectories.add(fixtureRoot);
+    const contentDir = path.join(fixtureRoot, "docs");
+    await cp(path.join(repoRoot, "apps/docs/content/docs"), contentDir, { recursive: true });
+    const indexPath = path.join(contentDir, "index.mdx");
+    const source = await Bun.file(indexPath).text();
+    await Bun.write(
+      indexPath,
+      source.replace(
+        /^description:.*$/m,
+        "description: 'Read the [guide](/docs/guide) and run `pipr check`.'",
+      ),
+    );
+
+    const child = Bun.spawn(["bun", "apps/docs/scripts/check-content.ts"], {
+      cwd: repoRoot,
+      env: { ...process.env, PIPR_DOCS_CONTENT_DIR: contentDir },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("frontmatter description must be plain text");
+  });
 });
