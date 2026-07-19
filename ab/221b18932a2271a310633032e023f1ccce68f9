@@ -1,0 +1,116 @@
+apps/docs/src/routes/index.tsx
+  s_75fb47a0891ced::t_9b6a8044fbc020 9-14,17-32
+apps/docs/content/docs/guide/entrypoints.mdx
+  s_75fb47a0891ced::t_9b6a8044fbc020 3
+scripts/tests/release-scripts.test.ts
+  s_75fb47a0891ced::t_01ccf8bea004ae 556,567,1036-1039
+  s_75fb47a0891ced::t_baa8e03928356e 554-555,557-566,568-575
+  s_75fb47a0891ced::t_79fb4ed5f42c3f 1032-1035,1040-1043
+apps/docs/scripts/build.ts
+  s_75fb47a0891ced::t_58263466dd7a96 3-5,17,19,39,41-46
+apps/docs/content/docs/concepts/runtime.mdx
+  s_75fb47a0891ced::t_9b6a8044fbc020 230,232
+apps/docs/content/docs/recipes/index.mdx
+  s_75fb47a0891ced::t_ae62636df49d95 3
+apps/docs/scripts/tests/check-content.test.ts
+  s_75fb47a0891ced::t_2c62bb4391fc0b 54
+  s_75fb47a0891ced::t_baa8e03928356e 42-53,55-68
+apps/docs/scripts/tests/og-images.test.ts
+  s_75fb47a0891ced::t_baa8e03928356e 1-5,7-82
+  s_75fb47a0891ced::t_43d52fe09c6921 6
+scripts/check-release-metadata.ts
+  s_75fb47a0891ced::t_58263466dd7a96 32,60-78,468-475
+  s_e454cfea4a7a0a::t_64d1faf444d6b6 476
+apps/docs/src/lib/og-image.tsx
+  s_75fb47a0891ced::t_27e5e4e0c72947 12-16,18
+  s_75fb47a0891ced::t_58263466dd7a96 1-11,17,151
+  s_75fb47a0891ced::t_11f8c75ae8fc3a 48,60-61,63,68-70,72-73,75,78,80,89,91,95,99,102,106-109,111,131-133
+  s_75fb47a0891ced::t_b2f3c8057dc5ca 39-41,43-44,52-53,55,58-59,62,64-67,71,81-82,88,90,92,101,103-104,114,116-117,120-130,137,139,143,147
+  s_75fb47a0891ced::t_40808c7f2b1c79 140
+  s_75fb47a0891ced::t_3ad9db0ccd3f85 19-38,42,45-47,49-51,54,56-57,74,76-77,79,83-87,93-94,96-98,100,105,110,112-113,115,118-119,134-136,138,141-142,144-146,148-150
+apps/docs/src/routes/docs/$.tsx
+  s_75fb47a0891ced::t_9b6a8044fbc020 21,38,55-58,102-103
+apps/docs/content/docs/project/development.mdx
+  s_75fb47a0891ced::t_9b6a8044fbc020 270,337,339,342,345
+apps/docs/scripts/tests/source-config.test.ts
+  s_75fb47a0891ced::t_8f9819564f8f54 5,8-9,19-21
+  s_75fb47a0891ced::t_7a53f9a7943149 22-23
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_75fb47a0891ced::t_9b6a8044fbc020 62
+apps/docs/src/routes/api/search.ts
+  s_75fb47a0891ced::t_9b6a8044fbc020 5,13
+apps/docs/scripts/sync-recipes.ts
+  s_75fb47a0891ced::t_9b6a8044fbc020 409,491,528,540,591
+  s_75fb47a0891ced::t_43d52fe09c6921 592
+  s_75fb47a0891ced::t_d62654c3c04e40 593-594
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_75fb47a0891ced::t_ae62636df49d95 3
+apps/docs/src/lib/shared.ts
+  s_75fb47a0891ced::t_9b6a8044fbc020 4-7
+  s_75fb47a0891ced::t_8f9819564f8f54 3
+apps/docs/scripts/og-images.ts
+  s_75fb47a0891ced::t_79fb4ed5f42c3f 144-148
+  s_75fb47a0891ced::t_58263466dd7a96 1-3,5-65,71-76,78,80-82,89-91,115-143,149-180,182-193,197,243-255
+  s_75fb47a0891ced::t_43d52fe09c6921 4,181
+  s_75fb47a0891ced::t_ba8e72ad16fcaf 79,242
+  s_75fb47a0891ced::t_8f9819564f8f54 66-70,77,83-88,92-114,194-196,198-241
+apps/docs/content/docs/guide/quickstart.mdx
+  s_75fb47a0891ced::t_9b6a8044fbc020 31,48
+apps/docs/source.config.ts
+  s_75fb47a0891ced::t_58263466dd7a96 8,124,131-133
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_75fb47a0891ced::t_ae62636df49d95 3
+apps/docs/src/lib/machine-readable.ts
+  s_75fb47a0891ced::t_58263466dd7a96 1-28,31-32,39-120
+  s_75fb47a0891ced::t_95ce7254ed33fc 29-30,33-38
+apps/docs/src/routes/og/docs/$.tsx
+  s_75fb47a0891ced::t_58263466dd7a96 3,13-15,17
+  s_75fb47a0891ced::t_e80aa49cc2231f 16
+apps/docs/content/docs/recipes/default-review.mdx
+  s_75fb47a0891ced::t_ae62636df49d95 3
+apps/docs/content/docs/reference/architecture.mdx
+  s_75fb47a0891ced::t_9b6a8044fbc020 17
+apps/docs/content/docs/recipes/meta.json
+  s_75fb47a0891ced::t_ae62636df49d95 3
+apps/docs/content/docs/guide/configuration.mdx
+  s_75fb47a0891ced::t_9b6a8044fbc020 118-119
+apps/docs/src/lib/tests/machine-readable.test.ts
+  s_75fb47a0891ced::t_e80aa49cc2231f 4-8,24
+  s_75fb47a0891ced::t_baa8e03928356e 1-3,9-23,25-70,85-97
+  s_75fb47a0891ced::t_95ce7254ed33fc 71-84
+apps/docs/content/docs/guide/gitlab.mdx
+  s_75fb47a0891ced::t_9b6a8044fbc020 110-115
+apps/docs/tests/browser/docs.smoke.spec.ts
+  s_75fb47a0891ced::t_8dc2ae6ff2e56e 43,80
+  s_75fb47a0891ced::t_d82bc186f55f59 2,16-27,31-42,44-74,76-77,91-115
+  s_75fb47a0891ced::t_474e4049634976 75
+  s_75fb47a0891ced::t_43d52fe09c6921 28-30
+  s_75fb47a0891ced::t_c90ede59314629 78-79,81-90
+apps/docs/scripts/check-content.ts
+  s_75fb47a0891ced::t_58263466dd7a96 4,29,34,37-39,41-42,56-57,325-328
+  s_75fb47a0891ced::t_8f9819564f8f54 35-36,40,43-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "ab221b18932a2271a310633032e023f1ccce68f9",
+  "prompts": {},
+  "sessions": {
+    "s_75fb47a0891ced": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7b44-30a2-7c20-ae6b-80c57f6feb9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_e454cfea4a7a0a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7b64-5636-7a51-9a36-00f9439387db",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
