@@ -11,6 +11,9 @@ const recoveryBase = `export type Delivery = {
   resultJson: string | null;
 };
 
+// Pending and processing rows have no result. Terminal failures clear the
+// retryable payload and store a safe structured error for downstream readers.
+
 export function startDelivery(row: Delivery): Delivery {
   return {
     ...row,
@@ -20,6 +23,28 @@ export function startDelivery(row: Delivery): Delivery {
     resultJson: null,
   };
 }
+`;
+
+const recoveryContractTest = `import { expect, test } from "bun:test";
+import { recoverInterrupted } from "./review-target";
+
+test("stores a safe result when an interrupted delivery exhausts retries", () => {
+  const recovered = recoverInterrupted({
+    status: "processing",
+    attempts: 3,
+    payload: "sensitive input",
+    resultKind: null,
+    resultJson: null,
+  });
+
+  expect(recovered.status).toBe("failed");
+  expect(recovered.payload).toBeNull();
+  expect(recovered.resultKind).toBe("error");
+  expect(JSON.parse(recovered.resultJson ?? "null")).toEqual({
+    kind: "error",
+    message: "Delivery interrupted.",
+  });
+});
 `;
 
 const recoveryDefect = `${recoveryBase}
@@ -61,8 +86,8 @@ export type CommandStateRecord = {
   reviewedHeadSha: string;
 };
 
-// Only accepted may replace a record for a different reviewed head. Every later
-// lifecycle state belongs to the attempt identified by the existing head SHA.
+// Any state may create the first record, but only accepted may replace a record
+// for a different reviewed head. Later states must match the existing head SHA.
 `;
 
 const orderingDefect = `${orderingBase}
@@ -73,6 +98,27 @@ export function shouldUpdateCommandComment(
   if (next.state !== "failed" && next.state !== "superseded") return true;
   return existing === undefined || existing.reviewedHeadSha === next.reviewedHeadSha;
 }
+`;
+
+const orderingContractTest = `import { expect, test } from "bun:test";
+import { shouldUpdateCommandComment } from "./review-target";
+
+test("orders lifecycle updates by reviewed head", () => {
+  const existing = { state: "accepted" as const, reviewedHeadSha: "head-2" };
+
+  expect(
+    shouldUpdateCommandComment(existing, { state: "running", reviewedHeadSha: "head-1" }),
+  ).toBe(false);
+  expect(
+    shouldUpdateCommandComment(existing, { state: "completed", reviewedHeadSha: "head-2" }),
+  ).toBe(true);
+  expect(
+    shouldUpdateCommandComment(existing, { state: "accepted", reviewedHeadSha: "head-3" }),
+  ).toBe(true);
+  expect(
+    shouldUpdateCommandComment(undefined, { state: "running", reviewedHeadSha: "head-1" }),
+  ).toBe(true);
+});
 `;
 
 const orderingClean = `${orderingBase}
@@ -96,6 +142,20 @@ export type CommandOptions = {
 };
 `;
 
+const dispatchTerminalReporting = `async function reportTerminalStatus(
+  options: CommandOptions,
+): Promise<void> {
+  try {
+    const currentHeadSha = await options.currentHeadSha();
+    await options.publishStatus(
+      currentHeadSha === options.reviewedHeadSha ? "failed" : "superseded",
+    );
+  } catch {
+    // Best-effort terminal reporting must not replace the task error.
+  }
+}
+`;
+
 const dispatchDefect = `${dispatchBase}
 export async function dispatchCommand(options: CommandOptions): Promise<void> {
   await options.publishStatus("accepted");
@@ -108,13 +168,12 @@ async function executeCommand(options: CommandOptions): Promise<void> {
     await options.publishStatus("running");
     await options.runTask();
   } catch (error) {
-    const currentHeadSha = await options.currentHeadSha();
-    await options.publishStatus(
-      currentHeadSha === options.reviewedHeadSha ? "failed" : "superseded",
-    );
+    await reportTerminalStatus(options);
     throw error;
   }
 }
+
+${dispatchTerminalReporting}
 `;
 
 const dispatchClean = `${dispatchBase}
@@ -129,34 +188,66 @@ async function executeCommand(options: CommandOptions): Promise<void> {
     await options.publishStatus("running");
     await options.runTask();
   } catch (error) {
-    const currentHeadSha = await options.currentHeadSha();
-    await options.publishStatus(
-      currentHeadSha === options.reviewedHeadSha ? "failed" : "superseded",
-    );
+    await reportTerminalStatus(options);
     throw error;
   }
 }
+
+${dispatchTerminalReporting}
 `;
 
-const emptyValueBase = `export function displayLabel(value: string | undefined): string {
+const dispatchContractTest = `import { expect, test } from "bun:test";
+import {
+  dispatchCommand,
+  type CommandOptions,
+  type CommandStatus,
+} from "./review-target";
+
+test("reports a terminal state when accepted publication fails", async () => {
+  const statuses: CommandStatus[] = [];
+  const options: CommandOptions = {
+    reviewedHeadSha: "head-1",
+    publishStatus: async (status) => {
+      statuses.push(status);
+      if (status === "accepted") throw new Error("acceptance failed");
+    },
+    prepareTrustedHead: async () => {},
+    currentHeadSha: async () => "head-1",
+    runTask: async () => {},
+  };
+
+  await expect(dispatchCommand(options)).rejects.toThrow("acceptance failed");
+  expect(statuses).toEqual(["accepted", "failed"]);
+});
+`;
+
+const emptyValueBase = `// Callers pass string or undefined; null is rejected at the input boundary.
+export function displayLabel(value: string | undefined): string {
   return value ?? "fallback";
 }
 `;
 
-const emptyValueDefect = `export function displayLabel(value: string | undefined): string {
+const emptyValueDefect = `// Callers pass string or undefined; null is rejected at the input boundary.
+export function displayLabel(value: string | undefined): string {
   return value || "fallback";
 }
 `;
 
-const emptyValueClean = `export function displayLabel(value: string | undefined): string {
+const emptyValueClean = `// Callers pass string or undefined; null is rejected at the input boundary.
+export function displayLabel(value: string | undefined): string {
   return value === undefined ? "fallback" : value;
 }
 `;
 
-const emptyValueContractTest = `import { displayLabel } from "./review-target";
+const emptyValueContractTest = `import { expect, test } from "bun:test";
+import { displayLabel } from "./review-target";
 
 test("preserves an intentionally empty label", () => {
   expect(displayLabel("")).toBe("");
+});
+
+test("uses the fallback for an absent label", () => {
+  expect(displayLabel(undefined)).toBe("fallback");
 });
 `;
 
@@ -166,6 +257,7 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
     description: "Reports a final interrupted delivery that loses its structured failure result.",
     base: recoveryBase,
     head: recoveryDefect,
+    headSupportFiles: { "src/review-target.test.ts": recoveryContractTest },
     expectedLine: lineOf(recoveryDefect, 'status: retryable ? "pending" : "failed"'),
     issueId: "interrupted-result-loss",
     keywordSets: [
@@ -179,13 +271,20 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
     description: "Stays quiet when interrupted terminal deliveries retain a safe result.",
     base: recoveryBase,
     head: recoveryClean,
+    headSupportFiles: { "src/review-target.test.ts": recoveryContractTest },
   }),
   positiveCase({
     id: "pr105-stale-lifecycle-overwrite",
     description: "Reports older running or completed states that can overwrite a newer attempt.",
     base: orderingBase,
     head: orderingDefect,
+    headSupportFiles: { "src/review-target.test.ts": orderingContractTest },
     expectedLine: lineOf(orderingDefect, 'next.state !== "failed"'),
+    acceptableLines: [
+      lineOf(orderingDefect, "): boolean {"),
+      lineOf(orderingDefect, 'next.state !== "failed"'),
+      lineOf(orderingDefect, "return existing === undefined"),
+    ],
     issueId: "stale-lifecycle-overwrite",
     keywordSets: [
       ["running", "newer"],
@@ -193,6 +292,8 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
       ["non-terminal", "stale"],
       ["running", "out-of-order"],
       ["running", "different head", "overwrite"],
+      ["running", "head", "overwrit"],
+      ["running", "attempt", "replac"],
     ],
   }),
   cleanCase({
@@ -200,12 +301,14 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
     description: "Stays quiet when every post-acceptance state is ordered by reviewed head.",
     base: orderingBase,
     head: orderingClean,
+    headSupportFiles: { "src/review-target.test.ts": orderingContractTest },
   }),
   positiveCase({
     id: "pr105-stale-acceptance-supersession",
     description: "Reports acceptance failures that bypass terminal supersession handling.",
     base: dispatchBase,
     head: dispatchDefect,
+    headSupportFiles: { "src/review-target.test.ts": dispatchContractTest },
     expectedLine: lineOf(dispatchDefect, 'publishStatus("accepted")'),
     issueId: "acceptance-supersession-gap",
     keywordSets: [
@@ -219,6 +322,7 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
     description: "Stays quiet when acceptance failures pass through terminal status handling.",
     base: dispatchBase,
     head: dispatchClean,
+    headSupportFiles: { "src/review-target.test.ts": dispatchContractTest },
   }),
   positiveCase({
     id: "empty-value-contract-regression",
@@ -268,7 +372,9 @@ function positiveCase(options: {
   base: string;
   head: string;
   supportFiles?: Record<string, string>;
+  headSupportFiles?: Record<string, string>;
   expectedLine: number;
+  acceptableLines?: number[];
   issueId: string;
   keywordSets: string[][];
 }): PiprEvalCase {
@@ -278,11 +384,12 @@ function positiveCase(options: {
     reviewer: "custom",
     modes: ["live"],
     baseFiles: { ...options.supportFiles, [targetPath]: options.base },
-    headFiles: { ...options.supportFiles, [targetPath]: options.head },
+    headFiles: { ...options.supportFiles, ...options.headSupportFiles, [targetPath]: options.head },
     expected: {
       findings: [
         {
           line: options.expectedLine,
+          acceptableLines: options.acceptableLines,
           path: targetPath,
           issueId: options.issueId,
           keywords: options.keywordSets[0] ?? [],
@@ -301,6 +408,7 @@ function cleanCase(options: {
   base: string;
   head: string;
   supportFiles?: Record<string, string>;
+  headSupportFiles?: Record<string, string>;
 }): PiprEvalCase {
   return {
     id: options.id,
@@ -308,7 +416,7 @@ function cleanCase(options: {
     reviewer: "custom",
     modes: ["live"],
     baseFiles: { ...options.supportFiles, [targetPath]: options.base },
-    headFiles: { ...options.supportFiles, [targetPath]: options.head },
+    headFiles: { ...options.supportFiles, ...options.headSupportFiles, [targetPath]: options.head },
     expected: {
       findings: [],
       maxInlineFindings: 0,

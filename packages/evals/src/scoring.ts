@@ -323,10 +323,10 @@ function expectedFindingLocationMatches(
   finding: PiprEvalExpected["findings"][number],
   actual: EvalInlineFinding,
 ): boolean {
+  const acceptableLines = finding.acceptableLines ?? [finding.line];
   return [
     actual.path === finding.path,
-    finding.line >= actual.startLine,
-    finding.line <= actual.endLine,
+    acceptableLines.some((line) => line >= actual.startLine && line <= actual.endLine),
   ].every(Boolean);
 }
 

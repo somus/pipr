@@ -72,11 +72,16 @@ describe("effectiveness benchmark", () => {
       effectivenessBenchmarkCases.filter(({ expected }) => expected.findings.length === 0),
     ).toHaveLength(4);
     expect(effectivenessBenchmarkCases.every(({ reviewer }) => reviewer === "custom")).toBe(true);
+    expect(
+      effectivenessBenchmarkCases.every(({ headFiles }) =>
+        Object.keys(headFiles).some((filePath) => filePath.endsWith(".test.ts")),
+      ),
+    ).toBe(true);
     const staleCase = effectivenessBenchmarkCases.find(
       ({ id }) => id === "pr105-stale-lifecycle-overwrite",
     );
     expect(staleCase?.headFiles["src/review-target.ts"]).toContain(
-      "Only accepted may replace a record for a different reviewed head",
+      "only accepted may replace a record",
     );
     expect(effectivenessBenchmarkVariants.map(({ id }) => id)).toEqual([
       "generic",
@@ -140,6 +145,37 @@ describe("effectiveness benchmark", () => {
     });
 
     expect(scoreEffectivenessRun(output, testCase.expected).structuredRecalledIssues).toBe(1);
+  });
+
+  it("accepts a nearby signature anchor for the same live stale-overwrite issue", () => {
+    const testCase = effectivenessBenchmarkCases.find(
+      ({ id }) => id === "pr105-stale-lifecycle-overwrite",
+    );
+    if (!testCase) throw new Error("missing stale lifecycle benchmark case");
+    const expectedLine = testCase.expected.findings[0]?.line;
+    if (!expectedLine) throw new Error("missing stale lifecycle expected line");
+    const output = evalOutput({
+      valid: [
+        {
+          ...expectedFinding,
+          body: "Running and completed states from a newer attempt can overwrite the current record.",
+          startLine: expectedLine - 1,
+          endLine: expectedLine - 1,
+        },
+      ],
+    });
+
+    expect(scoreEffectivenessRun(output, testCase.expected).structuredRecalledIssues).toBe(1);
+  });
+
+  it("keeps the acceptance clean control free of secondary error masking", () => {
+    const testCase = effectivenessBenchmarkCases.find(
+      ({ id }) => id === "pr105-stale-acceptance-supersession-clean",
+    );
+    const source = testCase?.headFiles["src/review-target.ts"] ?? "";
+
+    expect(source).toContain("Best-effort terminal reporting must not replace the task error");
+    expect(source).toContain("throw error");
   });
 
   it("aggregates issue-level recall, precision, clean accuracy, and funnel counts", () => {

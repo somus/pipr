@@ -10,6 +10,7 @@ export type PiprEvalExpectedSuggestedFix =
 export type PiprEvalExpectedFinding = {
   issueId?: string;
   line: number;
+  acceptableLines?: number[];
   path: string;
   keywords: string[];
   keywordSets?: string[][];
