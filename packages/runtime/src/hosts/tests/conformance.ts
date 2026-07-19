@@ -234,6 +234,75 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
+    it("keeps an older terminal status from overwriting a newer command attempt", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        const publication = requiredPublication(harness.adapter);
+        const publishCommandStatus = requiredMethod(
+          publication.publishCommandStatus,
+          "command status publication",
+        );
+        const publishCommandResponse = requiredMethod(
+          publication.publishCommandResponse,
+          "command response publication",
+        );
+        const originalCommand = {
+          change: harness.change,
+          sourceCommentId: "101",
+          commandName: "review",
+          reviewedHeadSha: harness.change.change.head.sha,
+        };
+
+        await expect(
+          publishCommandStatus({ ...originalCommand, state: "accepted" }),
+        ).resolves.toMatchObject({ action: "created" });
+
+        const currentHeadSha = "new-head";
+        harness.setCurrentHead(currentHeadSha);
+        const currentChange = {
+          ...harness.change,
+          change: {
+            ...harness.change.change,
+            head: { ...harness.change.change.head, sha: currentHeadSha },
+          },
+        } satisfies ChangeRequestEventContext;
+        const currentCommand = {
+          ...originalCommand,
+          change: currentChange,
+          reviewedHeadSha: currentHeadSha,
+        };
+        await expect(
+          publishCommandStatus({ ...currentCommand, state: "running" }),
+        ).resolves.toMatchObject({ action: "updated" });
+
+        for (const terminal of [
+          { state: "failed" as const },
+          { state: "superseded" as const, currentHeadSha },
+        ]) {
+          await expect(
+            publishCommandStatus({ ...originalCommand, ...terminal }),
+          ).resolves.toMatchObject({ action: "updated" });
+        }
+        expect(harness.writes()).toMatchObject({ commandCreates: 1, commandUpdates: 1 });
+
+        await expect(
+          publishCommandResponse({
+            change: currentChange,
+            sourceCommentId: currentCommand.sourceCommentId,
+            commandName: currentCommand.commandName,
+            body: "Current response.",
+          }),
+        ).resolves.toMatchObject({ action: "updated" });
+        await expect(
+          publishCommandStatus({
+            ...originalCommand,
+            state: "superseded",
+            currentHeadSha,
+          }),
+        ).resolves.toMatchObject({ action: "updated" });
+        expect(harness.writes()).toMatchObject({ commandCreates: 1, commandUpdates: 2 });
+      });
+    });
+
     it("upserts main, inline, and command comments idempotently", async () => {
       await withHarness(options.createHarness, async (harness) => {
         const publication = requiredPublication(harness.adapter);

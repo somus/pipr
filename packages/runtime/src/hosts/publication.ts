@@ -135,6 +135,13 @@ export function commandStatusBody(options: {
   };
 }
 
+export function shouldUpdateCommandComment(existingBody: string, nextBody: string): boolean {
+  const next = commandStateRecord(nextBody);
+  if (next?.state !== "failed" && next?.state !== "superseded") return true;
+  const existing = commandStateRecord(existingBody);
+  return existing === undefined || existing.reviewedHeadSha === next.reviewedHeadSha;
+}
+
 export function commandResponsePublication(options: CommandResponsePublicationOptions<unknown>): {
   guardHead: true;
   comment: { marker: string; body: string };
@@ -183,6 +190,16 @@ function commandStateMarker(options: {
 }): string {
   const current = options.currentHeadSha ? ` current=${options.currentHeadSha}` : "";
   return `<!-- pipr:command-state state=${options.state} head=${options.reviewedHeadSha}${current} -->`;
+}
+
+function commandStateRecord(
+  body: string,
+): { state: CommandLifecycleState; reviewedHeadSha: string } | undefined {
+  const match = body.match(
+    /^<!-- pipr:command-state state=(accepted|running|completed|failed|superseded) head=([^\s>]+)(?: current=[^\s>]+)? -->$/m,
+  );
+  if (!match?.[1] || !match[2]) return undefined;
+  return { state: match[1] as CommandLifecycleState, reviewedHeadSha: match[2] };
 }
 
 function commandStatusMessage(options: {

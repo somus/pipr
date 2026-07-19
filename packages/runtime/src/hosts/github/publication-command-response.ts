@@ -1,5 +1,9 @@
 import type { ChangeRequestEventContext } from "../../types.js";
-import { commandResponseBody, commandStatusBody } from "../publication.js";
+import {
+  commandResponseBody,
+  commandStatusBody,
+  shouldUpdateCommandComment,
+} from "../publication.js";
 import type { CommandLifecycleState } from "../types.js";
 import type { GitHubIssueComment, GitHubPublicationClient } from "./publication-client.js";
 import { assertCurrentHeadSha, findOwnedIssueComment } from "./publication-shared.js";
@@ -68,6 +72,9 @@ async function publishGitHubCommandComment(options: {
   }
   const existing = findCommandResponseComment(comments, options.comment.marker, ownerLogin);
   if (existing) {
+    if (!shouldUpdateCommandComment(existing.body ?? "", options.comment.body)) {
+      return { action: "updated", id: String(existing.id) };
+    }
     const updated = await options.client.updateIssueComment({
       repo: options.change.repository.slug,
       commentId: existing.id,

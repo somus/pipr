@@ -18,6 +18,7 @@ import {
   completeHostPublication,
   nativeInlineLocation,
   publishUnseenInlineItems,
+  shouldUpdateCommandComment,
   threadActionReply,
 } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
@@ -155,6 +156,15 @@ async function publishBitbucketCommandComment(options: {
       normalizeBitbucketMarkdown(comment.content.raw).includes(options.comment.marker),
   );
   const responseBody = renderBitbucketMarkdown(options.comment.body);
+  if (
+    existing &&
+    !shouldUpdateCommandComment(
+      normalizeBitbucketMarkdown(existing.content.raw),
+      options.comment.body,
+    )
+  ) {
+    return { action: "updated" as const, id: existing.id };
+  }
   const comment = existing
     ? await options.client.updateComment(options.change.change.number, existing.id, responseBody)
     : await options.client.createComment(options.change.change.number, {

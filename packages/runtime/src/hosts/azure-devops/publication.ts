@@ -19,6 +19,7 @@ import {
   completeHostPublication,
   nativeInlineLocation,
   publishUnseenInlineItems,
+  shouldUpdateCommandComment,
   threadActionReply,
 } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
@@ -176,6 +177,14 @@ async function publishAzureDevOpsCommandComment(options: {
     options.guardHead,
   );
   const existing = ownedRootThread(threads, owner.uniqueName, options.comment.marker);
+  if (
+    existing &&
+    !shouldUpdateCommandComment(existing.comments[0]?.content ?? "", options.comment.body)
+  ) {
+    const commentId = existing.comments[0]?.id;
+    if (!commentId) throw new Error("Azure DevOps command response thread has no root comment");
+    return { action: "updated" as const, id: commentId };
+  }
   const comment = existing
     ? await options.client.updateComment(
         coordinates.repositoryId,

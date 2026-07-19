@@ -18,6 +18,7 @@ import {
   completeHostPublication,
   nativeInlineLocation,
   publishUnseenInlineItems,
+  shouldUpdateCommandComment,
   threadActionReply,
 } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
@@ -164,6 +165,9 @@ async function publishGitLabCommandComment(options: {
   );
   if (options.guardHead) {
     await assertCurrentHead(options.client, projectId, options.change);
+  }
+  if (existing && !shouldUpdateCommandComment(existing.body, options.comment.body)) {
+    return { action: "updated" as const, id: existing.id };
   }
   const note = existing
     ? await options.client.updateNote(
