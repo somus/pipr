@@ -179,6 +179,48 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
+    it("reuses one command comment for lifecycle status and the final guarded response", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        const publication = requiredPublication(harness.adapter);
+        const publishCommandStatus = requiredMethod(
+          publication.publishCommandStatus,
+          "command status publication",
+        );
+        const publishCommandResponse = requiredMethod(
+          publication.publishCommandResponse,
+          "command response publication",
+        );
+        const command = {
+          change: harness.change,
+          sourceCommentId: "101",
+          commandName: "review",
+        };
+        await expect(
+          publishCommandStatus({
+            ...command,
+            state: "accepted",
+            reviewedHeadSha: harness.change.change.head.sha,
+          }),
+        ).resolves.toMatchObject({ action: "created" });
+        await expect(
+          publishCommandResponse({ ...command, body: "Completed." }),
+        ).resolves.toMatchObject({ action: "updated" });
+        expect(harness.writes()).toMatchObject({ commandCreates: 1, commandUpdates: 1 });
+
+        harness.setCurrentHead("new-head");
+        await expect(
+          publishCommandStatus({
+            ...command,
+            state: "superseded",
+            reviewedHeadSha: harness.change.change.head.sha,
+          }),
+        ).resolves.toMatchObject({ action: "updated" });
+        await expect(
+          publishCommandResponse({ ...command, body: "Stale model output." }),
+        ).rejects.toThrow(/head changed|endpoints changed/i);
+      });
+    });
+
     it("upserts main, inline, and command comments idempotently", async () => {
       await withHarness(options.createHarness, async (harness) => {
         const publication = requiredPublication(harness.adapter);

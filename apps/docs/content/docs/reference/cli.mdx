@@ -119,6 +119,23 @@ Options:
 
 `GET /healthz` returns `200 OK` while the HTTP server can accept deliveries. It does not inspect provider credentials or run model work. See [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for the supported Compose deployment.
 
+## `pipr webhook status`
+
+Inspect recent results from a webhook worker's local SQLite queue:
+
+```bash
+pipr webhook status --database /var/lib/pipr/webhooks.sqlite
+pipr webhook status --database /var/lib/pipr/webhooks.sqlite --limit 50 --json
+```
+
+The default table shows a bounded delivery ID, host, queue status, attempts, result kind, shortened Review Run ID, and update time. `--json` returns full delivery IDs and parsed safe Pipr Result V2 values in a versioned envelope. Results omitted by the 512 KiB per-result or 32 MiB aggregate retention limits report `size-limit` or `retention`; corrupted JSON reports `invalid` without hiding other deliveries.
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--database <path>` | `.pipr/webhooks.sqlite` | Existing delivery database. Pipr fails without creating it when the path is missing. |
+| `--limit <count>` | `20` | Number of deliveries to return, from 1 to 200. |
+| `--json` | false | Print a versioned JSON envelope instead of the table. |
+
 ## `pipr check`
 
 Type-load config and validate the runtime plan:

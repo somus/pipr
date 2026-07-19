@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import {
   access,
@@ -247,6 +248,91 @@ describe("pipr CLI", () => {
     expect(result.stderr).not.toContain("Code host request failed");
   });
 
+  it("shows bounded webhook status as a table or versioned JSON", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-webhook-status-"));
+    const databasePath = path.join(workspace, "webhooks.sqlite");
+    try {
+      const database = new Database(databasePath, { create: true, strict: true });
+      database.exec(`
+        CREATE TABLE webhook_deliveries (
+          id TEXT PRIMARY KEY, host TEXT NOT NULL, payload TEXT, event_name TEXT,
+          status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT,
+          run_id TEXT, result_kind TEXT, result_json TEXT, result_omitted_reason TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO webhook_deliveries
+          (id, host, status, attempts, result_kind, result_json)
+        VALUES
+          ('delivery-with-a-very-long-identifier', 'gitlab', 'completed', 1, 'ignored',
+           '{"formatVersion":2,"kind":"ignored","reason":"test"}'),
+          ('corrupt', 'bitbucket', 'failed', 3, 'error', '{bad json');
+      `);
+      database.close();
+
+      const table = await runCli(["webhook", "status", "--database", databasePath]);
+      expect(table.exitCode, table.stderr).toBe(0);
+      expect(table.stdout).toContain("DELIVERY\tHOST\tSTATUS\tATTEMPTS\tRESULT\tRUN\tUPDATED");
+      expect(table.stdout).toContain("delivery-with-a-very-lo…");
+
+      const json = await runCli(["webhook", "status", "--database", databasePath, "--json"]);
+      expect(JSON.parse(json.stdout)).toEqual({
+        formatVersion: 1,
+        deliveries: expect.arrayContaining([
+          expect.objectContaining({ id: "delivery-with-a-very-long-identifier" }),
+          expect.objectContaining({ id: "corrupt", resultOmittedReason: "invalid" }),
+        ]),
+      });
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("does not create a missing webhook status database and validates limits", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-webhook-status-"));
+    const databasePath = path.join(workspace, "missing.sqlite");
+    try {
+      const missing = await runCli(["webhook", "status", "--database", databasePath]);
+      expect(missing.exitCode).toBe(1);
+      await expect(access(databasePath)).rejects.toThrow();
+      const invalid = await runCli([
+        "webhook",
+        "status",
+        "--database",
+        databasePath,
+        "--limit",
+        "201",
+      ]);
+      expect(invalid.exitCode).toBe(1);
+      expect(invalid.stderr).toContain("--limit must be an integer from 1 to 200");
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("reports an empty webhook history", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-webhook-status-"));
+    const databasePath = path.join(workspace, "webhooks.sqlite");
+    try {
+      const database = new Database(databasePath, { create: true, strict: true });
+      database.exec(`
+        CREATE TABLE webhook_deliveries (
+          id TEXT PRIMARY KEY, host TEXT NOT NULL, payload TEXT,
+          status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      database.close();
+
+      const result = await runCli(["webhook", "status", "--database", databasePath]);
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(result.stdout).toBe("No webhook deliveries found.\n");
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
   it("prints no-args help without failing inside GitHub Actions", async () => {
     const result = await runCli([], { GITHUB_ACTIONS: "true" });
 
@@ -494,13 +580,27 @@ describe("pipr CLI", () => {
         inlineFindings: unknown[];
         droppedFindings: unknown[];
         taskChecks: unknown[];
-        provider: Record<string, unknown>;
-        providerModels: string[];
+        run: Record<string, unknown>;
         repairAttempted: boolean;
+        publication: Record<string, unknown>;
       };
       expect(json).toEqual({
-        formatVersion: 1,
+        formatVersion: 2,
         kind: "review",
+        run: {
+          id: expect.any(String),
+          trigger: "local",
+          baseSha: workspace.baseSha,
+          headSha: workspace.headSha,
+          tasks: ["review"],
+          durationMs: expect.any(Number),
+          models: ["deepseek-v4-pro"],
+          agentRuns: 1,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+          usageStatus: "unavailable",
+        },
         mainComment: expect.stringContaining(
           "One finding.\n<!-- pipr:header:hidden -->\nTask marker example.",
         ),
@@ -528,13 +628,8 @@ describe("pipr CLI", () => {
           },
         ],
         taskChecks: [{ taskName: "review", conclusion: "success" }],
-        provider: {
-          id: "deepseek/deepseek-v4-pro",
-          provider: "deepseek",
-          model: "deepseek-v4-pro",
-        },
-        providerModels: ["deepseek-v4-pro"],
         repairAttempted: false,
+        publication: { state: "disabled" },
       });
       expect(json.mainComment).not.toContain("<!-- pipr:main-comment ");
       expect(json.mainComment).not.toContain("<!-- pipr:stats:start -->");
@@ -569,7 +664,7 @@ describe("pipr CLI", () => {
         formatVersion: number;
         kind: string;
       };
-      expect(json.formatVersion).toBe(1);
+      expect(json.formatVersion).toBe(2);
       expect(json.kind).toBe("skipped");
       expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(0);
     } finally {
@@ -795,12 +890,12 @@ describe("pipr CLI", () => {
       const output = await Bun.file(githubOutputPath).text();
       const serializedResult = output
         .split("\n")
-        .find((line) => line.startsWith('{"formatVersion":1'));
+        .find((line) => line.startsWith('{"formatVersion":2'));
 
       expect(result.exitCode).toBe(1);
       expect(serializedResult).toBeDefined();
       expect(JSON.parse(serializedResult ?? "null")).toEqual({
-        formatVersion: 1,
+        formatVersion: 2,
         kind: "error",
         message: "Pipr failed; see the Action log for details.",
       });

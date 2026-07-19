@@ -46,13 +46,17 @@
       "types": "./dist/internal/action-result.d.mts",
       "default": "./dist/internal/action-result.mjs"
     },
+    "./internal/pipr-result": {
+      "types": "./dist/internal/pipr-result.d.mts",
+      "default": "./dist/internal/pipr-result.mjs"
+    },
     "./runtime-tools-extension": {
       "types": "./dist/pi/runtime-tools-extension.d.mts",
       "default": "./dist/pi/runtime-tools-extension.mjs"
     }
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/internal/testing.ts src/internal/review-testing.ts src/internal/docs.ts src/internal/action-result.ts src/pi/runtime-tools-extension.ts --dts --format esm --out-dir dist",
+    "build": "tsdown src/index.ts src/internal/testing.ts src/internal/review-testing.ts src/internal/docs.ts src/internal/action-result.ts src/internal/pipr-result.ts src/pi/runtime-tools-extension.ts --dts --format esm --out-dir dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test --timeout 60000",
     "test:config-init": "bun test --timeout 60000 src/config/tests/init-project.test.ts src/config/tests/init-recipes.test.ts",

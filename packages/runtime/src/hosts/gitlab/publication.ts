@@ -132,6 +132,7 @@ export async function publishGitLabCommandResponse(options: {
   sourceCommentId: string;
   commandName: string;
   body: string;
+  allowHeadDrift?: boolean;
 }) {
   const { projectId } = gitLabCoordinates(options.change);
   const owner = await options.client.currentUser();
@@ -146,7 +147,9 @@ export async function publishGitLabCommandResponse(options: {
     owner.username,
     response.marker,
   );
-  await assertCurrentHead(options.client, projectId, options.change);
+  if (!options.allowHeadDrift) {
+    await assertCurrentHead(options.client, projectId, options.change);
+  }
   const note = existing
     ? await options.client.updateNote(
         projectId,

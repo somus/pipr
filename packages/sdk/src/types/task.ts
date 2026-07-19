@@ -261,7 +261,6 @@ export type PlatformInfo = {
 export type ChangeRequestContext = ChangeRequestInfo & {
   diffManifest(options?: DiffManifestOptions): Promise<DiffManifest>;
   changedFiles(): Promise<readonly ChangedFile[]>;
-  currentHeadSha(): Promise<string>;
 };
 
 /** Runner for invoking Pi agents from tasks. */

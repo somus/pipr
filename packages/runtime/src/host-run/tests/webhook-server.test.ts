@@ -1,19 +1,52 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { createHmac } from "node:crypto";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { PiprResult } from "@usepipr/sdk";
 import { createCodeHostWebhookProtocol } from "../../hosts/webhook.js";
 import {
   createWebhookIngress,
   createWebhookQueueProcessor,
   processNextWebhookDelivery,
+  readWebhookDeliveryStatus,
   runWebhookDelivery,
   SqliteWebhookDeliveryStore,
   type WebhookDelivery,
   type WebhookDeliveryStore,
 } from "../webhook-server.js";
+
+const ignoredPiprResult = {
+  formatVersion: 2,
+  kind: "ignored",
+  reason: "test",
+} as const satisfies PiprResult;
+const errorPiprResult = {
+  formatVersion: 2,
+  kind: "error",
+  message: "Pipr failed; see the Action log for details.",
+} as const satisfies PiprResult;
+const commandResponsePiprResult = {
+  formatVersion: 2,
+  kind: "command-response",
+  run: {
+    id: "run-webhook",
+    trigger: "command",
+    baseSha: "base",
+    headSha: "head",
+    tasks: ["ask"],
+    durationMs: 10,
+    models: ["deepseek-chat"],
+    agentRuns: 1,
+    inputTokens: 1,
+    outputTokens: 1,
+    costUsd: 0,
+    usageStatus: "complete",
+  },
+  mainComment: "Completed.",
+  publication: { state: "completed", action: "created" },
+} as const satisfies PiprResult;
 
 describe("webhook runner", () => {
   it("reports HTTP health without requiring webhook authentication", async () => {
@@ -46,6 +79,7 @@ describe("webhook runner", () => {
         runs += 1;
         started.resolve();
         await release.promise;
+        return { kind: "ignored", reason: "test" };
       },
     });
 
@@ -78,13 +112,13 @@ describe("webhook runner", () => {
         }
         return backingStore.next();
       },
-      complete: (id) => backingStore.complete(id),
+      complete: (id, result) => backingStore.complete(id, result),
       fail: (id, error) => backingStore.fail(id, error),
     };
     const messages: string[] = [];
     const processor = createWebhookQueueProcessor({
       store,
-      run: async () => {},
+      run: async () => ({ kind: "ignored", reason: "test" }),
       log: (message) => messages.push(message),
     });
 
@@ -350,7 +384,7 @@ describe("webhook runner", () => {
       });
       expect(store.enqueue({ id: "one", host: "gitlab", payload: "x".repeat(60) })).toBe("created");
       expect(store.enqueue({ id: "two", host: "gitlab", payload: "{}" })).toBe("full");
-      store.complete("one");
+      store.complete("one", ignoredPiprResult);
       expect(store.enqueue({ id: "three", host: "gitlab", payload: "x".repeat(101) })).toBe("full");
       store.close();
     } finally {
@@ -379,7 +413,13 @@ describe("webhook runner", () => {
     store.enqueue({ id: "delivery-1", host: "gitlab", payload: '{"safe":true}' });
     const runs: WebhookDelivery[] = [];
 
-    await processNextWebhookDelivery({ store, run: async (delivery) => runs.push(delivery) });
+    await processNextWebhookDelivery({
+      store,
+      run: async (delivery) => {
+        runs.push(delivery);
+        return { kind: "ignored", reason: "test" };
+      },
+    });
     expect(runs).toHaveLength(1);
     expect(store.completed).toEqual(["delivery-1"]);
 
@@ -390,7 +430,7 @@ describe("webhook runner", () => {
         throw new Error("provider failed");
       },
     });
-    expect(store.failures).toEqual([{ id: "delivery-2", error: "provider failed" }]);
+    expect(store.failures).toEqual([{ id: "delivery-2", error: errorPiprResult }]);
   });
 
   it("writes one temporary event, selects GitLab, and cleans up after host-run execution", async () => {
@@ -464,13 +504,153 @@ describe("webhook runner", () => {
 
       const third = new SqliteWebhookDeliveryStore(databasePath);
       expect(third.next()).toEqual({ id: "delivery-1", host: "gitlab", payload: "{}" });
-      third.complete("delivery-1");
+      third.complete("delivery-1", ignoredPiprResult);
       third.close();
 
       const fourth = new SqliteWebhookDeliveryStore(databasePath);
       expect(fourth.next()).toBeUndefined();
       expect(fourth.enqueue({ id: "delivery-1", host: "gitlab", payload: "{}" })).toBe("duplicate");
       fourth.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("restricts persisted webhook results to the service account", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      const store = new SqliteWebhookDeliveryStore(databasePath);
+      expect((await stat(databasePath)).mode & 0o777).toBe(0o600);
+      store.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("persists schema-valid V2 outcomes without raw failure text", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      const store = new SqliteWebhookDeliveryStore(databasePath);
+      store.enqueue({ id: "success", host: "gitlab", payload: "{}" });
+      await processNextWebhookDelivery({
+        store,
+        run: async () => ({ kind: "ignored", reason: "unsupported event" }),
+      });
+      store.enqueue({ id: "failure", host: "gitlab", payload: "{}" });
+      await processNextWebhookDelivery({
+        store,
+        run: async () => {
+          throw new Error("token=private-provider-secret");
+        },
+      });
+      store.close();
+
+      const database = new Database(databasePath, { readonly: true, strict: true });
+      const rows = database
+        .query<{ id: string; resultKind: string; resultJson: string; error: string | null }, []>(
+          "SELECT id, result_kind AS resultKind, result_json AS resultJson, error FROM webhook_deliveries ORDER BY id",
+        )
+        .all();
+      expect(rows.map((row) => ({ ...row, resultJson: JSON.parse(row.resultJson) }))).toEqual([
+        {
+          id: "failure",
+          resultKind: "error",
+          resultJson: {
+            formatVersion: 2,
+            kind: "error",
+            message: "Pipr failed; see the Action log for details.",
+          },
+          error: "Pipr failed; see the Action log for details.",
+        },
+        {
+          id: "success",
+          resultKind: "ignored",
+          resultJson: { formatVersion: 2, kind: "ignored", reason: "unsupported event" },
+          error: null,
+        },
+      ]);
+      expect(JSON.stringify(rows)).not.toContain("private-provider-secret");
+      database.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("bounds result bodies and clears prior attempt results when retrying", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      const store = new SqliteWebhookDeliveryStore(databasePath, {
+        maxResultBytes: 80,
+        maxRetainedResultBytes: 120,
+      });
+      store.enqueue({ id: "large", host: "gitlab", payload: "{}" });
+      store.next();
+      store.complete("large", {
+        formatVersion: 2,
+        kind: "ignored",
+        reason: "x".repeat(200),
+      });
+      store.enqueue({ id: "retry", host: "gitlab", payload: "{}" });
+      store.next();
+      store.fail("retry", errorPiprResult);
+
+      const database = new Database(databasePath, { strict: true });
+      expect(
+        database
+          .query<{ resultJson: string | null; reason: string | null }, []>(
+            "SELECT result_json AS resultJson, result_omitted_reason AS reason FROM webhook_deliveries WHERE id = 'large'",
+          )
+          .get(),
+      ).toEqual({ resultJson: null, reason: "size-limit" });
+      expect(store.next()?.id).toBe("retry");
+      expect(
+        database
+          .query<{ kind: string | null; resultJson: string | null }, []>(
+            "SELECT result_kind AS kind, result_json AS resultJson FROM webhook_deliveries WHERE id = 'retry'",
+          )
+          .get(),
+      ).toEqual({ kind: null, resultJson: null });
+      database.close();
+      store.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("evicts the oldest result bodies when aggregate retention is exceeded", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      const store = new SqliteWebhookDeliveryStore(databasePath, {
+        maxResultBytes: 1_024,
+        maxRetainedResultBytes: 150,
+      });
+      for (const id of ["a-oldest", "z-newest"]) {
+        store.enqueue({ id, host: "gitlab", payload: "{}" });
+        store.next();
+        store.complete(id, {
+          formatVersion: 2,
+          kind: "ignored",
+          reason: `${id}-${"x".repeat(45)}`,
+        });
+      }
+      store.close();
+
+      const database = new Database(databasePath, { readonly: true, strict: true });
+      expect(
+        database
+          .query<{ id: string; resultJson: string | null; reason: string | null }, []>(
+            "SELECT id, result_json AS resultJson, result_omitted_reason AS reason FROM webhook_deliveries ORDER BY id",
+          )
+          .all(),
+      ).toEqual([
+        { id: "a-oldest", resultJson: null, reason: "retention" },
+        { id: "z-newest", resultJson: expect.any(String), reason: null },
+      ]);
+      database.close();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -493,6 +673,55 @@ describe("webhook runner", () => {
       const recovered = new SqliteWebhookDeliveryStore(databasePath, { maxPendingDeliveries: 1 });
       expect(recovered.enqueue({ id: "next", host: "gitlab", payload: "{}" })).toBe("created");
       recovered.close();
+      expect(readWebhookDeliveryStatus(databasePath, 2)).toContainEqual(
+        expect.objectContaining({
+          id: "interrupted",
+          status: "failed",
+          attempts: 3,
+          resultKind: "error",
+          result: errorPiprResult,
+        }),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("projects stored run ids and omission reasons through webhook status", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      const store = new SqliteWebhookDeliveryStore(databasePath);
+      store.enqueue({ id: "run-result", host: "gitlab", payload: "{}" });
+      store.next();
+      store.complete("run-result", commandResponsePiprResult);
+      store.close();
+
+      const database = new Database(databasePath, { strict: true });
+      database.exec(`
+        INSERT INTO webhook_deliveries
+          (id, host, status, attempts, result_kind, result_omitted_reason)
+        VALUES
+          ('size-limited', 'gitlab', 'completed', 1, 'review', 'size-limit'),
+          ('retained', 'gitlab', 'completed', 1, 'review', 'retention');
+      `);
+      database.close();
+
+      expect(readWebhookDeliveryStatus(databasePath, 3)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "run-result",
+            runId: "run-webhook",
+            resultKind: "command-response",
+            result: commandResponsePiprResult,
+          }),
+          expect.objectContaining({
+            id: "size-limited",
+            resultOmittedReason: "size-limit",
+          }),
+          expect.objectContaining({ id: "retained", resultOmittedReason: "retention" }),
+        ]),
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -521,7 +750,7 @@ describe("webhook runner", () => {
 
       const store = new SqliteWebhookDeliveryStore(databasePath);
       expect(store.next()).toEqual({ id: "legacy", host: "gitlab", payload: "{}" });
-      store.complete("legacy");
+      store.complete("legacy", ignoredPiprResult);
       expect(
         store.enqueue({
           id: "bitbucket",
@@ -550,7 +779,7 @@ describe("webhook runner", () => {
       store.enqueue({ id: "delivery-1", host: "gitlab", payload: '{"private":"content"}' });
       for (let attempt = 0; attempt < 3; attempt += 1) {
         expect(store.next()?.id).toBe("delivery-1");
-        store.fail("delivery-1", "provider failed");
+        store.fail("delivery-1", errorPiprResult);
       }
       store.close();
 
@@ -576,7 +805,7 @@ describe("webhook runner", () => {
       for (const id of ["one", "two"]) {
         store.enqueue({ id, host: "gitlab", payload: "{}" });
         store.next();
-        store.complete(id);
+        store.complete(id, ignoredPiprResult);
       }
       store.close();
       const database = new Database(databasePath, { readonly: true, strict: true });
@@ -605,14 +834,14 @@ describe("webhook runner", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]).toContain("delivery-1");
     expect(messages[0]).not.toContain("glpat-secret-value");
-    expect(store.failures).toEqual([{ id: "delivery-1", error: "token=glpat-secret-value" }]);
+    expect(store.failures).toEqual([{ id: "delivery-1", error: errorPiprResult }]);
   });
 });
 
 class MemoryDeliveryStore implements WebhookDeliveryStore {
   deliveries: WebhookDelivery[] = [];
   completed: string[] = [];
-  failures: Array<{ id: string; error: string }> = [];
+  failures: Array<{ id: string; error: PiprResult }> = [];
   enqueue(delivery: WebhookDelivery) {
     if (this.deliveries.some((candidate) => candidate.id === delivery.id))
       return "duplicate" as const;
@@ -626,10 +855,10 @@ class MemoryDeliveryStore implements WebhookDeliveryStore {
         !this.failures.some((failure) => failure.id === delivery.id),
     );
   }
-  complete(id: string) {
+  complete(id: string, _result: PiprResult) {
     this.completed.push(id);
   }
-  fail(id: string, error: string) {
+  fail(id: string, error: PiprResult) {
     this.failures.push({ id, error });
   }
 }

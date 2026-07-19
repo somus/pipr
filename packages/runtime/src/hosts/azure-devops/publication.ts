@@ -142,6 +142,7 @@ export async function publishAzureDevOpsCommandResponse(options: {
   sourceCommentId: string;
   commandName: string;
   body: string;
+  allowHeadDrift?: boolean;
 }) {
   const coordinates = azureCoordinates(options.change);
   const response = commandResponseBody({
@@ -150,8 +151,18 @@ export async function publishAzureDevOpsCommandResponse(options: {
     commandName: options.commandName,
     body: options.body,
   });
-  await currentPullRequest(options.client, options.change);
-  const { owner, threads } = await loadAzureWriteState(options.client, options.change);
+  if (!options.allowHeadDrift) {
+    await currentPullRequest(options.client, options.change);
+  }
+  const { owner, threads } = options.allowHeadDrift
+    ? {
+        owner: await authenticatedAzureOwner(options.client),
+        threads: await options.client.listThreads(
+          coordinates.repositoryId,
+          options.change.change.number,
+        ),
+      }
+    : await loadAzureWriteState(options.client, options.change);
   const existing = ownedRootThread(threads, owner.uniqueName, response.marker);
   const comment = existing
     ? await options.client.updateComment(

@@ -57,6 +57,10 @@ _Avoid_: YAML workflow, block graph
 The Pipr-owned path used by `ctx.change.diffManifest()` and `ctx.pi.run()`.
 _Avoid_: user-authored diff or validation block
 
+**Pipr Result**:
+The public, versioned result returned by hosted, local, and webhook delivery surfaces. A Pipr Result contains safe review or command output and bounded Review Run metadata, but excludes runtime plans, native identifiers, credentials, and raw errors.
+_Avoid_: Action-only result, raw runtime result
+
 **Diff Manifest**:
 The compact changed-code model that defines files, hunks, and ranges where review findings may be anchored.
 _Avoid_: raw diff

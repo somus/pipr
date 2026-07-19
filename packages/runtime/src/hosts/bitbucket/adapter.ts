@@ -1,3 +1,4 @@
+import { commandStatusText } from "../publication.js";
 import type { CodeHostAdapter } from "../types.js";
 import { type BitbucketClient, bitbucketStatusState, createBitbucketClient } from "./client.js";
 import { parseBitbucketEvent } from "./event.js";
@@ -62,6 +63,13 @@ export function createBitbucketHostAdapter(
     publication: {
       publish: ({ change, plan }) => publishBitbucketPlan({ client, change, plan }),
       publishCommandResponse: (args) => publishBitbucketCommandResponse({ client, ...args }),
+      publishCommandStatus: (args) =>
+        publishBitbucketCommandResponse({
+          client,
+          ...args,
+          body: commandStatusText(args),
+          allowHeadDrift: true,
+        }),
       publishThreadActions: (args) => publishBitbucketThreadActions({ client, ...args }),
     },
     comments: {

@@ -25,6 +25,8 @@ import type {
   DiffManifest,
   ModelProfile,
   PiprBuilder,
+  PiprResult,
+  PiprRunSummary,
   PromptText,
   Reviewer,
   Task,
@@ -36,8 +38,10 @@ import {
   definePipr,
   definePlugin,
   jsonSchema,
+  parsePiprResult,
   parseReviewFinding,
   parseReviewResult,
+  piprResultSchema,
   reviewFindingSchema,
   reviewResultSchema,
   reviewSummarySchema,
@@ -50,6 +54,101 @@ import {
   embeddedSdkDeclaration,
   readSdkDeclarationSourceWithChunk,
 } from "../internal.js";
+
+describe("Pipr Result", () => {
+  it("exports a strict, schema-validated V2 review result", () => {
+    const run = {
+      id: "run-1",
+      trigger: "local",
+      baseSha: "base-sha",
+      headSha: "head-sha",
+      tasks: ["review"],
+      durationMs: 125,
+      models: ["openai/gpt-5"],
+      agentRuns: 1,
+      inputTokens: 100,
+      outputTokens: 20,
+      costUsd: 0.01,
+      usageStatus: "complete",
+    } satisfies PiprRunSummary;
+    const result = {
+      formatVersion: 2,
+      kind: "review",
+      run,
+      mainComment: "Review complete.",
+      inlineFindings: [],
+      droppedFindings: [],
+      taskChecks: [],
+      repairAttempted: false,
+      publication: { state: "disabled" },
+    } satisfies PiprResult;
+
+    expect(parsePiprResult(result)).toEqual(result);
+    expect(piprResultSchema.safeParse({ ...result, internalMarker: "secret" }).success).toBe(false);
+  });
+
+  it("validates every V2 result discriminator and run-summary limits", () => {
+    const run: PiprRunSummary = {
+      id: "run-1",
+      trigger: "command",
+      baseSha: "base",
+      headSha: "head",
+      tasks: ["review"],
+      durationMs: 1,
+      models: ["model"],
+      agentRuns: 1,
+      inputTokens: 2,
+      outputTokens: 1,
+      costUsd: 0.01,
+      usageStatus: "partial",
+    };
+    const results = [
+      { formatVersion: 2, kind: "skipped", reason: "no task" },
+      { formatVersion: 2, kind: "ignored", reason: "event" },
+      { formatVersion: 2, kind: "dry-run" },
+      { formatVersion: 2, kind: "command-help", reason: "input", mainComment: "help" },
+      {
+        formatVersion: 2,
+        kind: "command-response",
+        run,
+        mainComment: "answer",
+        publication: { state: "completed", action: "updated" },
+      },
+      {
+        formatVersion: 2,
+        kind: "verifier",
+        run: { ...run, trigger: "verifier" },
+        publication: { state: "completed", inlineResolutionErrorCount: 0 },
+      },
+      { formatVersion: 2, kind: "publication-error", message: "safe" },
+      { formatVersion: 2, kind: "error", message: "safe" },
+    ] satisfies PiprResult[];
+
+    for (const result of results) {
+      expect(parsePiprResult(result)).toEqual(result);
+      expect(piprResultSchema.safeParse({ ...result, privateField: true }).success).toBe(false);
+    }
+    expect(
+      piprResultSchema.safeParse({
+        formatVersion: 2,
+        kind: "command-response",
+        run: { ...run, tasks: Array.from({ length: 201 }, (_, index) => `task-${index}`) },
+        mainComment: "answer",
+        publication: { state: "completed", action: "updated" },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("ChangeRequestContext", () => {
+  it("does not expose a misleading live-head lookup", async () => {
+    const taskTypes = await readFile(
+      path.join(import.meta.dirname, "..", "types", "task.ts"),
+      "utf8",
+    );
+    expect(taskTypes).not.toContain("currentHeadSha");
+  });
+});
 
 describe("definePipr", () => {
   it("registers models, agents, tasks, events, commands, and tools", () => {
@@ -481,9 +580,6 @@ describe("definePipr", () => {
           },
           async changedFiles() {
             return [];
-          },
-          async currentHeadSha() {
-            return "head";
           },
         },
         pi: {
@@ -1369,9 +1465,6 @@ function fakeChange() {
     },
     async changedFiles() {
       return [];
-    },
-    async currentHeadSha() {
-      return "head";
     },
   };
 }

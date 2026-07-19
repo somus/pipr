@@ -1,3 +1,4 @@
+import { commandStatusText } from "../publication.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGitLabClient, type GitLabClient } from "./client.js";
 import { parseGitLabEvent } from "./event.js";
@@ -63,6 +64,13 @@ export function createGitLabHostAdapter(
     publication: {
       publish: ({ plan, change }) => publishGitLabPlan({ client, plan, change }),
       publishCommandResponse: (args) => publishGitLabCommandResponse({ client, ...args }),
+      publishCommandStatus: (args) =>
+        publishGitLabCommandResponse({
+          client,
+          ...args,
+          body: commandStatusText(args),
+          allowHeadDrift: true,
+        }),
       publishThreadActions: (args) => publishGitLabThreadActions({ client, ...args }),
     },
     comments: {

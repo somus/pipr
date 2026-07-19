@@ -1,4 +1,10 @@
-import type { Agent, DiffManifestOptions, SecretRef, TaskContext } from "@usepipr/sdk";
+import type {
+  Agent,
+  DiffManifestOptions,
+  PiprRunSummary,
+  SecretRef,
+  TaskContext,
+} from "@usepipr/sdk";
 import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
@@ -81,6 +87,7 @@ export type RunTaskRuntimeOptions = {
   log?: RuntimeLog;
   taskLog?: TaskContext["log"];
   secretRedactor?: SecretRedactor;
+  runTrigger?: PiprRunSummary["trigger"];
 };
 
 type ReviewRuntimeBaseResult = {
@@ -93,6 +100,7 @@ type ReviewRuntimeBaseResult = {
 export type ReviewRuntimeResult =
   | (ReviewRuntimeBaseResult & {
       kind: "review";
+      run: PiprRunSummary;
       review: ReviewResult;
       validated: ValidatedReview;
       publicationPlan: PublicationPlan;
@@ -112,6 +120,7 @@ export type ReviewRuntimeResult =
     })
   | (ReviewRuntimeBaseResult & {
       kind: "command-response";
+      run: PiprRunSummary;
       commandResponse: {
         commandName: string;
         line: string;
@@ -256,11 +265,20 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     providerModels: output.providerModels,
     repairAttempted: output.repairAttempted,
   });
+  const commandDurationMs = Date.now() - runtimeStarted;
   const commandResponse = commandResponseResultFromOutput({
     provider,
     diffManifest,
     output,
     taskChecks,
+    run: runSummary({
+      options,
+      runId,
+      selectedTasks,
+      durationMs: commandDurationMs,
+      models: output.providerModels.length > 0 ? uniq(output.providerModels) : [provider.model],
+      stats: reviewStatsForRuns(piRuns, commandDurationMs),
+    }),
     commandInvocation: options.commandInvocation,
     secretRedactor: options.secretRedactor,
   });
@@ -288,7 +306,12 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     runId,
     piRunSink: runtimeOptions.piRunSink,
   });
-  const stats = reviewStatsForRuns(piRuns, Date.now() - runtimeStarted);
+  const durationMs = Date.now() - runtimeStarted;
+  const stats = reviewStatsForRuns(piRuns, durationMs);
+  const models =
+    output.providerModels.length + verifier.providerModels.length > 0
+      ? uniq([...output.providerModels, ...verifier.providerModels])
+      : [provider.model];
   const redactedPublication = redactReviewPublication({
     main,
     validated,
@@ -314,10 +337,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
       trustedConfigSha: options.trustedConfigSha,
       trustedConfigHash: options.trustedConfigHash,
       reviewedHeadSha: options.event.change.head.sha,
-      providerModels:
-        output.providerModels.length + verifier.providerModels.length > 0
-          ? uniq([...output.providerModels, ...verifier.providerModels])
-          : [provider.model],
+      providerModels: models,
       selectedTasks,
       failedTasks: [],
       validFindings: validated.validFindings.length,
@@ -336,6 +356,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
 
   return {
     kind: "review",
+    run: runSummary({ options, runId, selectedTasks, durationMs, models, stats }),
     provider,
     diffManifest,
     review: redactedPublication.validated.review,
@@ -360,6 +381,43 @@ function publishFailedRunTaskChecks(
   publishTaskChecks(options.checkSink, redacted.taskChecks);
 }
 
+function runSummary(options: {
+  options: RunTaskRuntimeOptions;
+  runId: string;
+  selectedTasks: string[];
+  durationMs: number;
+  models: string[];
+  stats: ReturnType<typeof reviewStatsForRuns>;
+}): PiprRunSummary {
+  const stats: Partial<NonNullable<ReturnType<typeof reviewStatsForRuns>>> = options.stats ?? {};
+  const {
+    agentRuns = 0,
+    inputTokens = 0,
+    outputTokens = 0,
+    costUsd = 0,
+    usageStatus = "unavailable",
+  } = stats;
+  const trigger = options.options.runTrigger
+    ? options.options.runTrigger
+    : options.options.commandInvocation
+      ? "command"
+      : "change-request";
+  return {
+    id: options.runId,
+    trigger,
+    baseSha: options.options.event.change.base.sha,
+    headSha: options.options.event.change.head.sha,
+    tasks: options.selectedTasks,
+    durationMs: options.durationMs,
+    models: options.models,
+    agentRuns,
+    inputTokens,
+    outputTokens,
+    costUsd,
+    usageStatus,
+  };
+}
+
 function commandResponseResultFromOutput(options: {
   provider: ProviderConfig;
   diffManifest: DiffManifest;
@@ -367,6 +425,7 @@ function commandResponseResultFromOutput(options: {
   taskChecks: RuntimeTaskCheckResult[];
   commandInvocation?: RuntimeCommandInvocation;
   secretRedactor?: SecretRedactor;
+  run: PiprRunSummary;
 }): ReviewRuntimeResult | undefined {
   const commandResponse = options.output.commandResponse;
   if (!commandResponse) {
@@ -484,9 +543,6 @@ function createTaskContext(
           status: file.status,
         }));
       },
-      async currentHeadSha() {
-        return options.event.change.head.sha;
-      },
     },
     platform: { id: options.event.platform.id },
     command: options.commandInvocation
@@ -566,6 +622,7 @@ function commandResponseRuntimeResult(options: {
   taskChecks: RuntimeTaskCheckResult[];
   commandInvocation: RuntimeCommandInvocation;
   secretRedactor?: SecretRedactor;
+  run: PiprRunSummary;
 }): ReviewRuntimeResult {
   const redacted = redactCommandPublication({
     body: options.commandResponse.value,
@@ -574,6 +631,7 @@ function commandResponseRuntimeResult(options: {
   });
   return {
     kind: "command-response",
+    run: options.run,
     provider: options.provider,
     diffManifest: options.diffManifest,
     taskChecks: redacted.taskChecks,

@@ -215,6 +215,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
   it("executes commands from the base commit config instead of PR-head config", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const logs = memoryRuntimeLogSink();
+    const publication = recordingCommandPublicationClient(workspace);
     try {
       expect(currentGitHead(workspace.rootDir)).toBe(workspace.baseSha);
       const result = await runIssueCommentCommand(
@@ -222,7 +223,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         "@pipr review --scope full",
         "write",
         undefined,
-        undefined,
+        publication.client,
         logs.logSink,
       );
 
@@ -237,6 +238,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
       expect(output).toContain('"event":"event dispatch","kind":"command-comment"');
       expect(output).toContain('"event":"command dispatch"');
       expect(output).toContain('"event":"publication result"');
+      expect(publication.writes.updated.at(-1)).toContain("state=completed");
       await expectReviewRanAtHead(result, workspace);
     } finally {
       await removeWorkspace(workspace.rootDir);
@@ -272,14 +274,18 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         response: {
           body: "The change updates command output.",
         },
-        publication: { action: "created", id: "10" },
+        publication: { action: "updated", id: "10" },
       });
       expect(publication.writes.created).toHaveLength(1);
       expect(publication.writes.created[0]).toContain(
         "<!-- pipr:command-response change=1 source=123 command=ask -->",
       );
-      expect(publication.writes.created[0]).toContain("The change updates command output.");
-      expect(publication.writes.updated).toEqual([]);
+      expect(publication.writes.created[0]).toContain(
+        `<!-- pipr:command-state state=accepted head=${workspace.headSha} -->`,
+      );
+      expect(publication.writes.updated).toHaveLength(2);
+      expect(publication.writes.updated[0]).toContain("state=running");
+      expect(publication.writes.updated[1]).toContain("The change updates command output.");
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -323,9 +329,9 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         456,
       );
 
-      const firstRunId = commandResponsePayload(firstPublication.writes.created[0]);
-      expect(commandResponsePayload(repeatedPublication.writes.created[0])).toBe(firstRunId);
-      expect(commandResponsePayload(changedPublication.writes.created[0])).not.toBe(firstRunId);
+      const firstRunId = commandResponsePayload(firstPublication.writes.updated.at(-1));
+      expect(commandResponsePayload(repeatedPublication.writes.updated.at(-1))).toBe(firstRunId);
+      expect(commandResponsePayload(changedPublication.writes.updated.at(-1))).not.toBe(firstRunId);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -363,8 +369,10 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         publication: { action: "updated", id: "88" },
       });
       expect(publication.writes.created).toEqual([]);
-      expect(publication.writes.updated).toHaveLength(1);
-      expect(publication.writes.updated[0]).toContain("Updated answer.");
+      expect(publication.writes.updated).toHaveLength(3);
+      expect(publication.writes.updated[0]).toContain("state=accepted");
+      expect(publication.writes.updated[1]).toContain("state=running");
+      expect(publication.writes.updated[2]).toContain("Updated answer.");
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -387,6 +395,111 @@ describe("runHostRunCommand issue_comment dispatch", () => {
       expect(result).toMatchObject({ kind: "review", command: "review" });
       expect(checks.created).toEqual([]);
       expect(checks.updated).toEqual([]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("publishes a generic failed status when command task execution fails", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: askConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    await writePiExecutable(workspace.piExecutable, "not valid json");
+    try {
+      await expect(
+        runIssueCommentCommand(
+          workspace,
+          "@pipr ask what changed?",
+          "read",
+          undefined,
+          publication.client,
+        ),
+      ).rejects.toThrow();
+      expect(publication.writes.updated.at(-1)).toContain("state=failed");
+      expect(publication.writes.updated.at(-1)).not.toContain("not valid json");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("publishes superseded after head drift and keeps the final model response guarded", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: askConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    await writePiExecutable(workspace.piExecutable, '{"body":"Head-specific answer."}');
+    const update = publication.client.updateIssueComment;
+    publication.client.updateIssueComment = async (options) => {
+      const result = await update(options);
+      if (options.body.includes("state=running")) workspace.headSha = "new-head";
+      return result;
+    };
+    try {
+      await expect(
+        runIssueCommentCommand(
+          workspace,
+          "@pipr ask what changed?",
+          "read",
+          undefined,
+          publication.client,
+        ),
+      ).rejects.toThrow(/head changed/i);
+      expect(publication.writes.updated.at(-1)).toContain("state=superseded");
+      expect(publication.writes.updated.join("\n")).not.toContain("Head-specific answer.");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("stops before Pi when accepted status publication fails", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: askConfigTs(),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    publication.client.createIssueComment = async () => {
+      throw new Error("status denied");
+    };
+    try {
+      await expect(
+        runIssueCommentCommand(
+          workspace,
+          "@pipr ask what changed?",
+          "read",
+          undefined,
+          publication.client,
+        ),
+      ).rejects.toThrow("status denied");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("fails the host run when completed status publication fails", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = recordingCommandPublicationClient(workspace);
+    const update = publication.client.updateIssueComment;
+    publication.client.updateIssueComment = async (options) => {
+      if (options.body.includes("state=completed")) {
+        throw new Error("terminal status denied");
+      }
+      return await update(options);
+    };
+    try {
+      await expect(
+        runIssueCommentCommand(
+          workspace,
+          "@pipr review --scope full",
+          "write",
+          undefined,
+          publication.client,
+        ),
+      ).rejects.toThrow("terminal status denied");
+      expect(publication.writes.updated.at(-1)).toContain("state=failed");
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

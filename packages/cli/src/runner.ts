@@ -12,10 +12,8 @@ import {
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
-import {
-  presentGitHubActionResult,
-  stripPiprMainCommentMarkers,
-} from "@usepipr/runtime/internal/action-result";
+import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
+import { stripPiprMainCommentMarkers, toPiprResult } from "@usepipr/runtime/internal/pipr-result";
 import { Command, CommanderError } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
@@ -43,6 +41,7 @@ type CliOptions = {
   head?: string;
   piExecutable?: string;
   json?: boolean;
+  limit?: string;
 };
 
 type MainOptions = {
@@ -114,6 +113,13 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .option("--port <port>", "Listen port", "8787")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .action(runWebhookServe);
+  webhook
+    .command("status")
+    .description("Show recent webhook delivery outcomes")
+    .option("--database <path>", "SQLite delivery database", ".pipr/webhooks.sqlite")
+    .option("--limit <count>", "Maximum deliveries to show", "20")
+    .option("--json", "Print versioned JSON")
+    .action(runWebhookStatus);
 
   program
     .command("check")
@@ -230,6 +236,38 @@ async function runWebhookServe(options: CliOptions): Promise<void> {
     port,
     env: process.env,
   });
+}
+
+async function runWebhookStatus(options: CliOptions): Promise<void> {
+  const { readWebhookDeliveryStatus } = await import("@usepipr/runtime");
+  const limit = Number(options.limit);
+  const deliveries = readWebhookDeliveryStatus(options.database ?? ".pipr/webhooks.sqlite", limit);
+  if (options.json) {
+    console.log(JSON.stringify({ formatVersion: 1, deliveries }, null, 2));
+    return;
+  }
+  if (deliveries.length === 0) {
+    console.log("No webhook deliveries found.");
+    return;
+  }
+  const rows = deliveries.map((delivery) => [
+    shorten(delivery.id, 24),
+    delivery.host,
+    delivery.status,
+    String(delivery.attempts),
+    delivery.resultKind ?? "-",
+    delivery.runId ? shorten(delivery.runId, 12) : "-",
+    delivery.updatedAt,
+  ]);
+  console.log(
+    [["DELIVERY", "HOST", "STATUS", "ATTEMPTS", "RESULT", "RUN", "UPDATED"], ...rows]
+      .map((row) => row.join("\t"))
+      .join("\n"),
+  );
+}
+
+function shorten(value: string, length: number): string {
+  return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
 }
 
 function webhookHost(value: string | undefined): "gitlab" | "azure-devops" | "bitbucket" {
@@ -489,7 +527,7 @@ function formatLocalLogValue(value: unknown): string {
 
 function writeLocalReviewResult(result: LocalReviewResult, json: boolean): void {
   if (json) {
-    console.log(JSON.stringify(serializeLocalReviewJsonV1(result), null, 2));
+    console.log(JSON.stringify(toPiprResult({ source: "local", result }), null, 2));
     return;
   }
   if (result.kind === "skipped") {
@@ -515,43 +553,6 @@ function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }
   return inlineFindings.length === 0
     ? mainComment
     : [mainComment.trimEnd(), "", "## Inline Findings", "", inlineFindings.join("\n\n")].join("\n");
-}
-
-const localReviewJsonFormatVersion = 1 as const;
-
-type LocalReviewJsonCommonV1 = {
-  formatVersion: typeof localReviewJsonFormatVersion;
-  mainComment: string;
-  inlineFindings: LocalReviewResult["inlineCommentDrafts"][number]["finding"][];
-  droppedFindings: LocalReviewResult["validated"]["droppedFindings"];
-  taskChecks: LocalReviewResult["taskChecks"];
-  provider: Pick<LocalReviewResult["provider"], "id" | "provider" | "model">;
-  providerModels: string[];
-  repairAttempted: boolean;
-};
-
-type LocalReviewJsonResultV1 =
-  | (LocalReviewJsonCommonV1 & { kind: "review" })
-  | (LocalReviewJsonCommonV1 & { kind: "skipped"; skipReason?: string });
-
-function serializeLocalReviewJsonV1(result: LocalReviewResult): LocalReviewJsonResultV1 {
-  const common: LocalReviewJsonCommonV1 = {
-    formatVersion: localReviewJsonFormatVersion,
-    mainComment: stripPiprMainCommentMarkers(result.mainComment),
-    inlineFindings: result.inlineCommentDrafts.map((draft) => draft.finding),
-    droppedFindings: result.validated.droppedFindings,
-    taskChecks: result.taskChecks,
-    provider: {
-      id: result.provider.id,
-      provider: result.provider.provider,
-      model: result.provider.model,
-    },
-    providerModels: result.publicationPlan.metadata.providerModels ?? [result.provider.model],
-    repairAttempted: result.repairAttempted,
-  };
-  return result.kind === "skipped"
-    ? { ...common, kind: "skipped", skipReason: result.skipReason }
-    : { ...common, kind: "review" };
 }
 
 async function runDryRun(options: CliOptions): Promise<void> {

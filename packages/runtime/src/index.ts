@@ -27,8 +27,8 @@ export {
   runLocalReviewCommand,
   runValidateCommand,
 } from "./host-run/commands.js";
-export type { WebhookHost } from "./host-run/webhook-server.js";
-export { runWebhookServer } from "./host-run/webhook-server.js";
+export type { WebhookDeliveryStatus, WebhookHost } from "./host-run/webhook-server.js";
+export { readWebhookDeliveryStatus, runWebhookServer } from "./host-run/webhook-server.js";
 export type { PublicationResult } from "./review/publication-result.js";
 export { PublicationError } from "./review/publication-result.js";
 export type {

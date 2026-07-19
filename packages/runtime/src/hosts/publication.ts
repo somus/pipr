@@ -13,6 +13,7 @@ import {
   renderVerifierResponseMarker,
 } from "../review/prior-state.js";
 import { PublicationError, type PublicationResult } from "../review/publication-result.js";
+import type { CommandLifecycleState } from "./types.js";
 
 export async function publishUnseenInlineItems(options: {
   items: InlinePublicationItem[];
@@ -88,6 +89,21 @@ export function commandResponseBody(options: {
 }): { marker: string; body: string } {
   const marker = `<!-- pipr:command-response change=${options.changeNumber} source=${options.sourceCommentId} command=${options.commandName} -->`;
   return { marker, body: [marker, "", options.body, ""].join("\n") };
+}
+
+export function commandStatusText(options: {
+  state: CommandLifecycleState;
+  reviewedHeadSha: string;
+}): string {
+  const labels: Record<CommandLifecycleState, string> = {
+    accepted: "Pipr accepted this command.",
+    running: "Pipr is running this command.",
+    completed: "Pipr completed this command.",
+    failed: "Pipr could not complete this command; see the run log for details.",
+    superseded: "Pipr stopped because the change request head was updated.",
+  };
+  const marker = `<!-- pipr:command-state state=${options.state} head=${options.reviewedHeadSha} -->`;
+  return [marker, "", labels[options.state]].join("\n");
 }
 
 export function threadActionReply(action: ThreadAction): { body: string; marker: string } {

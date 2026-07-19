@@ -117,6 +117,7 @@ export async function publishBitbucketCommandResponse(options: {
   sourceCommentId: string;
   commandName: string;
   body: string;
+  allowHeadDrift?: boolean;
 }) {
   const response = commandResponseBody({
     changeNumber: options.change.change.number,
@@ -124,8 +125,15 @@ export async function publishBitbucketCommandResponse(options: {
     commandName: options.commandName,
     body: options.body,
   });
-  await assertCurrentEndpoints(options.client, options.change);
-  const { owner, comments } = await loadBitbucketWriteState(options.client, options.change);
+  if (!options.allowHeadDrift) {
+    await assertCurrentEndpoints(options.client, options.change);
+  }
+  const { owner, comments } = options.allowHeadDrift
+    ? {
+        owner: await authenticatedBitbucketOwner(options.client),
+        comments: await options.client.listComments(options.change.change.number),
+      }
+    : await loadBitbucketWriteState(options.client, options.change);
   const existing = comments.find(
     (comment) =>
       comment.user?.uuid === owner.uuid &&

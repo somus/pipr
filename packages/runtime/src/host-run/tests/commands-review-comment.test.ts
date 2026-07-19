@@ -240,10 +240,24 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
         workspace,
         "This still applies because the unsafe path remains.",
       );
-      await expectVerifierReplyPublished(workspace, publication, {
+      const result = await expectVerifierReplyPublished(workspace, publication, {
         githubClient: fakeGitHubClient(workspace, "write"),
         logSink: logs.logSink,
       });
+      expect(result.run).toMatchObject({
+        trigger: "verifier",
+        baseSha: workspace.baseSha,
+        headSha: workspace.headSha,
+        tasks: ["pipr-internal-verifier"],
+        models: ["deepseek-reasoner"],
+        agentRuns: 1,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        usageStatus: "unavailable",
+      });
+      expect(result.run.id).toMatch(/^pipr-/);
+      expect(result.run.durationMs).toBeGreaterThanOrEqual(0);
       const output = logs.messages.join("\n");
       expect(output).toContain('"eventName":"pull_request_review_comment"');
       expect(output).toContain('"event":"parse event start"');

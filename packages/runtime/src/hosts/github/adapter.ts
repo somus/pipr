@@ -1,4 +1,5 @@
 import { githubCoordinates } from "../../shared/github.js";
+import { commandStatusText } from "../publication.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGitHubCommandClient, type GitHubCommandClient } from "./command.js";
 import {
@@ -102,6 +103,16 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
           sourceCommentId: Number(options.sourceCommentId),
           commandName: options.commandName,
           body: options.body,
+        });
+      },
+      publishCommandStatus(options) {
+        return publishGitHubCommandResponse({
+          client: publicationClient,
+          change: options.change,
+          sourceCommentId: Number(options.sourceCommentId),
+          commandName: options.commandName,
+          body: commandStatusText(options),
+          allowHeadDrift: true,
         });
       },
       publishThreadActions(options) {
