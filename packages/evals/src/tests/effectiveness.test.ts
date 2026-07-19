@@ -147,6 +147,39 @@ describe("effectiveness benchmark", () => {
     expect(scoreEffectivenessRun(output, testCase.expected).structuredRecalledIssues).toBe(1);
   });
 
+  it.each([
+    {
+      caseId: "pr105-interrupted-result-recovery",
+      body: "resultKind and resultJson remain null instead of the documented structured error.",
+    },
+    {
+      caseId: "pr105-stale-lifecycle-overwrite",
+      body: "Running and completed bypass the head check, so they can replace a record for a different reviewed head.",
+    },
+    {
+      caseId: "pr105-stale-acceptance-supersession",
+      body: 'If publishStatus("accepted") throws, reportTerminalStatus is never called.',
+    },
+  ])("recognizes an adjudicated live paraphrase for $caseId", ({ caseId, body }) => {
+    const testCase = effectivenessBenchmarkCases.find(({ id }) => id === caseId);
+    if (!testCase) throw new Error(`missing benchmark case ${caseId}`);
+    const expectedLine = testCase.expected.findings[0]?.line;
+    if (!expectedLine) throw new Error(`missing expected line for ${caseId}`);
+
+    const output = evalOutput({
+      valid: [
+        {
+          ...expectedFinding,
+          body,
+          startLine: expectedLine,
+          endLine: expectedLine,
+        },
+      ],
+    });
+
+    expect(scoreEffectivenessRun(output, testCase.expected).structuredRecalledIssues).toBe(1);
+  });
+
   it("accepts a nearby signature anchor for the same live stale-overwrite issue", () => {
     const testCase = effectivenessBenchmarkCases.find(
       ({ id }) => id === "pr105-stale-lifecycle-overwrite",
@@ -176,6 +209,34 @@ describe("effectiveness benchmark", () => {
 
     expect(source).toContain("Best-effort terminal reporting must not replace the task error");
     expect(source).toContain("throw error");
+  });
+
+  it("covers the clean lifecycle branches that the reviewer is asked to inspect", () => {
+    const recovery = effectivenessBenchmarkCases.find(
+      ({ id }) => id === "pr105-interrupted-result-recovery-clean",
+    );
+    const ordering = effectivenessBenchmarkCases.find(
+      ({ id }) => id === "pr105-stale-lifecycle-overwrite-clean",
+    );
+    const dispatch = effectivenessBenchmarkCases.find(
+      ({ id }) => id === "pr105-stale-acceptance-supersession-clean",
+    );
+
+    expect(recovery?.headFiles["src/review-target.test.ts"]).toContain(
+      "preserves a retryable interrupted delivery",
+    );
+    expect(ordering?.headFiles["src/review-target.test.ts"]).toContain(
+      "orders later states for an existing running record",
+    );
+    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
+      "reports failures from every command stage",
+    );
+    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
+      "reports superseded when the reviewed head changed",
+    );
+    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
+      "preserves the command error when terminal reporting fails",
+    );
   });
 
   it("aggregates issue-level recall, precision, clean accuracy, and funnel counts", () => {

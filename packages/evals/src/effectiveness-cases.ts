@@ -45,6 +45,36 @@ test("stores a safe result when an interrupted delivery exhausts retries", () =>
     message: "Delivery interrupted.",
   });
 });
+
+test("preserves a retryable interrupted delivery", () => {
+  const recovered = recoverInterrupted({
+    status: "processing",
+    attempts: 2,
+    payload: "retry input",
+    resultKind: null,
+    resultJson: null,
+  });
+
+  expect(recovered).toEqual({
+    status: "pending",
+    attempts: 2,
+    payload: "retry input",
+    resultKind: null,
+    resultJson: null,
+  });
+});
+
+test("leaves a non-processing delivery unchanged", () => {
+  const row = {
+    status: "pending" as const,
+    attempts: 1,
+    payload: "queued input",
+    resultKind: null,
+    resultJson: null,
+  };
+
+  expect(recoverInterrupted(row)).toEqual(row);
+});
 `;
 
 const recoveryDefect = `${recoveryBase}
@@ -118,6 +148,23 @@ test("orders lifecycle updates by reviewed head", () => {
   expect(
     shouldUpdateCommandComment(undefined, { state: "running", reviewedHeadSha: "head-1" }),
   ).toBe(true);
+});
+
+test("orders later states for an existing running record", () => {
+  const existing = { state: "running" as const, reviewedHeadSha: "head-2" };
+
+  expect(
+    shouldUpdateCommandComment(existing, { state: "completed", reviewedHeadSha: "head-2" }),
+  ).toBe(true);
+  expect(
+    shouldUpdateCommandComment(existing, { state: "completed", reviewedHeadSha: "head-1" }),
+  ).toBe(false);
+  expect(
+    shouldUpdateCommandComment(existing, { state: "failed", reviewedHeadSha: "head-2" }),
+  ).toBe(true);
+  expect(
+    shouldUpdateCommandComment(existing, { state: "superseded", reviewedHeadSha: "head-1" }),
+  ).toBe(false);
 });
 `;
 
@@ -203,21 +250,75 @@ import {
   type CommandStatus,
 } from "./review-target";
 
-test("reports a terminal state when accepted publication fails", async () => {
-  const statuses: CommandStatus[] = [];
-  const options: CommandOptions = {
-    reviewedHeadSha: "head-1",
-    publishStatus: async (status) => {
-      statuses.push(status);
-      if (status === "accepted") throw new Error("acceptance failed");
-    },
-    prepareTrustedHead: async () => {},
-    currentHeadSha: async () => "head-1",
-    runTask: async () => {},
-  };
+type FailureStage = "accepted" | "prepare" | "running" | "task";
 
-  await expect(dispatchCommand(options)).rejects.toThrow("acceptance failed");
+function commandScenario(options: {
+  failureStage?: FailureStage;
+  currentHeadSha?: string;
+  terminalStatusFailure?: boolean;
+} = {}): { command: CommandOptions; statuses: CommandStatus[] } {
+  const statuses: CommandStatus[] = [];
+  const fail = (stage: FailureStage): void => {
+    if (options.failureStage === stage) throw new Error(stage + " failed");
+  };
+  return {
+    statuses,
+    command: {
+      reviewedHeadSha: "head-1",
+      publishStatus: async (status) => {
+        statuses.push(status);
+        if (status === "accepted") fail("accepted");
+        if (status === "running") fail("running");
+        if (options.terminalStatusFailure && (status === "failed" || status === "superseded")) {
+          throw new Error("terminal reporting failed");
+        }
+      },
+      prepareTrustedHead: async () => fail("prepare"),
+      currentHeadSha: async () => options.currentHeadSha ?? "head-1",
+      runTask: async () => fail("task"),
+    },
+  };
+}
+
+test("reports a terminal state when accepted publication fails", async () => {
+  const { command, statuses } = commandScenario({ failureStage: "accepted" });
+
+  await expect(dispatchCommand(command)).rejects.toThrow("accepted failed");
   expect(statuses).toEqual(["accepted", "failed"]);
+});
+
+test("reports failures from every command stage", async () => {
+  const expectations: Array<{ stage: FailureStage; statuses: CommandStatus[] }> = [
+    { stage: "prepare", statuses: ["accepted", "failed"] },
+    { stage: "running", statuses: ["accepted", "running", "failed"] },
+    { stage: "task", statuses: ["accepted", "running", "failed"] },
+  ];
+
+  for (const expectation of expectations) {
+    const { command, statuses } = commandScenario({ failureStage: expectation.stage });
+    await expect(dispatchCommand(command)).rejects.toThrow(expectation.stage + " failed");
+    expect(statuses).toEqual(expectation.statuses);
+  }
+});
+
+test("reports superseded when the reviewed head changed", async () => {
+  const { command, statuses } = commandScenario({
+    failureStage: "task",
+    currentHeadSha: "head-2",
+  });
+
+  await expect(dispatchCommand(command)).rejects.toThrow("task failed");
+  expect(statuses).toEqual(["accepted", "running", "superseded"]);
+});
+
+test("preserves the command error when terminal reporting fails", async () => {
+  const { command, statuses } = commandScenario({
+    failureStage: "task",
+    terminalStatusFailure: true,
+  });
+
+  await expect(dispatchCommand(command)).rejects.toThrow("task failed");
+  expect(statuses).toEqual(["accepted", "running", "failed"]);
 });
 `;
 
@@ -264,6 +365,7 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
       ["failed", "result"],
       ["terminal", "result"],
       ["failure", "structured"],
+      ["resultkind", "structured error"],
     ],
   }),
   cleanCase({
@@ -294,6 +396,7 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
       ["running", "different head", "overwrite"],
       ["running", "head", "overwrit"],
       ["running", "attempt", "replac"],
+      ["running", "head", "replac"],
     ],
   }),
   cleanCase({
@@ -315,6 +418,8 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
       ["accepted", "superseded"],
       ["acceptance", "catch"],
       ["accepted", "error boundary"],
+      ["accepted", "terminal status"],
+      ["accepted", "reportterminalstatus"],
     ],
   }),
   cleanCase({
