@@ -20,7 +20,7 @@ Use the narrowest command that covers the change.
 | `bun run --cwd packages/evals eval:dev` | Evalite watch mode for the focused live gates. | Yes |
 | `bun run --cwd packages/evals eval:full` | Broad live suite for trend checks and investigation. | Advisory |
 | `bun run --cwd packages/evals eval:full:export` | Broad live suite with JSON results in `evalite-export/results.json`. | Advisory |
-| `bun run --cwd packages/evals eval:effectiveness` | Paired, repeated live benchmark with issue-level recall, precision, clean accuracy, and funnel counts. | Advisory |
+| `bun run --cwd packages/evals benchmark:effectiveness` | Paired, repeated live benchmark with issue-level recall, precision, clean accuracy, and funnel counts. | Advisory |
 
 Keep `DEEPSEEK_API_KEY` in the untracked `.pipr/.env`, but explicitly export only
 that variable in a trusted shell before running live evals. The committed scripts
