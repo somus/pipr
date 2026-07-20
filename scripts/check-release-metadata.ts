@@ -29,6 +29,7 @@ const dockerImageWorkflow = await readText(".github/workflows/docker-image.yml")
 const evalsWorkflow = await readText(".github/workflows/evals.yml");
 const releaseWorkflow = await readText(".github/workflows/release.yml");
 const releasePleaseWorkflow = await readText(".github/workflows/release-please.yml");
+const docsSources = await readGlob("apps/docs/content/docs/**/*.mdx");
 const selfReviewWorkflow = await readText(".github/workflows/pipr.yml");
 const actionMetadata = await readText("action.yml");
 const webhookCompose = await readText("deploy/webhook/compose.yml");
@@ -55,6 +56,25 @@ const workflowSources = {
   ".github/workflows/release-please.yml": releasePleaseWorkflow,
   ".github/workflows/pipr.yml": selfReviewWorkflow,
 };
+
+for (const [file, source] of docsSources) {
+  for (const [index, line] of source.split(/\r?\n/).entries()) {
+    if (!line.includes("x-release-please-version")) continue;
+    const versions = [...line.matchAll(/\bv?(\d+\.\d+\.\d+)\b/g)].map((match) => match[1]);
+    assert(versions.length > 0, `${file}:${index + 1} release marker must include a version`);
+    for (const version of versions) {
+      assert.equal(
+        version,
+        rootPackage.version,
+        `${file}:${index + 1} marked version must match root`,
+      );
+    }
+  }
+  assert(
+    !/release\.published/.test(source),
+    `${file} must not claim publishing runs directly from release.published`,
+  );
+}
 
 for (const packageConfig of Object.values(parsedReleasePleaseConfig.packages)) {
   for (const extraFile of packageConfig["extra-files"] ?? []) {
@@ -443,6 +463,15 @@ async function readJson<T>(relativePath: string): Promise<T> {
 
 async function readText(relativePath: string): Promise<string> {
   return await Bun.file(path.join(rootDir, relativePath)).text();
+}
+
+async function readGlob(pattern: string): Promise<Array<[string, string]>> {
+  const files: Array<[string, string]> = [];
+  const glob = new Bun.Glob(pattern);
+  for await (const relativePath of glob.scan({ cwd: rootDir, onlyFiles: true })) {
+    files.push([relativePath, await readText(relativePath)]);
+  }
+  return files.sort(([left], [right]) => left.localeCompare(right));
 }
 
 function githubExpression(value: string): string {

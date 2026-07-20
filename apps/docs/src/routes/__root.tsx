@@ -13,14 +13,6 @@ export const Route = createRootRoute({
         name: "viewport",
         content: "width=device-width, initial-scale=1",
       },
-      {
-        title: "Pipr",
-      },
-      {
-        name: "description",
-        content:
-          "Documentation for Pipr, code-owned AI review for GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud.",
-      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

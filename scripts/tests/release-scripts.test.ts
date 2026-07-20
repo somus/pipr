@@ -551,6 +551,28 @@ describe("install.sh", () => {
 });
 
 describe("check-release-metadata", () => {
+  it("rejects documentation release markers that drift from the root version", () => {
+    const repository = copyRepositoryFixture();
+    const quickstartPath = path.join(repository, "apps/docs/content/docs/guide/quickstart.mdx");
+    write(
+      quickstartPath,
+      `${readFileSync(quickstartPath, "utf8")}\nRelease v0.0.0. {/* x-release-please-version */}\n`,
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects documentation that claims publishing runs from release.published", () => {
+    const repository = copyRepositoryFixture();
+    const developmentPath = path.join(repository, "apps/docs/content/docs/project/development.mdx");
+    write(
+      developmentPath,
+      `${readFileSync(developmentPath, "utf8")}\nPublishing runs directly from release.published.\n`,
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
   it("rejects missing Release Please extra files", () => {
     const repository = copyRepositoryFixture();
     const configPath = path.join(repository, "release-please-config.json");
@@ -1006,5 +1028,17 @@ function bumpReleaseFixture(repository: string, version: string): void {
   for (const { path: relativePath } of genericFiles) {
     const filePath = path.join(repository, relativePath);
     write(filePath, readFileSync(filePath, "utf8").replaceAll(previousVersion, version));
+  }
+  const genericGlobs = releasePleaseConfig.packages["."]["extra-files"].filter(
+    (extraFile) => extraFile.type === "generic" && extraFile.glob,
+  );
+  for (const { path: pattern } of genericGlobs) {
+    for (const relativePath of new Bun.Glob(pattern).scanSync({
+      cwd: repository,
+      onlyFiles: true,
+    })) {
+      const filePath = path.join(repository, relativePath);
+      write(filePath, readFileSync(filePath, "utf8").replaceAll(previousVersion, version));
+    }
   }
 }

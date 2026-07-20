@@ -267,7 +267,7 @@ Required release setup:
 - GHCR package write access through `GITHUB_TOKEN`
 - `PIPR_RELEASE_PLEASE_TOKEN` configured with permission to create release pull requests and releases
 
-The Release Please workflow opens changelog and version pull requests from Conventional Commits on `main`. The publish workflow runs on `release.published`. The release tag must look like `v0.4.3`, and root, SDK, runtime, and CLI package versions must match the tag without the leading `v`. The workflow grants `id-token: write` and uses npm trusted publishing, so it does not need an `NPM_TOKEN` secret. {/* x-release-please-version */}
+Release Please opens a changelog and version pull request from Conventional Commits on `main`. Merge that pull request, wait for its CI run to succeed, and let Release Please create the `v0.4.3` release. The successful CI event then lets `release.yml` validate and publish the npm packages, CLI binaries, and GHCR images. Root, SDK, runtime, and CLI package versions must match the tag without the leading `v`. The workflow grants `id-token: write` and uses npm trusted publishing, so it does not need an `NPM_TOKEN` secret. {/* x-release-please-version */}
 
 Configure trusted publishing through npm package settings, or with npm 11.15.0 or newer after the package exists:
 
@@ -334,12 +334,12 @@ git remote add origin git@github.com:somus/pipr.git
 git push -u origin main
 ```
 
-### Draft release
+### Retry a failed publish
 
-Publish a GitHub Release from a semver tag when the package is ready:
+Use manual dispatch only to recover when the release exists but its publish workflow failed:
 
 ```bash
-gh release create v0.4.3 --draft --title v0.4.0 --generate-notes # x-release-please-version
+gh workflow run release.yml -f tag=v0.4.3 # x-release-please-version
 ```
 
-The release workflow starts when the release is published.
+The normal release path is the merged Release Please pull request and successful CI sequence above.

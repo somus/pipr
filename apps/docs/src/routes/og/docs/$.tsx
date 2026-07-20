@@ -1,8 +1,6 @@
-import { ImageResponse } from "@takumi-rs/image-response";
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { generate as DefaultImage } from "fumadocs-ui/og/takumi";
 import { getLegacyDocRedirect } from "@/lib/docs-routes";
-import { appName } from "@/lib/shared";
+import { renderDocsOgImage } from "@/lib/og-image";
 import { source } from "@/lib/source";
 
 export const Route = createFileRoute("/og/docs/$")({
@@ -12,7 +10,11 @@ export const Route = createFileRoute("/og/docs/$")({
         const segments = ogSegments(params._splat);
         const redirect = legacyOgRedirect(segments);
         if (redirect) return redirect;
-        const response = renderOgImage(loadOgPage(segments));
+        const page = loadOgPage(segments);
+        const response = renderDocsOgImage({
+          title: page.data.title,
+          description: page.data.description ?? "",
+        });
         await response.ready;
         return response;
       },
@@ -40,24 +42,4 @@ function loadOgPage(segments: string[]) {
   const page = source.getPage(segments);
   if (!page) throw notFound();
   return page;
-}
-
-function renderOgImage(page: NonNullable<ReturnType<typeof source.getPage>>) {
-  return new ImageResponse(
-    <DefaultImage
-      title={page.data.title}
-      description={page.data.description}
-      site={`${appName} Docs`}
-      primaryColor="rgba(178, 221, 91, 0.3)"
-      primaryTextColor="rgb(178, 221, 91)"
-    />,
-    {
-      width: 1200,
-      height: 630,
-      format: "webp",
-      headers: {
-        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
-      },
-    },
-  );
 }

@@ -115,6 +115,8 @@ const primary = pipr.model({
 });
 ```
 
+Pipr passes the configured provider and model IDs to Pi. [Browse Pi's Model Catalog](https://pi.dev/models) for current identifiers, providers, context limits, and pricing.
+
 ### Env-only secrets
 
 Provider secrets are env-only. `pipr.secret({ name: "DEEPSEEK_API_KEY" })` records the env var name and does not put raw secret values in the runtime plan.

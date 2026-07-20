@@ -20,12 +20,6 @@ const staticDocsPages = docsPageSlugs.flatMap((slugs) => [
       crawlLinks: false,
     },
   },
-  {
-    path: `/og/docs/${[...slugs, "image.webp"].join("/")}`,
-    prerender: {
-      crawlLinks: false,
-    },
-  },
 ]);
 
 function getDocsPageSlugs(directory: string, parents: string[] = []): string[][] {
