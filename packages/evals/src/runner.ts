@@ -12,7 +12,13 @@ type PiprEvalRunMode = "live" | "deterministic";
 type PiprEvalRunOptions = {
   mode: PiprEvalRunMode;
   piExecutable?: string;
+  reviewInstructions?: string;
 };
+
+export const piprEvalModel = {
+  provider: "deepseek",
+  model: "deepseek-v4-pro",
+} as const;
 
 const evalSideSchema = z.enum(["RIGHT", "LEFT"]);
 const evalRangeKindSchema = z.enum(["added", "deleted", "context", "mixed"]);
@@ -51,6 +57,7 @@ const evalPiCallSchema = z.object({
 
 const evalDroppedFindingSchema = z.object({
   reason: z.string(),
+  body: z.string(),
   path: z.string(),
   rangeId: z.string(),
   side: evalSideSchema,
@@ -96,6 +103,10 @@ type ForbiddenOutputSnapshot = Pick<
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const packagedFakePi = fileURLToPath(new URL("./fake-pi.ts", import.meta.url));
+const defaultReviewInstructions = [
+  "Review the pull request diff for correctness, security, and test coverage.",
+  "Return only actionable findings that target valid diff ranges.",
+].join("\n");
 const forbiddenOutputSnapshotKey = Symbol("piprEvalForbiddenOutputSnapshot");
 const textDecoder = new TextDecoder();
 
@@ -126,7 +137,11 @@ async function runPreparedFixture(
 ): Promise<PiprEvalOutput> {
   const runOptions = evalRunOptions(options);
   assertRunOptions(runOptions);
-  const { baseSha, headSha } = await prepareFixture(rootDir, testCase);
+  const { baseSha, headSha } = await prepareFixture(
+    rootDir,
+    testCase,
+    runOptions.reviewInstructions,
+  );
   const result = runLocalReview(rootDir, baseSha, headSha, {
     mode: runOptions.mode,
     callsDir,
@@ -181,6 +196,7 @@ async function successfulEvalOutput(
       ),
       droppedFindings: result.validated.droppedFindings.map((finding) => ({
         ...finding,
+        body: sanitizeEvalText(finding.body, forbiddenOutputSubstrings),
         reason: sanitizeEvalText(finding.reason, forbiddenOutputSubstrings),
       })),
       diffRanges: result.diffRanges.map((range) => ({
@@ -212,6 +228,7 @@ export function piprEvalForbiddenOutputText(output: PiprEvalOutput): string {
       finding.suggestedFix ?? "",
     ]),
     ...snapshot.droppedFindings.flatMap((finding) => [
+      finding.body,
       finding.reason,
       finding.path,
       finding.rangeId,
@@ -305,12 +322,13 @@ async function readPiCallsAfterFailure(
 async function prepareFixture(
   rootDir: string,
   testCase: PiprEvalCase,
+  reviewInstructions: string | undefined,
 ): Promise<{ baseSha: string; headSha: string }> {
   run("git", ["init", "--quiet"], rootDir);
   run("git", ["config", "user.email", "pipr-evals@example.invalid"], rootDir);
   run("git", ["config", "user.name", "Pipr Evals"], rootDir);
   await writeFiles(rootDir, {
-    ".pipr/config.ts": configTs(testCase.reviewer),
+    ".pipr/config.ts": configTs(testCase.reviewer, reviewInstructions),
     ...testCase.baseFiles,
   });
   run("git", ["add", "."], rootDir);
@@ -339,16 +357,19 @@ async function writeFiles(rootDir: string, files: Record<string, string>): Promi
   }
 }
 
-function configTs(reviewer: PiprEvalCase["reviewer"]): string {
+function configTs(
+  reviewer: PiprEvalCase["reviewer"],
+  reviewInstructions = defaultReviewInstructions,
+): string {
   if (reviewer === "custom") {
-    return customReviewConfigTs();
+    return customReviewConfigTs(reviewInstructions);
   }
   return `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
+    provider: ${JSON.stringify(piprEvalModel.provider)},
+    model: ${JSON.stringify(piprEvalModel.model)},
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
     options: { thinking: "high" },
   });
@@ -359,23 +380,20 @@ export default definePipr((pipr) => {
     id: "prompt-eval-review",
     model,
     paths: { include: ["src/**"] },
-    instructions: \`
-      Review the pull request diff for correctness, security, and test coverage.
-      Return only actionable findings that target valid diff ranges.
-    \`,
+    instructions: ${JSON.stringify(reviewInstructions)},
     timeout: "2m",
   });
 });
 `;
 }
 
-function customReviewConfigTs(): string {
+function customReviewConfigTs(reviewInstructions: string): string {
   return `import { definePipr, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
+    provider: ${JSON.stringify(piprEvalModel.provider)},
+    model: ${JSON.stringify(piprEvalModel.model)},
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
     options: { thinking: "high" },
   });
@@ -405,10 +423,7 @@ export default definePipr((pipr) => {
   const reviewer = pipr.agent({
     name: "prompt-eval-reviewer",
     model,
-    instructions: \`
-      Review the pull request diff for correctness, security, and test coverage.
-      Return only actionable findings that target valid diff ranges.
-    \`,
+    instructions: ${JSON.stringify(reviewInstructions)},
     output,
     tools: pipr.tools.readOnly,
     retry: { invalidOutput: 1, transientFailure: 1 },
