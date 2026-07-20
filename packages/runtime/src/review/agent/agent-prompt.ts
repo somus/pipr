@@ -218,6 +218,7 @@ function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
       "Review only changed behavior.",
       "Report only actionable defects, security risks, regressions, or meaningful test gaps.",
       "Before emitting a finding, verify that the changed code introduces or exposes the issue, repository evidence supports it, and the impact is concrete. If any part is uncertain, omit it.",
+      "Moved or copied code exposes defects in its new changed location even when the same defect existed at the old location. Report such a defect only when it is concrete and anchored in the moved or copied changed code. Do not report unrelated pre-existing defects outside changed code.",
       "When changed behavior crosses a function, type, API, configuration, or data boundary, inspect relevant callers, callees, and tests before deciding whether the change is defective or intentionally coordinated.",
       "Put each actionable issue in the schema's finding collection. Do not leave actionable defects or test gaps only in the summary.",
       "When the output includes a summary, base it only on changed behavior and evidence available in the Diff Manifest or read tools. Do not claim tests or checks ran, passed, or failed unless their output is present.",

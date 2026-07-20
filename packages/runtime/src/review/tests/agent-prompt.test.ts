@@ -396,6 +396,10 @@ describe("renderAgentPrompt", () => {
       "verify that the changed code introduces or exposes the issue, repository evidence supports it, and the impact is concrete",
     );
     expect(prompt).toContain(
+      "Moved or copied code exposes defects in its new changed location even when the same defect existed at the old location",
+    );
+    expect(prompt).toContain("Do not report unrelated pre-existing defects outside changed code");
+    expect(prompt).toContain(
       "inspect relevant callers, callees, and tests before deciding whether the change is defective or intentionally coordinated",
     );
     expect(prompt).toContain(
