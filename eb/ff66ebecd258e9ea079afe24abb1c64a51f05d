@@ -1,0 +1,69 @@
+package.json
+  s_5aa5d1424f82fa::t_1ca6079294d657 24,33
+  s_5aa5d1424f82fa::t_3da40c4626f572 78-79
+packages/cli/package.json
+  s_5aa5d1424f82fa::t_fb2452be224b1e 30
+  s_5aa5d1424f82fa::t_1ca6079294d657 31
+scripts/tests/release-scripts.test.ts
+  s_5aa5d1424f82fa::t_3da40c4626f572 262,296
+  s_5aa5d1424f82fa::t_3b6dcafaa03af3 272,304-306
+  s_5aa5d1424f82fa::t_3441eefa55afbe 276-278,307-308
+  s_5aa5d1424f82fa::t_52b3dc96cabac9 294-295
+  s_5aa5d1424f82fa::t_af929fd40e8a17 270-271
+  s_5aa5d1424f82fa::t_d2deca7d71826f 273-275,300-303
+  s_5aa5d1424f82fa::t_f647584eab155d 17,318
+  s_5aa5d1424f82fa::t_fb2452be224b1e 279-284,309-310
+  s_5aa5d1424f82fa::t_2a0c76d36f7f48 285
+  s_5aa5d1424f82fa::t_89d9bb04259074 297
+  s_5aa5d1424f82fa::t_47ea5d9ac533fc 298-299
+packages/evals/package.json
+  s_5aa5d1424f82fa::t_1ca6079294d657 18
+bun.lock
+  s_611e522ea23400::t_3c066316d5bfdc 54,1738
+  s_5aa5d1424f82fa::t_4eac2962dc0dae 15,105,125,1617-1619
+  s_5aa5d1424f82fa::t_377c650eef3122 1737
+packages/sdk/package.json
+  s_5aa5d1424f82fa::t_1ca6079294d657 38
+packages/runtime/package.json
+  s_5aa5d1424f82fa::t_47ea5d9ac533fc 76
+  s_5aa5d1424f82fa::t_d6e2a99959441e 60
+  s_5aa5d1424f82fa::t_95be522ad207b6 59
+packages/e2e/package.json
+  s_5aa5d1424f82fa::t_1ca6079294d657 17
+packages/runtime/src/config/tests/helpers/local-init-sdk.ts
+  s_5aa5d1424f82fa::t_47ea5d9ac533fc 83
+apps/docs/package.json
+  s_5aa5d1424f82fa::t_d2deca7d71826f 22,62
+scripts/check-runtime-import-boundary.ts
+  s_5aa5d1424f82fa::t_3da40c4626f572 3
+packages/cli/tsconfig.build.json
+  s_5aa5d1424f82fa::t_fb2452be224b1e 1-6
+packages/runtime/src/config/ts-loader.ts
+  s_5aa5d1424f82fa::t_47ea5d9ac533fc 30,37,135,189,207,220,222,241
+packages/runtime/tsconfig.build.json
+  s_5aa5d1424f82fa::t_95be522ad207b6 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "ebff66ebecd258e9ea079afe24abb1c64a51f05d",
+  "prompts": {},
+  "sessions": {
+    "s_5aa5d1424f82fa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7c27-ecea-7340-8b99-50f567ff0adc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_611e522ea23400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef836-1781-7052-a770-eac8bfbc3291",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
