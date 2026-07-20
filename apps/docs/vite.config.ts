@@ -60,7 +60,7 @@ export default defineConfig(({ command, isPreview }) => ({
     },
     nitro: {
       resolve: {
-        external: ["react", "react-dom"],
+        external: ["react", "react-dom", "@takumi-rs/image-response"],
       },
     },
   },
