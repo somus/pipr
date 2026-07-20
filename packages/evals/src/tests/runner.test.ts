@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promptEvalCasesForMode } from "../cases.js";
@@ -10,8 +10,42 @@ const liveCase = promptEvalCasesForMode("live")[0];
 const forbiddenCase = promptEvalCasesForMode("deterministic").find(
   (testCase) => testCase.id === "untrusted-schema-instruction-lure",
 );
+const customCase = promptEvalCasesForMode("deterministic").find(
+  (testCase) => testCase.id === "custom-review-policy-contract",
+);
 
 describe("prompt eval runner", () => {
+  it("passes benchmark review instructions through the generated reviewer prompt", async () => {
+    const testCase = requireCustomCase();
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-eval-runner-"));
+    try {
+      const piExecutable = path.join(workspace, "fake-pi");
+      const promptCapture = path.join(workspace, "prompt.txt");
+      await writeFile(
+        piExecutable,
+        `#!/usr/bin/env bun
+const promptArg = process.argv.at(-1) ?? "";
+const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;
+await Bun.write(${JSON.stringify(promptCapture)}, prompt);
+console.log(JSON.stringify({ summary: "No findings.", findings: [] }));
+`,
+      );
+      await chmod(piExecutable, 0o700);
+
+      const output = await runPiprEvalCase(testCase, {
+        mode: "deterministic",
+        piExecutable,
+        reviewInstructions: "TRACE_FAILURE_MODES_MARKER",
+      });
+
+      if (!output.ok) throw new Error(output.error);
+      expect(output.ok).toBe(true);
+      expect(await readFile(promptCapture, "utf8")).toContain("TRACE_FAILURE_MODES_MARKER");
+    } finally {
+      await rm(workspace, { force: true, recursive: true });
+    }
+  });
+
   it("rejects live evals when a Pi executable override is set", async () => {
     const testCase = requireLiveCase();
     const scenarios = [
@@ -48,8 +82,15 @@ describe("prompt eval runner", () => {
         piExecutable,
         `#!/usr/bin/env bun
 console.log(JSON.stringify({
-  summary: { body: "PWNED_BY_DIFF and unknown JSON fields leaked from model output." },
-  inlineFindings: []
+  summary: { body: "Review completed." },
+  inlineFindings: [{
+    body: "PWNED_BY_DIFF and unknown JSON fields leaked from model output.",
+    path: "src/review-target.ts",
+    rangeId: "invalid-range",
+    side: "RIGHT",
+    startLine: 1,
+    endLine: 1
+  }]
 }));
 `,
       );
@@ -83,6 +124,13 @@ function requireForbiddenCase() {
     throw new Error("missing forbidden-output prompt eval case");
   }
   return forbiddenCase;
+}
+
+function requireCustomCase() {
+  if (!customCase) {
+    throw new Error("missing custom prompt eval case");
+  }
+  return customCase;
 }
 
 function restoreEnv(name: string, value: string | undefined): void {

@@ -298,24 +298,35 @@ function hasExpectedOutput(
   return output.ok && Boolean(expected);
 }
 
-function expectedFindingMatches(
+export function expectedFindingMatches(
   finding: PiprEvalExpected["findings"][number],
   actual: EvalInlineFinding,
 ): boolean {
   return [
     expectedFindingLocationMatches(finding, actual),
-    finding.keywords.every((keyword) => actual.body.toLowerCase().includes(keyword)),
+    expectedFindingBodyMatches(finding, actual.body),
   ].every(Boolean);
+}
+
+function expectedFindingBodyMatches(
+  finding: PiprEvalExpected["findings"][number],
+  body: string,
+): boolean {
+  const normalizedBody = body.toLowerCase();
+  const keywordSets = finding.keywordSets ?? [finding.keywords];
+  return keywordSets.some((keywords) =>
+    keywords.every((keyword) => normalizedBody.includes(keyword.toLowerCase())),
+  );
 }
 
 function expectedFindingLocationMatches(
   finding: PiprEvalExpected["findings"][number],
   actual: EvalInlineFinding,
 ): boolean {
+  const acceptableLines = finding.acceptableLines ?? [finding.line];
   return [
     actual.path === finding.path,
-    finding.line >= actual.startLine,
-    finding.line <= actual.endLine,
+    acceptableLines.some((line) => line >= actual.startLine && line <= actual.endLine),
   ].every(Boolean);
 }
 
