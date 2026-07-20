@@ -1,0 +1,21 @@
+packages/evals/package.json
+  s_138fbeb7b2b365::t_958c1de64b456d 13
+packages/evals/README.md
+  s_138fbeb7b2b365::t_958c1de64b456d 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "b22b8cae052f3e81c38ef7baa208043fe0872f27",
+  "prompts": {},
+  "sessions": {
+    "s_138fbeb7b2b365": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7c20-6d02-7c52-9dbc-837765ad8d32",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
