@@ -211,7 +211,7 @@ Release workflows publish the verified Action image and retain immutable version
 The checked-in Action metadata uses the published image directly:
 
 ```text
-docker://ghcr.io/somus/pipr:v0.4.3 # x-release-please-version
+docker://ghcr.io/somus/pipr:v0.5.0 # x-release-please-version
 ```
 
 Local `act` fixtures rewrite that metadata to the `PIPR_ACTION_IMAGE` value so Action checks still exercise the freshly built local image.
@@ -242,8 +242,8 @@ ghcr.io/somus/pipr
 
 Publishing uses the tags:
 
-- release tag, such as `v0.4.3` {/* x-release-please-version */}
-- release version, such as `0.4.3` {/* x-release-please-version */}
+- release tag, such as `v0.5.0` {/* x-release-please-version */}
+- release version, such as `0.5.0` {/* x-release-please-version */}
 - `latest`
 
 ## npm and binary release
@@ -267,7 +267,7 @@ Required release setup:
 - GHCR package write access through `GITHUB_TOKEN`
 - `PIPR_RELEASE_PLEASE_TOKEN` configured with permission to create release pull requests and releases
 
-Release Please opens a changelog and version pull request from Conventional Commits on `main`. Merge that pull request, wait for its CI run to succeed, and let Release Please create the `v0.4.3` release. The successful CI event then lets `release.yml` validate and publish the npm packages, CLI binaries, and GHCR images. Root, SDK, runtime, and CLI package versions must match the tag without the leading `v`. The workflow grants `id-token: write` and uses npm trusted publishing, so it does not need an `NPM_TOKEN` secret. {/* x-release-please-version */}
+Release Please opens a changelog and version pull request from Conventional Commits on `main`. Merge that pull request, wait for its CI run to succeed, and let Release Please create the `v0.5.0` release. The successful CI event then lets `release.yml` validate and publish the npm packages, CLI binaries, and GHCR images. Root, SDK, runtime, and CLI package versions must match the tag without the leading `v`. The workflow grants `id-token: write` and uses npm trusted publishing, so it does not need an `NPM_TOKEN` secret. {/* x-release-please-version */}
 
 Configure trusted publishing through npm package settings, or with npm 11.15.0 or newer after the package exists:
 
@@ -339,7 +339,7 @@ git push -u origin main
 Use manual dispatch only to recover when the release exists but its publish workflow failed:
 
 ```bash
-gh workflow run release.yml -f tag=v0.4.3 # x-release-please-version
+gh workflow run release.yml -f tag=v0.5.0 # x-release-please-version
 ```
 
 The normal release path is the merged Release Please pull request and successful CI sequence above.

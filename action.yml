@@ -15,7 +15,7 @@ outputs:
     description: Versioned JSON summary for every Pipr Action outcome
 runs:
   using: docker
-  image: docker://ghcr.io/somus/pipr:v0.4.3 # x-release-please-version
+  image: docker://ghcr.io/somus/pipr:v0.5.0 # x-release-please-version
   args:
     - host-run
     - --host
