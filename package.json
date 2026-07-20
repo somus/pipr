@@ -20,7 +20,7 @@
   ],
   "catalog": {
     "@types/bun": "1.3.14",
-    "@types/node": "26.1.0",
+    "@types/node": "26.1.1",
     "typescript": "6.0.3",
     "zod": "4.4.3"
   },
@@ -39,11 +39,12 @@
     "format:check:docs-root": "biome format docs *.md --files-ignore-unknown=true --no-errors-on-unmatched",
     "format:check:packages": "turbo run format:check --filter='!@pipr/docs' //#format:check:root",
     "format:check:docs": "turbo run format:check --filter=@pipr/docs //#format:check:docs-root",
-    "fallow": "bun run fallow:packages && bun run fallow:docs",
+    "fallow": "bun run fallow:packages && bun run fallow:docs && bun run fallow:audit",
     "fallow:packages": "turbo run //#fallow:packages:root",
     "fallow:packages:root": "fallow --fail-on-issues --format compact --workspace '!@pipr/docs'",
     "fallow:docs": "turbo run //#fallow:docs:root",
     "fallow:docs:root": "fallow --fail-on-issues --format compact --workspace @pipr/docs",
+    "fallow:audit": "fallow audit --format compact",
     "build:release:cli": "bun packages/cli/build-release.ts",
     "check:release-artifacts": "bun scripts/verify-release-artifacts.ts",
     "check:npm-tarballs": "bun scripts/verify-npm-tarballs.ts",
@@ -63,17 +64,17 @@
     "check:quality:docs": "turbo run //#format:check:docs-root //#fallow:docs:root",
     "check:packages": "bun run build:packages && turbo run lint typecheck test format:check --filter='!@pipr/docs' && bun run check:quality",
     "check:docs": "turbo run lint typecheck:generated test:generated build:generated format:check --filter=@pipr/docs && bun run check:quality:docs",
-    "check": "bun run check:packages && bun run check:docs",
+    "check": "bun run check:packages && bun run check:docs && bun run fallow:audit",
     "check:actions": "bun run --cwd packages/e2e check:actions",
     "eval:prompts": "bun run --cwd packages/evals eval"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.3",
+    "@biomejs/biome": "2.5.4",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "fallow": "2.104.0",
-    "tsdown": "0.22.4",
-    "turbo": "2.10.4",
+    "fallow": "3.6.0",
+    "tsdown": "0.22.12",
+    "turbo": "2.10.5",
     "typescript": "catalog:"
   }
 }

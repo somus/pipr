@@ -39,7 +39,14 @@ type Workflow = {
   jobs: Record<
     string,
     {
-      steps?: Array<{ "continue-on-error"?: boolean; run?: string }>;
+      needs?: string[];
+      steps?: Array<{
+        "continue-on-error"?: boolean;
+        env?: Record<string, string>;
+        run?: string;
+        uses?: string;
+        with?: Record<string, unknown>;
+      }>;
       strategy?: { matrix?: { include?: Array<{ name?: string }> } };
     }
   >;
@@ -282,6 +289,26 @@ describe("developer checks", () => {
     expect(matrix.map((entry) => entry.name)).not.toContain("runtime-init");
     expect(matrix.map((entry) => entry.name)).not.toContain("runtime-config");
     expect(matrix.map((entry) => entry.name)).not.toContain("runtime-core");
+  });
+
+  it("runs the Fallow 3 audit gate locally and against the explicit CI base", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as {
+      scripts?: Record<string, string>;
+    };
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const audit = workflow.jobs["fallow-audit"];
+    const auditStep = audit?.steps?.find((step) => step.run === "bun run fallow:audit");
+    const checkout = audit?.steps?.find((step) => step.uses?.startsWith("actions/checkout@"));
+
+    expect(rootPackageJson.scripts?.["fallow:audit"]).toBe("fallow audit --format compact");
+    expect(rootPackageJson.scripts?.fallow).toContain("fallow:audit");
+    expect(rootPackageJson.scripts?.check).toContain("fallow:audit");
+    expect(checkout?.with?.["fetch-depth"]).toBe(0);
+    expect(auditStep?.env?.FALLOW_AUDIT_BASE).toContain("github.event.pull_request.base.sha");
+    expect(auditStep?.env?.FALLOW_AUDIT_BASE).toContain("github.event.before");
+    expect(workflow.jobs.check?.needs).toContain("fallow-audit");
   });
 
   it("runs scheduled live evals in an advisory container lane", () => {
