@@ -1,0 +1,40 @@
+apps/docs/package.json
+  s_5aa5d1424f82fa::t_96cea59e33f5f9 22
+scripts/tests/release-scripts.test.ts
+  s_5aa5d1424f82fa::t_2f272d145af4b3 262-269,271,279-281,289,297-298
+  s_5aa5d1424f82fa::t_c674d012849321 17,272-278,283-284,288,291-294
+  s_5aa5d1424f82fa::t_edee3a596381b4 270
+  s_5aa5d1424f82fa::t_99e24666fe233e 282,285-287
+  s_5aa5d1424f82fa::t_bdb1bc54e1dacb 290,295-296
+packages/e2e/package.json
+  s_5aa5d1424f82fa::t_96cea59e33f5f9 17
+packages/evals/package.json
+  s_5aa5d1424f82fa::t_96cea59e33f5f9 18
+packages/sdk/package.json
+  s_5aa5d1424f82fa::t_96cea59e33f5f9 38
+package.json
+  s_5aa5d1424f82fa::t_7eb0f40ed533ea 73
+  s_5aa5d1424f82fa::t_96cea59e33f5f9 33
+packages/runtime/package.json
+  s_5aa5d1424f82fa::t_96cea59e33f5f9 60
+packages/cli/package.json
+  s_5aa5d1424f82fa::t_96cea59e33f5f9 31
+bun.lock
+  s_5aa5d1424f82fa::t_e301a33d05f444 11,649-690
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "c90b7a808ddc27b1bf898baac11674a797925ed3",
+  "prompts": {},
+  "sessions": {
+    "s_5aa5d1424f82fa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7c27-ecea-7340-8b99-50f567ff0adc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
