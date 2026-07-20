@@ -255,6 +255,7 @@ type FailureStage = "accepted" | "prepare" | "running" | "task";
 function commandScenario(options: {
   failureStage?: FailureStage;
   currentHeadSha?: string;
+  currentHeadFailure?: boolean;
   terminalStatusFailure?: boolean;
 } = {}): { command: CommandOptions; statuses: CommandStatus[] } {
   const statuses: CommandStatus[] = [];
@@ -274,7 +275,10 @@ function commandScenario(options: {
         }
       },
       prepareTrustedHead: async () => fail("prepare"),
-      currentHeadSha: async () => options.currentHeadSha ?? "head-1",
+      currentHeadSha: async () => {
+        if (options.currentHeadFailure) throw new Error("current head failed");
+        return options.currentHeadSha ?? "head-1";
+      },
       runTask: async () => fail("task"),
     },
   };
@@ -320,6 +324,23 @@ test("preserves the command error when terminal reporting fails", async () => {
   await expect(dispatchCommand(command)).rejects.toThrow("task failed");
   expect(statuses).toEqual(["accepted", "running", "failed"]);
 });
+
+test("resolves after every command stage succeeds", async () => {
+  const { command, statuses } = commandScenario();
+
+  await expect(dispatchCommand(command)).resolves.toBeUndefined();
+  expect(statuses).toEqual(["accepted", "running"]);
+});
+
+test("preserves the command error when current-head lookup fails", async () => {
+  const { command, statuses } = commandScenario({
+    failureStage: "task",
+    currentHeadFailure: true,
+  });
+
+  await expect(dispatchCommand(command)).rejects.toThrow("task failed");
+  expect(statuses).toEqual(["accepted", "running"]);
+});
 `;
 
 const emptyValueBase = `// Callers pass string or undefined; null is rejected at the input boundary.
@@ -360,6 +381,10 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
     head: recoveryDefect,
     headSupportFiles: { "src/review-target.test.ts": recoveryContractTest },
     expectedLine: lineOf(recoveryDefect, 'status: retryable ? "pending" : "failed"'),
+    acceptableLines: [
+      lineOf(recoveryDefect, 'status: retryable ? "pending" : "failed"'),
+      lineOf(recoveryDefect, "payload: retryable ? row.payload : null"),
+    ],
     issueId: "interrupted-result-loss",
     keywordSets: [
       ["failed", "result"],
@@ -397,6 +422,7 @@ export const effectivenessBenchmarkCases: PiprEvalCase[] = [
       ["running", "head", "overwrit"],
       ["running", "attempt", "replac"],
       ["running", "head", "replac"],
+      ["running", "head", "bypass"],
     ],
   }),
   cleanCase({

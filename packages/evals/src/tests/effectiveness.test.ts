@@ -154,7 +154,7 @@ describe("effectiveness benchmark", () => {
     },
     {
       caseId: "pr105-stale-lifecycle-overwrite",
-      body: "Running and completed bypass the head check, so they can replace a record for a different reviewed head.",
+      body: "Running and completed states update regardless of head SHA because they bypass the head check.",
     },
     {
       caseId: "pr105-stale-acceptance-supersession",
@@ -173,6 +173,27 @@ describe("effectiveness benchmark", () => {
           body,
           startLine: expectedLine,
           endLine: expectedLine,
+        },
+      ],
+    });
+
+    expect(scoreEffectivenessRun(output, testCase.expected).structuredRecalledIssues).toBe(1);
+  });
+
+  it("accepts the changed payload line for the interrupted-result issue", () => {
+    const testCase = effectivenessBenchmarkCases.find(
+      ({ id }) => id === "pr105-interrupted-result-recovery",
+    );
+    if (!testCase) throw new Error("missing interrupted recovery benchmark case");
+    const expectedLine = testCase.expected.findings[0]?.line;
+    if (!expectedLine) throw new Error("missing interrupted recovery expected line");
+    const output = evalOutput({
+      valid: [
+        {
+          ...expectedFinding,
+          body: "The failed delivery leaves resultKind unset instead of storing a structured result.",
+          startLine: expectedLine + 1,
+          endLine: expectedLine + 1,
         },
       ],
     });
@@ -236,6 +257,12 @@ describe("effectiveness benchmark", () => {
     );
     expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
       "preserves the command error when terminal reporting fails",
+    );
+    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
+      "resolves after every command stage succeeds",
+    );
+    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
+      "preserves the command error when current-head lookup fails",
     );
   });
 
