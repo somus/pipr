@@ -35,7 +35,7 @@
   },
   "scripts": {
     "build": "tsdown src/index.ts src/internal.ts --dts --format esm --out-dir dist",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bunx --no-install --package @typescript/native tsc --noEmit",
     "test": "bun test",
     "lint": "biome lint src",
     "format:check": "biome format src",

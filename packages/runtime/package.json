@@ -57,7 +57,7 @@
   },
   "scripts": {
     "build": "tsdown src/index.ts src/internal/testing.ts src/internal/review-testing.ts src/internal/docs.ts src/internal/action-result.ts src/internal/pipr-result.ts src/pi/runtime-tools-extension.ts --dts --format esm --out-dir dist",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bunx --no-install --package @typescript/native tsc --noEmit",
     "test": "bun test --timeout 60000",
     "test:config-init": "bun test --timeout 60000 src/config/tests/init-project.test.ts src/config/tests/init-recipes.test.ts",
     "test:config-loader": "bun test --timeout 60000 src/config/tests/config.test.ts src/config/tests/sdk-module.test.ts src/config/tests/ts-loader.test.ts",

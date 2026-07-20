@@ -14,6 +14,7 @@ import {
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import nativeTypeScriptPackage from "@typescript/native/package.json" with { type: "json" };
 import { releaseAssetForPlatform, releaseTargets } from "../../packages/cli/src/release/targets.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
@@ -258,6 +259,43 @@ describe("changed-scope", () => {
 });
 
 describe("developer checks", () => {
+  it("uses the TypeScript 7 CLI while keeping the TypeScript 6 API for embedded tools", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as {
+      catalog?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+    const typecheckCommand = "bunx --no-install --package @typescript/native tsc --noEmit";
+    const typecheckScripts = [
+      ["package.json", "typecheck:root"],
+      ["apps/docs/package.json", "typecheck:generated"],
+      ["packages/cli/package.json", "typecheck"],
+      ["packages/e2e/package.json", "typecheck"],
+      ["packages/evals/package.json", "typecheck"],
+      ["packages/runtime/package.json", "typecheck"],
+      ["packages/sdk/package.json", "typecheck"],
+    ] as const;
+
+    expect(rootPackageJson.catalog?.typescript).toBe("6.0.3");
+    expect(rootPackageJson.devDependencies?.["@typescript/native"]).toBe("npm:typescript@7.0.2");
+    expect(nativeTypeScriptPackage.version).toBe("7.0.2");
+    for (const [packagePath, script] of typecheckScripts) {
+      const packageJson = JSON.parse(readFileSync(path.join(repoRoot, packagePath), "utf8")) as {
+        scripts?: Record<string, string>;
+      };
+      expect(packageJson.scripts?.[script]).toBe(typecheckCommand);
+    }
+
+    const version = Bun.spawnSync(
+      ["bunx", "--no-install", "--package", "@typescript/native", "tsc", "--version"],
+      { cwd: repoRoot },
+    );
+    expect(version.exitCode).toBe(0);
+    expect(version.stdout.toString().trim()).toBe("Version 7.0.2");
+  });
+
   it("serializes docs type generation through the Turbo graph", () => {
     const rootPackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "package.json"), "utf8"),
