@@ -4,7 +4,7 @@
   "workspaces": {
     "": {
       "dependencies": {
-        "@usepipr/sdk": "0.4.3",
+        "@usepipr/sdk": "0.5.0",
       },
       "devDependencies": {
         "@types/bun": "1.3.14",
@@ -17,7 +17,7 @@
 
     "@types/node": ["@types/node@26.1.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-O0A1G3xPGy4w7AgQdAQYUlQ+BKk2Oovw8eRpofyp5KdBZULnbe+WqaOVNrm705SHphCiG4XHsACrSmPu1f+Kgw=="],
 
-    "@usepipr/sdk": ["@usepipr/sdk@0.4.3", "", { "dependencies": { "zod": "4.4.3" } }, "sha512-db3ha+uF5Axeh9fEfd9ZaG/Jc635iZc0Nb+UcJ9ExBSSyzAUfnvx860iRSKYC3+WnKbX1AOMVSq9ImSS7n4hPQ=="],
+    "@usepipr/sdk": ["@usepipr/sdk@0.5.0", "", { "dependencies": { "zod": "4.4.3" } }, "sha512-D5kwSOlT8HgPF5f4cMOc20P9OALi4S7d9XUPbgEIzzP7OTsBeYyFMO5qXVGiodCivOdp0wzGMBpq9bKt/2cAgQ=="],
 
     "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
