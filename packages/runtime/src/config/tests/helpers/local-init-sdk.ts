@@ -80,7 +80,7 @@ async function createSharedInitDependencies(): Promise<SharedInitDependencies> {
   const fixtureRoot = path.resolve(import.meta.dirname, "../fixtures/init-dependencies");
   const dependencyRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-init-dependencies-"));
   const typescriptSource = await realpath(
-    path.resolve(import.meta.dirname, "../../../../../../node_modules/typescript"),
+    path.resolve(import.meta.dirname, "../../../../node_modules/typescript6"),
   );
   const typescriptFixture = path.join(dependencyRoot, "typescript");
   await cp(typescriptSource, typescriptFixture, { recursive: true });

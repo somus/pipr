@@ -14,6 +14,7 @@ import {
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import typeScriptPackage from "typescript/package.json" with { type: "json" };
 import { releaseAssetForPlatform, releaseTargets } from "../../packages/cli/src/release/targets.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
@@ -39,7 +40,14 @@ type Workflow = {
   jobs: Record<
     string,
     {
-      steps?: Array<{ "continue-on-error"?: boolean; run?: string }>;
+      needs?: string[];
+      steps?: Array<{
+        "continue-on-error"?: boolean;
+        env?: Record<string, string>;
+        run?: string;
+        uses?: string;
+        with?: Record<string, unknown>;
+      }>;
       strategy?: { matrix?: { include?: Array<{ name?: string }> } };
     }
   >;
@@ -251,6 +259,67 @@ describe("changed-scope", () => {
 });
 
 describe("developer checks", () => {
+  it("uses TypeScript 7 directly while keeping the TypeScript 6 API scoped to embedded tools", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as {
+      catalog?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+    const runtimePackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/runtime/package.json"), "utf8"),
+    ) as { dependencies?: Record<string, string>; scripts?: Record<string, string> };
+    const docsPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "apps/docs/package.json"), "utf8"),
+    ) as { devDependencies?: Record<string, string>; scripts?: Record<string, string> };
+    const runtimeBuildTsconfig = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/runtime/tsconfig.build.json"), "utf8"),
+    ) as { compilerOptions?: { paths?: Record<string, string[]> } };
+    const cliPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/cli/package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+    const cliBuildTsconfig = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/cli/tsconfig.build.json"), "utf8"),
+    ) as { compilerOptions?: { paths?: Record<string, string[]> } };
+    const typecheckCommand = "tsc --noEmit";
+    const typecheckScripts = [
+      ["package.json", "typecheck:root"],
+      ["packages/cli/package.json", "typecheck"],
+      ["packages/e2e/package.json", "typecheck"],
+      ["packages/evals/package.json", "typecheck"],
+      ["packages/sdk/package.json", "typecheck"],
+    ] as const;
+
+    expect(rootPackageJson.catalog?.typescript).toBe("7.0.2");
+    expect(rootPackageJson.devDependencies?.["@typescript/native"]).toBeUndefined();
+    expect(rootPackageJson.devDependencies?.typescript6).toBe("npm:typescript@6.0.3");
+    expect(typeScriptPackage.version).toBe("7.0.2");
+    expect(runtimePackageJson.dependencies?.typescript6).toBe("npm:typescript@6.0.3");
+    expect(runtimePackageJson.dependencies?.typescript).toBeUndefined();
+    expect(docsPackageJson.devDependencies?.typescript).toBe("6.0.3");
+    expect(docsPackageJson.scripts?.["typecheck:generated"]).toBe(
+      "bun ../../node_modules/typescript/bin/tsc --noEmit",
+    );
+    expect(runtimePackageJson.scripts?.typecheck).toBe(
+      "bun ../../node_modules/typescript/bin/tsc --noEmit",
+    );
+    expect(runtimePackageJson.scripts?.build).toContain("--tsconfig tsconfig.build.json");
+    expect(runtimeBuildTsconfig.compilerOptions?.paths).toEqual({});
+    expect(cliPackageJson.scripts?.build).toContain("--tsconfig tsconfig.build.json");
+    expect(cliBuildTsconfig.compilerOptions?.paths).toEqual({});
+    for (const [packagePath, script] of typecheckScripts) {
+      const packageJson = JSON.parse(readFileSync(path.join(repoRoot, packagePath), "utf8")) as {
+        scripts?: Record<string, string>;
+      };
+      expect(packageJson.scripts?.[script]).toBe(typecheckCommand);
+    }
+
+    const version = Bun.spawnSync(["bun", "run", "tsc", "--version"], { cwd: repoRoot });
+    expect(version.exitCode).toBe(0);
+    expect(version.stdout.toString().trim()).toBe("Version 7.0.2");
+  });
+
   it("serializes docs type generation through the Turbo graph", () => {
     const rootPackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "package.json"), "utf8"),
@@ -282,6 +351,26 @@ describe("developer checks", () => {
     expect(matrix.map((entry) => entry.name)).not.toContain("runtime-init");
     expect(matrix.map((entry) => entry.name)).not.toContain("runtime-config");
     expect(matrix.map((entry) => entry.name)).not.toContain("runtime-core");
+  });
+
+  it("runs the Fallow 3 audit gate locally and against the explicit CI base", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as {
+      scripts?: Record<string, string>;
+    };
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const audit = workflow.jobs["fallow-audit"];
+    const auditStep = audit?.steps?.find((step) => step.run === "bun run fallow:audit");
+    const checkout = audit?.steps?.find((step) => step.uses?.startsWith("actions/checkout@"));
+
+    expect(rootPackageJson.scripts?.["fallow:audit"]).toBe("fallow audit --format compact");
+    expect(rootPackageJson.scripts?.fallow).toContain("fallow:audit");
+    expect(rootPackageJson.scripts?.check).toContain("fallow:audit");
+    expect(checkout?.with?.["fetch-depth"]).toBe(0);
+    expect(auditStep?.env?.FALLOW_AUDIT_BASE).toContain("github.event.pull_request.base.sha");
+    expect(auditStep?.env?.FALLOW_AUDIT_BASE).toContain("github.event.before");
+    expect(workflow.jobs.check?.needs).toContain("fallow-audit");
   });
 
   it("runs scheduled live evals in an advisory container lane", () => {
