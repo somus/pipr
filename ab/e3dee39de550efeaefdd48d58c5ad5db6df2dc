@@ -1,0 +1,19 @@
+apps/docs/vite.config.ts
+  s_5aa5d1424f82fa::t_5f7a3a05fde8ac 63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "abe3dee39de550efeaefdd48d58c5ad5db6df2dc",
+  "prompts": {},
+  "sessions": {
+    "s_5aa5d1424f82fa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7c27-ecea-7340-8b99-50f567ff0adc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
