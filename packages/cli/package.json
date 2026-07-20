@@ -27,8 +27,8 @@
     "pipr": "./dist/main.mjs"
   },
   "scripts": {
-    "build": "tsdown src/main.ts --dts --format esm --out-dir dist && bun src/release/copy-skills.ts",
-    "typecheck": "bunx --no-install --package @typescript/native tsc --noEmit",
+    "build": "tsdown src/main.ts --dts --format esm --out-dir dist --tsconfig tsconfig.build.json && bun src/release/copy-skills.ts",
+    "typecheck": "tsc --noEmit",
     "test": "bun test --timeout 30000",
     "lint": "biome lint src",
     "format:check": "biome format src",

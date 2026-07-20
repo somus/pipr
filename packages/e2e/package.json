@@ -14,7 +14,7 @@
   "scripts": {
     "test": "bun test --timeout 60000 .",
     "lint": "biome lint .",
-    "typecheck": "bunx --no-install --package @typescript/native tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "format:check": "biome format .",
     "check": "bun run lint && bun run typecheck && bun run build:deps && bun run test",
     "build:deps": "bun run --cwd ../sdk build && bun run --cwd ../runtime build",

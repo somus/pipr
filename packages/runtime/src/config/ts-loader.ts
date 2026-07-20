@@ -27,14 +27,14 @@ export type LoadedTypescriptConfig = {
   versionCompatibility: ConfigVersionCompatibility;
 };
 
-type TypescriptApi = typeof import("typescript");
+type TypescriptApi = typeof import("typescript6");
 
 type TypescriptForConfig = {
   ts: TypescriptApi;
   packageRoot?: string;
 };
 
-type CompilerHostWithDefaultLibLocation = import("typescript").CompilerHost & {
+type CompilerHostWithDefaultLibLocation = import("typescript6").CompilerHost & {
   getDefaultLibLocation?: () => string;
 };
 
@@ -132,7 +132,7 @@ async function typecheckTypescriptConfigWithApi(
   configDir: string,
   tsconfigPath: string,
 ): Promise<void> {
-  // `typescript` and `@types/bun` are runtime dependencies: `pipr check`
+  // The TypeScript 6 compatibility API and `@types/bun` are runtime dependencies: `pipr check`
   // typechecks user `.pipr/config.ts` files outside this package's build.
   const { ts, packageRoot } = await loadTypescriptForConfig(configDir);
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
@@ -186,7 +186,7 @@ async function loadTypescriptForConfig(configDir: string): Promise<TypescriptFor
     };
   }
 
-  const ts = typescriptApi(await import("typescript"));
+  const ts = typescriptApi(await import("typescript6"));
   return { ts, packageRoot: await runtimeTypescriptPackageRoot() };
 }
 
@@ -204,7 +204,7 @@ function typescriptApi(module: unknown): TypescriptApi {
 async function runtimeTypescriptPackageRoot(): Promise<string | undefined> {
   try {
     const require = createRequire(import.meta.url);
-    const packageRoot = path.dirname(require.resolve("typescript/package.json"));
+    const packageRoot = path.dirname(require.resolve("typescript6/package.json"));
     // packageRoot is only needed to pin lib file resolution to the same TypeScript package.
     // The runtime TypeScript host can still resolve its own libs when the package root is opaque.
     return (await fileExists(path.join(packageRoot, "lib", "typescript.js")))
@@ -217,9 +217,9 @@ async function runtimeTypescriptPackageRoot(): Promise<string | undefined> {
 
 async function createTypescriptCompilerHost(
   ts: TypescriptApi,
-  compilerOptions: import("typescript").CompilerOptions,
+  compilerOptions: import("typescript6").CompilerOptions,
   packageRoot: string | undefined,
-): Promise<import("typescript").CompilerHost> {
+): Promise<import("typescript6").CompilerHost> {
   const compilerHost = ts.createCompilerHost(compilerOptions, true);
   if (!packageRoot) {
     return compilerHost;
@@ -238,7 +238,7 @@ async function createTypescriptCompilerHost(
 
 function formatTypeScriptDiagnostics(
   ts: TypescriptApi,
-  diagnostics: import("typescript").Diagnostic[],
+  diagnostics: import("typescript6").Diagnostic[],
   configDir: string,
 ): string {
   return ts.formatDiagnostics(diagnostics, {

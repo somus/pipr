@@ -14,7 +14,7 @@ import {
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import nativeTypeScriptPackage from "@typescript/native/package.json" with { type: "json" };
+import typeScriptPackage from "typescript/package.json" with { type: "json" };
 import { releaseAssetForPlatform, releaseTargets } from "../../packages/cli/src/release/targets.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
@@ -259,7 +259,7 @@ describe("changed-scope", () => {
 });
 
 describe("developer checks", () => {
-  it("uses the TypeScript 7 CLI while keeping the TypeScript 6 API for embedded tools", () => {
+  it("uses TypeScript 7 directly while keeping the TypeScript 6 API scoped to embedded tools", () => {
     const rootPackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "package.json"), "utf8"),
     ) as {
@@ -267,20 +267,47 @@ describe("developer checks", () => {
       devDependencies?: Record<string, string>;
       scripts?: Record<string, string>;
     };
-    const typecheckCommand = "bunx --no-install --package @typescript/native tsc --noEmit";
+    const runtimePackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/runtime/package.json"), "utf8"),
+    ) as { dependencies?: Record<string, string>; scripts?: Record<string, string> };
+    const docsPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "apps/docs/package.json"), "utf8"),
+    ) as { devDependencies?: Record<string, string>; scripts?: Record<string, string> };
+    const runtimeBuildTsconfig = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/runtime/tsconfig.build.json"), "utf8"),
+    ) as { compilerOptions?: { paths?: Record<string, string[]> } };
+    const cliPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/cli/package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+    const cliBuildTsconfig = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/cli/tsconfig.build.json"), "utf8"),
+    ) as { compilerOptions?: { paths?: Record<string, string[]> } };
+    const typecheckCommand = "tsc --noEmit";
     const typecheckScripts = [
       ["package.json", "typecheck:root"],
-      ["apps/docs/package.json", "typecheck:generated"],
       ["packages/cli/package.json", "typecheck"],
       ["packages/e2e/package.json", "typecheck"],
       ["packages/evals/package.json", "typecheck"],
-      ["packages/runtime/package.json", "typecheck"],
       ["packages/sdk/package.json", "typecheck"],
     ] as const;
 
-    expect(rootPackageJson.catalog?.typescript).toBe("6.0.3");
-    expect(rootPackageJson.devDependencies?.["@typescript/native"]).toBe("npm:typescript@7.0.2");
-    expect(nativeTypeScriptPackage.version).toBe("7.0.2");
+    expect(rootPackageJson.catalog?.typescript).toBe("7.0.2");
+    expect(rootPackageJson.devDependencies?.["@typescript/native"]).toBeUndefined();
+    expect(rootPackageJson.devDependencies?.typescript6).toBe("npm:typescript@6.0.3");
+    expect(typeScriptPackage.version).toBe("7.0.2");
+    expect(runtimePackageJson.dependencies?.typescript6).toBe("npm:typescript@6.0.3");
+    expect(runtimePackageJson.dependencies?.typescript).toBeUndefined();
+    expect(docsPackageJson.devDependencies?.typescript).toBe("6.0.3");
+    expect(docsPackageJson.scripts?.["typecheck:generated"]).toBe(
+      "bun ../../node_modules/typescript/bin/tsc --noEmit",
+    );
+    expect(runtimePackageJson.scripts?.typecheck).toBe(
+      "bun ../../node_modules/typescript/bin/tsc --noEmit",
+    );
+    expect(runtimePackageJson.scripts?.build).toContain("--tsconfig tsconfig.build.json");
+    expect(runtimeBuildTsconfig.compilerOptions?.paths).toEqual({});
+    expect(cliPackageJson.scripts?.build).toContain("--tsconfig tsconfig.build.json");
+    expect(cliBuildTsconfig.compilerOptions?.paths).toEqual({});
     for (const [packagePath, script] of typecheckScripts) {
       const packageJson = JSON.parse(readFileSync(path.join(repoRoot, packagePath), "utf8")) as {
         scripts?: Record<string, string>;
@@ -288,10 +315,7 @@ describe("developer checks", () => {
       expect(packageJson.scripts?.[script]).toBe(typecheckCommand);
     }
 
-    const version = Bun.spawnSync(
-      ["bunx", "--no-install", "--package", "@typescript/native", "tsc", "--version"],
-      { cwd: repoRoot },
-    );
+    const version = Bun.spawnSync(["bun", "run", "tsc", "--version"], { cwd: repoRoot });
     expect(version.exitCode).toBe(0);
     expect(version.stdout.toString().trim()).toBe("Version 7.0.2");
   });
