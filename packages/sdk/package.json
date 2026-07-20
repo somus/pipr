@@ -1,6 +1,6 @@
 {
   "name": "@usepipr/sdk",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "TypeScript configuration SDK for Pipr code host review automation",
   "type": "module",
   "license": "MIT",
