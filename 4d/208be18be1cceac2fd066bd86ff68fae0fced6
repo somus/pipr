@@ -1,0 +1,19 @@
+.github/workflows/release.yml
+  s_e2e5785b8e2848::t_62e0e69de5b7ee 116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "4d208be18be1cceac2fd066bd86ff68fae0fced6",
+  "prompts": {},
+  "sessions": {
+    "s_e2e5785b8e2848": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f8b-0344-76b1-ac71-4fc72335600a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
