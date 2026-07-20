@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import path from "node:path";
-import ts from "typescript";
+import ts from "typescript6";
 
 const forbiddenPatterns = [
   /hosts\/(?:azure-devops|bitbucket|github|gitlab|local)(?:\/|$)/,

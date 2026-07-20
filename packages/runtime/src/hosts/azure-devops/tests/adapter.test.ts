@@ -224,23 +224,21 @@ describe("Azure DevOps host adapter", () => {
     expect(inline.status).toBe("fixed");
   });
 
-  it.each([
-    "fixed",
-    "closed",
-    "wontFix",
-    "byDesign",
-  ])("loads %s threads as resolved", async (status) => {
-    const client = new FakeAzureDevOpsClient();
-    const adapter = createAzureDevOpsHostAdapter({ client });
-    await adapter.publication?.publish({ change, plan: publicationPlan() });
-    const inline = client.threads.find((thread) => thread.threadContext?.filePath);
-    if (!inline) throw new Error("Expected inline thread");
-    inline.status = status;
+  it.each(["fixed", "closed", "wontFix", "byDesign"])(
+    "loads %s threads as resolved",
+    async (status) => {
+      const client = new FakeAzureDevOpsClient();
+      const adapter = createAzureDevOpsHostAdapter({ client });
+      await adapter.publication?.publish({ change, plan: publicationPlan() });
+      const inline = client.threads.find((thread) => thread.threadContext?.filePath);
+      if (!inline) throw new Error("Expected inline thread");
+      inline.status = status;
 
-    await expect(adapter.comments?.loadInlineThreadContexts?.({ change })).resolves.toMatchObject([
-      { threadResolved: true },
-    ]);
-  });
+      await expect(adapter.comments?.loadInlineThreadContexts?.({ change })).resolves.toMatchObject(
+        [{ threadResolved: true }],
+      );
+    },
+  );
 
   it("creates and updates one command response thread", async () => {
     const client = new FakeAzureDevOpsClient();
