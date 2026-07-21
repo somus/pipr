@@ -1,0 +1,323 @@
+packages/runtime/src/observability/archive-extraction.ts
+  s_dea394ec8da4dc::t_c552e8c9daa2b5 109,113-114
+  s_dea394ec8da4dc::t_1371487bf34146 1-33,35,46,48-49,57,62-72,74-108,110-112,115-236
+  s_dea394ec8da4dc::t_2212da62c94662 34,37,40-45,47,50-56,58-61,73
+  s_dea394ec8da4dc::t_c3266872d7756f 36,38-39
+packages/runtime/src/observability/provider-sources.ts
+  s_dea394ec8da4dc::t_55f565dc352105 322-328,423,426-437
+  s_dea394ec8da4dc::t_0f9f3d0cdb0097 1-19,21-35,38-71,81-92,94-165,167-195,203-320,329-354,362-368,372-377,380-392,394-422,439-492,496-500,502-514,518-546,549-551,563-564,568-591,593-596,598-601,607-608,612-708,710-713,715-723,727-752,756,758-760,766-922,926-994
+  s_dea394ec8da4dc::t_0d91b40b1a571f 548,553-561,565-566,603
+  s_dea394ec8da4dc::t_4a84e8b498eed1 562,567,592,597,602,604-606,610-611
+  s_dea394ec8da4dc::t_1b53d9d678a81a 501
+  s_dea394ec8da4dc::t_45af2a43b045be 36,72-80,196-202,355-361
+  s_dea394ec8da4dc::t_b99d6aa887d5e3 438
+  s_dea394ec8da4dc::t_eed606b805452a 93,515-517
+  s_dea394ec8da4dc::t_1abd3e8389ddf6 547,552,609
+  s_dea394ec8da4dc::t_1a26a2ebb46915 166,321,369-371,378-379,393,424-425,923-925
+  s_dea394ec8da4dc::t_3357e71c31bb04 20,37,493-495,709,714,724-726,753-755,757,761-765
+packages/cli/src/tests/runs.test.ts
+  s_dea394ec8da4dc::t_3421082ab6ed1e 1-185,187-549
+  s_dea394ec8da4dc::t_eed606b805452a 186
+packages/runtime/src/host-run/tests/commands-local-review.test.ts
+  s_dea394ec8da4dc::t_29c7a475f79f9a 12,187-190
+  s_dea394ec8da4dc::t_b7d8ae0e164358 13,74-124,147-186,191-203,205-225
+  s_dea394ec8da4dc::t_eed606b805452a 4
+  s_dea394ec8da4dc::t_97dc54b68018ae 2,204
+packages/cli/src/runs.ts
+  s_dea394ec8da4dc::t_f4aaeea4b069b2 1-729
+packages/runtime/src/host-run/tests/webhook-server.test.ts
+  s_dea394ec8da4dc::t_f35884caf5ab24 61,909
+  s_dea394ec8da4dc::t_635fd47ac4057d 60,98,904,907-908
+  s_dea394ec8da4dc::t_a26e81f77f83d8 4,15,53-59,63-97,99-107,498
+  s_dea394ec8da4dc::t_f20c9e8cdd2308 62,903
+  s_dea394ec8da4dc::t_94c21c37412633 902,905-906,910-914
+  s_c4cefe80015294::t_b590cb90deb06b 496-497,499-501,509
+apps/docs/content/docs/reference/cli.mdx
+  s_dea394ec8da4dc::t_f76d59d2607cc0 160-201
+  s_c4cefe80015294::t_e918ca3022836a 117-119,142-159,202-204,290
+packages/runtime/src/observability/bitbucket-upload.ts
+  s_dea394ec8da4dc::t_0d91b40b1a571f 5-172
+  s_dea394ec8da4dc::t_77700105d2131e 1-4,173-259
+packages/cli/src/runner.ts
+  s_dea394ec8da4dc::t_47d69993048747 279-341
+  s_dea394ec8da4dc::t_f4aaeea4b069b2 181-182,196-197,209-210
+  s_c4cefe80015294::t_9d99228f8f5ee2 1,5,16,22-30,57-60,76,91,93,132-134,172,176-180,183-195,198-208,211-217,249,251,258-260,342-353,380-382,386-394,586-591,599
+packages/runtime/src/host-run/commands.ts
+  s_dea394ec8da4dc::t_ff9ad5fa265b59 243
+  s_dea394ec8da4dc::t_eed606b805452a 1,9,11-18
+  s_dea394ec8da4dc::t_dec4d6c62627b0 170,224-237,282
+  s_dea394ec8da4dc::t_f50648a0249bb3 151,217-223
+  s_dea394ec8da4dc::t_6fd1e78121d67f 130-131,153-159,162,210-213
+  s_dea394ec8da4dc::t_1b53d9d678a81a 206,238-242,244-255,278,405,413,419,431,455,465,473,480,489,495,502-503,511,519-520,529,548,557,566,575,587,596,606
+  s_dea394ec8da4dc::t_d05158a19cb6ea 129
+  s_dea394ec8da4dc::t_d190ebb0864cc4 132-134,148-150
+  s_dea394ec8da4dc::t_a185d2115d8355 152
+  s_dea394ec8da4dc::t_5cf2ad52d429a3 163-165,167-169
+  s_dea394ec8da4dc::t_859f1ef3690dd4 203-205
+  s_dea394ec8da4dc::t_f7cb3f0d8dd2d7 207-209
+  s_dea394ec8da4dc::t_848c9967077ad1 214-215
+  s_dea394ec8da4dc::t_0aa3c7b81ad21c 256-258,275-277
+  s_dea394ec8da4dc::t_596e6a4aac8294 279-281
+  s_dea394ec8da4dc::t_3cd1b3f6b50999 283-285
+  s_dea394ec8da4dc::t_ee813de64c2f88 402-404
+  s_dea394ec8da4dc::t_92c910a57f84f8 406-408,410-412
+  s_dea394ec8da4dc::t_4de7e1907ca2d3 414-418
+  s_dea394ec8da4dc::t_e73d4b1b97ac2f 420-422,428-430
+  s_dea394ec8da4dc::t_64241a5e0fe2bc 432-434,452-454
+  s_dea394ec8da4dc::t_f62967a8c72216 456-458,462-464
+  s_dea394ec8da4dc::t_59419b76d43bfe 466-468,470-472
+  s_dea394ec8da4dc::t_0c9718c1bbe207 474-479
+  s_dea394ec8da4dc::t_c2badb7766ddea 481-483,486-488
+  s_dea394ec8da4dc::t_7c3e19daf1319d 490-494
+  s_dea394ec8da4dc::t_3ef4236629b441 496-501
+  s_dea394ec8da4dc::t_bd0c85e2f7609f 504-506,508-510
+  s_dea394ec8da4dc::t_a08c48da0bfbe1 512-514,516-518
+  s_dea394ec8da4dc::t_835f3da5539a2d 521-523,526-528
+  s_dea394ec8da4dc::t_d26466f4ac7012 530-532,545-547
+  s_dea394ec8da4dc::t_e4fd5ef7024f87 549-551,554-556
+  s_dea394ec8da4dc::t_bcd0fdb8baf0b5 558-560,563-565
+  s_dea394ec8da4dc::t_2f366892f8d33c 567-569,572-574
+  s_dea394ec8da4dc::t_1ab58e165c195c 576-578,584-586
+  s_dea394ec8da4dc::t_c48e6285a6295d 588-590,593-595
+  s_dea394ec8da4dc::t_cda706cb363001 597-599,603-605
+  s_dea394ec8da4dc::t_7b04174f41d491 607-609
+  s_dea394ec8da4dc::t_47d31216936fc9 119-127,135-147,166,177-202,259-274,286-299,316-339,341-361,363-365,367-401,409,423-427,435-451,459-461,469,484-485,507,515,524-525,533-544,552-553,561-562,570-571,579-583,591-592,600-602,610-627
+packages/runtime/src/observability/tests/bitbucket-upload.test.ts
+  s_dea394ec8da4dc::t_cb49e3cd92ff3c 1-137,139-142,146,150-197
+  s_dea394ec8da4dc::t_7d29173148c6dc 138,143-145,147-149
+packages/runtime/src/observability/tests/recorder.test.ts
+  s_dea394ec8da4dc::t_eed606b805452a 162-170
+  s_dea394ec8da4dc::t_cb49e3cd92ff3c 6,367-369
+  s_dea394ec8da4dc::t_90aea4fbf557d7 390-391
+  s_dea394ec8da4dc::t_b7d8ae0e164358 1,3-5,7-21,46-93,143-161,171-366,373-379,381-382,384,394-395,398-401,406-471
+  s_dea394ec8da4dc::t_22cef96a841dac 94-142,386
+  s_dea394ec8da4dc::t_c7339ae5f173eb 22-45,388
+  s_c4cefe80015294::t_ff305f4c6b04bf 2,370-372,380,383,385,387,389,392-393,396-397,402-405
+packages/runtime/src/host-run/tests/commands-review-comment.test.ts
+  s_dea394ec8da4dc::t_991a92d54af2e4 2,272-276,281-284
+  s_dea394ec8da4dc::t_45af2a43b045be 285-287
+  s_dea394ec8da4dc::t_cb49e3cd92ff3c 279
+  s_dea394ec8da4dc::t_6297b907085468 277-278,280
+  s_dea394ec8da4dc::t_a6cf372abbf7d1 315,325-328,334-340
+  s_dea394ec8da4dc::t_c7339ae5f173eb 313-314,316-324,329-333,341-343
+  s_dea394ec8da4dc::t_4a1c94d3d421e2 308-312
+packages/runtime/src/observability/tests/archive.test.ts
+  s_dea394ec8da4dc::t_c7339ae5f173eb 215-223,300-319
+  s_dea394ec8da4dc::t_b7d8ae0e164358 1-7,9-11,14-79,95-182,224-233,241-250,258-259,284,286-290,292-299,320-351
+  s_dea394ec8da4dc::t_27fac6fc5a609a 80-94
+  s_dea394ec8da4dc::t_c3266872d7756f 193-205,271-282
+  s_dea394ec8da4dc::t_eed606b805452a 8,12
+  s_dea394ec8da4dc::t_51020a4ad6aefc 13,183-192,260-270,283
+  s_dea394ec8da4dc::t_cb49e3cd92ff3c 206-214
+  s_dea394ec8da4dc::t_c7e336434d1e5c 234-240,251-257,285,291
+packages/runtime/src/review/task/task-runtime.ts
+  s_dea394ec8da4dc::t_eed606b805452a 16
+  s_dea394ec8da4dc::t_16f1901e917091 731
+  s_dea394ec8da4dc::t_f35884caf5ab24 384
+  s_dea394ec8da4dc::t_4a84e8b498eed1 143,163-169,206-214,337-363,380-383,385-388,402
+  s_c4cefe80015294::t_b4f380718879cf 15,93,389-401,403-404,604-607,611
+packages/runtime/src/observability/recorder.ts
+  s_dea394ec8da4dc::t_16f1901e917091 1-33,37-185,193-204,206-220,246-392,394-395,402-444,448-505,507-512,519-521,526-766,768-1011,1014-1024,1026-1105,1107-1108,1110-1112,1116,1118-1119,1121-1122,1140-1281
+  s_dea394ec8da4dc::t_1371487bf34146 35,205
+  s_dea394ec8da4dc::t_4a84e8b498eed1 186-188,190-192,514-518,767
+  s_dea394ec8da4dc::t_2a5ea8ab39901b 393,396,399,401,522-525,1109,1113,1117,1120,1123-1133,1136,1138
+  s_dea394ec8da4dc::t_25def8ca1baa8d 1025
+  s_dea394ec8da4dc::t_c552e8c9daa2b5 189,221-245,397-398,506,513,1106,1114-1115,1134-1135,1137,1139
+  s_dea394ec8da4dc::t_a6cf372abbf7d1 34,400
+  s_dea394ec8da4dc::t_95f29606bb9cde 445-447
+  s_dea394ec8da4dc::t_eed606b805452a 36
+  s_dea394ec8da4dc::t_6bce85396d630a 1012-1013
+packages/runtime/src/observability/archive.ts
+  s_dea394ec8da4dc::t_6779dbabcb621b 1-455
+packages/runtime/src/host-run/tests/commands-issue-comment.test.ts
+  s_dea394ec8da4dc::t_991a92d54af2e4 2,289-293,297-301
+  s_dea394ec8da4dc::t_6297b907085468 294-296
+apps/docs/content/docs/guide/run-observability.mdx
+  s_dea394ec8da4dc::t_9bf1c7525b3acc 1-136
+packages/runtime/src/observability/retention-store.ts
+  s_dea394ec8da4dc::t_cf8b17acea169d 1-4,9-46,51,74,80,83,88-126
+  s_dea394ec8da4dc::t_3255fa84ccea4e 47-48,50,52-55,58-59,75-79,81-82,84-87
+  s_dea394ec8da4dc::t_fee61416dba7b1 62,65-66
+  s_dea394ec8da4dc::t_c552e8c9daa2b5 6,49,57,60-61,64,67-73
+  s_dea394ec8da4dc::t_0d91b40b1a571f 7
+  s_dea394ec8da4dc::t_4a84e8b498eed1 5,8,56,63
+packages/runtime/src/observability/types.ts
+  s_dea394ec8da4dc::t_16f1901e917091 1-2,5-53,55
+  s_dea394ec8da4dc::t_1371487bf34146 3-4
+  s_dea394ec8da4dc::t_eed606b805452a 54
+packages/runtime/src/host-run/tests/commands-fixtures.ts
+  s_dea394ec8da4dc::t_c7339ae5f173eb 201,210,295,305
+packages/runtime/src/host-run/verifier-entry.ts
+  s_dea394ec8da4dc::t_c552e8c9daa2b5 157,185-203,214-215,253-265
+  s_c4cefe80015294::t_bac25fedfd0cdd 266-267
+packages/runtime/src/observability/tests/retention.test.ts
+  s_dea394ec8da4dc::t_c7339ae5f173eb 6,31,79,94-95,99,101,103,119-138
+  s_dea394ec8da4dc::t_b7d8ae0e164358 1-5,7-29,32-77,80,82-87,89-91,97-98,100,102,104,106-118,139-191
+  s_c4cefe80015294::t_1e9a2a7b1eaed3 30,78,81,88,92-93,96,105
+packages/cli/src/tests/main.test.ts
+  s_dea394ec8da4dc::t_9ad0c15ad44510 20,34-102
+  s_dea394ec8da4dc::t_7d29173148c6dc 308-310
+  s_c4cefe80015294::t_73b2749fc74e5f 305-307
+packages/runtime/src/observability/bitbucket-url.ts
+  s_dea394ec8da4dc::t_0d91b40b1a571f 2-8
+  s_dea394ec8da4dc::t_d80a0bc9633b6c 1
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_dea394ec8da4dc::t_90aea4fbf557d7 607
+  s_dea394ec8da4dc::t_b7d8ae0e164358 555,571-578,582,603-604,606
+  s_dea394ec8da4dc::t_a26e81f77f83d8 587-602,605,611
+  s_c4cefe80015294::t_f8f16c5e52ea47 583-586,608-610
+packages/runtime/src/observability/tests/provider-sources.test.ts
+  s_dea394ec8da4dc::t_857d8c6c27857a 309,337,339-340,368,510-516,518-520
+  s_dea394ec8da4dc::t_5fe903eb2042f1 688-690
+  s_dea394ec8da4dc::t_ab374c59116122 619-670,676-679,685,819-820,845-871,874
+  s_dea394ec8da4dc::t_9e1451f71e5a1a 589-591,594,608,610,612-614,616-618
+  s_dea394ec8da4dc::t_ed245fdfde752b 194-195,197-212,214,216,428-429,431-444,446-447,449,592-593,595-607,609,611
+  s_dea394ec8da4dc::t_66b4e6fdf62961 1-102,105,123,148,150,152-153,157-158,222-250,252-308,310-336,338,341-367,369,453-466,468-481,483-509,521-529,533-539,541-542,544-588,672-675,691,693-745,748,760,763,788,791,793-818,872-873,875-1010
+  s_dea394ec8da4dc::t_eed606b805452a 103-104,106-122,124-147,149,151,154-156,467,482,540,746-747,749-759,761-762,764-787,789-790,792
+  s_dea394ec8da4dc::t_a9d52d02540604 615
+  s_dea394ec8da4dc::t_7d29173148c6dc 186-188
+  s_dea394ec8da4dc::t_601620c0260a23 420-422
+  s_dea394ec8da4dc::t_cb49e3cd92ff3c 159-185,189-190,251,370-419,684,821-844
+  s_dea394ec8da4dc::t_f9eab0e31467a8 517,530-532,543
+  s_dea394ec8da4dc::t_4afb7edbdbd814 191-193,196,213,215,217-221,423-427,430,445,448,450-452
+  s_dea394ec8da4dc::t_f4e41478facea3 671,680-683,686-687,692
+apps/docs/content/docs/guide/local-runs.mdx
+  s_dea394ec8da4dc::t_9bf1c7525b3acc 54
+  s_c4cefe80015294::t_cb9129723698d0 46-53,55
+.gitignore
+  s_dea394ec8da4dc::t_0b14e974f99009 2
+action.yml
+  s_dea394ec8da4dc::t_a342f50273c13e 16-21
+apps/docs/content/docs/concepts/trust-security.mdx
+  s_dea394ec8da4dc::t_dfdc2ebbd84ccd 101-120
+apps/docs/content/docs/guide/azure-devops.mdx
+  s_dea394ec8da4dc::t_e21e555761d68a 10,16,49-51,54,66-71,76-77
+apps/docs/content/docs/guide/bitbucket.mdx
+  s_dea394ec8da4dc::t_adaa84c26c3204 16,22,34,37-43,48-51
+apps/docs/content/docs/guide/github-action.mdx
+  s_c4cefe80015294::t_a870074524135d 44,48-56,128-130,136-137
+apps/docs/content/docs/guide/gitlab.mdx
+  s_dea394ec8da4dc::t_50e8b0db58a1c2 34-39,55-56
+apps/docs/content/docs/guide/meta.json
+  s_dea394ec8da4dc::t_0fa5a28e3a4272 21
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_dea394ec8da4dc::t_04dae24f71c9cc 16-21,48,51-52,114-115,224
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_c4cefe80015294::t_5147322f3d0078 125,129-137
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_c4cefe80015294::t_e8de24db8b7d14 126,130-138
+apps/docs/content/docs/recipes/ci-triage-command.mdx
+  s_c4cefe80015294::t_4b3e4617e452df 164,168-176
+apps/docs/content/docs/recipes/default-review.mdx
+  s_c4cefe80015294::t_a6b37fe47f9eda 126,130-138
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_c4cefe80015294::t_3979c18d980dfa 162,166-174
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_c4cefe80015294::t_86027fd6f5bd3b 135,139-147
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_c4cefe80015294::t_650087267ae6af 647,651-659
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_c4cefe80015294::t_7f790969ba1dbf 119,123-131
+apps/docs/content/docs/recipes/multi-agent-review.mdx
+  s_c4cefe80015294::t_459db1ef28b76b 173,177-185
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_c4cefe80015294::t_eefb7d42fb84f3 466,474-482
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_c4cefe80015294::t_12f3daeeee8dc8 260,264-272
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_c4cefe80015294::t_4eb24514f5acb3 221,225-233
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_c4cefe80015294::t_8880a7787b667c 346,350-358
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_c4cefe80015294::t_b4f313081956c7 242,246-254
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_c4cefe80015294::t_b2c60fc0293a99 389,393-401
+apps/docs/content/docs/reference/architecture.mdx
+  s_dea394ec8da4dc::t_656d4048b779a5 16-17,28,30-38,58-59
+bun.lock
+  s_c4cefe80015294::t_76c70a35aaa909 101-109,112,371-400,1063-1064
+docs/CONTEXT.md
+  s_dea394ec8da4dc::t_3cb6eb9c80e2d4 60-63
+docs/adr/README.md
+  s_dea394ec8da4dc::t_cd350439c15152 13-14
+packages/e2e/assertions.test.ts
+  s_dea394ec8da4dc::t_44fb09b6c0eda3 100-102
+packages/evals/src/effectiveness-cases.ts
+  s_dea394ec8da4dc::t_7bee7016365e6b 512,518,544,550,559-570
+packages/runtime/package.json
+  s_c4cefe80015294::t_4e6285a455f901 64,72-80,83
+packages/runtime/src/config/init.ts
+  s_dea394ec8da4dc::t_91f40390c7af3e 188-197,200-209,227-232,257-307,317-318,326-353
+packages/runtime/src/config/official-github-workflow.ts
+  s_dea394ec8da4dc::t_aae10e3f9f2804 53,64-74
+packages/runtime/src/config/tests/init-project.test.ts
+  s_dea394ec8da4dc::t_1fc3d53b9bb43b 81-83,89,202,256-259,263,272,278-281,292,298-299,301-307
+packages/runtime/src/host-run/logging.ts
+  s_dea394ec8da4dc::t_f9003f95c3681e 2,11
+packages/runtime/src/host-run/review-publishing.ts
+  s_dea394ec8da4dc::t_c63ddea53b0aaa 4,39-126,131-132,134-141,146-224
+packages/runtime/src/host-run/tests/commands-change-request.test.ts
+  s_dea394ec8da4dc::t_4344542373e9c6 2,5,31,36-302,417-499,756-757,769-773,777-779,788-803
+packages/runtime/src/host-run/types.ts
+  s_dea394ec8da4dc::t_1c3512a7435e6d 4,35-41,48,63-64
+packages/runtime/src/host-run/webhook-server.ts
+  s_dea394ec8da4dc::t_15714eda16e1c6 9,245-247,256-265,275-297,544,562-563,582-590
+packages/runtime/src/hosts/azure-devops/client.ts
+  s_dea394ec8da4dc::t_1580830f29a615 65-68,401-414
+packages/runtime/src/hosts/azure-devops/tests/client.test.ts
+  s_dea394ec8da4dc::t_850c7d8d9f186d 202
+packages/runtime/src/hosts/gitlab/client.ts
+  s_dea394ec8da4dc::t_b2917faa354b18 41-42
+packages/runtime/src/hosts/gitlab/tests/client.test.ts
+  s_dea394ec8da4dc::t_d733169792985a 260-286
+packages/runtime/src/index.ts
+  s_dea394ec8da4dc::t_3b1dfecbdf3e93 32-55
+packages/runtime/src/observability/otlp.ts
+  s_dea394ec8da4dc::t_1cdd0c15fae9c4 1-361
+packages/runtime/src/pi/runner.ts
+  s_dea394ec8da4dc::t_484010d8595688 3,9,34,115,244,533-538,666,689-706,774-837,897,922
+packages/runtime/src/pi/tests/pi.test.ts
+  s_dea394ec8da4dc::t_3b36573885ca10 283-302
+packages/runtime/src/review/agent/review-run.ts
+  s_dea394ec8da4dc::t_9740bc346088f9 2,12-16,65,117,119-125,180,184-185,208-210,245,250-256,332-333,339-355,358,362,365-374,377-455,461-468,525-527,533-535,550-552,558-560,567-596,600-638
+packages/runtime/src/review/publication-result.ts
+  s_dea394ec8da4dc::t_6225dacac36f17 24,26
+packages/runtime/src/review/verifier.ts
+  s_dea394ec8da4dc::t_6b1ecc10284ecd 5,51,123
+packages/runtime/src/shared/logging.ts
+  s_dea394ec8da4dc::t_3589b1284e3797 47,60,113-134
+packages/sdk/src/index.ts
+  s_dea394ec8da4dc::t_3592058fffd7f7 22-39
+packages/sdk/src/run-bundle.ts
+  s_dea394ec8da4dc::t_70b90098f839c6 1-284
+packages/sdk/src/tests/run-bundle.test.ts
+  s_dea394ec8da4dc::t_2e3163bd1413b2 1-235
+docs/adr/0008-provider-neutral-run-observability.md
+  s_dea394ec8da4dc::t_463c98387b5fe3 1-29
+packages/runtime/src/observability/retention.ts
+  s_dea394ec8da4dc::t_5e3b1981f57dcb 1-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "149eb4cabe8f572d4d29026b761593828468a868",
+  "prompts": {},
+  "sessions": {
+    "s_c4cefe80015294": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7e1d-67b7-7d21-a388-1c7159fba85e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_dea394ec8da4dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7ef7-96df-75a0-8d1e-8df4fab8bb81",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
