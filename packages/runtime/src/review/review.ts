@@ -42,15 +42,19 @@ export function validateReviewResult(
   const droppedFindings: ValidatedReview["droppedFindings"] = [];
 
   for (const [index, finding] of review.inlineFindings.entries()) {
-    const fingerprint = findingFingerprint(finding);
-    const rangeMatch = ranges.findRange(finding.rangeId);
+    const suppliedRange = ranges.findRange(finding.rangeId)?.range;
+    const validatedFinding = findingRangeMismatchReason(finding, suppliedRange)
+      ? canonicalizeFindingRangeId(finding, manifest)
+      : finding;
+    const fingerprint = findingFingerprint(validatedFinding);
+    const rangeMatch = ranges.findRange(validatedFinding.rangeId);
     const reason = findingDropReason({
-      finding,
+      finding: validatedFinding,
       fingerprint,
-      pathScope: options.pathScopeForFinding?.(finding, index),
+      pathScope: options.pathScopeForFinding?.(validatedFinding, index),
       file: rangeMatch?.file,
       range: rangeMatch?.range,
-      excludedReason: ranges.excludedReason(finding.path),
+      excludedReason: ranges.excludedReason(validatedFinding.path),
       seenFingerprints,
     });
 
@@ -60,7 +64,7 @@ export function validateReviewResult(
     }
 
     seenFingerprints.add(fingerprint);
-    validFindings.push(finding);
+    validFindings.push(validatedFinding);
   }
 
   return parseValidatedReview({
@@ -68,6 +72,24 @@ export function validateReviewResult(
     validFindings,
     droppedFindings,
   });
+}
+
+function canonicalizeFindingRangeId(finding: ReviewFinding, manifest: DiffManifest): ReviewFinding {
+  if (finding.startLine > finding.endLine) {
+    return finding;
+  }
+
+  const matchingRanges = manifest.files.flatMap((file) =>
+    file.commentableRanges.filter(
+      (range) =>
+        range.path === finding.path &&
+        range.side === finding.side &&
+        finding.startLine >= range.startLine &&
+        finding.endLine <= range.endLine,
+    ),
+  );
+  const matchingRange = matchingRanges.length === 1 ? matchingRanges[0] : undefined;
+  return matchingRange ? { ...finding, rangeId: matchingRange.id } : finding;
 }
 
 type FindingValidationContext = {

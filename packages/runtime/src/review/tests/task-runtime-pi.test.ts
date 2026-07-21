@@ -18,6 +18,7 @@ import {
   providerFailurePiRunner,
   registerPiReviewTask,
   reviewPiResult,
+  reviewTestManifestWithDocs,
   runRuntime,
   runWithInsideOutsideFindings,
   singleTaskPlan,
@@ -25,6 +26,150 @@ import {
 } from "./task-runtime-fixtures.js";
 
 describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication limits", () => {
+  it("schedules oversized core reviews into bounded manifest units", async () => {
+    const prompts: string[] = [];
+    const result = await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          entrypoints: { command: false },
+        });
+      }),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1_200,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return options.prompt.includes('"path": "docs/readme.md"')
+          ? reviewPiResult([finding("docs defect", "docs-range-1", 1, "docs/readme.md")])
+          : reviewPiResult([finding("source defect", "range-1", 10)]);
+      },
+    });
+
+    expect(prompts).toHaveLength(2);
+    expect(
+      prompts.every(
+        (prompt) =>
+          !prompt.includes('"path": "src/a.ts"') || !prompt.includes('"path": "docs/readme.md"'),
+      ),
+    ).toBe(true);
+    expect(result.validated.validFindings.map((item) => item.body)).toEqual([
+      "source defect body",
+      "docs defect body",
+    ]);
+  });
+
+  it("deduplicates same-anchor findings from scheduled review units", async () => {
+    let calls = 0;
+    const result = await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          entrypoints: { command: false },
+        });
+      }),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1_200,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async () => {
+        calls += 1;
+        return reviewPiResult(
+          calls === 1
+            ? [
+                {
+                  ...finding("discarded config", "range-1", 10),
+                  body: "`config` is copied and `schedule_type` is replaced with its display value, but the return statement uses the original unmodified monitor config. The modified copy is discarded, so the integer is emitted instead of the display string.",
+                },
+                {
+                  ...finding("wrong cleanup", "range-1", 10),
+                  body: "The cleanup branch removes the active cache entry instead of the expired entry, so stale state remains reachable.",
+                },
+              ]
+            : [
+                {
+                  ...finding("discarded config", "range-1", 10),
+                  body: "`config` is copied and `schedule_type` is replaced with its display value, but the return dictionary uses the original monitor config instead of the modified copy. The integer reaches the issue event instead of the display string.",
+                },
+              ],
+        );
+      },
+    });
+
+    expect(result.validated.validFindings.map((item) => item.body)).toEqual([
+      "`config` is copied and `schedule_type` is replaced with its display value, but the return statement uses the original unmodified monitor config. The modified copy is discarded, so the integer is emitted instead of the display string.",
+      "The cleanup branch removes the active cache entry instead of the expired entry, so stale state remains reachable.",
+    ]);
+  });
+
+  it("keeps fitting core reviews on one Pi call", async () => {
+    let calls = 0;
+    await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          entrypoints: { command: false },
+        });
+      }),
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async () => {
+        calls += 1;
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(calls).toBe(1);
+  });
+
+  it("splits one oversized file across complete commentable ranges", async () => {
+    const prompts: string[] = [];
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 900,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts.filter((prompt) => prompt.includes('"id": "range-1"'))).toHaveLength(1);
+    expect(prompts.filter((prompt) => prompt.includes('"id": "range-2"'))).toHaveLength(1);
+  });
+
   it("uses agent timeout when running Pi", async () => {
     let observedTimeout: number | undefined;
     const plan = testPlan((pipr) => {

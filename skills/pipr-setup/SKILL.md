@@ -46,7 +46,7 @@ Defaults are allowed only when the user says to use Pipr defaults, accepts your 
 Combine questions so the interview stays short.
 
 - Existing-file handling: config directory, selected adapter files, and whether existing Pipr files may be edited. Never use `pipr init --force` without explicit approval.
-- Recipe or review goal: general review, bugs, security, quality gate, dependency risk, PR hygiene, diagnostics, briefing, changelog, interactive ask, CI triage, multi-agent review, or durable memory tools.
+- Recipe or review goal: general review, deep review, bugs, security, quality gate, dependency risk, PR hygiene, diagnostics, briefing, changelog, interactive ask, CI triage, multi-agent review, or durable memory tools.
 - Provider policy: GitHub, GitLab, Azure DevOps, Bitbucket, or no generated adapter files; model and code-host secret names; fallback model; and whether local runs should require provider env vars.
 - Trigger policy: automatic change request actions, `@pipr` commands, command permissions, local review behavior, and command-only workflows.
 - Publication policy: inline comment cap, check runs, aggregate checks, required gates, auto-resolve behavior, and who may trigger verifier replies.
@@ -56,7 +56,7 @@ Example compact interview:
 
 ```text
 Before I initialize Pipr, choose the setup policy:
-1. Recipe or goal: default-review, bug-hunter, rich-review, fix-suggestions,
+1. Recipe or goal: default-review, deep-review, bug-hunter, rich-review, fix-suggestions,
    security-sast, quality-gate, diff-diagnostics, pr-hygiene, dependency-risk,
    ci-triage-command, multi-agent-review, plugin-tool-review, pr-briefing,
    interactive-ask, changelog-draft, or a custom workflow.

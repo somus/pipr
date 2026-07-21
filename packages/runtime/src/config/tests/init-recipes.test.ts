@@ -26,6 +26,7 @@ afterEach(cleanupTemporaryDirectories);
 
 describe("initOfficialMinimalProject: generated recipes", () => {
   it("initializes every official recipe and validates the generated config", async () => {
+    expect(supportedOfficialInitRecipes).toContain("deep-review");
     expect(supportedOfficialInitRecipes).toContain("rich-review");
     expect(supportedOfficialInitRecipes).toContain("fix-suggestions");
     expect(listOfficialInitRecipes().map((recipe) => recipe.id)).toEqual([
@@ -54,6 +55,136 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       expect(configTs).not.toContain("suggestedFix directly fixes");
       expect(configTs).not.toContain("trailing-blank-line-only");
     }
+  });
+
+  it("initializes the deep review recipe with dual-scale and conditional concurrency lanes", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-deep-review-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "deep-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
+    const inspection = inspectRuntimePlan(project.plan, ".pipr/config.ts");
+
+    expect(configTs).toContain("minimumFilesToShard = 12");
+    expect(configTs).toContain("maxUnitCharacters = 25_000");
+    expect(configTs).toContain("hasConcurrencySignals(manifest)");
+    expect(configTs).toContain("Promise.all");
+    expect(configTs).toContain('name: "deep-concurrency-reviewer"');
+    expect(inspection.agents).toEqual(["deep-reviewer"]);
+    expect(inspection.tasks).toEqual(["deep-review"]);
+    expect(inspection.commands).toEqual([
+      { pattern: "@pipr deep-review", task: "deep-review", permission: "write" },
+    ]);
+  });
+
+  it("runs and deduplicates the deep review concurrency lane when changed code signals it", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-deep-review-"));
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "deep-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const manifest = reviewTestManifest();
+    const changedRange = manifest.files[0]?.commentableRanges[0];
+    if (!changedRange) {
+      throw new Error("expected a changed range in the review test manifest");
+    }
+    changedRange.preview = "async function refreshCache() { await cache.update(); }";
+    const prompts: string[] = [];
+    const finding = {
+      body: "The cache update can publish stale state after shutdown.",
+      path: "src/a.ts",
+      rangeId: "range-1",
+      side: "RIGHT",
+      startLine: 10,
+      endLine: 10,
+    } as const;
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => manifest,
+      piRunner: async (run) => {
+        prompts.push(run.prompt);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            summary: { body: "One concurrency defect." },
+            inlineFindings: [finding],
+          }),
+          stderr: "",
+          durationMs: 1,
+        };
+      },
+    });
+
+    assertReviewResult(result);
+    expect(prompts).toHaveLength(2);
+    expect(prompts.some((prompt) => prompt.includes("Review only concurrency"))).toBe(true);
+    expect(result.mainComment).toContain("Deep review completed with 2 reviewer calls.");
+    expect(result.inlineCommentDrafts).toHaveLength(1);
+  });
+
+  it("adds a focused unit pass for a large deep review", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-deep-review-"));
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "deep-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const seedFile = reviewTestManifest().files[0];
+    if (!seedFile) {
+      throw new Error("expected a changed file in the review test manifest");
+    }
+    const manifest = {
+      ...reviewTestManifest(),
+      files: Array.from({ length: 12 }, (_, index) => ({
+        ...seedFile,
+        path: `src/file-${index}.ts`,
+        commentableRanges: seedFile.commentableRanges.map((range) => ({
+          ...range,
+          id: `${range.id}-${index}`,
+          path: `src/file-${index}.ts`,
+        })),
+      })),
+    };
+    const prompts: string[] = [];
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => manifest,
+      piRunner: async (run) => {
+        prompts.push(run.prompt);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            summary: { body: "No actionable findings." },
+            inlineFindings: [],
+          }),
+          stderr: "",
+          durationMs: 1,
+        };
+      },
+    });
+
+    assertReviewResult(result);
+    expect(prompts).toHaveLength(2);
+    expect(prompts.some((prompt) => prompt.includes('"reviewScale": "unit"'))).toBe(true);
+    expect(result.mainComment).toContain("Deep review completed with 2 reviewer calls.");
   });
 
   it("initializes the structured review recipe with category and severity metadata", async () => {

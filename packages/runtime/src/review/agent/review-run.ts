@@ -8,6 +8,7 @@ import {
 } from "@usepipr/sdk/internal";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
+import { partitionDiffManifestForPrompt } from "../../diff/manifest-projection.js";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
 import {
@@ -18,7 +19,13 @@ import {
   withPiRunWorkspace,
 } from "../../pi/runner.js";
 import { boundedLogSnippet, type RuntimeLog } from "../../shared/logging.js";
-import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
+import type {
+  ChangeRequestEventContext,
+  DiffManifest,
+  PiprConfig,
+  ProviderConfig,
+  ReviewResult,
+} from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
 import { parseReviewResult, reviewResultSchemaId } from "../review.js";
 import {
@@ -27,7 +34,7 @@ import {
   type PreparedAgentContext,
   renderAgentPrompt,
 } from "./agent-prompt.js";
-import { prepareDiffManifestContext } from "./diff-manifest-context.js";
+import { prepareDiffManifestContext, readReservedInputManifest } from "./diff-manifest-context.js";
 
 export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
 
@@ -86,6 +93,33 @@ type AgentAttemptResult =
 export async function runReviewAgent(
   options: RunReviewAgentOptions,
 ): Promise<RunReviewAgentResult> {
+  const manifests = scheduledReviewManifests(options);
+  if (!manifests || manifests.length === 1) {
+    return await runReviewAgentOnce(options);
+  }
+  const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
+    const results: RunReviewAgentResult[] = [];
+    for (const manifest of manifests) {
+      results.push(
+        await runReviewAgentOnce({
+          ...options,
+          input: inputWithManifest(options.input, manifest),
+          runtime: { ...options.runtime, piRunner },
+        }),
+      );
+    }
+    return mergeScheduledReviewAgentResults(results);
+  };
+  if (options.runtime.piRunner) {
+    return await runScheduled(options.runtime.piRunner);
+  }
+  return await withPiRunWorkspace(
+    { workspace: options.runtime.workspace, env: options.runtime.env },
+    runScheduled,
+  );
+}
+
+async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunReviewAgentResult> {
   const agentTools = resolveAgentTools(options.agent, options.runtime.plan);
   const agentRunContext = createAgentRunContext(options.runtime);
   const diffManifest = prepareDiffManifestContext({
@@ -127,6 +161,87 @@ export async function runReviewAgent(
     { workspace: options.runtime.workspace, env: options.runtime.env },
     runProviders,
   );
+}
+
+function scheduledReviewManifests(options: RunReviewAgentOptions) {
+  if (options.agent.definition.output.id !== reviewResultSchemaId) {
+    return undefined;
+  }
+  const manifest = readReservedInputManifest(options.input);
+  if (!manifest) {
+    return undefined;
+  }
+  return partitionDiffManifestForPrompt(manifest, options.runtime.config.limits?.diffManifest);
+}
+
+function inputWithManifest(input: unknown, manifest: DiffManifest): Record<string, unknown> {
+  if (typeof input !== "object" || input === null) {
+    throw new Error("Scheduled review input must contain a Diff Manifest");
+  }
+  return { ...input, manifest };
+}
+
+function mergeScheduledReviewAgentResults(
+  results: readonly RunReviewAgentResult[],
+): RunReviewAgentResult {
+  const reviews = results.map((result) => parseReviewResult(result.value));
+  const summaries = [...new Set(reviews.map((review) => review.summary.body))];
+  return {
+    value: parseReviewResult({
+      summary: { body: summaries.join("\n\n") },
+      inlineFindings: deduplicateScheduledFindings(
+        reviews.flatMap((review) => review.inlineFindings),
+      ),
+    }),
+    repairAttempted: results.some((result) => result.repairAttempted),
+    providerModels: results.flatMap((result) => result.providerModels),
+  };
+}
+
+function deduplicateScheduledFindings(findings: ReviewResult["inlineFindings"]) {
+  const unique: ReviewResult["inlineFindings"] = [];
+  for (const finding of findings) {
+    const duplicate = unique.some(
+      (candidate) =>
+        sameFindingAnchor(candidate, finding) && similarFindingBody(candidate.body, finding.body),
+    );
+    if (!duplicate) {
+      unique.push(finding);
+    }
+  }
+  return unique;
+}
+
+function sameFindingAnchor(
+  left: ReviewResult["inlineFindings"][number],
+  right: ReviewResult["inlineFindings"][number],
+): boolean {
+  return (
+    left.path === right.path &&
+    left.rangeId === right.rangeId &&
+    left.side === right.side &&
+    left.startLine === right.startLine &&
+    left.endLine === right.endLine
+  );
+}
+
+function similarFindingBody(left: string, right: string): boolean {
+  const leftTokens = findingBodyTokens(left);
+  const rightTokens = findingBodyTokens(right);
+  if (leftTokens.size === 0 || rightTokens.size === 0) {
+    return left.trim().toLowerCase() === right.trim().toLowerCase();
+  }
+  let shared = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) {
+      shared += 1;
+    }
+  }
+  return shared / Math.min(leftTokens.size, rightTokens.size) >= 0.8;
+}
+
+function findingBodyTokens(body: string): Set<string> {
+  return new Set(body.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
 }
 
 export function resolveProvider(config: PiprConfig, providerId: string): ProviderConfig {

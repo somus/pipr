@@ -93,6 +93,47 @@ export function prepareDiffManifestPrompt(
   };
 }
 
+export function partitionDiffManifestForPrompt(
+  manifest: DiffManifest,
+  config: DiffManifestLimitsConfig | undefined,
+): DiffManifest[] {
+  if (diffManifestFitsPrompt(manifest, config)) {
+    return [manifest];
+  }
+
+  const units: DiffManifest[] = [];
+  let files: DiffManifestFile[] = [];
+  for (const file of manifest.files) {
+    const singleFileManifest = manifestWithFiles(manifest, [file]);
+    if (!diffManifestFitsPrompt(singleFileManifest, config)) {
+      if (files.length > 0) {
+        units.push(manifestWithFiles(manifest, files));
+        files = [];
+      }
+      units.push(...splitOversizedManifestFile(manifest, file, config));
+      continue;
+    }
+
+    const candidateFiles = [...files, file];
+    if (
+      files.length > 0 &&
+      !diffManifestFitsPrompt(manifestWithFiles(manifest, candidateFiles), config)
+    ) {
+      units.push(manifestWithFiles(manifest, files));
+      files = [file];
+    } else {
+      files = candidateFiles;
+    }
+  }
+  if (files.length > 0) {
+    units.push(manifestWithFiles(manifest, files));
+  }
+  if (units.length === 0) {
+    prepareDiffManifestPrompt(manifest, config);
+  }
+  return units;
+}
+
 export function condenseDiffManifest(manifest: DiffManifest): DiffManifest {
   return {
     baseSha: manifest.baseSha,
@@ -203,6 +244,97 @@ function condenseDiffManifestFile(file: DiffManifestFile): DiffManifestFile {
     })),
     excludedReason: file.excludedReason,
   };
+}
+
+function splitOversizedManifestFile(
+  manifest: DiffManifest,
+  file: DiffManifestFile,
+  config: DiffManifestLimitsConfig | undefined,
+): DiffManifest[] {
+  if (file.hunks.length === 0) {
+    return [ensureManifestFitsPrompt(manifestWithFiles(manifest, [file]), config)];
+  }
+
+  const rangesByHunk = new Map<number, DiffManifestFile["commentableRanges"][number][]>();
+  for (const range of file.commentableRanges) {
+    const ranges = rangesByHunk.get(range.hunkIndex) ?? [];
+    ranges.push(range);
+    rangesByHunk.set(range.hunkIndex, ranges);
+  }
+  return file.hunks.flatMap((hunk) =>
+    splitManifestHunk(manifest, file, hunk, rangesByHunk.get(hunk.hunkIndex) ?? [], config),
+  );
+}
+
+function splitManifestHunk(
+  manifest: DiffManifest,
+  file: DiffManifestFile,
+  hunk: DiffManifestFile["hunks"][number],
+  ranges: DiffManifestFile["commentableRanges"],
+  config: DiffManifestLimitsConfig | undefined,
+): DiffManifest[] {
+  if (ranges.length === 0) {
+    return [ensureManifestFitsPrompt(manifestWithFileSlice(manifest, file, [hunk], []), config)];
+  }
+
+  const units: DiffManifest[] = [];
+  let selectedRanges: DiffManifestFile["commentableRanges"] = [];
+  for (const range of ranges) {
+    const candidateRanges = [...selectedRanges, range];
+    const candidate = manifestWithFileSlice(manifest, file, [hunk], candidateRanges);
+    if (selectedRanges.length > 0 && !diffManifestFitsPrompt(candidate, config)) {
+      units.push(
+        ensureManifestFitsPrompt(
+          manifestWithFileSlice(manifest, file, [hunk], selectedRanges),
+          config,
+        ),
+      );
+      selectedRanges = [range];
+      continue;
+    }
+    selectedRanges = candidateRanges;
+  }
+  units.push(
+    ensureManifestFitsPrompt(manifestWithFileSlice(manifest, file, [hunk], selectedRanges), config),
+  );
+  return units;
+}
+
+function manifestWithFileSlice(
+  manifest: DiffManifest,
+  file: DiffManifestFile,
+  hunks: DiffManifestFile["hunks"],
+  commentableRanges: DiffManifestFile["commentableRanges"],
+): DiffManifest {
+  return manifestWithFiles(manifest, [{ ...file, hunks, commentableRanges }]);
+}
+
+function manifestWithFiles(
+  manifest: DiffManifest,
+  files: readonly DiffManifestFile[],
+): DiffManifest {
+  return { ...manifest, files };
+}
+
+function ensureManifestFitsPrompt(
+  manifest: DiffManifest,
+  config: DiffManifestLimitsConfig | undefined,
+): DiffManifest {
+  prepareDiffManifestPrompt(manifest, config);
+  return manifest;
+}
+
+function diffManifestFitsPrompt(
+  manifest: DiffManifest,
+  config: DiffManifestLimitsConfig | undefined,
+): boolean {
+  const limits = resolveDiffManifestPromptLimits(config);
+  const full = measureDiffManifestPrompt(manifest);
+  if (fitsLimit(full, limits.fullMaxBytes, limits.fullMaxEstimatedTokens)) {
+    return true;
+  }
+  const condensed = measureDiffManifestPrompt(condenseDiffManifest(manifest));
+  return fitsLimit(condensed, limits.condensedMaxBytes, limits.condensedMaxEstimatedTokens);
 }
 
 function fitsLimit(

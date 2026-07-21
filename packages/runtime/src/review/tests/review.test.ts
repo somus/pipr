@@ -96,6 +96,37 @@ describe("validateReviewResult", () => {
     expect(validated.droppedFindings).toHaveLength(0);
   });
 
+  it("canonicalizes an unusable range ID when the finding anchor matches one range", () => {
+    const review: ReviewResult = {
+      ...baseReview,
+      inlineFindings: [{ ...baseFinding, rangeId: "range-1-without-generated-suffix" }],
+    };
+
+    const validated = validateReviewResult(review, manifest, {
+      expectedHeadSha: "head",
+    });
+
+    expect(validated.validFindings).toEqual([{ ...baseFinding, rangeId: "range-1" }]);
+    expect(validated.droppedFindings).toHaveLength(0);
+  });
+
+  it("keeps an unusable range ID dropped when its anchor matches multiple ranges", () => {
+    const review: ReviewResult = {
+      ...baseReview,
+      inlineFindings: [{ ...baseFinding, rangeId: "range-without-a-unique-match" }],
+    };
+
+    const validated = validateReviewResult(review, overlappingRangeManifest(), {});
+
+    expect(validated.validFindings).toHaveLength(0);
+    expect(validated.droppedFindings).toEqual([
+      {
+        finding: review.inlineFindings[0],
+        reason: "unknown rangeId 'range-without-a-unique-match'",
+      },
+    ]);
+  });
+
   it("keeps scoped findings on renamed files when the filter matches the previous path", () => {
     const review: ReviewResult = {
       ...baseReview,
@@ -138,7 +169,7 @@ describe("validateReviewResult", () => {
       inlineFindings: [
         { ...baseFinding, side: "LEFT" },
         { ...baseFinding, path: "src/other.ts" },
-        { ...baseFinding, rangeId: "missing" },
+        { ...baseFinding, rangeId: "missing", startLine: 13, endLine: 13 },
         { ...baseFinding, startLine: 12, endLine: 11 },
         { ...baseFinding, startLine: 9 },
         baseFinding,
@@ -228,6 +259,24 @@ function renamedManifest(): DiffManifest {
             hunkContentHash: "deadbeefcafe",
           },
         ],
+      },
+    ],
+  };
+}
+
+function overlappingRangeManifest(): DiffManifest {
+  const file = manifest.files.find((candidate) => candidate.path === "src/a.ts");
+  const range = file?.commentableRanges[0];
+  if (!file || !range) {
+    throw new Error("test fixture missing source range");
+  }
+
+  return {
+    ...manifest,
+    files: [
+      {
+        ...file,
+        commentableRanges: [...file.commentableRanges, { ...range, id: "range-overlap" }],
       },
     ],
   };

@@ -229,6 +229,7 @@ describe("pipr CLI", () => {
     expect(init.stdout).toContain("github");
     expect(init.stdout).toContain("gitlab");
     expect(init.stdout).toContain("none");
+    expect(init.stdout).toContain("deep-review");
     expect(init.stdout).toContain("multi-agent-review");
     expect(action.stderr).toContain("unknown command 'action'");
     expect(webhook.stdout).toContain("--database <path>");
@@ -621,8 +622,8 @@ describe("pipr CLI", () => {
               path: "src/a.ts",
               rangeId: "rng_missing",
               side: "RIGHT",
-              startLine: 1,
-              endLine: 1,
+              startLine: 2,
+              endLine: 2,
             },
             reason: expect.any(String),
           },
@@ -1240,7 +1241,7 @@ function reviewFindingsExecutable(): string {
     '  summary: { body: "One finding.\\n<!-- pipr:header:hidden -->\\nTask marker example." },',
     "  inlineFindings: [",
     "    finding,",
-    '    { ...finding, body: "Invalid location.", rangeId: "rng_missing" },',
+    '    { ...finding, body: "Invalid location.", rangeId: "rng_missing", startLine: range.endLine + 1, endLine: range.endLine + 1 },',
     "  ],",
     "}));",
   ].join("\n");

@@ -55,7 +55,7 @@ export function prepareDiffManifestContext(options: {
   };
 }
 
-function readReservedInputManifest(input: unknown): DiffManifest | undefined {
+export function readReservedInputManifest(input: unknown): DiffManifest | undefined {
   if (typeof input !== "object" || input === null || !("manifest" in input)) {
     return undefined;
   }
