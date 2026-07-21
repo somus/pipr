@@ -958,9 +958,13 @@ function observeInternalAttemptEvent(
   const operation = event.kind.startsWith("retry") ? "retry" : "compaction";
   const key = `internal:${operation}:${context.suffix}`;
   if (event.kind.endsWith("start")) {
-    context.openSpan(key, `pipr.agent.${operation}`, "internal", {
+    const attributes: RunSpanRecord["attributes"] = {
       "pipr.attempt.type": context.attempt.attemptType,
-    });
+    };
+    if (event.kind === "retry-start") {
+      setDefined(attributes, "pipr.retry.backoff_ms", event.delayMs);
+    }
+    context.openSpan(key, `pipr.agent.${operation}`, "internal", attributes);
     return;
   }
   context.closeSpan(key, "ok");

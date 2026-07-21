@@ -775,7 +775,7 @@ function observedPiEvent(event: Record<string, unknown>): RunAgentEvent | undefi
   if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
     return observedToolEvent(event);
   }
-  return observedLifecycleEvent(event.type);
+  return observedLifecycleEvent(event);
 }
 
 function observedToolEvent(event: Record<string, unknown>): RunAgentEvent {
@@ -803,14 +803,22 @@ function firstDefinedValue(record: Record<string, unknown>, keys: readonly strin
   return keys.map((key) => record[key]).find((value) => value !== undefined);
 }
 
-function observedLifecycleEvent(type: unknown): RunAgentEvent | undefined {
+function observedLifecycleEvent(event: Record<string, unknown>): RunAgentEvent | undefined {
+  if (event.type === "auto_retry_start") {
+    const delayMs = event.delayMs;
+    return {
+      kind: "retry-start",
+      ...(typeof delayMs === "number" && Number.isFinite(delayMs) && delayMs >= 0
+        ? { delayMs }
+        : {}),
+    };
+  }
   const events: Record<string, RunAgentEvent> = {
-    auto_retry_start: { kind: "retry-start" },
     auto_retry_end: { kind: "retry-end" },
     compaction_start: { kind: "compaction-start" },
     compaction_end: { kind: "compaction-end" },
   };
-  return typeof type === "string" ? events[type] : undefined;
+  return typeof event.type === "string" ? events[event.type] : undefined;
 }
 
 function contentStats(value: unknown): { contentBytes?: number; contentHash?: string } {

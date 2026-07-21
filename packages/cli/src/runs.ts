@@ -675,7 +675,8 @@ function printDiagnosis(
   console.log(`Kind: ${manifest.kind}`);
   console.log(`Outcome: ${manifest.outcome}`);
   console.log(`Duration: ${manifest.durationMs ?? 0}ms`);
-  console.log(`Retries: ${diagnosis.retryAttempts}`);
+  console.log(`Model retries: ${diagnosis.modelRetryAttempts}`);
+  console.log(`Agent retries: ${diagnosis.agentRetryAttempts}`);
   console.log(
     `Backoff: ${diagnosis.backoffDurationsMs.length > 0 ? `${diagnosis.backoffDurationsMs.join(", ")}ms` : "none"}`,
   );

@@ -122,7 +122,7 @@ describe("deterministic run diagnosis", () => {
       model: "gpt-test",
       prompt: "prompt",
     });
-    attempt.event({ kind: "retry-start" });
+    attempt.event({ kind: "retry-start", delayMs: 2_000 });
     attempt.event({ kind: "retry-end" });
     attempt.event({ kind: "tool-start", id: "tool-1", name: "read" });
     attempt.event({ kind: "tool-end", id: "tool-1", name: "read" });
@@ -137,6 +137,23 @@ describe("deterministic run diagnosis", () => {
         costUsd: 0.01,
       },
     });
+    recorder.logSink.log({
+      level: "info",
+      event: "pi start",
+      fields: {
+        attemptId: "model-retry",
+        attemptType: "retry",
+        attemptNumber: 3,
+        agent: "reviewer",
+        provider: "openai",
+        model: "gpt-test",
+      },
+    });
+    recorder.logSink.log({
+      level: "info",
+      event: "pi run",
+      fields: { attemptId: "model-retry", exitCode: 0, durationMs: 10 },
+    });
     await recorder.finish({
       kind: "review",
       outcome: "failed",
@@ -147,7 +164,9 @@ describe("deterministic run diagnosis", () => {
     expect(diagnosis.phaseDurations).toEqual([
       expect.objectContaining({ name: "pipr.workspace.prepare", durationMs: 20 }),
     ]);
-    expect(diagnosis.retryAttempts).toBe(1);
+    expect(diagnosis.agentRetryAttempts).toBe(1);
+    expect(diagnosis.modelRetryAttempts).toBe(1);
+    expect(diagnosis.backoffDurationsMs).toEqual([2_000]);
     expect(diagnosis.repairAttempts).toBe(1);
     expect(diagnosis.toolDurations[0]).toMatchObject({ name: "read", status: "ok" });
     expect(diagnosis.timeToFirstTokenMs).toBeNumber();

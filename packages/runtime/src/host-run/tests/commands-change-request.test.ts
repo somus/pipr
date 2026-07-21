@@ -233,6 +233,14 @@ describe("runHostRunCommand pull_request dispatch", () => {
             result: "do-not-store",
           }),
           JSON.stringify({
+            type: "auto_retry_start",
+            attempt: 1,
+            maxAttempts: 3,
+            delayMs: 2_000,
+            errorMessage: "do-not-store",
+          }),
+          JSON.stringify({ type: "auto_retry_end", success: true, attempt: 2 }),
+          JSON.stringify({
             type: "message_end",
             message: {
               role: "assistant",
@@ -281,6 +289,10 @@ describe("runHostRunCommand pull_request dispatch", () => {
               "pipr.tool.output_bytes": expect.any(Number),
               "pipr.tool.output_hash": expect.stringMatching(/^[a-f0-9]{64}$/),
             }),
+          }),
+          expect.objectContaining({
+            name: "pipr.agent.retry",
+            attributes: expect.objectContaining({ "pipr.retry.backoff_ms": 2_000 }),
           }),
           expect.objectContaining({ name: "gen_ai.time_to_first_token" }),
         ]),

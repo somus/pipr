@@ -87,7 +87,8 @@ export type RunDiagnosis = {
     durationMs: number;
     status: RunSpanRecord["status"];
   }>;
-  retryAttempts: number;
+  agentRetryAttempts: number;
+  modelRetryAttempts: number;
   backoffDurationsMs: number[];
   repairAttempts: number;
   timeToFirstTokenMs?: number;
@@ -205,17 +206,16 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
     executionId: bundle.manifest.executionId,
     criticalPath,
     phaseDurations,
-    retryAttempts:
-      bundle.spans.filter((span) => span.name === "pipr.agent.retry").length +
-      bundle.spans.filter(
-        (span) => span.name === "gen_ai.chat" && span.attributes["pipr.attempt.type"] === "retry",
-      ).length,
+    agentRetryAttempts: bundle.spans.filter((span) => span.name === "pipr.agent.retry").length,
+    modelRetryAttempts: bundle.spans.filter(
+      (span) => span.name === "gen_ai.chat" && span.attributes["pipr.attempt.type"] === "retry",
+    ).length,
     backoffDurationsMs: bundle.spans
-      .filter(
-        (span): span is RunSpanRecord & { durationMs: number } =>
-          span.name === "pipr.agent.backoff" && span.durationMs !== undefined,
-      )
-      .map((span) => span.durationMs),
+      .filter((span) => span.name === "pipr.agent.retry")
+      .flatMap((span) => {
+        const durationMs = optionalNumberAttribute(span, "pipr.retry.backoff_ms");
+        return durationMs === undefined ? [] : [durationMs];
+      }),
     repairAttempts: bundle.manifest.artifacts.filter(
       (artifact) => artifact.kind === "prompt" && /-repair\./.test(artifact.path),
     ).length,
@@ -339,6 +339,11 @@ function stringAttribute(span: RunSpanRecord, key: string): string | undefined {
 function numberAttribute(span: RunSpanRecord, key: string): number {
   const value = span.attributes[key];
   return typeof value === "number" ? value : 0;
+}
+
+function optionalNumberAttribute(span: RunSpanRecord, key: string): number | undefined {
+  const value = span.attributes[key];
+  return typeof value === "number" ? value : undefined;
 }
 
 function minimumDuration(spans: RunSpanRecord[], name: string): number | undefined {

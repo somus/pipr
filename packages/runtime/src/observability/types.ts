@@ -31,7 +31,8 @@ export type RunAgentEvent =
       contentBytes?: number;
       contentHash?: string;
     }
-  | { kind: "retry-start" | "retry-end" | "compaction-start" | "compaction-end" };
+  | { kind: "retry-start"; delayMs?: number }
+  | { kind: "retry-end" | "compaction-start" | "compaction-end" };
 
 export type RunObserver = {
   registerSecret?(value: string): void;
