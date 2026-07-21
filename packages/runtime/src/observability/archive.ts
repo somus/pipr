@@ -11,6 +11,7 @@ import {
   runMetricsSnapshotSchema,
   runSpanRecordSchema,
 } from "@usepipr/sdk";
+import { bundleFilePaths } from "./bundle-files.js";
 import { readActiveCaptureMarker } from "./retention-store.js";
 
 export type RunRecordState =
@@ -175,7 +176,7 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
       durationMs: span.durationMs,
       status: span.status,
     }));
-  const usage = timedSpans.reduce(
+  const usage = bundle.spans.reduce(
     (total, span) => ({
       inputTokens: total.inputTokens + numberAttribute(span, "gen_ai.usage.input_tokens"),
       outputTokens: total.outputTokens + numberAttribute(span, "gen_ai.usage.output_tokens"),
@@ -271,16 +272,6 @@ function optionalMatch<T>(expected: T | undefined, actual: T | undefined): boole
 
 function statusMatches(status: RunQuery["status"], record: RunRecord): boolean {
   return status === undefined || record.state === status || record.outcome === status;
-}
-
-function bundleFilePaths(manifest: RunBundleManifest): string[] {
-  return [
-    "run.json",
-    manifest.signals.spans,
-    manifest.signals.logs,
-    manifest.signals.metrics,
-    ...manifest.artifacts.filter((artifact) => !artifact.omitted).map((artifact) => artifact.path),
-  ];
 }
 
 async function listBundleFiles(directory: string, relative = ""): Promise<Set<string>> {

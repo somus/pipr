@@ -4,6 +4,7 @@ import { gzipSync } from "fflate";
 import { z } from "zod";
 import { loadValidatedRunBundle } from "./archive.js";
 import { resolveBitbucketCollectionPageUrl } from "./bitbucket-url.js";
+import { bundleFilePaths } from "./bundle-files.js";
 
 type UploadFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -206,17 +207,8 @@ async function updateExternalUploadState(
 
 async function createBundleTarGz(directory: string): Promise<Uint8Array> {
   const bundle = await loadValidatedRunBundle(directory);
-  const filePaths = [
-    "run.json",
-    bundle.manifest.signals.spans,
-    bundle.manifest.signals.logs,
-    bundle.manifest.signals.metrics,
-    ...bundle.manifest.artifacts
-      .filter((artifact) => !artifact.omitted)
-      .map((artifact) => artifact.path),
-  ];
   const blocks: Uint8Array[] = [];
-  for (const relativePath of filePaths) {
+  for (const relativePath of bundleFilePaths(bundle.manifest)) {
     const contents = await readFile(path.join(directory, relativePath));
     blocks.push(tarHeader(relativePath, contents.byteLength), contents);
     const padding = (512 - (contents.byteLength % 512)) % 512;

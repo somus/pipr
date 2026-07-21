@@ -160,7 +160,22 @@ describe("deterministic run diagnosis", () => {
       failureCategory: "publication",
     });
 
-    const diagnosis = diagnoseRunBundle(await loadValidatedRunBundle(recorder.directory));
+    const bundle = await loadValidatedRunBundle(recorder.directory);
+    bundle.spans.push({
+      formatVersion: 1,
+      traceId: recorder.executionId,
+      spanId: "f".repeat(16),
+      name: "gen_ai.usage.snapshot",
+      category: "model",
+      startedAt: "2026-07-20T00:00:00.000Z",
+      status: "ok",
+      attributes: {
+        "gen_ai.usage.input_tokens": 7,
+        "gen_ai.usage.output_tokens": 3,
+        "pipr.usage.cost_usd": 0.002,
+      },
+    });
+    const diagnosis = diagnoseRunBundle(bundle);
     expect(diagnosis.phaseDurations).toEqual([
       expect.objectContaining({ name: "pipr.workspace.prepare", durationMs: 20 }),
     ]);
@@ -170,6 +185,7 @@ describe("deterministic run diagnosis", () => {
     expect(diagnosis.repairAttempts).toBe(1);
     expect(diagnosis.toolDurations[0]).toMatchObject({ name: "read", status: "ok" });
     expect(diagnosis.timeToFirstTokenMs).toBeNumber();
+    expect(diagnosis.usage).toEqual({ inputTokens: 7, outputTokens: 3, costUsd: 0.002 });
     expect(diagnosis.validationDrops).toBe(2);
     expect(diagnosis.publicationFailures).toBe(1);
     expect(diagnosis.missingEvidence).toContain("diff manifest");
