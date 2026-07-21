@@ -1,0 +1,36 @@
+packages/cli/src/tests/runs.test.ts
+  s_dea394ec8da4dc::t_4683098e38db65 283,289-291,334,340-349
+packages/cli/src/runs.ts
+  s_dea394ec8da4dc::t_e475d25a02edd6 446-451
+  s_dea394ec8da4dc::t_b4bea1f1974ff7 12,439
+  s_dea394ec8da4dc::t_91f58022841b7d 428-436,452
+packages/runtime/src/observability/provider-sources.ts
+  s_dea394ec8da4dc::t_e475d25a02edd6 506,567-573
+  s_dea394ec8da4dc::t_786cd4712eb502 9
+  s_dea394ec8da4dc::t_24069246eea4fb 521-526
+  s_dea394ec8da4dc::t_b4bea1f1974ff7 519-520,527-528
+  s_dea394ec8da4dc::t_91f58022841b7d 507,529,534-539,564
+  s_dea394ec8da4dc::t_cb163ba2e7bf2d 508-518,530-533
+packages/runtime/src/index.ts
+  s_dea394ec8da4dc::t_4ef90073d762e5 49
+packages/runtime/src/observability/partial-list-error.ts
+  s_dea394ec8da4dc::t_786cd4712eb502 1-10
+packages/runtime/src/observability/tests/provider-sources.test.ts
+  s_dea394ec8da4dc::t_4683098e38db65 693,727-742
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "9732d443702d8fd52a9d75fad991351224477a38",
+  "prompts": {},
+  "sessions": {
+    "s_dea394ec8da4dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7ef7-96df-75a0-8d1e-8df4fab8bb81",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
