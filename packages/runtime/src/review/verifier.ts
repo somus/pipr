@@ -2,6 +2,7 @@ import type { ModelProfile, PiprRunContext, Schema } from "@usepipr/sdk";
 import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import type { InlineThreadContext } from "../hosts/types.js";
+import type { RunObserver } from "../observability/types.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type {
   ChangeRequestEventContext,
@@ -47,6 +48,7 @@ export type RunVerifierOptions = {
   run: PiprRunContext;
   log?: RuntimeLog;
   piRunSink?: (run: PiRunStats) => void;
+  runObserver?: RunObserver;
 };
 
 export type VerifierResult = {
@@ -118,6 +120,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         piRunner: options.piRunner,
         run: options.run,
         log: options.log,
+        runObserver: options.runObserver,
         ...(options.piRunSink ? { piRunSink: options.piRunSink } : {}),
       },
     });

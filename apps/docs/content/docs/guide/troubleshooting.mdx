@@ -13,6 +13,12 @@ pipr review --base origin/main
 
 For GitHub Action behavior, set `PIPR_DRY_RUN=1` or use `pipr dry-run --event <path>`.
 
+When a hosted run reached Pipr, inspect its captured evidence before rerunning it:
+
+```bash
+pipr runs show --pr 42
+```
+
 ## First-run failure ladder
 
 Follow this order for a new setup. It separates config failures from provider delivery and publication failures.
@@ -39,10 +45,11 @@ Use the symptom to pick the first diagnostic command.
 | Config does not load | `pipr check` |
 | Runtime plan looks wrong | `pipr inspect` |
 | Local review cannot find a base | `pipr review --base <ref>` |
-| Hosted run does not publish | CI or trusted-worker logs and provider permissions |
+| Hosted run does not publish | `pipr runs show --pr <number>` |
 | Command comment is ignored | Event type, command pattern, and commenter permission |
 | Findings are dropped | `droppedFindings` in the Action `result` output |
-| Pi output is invalid | Task logs and model output repair metadata |
+| Pi output is invalid | `pipr runs show --pr <number>` and its repair count |
+| A small change runs slowly | `pipr runs show --pr <number> --timeline` |
 | Publication stopped after a new commit | Current change request head SHA |
 
 ## Config does not load
@@ -103,6 +110,8 @@ Use `--head` only when reviewing something other than `HEAD`.
 ## GitHub Action does not publish
 
 Check the workflow before changing task code.
+
+Run `pipr runs show --pr <number>` first. A publication failure, stale-head category, or missing publication artifact distinguishes a provider write failure from a capture or model failure.
 
 - `actions/checkout` uses `fetch-depth: 0`.
 - `GITHUB_TOKEN` is present in the Action environment.
@@ -212,3 +221,4 @@ Use these pages when the first diagnostic identifies the failing area.
 - [GitLab](/docs/guide/gitlab), [Azure DevOps](/docs/guide/azure-devops), and [Bitbucket Cloud](/docs/guide/bitbucket) cover trusted workers, credentials, and native publication.
 - [Comments and findings](/docs/concepts/comments) covers dropped findings, inline caps, dedupe, and verifier replies.
 - [Local runs](/docs/guide/local-runs) covers `--base`, `--head`, local secrets, and local output.
+- [Debug captured runs](/docs/guide/run-observability) covers deterministic diagnosis, downloads, retention, and OTLP export.

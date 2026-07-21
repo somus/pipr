@@ -21,7 +21,8 @@ export class PublicationError extends Error {
   constructor(
     message: string,
     readonly result: Omit<PublicationResult, "mainComment"> | undefined,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }

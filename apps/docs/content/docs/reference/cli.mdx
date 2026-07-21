@@ -114,6 +114,9 @@ Options:
 | `--hostname <hostname>` | `127.0.0.1` | Listen hostname. Keep loopback when using a reverse proxy. |
 | `--port <port>` | `8787` | Listen port. |
 | `--config-dir <dir>` | `.pipr` | Config directory to load from Trusted Base Config. |
+| `--run-store-dir <path>` | `/var/lib/pipr/runs` | Diagnostic bundle store. |
+| `--run-retention-days <days>` | `14` | Completed bundle retention. |
+| `--run-max-bytes <bytes>` | `5368709120` | Maximum run-store size. |
 
 `PIPR_WEBHOOK_SECRET` is required. Azure workers also require `AZURE_DEVOPS_ORGANIZATION`, `AZURE_DEVOPS_PROJECT`, and `PIPR_AZURE_SUBSCRIPTION_ID`. Bitbucket workers require `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, and `BITBUCKET_API_TOKEN`; command permission checks also require the separate workspace-admin permission credential documented in the [Bitbucket Cloud guide](/docs/guide/bitbucket). Provider credentials and model keys remain in the runner environment.
 
@@ -135,6 +138,69 @@ The default table shows a bounded delivery ID, host, queue status, attempts, res
 | `--database <path>` | `.pipr/webhooks.sqlite` | Existing delivery database. Pipr fails without creating it when the path is missing. |
 | `--limit <count>` | `20` | Number of deliveries to return, from 1 to 200. |
 | `--json` | false | Print a versioned JSON envelope instead of the table. |
+
+## `pipr runs list`
+
+List local and provider records for one pull or merge request:
+
+```bash
+pipr runs list --pr 42
+pipr runs list --pr https://gitlab.com/group/project/-/merge_requests/42 --json
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--pr <selector>` | required | Change request number or provider URL. |
+| `--host <host>` | Git remote or URL | Override the provider. |
+| `--repository <repository>` | Git remote or URL | Override the provider repository path. |
+| `--kind <kind>` | `all` | Filter `review`, `command`, `verifier`, or `startup`. |
+| `--status <status>` | all | Filter by run outcome or artifact state. |
+| `--limit <count>` | `20` | Return 1 to 1,000 records. |
+| `--json` | false | Print a versioned JSON envelope, including partial-source errors. |
+| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with provider records. |
+
+A numeric selector derives the host and repository from `remote.origin.url`. A provider URL works outside a checkout. Explicit `--host` and `--repository` values override discovery.
+
+## `pipr runs show`
+
+Diagnose one execution or the latest completed review for a change request:
+
+```bash
+pipr runs show 0123456789abcdef0123456789abcdef
+pipr runs show --pr 42 --timeline
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `[execution-id]` | none | Select one 32-character execution trace ID. |
+| `--pr <selector>` | none | Select the latest completed review for the change request. |
+| `--host <host>` | Git remote or URL | Override the provider. |
+| `--repository <repository>` | Git remote or URL | Override the provider repository path. |
+| `--kind <kind>` | `review` with `--pr` | Select `command`, `verifier`, `startup`, or `all`. |
+| `--timeline` | false | Print the complete span timeline. |
+| `--json` | false | Print the manifest, spans, diagnosis, and artifact descriptors without prompt or output bodies. |
+| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with provider records. |
+
+The diagnosis is deterministic and does not invoke an LLM.
+
+## `pipr runs download`
+
+Download and validate one bundle:
+
+```bash
+pipr runs download 0123456789abcdef0123456789abcdef --output ./pipr-run
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `<execution-id>` | required | Select one 32-character execution trace ID. |
+| `--host <host>` | Git remote | Override the code host when downloading outside a checkout. |
+| `--repository <repository>` | Git remote | Override the provider repository path. |
+| `--output <path>` | `pipr-run-<execution-id>` | Write the validated unpacked directory. The destination must not exist. |
+| `--archive` | false | Preserve the original provider archive beside the directory. |
+| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with provider records. |
+
+See [Debug captured runs](/docs/guide/run-observability) for provider credentials, capture settings, artifact states, and bundle security.
 
 ## `pipr check`
 
@@ -221,6 +287,7 @@ Options:
 | `--head <sha>` | working tree | Head commit, branch, or ref. Omit to include staged and unstaged tracked-file edits. |
 | `--config-dir <dir>` | `.pipr` | Config directory to load. |
 | `--pi-executable <path>` | `pi` on PATH | Pi executable for local runs. |
+| `--trace [path]` | disabled | Capture a diagnostic bundle. A bare flag uses the platform Pipr state directory. |
 | `--json` | false | Print structured local review output. |
 
 See [Local runs](/docs/guide/local-runs) for behavior differences between local and hosted change-request runs.

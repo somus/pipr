@@ -1,11 +1,12 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { type PiprResult, parsePiprResult } from "@usepipr/sdk";
 import { createCodeHostWebhookProtocol, type WebhookHost } from "../hosts/webhook.js";
 import { toPiprErrorResult, toPiprResult } from "../internal/pipr-result.js";
+import { enforceRunStoreRetention } from "../observability/retention.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
 import { runHostRunCommand } from "./commands.js";
 import type { HostRunCommandResult } from "./types.js";
@@ -241,6 +242,9 @@ export async function runWebhookServer(options: {
   port: number;
   hostname?: string;
   env?: NodeJS.ProcessEnv;
+  runStoreDirectory?: string;
+  runRetentionDays?: number;
+  runMaxBytes?: number;
 }): Promise<void> {
   await mkdir(path.dirname(path.resolve(options.databasePath)), { recursive: true });
   const env = { ...process.env, ...options.env };
@@ -249,6 +253,16 @@ export async function runWebhookServer(options: {
     env,
     options.expectedRepository,
   );
+  const runStoreDirectory =
+    options.runStoreDirectory ?? env.PIPR_RUN_STORE_DIR ?? "/var/lib/pipr/runs";
+  const runRetentionDays =
+    options.runRetentionDays ?? integerSetting(env.PIPR_RUN_RETENTION_DAYS, 14);
+  const runMaxBytes = options.runMaxBytes ?? integerSetting(env.PIPR_RUN_MAX_BYTES, 5 * 1024 ** 3);
+  await enforceRunStoreRetention({
+    rootDirectory: runStoreDirectory,
+    retentionDays: runRetentionDays,
+    maxBytes: runMaxBytes,
+  });
   const store = new SqliteWebhookDeliveryStore(options.databasePath);
   const ingress = createWebhookIngress({
     host: options.host,
@@ -258,7 +272,29 @@ export async function runWebhookServer(options: {
   });
   const processor = createWebhookQueueProcessor({
     store,
-    run: (delivery) => runWebhookDelivery(delivery, { ...options, env }),
+    run: async (delivery) => {
+      try {
+        return await runWebhookDelivery(delivery, {
+          ...options,
+          env,
+          runStoreDirectory,
+        });
+      } finally {
+        try {
+          await enforceRunStoreRetention({
+            rootDirectory: runStoreDirectory,
+            retentionDays: runRetentionDays,
+            maxBytes: runMaxBytes,
+          });
+        } catch (error) {
+          console.error(
+            `pipr warning run retention cleanup failed: ${
+              error instanceof Error ? error.message : "unknown retention error"
+            }`,
+          );
+        }
+      }
+    },
     log: console.error,
   });
   const server = Bun.serve({
@@ -505,6 +541,7 @@ export async function runWebhookDelivery(
     workspace: string;
     configDir: string;
     env?: NodeJS.ProcessEnv;
+    runStoreDirectory?: string;
   },
   runHostRun: typeof runHostRunCommand = runHostRunCommand,
 ): Promise<HostRunCommandResult> {
@@ -512,7 +549,7 @@ export async function runWebhookDelivery(
   const eventPath = path.join(directory, "event.json");
   const protocol = createCodeHostWebhookProtocol(delivery.host);
   try {
-    await Bun.write(eventPath, delivery.payload);
+    await writeFile(eventPath, delivery.payload, { mode: 0o600 });
     return await runHostRun({
       rootDir: options.workspace,
       configDir: options.configDir,
@@ -522,6 +559,8 @@ export async function runWebhookDelivery(
         ...process.env,
         ...options.env,
         PIPR_CODE_HOST: delivery.host,
+        PIPR_RUN_STORE_DIR:
+          options.runStoreDirectory ?? options.env?.PIPR_RUN_STORE_DIR ?? "/var/lib/pipr/runs",
         ...protocol.runtimeEnv?.(delivery.eventName),
       },
       dryRun: false,
@@ -540,3 +579,12 @@ const consoleRuntimeLogSink: RuntimeLogSink = {
     return await run();
   },
 };
+
+function integerSetting(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`Expected a positive integer, received '${value}'`);
+  }
+  return parsed;
+}

@@ -98,6 +98,26 @@ Review Tasks do not call code host APIs directly. They emit final output, then P
 - dedupes same-head inline comments
 - records publication metadata
 
+## Run bundle security
+
+Diagnostic bundles preserve enough evidence to debug a model-backed review, so handle them as sensitive repository data.
+
+### Filesystem and archive controls
+
+Pipr creates bundle directories with mode `0700` and files with mode `0600` where the platform supports Unix permissions. It rejects symlinked stores, traversal paths, unexpected files, invalid schemas, artifact hash mismatches, and archives that expand beyond 64 MiB.
+
+Known runtime secrets are redacted before prompts, visible output, stderr, diffs, validation records, or publication evidence reach disk. Redaction matches values Pipr receives through its environment and secret APIs; it is not a general repository secret scanner.
+
+### Provider access
+
+GitHub, GitLab, Azure DevOps, and Bitbucket retain bundles behind their native artifact authorization. Pipr does not copy provider credentials into the bundle and does not add a second authorization service.
+
+Use `pipr runs show --json` for content-free automation. Download a full bundle only when the receiving person or coding agent is authorized to read the repository and change request.
+
+### OTLP boundary
+
+OTLP traces, metrics, and logs contain event names, timings, statuses, sizes, hashes, usage, and low-cardinality dimensions. They exclude prompts, model output, source text, stderr snippets, environment values, raw reasoning, and tool payload bodies.
+
 ## Guarantees and limits
 
 The runtime provides deterministic publication guards around probabilistic model output, but it cannot guarantee the model's judgment.

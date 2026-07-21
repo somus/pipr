@@ -43,6 +43,16 @@ Use a custom Pi executable during local development:
 pipr review --base origin/main --pi-executable /path/to/pi
 ```
 
+### Diagnostic capture
+
+Capture a redacted Run Bundle when you need phase timing, retry, repair, tool, resource, validation, and output evidence:
+
+```bash
+pipr review --base origin/main --trace ./.pipr-runs
+```
+
+Pass a bare `--trace` flag to write under the platform Pipr state directory, partitioned by repository. The `pipr runs` commands discover that store automatically. Local capture is opt-in and does not change the rendered review output.
+
 ## What local runs do
 
 Local review exercises config, diff construction, Pi execution, and rendering while keeping provider publication disabled.

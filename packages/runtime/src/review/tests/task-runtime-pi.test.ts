@@ -552,6 +552,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
   it("resolves declared task secrets from runtime env", async () => {
     let observedSecret: string | undefined;
+    let registeredSecret: string | undefined;
     const plan = testPlan((pipr) => {
       const token = pipr.secret({ name: "CUSTOM_TOOL_TOKEN" });
       const task = pipr.task({
@@ -567,9 +568,47 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     await runRuntime({
       plan,
       env: { CUSTOM_TOOL_TOKEN: "resolved-token" },
+      runObserver: {
+        registerSecret(value) {
+          registeredSecret = value;
+        },
+        async beginAgentAttempt() {
+          return { event() {}, async finish() {} };
+        },
+      },
     });
 
     expect(observedSecret).toBe("resolved-token");
+    expect(registeredSecret).toBe("resolved-token");
+  });
+
+  it("registers configured provider keys even when their env name is nonstandard", async () => {
+    const registeredSecrets: Array<string | undefined> = [];
+    let registeredBeforeArtifacts = false;
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        providers: [{ ...provider, apiKeyEnv: "FOO" }],
+      },
+      env: { FOO: "provider-secret" },
+      runObserver: {
+        registerSecret(value) {
+          registeredSecrets.push(value);
+        },
+        async recordArtifact() {
+          registeredBeforeArtifacts = registeredSecrets.includes("provider-secret");
+        },
+        async beginAgentAttempt() {
+          return { event() {}, async finish() {} };
+        },
+      },
+      piRunner: noFindingsPiRunner(),
+    });
+
+    expect(registeredSecrets).toContain("provider-secret");
+    expect(registeredBeforeArtifacts).toBe(true);
   });
 
   it("fails when a declared task secret is missing", async () => {

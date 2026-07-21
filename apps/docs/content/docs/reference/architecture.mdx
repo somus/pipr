@@ -13,8 +13,8 @@ Each workspace package owns a distinct public or runtime boundary.
 
 | Area | Responsibility |
 | --- | --- |
-| `packages/sdk` | Public TypeScript config builder, schemas, review contracts, prompt helpers, and generated declaration source. |
-| `packages/runtime` | Config loading, task orchestration, Diff Manifest creation, Pi execution, validation, publication planning, all code-host adapters, and the local adapter. |
+| `packages/sdk` | Public TypeScript config builder, Run Bundle and review schemas, prompt helpers, and generated declaration source. |
+| `packages/runtime` | Config loading, task orchestration, Diff Manifest creation, Pi execution, validation, publication planning, observability recording and archive retrieval, all code-host adapters, and the local adapter. |
 | `packages/cli` | CLI command parsing and release binary entrypoint. |
 | `packages/e2e` | Local Action fixture checks, container checks, and dry-run scenarios. |
 | `apps/docs` | Fumadocs documentation app and migrated public docs content. |
@@ -25,15 +25,17 @@ The package root public surfaces stay small. Runtime internals stay behind domai
 
 The runtime keeps provider parsing and publication around a shared review pipeline.
 
-1. Load the trusted TypeScript config.
+1. Start the process Run Recorder before provider event parsing.
 2. Parse the code host change request or command event through an adapter.
-3. Build the Diff Manifest from local git state.
-4. Run selected Review Tasks.
-5. Call Pi through `ctx.pi.run()`.
-6. Emit exactly one final output from the task.
-7. For review output, validate structured findings against the Diff Manifest and build the Main Review Comment and Inline Review Comments.
-8. For command response output, build a normal change-request comment keyed to the source command comment.
-9. Publish comments through the code host adapter after stale-head checks.
+3. Load the trusted TypeScript config.
+4. Build the Diff Manifest from local git state.
+5. Run selected Review Tasks.
+6. Call Pi through `ctx.pi.run()`.
+7. Emit exactly one final output from the task.
+8. For review output, validate structured findings against the Diff Manifest and build the Main Review Comment and Inline Review Comments.
+9. For command response output, build a normal change-request comment keyed to the source command comment.
+10. Publish comments through the code host adapter after stale-head checks.
+11. Atomically finalize the Run Bundle, then let provider CI upload it.
 
 ## Data flow
 
@@ -52,6 +54,8 @@ Data moves from native event input to validated provider-neutral output.
 ```
 
 The Diff Manifest is the central contract between git state, model-visible context, validation, and inline publication. Tasks should pass it into Pi instead of parsing raw diffs.
+
+Run observability follows a separate provider-neutral path. `RunRecorder` captures lifecycle evidence while `RunArchiveSource` discovers and validates local or provider archives; neither interface expands `CodeHostAdapter`.
 
 ## Trust boundaries
 

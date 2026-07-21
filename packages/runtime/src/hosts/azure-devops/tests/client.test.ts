@@ -199,6 +199,7 @@ describe("Azure DevOps API client", () => {
           })
         : Response.json({
             changeEntries: [
+              { changeTrackingId: 10, changeType: "edit", item: { path: null } },
               { changeTrackingId: 11, changeType: "edit", item: { path: "/src/a.ts" } },
             ],
             nextSkip: 1,

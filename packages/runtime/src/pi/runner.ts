@@ -1,10 +1,12 @@
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmod, chown, cp, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { compact, isPlainObject } from "lodash-es";
 import { z } from "zod";
+import type { RunAgentEvent } from "../observability/types.js";
 import type { DiffManifest, ProviderConfig } from "../types.js";
 import type { PiReadOnlyToolName } from "./contract.js";
 import {
@@ -29,6 +31,7 @@ export type PiRunOptions = {
   };
   customTools?: PiCustomToolRequest;
   streamLimits?: PiStreamLimits;
+  eventObserver?: (event: RunAgentEvent) => void;
 };
 
 export type PiRunResult = {
@@ -109,6 +112,7 @@ const piprJsonSystemPrompt = [
 ].join(" ");
 const ignoredWorkspacePaths = new Set([
   ".git",
+  ".pipr-runs",
   "node_modules",
   "dist",
   ".turbo",
@@ -237,6 +241,7 @@ async function runPiAttempt(
       started,
       timeoutSeconds: options.timeoutSeconds,
       streamLimits: options.streamLimits ?? defaultPiStreamLimits,
+      eventObserver: options.eventObserver,
     });
   } finally {
     await preparedTools?.custom?.close();
@@ -525,7 +530,12 @@ class PiOutputCollector {
     peakBufferedBytes: 0,
   };
 
-  constructor(private readonly limits: PiStreamLimits) {}
+  private firstResponseObserved = false;
+
+  constructor(
+    private readonly limits: PiStreamLimits,
+    private readonly eventObserver?: (event: RunAgentEvent) => void,
+  ) {}
 
   push(chunk: string): string | undefined {
     this.stream.rawStdoutBytes += Buffer.byteLength(chunk, "utf8");
@@ -653,6 +663,7 @@ class PiOutputCollector {
   }
 
   private consumeEvent(event: Record<string, unknown>): void {
+    this.observeEvent(event);
     this.assistantText = assistantTextFromEvent(event) ?? this.assistantText;
     const parsed = assistantMessageEventSchema.safeParse(event);
     if (!parsed.success) {
@@ -673,6 +684,24 @@ class PiOutputCollector {
     }
     this.usageMessageCount += 1;
     this.addUsage(usage.data);
+  }
+
+  private observeEvent(event: Record<string, unknown>): void {
+    try {
+      if (
+        !this.firstResponseObserved &&
+        (event.type === "message_start" ||
+          event.type === "message_update" ||
+          event.type === "message_end")
+      ) {
+        this.firstResponseObserved = true;
+        this.eventObserver?.({ kind: "first-response" });
+      }
+      const observed = observedPiEvent(event);
+      if (observed) this.eventObserver?.(observed);
+    } catch {
+      // Observability must not affect Pi output collection.
+    }
   }
 
   private addModel(model: string): void {
@@ -742,6 +771,78 @@ function parsePiEvent(line: string): (Record<string, unknown> & { type: string }
   }
 }
 
+function observedPiEvent(event: Record<string, unknown>): RunAgentEvent | undefined {
+  if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
+    return observedToolEvent(event);
+  }
+  return observedLifecycleEvent(event);
+}
+
+function observedToolEvent(event: Record<string, unknown>): RunAgentEvent {
+  const id = firstString(event, ["toolCallId", "tool_call_id", "id"]) ?? "unknown-tool";
+  const name =
+    firstString(event, ["toolName", "tool_name", "name"]) ??
+    nestedToolName(event.tool) ??
+    "unknown";
+  return {
+    kind: event.type === "tool_execution_start" ? "tool-start" : "tool-end",
+    id,
+    name,
+    ...(event.isError === true || event.error === true ? { failed: true } : {}),
+    ...contentStats(toolEventContent(event)),
+  };
+}
+
+function toolEventContent(event: Record<string, unknown>): unknown {
+  return event.type === "tool_execution_start"
+    ? firstDefinedValue(event, ["args", "input", "arguments"])
+    : firstDefinedValue(event, ["result", "output"]);
+}
+
+function firstDefinedValue(record: Record<string, unknown>, keys: readonly string[]): unknown {
+  return keys.map((key) => record[key]).find((value) => value !== undefined);
+}
+
+function observedLifecycleEvent(event: Record<string, unknown>): RunAgentEvent | undefined {
+  if (event.type === "auto_retry_start") {
+    const delayMs = event.delayMs;
+    return {
+      kind: "retry-start",
+      ...(typeof delayMs === "number" && Number.isFinite(delayMs) && delayMs >= 0
+        ? { delayMs }
+        : {}),
+    };
+  }
+  const events: Record<string, RunAgentEvent> = {
+    auto_retry_end: { kind: "retry-end" },
+    compaction_start: { kind: "compaction-start" },
+    compaction_end: { kind: "compaction-end" },
+  };
+  return typeof event.type === "string" ? events[event.type] : undefined;
+}
+
+function contentStats(value: unknown): { contentBytes?: number; contentHash?: string } {
+  if (value === undefined) return {};
+  const serialized = typeof value === "string" ? value : JSON.stringify(value);
+  const bytes = Buffer.from(serialized, "utf8");
+  return {
+    contentBytes: bytes.byteLength,
+    contentHash: createHash("sha256").update(bytes).digest("hex"),
+  };
+}
+
+function firstString(record: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) return value.slice(0, 200);
+  }
+  return undefined;
+}
+
+function nestedToolName(value: unknown): string | undefined {
+  return isPlainObject(value) ? firstString(value as Record<string, unknown>, ["name"]) : undefined;
+}
+
 function assistantTextFromEvent(event: Record<string, unknown>): string | undefined {
   if (event.type === "message_end" || event.type === "turn_end") {
     return assistantMessageText(event.message);
@@ -801,6 +902,7 @@ function runProcess(
     processIdentity?: PiProcessIdentity;
     timeoutSeconds?: number;
     streamLimits: PiStreamLimits;
+    eventObserver?: (event: RunAgentEvent) => void;
   },
 ): Promise<PiRunResult> {
   return new Promise((resolve, reject) => {
@@ -825,7 +927,7 @@ function runProcess(
       env: options.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    const stdout = new PiOutputCollector(options.streamLimits);
+    const stdout = new PiOutputCollector(options.streamLimits, options.eventObserver);
     let stderr = "";
     let stderrBytes = 0;
     child.stdout.setEncoding("utf8");

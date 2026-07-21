@@ -38,7 +38,8 @@ const positionSchema = z.looseObject({
         old_line: z.number().int().positive().nullish(),
       }),
     })
-    .optional(),
+    .nullish()
+    .transform((value) => value ?? undefined),
 });
 const discussionNoteSchema = noteSchema.extend({
   resolvable: z.boolean().optional(),

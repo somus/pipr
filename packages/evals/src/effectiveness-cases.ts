@@ -509,13 +509,13 @@ function positiveCase(options: {
   issueId: string;
   keywordSets: string[][];
 }): PiprEvalCase {
+  const files = effectivenessCaseFiles(options);
   return {
     id: options.id,
     description: options.description,
     reviewer: "custom",
     modes: ["live"],
-    baseFiles: { ...options.supportFiles, [targetPath]: options.base },
-    headFiles: { ...options.supportFiles, ...options.headSupportFiles, [targetPath]: options.head },
+    ...files,
     expected: {
       findings: [
         {
@@ -541,18 +541,30 @@ function cleanCase(options: {
   supportFiles?: Record<string, string>;
   headSupportFiles?: Record<string, string>;
 }): PiprEvalCase {
+  const files = effectivenessCaseFiles(options);
   return {
     id: options.id,
     description: options.description,
     reviewer: "custom",
     modes: ["live"],
-    baseFiles: { ...options.supportFiles, [targetPath]: options.base },
-    headFiles: { ...options.supportFiles, ...options.headSupportFiles, [targetPath]: options.head },
+    ...files,
     expected: {
       findings: [],
       maxInlineFindings: 0,
       requirePiCall: true,
     },
+  };
+}
+
+function effectivenessCaseFiles(options: {
+  base: string;
+  head: string;
+  supportFiles?: Record<string, string>;
+  headSupportFiles?: Record<string, string>;
+}): Pick<PiprEvalCase, "baseFiles" | "headFiles"> {
+  return {
+    baseFiles: { ...options.supportFiles, [targetPath]: options.base },
+    headFiles: { ...options.supportFiles, ...options.headSupportFiles, [targetPath]: options.head },
   };
 }
 

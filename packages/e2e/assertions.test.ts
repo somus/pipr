@@ -97,6 +97,9 @@ async function assertActionMetadataRendering(): Promise<void> {
   expect(rendered).toContain("outputs:");
   expect(rendered).toContain("  main-comment:");
   expect(rendered).toContain("  result:");
+  expect(rendered).toContain("  execution-id:");
+  expect(rendered).toContain("  run-bundle-path:");
+  expect(rendered).toContain("  run-artifact-name:");
   expect(rendered).not.toContain("  inline-comments:");
   expect(rendered).not.toContain("  dropped-findings:");
   expect(rendered).not.toContain("  publication:");

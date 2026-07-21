@@ -29,6 +29,31 @@ export {
 } from "./host-run/commands.js";
 export type { WebhookDeliveryStatus, WebhookHost } from "./host-run/webhook-server.js";
 export { readWebhookDeliveryStatus, runWebhookServer } from "./host-run/webhook-server.js";
+export type {
+  DownloadedBundle,
+  RunArchiveSource,
+  RunDiagnosis,
+  RunQuery,
+  RunRecord,
+  RunRecordState,
+  RunRef,
+  ValidatedRunBundle,
+} from "./observability/archive.js";
+export {
+  copyValidatedRunBundle,
+  diagnoseRunBundle,
+  FileSystemRunArchiveSource,
+  loadValidatedRunBundle,
+} from "./observability/archive.js";
+export { uploadBitbucketRunBundle } from "./observability/bitbucket-upload.js";
+export { PartialRunArchiveListError } from "./observability/partial-list-error.js";
+export {
+  AzureDevOpsRunArchiveSource,
+  BitbucketRunArchiveSource,
+  GitHubRunArchiveSource,
+  GitLabRunArchiveSource,
+} from "./observability/provider-sources.js";
+export { enforceRunStoreRetention } from "./observability/retention.js";
 export type { PublicationResult } from "./review/publication-result.js";
 export { PublicationError } from "./review/publication-result.js";
 export type {

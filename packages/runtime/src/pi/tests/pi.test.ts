@@ -280,6 +280,26 @@ describe("buildPiArgs", () => {
     }
   });
 
+  it("excludes captured run bundles from the read-only workspace copy", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    let copy: string | undefined;
+    try {
+      await Bun.write(path.join(workspace, "source.ts"), "export const value = 1;\n");
+      await Bun.write(path.join(workspace, ".pipr-runs", "previous", "run.json"), "{}\n");
+
+      copy = await createReadOnlyWorkspace(workspace);
+
+      await expect(lstat(path.join(copy, ".pipr-runs"))).rejects.toThrow();
+      await expect(lstat(path.join(copy, "source.ts"))).resolves.toBeDefined();
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+      if (copy) {
+        await chmodTree(copy, 0o755);
+        await rm(copy, { recursive: true, force: true });
+      }
+    }
+  });
+
   it("reuses a prepared workspace while isolating attempt state", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
     const piExecutable = path.join(workspace, "fake-pi.sh");

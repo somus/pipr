@@ -170,9 +170,19 @@ jobs:
           path: /home/runner/work/_temp/_github_home/.bun/install/cache
           key: pipr-bun-${{ hashFiles('.pipr/bun.lock') }}
       - uses: somus/pipr@v0.5.0 # x-release-please-version
+        id: pipr
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Upload Pipr run bundle
+        if: always() && steps.pipr.outputs.run-bundle-path != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.pipr.outputs.run-artifact-name }}
+          path: ${{ steps.pipr.outputs.run-bundle-path }}
+          retention-days: 14
+          if-no-files-found: warn
+          include-hidden-files: true
 ```
 
 </RecipeFilePane>
