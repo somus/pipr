@@ -1,0 +1,27 @@
+packages/runtime/src/observability/bundle-files.ts
+  s_dea394ec8da4dc::t_69a185e49a0956 1-11
+packages/runtime/src/observability/archive.ts
+  s_dea394ec8da4dc::t_69a185e49a0956 14,179
+packages/runtime/src/observability/tests/archive.test.ts
+  s_dea394ec8da4dc::t_47b216cea7ce66 163-178
+  s_dea394ec8da4dc::t_55fadc0bb1580f 188
+packages/runtime/src/observability/bitbucket-upload.ts
+  s_dea394ec8da4dc::t_69a185e49a0956 211
+  s_dea394ec8da4dc::t_b6f9a40fd9b72a 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "5ac56134338ba22725a0fa04c42b11866014e8f0",
+  "prompts": {},
+  "sessions": {
+    "s_dea394ec8da4dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7ef7-96df-75a0-8d1e-8df4fab8bb81",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
