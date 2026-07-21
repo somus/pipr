@@ -690,7 +690,7 @@ describe("provider run archive sources", () => {
     );
   });
 
-  it("links completed Pipr pipelines when the native artifact is only available in CI", async () => {
+  it("returns completed Pipr pipelines with a surfaced Downloads lookup failure", async () => {
     const requests: Request[] = [];
     const pipelineUrl = "https://bitbucket.org/workspace/pipr/pipelines/results/7";
     const stepsPath = "/2.0/repositories/workspace/pipr/pipelines/pipeline-7/steps";
@@ -724,15 +724,22 @@ describe("provider run archive sources", () => {
       ]),
     });
 
-    const records = await source.list(reviewQuery());
-
-    expect(records).toHaveLength(1);
-    expect(records[0]).toMatchObject({
-      state: "available-in-ci",
-      source: "bitbucket",
-      outcome: "succeeded",
-      nativeUrl: pipelineUrl,
-    });
+    try {
+      await source.list(reviewQuery());
+      throw new Error("expected partial Bitbucket lookup failure");
+    } catch (error) {
+      expect(error).toMatchObject({
+        message: expect.stringContaining("Bitbucket Downloads lookup failed"),
+        records: [
+          expect.objectContaining({
+            state: "available-in-ci",
+            source: "bitbucket",
+            outcome: "succeeded",
+            nativeUrl: pipelineUrl,
+          }),
+        ],
+      });
+    }
     expect(requests.map((request) => request.url)).toContain(stepsUrl);
   });
 

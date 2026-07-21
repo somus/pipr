@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { DownloadedBundle, RunArchiveSource, RunQuery, RunRecord, RunRef } from "./archive.js";
 import { extractRunArchive } from "./archive-extraction.js";
 import { resolveBitbucketCollectionPageUrl } from "./bitbucket-url.js";
+import { PartialRunArchiveListError } from "./partial-list-error.js";
 import { maximumRunBundleBytes } from "./types.js";
 
 type ProviderSourceOptions = {
@@ -502,10 +503,40 @@ export class BitbucketRunArchiveSource extends DownloadableRunArchiveSource {
   // fallow-ignore-next-line unused-class-member -- invoked through the RunArchiveSource interface
   async list(query: RunQuery): Promise<RunRecord[]> {
     const changeNumber = query.changeNumber;
-    const downloads = await this.listDownloads().catch((error: unknown) => {
-      if (changeNumber === undefined) throw error;
-      return [];
-    });
+    const { downloads, error: downloadError } = await this.downloadsForQuery(changeNumber);
+    const records = await this.recordsForDownloads(downloads, changeNumber);
+    const pipelines = changeNumber === undefined ? [] : await this.listPipelines(changeNumber);
+    const archivedPipelineIds = new Set(
+      records.flatMap((record) => (record.ref.providerId ? [record.ref.providerId] : [])),
+    );
+    records.push(
+      ...(await Promise.all(
+        pipelines
+          .filter((pipeline) => !archivedPipelineIds.has(String(pipeline.uuid)))
+          .map((pipeline) => this.pipelineRecord(pipeline)),
+      )),
+    );
+    const finalized = finalizeRecords(records, query);
+    if (downloadError !== undefined) {
+      const message =
+        downloadError instanceof Error ? downloadError.message : "provider lookup failed";
+      throw new PartialRunArchiveListError(
+        `Bitbucket Downloads lookup failed: ${message}`,
+        finalized,
+      );
+    }
+    return finalized;
+  }
+
+  private async listDownloads() {
+    const collectionUrl = `${this.apiBaseUrl}/2.0/repositories/${encodeURIComponent(this.workspace)}/${encodeURIComponent(this.repository)}/downloads`;
+    return await this.listCollection(collectionUrl, bitbucketDownloadsSchema);
+  }
+
+  private async recordsForDownloads(
+    downloads: z.infer<typeof bitbucketDownloadSchema>[],
+    changeNumber: number | undefined,
+  ): Promise<RunRecord[]> {
     const records: RunRecord[] = [];
     for (const download of downloads) {
       const identity = parseArtifactName(download.name, changeNumber);
@@ -530,23 +561,16 @@ export class BitbucketRunArchiveSource extends DownloadableRunArchiveSource {
         },
       });
     }
-    const pipelines = changeNumber === undefined ? [] : await this.listPipelines(changeNumber);
-    const archivedPipelineIds = new Set(
-      records.flatMap((record) => (record.ref.providerId ? [record.ref.providerId] : [])),
-    );
-    records.push(
-      ...(await Promise.all(
-        pipelines
-          .filter((pipeline) => !archivedPipelineIds.has(String(pipeline.uuid)))
-          .map((pipeline) => this.pipelineRecord(pipeline)),
-      )),
-    );
-    return finalizeRecords(records, query);
+    return records;
   }
 
-  private async listDownloads() {
-    const collectionUrl = `${this.apiBaseUrl}/2.0/repositories/${encodeURIComponent(this.workspace)}/${encodeURIComponent(this.repository)}/downloads`;
-    return await this.listCollection(collectionUrl, bitbucketDownloadsSchema);
+  private async downloadsForQuery(changeNumber: number | undefined) {
+    try {
+      return { downloads: await this.listDownloads() };
+    } catch (error) {
+      if (changeNumber === undefined) throw error;
+      return { downloads: [], error };
+    }
   }
 
   private async listPipelines(changeNumber: number) {

@@ -280,13 +280,15 @@ describe("pipr runs", () => {
     expect(JSON.parse(commandOutput).manifest.executionId).toBe(newestCommand);
   });
 
-  it("links Bitbucket native CI artifacts that cannot be downloaded through the API", async () => {
+  it("links Bitbucket native CI artifacts while surfacing Downloads API failures", async () => {
     const store = await temporaryDirectory();
     const pipelineUrl = "https://bitbucket.org/workspace/pipr/pipelines/results/7";
     globalThis.fetch = Object.assign(
       async (input: string | URL | Request) => {
         const url = new URL(input instanceof Request ? input.url : String(input));
-        if (url.pathname.endsWith("/downloads")) return Response.json({ values: [] });
+        if (url.pathname.endsWith("/downloads")) {
+          return Response.json({ error: "payment required" }, { status: 402 });
+        }
         if (url.pathname.endsWith("/pipelines/")) {
           return Response.json({
             values: [
@@ -329,13 +331,22 @@ describe("pipr runs", () => {
           "workspace/pipr",
           "--store",
           store,
+          "--json",
         ],
         env: { PIPR_UPDATE_NOTICE: "0", PIPR_BITBUCKET_TOKEN: "test-token" },
       });
     });
 
-    expect(output).toContain("available-in-ci");
-    expect(output).toContain(pipelineUrl);
+    const listed = JSON.parse(output);
+    expect(listed.runs).toEqual([
+      expect.objectContaining({ state: "available-in-ci", nativeUrl: pipelineUrl }),
+    ]);
+    expect(listed.errors).toEqual([
+      expect.objectContaining({
+        source: "bitbucket",
+        message: expect.stringContaining("Bitbucket Downloads lookup failed"),
+      }),
+    ]);
 
     await expect(
       runMain({

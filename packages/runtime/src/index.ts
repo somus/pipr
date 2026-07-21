@@ -46,6 +46,7 @@ export {
   loadValidatedRunBundle,
 } from "./observability/archive.js";
 export { uploadBitbucketRunBundle } from "./observability/bitbucket-upload.js";
+export { PartialRunArchiveListError } from "./observability/partial-list-error.js";
 export {
   AzureDevOpsRunArchiveSource,
   BitbucketRunArchiveSource,

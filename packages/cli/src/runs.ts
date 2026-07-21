@@ -9,6 +9,7 @@ import {
   FileSystemRunArchiveSource,
   GitHubRunArchiveSource,
   GitLabRunArchiveSource,
+  PartialRunArchiveListError,
   type RunArchiveSource,
   type RunQuery,
   type RunRecord,
@@ -424,22 +425,31 @@ async function collectRecords(
   );
   const errors: Array<{ source: RunRecord["source"]; message: string }> = [];
   const byExecutionId = new Map<string, CollectedRecord>();
-  for (const [index, result] of settled.entries()) {
-    const source = sources[index];
-    if (result.status === "rejected") {
-      errors.push({
-        source: source.name,
-        message: result.reason instanceof Error ? result.reason.message : "provider lookup failed",
-      });
-      continue;
-    }
-    for (const record of result.value.records) {
+  const collectSourceRecords = (source: SourceEntry, records: RunRecord[]) => {
+    for (const record of records) {
       const collected = { ...record, archiveSource: source.archiveSource };
       const existing = byExecutionId.get(record.executionId);
       if (!existing || recordPreference(collected) > recordPreference(existing)) {
         byExecutionId.set(record.executionId, collected);
       }
     }
+  };
+  for (const [index, result] of settled.entries()) {
+    const source = sources[index];
+    if (!source) continue;
+    if (result.status === "rejected") {
+      errors.push({
+        source: source.name,
+        message: result.reason instanceof Error ? result.reason.message : "provider lookup failed",
+      });
+    }
+    const records =
+      result.status === "fulfilled"
+        ? result.value.records
+        : result.reason instanceof PartialRunArchiveListError
+          ? result.reason.records
+          : [];
+    collectSourceRecords(source, records);
   }
   return {
     records: [...byExecutionId.values()]
