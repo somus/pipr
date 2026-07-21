@@ -1,0 +1,19 @@
+docs/research/code-review-recall-strategies.md
+  s_c4cefe80015294::t_89aa0e1d3e1c83 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d6df53f65f63f3ea84c3c7f94b0415cca66c1a53",
+  "prompts": {},
+  "sessions": {
+    "s_c4cefe80015294": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7e1d-67b7-7d21-a388-1c7159fba85e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
