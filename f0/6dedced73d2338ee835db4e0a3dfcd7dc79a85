@@ -1,0 +1,78 @@
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_c4cefe80015294::t_806fbd65a961a9 29-60,67-72
+  s_c4cefe80015294::t_4ab6500573d22d 73-123,171-172
+  s_c4cefe80015294::t_9ec24428da7f09 21,124-170
+  s_c4cefe80015294::t_0b16fddd8828ea 61-66
+packages/cli/src/tests/main.test.ts
+  s_c4cefe80015294::t_c434d92e87ada2 625-626,1244
+  s_00d4cb73aea6a9::t_c23a357831df84 232
+packages/runtime/src/review/agent/review-run.ts
+  s_c4cefe80015294::t_2229071bec189e 246
+  s_c4cefe80015294::t_acc88992ad8ac9 106,175-181
+  s_c4cefe80015294::t_991ea6d4e2779c 232,244
+  s_c4cefe80015294::t_5c4f95ba3c2763 96,98-105,107-121,166-167,169-171,173-174,182-191,195-198
+  s_c4cefe80015294::t_daf46d97f082b8 97,168,172
+  s_c4cefe80015294::t_627b3e5e16b400 192-194,199-204,207-231,233-243,245
+  s_c4cefe80015294::t_de17b9148379d0 22-23,25-28
+  s_c4cefe80015294::t_0b16fddd8828ea 11,37,122,205-206
+  s_c4cefe80015294::t_b3928628f22634 24
+packages/runtime/src/review/review.ts
+  s_c4cefe80015294::t_ffb7f7189989ed 77
+  s_c4cefe80015294::t_152bce350b8624 93-94
+  s_c4cefe80015294::t_36d7f913a8d3c7 45-50,52,54,57,67,78-92
+packages/runtime/src/review/agent/diff-manifest-context.ts
+  s_c4cefe80015294::t_5c4f95ba3c2763 58
+packages/runtime/src/diff/manifest-projection.ts
+  s_c4cefe80015294::t_00c751bd616dbc 258-262,278
+  s_c4cefe80015294::t_5c4f95ba3c2763 96-117,122-136,249-253,293-294,296,300-330,334-335,338
+  s_c4cefe80015294::t_554f76d991daa9 337
+  s_c4cefe80015294::t_3ec2f1baaca58f 254-257,263-277,279-285,287-290,292,295,297-299
+  s_c4cefe80015294::t_daf46d97f082b8 331-333,336
+  s_c4cefe80015294::t_575c32a5e922df 339
+  s_c4cefe80015294::t_0b16fddd8828ea 118-121,286,291
+packages/runtime/src/review/tests/review.test.ts
+  s_c4cefe80015294::t_fe10ec4ce6c4af 281-283
+  s_c4cefe80015294::t_2a32c5cc214ca0 99-112
+  s_c4cefe80015294::t_f763d6bca1f8bb 172
+  s_c4cefe80015294::t_aa074e11d9f7b3 113-129,266-280
+apps/docs/content/docs/recipes/deep-review.mdx
+  s_c4cefe80015294::t_9622ed9f5df41c 1-292
+apps/docs/content/docs/recipes/index.mdx
+  s_c4cefe80015294::t_4db0d8127ede77 77
+packages/runtime/src/config/recipes.ts
+  s_c4cefe80015294::t_a796da22f83ccd 4,25,47
+apps/docs/scripts/sync-recipes.ts
+  s_00d4cb73aea6a9::t_8fd864d7719fcd 20-23,87-90,176-187
+packages/runtime/src/config/recipes/deep-review.ts
+  s_00d4cb73aea6a9::t_fa6864a482ff5a 1-192
+packages/runtime/src/config/tests/init-recipes.test.ts
+  s_00d4cb73aea6a9::t_e6254363059bba 29,60-189
+skills/pipr-setup/SKILL.md
+  s_00d4cb73aea6a9::t_6f9a2d5bd917d6 49,59
+skills/pipr-setup/references/recipes.md
+  s_00d4cb73aea6a9::t_c7fef7daf09338 10,39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "f06dedced73d2338ee835db4e0a3dfcd7dc79a85",
+  "prompts": {},
+  "sessions": {
+    "s_00d4cb73aea6a9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8503-df4c-7a60-a108-3be8a10f384e",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_c4cefe80015294": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7e1d-67b7-7d21-a388-1c7159fba85e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
