@@ -502,6 +502,7 @@ describe("webhook runner", () => {
       async (options) => {
         observedPaths.push(options.eventPath ?? "");
         expect(await Bun.file(options.eventPath ?? "").text()).toContain('"id":42');
+        expect((await stat(options.eventPath ?? "")).mode & 0o777).toBe(0o600);
         expect(options).toMatchObject({
           rootDir: "/workspace",
           configDir: ".pipr",

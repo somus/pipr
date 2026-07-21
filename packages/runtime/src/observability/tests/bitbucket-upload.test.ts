@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { uploadBitbucketRunBundle } from "../bitbucket-upload.js";
@@ -22,6 +22,7 @@ describe("Bitbucket run upload", () => {
       externalUpload: "pending",
     });
     await recorder.finish({ kind: "review", outcome: "succeeded" });
+    await writeFile(path.join(recorder.directory, "run.json.upload.tmp"), "orphaned");
     const requests: Request[] = [];
     let uploadStateWhenPosted: string | undefined;
 

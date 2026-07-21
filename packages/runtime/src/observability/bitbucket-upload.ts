@@ -1,4 +1,4 @@
-import { chmod, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gzipSync } from "fflate";
 import { z } from "zod";
@@ -42,6 +42,7 @@ export async function uploadBitbucketRunBundle(options: {
       : writeHeaders;
   const baseUrl = `https://api.bitbucket.org/2.0/repositories/${encodeURIComponent(target.workspace)}/${encodeURIComponent(target.repository)}/downloads`;
   try {
+    await rm(path.join(options.directory, "run.json.upload.tmp"), { force: true });
     const warning = await cleanupExpiredDownloads(options, request, baseUrl, {
       readHeaders,
       writeHeaders,
@@ -199,10 +200,17 @@ async function updateExternalUploadState(
   const manifestPath = path.join(directory, "run.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.export.externalUpload = state;
-  const temporary = path.join(directory, "run.json.upload.tmp");
-  await writeFile(temporary, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  await chmod(temporary, 0o600);
-  await rename(temporary, manifestPath);
+  const temporaryDirectory = await mkdtemp(
+    path.join(path.dirname(directory), ".pipr-upload-manifest-"),
+  );
+  const temporary = path.join(temporaryDirectory, "run.json");
+  try {
+    await writeFile(temporary, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+    await chmod(temporary, 0o600);
+    await rename(temporary, manifestPath);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 async function createBundleTarGz(directory: string): Promise<Uint8Array> {

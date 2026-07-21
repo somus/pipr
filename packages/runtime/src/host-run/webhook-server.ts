@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { type PiprResult, parsePiprResult } from "@usepipr/sdk";
@@ -549,7 +549,7 @@ export async function runWebhookDelivery(
   const eventPath = path.join(directory, "event.json");
   const protocol = createCodeHostWebhookProtocol(delivery.host);
   try {
-    await Bun.write(eventPath, delivery.payload);
+    await writeFile(eventPath, delivery.payload, { mode: 0o600 });
     return await runHostRun({
       rootDir: options.workspace,
       configDir: options.configDir,
