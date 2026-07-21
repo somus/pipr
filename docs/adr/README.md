@@ -10,3 +10,5 @@ docs for current user-facing behavior.
 - [0004: Pipr-owned review run](0004-pipr-owned-review-run.md)
 - [0005: Pipr-owned comment publishing](0005-pipr-owned-comment-publishing.md)
 - [0006: Installable config dependencies](0006-installable-config-dependencies.md)
+- [0007: Public results, command lifecycle, and webhook history](0007-public-results-command-lifecycle-and-webhook-history.md)
+- [0008: Provider-neutral run observability](0008-provider-neutral-run-observability.md)

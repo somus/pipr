@@ -31,6 +31,12 @@ pipr:
     PIPR_CODE_HOST: "gitlab"
   script:
     - pipr host-run --host gitlab --config-dir .pipr
+  artifacts:
+    when: always
+    expire_in: 14 days
+    name: "pipr-runs-pr-$CI_MERGE_REQUEST_IID-pipeline-$CI_PIPELINE_ID"
+    paths:
+      - .pipr-runs/
 ```
 
 GitLab provides the project and merge request coordinates as predefined CI variables. Store `GITLAB_TOKEN` and the configured model-provider key as masked CI/CD variables; don't write their values in `.gitlab-ci.yml`.
@@ -45,6 +51,8 @@ Configure these masked CI/CD variables in GitLab:
 Give the project access token API scope and a project role that can read code, comment on merge requests, resolve discussions, and create commit statuses. Pipr maps GitLab access levels into its provider-neutral command permissions.
 
 GitLab CI configuration comes from source control. A contributor who can change the pipeline can attempt to expose variables available to that job, so don't provide write or model credentials to pipelines that run untrusted merge-request code. Use the trusted webhook runner for fork reviews or repositories where contributors can edit `.gitlab-ci.yml`.
+
+The `artifacts: when: always` block keeps successful and failed diagnostic bundles for 14 days. Existing pipelines must add that block before `pipr runs list --pr <number>` can retrieve historical bundles through the GitLab jobs and artifacts APIs.
 
 ## Commands and reply verification
 

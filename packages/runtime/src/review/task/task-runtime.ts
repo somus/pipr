@@ -12,7 +12,8 @@ import type { ConfigVersionCompatibility } from "../../config/version-compat.js"
 import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/diff.js";
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
 import { selectRuntimeTasks } from "../../host-run/entry-dispatch.js";
-import type { RuntimeLog } from "../../shared/logging.js";
+import type { RunObserver } from "../../observability/types.js";
+import { type RuntimeLog, runLoggedPhase } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
 import type {
   ChangeRequestEventContext,
@@ -89,6 +90,7 @@ export type RunTaskRuntimeOptions = {
   taskLog?: TaskContext["log"];
   secretRedactor?: SecretRedactor;
   runTrigger?: Exclude<PiprRunContext["trigger"], "verifier">;
+  runObserver?: RunObserver;
 };
 
 type ReviewRuntimeBaseResult = {
@@ -138,6 +140,7 @@ export type ReviewRuntimeResult =
 export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<ReviewRuntimeResult> {
   const runtimeStarted = Date.now();
   const config = parsePiprConfig(options.config);
+  registerProviderSecrets(config, options);
   const provider = taskRuntimeProvider(options, config);
   const diffManifest = parseDiffManifest(
     (options.diffManifestBuilder ?? buildDiffManifest)({
@@ -156,6 +159,13 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     additions: diffManifest.files.reduce((sum, file) => sum + file.additions, 0),
     deletions: diffManifest.files.reduce((sum, file) => sum + file.deletions, 0),
     excluded: diffManifest.files.filter((file) => file.excludedReason !== undefined).length,
+  });
+  await recordRuntimeArtifact(options, {
+    kind: "diff-manifest",
+    name: "diff-manifest.json",
+    mediaType: "application/json",
+    content: JSON.stringify(diffManifest, null, 2),
+    sensitive: true,
   });
   const tasks = [
     ...(options.selectedTasks ??
@@ -193,8 +203,15 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     trigger: taskRunTrigger(options),
   });
   const loadedPriorReviewState =
-    options.priorReviewState ?? (await options.loadPriorReviewState?.());
-  const priorMainComment = options.priorMainComment ?? (await options.loadPriorMainComment?.());
+    options.priorReviewState ??
+    (await runLoggedPhase(options.log, "load prior review state", async () =>
+      options.loadPriorReviewState?.(),
+    ));
+  const priorMainComment =
+    options.priorMainComment ??
+    (await runLoggedPhase(options.log, "load prior main comment", async () =>
+      options.loadPriorMainComment?.(),
+    ));
   const priorReviewState = priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks);
   const piRuns: PiRunStats[] = [];
   const runtimeOptions = {
@@ -317,6 +334,33 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     inlineDrafts: publishing.inlineCommentDrafts.length,
     threadActions: verifier.threadActions.length,
   });
+  await Promise.all([
+    recordRuntimeArtifact(options, {
+      kind: "output",
+      name: "review-output.json",
+      mediaType: "application/json",
+      content: JSON.stringify(
+        { review: redactedPublication.validated.review, mainComment: publicationPlan.mainComment },
+        null,
+        2,
+      ),
+      sensitive: true,
+    }),
+    recordRuntimeArtifact(options, {
+      kind: "validation",
+      name: "validation.json",
+      mediaType: "application/json",
+      content: JSON.stringify(redactedPublication.validated, null, 2),
+      sensitive: true,
+    }),
+    recordRuntimeArtifact(options, {
+      kind: "publication-plan",
+      name: "publication-plan.json",
+      mediaType: "application/json",
+      content: JSON.stringify(publicationPlan, null, 2),
+      sensitive: true,
+    }),
+  ]);
 
   return {
     kind: "review",
@@ -331,6 +375,31 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     taskChecks: redactedPublication.taskChecks,
     repairAttempted: output.repairAttempted,
   };
+}
+
+function registerProviderSecrets(config: PiprConfig, options: RunTaskRuntimeOptions): void {
+  const env = options.env ?? process.env;
+  for (const provider of config.providers) {
+    const value = env[provider.apiKeyEnv];
+    if (!value) continue;
+    options.log?.addSecret(value);
+    options.secretRedactor?.addSecret(value);
+    options.runObserver?.registerSecret?.(value);
+  }
+}
+
+async function recordRuntimeArtifact(
+  options: Pick<RunTaskRuntimeOptions, "runObserver" | "log">,
+  artifact: Parameters<NonNullable<RunObserver["recordArtifact"]>>[0],
+): Promise<void> {
+  try {
+    await options.runObserver?.recordArtifact?.(artifact);
+  } catch (error) {
+    options.log?.warning("run capture artifact failed", {
+      kind: artifact.kind,
+      error: error instanceof Error ? error.message : "unknown capture error",
+    });
+  }
 }
 
 function taskRuntimeProvider(options: RunTaskRuntimeOptions, config: PiprConfig): ProviderConfig {
@@ -532,10 +601,14 @@ async function runSynchronizeVerifier(options: {
     log: options.options.log,
     diffManifest: options.diffManifest,
     priorReviewState: options.priorReviewState,
-    threadContexts: (await options.options.loadInlineThreadContexts?.()) ?? [],
+    threadContexts:
+      (await runLoggedPhase(options.options.log, "load inline thread contexts", async () =>
+        options.options.loadInlineThreadContexts?.(),
+      )) ?? [],
     mode: { kind: "synchronize" },
     run: options.run,
     piRunSink: options.piRunSink,
+    runObserver: options.options.runObserver,
   });
 }
 
@@ -655,6 +728,7 @@ function resolveTaskSecret(secret: SecretRef, options: RunTaskRuntimeOptions): s
   }
   options.log?.addSecret(value);
   options.secretRedactor?.addSecret(value);
+  options.runObserver?.registerSecret?.(value);
   return value;
 }
 

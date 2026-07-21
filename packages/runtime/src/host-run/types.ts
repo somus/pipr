@@ -1,6 +1,7 @@
 import type { PiprRunSummary } from "@usepipr/sdk";
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
+import type { RunObserver } from "../observability/types.js";
 import type { PublicationResult } from "../review/publication-result.js";
 import type { ReviewRuntimeResult } from "../review/task/task-runtime.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
@@ -31,12 +32,20 @@ export type HostRunCommandOptions = RuntimeCommandOptions & {
   eventPath?: string;
   dryRun: boolean;
   logSink?: RuntimeLogSink;
+  onRunBundleFinalized?: (bundle: {
+    executionId: string;
+    directory: string;
+    kind: "review" | "command" | "verifier" | "startup";
+    outcome: "in-progress" | "succeeded" | "failed" | "partial";
+    repository?: import("@usepipr/sdk").RunBundleManifest["repository"];
+  }) => void | Promise<void>;
 };
 
 export type HostRunCommandDependencyOptions = HostRunCommandOptions & {
   piExecutable?: string;
   hostAdapter?: CodeHostAdapter;
   secretRedactor?: SecretRedactor;
+  runObserver?: RunObserver;
 };
 
 export type LocalReviewTaskLog = {
@@ -51,6 +60,8 @@ export type LocalReviewCommandOptions = RuntimeCommandOptions & {
   piExecutable?: string;
   logSink?: RuntimeLogSink;
   taskLog?: LocalReviewTaskLog;
+  traceDirectory?: string;
+  runObserver?: RunObserver;
 };
 
 export type DryRunCommandResult = {

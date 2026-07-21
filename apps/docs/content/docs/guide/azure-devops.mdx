@@ -7,13 +7,13 @@ Run Pipr on Azure DevOps Services through a trusted service-hook runner. Pipelin
 
 ## Initialize the adapter
 
-Generate the trusted-runner environment template alongside `.pipr/config.ts`:
+Generate the trusted-runner environment template and optional branch-policy pipeline alongside `.pipr/config.ts`:
 
 ```bash
 pipr init --adapters azure-devops
 ```
 
-The command creates `azure-devops.pipr.env.example`. Copy its variable names into the trusted runner's secret store, then delete or leave the example values empty.
+The command creates `azure-devops.pipr.env.example` and `azure-pipelines.pipr.yml`. Copy the environment template's variable names into the trusted runner's secret store, then delete or leave the example values empty.
 
 Do not put a write-capable Azure token or model-provider key in pull-request-controlled pipeline YAML. Azure build validation can execute the proposed YAML, so a contributor could replace the review step and read those credentials before Pipr starts.
 
@@ -46,8 +46,12 @@ steps:
   - bash: |
       docker run --rm \
         --volume "$BUILD_SOURCESDIRECTORY:/workspace" \
+        --env TF_BUILD=true \
+        --env BUILD_SOURCESDIRECTORY=/workspace \
+        --env BUILD_BUILDID \
         --env SYSTEM_COLLECTIONURI \
         --env SYSTEM_TEAMPROJECT \
+        --env SYSTEM_JOBID \
         --env BUILD_REPOSITORY_ID \
         --env SYSTEM_PULLREQUEST_PULLREQUESTID \
         --env SYSTEM_ACCESSTOKEN \
@@ -59,9 +63,17 @@ steps:
       PIPR_IMAGE: ghcr.io/somus/pipr:v0.5.0 # x-release-please-version
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       DEEPSEEK_API_KEY: $(DEEPSEEK_API_KEY)
+
+  - task: PublishPipelineArtifact@1
+    condition: and(always(), ne(variables['PIPR_RUN_BUNDLE_PATH'], ''))
+    inputs:
+      targetPath: $(PIPR_RUN_BUNDLE_PATH)
+      artifact: $(PIPR_RUN_ARTIFACT_NAME)
 ```
 
 Azure supplies the remaining `SYSTEM_*` and `BUILD_*` values during branch-policy validation. The full checkout lets Pipr load Trusted Base Config and build the Diff Manifest.
+
+The Pipr process emits the bundle path and artifact name as Azure logging-command variables. `PublishPipelineArtifact@1` runs after success or failure, and `pipr runs` retrieves the result with a credential that has `vso.build`. Existing branch-policy pipelines must add this task to expose bundles.
 
 ## Commands and reply verification
 

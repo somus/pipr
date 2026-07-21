@@ -13,13 +13,13 @@ Generate the Bitbucket worker environment template with the repository config.
 pipr init --adapters bitbucket
 ```
 
-The command creates `bitbucket.pipr.env.example`. Copy its variable names into the trusted runner's secret store and leave the checked-in example values empty.
+The command creates `bitbucket.pipr.env.example` and `bitbucket-pipelines.yml`. Copy the environment template's variable names into the trusted runner's secret store and leave the checked-in example values empty.
 
 ## Optional pull request pipeline
 
 Use Bitbucket Pipelines only for same-repository pull requests whose authors are trusted with pipeline variables. Pull request pipelines use source-controlled `bitbucket-pipelines.yml`, so a contributor who can change that file can replace the review command before Pipr starts. Fork pull requests don't trigger this pipeline; use the trusted webhook runner when the pipeline trust boundary is not sufficient.
 
-Add `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, and the configured model-provider key as secured repository variables. Then add this pull request pipeline:
+Add `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, `BITBUCKET_ARTIFACT_EMAIL`, `BITBUCKET_ARTIFACT_API_TOKEN`, and the configured model-provider key as secured repository variables. Then use this pull request pipeline:
 
 ```yaml
 image: ghcr.io/somus/pipr:v0.5.0 # x-release-please-version
@@ -31,12 +31,23 @@ pipelines:
   pull-requests:
     "**":
       - step:
-          name: Pipr review
+          name: Pipr review (run bundle v1)
           script:
             - pipr host-run --host bitbucket
+          artifacts:
+            upload:
+              - name: pipr-run-v1
+                type: scoped
+                paths:
+                  - .pipr-runs/**
+                capture-on: always
 ```
 
 Bitbucket supplies `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, and `BITBUCKET_PR_ID` to the step. This pipeline handles automatic reviews only. Use the webhook runner for `@pipr` commands and reply verification.
+
+The step always captures `.pipr-runs/**` as a native Pipelines artifact. Keep the step name `Pipr review (run bundle v1)`: `pipr runs list` uses that marker to report `available-in-ci` and link to the pipeline when automated download is unavailable. Bitbucket keeps native pipeline artifacts for 14 days, but its documented public API does not provide a download endpoint for them.
+
+Pipr also attempts to upload one `pipr-run-v1-pr-<number>-<executionId>.tar.gz` file to repository Downloads so `pipr runs show` and `pipr runs download` can retrieve the bundle through the public API. The artifact credential is separate from the review credential because uploading and expiring Downloads requires `write:repository:bitbucket`. Pipr uses the review credential to list Downloads, so the artifact API token needs only that write scope. It deletes only expired files with the reserved `pipr-run-v1-` prefix and never deletes unrelated Downloads. If cleanup or upload fails, Pipr warns and preserves the native Pipelines artifact.
 
 ## Configure the runner
 

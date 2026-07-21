@@ -1,5 +1,5 @@
 import type { RuntimeLog } from "../shared/logging.js";
-import { shortSha } from "../shared/logging.js";
+import { runLoggedPhase, shortSha } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
 import type { TrustedRuntimeProject } from "./types.js";
 
@@ -8,20 +8,7 @@ export async function logPhase<T>(
   name: string,
   run: () => Promise<T> | T,
 ): Promise<T> {
-  const started = Date.now();
-  log.info(`${name} start`);
-  try {
-    const result = await run();
-    log.info(`${name} ok`, { durationMs: Date.now() - started });
-    return result;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    log.error(`${name} failed`, { durationMs: Date.now() - started, error: message });
-    if (log.debugEnabled && error instanceof Error && error.stack) {
-      log.text("debug", "error stack", error.stack);
-    }
-    throw error;
-  }
+  return await runLoggedPhase(log, name, run, { includeDebugStack: true });
 }
 
 export function logEventContext(log: RuntimeLog, event: ChangeRequestEventContext): void {

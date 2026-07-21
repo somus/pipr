@@ -154,6 +154,7 @@ async function runReviewCommentVerifier(
 ) {
   const { event, reply, trustedRuntime } = prepared;
   const config = trustedRuntime.settings.config;
+  registerVerifierProviderSecrets(config, options, log);
   const provider = resolveProvider(config, config.defaultProvider);
   const verifierProvider = resolveProvider(
     config,
@@ -181,6 +182,25 @@ async function runReviewCommentVerifier(
     replyCommentId: reply.commentId,
     parentCommentId: reply.parentCommentId,
   });
+  const diffManifest = buildDiffManifest({
+    cwd: options.rootDir,
+    baseSha: event.change.base.sha,
+    headSha: event.change.head.sha,
+  });
+  try {
+    await options.runObserver?.recordArtifact?.({
+      kind: "diff-manifest",
+      name: "diff-manifest.json",
+      mediaType: "application/json",
+      content: JSON.stringify(diffManifest, null, 2),
+      sensitive: true,
+    });
+  } catch (error) {
+    log.warning("run capture artifact failed", {
+      kind: "diff-manifest",
+      error: error instanceof Error ? error.message : "unknown capture error",
+    });
+  }
   const result = await runInternalVerifier({
     workspace: options.rootDir,
     config,
@@ -191,11 +211,8 @@ async function runReviewCommentVerifier(
     env: options.env,
     piExecutable: options.piExecutable,
     log,
-    diffManifest: buildDiffManifest({
-      cwd: options.rootDir,
-      baseSha: event.change.base.sha,
-      headSha: event.change.head.sha,
-    }),
+    runObserver: options.runObserver,
+    diffManifest,
     priorReviewState: await adapter.comments?.loadPriorReviewState?.({ change: event }),
     threadContexts,
     mode: {
@@ -231,6 +248,21 @@ async function runReviewCommentVerifier(
       redactor: options.secretRedactor,
     }),
   };
+}
+
+function registerVerifierProviderSecrets(
+  config: PiprConfig,
+  options: HostRunCommandDependencyOptions,
+  log: RuntimeLog,
+): void {
+  const env = options.env ?? process.env;
+  for (const provider of config.providers) {
+    const value = env[provider.apiKeyEnv];
+    if (!value) continue;
+    log.addSecret(value);
+    options.secretRedactor?.addSecret(value);
+    options.runObserver?.registerSecret?.(value);
+  }
 }
 
 function verifierRunSummary(options: {

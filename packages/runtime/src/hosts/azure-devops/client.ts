@@ -62,7 +62,10 @@ const iterationSchema = z.looseObject({
 const iterationChangeSchema = z.looseObject({
   changeTrackingId: z.number().int(),
   changeType: z.string(),
-  item: z.looseObject({ path: z.string().min(1), originalPath: z.string().min(1).optional() }),
+  item: z.looseObject({
+    path: z.string().min(1).nullish(),
+    originalPath: z.string().min(1).nullish(),
+  }),
 });
 
 const threadCommentSchema = z.looseObject({
@@ -395,14 +398,20 @@ export function createAzureDevOpsClient(
           }),
         );
         changes.push(
-          ...page.changeEntries.map((change) => ({
-            changeTrackingId: change.changeTrackingId,
-            changeType: change.changeType,
-            path: trimLeadingSlash(change.item.path),
-            ...(change.item.originalPath
-              ? { originalPath: trimLeadingSlash(change.item.originalPath) }
-              : {}),
-          })),
+          ...page.changeEntries.flatMap((change) =>
+            change.item.path
+              ? [
+                  {
+                    changeTrackingId: change.changeTrackingId,
+                    changeType: change.changeType,
+                    path: trimLeadingSlash(change.item.path),
+                    ...(change.item.originalPath
+                      ? { originalPath: trimLeadingSlash(change.item.originalPath) }
+                      : {}),
+                  },
+                ]
+              : [],
+          ),
         );
         if (!page.nextSkip) return changes;
         skip = page.nextSkip;

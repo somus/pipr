@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
@@ -286,6 +286,19 @@ describe("runHostRunCommand issue_comment dispatch", () => {
       expect(publication.writes.updated).toHaveLength(2);
       expect(publication.writes.updated[0]).toContain("state=running");
       expect(publication.writes.updated[1]).toContain("The change updates command output.");
+      const [executionId] = await readdir(path.join(workspace.rootDir, ".pipr-runs"));
+      if (!executionId) throw new Error("expected command run bundle");
+      const bundle = path.join(workspace.rootDir, ".pipr-runs", executionId);
+      expect(await Bun.file(path.join(bundle, "run.json")).json()).toMatchObject({
+        kind: "command",
+        artifacts: expect.arrayContaining([
+          expect.objectContaining({ path: "artifacts/command-output.json" }),
+        ]),
+      });
+      expect(await Bun.file(path.join(bundle, "artifacts/command-output.json")).json()).toEqual({
+        response: result.kind === "command-response" ? result.response : undefined,
+        publication: result.kind === "command-response" ? result.publication : undefined,
+      });
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

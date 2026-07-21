@@ -78,12 +78,15 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
     expect(workflow).toContain("uses: somus/pipr@v0.5.0"); // x-release-please-version
     expect(workflow).toContain("actions/cache@v4");
+    expect(workflow).toContain("actions/upload-artifact@v6");
+    expect(workflow).toContain("if: always() && steps.pipr.outputs.run-bundle-path != ''");
+    expect(workflow).toContain("retention-days: 14");
     expect(workflow).toContain("hashFiles('.pipr/bun.lock')");
     expect(workflow).toContain("checks: write");
     expect(workflow).toContain("pull_request_review_comment:");
     expect(workflow).toContain("types: [created]");
     expect(workflow).not.toContain("config-dir:");
-    expect([...workflow.matchAll(/^ {8}with:$/gm)]).toHaveLength(2);
+    expect([...workflow.matchAll(/^ {8}with:$/gm)]).toHaveLength(3);
     expect(workflow).not.toContain("provider-id:");
     expect(workflow).not.toContain("provider: deepseek");
     expect(workflow).not.toContain("model: deepseek-v4-pro");
@@ -196,7 +199,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(workflow).toContain("config-dir: config/pipr");
     expect(workflow).toContain("hashFiles('config/pipr/bun.lock')");
     expect(workflow).not.toContain("hashFiles('.pipr/bun.lock')");
-    expect([...workflow.matchAll(/^ {8}with:$/gm)]).toHaveLength(3);
+    expect([...workflow.matchAll(/^ {8}with:$/gm)]).toHaveLength(4);
     expect(await Bun.file(path.join(rootDir, "config", "pipr", "config.ts")).text()).toContain(
       "pipr.review",
     );
@@ -250,10 +253,14 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(pipeline).toContain("pipr host-run --host gitlab --config-dir config/pipr");
     expect(pipeline).toContain('PIPR_CODE_HOST: "gitlab"');
     expect(pipeline).toContain('GIT_DEPTH: "0"');
+    expect(pipeline).toContain("artifacts:");
+    expect(pipeline).toContain("when: always");
+    expect(pipeline).toContain("expire_in: 14 days");
+    expect(pipeline).toContain(".pipr-runs/");
     expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
   });
 
-  it("creates an Azure trusted-runner environment template without a credentialed PR pipeline", async () => {
+  it("creates Azure trusted-runner settings and an explicit immutable PR pipeline", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
 
     const result = await initOfficialMinimalProject({
@@ -262,12 +269,16 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
       adapters: ["azure-devops"],
     });
     const environment = await Bun.file(path.join(rootDir, "azure-devops.pipr.env.example")).text();
+    const pipeline = await Bun.file(path.join(rootDir, "azure-pipelines.pipr.yml")).text();
 
     expect(result.created).toContain("azure-devops.pipr.env.example");
     expect(environment).toContain("AZURE_DEVOPS_BEARER_TOKEN=");
     expect(environment).toContain("PIPR_AZURE_SUBSCRIPTION_ID=");
     expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
-    expect(await fileExists(path.join(rootDir, "azure-pipelines.pipr.yml"))).toBe(false);
+    expect(result.created).toContain("azure-pipelines.pipr.yml");
+    expect(pipeline).toContain("PublishPipelineArtifact@1");
+    expect(pipeline).toContain("condition: and(always()");
+    expect(pipeline).toContain("PIPR_RUN_ARTIFACT_NAME");
   });
 
   it("creates a Bitbucket trusted-runner environment template", async () => {
@@ -278,12 +289,22 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
       adapters: ["bitbucket"],
     });
     const environment = await Bun.file(path.join(rootDir, "bitbucket.pipr.env.example")).text();
+    const pipeline = await Bun.file(path.join(rootDir, "bitbucket-pipelines.yml")).text();
     expect(result.created).toContain("bitbucket.pipr.env.example");
     expect(environment).toContain("BITBUCKET_WORKSPACE=");
     expect(environment).toContain("BITBUCKET_EMAIL=");
     expect(environment).toContain("BITBUCKET_API_TOKEN=");
     expect(environment).toContain("BITBUCKET_PERMISSION_API_TOKEN=");
+    expect(environment).toContain("BITBUCKET_ARTIFACT_EMAIL=");
+    expect(environment).toContain("BITBUCKET_ARTIFACT_API_TOKEN=");
     expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
+    expect(result.created).toContain("bitbucket-pipelines.yml");
+    expect(pipeline).toContain("pipr host-run --host bitbucket --config-dir config/pipr");
+    expect(pipeline).toContain("name: Pipr review (run bundle v1)");
+    expect(pipeline).toContain("name: pipr-run-v1");
+    expect(pipeline).toContain("type: scoped");
+    expect(pipeline).toContain("capture-on: always");
+    expect(pipeline).toContain(".pipr-runs/**");
   });
 
   it("rejects unsupported init adapters", async () => {

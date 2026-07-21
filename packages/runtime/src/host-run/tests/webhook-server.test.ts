@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { createHmac } from "node:crypto";
-import { access, mkdtemp, rm, stat } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { PiprResult } from "@usepipr/sdk";
@@ -12,6 +12,7 @@ import {
   processNextWebhookDelivery,
   readWebhookDeliveryStatus,
   runWebhookDelivery,
+  runWebhookServer,
   SqliteWebhookDeliveryStore,
   type WebhookDelivery,
   type WebhookDeliveryStore,
@@ -49,6 +50,61 @@ const commandResponsePiprResult = {
 } as const satisfies PiprResult;
 
 describe("webhook runner", () => {
+  it("applies environment-only run-store settings before accepting traffic", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-retention-"));
+    const runStore = path.join(root, "runs");
+    const partial = path.join(runStore, "a".repeat(32));
+    await mkdir(partial, { recursive: true });
+    await writeFile(path.join(partial, "partial.log"), "sensitive".repeat(100));
+    const previousFetch = globalThis.fetch;
+    const previousSignalCount = process.listenerCount("SIGTERM");
+    globalThis.fetch = (async () =>
+      Response.json({ id: 42, path_with_namespace: "group/project" })) as unknown as typeof fetch;
+    try {
+      await expect(
+        runWebhookServer({
+          host: "gitlab",
+          workspace: root,
+          configDir: ".pipr",
+          databasePath: path.join(root, "invalid.sqlite"),
+          expectedRepository: "group/project",
+          secret: "webhook-secret",
+          hostname: "127.0.0.1",
+          port: 0,
+          env: {
+            GITLAB_TOKEN: "token",
+            PIPR_RUN_STORE_DIR: runStore,
+            PIPR_RUN_RETENTION_DAYS: "0",
+          },
+        }),
+      ).rejects.toThrow("positive integer");
+
+      const server = runWebhookServer({
+        host: "gitlab",
+        workspace: root,
+        configDir: ".pipr",
+        databasePath: path.join(root, "deliveries.sqlite"),
+        expectedRepository: "group/project",
+        secret: "webhook-secret",
+        hostname: "127.0.0.1",
+        port: 0,
+        env: {
+          GITLAB_TOKEN: "token",
+          PIPR_RUN_STORE_DIR: runStore,
+          PIPR_RUN_RETENTION_DAYS: "14",
+          PIPR_RUN_MAX_BYTES: "1",
+        },
+      });
+      const stop = await waitForNewSignalListener("SIGTERM", previousSignalCount);
+      await expect(access(partial)).rejects.toThrow();
+      stop();
+      await server;
+    } finally {
+      globalThis.fetch = previousFetch;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("reports HTTP health without requiring webhook authentication", async () => {
     const store = new MemoryDeliveryStore();
     const ingress = createWebhookIngress({
@@ -437,7 +493,12 @@ describe("webhook runner", () => {
     const observedPaths: string[] = [];
     await runWebhookDelivery(
       { id: "delivery-1", host: "gitlab", payload: '{"project":{"id":42}}' },
-      { workspace: "/workspace", configDir: ".pipr", env: { SAFE: "value" } },
+      {
+        workspace: "/workspace",
+        configDir: ".pipr",
+        env: { SAFE: "value" },
+        runStoreDirectory: "/runs",
+      },
       async (options) => {
         observedPaths.push(options.eventPath ?? "");
         expect(await Bun.file(options.eventPath ?? "").text()).toContain('"id":42');
@@ -445,7 +506,7 @@ describe("webhook runner", () => {
           rootDir: "/workspace",
           configDir: ".pipr",
           host: "gitlab",
-          env: { SAFE: "value", PIPR_CODE_HOST: "gitlab" },
+          env: { SAFE: "value", PIPR_CODE_HOST: "gitlab", PIPR_RUN_STORE_DIR: "/runs" },
           dryRun: false,
         });
         return { kind: "ignored", reason: "test" } as const;
@@ -837,6 +898,19 @@ describe("webhook runner", () => {
     expect(store.failures).toEqual([{ id: "delivery-1", error: errorPiprResult }]);
   });
 });
+
+async function waitForNewSignalListener(
+  signal: "SIGTERM",
+  previousCount: number,
+): Promise<() => void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const listeners = process.listeners(signal);
+    const listener = listeners.length > previousCount ? listeners.at(-1) : undefined;
+    if (listener) return () => listener(signal);
+    await Bun.sleep(10);
+  }
+  throw new Error(`Webhook server did not register ${signal}`);
+}
 
 class MemoryDeliveryStore implements WebhookDeliveryStore {
   deliveries: WebhookDelivery[] = [];

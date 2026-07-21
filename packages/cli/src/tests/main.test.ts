@@ -17,7 +17,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import cliPackage from "../../package.json" with { type: "json" };
 import { embeddedSdkDeclaration, readSdkDeclarationModules } from "../release/sdk-declaration.js";
-import { runMain } from "../runner.js";
+import { publishRunBundleMetadata, runMain } from "../runner.js";
 import {
   type BundledSkill,
   containedSkillFilePath,
@@ -31,6 +31,75 @@ const repoRoot = path.resolve(cliProjectDir, "../..");
 const cliPath = path.join(cliProjectDir, "src", "main.ts");
 
 describe("pipr CLI", () => {
+  it("publishes finalized run metadata for GitHub, Azure, and Bitbucket", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-run-metadata-"));
+    const outputPath = path.join(workspace, "github-output.txt");
+    await Bun.write(outputPath, "");
+    const originalOutput = process.env.GITHUB_OUTPUT;
+    const originalLog = console.log;
+    const originalError = console.error;
+    const logs: string[] = [];
+    const errors: string[] = [];
+    const uploads: unknown[] = [];
+    process.env.GITHUB_OUTPUT = outputPath;
+    console.log = (message?: unknown) => logs.push(String(message));
+    console.error = (message?: unknown) => errors.push(String(message));
+    try {
+      await publishRunBundleMetadata(
+        {
+          executionId: "0123456789abcdef0123456789abcdef",
+          directory: path.join(workspace, "bundle;%]\n"),
+          kind: "review",
+          outcome: "succeeded",
+          repository: {
+            host: "bitbucket",
+            repository: "workspace/pipr",
+            changeNumber: 42,
+          },
+        },
+        {
+          rootDir: workspace,
+          env: {
+            GITHUB_ACTIONS: "true",
+            TF_BUILD: "True",
+            BITBUCKET_BUILD_NUMBER: "7",
+            BITBUCKET_ARTIFACT_EMAIL: "bot@example.test",
+            BITBUCKET_ARTIFACT_API_TOKEN: "upload-token",
+          },
+        },
+        {
+          async upload(options) {
+            uploads.push(options);
+            return { status: "failed", error: "upload unavailable" };
+          },
+        },
+      );
+      const githubOutput = await Bun.file(outputPath).text();
+      expect(githubOutput).toContain("execution-id");
+      expect(githubOutput).toContain("0123456789abcdef0123456789abcdef");
+      expect(githubOutput).toContain("run-bundle-path");
+      expect(githubOutput).toContain("run-artifact-name");
+      expect(logs).toContain(
+        "##vso[task.setvariable variable=PIPR_RUN_BUNDLE_PATH]bundle%3B%AZP25%5D%0A",
+      );
+      expect(uploads).toEqual([
+        expect.objectContaining({
+          repository: "workspace/pipr",
+          changeNumber: 42,
+          email: "bot@example.test",
+          token: "upload-token",
+        }),
+      ]);
+      expect(errors).toContain("pipr warning Bitbucket run upload failed: upload unavailable");
+    } finally {
+      if (originalOutput === undefined) delete process.env.GITHUB_OUTPUT;
+      else process.env.GITHUB_OUTPUT = originalOutput;
+      console.log = originalLog;
+      console.error = originalError;
+      await removeWorkspace(workspace);
+    }
+  });
+
   it("prints update notices to stderr before running CLI commands", async () => {
     const events: Array<{ stream: "stdout" | "stderr"; message: string }> = [];
     const originalLog = console.log;
@@ -233,6 +302,12 @@ describe("pipr CLI", () => {
     expect(action.stderr).toContain("unknown command 'action'");
     expect(webhook.stdout).toContain("--database <path>");
     expect(webhook.stdout).toContain("--repository <repository>");
+    expect(webhook.stdout).toContain("--run-store-dir <path>");
+    expect(webhook.stdout).toContain("--run-retention-days <days>");
+    expect(webhook.stdout).toContain("--run-max-bytes <bytes>");
+    expect(webhook.stdout).not.toContain('(default: "/var/lib/pipr/runs")');
+    expect(webhook.stdout).not.toContain('(default: "14")');
+    expect(webhook.stdout).not.toContain('(default: "5368709120")');
     expect(hostRun.stdout).toContain("--host <host>");
     expect(hostRun.stdout).toContain("--event <path>");
     expect(dryRun.stdout).toContain("--host <host>");

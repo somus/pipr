@@ -44,6 +44,7 @@ export type LogLevel = "info" | "notice" | "warning" | "error" | "debug";
 export function createRuntimeLog(options: {
   logSink?: RuntimeLogSink;
   env?: NodeJS.ProcessEnv;
+  writesToSink?: boolean;
 }): RuntimeLog {
   const secrets = new Set<string>();
   for (const value of sensitiveEnvironmentValues(options.env ?? process.env)) {
@@ -56,7 +57,7 @@ export function createRuntimeLog(options: {
 
   return {
     debugEnabled,
-    writesToSink: options.logSink !== undefined,
+    writesToSink: options.writesToSink ?? options.logSink !== undefined,
     info(event, fields) {
       emitRecord(sink, secrets, "info", event, fields);
     },
@@ -107,6 +108,28 @@ export function createRuntimeLog(options: {
 
 export function shortSha(sha: string | undefined): string | undefined {
   return sha?.slice(0, 12);
+}
+
+export async function runLoggedPhase<T>(
+  log: RuntimeLog | undefined,
+  name: string,
+  run: () => Promise<T> | T,
+  options: { includeDebugStack?: boolean } = {},
+): Promise<T> {
+  const started = Date.now();
+  log?.info(`${name} start`);
+  try {
+    const result = await run();
+    log?.info(`${name} ok`, { durationMs: Date.now() - started });
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log?.error(`${name} failed`, { durationMs: Date.now() - started, error: message });
+    if (options.includeDebugStack && log?.debugEnabled && error instanceof Error && error.stack) {
+      log.text("debug", "error stack", error.stack);
+    }
+    throw error;
+  }
 }
 
 export function boundedLogSnippet(

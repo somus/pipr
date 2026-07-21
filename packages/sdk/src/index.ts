@@ -19,6 +19,24 @@ export {
   reviewSchemaExample,
   reviewSummarySchema,
 } from "./review-contract.js";
+export type {
+  RunBundle,
+  RunBundleArtifact,
+  RunBundleManifest,
+  RunLogRecord,
+  RunMetricsSnapshot,
+  RunSpanRecord,
+} from "./run-bundle.js";
+export {
+  parseRunBundle,
+  parseRunBundleManifest,
+  runBundleArtifactSchema,
+  runBundleManifestSchema,
+  runBundleSchema,
+  runLogRecordSchema,
+  runMetricsSnapshotSchema,
+  runSpanRecordSchema,
+} from "./run-bundle.js";
 export { jsonSchema, schema, schemas } from "./schema.js";
 export type {
   Agent,

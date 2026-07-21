@@ -50,6 +50,7 @@ export function renderOfficialGithubWorkflow(
     `      - uses: ${defaultWorkflowActionRef}${
       options.includeReleasePleaseVersionMarker ? " # x-release-please-version" : ""
     }`,
+    "        id: pipr",
     "        env:",
     `          DEEPSEEK_API_KEY: ${githubExpression("secrets.DEEPSEEK_API_KEY")}`,
     `          GITHUB_TOKEN: ${githubExpression("github.token")}`,
@@ -60,6 +61,17 @@ export function renderOfficialGithubWorkflow(
   if (relativeConfigDir !== ".pipr") {
     lines.push("        with:", `          config-dir: ${relativeConfigDir}`);
   }
+  lines.push(
+    "      - name: Upload Pipr run bundle",
+    "        if: always() && steps.pipr.outputs.run-bundle-path != ''",
+    "        uses: actions/upload-artifact@v6",
+    "        with:",
+    `          name: ${githubExpression("steps.pipr.outputs.run-artifact-name")}`,
+    `          path: ${githubExpression("steps.pipr.outputs.run-bundle-path")}`,
+    "          retention-days: 14",
+    "          if-no-files-found: warn",
+    "          include-hidden-files: true",
+  );
   lines.push("");
   return lines.join("\n");
 }

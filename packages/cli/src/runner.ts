@@ -1,6 +1,8 @@
+import path from "node:path";
 import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
+  type HostRunCommandOptions,
   type RuntimeLogRecord,
   type RuntimeLogSink,
   runDryRunCommand,
@@ -11,11 +13,21 @@ import {
   runValidateCommand,
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
+  uploadBitbucketRunBundle,
 } from "@usepipr/runtime";
 import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
 import { stripPiprMainCommentMarkers, toPiprResult } from "@usepipr/runtime/internal/pipr-result";
 import { Command, CommanderError } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
+import {
+  defaultLocalTraceStore,
+  type RunsDownloadOptions,
+  type RunsListOptions,
+  type RunsShowOptions,
+  runRunsDownload,
+  runRunsList,
+  runRunsShow,
+} from "./runs.js";
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
 import {
   availablePiprUpdateNotice,
@@ -42,6 +54,10 @@ type CliOptions = {
   piExecutable?: string;
   json?: boolean;
   limit?: string;
+  trace?: string | boolean;
+  runStoreDir?: string;
+  runRetentionDays?: string;
+  runMaxBytes?: string;
 };
 
 type MainOptions = {
@@ -57,7 +73,7 @@ export async function runMain(options: MainOptions = {}): Promise<void> {
   if (!isUpdateCommand(argv)) {
     await writeAvailableUpdateNotice(options);
   }
-  const program = createProgram({ exitOverride: env.GITHUB_ACTIONS === "true" });
+  const program = createProgram({ exitOverride: env.GITHUB_ACTIONS === "true", env });
   try {
     if (argv.length <= 2) {
       program.outputHelp();
@@ -72,8 +88,9 @@ export async function runMain(options: MainOptions = {}): Promise<void> {
   }
 }
 
-function createProgram(options: { exitOverride?: boolean } = {}): Command {
+function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEnv } = {}): Command {
   const program = new Command();
+  const env = options.env ?? process.env;
   program.name("pipr").version(cliPackage.version).showHelpAfterError();
   if (options.exitOverride) {
     program.exitOverride();
@@ -112,6 +129,9 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .option("--hostname <hostname>", "Listen hostname", "127.0.0.1")
     .option("--port <port>", "Listen port", "8787")
     .option("--config-dir <dir>", "Config directory", ".pipr")
+    .option("--run-store-dir <path>", "Diagnostic run store")
+    .option("--run-retention-days <days>", "Completed run retention")
+    .option("--run-max-bytes <bytes>", "Maximum webhook run store bytes")
     .action(runWebhookServe);
   webhook
     .command("status")
@@ -149,8 +169,51 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .option("--head <sha>", "Head commit SHA or ref; omitted reviews the working tree")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .option("--pi-executable <path>", "Pi executable path")
+    .option("--trace [path]", "Capture a diagnostic run bundle")
     .option("--json", "Print structured JSON output")
     .action(runLocalReview);
+
+  const runs = program.command("runs").description("Inspect captured Pipr runs");
+  runs
+    .command("list")
+    .description("List runs for a pull or merge request")
+    .requiredOption("--pr <number|URL>", "Pull or merge request number or URL")
+    .option("--host <host>", "Code host")
+    .option("--repository <repository>", "Provider repository path")
+    .option("--kind <kind>", "Run kind (review, command, verifier, startup, or all)", "all")
+    .option("--status <status>", "Run outcome or artifact state")
+    .option("--limit <count>", "Maximum runs", "20")
+    .option("--json", "Print versioned JSON")
+    .option("--store <path>", "Local run store")
+    .action(async (runOptions: RunsListOptions) => {
+      await runRunsList(runOptions, { env, cwd: process.cwd() });
+    });
+  runs
+    .command("show")
+    .description("Diagnose one captured run")
+    .argument("[execution-id]", "Run execution ID")
+    .option("--pr <number|URL>", "Select the latest completed run for a PR")
+    .option("--host <host>", "Code host")
+    .option("--repository <repository>", "Provider repository path")
+    .option("--kind <kind>", "Run kind (review, command, verifier, startup, or all)")
+    .option("--timeline", "Print the complete span timeline")
+    .option("--json", "Print versioned JSON without prompt or output bodies")
+    .option("--store <path>", "Local run store")
+    .action(async (executionId: string | undefined, runOptions: RunsShowOptions) => {
+      await runRunsShow(executionId, runOptions, { env, cwd: process.cwd() });
+    });
+  runs
+    .command("download")
+    .description("Download and validate a run bundle")
+    .argument("<execution-id>", "Run execution ID")
+    .option("--host <host>", "Code host")
+    .option("--repository <repository>", "Provider repository path")
+    .option("--output <path>", "Destination directory")
+    .option("--archive", "Preserve the provider archive beside the unpacked bundle")
+    .option("--store <path>", "Local run store")
+    .action(async (executionId: string, runOptions: RunsDownloadOptions) => {
+      await runRunsDownload(executionId, runOptions, { env, cwd: process.cwd() });
+    });
 
   program.command("version").description("Print the CLI version").action(runVersion);
 
@@ -183,14 +246,18 @@ Prefer it over guessing commands or config shape from memory.
 async function runHostRun(options: CliOptions): Promise<void> {
   const env = process.env;
   const isGitHubAction = env.GITHUB_ACTIONS === "true";
+  const rootDir = hostRunRootDir(env);
   const result = await runHostRunCommand({
-    rootDir: hostRunRootDir(env),
+    rootDir,
     configDir: options.configDir,
     host: options.host,
     eventPath: options.event ?? env.PIPR_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
     env,
     dryRun: env.PIPR_DRY_RUN === "1",
     logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
+    onRunBundleFinalized: async (bundle) => {
+      await publishRunBundleMetadata(bundle, { env, rootDir });
+    },
   });
   if (isGitHubAction) {
     await presentGitHubActionResult(result, {
@@ -207,6 +274,81 @@ async function runHostRun(options: CliOptions): Promise<void> {
     return;
   }
   console.log(`pipr ${result.kind} completed for change #${result.event.change.number}`);
+}
+
+export async function publishRunBundleMetadata(
+  bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0],
+  options: { env: NodeJS.ProcessEnv; rootDir: string },
+  dependencies: { upload: typeof uploadBitbucketRunBundle } = {
+    upload: uploadBitbucketRunBundle,
+  },
+): Promise<void> {
+  const relative = path.relative(options.rootDir, bundle.directory);
+  const bundlePath = relative && !relative.startsWith("..") ? relative : bundle.directory;
+  const changeNumber = bundle.repository?.changeNumber;
+  const artifactName = changeNumber
+    ? `pipr-run-v1-pr-${changeNumber}-${bundle.executionId}`
+    : `pipr-run-v1-${bundle.executionId}`;
+  publishGitHubRunMetadata(options.env, bundle.executionId, bundlePath, artifactName);
+  publishAzureRunMetadata(options.env, bundle.executionId, bundlePath, artifactName);
+  await publishBitbucketRunBundle(options.env, bundle, changeNumber, dependencies.upload);
+}
+
+function publishGitHubRunMetadata(
+  env: NodeJS.ProcessEnv,
+  executionId: string,
+  bundlePath: string,
+  artifactName: string,
+): void {
+  if (env.GITHUB_ACTIONS !== "true") return;
+  core.setOutput("execution-id", executionId);
+  core.setOutput("run-bundle-path", bundlePath);
+  core.setOutput("run-artifact-name", artifactName);
+}
+
+function publishAzureRunMetadata(
+  env: NodeJS.ProcessEnv,
+  executionId: string,
+  bundlePath: string,
+  artifactName: string,
+): void {
+  if (env.TF_BUILD !== "True" && env.TF_BUILD !== "true") return;
+  console.log(`##vso[task.setvariable variable=PIPR_EXECUTION_ID]${azureValue(executionId)}`);
+  console.log(`##vso[task.setvariable variable=PIPR_RUN_BUNDLE_PATH]${azureValue(bundlePath)}`);
+  console.log(`##vso[task.setvariable variable=PIPR_RUN_ARTIFACT_NAME]${azureValue(artifactName)}`);
+}
+
+async function publishBitbucketRunBundle(
+  env: NodeJS.ProcessEnv,
+  bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0],
+  changeNumber: number | undefined,
+  upload: typeof uploadBitbucketRunBundle,
+): Promise<void> {
+  if (!env.BITBUCKET_BUILD_NUMBER) return;
+  const result = await upload({
+    directory: bundle.directory,
+    repository: bundle.repository?.repository,
+    changeNumber,
+    executionId: bundle.executionId,
+    email: env.BITBUCKET_ARTIFACT_EMAIL,
+    token: env.BITBUCKET_ARTIFACT_API_TOKEN,
+    readEmail: env.BITBUCKET_EMAIL,
+    readToken: env.BITBUCKET_API_TOKEN,
+  });
+  if (result.status === "failed") {
+    console.error(`pipr warning Bitbucket run upload failed: ${result.error}`);
+  } else if (result.warning) {
+    console.error(`pipr warning Bitbucket expired run cleanup failed: ${result.warning}`);
+  }
+}
+
+function azureValue(value: string): string {
+  return value
+    .replaceAll("%", "%AZP25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A")
+    .replaceAll(";", "%3B")
+    .replaceAll("]", "%5D");
 }
 
 function hostRunRootDir(env: NodeJS.ProcessEnv): string {
@@ -235,7 +377,19 @@ async function runWebhookServe(options: CliOptions): Promise<void> {
     hostname: options.hostname,
     port,
     env: process.env,
+    runStoreDirectory: options.runStoreDir,
+    runRetentionDays: positiveIntegerOption(options.runRetentionDays, "--run-retention-days"),
+    runMaxBytes: positiveIntegerOption(options.runMaxBytes, "--run-max-bytes"),
   });
+}
+
+function positiveIntegerOption(value: string | undefined, name: string): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
 }
 
 async function runWebhookStatus(options: CliOptions): Promise<void> {
@@ -429,6 +583,12 @@ function isUpdateCommand(argv: string[]): boolean {
 }
 
 async function runLocalReview(options: CliOptions & { base: string }): Promise<void> {
+  const traceDirectory =
+    typeof options.trace === "string"
+      ? path.resolve(process.cwd(), options.trace)
+      : options.trace
+        ? await defaultLocalTraceStore(process.cwd(), process.env)
+        : undefined;
   const result = await runLocalReviewCommand({
     rootDir: process.cwd(),
     configDir: options.configDir,
@@ -436,6 +596,7 @@ async function runLocalReview(options: CliOptions & { base: string }): Promise<v
     baseSha: options.base,
     headSha: options.head,
     piExecutable: options.piExecutable,
+    traceDirectory,
     logSink: localConsoleLogSink,
     taskLog: stderrTaskLog,
   });

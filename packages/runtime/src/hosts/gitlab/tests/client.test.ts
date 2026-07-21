@@ -257,6 +257,33 @@ describe("GitLab API client", () => {
       end: { old_line: null, new_line: 2 },
     });
   });
+
+  it("accepts a null line range on an existing discussion position", async () => {
+    const client = createGitLabClient({ GITLAB_TOKEN: "test-token" }, async () =>
+      Response.json([
+        {
+          id: "thread-1",
+          notes: [
+            {
+              id: 10,
+              body: "inline",
+              position: {
+                old_path: "src/a.ts",
+                new_path: "src/a.ts",
+                old_line: null,
+                new_line: 2,
+                line_range: null,
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    const discussions = await client.listDiscussions("group/project", 7);
+
+    expect(discussions[0]?.notes[0]?.position?.line_range).toBeUndefined();
+  });
 });
 
 const mergeRequest = {

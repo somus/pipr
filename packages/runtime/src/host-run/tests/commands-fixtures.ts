@@ -198,6 +198,7 @@ export async function runReviewCommentAction(
     githubPublicationClient: GitHubPublicationClient;
     logSink?: RuntimeLogSink;
     secretRedactor?: SecretRedactor;
+    env?: NodeJS.ProcessEnv;
   },
 ) {
   const eventPath = path.join(workspace.rootDir, "event.json");
@@ -206,7 +207,7 @@ export async function runReviewCommentAction(
     configDir: ".pipr",
     eventPath,
     dryRun: options.dryRun ?? false,
-    env: reviewCommentEnv(workspace.rootDir, eventPath),
+    env: options.env ?? reviewCommentEnv(workspace.rootDir, eventPath),
     githubClient: options.githubClient,
     githubPublicationClient: options.githubPublicationClient,
     piExecutable: workspace.piExecutable,
@@ -291,6 +292,7 @@ export async function expectVerifierReplyPublished(
     event?: Parameters<typeof writeReviewCommentEvent>[1];
     logSink?: RuntimeLogSink;
     secretRedactor?: SecretRedactor;
+    env?: NodeJS.ProcessEnv;
   },
 ) {
   const eventPath = path.join(workspace.rootDir, "event.json");
@@ -300,6 +302,7 @@ export async function expectVerifierReplyPublished(
     githubPublicationClient: publication,
     logSink: options.logSink,
     secretRedactor: options.secretRedactor,
+    env: options.env,
   });
   expect(result).toMatchObject({
     kind: "verifier",
