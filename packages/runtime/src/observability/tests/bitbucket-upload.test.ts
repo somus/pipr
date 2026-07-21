@@ -23,6 +23,7 @@ describe("Bitbucket run upload", () => {
     });
     await recorder.finish({ kind: "review", outcome: "succeeded" });
     const requests: Request[] = [];
+    let uploadStateWhenPosted: string | undefined;
 
     const result = await uploadBitbucketRunBundle({
       directory: recorder.directory,
@@ -50,12 +51,18 @@ describe("Bitbucket run upload", () => {
           });
         }
         if (request.method === "DELETE") return new Response(null, { status: 204 });
-        if (request.method === "POST") return new Response(null, { status: 201 });
+        if (request.method === "POST") {
+          uploadStateWhenPosted = JSON.parse(
+            await readFile(path.join(recorder.directory, "run.json"), "utf8"),
+          ).export.externalUpload;
+          return new Response(null, { status: 201 });
+        }
         throw new Error(`Unexpected request: ${request.method} ${request.url}`);
       },
     });
 
     expect(result.status).toBe("available");
+    expect(uploadStateWhenPosted).toBe("pending");
     expect(requests.filter((request) => request.method === "DELETE")).toHaveLength(1);
     expect(requests.find((request) => request.method === "DELETE")?.url).toContain(
       `pipr-run-v1-pr-1-${"a".repeat(32)}.tar.gz`,

@@ -46,13 +46,13 @@ export async function uploadBitbucketRunBundle(options: {
       readHeaders,
       writeHeaders,
     });
-    await updateExternalUploadState(options.directory, "available");
     await uploadBundle(
       { ...options, changeNumber: target.changeNumber },
       request,
       baseUrl,
       writeHeaders,
     );
+    await updateExternalUploadState(options.directory, "available");
     return warning ? { status: "available", warning } : { status: "available" };
   } catch (error) {
     return await failUpload(
