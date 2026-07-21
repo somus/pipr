@@ -68,7 +68,8 @@ COPY --from=prod-deps --chown=bun:bun /opt/pipr/packages/sdk packages/sdk
 COPY --from=build --chown=bun:bun /opt/pipr/packages/cli/dist packages/cli/dist
 COPY --from=build --chown=bun:bun /opt/pipr/packages/runtime/dist packages/runtime/dist
 COPY --from=build --chown=bun:bun /opt/pipr/packages/sdk/dist packages/sdk/dist
-RUN chown -R bun:bun /opt/pipr \
+RUN mkdir -p /var/lib/pipr/runs \
+  && chown -R bun:bun /opt/pipr /var/lib/pipr \
   && chmod +x /opt/pipr/packages/cli/dist/main.mjs \
   && ln -sf /opt/pipr/packages/cli/dist/main.mjs /usr/local/bin/pipr \
   && command -v wget >/dev/null \
