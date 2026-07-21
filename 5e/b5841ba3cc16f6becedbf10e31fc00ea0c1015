@@ -1,0 +1,19 @@
+packages/evals/src/martian-campaign.ts
+  s_c4cefe80015294::t_25652ee14bae49 9-13,20,22,95-96,111,151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "5eb5841ba3cc16f6becedbf10e31fc00ea0c1015",
+  "prompts": {},
+  "sessions": {
+    "s_c4cefe80015294": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7e1d-67b7-7d21-a388-1c7159fba85e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
