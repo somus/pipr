@@ -183,7 +183,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     assertReviewResult(result);
     expect(prompts).toHaveLength(2);
     expect(prompts.some((prompt) => prompt.includes("Review only concurrency"))).toBe(true);
-    expect(result.mainComment).toContain("Deep review completed with 2 reviewer calls.");
+    expect(result.mainComment).toContain("Deep review completed.");
     expect(result.inlineCommentDrafts).toHaveLength(2);
     expect(result.inlineCommentDrafts.map((draft) => draft.side).sort()).toEqual(["LEFT", "RIGHT"]);
   });
@@ -238,7 +238,68 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       }
     }
     expect(maxActiveRuns).toBe(2);
-    expect(result.mainComment).toContain("Deep review completed with 25 reviewer calls.");
+    expect(result.mainComment).toContain("Deep review completed.");
+  });
+
+  it("keeps oversized files without commentable ranges in focused units", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-deep-review-"));
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "deep-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const baseManifest = largeDeepReviewManifest();
+    const oversizedFile = baseManifest.files[0];
+    const seedHunk = oversizedFile?.hunks[0];
+    if (!oversizedFile || !seedHunk) {
+      throw new Error("expected a changed file and hunk in the deep review manifest");
+    }
+    const pathWithoutRanges = "src/oversized-without-ranges.ts";
+    const manifest = {
+      ...baseManifest,
+      files: [
+        {
+          ...oversizedFile,
+          path: pathWithoutRanges,
+          hunks: Array.from({ length: 256 }, (_, index) => ({
+            ...seedHunk,
+            hunkIndex: index + 1,
+            header: `@@ -${index + 1},1 +${index + 1},1 @@`,
+            oldStart: index + 1,
+            newStart: index + 1,
+            contentHash: index.toString(16).padStart(12, "0"),
+          })),
+          commentableRanges: [],
+        },
+        ...baseManifest.files.slice(1),
+      ],
+    };
+    const prompts: string[] = [];
+
+    await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => manifest,
+      piRunner: async (run) => {
+        prompts.push(run.prompt);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            summary: { body: "No actionable findings." },
+            inlineFindings: [],
+          }),
+          stderr: "",
+          durationMs: 1,
+        };
+      },
+    });
+
+    const unitPrompts = prompts.filter((prompt) => prompt.includes('"reviewScale": "unit"'));
+    expect(unitPrompts.some((prompt) => prompt.includes(pathWithoutRanges))).toBe(true);
   });
 
   it("stops scheduling focused units and settles started work when a deep review lane fails", async () => {

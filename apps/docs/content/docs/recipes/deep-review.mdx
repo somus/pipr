@@ -149,10 +149,8 @@ export default definePipr((pipr) => {
         ...unitResults.flatMap((result) => result.inlineFindings),
         ...(concurrency?.inlineFindings ?? []),
       ]);
-      const calls = 1 + unitResults.length + (concurrency ? 1 : 0);
-
       await ctx.comment({
-        main: `Deep review completed with ${calls} reviewer call${calls === 1 ? "" : "s"}.`,
+        main: "Deep review completed.",
         inlineFindings: findings,
       });
     },
@@ -183,6 +181,10 @@ function chunkManifest(manifest: DiffManifest, maxCharacters: number): DiffManif
     }
     if (JSON.stringify(manifestWithFiles(manifest, [file])).length <= maxCharacters) {
       files = [...files, file];
+      continue;
+    }
+    if (file.commentableRanges.length === 0) {
+      units.push(manifestWithFiles(manifest, [file]));
       continue;
     }
     for (const ranges of chunkRanges(file.commentableRanges, maxCharacters / 2)) {
