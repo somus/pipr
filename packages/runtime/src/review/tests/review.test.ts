@@ -110,6 +110,34 @@ describe("validateReviewResult", () => {
     expect(validated.droppedFindings).toHaveLength(0);
   });
 
+  it("canonicalizes a valid but mismatched range ID from the finding anchor", () => {
+    const review: ReviewResult = {
+      ...baseReview,
+      inlineFindings: [
+        {
+          ...baseFinding,
+          rangeId: "range-1",
+          startLine: 20,
+          endLine: 21,
+        },
+      ],
+    };
+
+    const validated = validateReviewResult(review, manifest, {
+      expectedHeadSha: "head",
+    });
+
+    expect(validated.validFindings).toEqual([
+      {
+        ...baseFinding,
+        rangeId: "range-2",
+        startLine: 20,
+        endLine: 21,
+      },
+    ]);
+    expect(validated.droppedFindings).toHaveLength(0);
+  });
+
   it("keeps an unusable range ID dropped when its anchor matches multiple ranges", () => {
     const review: ReviewResult = {
       ...baseReview,

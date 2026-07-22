@@ -128,9 +128,6 @@ export function partitionDiffManifestForPrompt(
   if (files.length > 0) {
     units.push(manifestWithFiles(manifest, files));
   }
-  if (units.length === 0) {
-    prepareDiffManifestPrompt(manifest, config);
-  }
   return units;
 }
 
