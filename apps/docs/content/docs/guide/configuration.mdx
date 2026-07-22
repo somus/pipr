@@ -131,7 +131,9 @@ Limit manifest size before model execution while preserving authoritative ranges
 
 ### Limit config
 
-Pipr sends the full Diff Manifest while it fits configured limits. When it is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools for range-scoped context.
+Pipr sends the full Diff Manifest while it fits configured limits. If the full manifest is too large but its condensed form fits, Pipr sends one condensed manifest and attaches bounded Diff Read Tools for range-scoped context.
+
+If the condensed manifest is also too large for a Review-schema agent, Pipr partitions it into bounded units, runs those units sequentially, and merges their structured Review results. Each unit uses the same full-or-condensed selection, so an oversized review can make multiple model calls and use Diff Read Tools for condensed units.
 
 Pipr also enforces a fixed 16 MiB construction limit after excluding binary, removed, lock, generated-output, and oversized files. If the remaining reviewable patch exceeds the limit, the review fails before Pi runs instead of producing a partial Diff Manifest.
 

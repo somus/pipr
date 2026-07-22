@@ -186,9 +186,13 @@ function mergeScheduledReviewAgentResults(
 ): RunReviewAgentResult {
   const reviews = results.map((result) => parseReviewResult(result.value));
   const summaries = [...new Set(reviews.map((review) => review.summary.body))];
+  const titles = [...new Set(reviews.flatMap((review) => review.summary.title ?? []))];
   return {
     value: parseReviewResult({
-      summary: { body: summaries.join("\n\n") },
+      summary: {
+        ...(titles.length === 1 ? { title: titles[0] } : {}),
+        body: summaries.join("\n\n"),
+      },
       inlineFindings: deduplicateScheduledFindings(
         reviews.flatMap((review) => review.inlineFindings),
       ),
@@ -202,8 +206,7 @@ function deduplicateScheduledFindings(findings: ReviewResult["inlineFindings"]) 
   const unique: ReviewResult["inlineFindings"] = [];
   for (const finding of findings) {
     const duplicate = unique.some(
-      (candidate) =>
-        sameFindingAnchor(candidate, finding) && similarFindingBody(candidate.body, finding.body),
+      (candidate) => sameFindingAnchor(candidate, finding) && candidate.body === finding.body,
     );
     if (!duplicate) {
       unique.push(finding);
@@ -223,25 +226,6 @@ function sameFindingAnchor(
     left.startLine === right.startLine &&
     left.endLine === right.endLine
   );
-}
-
-function similarFindingBody(left: string, right: string): boolean {
-  const leftTokens = findingBodyTokens(left);
-  const rightTokens = findingBodyTokens(right);
-  if (leftTokens.size === 0 || rightTokens.size === 0) {
-    return left.trim().toLowerCase() === right.trim().toLowerCase();
-  }
-  let shared = 0;
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) {
-      shared += 1;
-    }
-  }
-  return shared / Math.min(leftTokens.size, rightTokens.size) >= 0.8;
-}
-
-function findingBodyTokens(body: string): Set<string> {
-  return new Set(body.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
 }
 
 export function resolveProvider(config: PiprConfig, providerId: string): ProviderConfig {

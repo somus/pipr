@@ -161,7 +161,9 @@ Diff Manifest prompt injection is reserved opt-in. When `ctx.pi.run(...)` receiv
 
 ### Condensed reads
 
-When the full manifest is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools. The model can ask for more range-scoped context without receiving shell or arbitrary filesystem access. If an agent runs with `toolMode: "none"`, Pipr still injects manifest prompt context when `manifest` is passed, but it does not attach Diff Read Tools.
+If the full manifest is too large but its condensed form fits, Pipr sends one condensed manifest and attaches bounded Diff Read Tools. If the condensed form is also too large for a Review-schema agent, Pipr partitions it into bounded units, runs those units sequentially, and merges their Review results. Each unit uses the same full-or-condensed selection.
+
+The model can ask for more range-scoped context without receiving shell or arbitrary filesystem access. If an agent runs with `toolMode: "none"`, Pipr still injects manifest prompt context when `manifest` is passed, but it does not attach Diff Read Tools.
 
 ### Path scope
 

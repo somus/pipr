@@ -70,7 +70,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     ]);
   });
 
-  it("deduplicates same-anchor findings from scheduled review units", async () => {
+  it("deduplicates only exact same-anchor findings from scheduled review units", async () => {
     let calls = 0;
     const result = await runRuntime({
       plan: testPlan((pipr) => {
@@ -110,6 +110,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
             : [
                 {
                   ...finding("discarded config", "range-1", 10),
+                  body: "`config` is copied and `schedule_type` is replaced with its display value, but the return statement uses the original unmodified monitor config. The modified copy is discarded, so the integer is emitted instead of the display string.",
+                },
+                {
+                  ...finding("discarded config", "range-1", 10),
                   body: "`config` is copied and `schedule_type` is replaced with its display value, but the return dictionary uses the original monitor config instead of the modified copy. The integer reaches the issue event instead of the display string.",
                 },
               ],
@@ -120,7 +124,49 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(result.validated.validFindings.map((item) => item.body)).toEqual([
       "`config` is copied and `schedule_type` is replaced with its display value, but the return statement uses the original unmodified monitor config. The modified copy is discarded, so the integer is emitted instead of the display string.",
       "The cleanup branch removes the active cache entry instead of the expired entry, so stale state remains reachable.",
+      "`config` is copied and `schedule_type` is replaced with its display value, but the return dictionary uses the original monitor config instead of the modified copy. The integer reaches the issue event instead of the display string.",
     ]);
+  });
+
+  it("preserves a shared summary title across scheduled review units", async () => {
+    let observedTitle: string | undefined;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          observedTitle = result.summary.title;
+          await ctx.comment(result.summary.body);
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+
+    await runRuntime({
+      plan,
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1_200,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        stdout: JSON.stringify({
+          summary: { title: "Shared title", body: "No findings." },
+          inlineFindings: [],
+        }),
+      }),
+    });
+
+    expect(observedTitle).toBe("Shared title");
   });
 
   it("keeps fitting core reviews on one Pi call", async () => {
@@ -144,8 +190,49 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(calls).toBe(1);
   });
 
-  it("splits one oversized file across complete commentable ranges", async () => {
+  it("splits one oversized file across complete multi-hunk ranges", async () => {
     const prompts: string[] = [];
+    const baseManifest = reviewTestManifestWithDocs();
+    const source = baseManifest.files[0];
+    if (!source) {
+      throw new Error("expected a source file in the review test manifest");
+    }
+    const manifest = {
+      ...baseManifest,
+      files: [
+        {
+          ...source,
+          hunks: [
+            ...source.hunks,
+            {
+              hunkIndex: 2,
+              header: "@@ -29,1 +30,1 @@",
+              oldStart: 29,
+              oldLines: 1,
+              newStart: 30,
+              newLines: 1,
+              contentHash: "feedfacecafe",
+            },
+          ],
+          commentableRanges: [
+            ...source.commentableRanges,
+            {
+              id: "range-3",
+              path: source.path,
+              side: "RIGHT" as const,
+              startLine: 30,
+              endLine: 30,
+              kind: "added" as const,
+              hunkIndex: 2,
+              hunkHeader: "@@ -29,1 +30,1 @@",
+              hunkContentHash: "feedfacecafe",
+              preview: "return updated;",
+            },
+          ],
+        },
+        ...baseManifest.files.slice(1),
+      ],
+    };
     await runRuntime({
       plan: defaultReviewPlan(),
       config: {
@@ -159,15 +246,18 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           },
         },
       },
+      diffManifestBuilder: () => manifest,
       piRunner: async (options) => {
         prompts.push(options.prompt);
         return noFindingsPiResult();
       },
     });
 
-    expect(prompts).toHaveLength(2);
+    expect(prompts).toHaveLength(4);
     expect(prompts.filter((prompt) => prompt.includes('"id": "range-1"'))).toHaveLength(1);
     expect(prompts.filter((prompt) => prompt.includes('"id": "range-2"'))).toHaveLength(1);
+    expect(prompts.filter((prompt) => prompt.includes('"id": "range-3"'))).toHaveLength(1);
+    expect(prompts.filter((prompt) => prompt.includes('"path": "docs/readme.md"'))).toHaveLength(1);
   });
 
   it("uses agent timeout when running Pi", async () => {

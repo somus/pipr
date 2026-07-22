@@ -7,7 +7,7 @@ export const deepReviewRecipe = {
     "Full-context review with focused units for large changes and a conditional concurrency lane.",
   sourceTools: ["PR-AF", "CodeRabbit", "Greptile"],
   configTs: `import { definePipr } from "@usepipr/sdk";
-import type { DiffManifest, ReviewFinding } from "@usepipr/sdk";
+import type { DiffManifest, ReviewFinding, ReviewResult } from "@usepipr/sdk";
 
 const maxUnitCharacters = 25_000;
 const minimumFilesToShard = 12;
@@ -64,25 +64,55 @@ export default definePipr((pipr) => {
       const sharded = manifest.files.length >= minimumFilesToShard;
       const unitManifests = sharded ? chunkManifest(manifest, maxUnitCharacters) : [];
       const reviewConcurrency = !sharded && hasConcurrencySignals(manifest);
+      let stopScheduling = false;
+      const trackLaneFailure = async <T>(lane: Promise<T>): Promise<T> => {
+        try {
+          return await lane;
+        } catch (error) {
+          stopScheduling = true;
+          throw error;
+        }
+      };
+      const runFocusedUnits = async () => {
+        const results: ReviewResult[] = [];
+        for (const [index, unitManifest] of unitManifests.entries()) {
+          if (stopScheduling) {
+            break;
+          }
+          results.push(
+            await trackLaneFailure(
+              ctx.pi.run(reviewer, {
+                manifest: unitManifest,
+                context: {
+                  reviewScale: "unit",
+                  reviewUnit: index + 1,
+                  reviewUnits: unitManifests.length,
+                },
+              }),
+            ),
+          );
+        }
+        return results;
+      };
 
-      const [full, unitResults, concurrency] = await Promise.all([
-        ctx.pi.run(reviewer, { manifest, context: { reviewScale: "full" } }),
-        Promise.all(
-          unitManifests.map((unitManifest, index) =>
-            ctx.pi.run(reviewer, {
-              manifest: unitManifest,
-              context: {
-                reviewScale: "unit",
-                reviewUnit: index + 1,
-                reviewUnits: unitManifests.length,
-              },
-            }),
-          ),
+      const lanes = [
+        trackLaneFailure(
+          ctx.pi.run(reviewer, { manifest, context: { reviewScale: "full" } }),
         ),
+        runFocusedUnits(),
         reviewConcurrency
-          ? ctx.pi.run(concurrencyReviewer, { manifest })
+          ? trackLaneFailure(ctx.pi.run(concurrencyReviewer, { manifest }))
           : Promise.resolve(undefined),
-      ]);
+      ] as const;
+      const [full, unitResults, concurrency] = await (async () => {
+        try {
+          return await Promise.all(lanes);
+        } catch (error) {
+          stopScheduling = true;
+          await Promise.allSettled(lanes);
+          throw error;
+        }
+      })();
 
       const findings = deduplicateFindings([
         ...full.inlineFindings,
@@ -180,7 +210,7 @@ function manifestWithFiles(
 function deduplicateFindings(findings: ReviewFinding[]): ReviewFinding[] {
   const seen = new Set<string>();
   return findings.filter((finding) => {
-    const key = \`\${finding.path}:\${finding.rangeId}:\${finding.startLine}:\${finding.endLine}:\${finding.body}\`;
+    const key = \`\${finding.path}:\${finding.rangeId}:\${finding.side}:\${finding.startLine}:\${finding.endLine}:\${finding.body}\`;
     if (seen.has(key)) {
       return false;
     }
