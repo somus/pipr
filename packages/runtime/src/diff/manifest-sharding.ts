@@ -231,47 +231,107 @@ function connectChangedImports(
       if (!item.isImport) {
         continue;
       }
-      const targetPath = resolveChangedImport(outline.path, item.name, fileIndexByPath);
-      const targetIndex = targetPath === undefined ? undefined : fileIndexByPath.get(targetPath);
-      if (targetIndex !== undefined) {
-        union(parents, sourceIndex, targetIndex);
+      for (const targetPath of resolveChangedImports(outline.path, item.name, fileIndexByPath)) {
+        const targetIndex = fileIndexByPath.get(targetPath);
+        if (targetIndex !== undefined) {
+          union(parents, sourceIndex, targetIndex);
+        }
       }
     }
   }
 }
 
-function resolveChangedImport(
+function resolveChangedImports(
   sourcePath: string,
   rawImport: string,
   fileIndexByPath: ReadonlyMap<string, number>,
-): string | undefined {
+): string[] {
   const importPath = unquote(rawImport);
-  if (!importPath.startsWith(".")) {
-    return undefined;
-  }
-  const resolved = path.posix.normalize(
-    path.posix.join(path.posix.dirname(sourcePath), importPath),
-  );
-  for (const candidate of importCandidates(resolved)) {
-    if (fileIndexByPath.has(candidate)) {
-      return candidate;
+  const relativePaths = relativeImportPaths(sourcePath, importPath);
+  const importSegments = pathSegments(importPath);
+  let bestScore = 0;
+  const matches: string[] = [];
+
+  for (const candidate of fileIndexByPath.keys()) {
+    if (candidate === sourcePath) {
+      continue;
     }
+    const candidatePaths = changedModulePaths(candidate);
+    const exactRelativeMatch = candidatePaths.some((candidatePath) =>
+      relativePaths.includes(candidatePath),
+    );
+    const score = exactRelativeMatch
+      ? 1_000
+      : Math.max(
+          ...candidatePaths.map((candidatePath) =>
+            longestSharedSegmentSequence(importSegments, pathSegments(candidatePath)),
+          ),
+        );
+    if (score === 0 || score < bestScore) {
+      continue;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      matches.length = 0;
+    }
+    matches.push(candidate);
   }
-  return undefined;
+
+  return matches;
 }
 
-function importCandidates(resolved: string): string[] {
-  const extension = path.posix.extname(resolved);
-  const base = /\.(?:[cm]?js|jsx)$/.test(extension)
-    ? resolved.slice(0, -extension.length)
-    : resolved;
-  const extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
-  return [
-    resolved,
-    ...(extension ? [] : extensions.map((candidate) => `${resolved}${candidate}`)),
-    ...extensions.map((candidate) => `${base}${candidate}`),
-    ...extensions.map((candidate) => path.posix.join(base, `index${candidate}`)),
-  ];
+function relativeImportPaths(sourcePath: string, importPath: string): string[] {
+  let resolved: string | undefined;
+  if (importPath.startsWith("./") || importPath.startsWith("../")) {
+    resolved = path.posix.normalize(path.posix.join(path.posix.dirname(sourcePath), importPath));
+  } else {
+    const leadingDots = importPath.match(/^\.+/)?.[0].length ?? 0;
+    if (leadingDots > 0) {
+      const parentSegments = Array.from({ length: leadingDots - 1 }, () => "..");
+      const modulePath = importPath.slice(leadingDots).replaceAll(".", "/");
+      resolved = path.posix.normalize(
+        path.posix.join(path.posix.dirname(sourcePath), ...parentSegments, modulePath),
+      );
+    }
+  }
+  if (!resolved) {
+    return [];
+  }
+  return [resolved, withoutFileExtension(resolved)];
+}
+
+function changedModulePaths(filePath: string): string[] {
+  const stem = withoutFileExtension(filePath);
+  return [stem, path.posix.dirname(stem)];
+}
+
+function withoutFileExtension(filePath: string): string {
+  const extension = path.posix.extname(filePath);
+  return extension ? filePath.slice(0, -extension.length) : filePath;
+}
+
+function pathSegments(value: string): string[] {
+  return unquote(value)
+    .replace(/^<|>$/g, "")
+    .split(/::|[./\\:]+/)
+    .filter(Boolean);
+}
+
+function longestSharedSegmentSequence(left: readonly string[], right: readonly string[]): number {
+  let longest = 0;
+  for (let leftIndex = 0; leftIndex < left.length; leftIndex += 1) {
+    for (let rightIndex = 0; rightIndex < right.length; rightIndex += 1) {
+      let length = 0;
+      while (
+        left[leftIndex + length] !== undefined &&
+        left[leftIndex + length] === right[rightIndex + length]
+      ) {
+        length += 1;
+      }
+      longest = Math.max(longest, length);
+    }
+  }
+  return longest;
 }
 
 function unquote(value: string): string {

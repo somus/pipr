@@ -137,6 +137,103 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     }
   });
 
+  it("keeps ast-grep import relationships across supported language path styles", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      const cases = [
+        {
+          language: "Python",
+          importer: "python/caller.py",
+          dependency: "python/dependency.py",
+          unrelated: "python/unrelated.py",
+          importedName: ".dependency",
+        },
+        {
+          language: "Rust",
+          importer: "rust/caller.rs",
+          dependency: "rust/dependency.rs",
+          unrelated: "rust/unrelated.rs",
+          importedName: "crate::dependency::run",
+        },
+        {
+          language: "Go",
+          importer: "go/cmd/caller.go",
+          dependency: "go/dependency/run.go",
+          unrelated: "go/unrelated/run.go",
+          importedName: "example.com/project/dependency",
+        },
+        {
+          language: "Java",
+          importer: "java/com/example/Caller.java",
+          dependency: "java/com/example/Dependency.java",
+          unrelated: "java/com/example/Unrelated.java",
+          importedName: "com.example.Dependency",
+        },
+        {
+          language: "C",
+          importer: "c/caller.c",
+          dependency: "c/include/dependency.h",
+          unrelated: "c/include/unrelated.h",
+          importedName: '"dependency.h"',
+        },
+      ];
+
+      for (const testCase of cases) {
+        await writeFakeAstGrepOutline(executableDirectory, [
+          outlineFile(
+            testCase.importer,
+            [outlineItem(testCase.importedName, { isImport: true, symbolType: "module" })],
+            testCase.language,
+          ),
+          outlineFile(testCase.unrelated, [outlineItem("unrelated")], testCase.language),
+          outlineFile(testCase.dependency, [outlineItem("dependency")], testCase.language),
+        ]);
+        const prompts: string[] = [];
+
+        await runRuntime({
+          plan: defaultReviewPlan(),
+          config: {
+            ...config,
+            limits: {
+              diffManifest: {
+                fullMaxBytes: 1,
+                fullMaxEstimatedTokens: 1,
+                condensedMaxBytes: 2_200,
+                condensedMaxEstimatedTokens: 10_000,
+              },
+            },
+          },
+          diffManifestBuilder: () =>
+            semanticShardingManifestForPaths(
+              testCase.importer,
+              testCase.unrelated,
+              testCase.dependency,
+            ),
+          env: {
+            ...process.env,
+            PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+          },
+          piRunner: async (options) => {
+            prompts.push(options.prompt);
+            return noFindingsPiResult();
+          },
+        });
+
+        expect(prompts).toHaveLength(2);
+        expect(
+          prompts.some(
+            (prompt) =>
+              prompt.includes(`"path": "${testCase.importer}"`) &&
+              prompt.includes(`"path": "${testCase.dependency}"`) &&
+              !prompt.includes(`"path": "${testCase.unrelated}"`),
+          ),
+        ).toBe(true);
+      }
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("defaults automatic Diff Manifest fan-out to four shards", async () => {
     const prompts: string[] = [];
 
@@ -1362,14 +1459,22 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 });
 
 function semanticShardingManifest(): DiffManifest {
+  return semanticShardingManifestForPaths("src/caller.ts", "src/unrelated.ts", "src/dependency.ts");
+}
+
+function semanticShardingManifestForPaths(
+  importer: string,
+  unrelated: string,
+  dependency: string,
+): DiffManifest {
   return {
     baseSha: "base",
     headSha: "head",
     mergeBaseSha: "base",
     files: [
-      semanticShardingFile("src/caller.ts", 1),
-      semanticShardingFile("src/unrelated.ts", 2),
-      semanticShardingFile("src/dependency.ts", 3),
+      semanticShardingFile(importer, 1),
+      semanticShardingFile(unrelated, 2),
+      semanticShardingFile(dependency, 3),
     ],
   };
 }
@@ -1410,8 +1515,8 @@ function semanticShardingFile(filePath: string, hunkIndex: number): DiffManifest
   };
 }
 
-function outlineFile(filePath: string, items: unknown[]) {
-  return { path: filePath, language: "TypeScript", items };
+function outlineFile(filePath: string, items: unknown[], language = "TypeScript") {
+  return { path: filePath, language, items };
 }
 
 function outlineItem(name: string, options: { isImport?: boolean; symbolType?: string } = {}) {
