@@ -1,0 +1,120 @@
+apps/docs/content/docs/recipes/index.mdx
+  s_557d1dbcfbaf62::t_3ac06871263881 78
+packages/sdk/src/tests/index.test.ts
+  s_557d1dbcfbaf62::t_849c9a51c12377 861-862,864-866,885-886
+  s_557d1dbcfbaf62::t_7cc92fe7c21394 860,863,867-877,883-884
+  s_557d1dbcfbaf62::t_e8cc351699896e 878-882
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_557d1dbcfbaf62::t_42aa318e2b4ad3 544-550,552-553
+  s_557d1dbcfbaf62::t_1c540229ed7032 551
+  s_557d1dbcfbaf62::t_ee45415854cbe3 531,533
+packages/runtime/src/config/tests/init-recipes.test.ts
+  s_557d1dbcfbaf62::t_5766e00063aae7 260-263
+  s_557d1dbcfbaf62::t_8996615ee50bcb 99-100
+  s_557d1dbcfbaf62::t_4e3f1e2c2757e9 339-342
+packages/runtime/src/review/agent/agent-run-budget.ts
+  s_557d1dbcfbaf62::t_14306758d7ac40 1-5,8-15,18-22
+  s_557d1dbcfbaf62::t_fb9d76f1614aae 6-7,17
+  s_557d1dbcfbaf62::t_8365366d4ed05b 16
+packages/runtime/src/config/recipes/deep-review.ts
+  s_557d1dbcfbaf62::t_b8ca0105ea09d9 32-35
+Dockerfile
+  s_557d1dbcfbaf62::t_d2bbf4cff44397 1,3
+  s_557d1dbcfbaf62::t_817d54d0912de6 2,4-5,9
+  s_557d1dbcfbaf62::t_7171e8801d2a7a 27
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_557d1dbcfbaf62::t_ee45415854cbe3 133
+apps/docs/scripts/sync-recipes.ts
+  s_557d1dbcfbaf62::t_9e44efe7a316e7 22,89,182
+packages/runtime/src/review/agent/diff-manifest-context.ts
+  s_557d1dbcfbaf62::t_a00acea1af0c4e 33,39-41
+apps/docs/content/docs/concepts/runtime.mdx
+  s_557d1dbcfbaf62::t_1c540229ed7032 166
+  s_557d1dbcfbaf62::t_ee45415854cbe3 164-165
+apps/docs/content/docs/recipes/deep-review.mdx
+  s_557d1dbcfbaf62::t_3ac06871263881 3,12,304,311,317
+  s_557d1dbcfbaf62::t_1767a1b3d2bc7c 62-65
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_557d1dbcfbaf62::t_fac1e049365006 108
+  s_557d1dbcfbaf62::t_c3dc296fcbe17b 441-465
+  s_557d1dbcfbaf62::t_1d85378b71759c 1432,1437,1439,1495,1497-1499
+  s_557d1dbcfbaf62::t_33f35effe5d645 140,298-314,317,319-320
+  s_557d1dbcfbaf62::t_4b1002b6f24e24 6,205-276,1445-1488
+  s_557d1dbcfbaf62::t_4f23e93fae0236 1406-1431,1433-1436,1438,1440-1444,1489-1494,1496,1500-1501
+  s_557d1dbcfbaf62::t_ce8f1871808e3c 1381
+  s_557d1dbcfbaf62::t_8134af8aea3ccb 291,315-316
+  s_557d1dbcfbaf62::t_4cce4f0b2d9308 832-875,888-901
+  s_557d1dbcfbaf62::t_85738899aa9df2 136,1047-1081
+  s_557d1dbcfbaf62::t_d630dd0893e1cb 2-5,77-107,109-135
+  s_557d1dbcfbaf62::t_099c6823e2fd35 1004
+  s_557d1dbcfbaf62::t_88fc5871f2a972 876-887
+  s_557d1dbcfbaf62::t_1856140574ce52 138-139,141-204,277-290,292-297,318
+  s_557d1dbcfbaf62::t_0fea6a2809c04e 1327-1380,1382-1405
+  s_2174d65d8cdde3::t_27408a6c255f19 137
+packages/runtime/src/types.ts
+  s_557d1dbcfbaf62::t_e8cc351699896e 37,78
+apps/docs/content/docs/guide/configuration.mdx
+  s_557d1dbcfbaf62::t_1c540229ed7032 134
+  s_557d1dbcfbaf62::t_42aa318e2b4ad3 128,130,132,135-138,142-144,148-150
+  s_557d1dbcfbaf62::t_ee45415854cbe3 151,157,159
+  s_557d1dbcfbaf62::t_e88e704caccace 133
+packages/runtime/src/review/tests/task-runtime-context.test.ts
+  s_557d1dbcfbaf62::t_4b1002b6f24e24 367-408
+packages/sdk/src/builder.ts
+  s_557d1dbcfbaf62::t_e8cc351699896e 331,341
+packages/runtime/src/diff/manifest-projection.ts
+  s_557d1dbcfbaf62::t_a00acea1af0c4e 69,79-82
+  s_557d1dbcfbaf62::t_ff617ba9824a5e 165
+  s_557d1dbcfbaf62::t_fb9d76f1614aae 107-109
+  s_557d1dbcfbaf62::t_e8cc351699896e 162
+packages/sdk/src/types/manifest.ts
+  s_557d1dbcfbaf62::t_e8cc351699896e 82,93
+packages/runtime/src/review/agent/review-run.ts
+  s_557d1dbcfbaf62::t_543652c5d59e76 11,103,182,190-196
+  s_557d1dbcfbaf62::t_a00acea1af0c4e 56,121,144
+  s_557d1dbcfbaf62::t_e4da45ccb28af1 37-41
+  s_557d1dbcfbaf62::t_47fa397ae0ed64 293,317,357,364-367
+  s_557d1dbcfbaf62::t_083f3f33af4a5f 72,439
+  s_557d1dbcfbaf62::t_7a46c5ee408c75 107-113
+  s_2174d65d8cdde3::t_49bb7029895ef4 368-369
+packages/runtime/src/review/task/task-runtime.ts
+  s_557d1dbcfbaf62::t_8365366d4ed05b 26
+  s_557d1dbcfbaf62::t_601e57eed78588 201,207,278,514,544,559
+packages/runtime/src/diff/manifest-sharding.ts
+  s_557d1dbcfbaf62::t_543652c5d59e76 119,137,144-146
+  s_557d1dbcfbaf62::t_08e5b065449a61 4-6,8-22,24-31,38-47,101-115,117,120-129,132-136,138-143,147-163,165-168,171-180,203-229,233-300
+  s_557d1dbcfbaf62::t_a00acea1af0c4e 23,32-37,48-69,71-72
+  s_557d1dbcfbaf62::t_d4a3db16b8dc39 1-3,116,118,130-131,169-170
+  s_557d1dbcfbaf62::t_cfee75583dc92d 181-202
+  s_557d1dbcfbaf62::t_fb9d76f1614aae 7,70,73-89,91-94,96-100
+  s_557d1dbcfbaf62::t_a5e00c8e3fd30e 164
+  s_557d1dbcfbaf62::t_ce8f1871808e3c 230-232
+  s_557d1dbcfbaf62::t_0c74d94cc6d76a 90,95
+packages/runtime/src/review/verifier.ts
+  s_557d1dbcfbaf62::t_fb9d76f1614aae 12-16,135-137
+  s_557d1dbcfbaf62::t_8ac949c91af24d 55,127-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "5321545aac9ac1f6f1375657c1e87e83077c20e9",
+  "prompts": {},
+  "sessions": {
+    "s_2174d65d8cdde3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f87af-5193-75d1-80a0-b262c1be9645",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_557d1dbcfbaf62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8a4a-b25d-71b1-9ad3-b2d217f77b29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
