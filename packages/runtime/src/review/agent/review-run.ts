@@ -8,6 +8,7 @@ import {
 } from "@usepipr/sdk/internal";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
+import { shardDiffManifestForPrompt } from "../../diff/manifest-sharding.js";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
 import {
@@ -18,7 +19,13 @@ import {
   withPiRunWorkspace,
 } from "../../pi/runner.js";
 import { boundedLogSnippet, type RuntimeLog } from "../../shared/logging.js";
-import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
+import type {
+  ChangeRequestEventContext,
+  DiffManifest,
+  PiprConfig,
+  ProviderConfig,
+  ReviewResult,
+} from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
 import { parseReviewResult, reviewResultSchemaId } from "../review.js";
 import {
@@ -27,7 +34,12 @@ import {
   type PreparedAgentContext,
   renderAgentPrompt,
 } from "./agent-prompt.js";
-import { prepareDiffManifestContext } from "./diff-manifest-context.js";
+import {
+  type AgentRunBudget,
+  AgentRunBudgetExhaustedError,
+  reserveAgentRun,
+} from "./agent-run-budget.js";
+import { prepareDiffManifestContext, readReservedInputManifest } from "./diff-manifest-context.js";
 
 export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
 
@@ -41,6 +53,7 @@ export type RunReviewAgentOptions = {
   input: unknown;
   runOptions: Parameters<TaskContext["pi"]["run"]>[2];
   toolMode?: "read-only" | "none";
+  allowOversizedCondensedManifest?: boolean;
   runtime: {
     workspace: string;
     config: PiprConfig;
@@ -56,6 +69,7 @@ export type RunReviewAgentOptions = {
     run: PiprRunContext;
     log?: RuntimeLog;
     piRunSink?: (run: PiRunStats) => void;
+    agentRunBudget?: AgentRunBudget;
   };
 };
 
@@ -86,12 +100,52 @@ type AgentAttemptResult =
 export async function runReviewAgent(
   options: RunReviewAgentOptions,
 ): Promise<RunReviewAgentResult> {
+  const maxShards = options.runOptions?.maxShards;
+  if (maxShards !== undefined && (!Number.isInteger(maxShards) || maxShards <= 0)) {
+    throw new Error("Pi run maxShards must be a positive integer");
+  }
+  const manifests = await scheduledReviewManifests(options);
+  if (!manifests) {
+    return await runReviewAgentOnce(options);
+  }
+  if (manifests.length === 1) {
+    return await runReviewAgentOnce({
+      ...options,
+      input: inputWithManifest(options.input, manifests[0]),
+      allowOversizedCondensedManifest: true,
+    });
+  }
+  const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
+    const results: RunReviewAgentResult[] = [];
+    for (const manifest of manifests) {
+      results.push(
+        await runReviewAgentOnce({
+          ...options,
+          input: inputWithManifest(options.input, manifest),
+          allowOversizedCondensedManifest: true,
+          runtime: { ...options.runtime, piRunner },
+        }),
+      );
+    }
+    return mergeScheduledReviewAgentResults(results);
+  };
+  if (options.runtime.piRunner) {
+    return await runScheduled(options.runtime.piRunner);
+  }
+  return await withPiRunWorkspace(
+    { workspace: options.runtime.workspace, env: options.runtime.env },
+    runScheduled,
+  );
+}
+
+async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunReviewAgentResult> {
   const agentTools = resolveAgentTools(options.agent, options.runtime.plan);
   const agentRunContext = createAgentRunContext(options.runtime);
   const diffManifest = prepareDiffManifestContext({
     input: options.input,
     limits: options.runtime.config.limits?.diffManifest,
     toolMode: options.toolMode ?? "read-only",
+    allowOversizedCondensed: options.allowOversizedCondensedManifest,
   });
   const prepared: PreparedAgentContext = { agentTools, agentRunContext, diffManifest };
   const prompt = await renderAgentPrompt({ ...options, ...prepared });
@@ -126,6 +180,82 @@ export async function runReviewAgent(
   return await withPiRunWorkspace(
     { workspace: options.runtime.workspace, env: options.runtime.env },
     runProviders,
+  );
+}
+
+async function scheduledReviewManifests(options: RunReviewAgentOptions) {
+  if (options.agent.definition.output.id !== reviewResultSchemaId) {
+    return undefined;
+  }
+  const manifest = readReservedInputManifest(options.input);
+  if (!manifest) {
+    return undefined;
+  }
+  const maxShards = options.runOptions?.maxShards;
+  const config =
+    maxShards === undefined
+      ? options.runtime.config.limits?.diffManifest
+      : { ...options.runtime.config.limits?.diffManifest, maxShards };
+  return await shardDiffManifestForPrompt({
+    manifest,
+    config,
+    workspace: options.runtime.workspace,
+    env: options.runtime.env,
+    log: options.runtime.log,
+  });
+}
+
+function inputWithManifest(input: unknown, manifest: DiffManifest): Record<string, unknown> {
+  if (typeof input !== "object" || input === null) {
+    throw new Error("Scheduled review input must contain a Diff Manifest");
+  }
+  return { ...input, manifest };
+}
+
+function mergeScheduledReviewAgentResults(
+  results: readonly RunReviewAgentResult[],
+): RunReviewAgentResult {
+  const reviews = results.map((result) => parseReviewResult(result.value));
+  const summaries = [...new Set(reviews.map((review) => review.summary.body))];
+  const titles = [...new Set(reviews.flatMap((review) => review.summary.title ?? []))];
+  return {
+    value: parseReviewResult({
+      summary: {
+        ...(titles.length === 1 ? { title: titles[0] } : {}),
+        body: summaries.join("\n\n"),
+      },
+      inlineFindings: deduplicateScheduledFindings(
+        reviews.flatMap((review) => review.inlineFindings),
+      ),
+    }),
+    repairAttempted: results.some((result) => result.repairAttempted),
+    providerModels: results.flatMap((result) => result.providerModels),
+  };
+}
+
+function deduplicateScheduledFindings(findings: ReviewResult["inlineFindings"]) {
+  const unique: ReviewResult["inlineFindings"] = [];
+  for (const finding of findings) {
+    const duplicate = unique.some(
+      (candidate) => sameFindingAnchor(candidate, finding) && candidate.body === finding.body,
+    );
+    if (!duplicate) {
+      unique.push(finding);
+    }
+  }
+  return unique;
+}
+
+function sameFindingAnchor(
+  left: ReviewResult["inlineFindings"][number],
+  right: ReviewResult["inlineFindings"][number],
+): boolean {
+  return (
+    left.path === right.path &&
+    left.rangeId === right.rangeId &&
+    left.side === right.side &&
+    left.startLine === right.startLine &&
+    left.endLine === right.endLine
   );
 }
 
@@ -169,6 +299,7 @@ async function runAgentWithProvider(
   try {
     output = (await runPiWithTransientRetries(options, provider, prompt, retry)).stdout;
   } catch (error) {
+    rethrowAgentRunBudgetExhaustion(error);
     return {
       ok: false,
       error: error instanceof Error ? error.message : String(error),
@@ -192,6 +323,7 @@ async function runAgentWithProvider(
     try {
       lastOutput = (await runPiWithTransientRetries(options, provider, repairPrompt, retry)).stdout;
     } catch (error) {
+      rethrowAgentRunBudgetExhaustion(error);
       return {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
@@ -231,10 +363,17 @@ async function runPiWithTransientRetries(
     try {
       return await runPiForPrompt(options, provider, prompt);
     } catch (error) {
+      rethrowAgentRunBudgetExhaustion(error);
       lastError = error;
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function rethrowAgentRunBudgetExhaustion(error: unknown): void {
+  if (error instanceof AgentRunBudgetExhaustedError) {
+    throw error;
+  }
 }
 
 function retrySettings(agent: RuntimeAgent): RetrySettings {
@@ -306,6 +445,7 @@ async function runPiForPrompt(
   provider: ProviderConfig,
   prompt: string,
 ): Promise<PiRunResult> {
+  reserveAgentRun(options.runtime.agentRunBudget);
   const builtinTools = builtinToolsForPrompt(options.toolMode ?? "read-only");
   const runtimeTools = runtimeToolsForRun(options);
   const customTools = customToolsForRun(options);

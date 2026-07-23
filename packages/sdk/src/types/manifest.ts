@@ -79,6 +79,7 @@ export type DiffManifestOptions = {
 
 /** Size limits for Diff Manifest prompt and runtime-tool payloads. */
 export type DiffManifestLimits = {
+  maxShards?: number;
   fullMaxBytes?: number;
   fullMaxEstimatedTokens?: number;
   condensedMaxBytes?: number;
@@ -89,5 +90,6 @@ export type DiffManifestLimits = {
 /** Runtime limits for a pipr config. */
 export type RuntimeLimits = {
   timeoutSeconds?: number;
+  maxAgentRuns?: number;
   diffManifest?: DiffManifestLimits;
 };

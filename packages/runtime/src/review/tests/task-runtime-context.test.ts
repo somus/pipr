@@ -364,6 +364,48 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     });
   });
 
+  it("fails before starting the synchronize verifier when maxAgentRuns is exhausted", async () => {
+    let calls = 0;
+
+    await expect(
+      runRuntime({
+        plan: defaultReviewPlan(),
+        config: {
+          ...fallbackConfig,
+          limits: { maxAgentRuns: 1 },
+          publication: {
+            ...fallbackConfig.publication,
+            autoResolve: {
+              ...fallbackConfig.publication.autoResolve,
+              model: "fallback",
+            },
+          },
+        },
+        event: eventContext({ action: "opened", rawAction: "synchronize" }),
+        priorReviewState: priorReviewStateForTasks(["review"]),
+        loadInlineThreadContexts: async () => [
+          {
+            findingId: "fnd_existing",
+            findingHeadSha: "head",
+            parentCommentId: "10",
+            parentBody: "<!-- pipr:finding id=fnd_existing head=head -->\nExisting body",
+            threadId: "thread-1",
+            threadResolved: false,
+            comments: [{ id: "10", body: "Existing body", authorLogin: "github-actions[bot]" }],
+          },
+        ],
+        piRunner: async () => {
+          calls += 1;
+          return reviewPiResult([]);
+        },
+      }),
+    ).rejects.toThrow(
+      "Review Run agent-call budget exhausted after 1 provider invocations; limit=1",
+    );
+
+    expect(calls).toBe(1);
+  });
+
   it("keeps synchronize still-valid and unknown verifier results open without thread actions", async () => {
     for (const status of ["still-valid", "unknown"] as const) {
       let calls = 0;

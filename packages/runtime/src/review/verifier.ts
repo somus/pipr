@@ -9,6 +9,11 @@ import type {
   PiprConfig,
   ProviderConfig,
 } from "../types.js";
+import {
+  type AgentRunBudget,
+  AgentRunBudgetExhaustedError,
+  createAgentRunBudget,
+} from "./agent/agent-run-budget.js";
 import { type PiRunner, type PiRunStats, runReviewAgent } from "./agent/review-run.js";
 import type { ThreadAction } from "./comment.js";
 import {
@@ -47,6 +52,7 @@ export type RunVerifierOptions = {
   run: PiprRunContext;
   log?: RuntimeLog;
   piRunSink?: (run: PiRunStats) => void;
+  agentRunBudget?: AgentRunBudget;
 };
 
 export type VerifierResult = {
@@ -118,12 +124,17 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         piRunner: options.piRunner,
         run: options.run,
         log: options.log,
+        agentRunBudget:
+          options.agentRunBudget ?? createAgentRunBudget(options.config.limits?.maxAgentRuns),
         ...(options.piRunSink ? { piRunSink: options.piRunSink } : {}),
       },
     });
     const output = verifierOutputSchema.parse(result.value);
     return applyVerifierOutput(options, candidates, output, result.providerModels);
   } catch (error) {
+    if (error instanceof AgentRunBudgetExhaustedError) {
+      throw error;
+    }
     options.log?.warning("verifier failed closed", {
       error: error instanceof Error ? error.message : String(error),
     });

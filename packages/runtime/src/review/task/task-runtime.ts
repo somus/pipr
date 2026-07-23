@@ -23,6 +23,7 @@ import type {
   ValidatedReview,
 } from "../../types.js";
 import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../types.js";
+import { type AgentRunBudget, createAgentRunBudget } from "../agent/agent-run-budget.js";
 import {
   type PiRunner,
   type PiRunStats,
@@ -197,11 +198,13 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   const priorMainComment = options.priorMainComment ?? (await options.loadPriorMainComment?.());
   const priorReviewState = priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks);
   const piRuns: PiRunStats[] = [];
+  const agentRunBudget = createAgentRunBudget(config.limits?.maxAgentRuns);
   const runtimeOptions = {
     ...options,
     priorReviewState,
     priorMainComment,
     run,
+    agentRunBudget,
     piRunSink(run: PiRunStats) {
       piRuns.push(run);
     },
@@ -272,6 +275,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     priorReviewState,
     run,
     piRunSink: runtimeOptions.piRunSink,
+    agentRunBudget,
   });
   const durationMs = Date.now() - runtimeStarted;
   const stats = reviewStatsForRuns(piRuns, durationMs);
@@ -507,6 +511,7 @@ async function runSynchronizeVerifier(options: {
   priorReviewState: PriorReviewState | undefined;
   run: PiprRunContext;
   piRunSink: (run: PiRunStats) => void;
+  agentRunBudget: AgentRunBudget;
 }): Promise<Awaited<ReturnType<typeof runInternalVerifier>>> {
   if (options.options.event.rawAction !== "synchronize") {
     return {
@@ -536,6 +541,7 @@ async function runSynchronizeVerifier(options: {
     mode: { kind: "synchronize" },
     run: options.run,
     piRunSink: options.piRunSink,
+    agentRunBudget: options.agentRunBudget,
   });
 }
 
@@ -550,6 +556,7 @@ function createTaskContext(
     taskOrder: number;
     run: PiprRunContext;
     piRunSink: (run: PiRunStats) => void;
+    agentRunBudget: AgentRunBudget;
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");

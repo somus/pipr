@@ -125,22 +125,38 @@ Provider secrets are env-only. `pipr.secret({ name: "DEEPSEEK_API_KEY" })` recor
 
 Model ids default to `<provider>/<model>`. Set an explicit `id` only when two profiles use the same provider and model with different options.
 
-## Diff Manifest limits
+## Runtime limits
 
-Limit manifest size before model execution while preserving authoritative ranges for validation.
+Limit total provider invocations and Diff Manifest prompt size through `pipr.config(...)`.
 
-### Limit config
+### Agent run budget
 
-Pipr sends the full Diff Manifest while it fits configured limits. When it is too large, Pipr sends a condensed manifest and attaches bounded Diff Read Tools for range-scoped context.
+`maxAgentRuns` accepts a positive integer and limits provider invocations across all tasks and agents in one Review Run. Shards, invalid-output repairs, transient retries, and model fallbacks each consume one invocation. Pipr reserves an agent run immediately before starting Pi. The reservation remains consumed if the invocation fails or is aborted.
+
+When the budget is exhausted, Pipr fails before starting another provider process. Omit `maxAgentRuns` to allow unlimited provider invocations.
+
+### Diff Manifest limits
+
+Pipr sends the full Diff Manifest while it fits configured limits. If the full manifest is too large but its condensed form fits, Pipr sends one condensed manifest and attaches bounded Diff Read Tools for range-scoped context.
+
+If the condensed manifest is also too large for a Review-schema agent, Pipr uses ast-grep outlines to keep changed importers and dependencies together where prompt limits allow, runs the bounded units sequentially, and merges their structured Review results. `maxShards` accepts a positive integer, defaults to `4`, and limits automatic fan-out from one review invocation.
+
+Set `maxShards: 1` to disable splitting and send one complete condensed manifest with Diff Read Tools. Pass `{ maxShards }` to `ctx.pi.run(...)` to override the global limit for one invocation. Increase `maxShards` if a capped condensed shard exceeds your provider's context limit; a higher value can make more provider calls.
 
 Pipr also enforces a fixed 16 MiB construction limit after excluding binary, removed, lock, generated-output, and oversized files. If the remaining reviewable patch exceeds the limit, the review fails before Pi runs instead of producing a partial Diff Manifest.
+
+### Configure runtime limits
+
+Set only the limits you need. This example sets both the Review Run budget and Diff Manifest sizing limits.
 
 ```ts twoslash
 // @include: pipr-builder
 pipr.config({
   limits: {
     timeoutSeconds: 300,
+    maxAgentRuns: 16,
     diffManifest: {
+      maxShards: 4,
       fullMaxBytes: 131072,
       fullMaxEstimatedTokens: 32000,
       condensedMaxBytes: 262144,

@@ -171,7 +171,7 @@ const finding: ReviewFinding = {
 
 ## Dropped findings
 
-Pipr records invalid or duplicate findings instead of publishing them at unverified locations.
+Pipr repairs a mismatched `rangeId` when the finding's path, side, and line span identify exactly one commentable range. It records ambiguous, invalid, or duplicate findings instead of publishing them at unverified locations.
 
 ### Drop reasons
 
@@ -180,7 +180,7 @@ Pipr drops invalid findings and continues the review. GitHub Action review resul
 | Reason | Fix |
 | --- | --- |
 | `path` does not match a changed Diff Manifest file | Pass the manifest to the agent and ask for findings only on changed files. |
-| `rangeId` does not exist for that file | Use the `rangeId` values from the Diff Manifest, not model-invented ids. |
+| `rangeId` does not exist and the path, side, and line span do not identify exactly one range | Use the `rangeId` values from the Diff Manifest. Pipr repairs the id only when the remaining anchor is unambiguous. |
 | `side`, `startLine`, or `endLine` does not match the range | Copy the side and line range from the selected Diff Manifest range. |
 | Finding is outside direct scoped Pi result paths | Use the same `paths` in `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`, and pass `result.inlineFindings` directly when scope enforcement should apply. |
 | Finding duplicates another current finding | Keep one finding per issue and range. |

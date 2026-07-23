@@ -30,12 +30,15 @@ export function prepareDiffManifestContext(options: {
   input: unknown;
   limits?: DiffManifestLimitsConfig;
   toolMode: "read-only" | "none";
+  allowOversizedCondensed?: boolean;
 }): PreparedDiffManifestContext | undefined {
   const manifest = readReservedInputManifest(options.input);
   if (!manifest) {
     return undefined;
   }
-  const prompt = prepareDiffManifestPrompt(manifest, options.limits);
+  const prompt = prepareDiffManifestPrompt(manifest, options.limits, {
+    allowOversizedCondensed: options.allowOversizedCondensed,
+  });
   const runtimeToolsEnabled = options.toolMode !== "none" && prompt.mode === "condensed";
   return {
     manifest,
@@ -55,7 +58,7 @@ export function prepareDiffManifestContext(options: {
   };
 }
 
-function readReservedInputManifest(input: unknown): DiffManifest | undefined {
+export function readReservedInputManifest(input: unknown): DiffManifest | undefined {
   if (typeof input !== "object" || input === null || !("manifest" in input)) {
     return undefined;
   }
