@@ -188,6 +188,57 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(result.inlineCommentDrafts.map((draft) => draft.side).sort()).toEqual(["LEFT", "RIGHT"]);
   });
 
+  it("runs the deep review concurrency lane for compound identifier signals", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-deep-review-"));
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "deep-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const baseManifest = reviewTestManifest();
+    const changedFile = baseManifest.files[0];
+    const changedRange = changedFile?.commentableRanges[0];
+    if (!changedFile || !changedRange) {
+      throw new Error("expected a changed file and range in the review test manifest");
+    }
+
+    for (const preview of ["deadlock", "pthread_mutex_lock", "try_lock", "rwlock"]) {
+      const prompts: string[] = [];
+
+      await runTaskRuntime({
+        workspace: rootDir,
+        config: project.settings.config,
+        event: eventContext(),
+        plan: project.plan,
+        diffManifestBuilder: () => ({
+          ...baseManifest,
+          files: [
+            {
+              ...changedFile,
+              commentableRanges: [{ ...changedRange, preview }],
+            },
+          ],
+        }),
+        piRunner: async (run) => {
+          prompts.push(run.prompt);
+          return {
+            exitCode: 0,
+            stdout: JSON.stringify({
+              summary: { body: "No actionable findings." },
+              inlineFindings: [],
+            }),
+            stderr: "",
+            durationMs: 1,
+          };
+        },
+      });
+
+      expect(prompts.some((prompt) => prompt.includes("Review only concurrency"))).toBe(true);
+    }
+  });
+
   it("serializes complete focused units for a large deep review", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-deep-review-"));
     await initOfficialMinimalProject({

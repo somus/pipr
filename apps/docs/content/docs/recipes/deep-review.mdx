@@ -164,8 +164,11 @@ function hasConcurrencySignals(manifest: DiffManifest): boolean {
   const changedText = manifest.files
     .flatMap((file) => file.commentableRanges.map((range) => range.preview ?? ""))
     .join("\n");
-  return /\b(?:async|await|promise|goroutine|mutex|lock|thread|queue|cache|retryCount|concurrent|atomic|shutdown)\b/i.test(
-    changedText,
+  const searchableText = changedText
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ");
+  return /\b(?:async|await|promise|goroutine|mutex|lock|thread|queue|cache|retry|concurrent|atomic|shutdown|deadlock|livelock|spinlock|rwlock)\b/i.test(
+    searchableText,
   );
 }
 
