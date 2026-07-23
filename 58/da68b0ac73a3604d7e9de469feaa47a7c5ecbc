@@ -1,0 +1,23 @@
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_557d1dbcfbaf62::t_2308b81d4fd57d 7-8,252-283
+  s_557d1dbcfbaf62::t_acb73038cb9f97 284-285
+packages/runtime/src/diff/manifest-sharding.ts
+  s_557d1dbcfbaf62::t_95f26ae92dcfd8 51
+  s_557d1dbcfbaf62::t_83ddcf4b60355e 8-11,40,58,69,77-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "58da68b0ac73a3604d7e9de469feaa47a7c5ecbc",
+  "prompts": {},
+  "sessions": {
+    "s_557d1dbcfbaf62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8a4a-b25d-71b1-9ad3-b2d217f77b29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
