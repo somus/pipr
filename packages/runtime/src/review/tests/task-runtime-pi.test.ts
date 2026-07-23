@@ -234,6 +234,59 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     }
   });
 
+  it("shards every review agent in multi-agent orchestration only when needed", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      const largeManifest = manyFileShardingManifest();
+      await writeFakeAstGrepOutline(
+        executableDirectory,
+        largeManifest.files.map((file) => outlineFile(file.path, [outlineItem(file.path)])),
+      );
+      const plan = multiAgentShardingPlan();
+      const smallPrompts: string[] = [];
+      await runRuntime({
+        plan,
+        diffManifestBuilder: () => manyFileShardingManifest(2),
+        env: {
+          ...process.env,
+          PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+        },
+        piRunner: async (options) => {
+          smallPrompts.push(options.prompt);
+          return noFindingsPiResult();
+        },
+      });
+      const largePrompts: string[] = [];
+      await runRuntime({
+        plan,
+        config: manifestShardConfig(),
+        diffManifestBuilder: () => largeManifest,
+        env: {
+          ...process.env,
+          PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+        },
+        piRunner: async (options) => {
+          largePrompts.push(options.prompt);
+          return noFindingsPiResult();
+        },
+      });
+
+      for (const marker of multiAgentShardingMarkers) {
+        const smallAgentPrompts = smallPrompts.filter((prompt) => prompt.includes(marker));
+        expect(smallAgentPrompts).toHaveLength(1);
+        expectPromptCoverage(smallAgentPrompts, 2);
+
+        const largeAgentPrompts = largePrompts.filter((prompt) => prompt.includes(marker));
+        expect(largeAgentPrompts).toHaveLength(4);
+        expectPromptCoverage(largeAgentPrompts, 8);
+      }
+      expect(smallPrompts).toHaveLength(4);
+      expect(largePrompts).toHaveLength(16);
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("defaults automatic Diff Manifest fan-out to four shards", async () => {
     const prompts: string[] = [];
 
@@ -1460,6 +1513,65 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
 function semanticShardingManifest(): DiffManifest {
   return semanticShardingManifestForPaths("src/caller.ts", "src/unrelated.ts", "src/dependency.ts");
+}
+
+const multiAgentShardingMarkers = [
+  "SECURITY_MULTI_AGENT",
+  "TESTS_MULTI_AGENT",
+  "MAINTAINABILITY_MULTI_AGENT",
+  "AGGREGATOR_MULTI_AGENT",
+] as const;
+
+function multiAgentShardingPlan() {
+  return testPlan((pipr) => {
+    const model = deepseekModel(pipr);
+    const security = defaultReviewAgent(pipr, {
+      name: "security-multi-agent",
+      model,
+      instructions: multiAgentShardingMarkers[0],
+      prompt: () => multiAgentShardingMarkers[0],
+    });
+    const tests = defaultReviewAgent(pipr, {
+      name: "tests-multi-agent",
+      model,
+      instructions: multiAgentShardingMarkers[1],
+      prompt: () => multiAgentShardingMarkers[1],
+    });
+    const maintainability = defaultReviewAgent(pipr, {
+      name: "maintainability-multi-agent",
+      model,
+      instructions: multiAgentShardingMarkers[2],
+      prompt: () => multiAgentShardingMarkers[2],
+    });
+    const aggregator = pipr.agent({
+      name: "aggregator-multi-agent",
+      model,
+      instructions: multiAgentShardingMarkers[3],
+      output: pipr.schemas.review,
+      prompt: (_input: { manifest: unknown; specialistResults: unknown }) =>
+        multiAgentShardingMarkers[3],
+    });
+    const task = pipr.task({
+      name: "multi-agent-sharding",
+      async run(ctx) {
+        const manifest = await ctx.change.diffManifest();
+        const [securityResult, testResult, maintainabilityResult] = await Promise.all([
+          ctx.pi.run(security, { manifest }),
+          ctx.pi.run(tests, { manifest }),
+          ctx.pi.run(maintainability, { manifest }),
+        ]);
+        const result = await ctx.pi.run(aggregator, {
+          manifest,
+          specialistResults: { securityResult, testResult, maintainabilityResult },
+        });
+        await ctx.comment({
+          main: result.summary.body,
+          inlineFindings: result.inlineFindings,
+        });
+      },
+    });
+    pipr.on.changeRequest({ actions: ["opened"], task });
+  });
 }
 
 function semanticShardingManifestForPaths(
