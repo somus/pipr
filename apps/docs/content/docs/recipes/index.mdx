@@ -23,7 +23,6 @@ Choose by the review job first, then tune noise after the first successful run.
 | Goal | Start with | Default noise level |
 | --- | --- | --- |
 | General change request review | [Default Review](/docs/recipes/default-review) | Balanced inline comments |
-| Broader defect coverage | [Deep Review](/docs/recipes/deep-review) | More model calls with deduplicated inline comments |
 | Structured general review | [Structured Review](/docs/recipes/rich-review) | Severity and category metadata |
 | Exact suggested fixes | [Fix Suggestions](/docs/recipes/fix-suggestions) | Command-triggered patch suggestions |
 | Real bug detection | [Bug Hunter](/docs/recipes/bug-hunter) | Focused inline comments |
@@ -75,7 +74,6 @@ Choose the smallest recipe that matches the review workflow you want to try.
 
 <Cards>
 <Card title="Default Review" description="Start with one general change request reviewer that runs from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded." href="/docs/recipes/default-review" />
-<Card title="Deep Review" description="Run a whole-change review plus focused units for large changes, with a conditional concurrency and lifecycle pass when changed code signals it." href="/docs/recipes/deep-review" />
 <Card title="Bug Hunter" description="Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with a reviewer tuned for actionable bug reports." href="/docs/recipes/bug-hunter" />
 <Card title="Structured Review" description="Run a general review that captures severity and category metadata before publishing validated inline comments." href="/docs/recipes/rich-review" />
 <Card title="Fix Suggestions" description="Run a command-triggered improvement pass that publishes only exact suggested fixes maintainers can apply from review." href="/docs/recipes/fix-suggestions" />

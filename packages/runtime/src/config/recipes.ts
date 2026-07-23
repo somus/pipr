@@ -1,7 +1,6 @@
 import { bugHunterRecipe } from "./recipes/bug-hunter.js";
 import { changelogDraftRecipe } from "./recipes/changelog-draft.js";
 import { ciTriageCommandRecipe } from "./recipes/ci-triage-command.js";
-import { deepReviewRecipe } from "./recipes/deep-review.js";
 import { defaultReviewRecipe } from "./recipes/default-review.js";
 import { dependencyRiskRecipe } from "./recipes/dependency-risk.js";
 import { diffDiagnosticsRecipe } from "./recipes/diff-diagnostics.js";
@@ -22,7 +21,6 @@ import type {
 
 export const supportedOfficialInitRecipes = [
   "default-review",
-  "deep-review",
   "bug-hunter",
   "rich-review",
   "fix-suggestions",
@@ -44,7 +42,6 @@ export type { OfficialInitRecipe, OfficialInitRecipeFile, OfficialInitRecipeWork
 
 const officialInitRecipeRegistry = {
   "default-review": defaultReviewRecipe,
-  "deep-review": deepReviewRecipe,
   "bug-hunter": bugHunterRecipe,
   "rich-review": structuredReviewRecipe,
   "fix-suggestions": fixSuggestionsRecipe,

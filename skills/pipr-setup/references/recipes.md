@@ -7,7 +7,6 @@ Choose the smallest recipe that matches the requested workflow, then customize `
 | Recipe | Use When | Main Customization Points |
 | --- | --- | --- |
 | `default-review` | The user wants a bounded general change request reviewer. | Review instructions, inline cap, command pattern, path scope. |
-| `deep-review` | The user wants broader review coverage and accepts extra model calls on large or concurrency-sensitive changes. | Sharding thresholds, concurrency signals, latency and cost limits. |
 | `bug-hunter` | The user wants correctness defects, edge cases, races, regressions, and missing tests. | Excluded docs paths, fallback model, inline cap. |
 | `rich-review` | The user wants a structured review with grouped findings and explicit coverage. | Finding categories, summary format, inline cap. |
 | `fix-suggestions` | The user wants concise, exact suggested replacements when a finding has a small fix. | Suggested-fix policy, inline cap, review scope. |
@@ -36,7 +35,6 @@ Choose the smallest recipe that matches the requested workflow, then customize `
 
 ```bash
 pipr init
-pipr init --recipe deep-review
 pipr init --recipe security-sast
 pipr init --recipe multi-agent-review --adapters none
 pipr init --minimal

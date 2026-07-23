@@ -18,10 +18,6 @@ const recipeDescriptions = new Map([
     "Start with one general change request reviewer that runs from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
   ],
   [
-    "deep-review",
-    "Run a whole-change review plus focused units for large changes, with a conditional concurrency and lifecycle pass when changed code signals it.",
-  ],
-  [
     "bug-hunter",
     "Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with a reviewer tuned for actionable bug reports.",
   ],
@@ -83,10 +79,6 @@ const recipeExpectedOutputs = new Map([
   [
     "default-review",
     "Pipr publishes one Main Review Comment and up to the configured number of Inline Review Comments. The same Review Task also runs from `@pipr review` and local `pipr review`.",
-  ],
-  [
-    "deep-review",
-    "Pipr starts with a whole-change reviewer, which core sharding may split into bounded calls, adds focused review units for changes spanning at least twelve files, and adds a concurrency reviewer only when a smaller change contains concurrency or lifecycle signals.",
   ],
   [
     "bug-hunter",
@@ -173,18 +165,6 @@ This is the baseline setup for repositories that want one trusted review path be
 - Put repository-specific review policy in \`instructions\`, not in ad hoc task code.
 - Use \`context.run.trigger === "local"\` for text that appears only during local review.
 - Add path filters only after you know which files must not receive inline findings.
-`,
-  ],
-  [
-    "deep-review",
-    `## Recipe notes
-
-Deep Review trades model latency and cost for broader candidate generation. It starts with one whole-change pass; when that manifest exceeds runtime limits, core sharding preserves its coverage across bounded calls. It then adds focused units only for large changes. Smaller changes receive an extra concurrency and lifecycle pass only when their changed ranges contain relevant signals.
-
-- Start with the existing twelve-file and 25,000-character thresholds, then tune them from repository-specific latency and review-quality evidence.
-- Keep the unit and full reviewer instructions aligned so the extra calls increase coverage without creating different review policies.
-- The task deduplicates exact repeated findings before publication; Pipr still validates every anchor against the Diff Manifest.
-- Use \`@pipr deep-review\` for explicit reruns when a change warrants the additional model work.
 `,
   ],
   [
@@ -449,7 +429,6 @@ Choose by the review job first, then tune noise after the first successful run.
 | Goal | Start with | Default noise level |
 | --- | --- | --- |
 | General change request review | [Default Review](/docs/recipes/default-review) | Balanced inline comments |
-| Broader defect coverage | [Deep Review](/docs/recipes/deep-review) | More model calls with deduplicated inline comments |
 | Structured general review | [Structured Review](/docs/recipes/rich-review) | Severity and category metadata |
 | Exact suggested fixes | [Fix Suggestions](/docs/recipes/fix-suggestions) | Command-triggered patch suggestions |
 | Real bug detection | [Bug Hunter](/docs/recipes/bug-hunter) | Focused inline comments |
