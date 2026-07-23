@@ -1,0 +1,21 @@
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_557d1dbcfbaf62::t_375fcb391ad196 237-289,1518,1523-1528,1530-1534,1536-1540,1542-1546,1548-1554,1556-1574
+  s_557d1dbcfbaf62::t_1e3ca50df55bae 1519-1522,1529,1535,1541,1547,1555
+  s_557d1dbcfbaf62::t_c5c2f47525fa07 1575-1576
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "d94f45d0ae3c06f421b45c0f62f33e0d9c9ad887",
+  "prompts": {},
+  "sessions": {
+    "s_557d1dbcfbaf62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8a4a-b25d-71b1-9ad3-b2d217f77b29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
