@@ -66,6 +66,7 @@ export function cloneDiffManifest(manifest: DiffManifest): DiffManifest {
 export function prepareDiffManifestPrompt(
   manifest: DiffManifest,
   config: DiffManifestLimitsConfig | undefined,
+  options: { allowOversizedCondensed?: boolean } = {},
 ): PreparedDiffManifestPrompt {
   const limits = resolveDiffManifestPromptLimits(config);
   const full = measureDiffManifestPrompt(manifest);
@@ -75,7 +76,10 @@ export function prepareDiffManifestPrompt(
 
   const condensedManifest = condenseDiffManifest(manifest);
   const condensed = measureDiffManifestPrompt(condensedManifest);
-  if (!fitsLimit(condensed, limits.condensedMaxBytes, limits.condensedMaxEstimatedTokens)) {
+  if (
+    !options.allowOversizedCondensed &&
+    !fitsLimit(condensed, limits.condensedMaxBytes, limits.condensedMaxEstimatedTokens)
+  ) {
     throw new Error(
       [
         "Diff Manifest payload exceeds condensed limit before Pi execution",
@@ -98,6 +102,9 @@ export function partitionDiffManifestForPrompt(
   config: DiffManifestLimitsConfig | undefined,
 ): DiffManifest[] {
   if (diffManifestFitsPrompt(manifest, config)) {
+    return [manifest];
+  }
+  if (manifest.files.length === 0) {
     return [manifest];
   }
 
@@ -152,9 +159,10 @@ export function measureDiffManifestPrompt(manifest: DiffManifest): DiffManifestP
 function resolveDiffManifestPromptLimits(
   config: DiffManifestLimitsConfig | undefined,
 ): DiffManifestPromptLimits {
+  const { maxShards: _maxShards, ...promptLimits } = config ?? {};
   return {
     ...defaultDiffManifestPromptLimits,
-    ...Object.fromEntries(Object.entries(config ?? {}).filter((entry) => entry[1] !== undefined)),
+    ...Object.fromEntries(Object.entries(promptLimits).filter((entry) => entry[1] !== undefined)),
   };
 }
 

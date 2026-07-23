@@ -857,6 +857,33 @@ describe("definePipr", () => {
     expect(plan.limits).toEqual({ timeoutSeconds: 300 });
   });
 
+  it("registers Review Run and Diff Manifest fan-out limits", () => {
+    const plan = buildPiprPlan(
+      definePipr((pipr) => {
+        pipr.config({ limits: { maxAgentRuns: 16, diffManifest: { maxShards: 4 } } });
+      }),
+    );
+
+    expect(plan.limits).toEqual({ maxAgentRuns: 16, diffManifest: { maxShards: 4 } });
+  });
+
+  it("rejects invalid Review Run and Diff Manifest fan-out limits", () => {
+    for (const limits of [
+      { maxAgentRuns: 0 },
+      { maxAgentRuns: 1.5 },
+      { diffManifest: { maxShards: 0 } },
+      { diffManifest: { maxShards: 1.5 } },
+    ]) {
+      expect(() =>
+        buildPiprPlan(
+          definePipr((pipr) => {
+            pipr.config({ limits });
+          }),
+        ),
+      ).toThrow();
+    }
+  });
+
   it("rejects conflicting global config values", () => {
     expect(() =>
       buildPiprPlan(

@@ -8,7 +8,7 @@ import {
 } from "@usepipr/sdk/internal";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
-import { partitionDiffManifestForPrompt } from "../../diff/manifest-projection.js";
+import { shardDiffManifestForPrompt } from "../../diff/manifest-sharding.js";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
 import {
@@ -34,6 +34,11 @@ import {
   type PreparedAgentContext,
   renderAgentPrompt,
 } from "./agent-prompt.js";
+import {
+  type AgentRunBudget,
+  AgentRunBudgetExhaustedError,
+  reserveAgentRun,
+} from "./agent-run-budget.js";
 import { prepareDiffManifestContext, readReservedInputManifest } from "./diff-manifest-context.js";
 
 export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
@@ -48,6 +53,7 @@ export type RunReviewAgentOptions = {
   input: unknown;
   runOptions: Parameters<TaskContext["pi"]["run"]>[2];
   toolMode?: "read-only" | "none";
+  allowOversizedCondensedManifest?: boolean;
   runtime: {
     workspace: string;
     config: PiprConfig;
@@ -63,6 +69,7 @@ export type RunReviewAgentOptions = {
     run: PiprRunContext;
     log?: RuntimeLog;
     piRunSink?: (run: PiRunStats) => void;
+    agentRunBudget?: AgentRunBudget;
   };
 };
 
@@ -93,9 +100,16 @@ type AgentAttemptResult =
 export async function runReviewAgent(
   options: RunReviewAgentOptions,
 ): Promise<RunReviewAgentResult> {
-  const manifests = scheduledReviewManifests(options);
+  const manifests = await scheduledReviewManifests(options);
   if (!manifests) {
     return await runReviewAgentOnce(options);
+  }
+  if (manifests.length === 1) {
+    return await runReviewAgentOnce({
+      ...options,
+      input: inputWithManifest(options.input, manifests[0]),
+      allowOversizedCondensedManifest: true,
+    });
   }
   const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
     const results: RunReviewAgentResult[] = [];
@@ -104,6 +118,7 @@ export async function runReviewAgent(
         await runReviewAgentOnce({
           ...options,
           input: inputWithManifest(options.input, manifest),
+          allowOversizedCondensedManifest: true,
           runtime: { ...options.runtime, piRunner },
         }),
       );
@@ -126,6 +141,7 @@ async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunRe
     input: options.input,
     limits: options.runtime.config.limits?.diffManifest,
     toolMode: options.toolMode ?? "read-only",
+    allowOversizedCondensed: options.allowOversizedCondensedManifest,
   });
   const prepared: PreparedAgentContext = { agentTools, agentRunContext, diffManifest };
   const prompt = await renderAgentPrompt({ ...options, ...prepared });
@@ -163,7 +179,7 @@ async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunRe
   );
 }
 
-function scheduledReviewManifests(options: RunReviewAgentOptions) {
+async function scheduledReviewManifests(options: RunReviewAgentOptions) {
   if (options.agent.definition.output.id !== reviewResultSchemaId) {
     return undefined;
   }
@@ -171,7 +187,13 @@ function scheduledReviewManifests(options: RunReviewAgentOptions) {
   if (!manifest) {
     return undefined;
   }
-  return partitionDiffManifestForPrompt(manifest, options.runtime.config.limits?.diffManifest);
+  return await shardDiffManifestForPrompt({
+    manifest,
+    config: options.runtime.config.limits?.diffManifest,
+    workspace: options.runtime.workspace,
+    env: options.runtime.env,
+    log: options.runtime.log,
+  });
 }
 
 function inputWithManifest(input: unknown, manifest: DiffManifest): Record<string, unknown> {
@@ -268,6 +290,7 @@ async function runAgentWithProvider(
   try {
     output = (await runPiWithTransientRetries(options, provider, prompt, retry)).stdout;
   } catch (error) {
+    rethrowAgentRunBudgetExhaustion(error);
     return {
       ok: false,
       error: error instanceof Error ? error.message : String(error),
@@ -291,6 +314,7 @@ async function runAgentWithProvider(
     try {
       lastOutput = (await runPiWithTransientRetries(options, provider, repairPrompt, retry)).stdout;
     } catch (error) {
+      rethrowAgentRunBudgetExhaustion(error);
       return {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
@@ -330,10 +354,17 @@ async function runPiWithTransientRetries(
     try {
       return await runPiForPrompt(options, provider, prompt);
     } catch (error) {
+      rethrowAgentRunBudgetExhaustion(error);
       lastError = error;
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function rethrowAgentRunBudgetExhaustion(error: unknown): void {
+  if (error instanceof AgentRunBudgetExhaustedError) {
+    throw error;
+  }
 }
 
 function retrySettings(agent: RuntimeAgent): RetrySettings {
@@ -405,6 +436,7 @@ async function runPiForPrompt(
   provider: ProviderConfig,
   prompt: string,
 ): Promise<PiRunResult> {
+  reserveAgentRun(options.runtime.agentRunBudget);
   const builtinTools = builtinToolsForPrompt(options.toolMode ?? "read-only");
   const runtimeTools = runtimeToolsForRun(options);
   const customTools = customToolsForRun(options);

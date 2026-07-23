@@ -19,7 +19,7 @@ const recipeDescriptions = new Map([
   ],
   [
     "deep-review",
-    "Run a full-context review plus focused units for large changes, with a conditional concurrency and lifecycle pass when changed code signals it.",
+    "Run a whole-change review plus focused units for large changes, with a conditional concurrency and lifecycle pass when changed code signals it.",
   ],
   [
     "bug-hunter",
@@ -86,7 +86,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "deep-review",
-    "Pipr always runs a full-context reviewer, adds focused review units for changes spanning at least twelve files, and adds a concurrency reviewer only when a smaller change contains concurrency or lifecycle signals.",
+    "Pipr starts with a whole-change reviewer, which core sharding may split into bounded calls, adds focused review units for changes spanning at least twelve files, and adds a concurrency reviewer only when a smaller change contains concurrency or lifecycle signals.",
   ],
   [
     "bug-hunter",
@@ -179,7 +179,7 @@ This is the baseline setup for repositories that want one trusted review path be
     "deep-review",
     `## Recipe notes
 
-Deep Review trades model latency and cost for broader candidate generation. It always keeps one full-context pass so cross-file behavior remains visible, then adds bounded units only for large changes. Smaller changes receive an extra concurrency and lifecycle pass only when their changed ranges contain relevant signals.
+Deep Review trades model latency and cost for broader candidate generation. It starts with one whole-change pass; when that manifest exceeds runtime limits, core sharding preserves its coverage across bounded calls. It then adds focused units only for large changes. Smaller changes receive an extra concurrency and lifecycle pass only when their changed ranges contain relevant signals.
 
 - Start with the existing twelve-file and 25,000-character thresholds, then tune them from repository-specific latency and review-quality evidence.
 - Keep the unit and full reviewer instructions aligned so the extra calls increase coverage without creating different review policies.

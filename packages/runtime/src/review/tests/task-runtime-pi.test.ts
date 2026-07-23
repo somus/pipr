@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type { AgentTool } from "@usepipr/sdk";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import type { AgentTool, DiffManifest } from "@usepipr/sdk";
+import { createDiffRangeIndex } from "../../diff/ranges.js";
 import { extractPriorReviewState } from "../prior-state.js";
 import {
   config,
@@ -68,6 +72,250 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       "source defect body",
       "docs defect body",
     ]);
+  });
+
+  it("keeps changed importers with their dependencies when sharding", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      await writeFakeAstGrepOutline(executableDirectory, [
+        outlineFile("src/caller.ts", [
+          outlineItem("./dependency.js", {
+            isImport: true,
+            symbolType: "module",
+          }),
+          outlineItem("run"),
+        ]),
+        outlineFile("src/unrelated.ts", [outlineItem("unrelated")]),
+        outlineFile("src/dependency.ts", [outlineItem("dependency")]),
+      ]);
+      const prompts: string[] = [];
+
+      await runRuntime({
+        plan: testPlan((pipr) => {
+          pipr.review({
+            id: "review",
+            model: deepseekModel(pipr),
+            instructions: "Review.",
+            entrypoints: { command: false },
+          });
+        }),
+        config: {
+          ...config,
+          limits: {
+            diffManifest: {
+              fullMaxBytes: 1,
+              fullMaxEstimatedTokens: 1,
+              condensedMaxBytes: 2_200,
+              condensedMaxEstimatedTokens: 10_000,
+            },
+          },
+        },
+        diffManifestBuilder: semanticShardingManifest,
+        env: {
+          ...process.env,
+          PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+        },
+        piRunner: async (options) => {
+          prompts.push(options.prompt);
+          return noFindingsPiResult();
+        },
+      });
+
+      expect(prompts).toHaveLength(2);
+      expect(
+        prompts.some(
+          (prompt) =>
+            prompt.includes('"path": "src/caller.ts"') &&
+            prompt.includes('"path": "src/dependency.ts"') &&
+            !prompt.includes('"path": "src/unrelated.ts"'),
+        ),
+      ).toBe(true);
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("defaults automatic Diff Manifest fan-out to four shards", async () => {
+    const prompts: string[] = [];
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: manifestShardConfig(),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(prompts).toHaveLength(4);
+    expectPromptCoverage(prompts, 8);
+  });
+
+  it("runs one complete condensed manifest when maxShards is one", async () => {
+    const prompts: string[] = [];
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: manifestShardConfig(1),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('"mode": "condensed"');
+    expectPromptCoverage(prompts, 8);
+  });
+
+  it("preserves files, hunks, and ranges under the same AST and fallback shard cap", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      const manifest = manyFileShardingManifest();
+      await writeFakeAstGrepOutline(
+        executableDirectory,
+        manifest.files.map((file) => outlineFile(file.path, [outlineItem(file.path)])),
+      );
+
+      for (const pathValue of [executableDirectory, ""]) {
+        const prompts: string[] = [];
+        await runRuntime({
+          plan: defaultReviewPlan(),
+          config: manifestShardConfig(2),
+          diffManifestBuilder: () => manifest,
+          env: { ...process.env, PATH: pathValue },
+          piRunner: async (options) => {
+            prompts.push(options.prompt);
+            return noFindingsPiResult();
+          },
+        });
+
+        expect(prompts).toHaveLength(2);
+        expectPromptCoverage(prompts, 8);
+      }
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps every capped single-file slice readable through its manifest path", async () => {
+    const rangeIds = new Set<string>();
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            maxShards: 2,
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 900,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: manyHunkSingleFileManifest,
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        const manifest = options.runtimeTools?.manifest;
+        if (!manifest) {
+          throw new Error("expected condensed Diff Manifest runtime tools");
+        }
+        const paths = manifest.files.map((file) => file.path);
+        expect(new Set(paths).size).toBe(paths.length);
+
+        const ranges = createDiffRangeIndex(manifest);
+        for (const file of manifest.files) {
+          for (const range of file.commentableRanges) {
+            expect(() =>
+              ranges.requireRangeInFile(ranges.requireFile(file.path), range.id),
+            ).not.toThrow();
+            rangeIds.add(range.id);
+          }
+        }
+        return noFindingsPiResult();
+      },
+    });
+
+    expect([...rangeIds].sort()).toEqual(
+      Array.from({ length: 8 }, (_, index) => `single-range-${index}`).sort(),
+    );
+  });
+
+  it("runs one complete condensed review for an oversized empty manifest", async () => {
+    let calls = 0;
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1,
+            condensedMaxEstimatedTokens: 1,
+          },
+        },
+      },
+      diffManifestBuilder: () => ({ ...reviewTestManifestWithDocs(), files: [] }),
+      piRunner: async (options) => {
+        calls += 1;
+        expect(options.runtimeTools?.manifest.files).toEqual([]);
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(calls).toBe(1);
+  });
+
+  it("rejects invalid runtime Review Run and Diff Manifest fan-out limits", async () => {
+    for (const limits of [
+      { maxAgentRuns: 0 },
+      { maxAgentRuns: 1.5 },
+      { diffManifest: { maxShards: 0 } },
+      { diffManifest: { maxShards: 1.5 } },
+    ]) {
+      await expect(
+        runRuntime({
+          plan: defaultReviewPlan(),
+          config: {
+            ...config,
+            limits,
+          },
+          piRunner: noFindingsPiRunner(),
+        }),
+      ).rejects.toThrow();
+    }
+  });
+
+  it("does not accept the removed sharding compatibility alias", async () => {
+    await expect(
+      runRuntime({
+        plan: testPlan((pipr) => {
+          pipr.review({
+            id: "review",
+            model: deepseekModel(pipr),
+            instructions: "Review.",
+            entrypoints: { command: false },
+          });
+        }),
+        config: {
+          ...config,
+          limits: {
+            diffManifest: {
+              sharding: false,
+            },
+          },
+        } as unknown as typeof config,
+        piRunner: noFindingsPiRunner(),
+      }),
+    ).rejects.toThrow();
   });
 
   it("deduplicates only exact same-anchor findings from scheduled review units", async () => {
@@ -188,6 +436,31 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     });
 
     expect(calls).toBe(1);
+  });
+
+  it("preserves provider output when a core review schedules one manifest", async () => {
+    let observedFindingCount = 0;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          observedFindingCount = result.inlineFindings.length;
+          await ctx.comment(result.summary.body);
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+    const duplicate = finding("same provider finding", "range-1", 10);
+
+    await runRuntime({
+      plan,
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async () => reviewPiResult([duplicate, duplicate]),
+    });
+
+    expect(observedFindingCount).toBe(2);
   });
 
   it("splits one oversized file across complete multi-hunk ranges", async () => {
@@ -556,6 +829,76 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     });
   });
 
+  it("reserves maxAgentRuns atomically across parallel Review Tasks", async () => {
+    const release = Promise.withResolvers<void>();
+    let calls = 0;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const first = pipr.task({
+        name: "first",
+        async run(ctx) {
+          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+        },
+      });
+      const second = pipr.task({
+        name: "second",
+        async run(ctx) {
+          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.comment("Parallel review complete.");
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task: first });
+      pipr.on.changeRequest({ actions: ["opened"], task: second });
+    });
+
+    const run = runRuntime({
+      plan,
+      config: { ...config, limits: { maxAgentRuns: 1 } },
+      piRunner: async () => {
+        calls += 1;
+        await release.promise;
+        return noFindingsPiResult();
+      },
+    });
+    await Bun.sleep(20);
+    const callsBeforeRelease = calls;
+    release.resolve();
+
+    await expect(run).rejects.toThrow(
+      "Review Run agent-call budget exhausted after 1 provider invocations",
+    );
+    expect(callsBeforeRelease).toBe(1);
+    expect(calls).toBe(1);
+  });
+
+  it("keeps provider invocations unlimited when maxAgentRuns is omitted", async () => {
+    let calls = 0;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          for (let index = 0; index < 5; index += 1) {
+            await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          }
+          await ctx.comment("Unlimited review complete.");
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+
+    const result = await runRuntime({
+      plan,
+      piRunner: async () => {
+        calls += 1;
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(calls).toBe(5);
+    expect(result.publicationPlan.metadata.stats?.agentRuns).toBe(5);
+  });
+
   it("accumulates review stats across reruns of the same Review Tasks", async () => {
     const first = await runRuntime({
       plan: defaultReviewPlan(),
@@ -658,7 +1001,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
   it("counts rejected Pi attempts as partial usage before retrying", async () => {
     let call = 0;
     const result = await runRuntime({
-      config: fallbackConfig,
+      config: { ...fallbackConfig, limits: { maxAgentRuns: 2 } },
       plan: fallbackReviewPlan({ agentPatch: { retry: { transientFailure: 1 } } }),
       piRunner: async () => {
         call += 1;
@@ -699,6 +1042,41 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     });
 
     expect(calls).toEqual(["deepseek-v4-pro", "deepseek-v4-pro", "fallback-model"]);
+  });
+
+  it("counts shards, transient retries, repairs, and fallbacks against maxAgentRuns", async () => {
+    let calls = 0;
+    const limitedConfig = {
+      ...manifestShardConfig(2),
+      providers: fallbackConfig.providers,
+      limits: {
+        ...manifestShardConfig(2).limits,
+        maxAgentRuns: 4,
+      },
+    };
+
+    await expect(
+      runRuntime({
+        config: limitedConfig,
+        plan: fallbackReviewPlan({
+          agentPatch: { retry: { invalidOutput: 1, transientFailure: 1 } },
+        }),
+        diffManifestBuilder: () => manyFileShardingManifest(),
+        env: { ...process.env, PATH: "" },
+        piRunner: async () => {
+          calls += 1;
+          if (calls === 1) {
+            throw new Error("temporary provider failure");
+          }
+          if (calls < 4) {
+            return { ...noFindingsPiResult(), stdout: "{" };
+          }
+          return noFindingsPiResult();
+        },
+      }),
+    ).rejects.toThrow("Review Run agent-call budget exhausted after 4 provider invocations");
+
+    expect(calls).toBe(4);
   });
 
   it("does not fall back when the primary model returns a valid empty review", async () => {
@@ -946,3 +1324,178 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(extractPriorReviewState(result.mainComment, 1)?.findings).toEqual([]);
   });
 });
+
+function semanticShardingManifest(): DiffManifest {
+  return {
+    baseSha: "base",
+    headSha: "head",
+    mergeBaseSha: "base",
+    files: [
+      semanticShardingFile("src/caller.ts", 1),
+      semanticShardingFile("src/unrelated.ts", 2),
+      semanticShardingFile("src/dependency.ts", 3),
+    ],
+  };
+}
+
+function semanticShardingFile(filePath: string, hunkIndex: number): DiffManifest["files"][number] {
+  const contentHash = `00000000000${hunkIndex}`;
+  const header = "@@ -1,1 +1,1 @@";
+  return {
+    path: filePath,
+    status: "modified",
+    additions: 1,
+    deletions: 0,
+    hunks: [
+      {
+        hunkIndex,
+        header,
+        oldStart: 1,
+        oldLines: 1,
+        newStart: 1,
+        newLines: 1,
+        contentHash,
+      },
+    ],
+    commentableRanges: [
+      {
+        id: `range-${hunkIndex}`,
+        path: filePath,
+        side: "RIGHT",
+        startLine: 1,
+        endLine: 1,
+        kind: "added",
+        hunkIndex,
+        hunkHeader: header,
+        hunkContentHash: contentHash,
+        preview: `changed ${filePath}`,
+      },
+    ],
+  };
+}
+
+function outlineFile(filePath: string, items: unknown[]) {
+  return { path: filePath, language: "TypeScript", items };
+}
+
+function outlineItem(name: string, options: { isImport?: boolean; symbolType?: string } = {}) {
+  return {
+    role: "item",
+    symbolType: options.symbolType ?? "function",
+    name,
+    range: {
+      byteOffset: { start: 0, end: 10 },
+      start: { line: 0, column: 0 },
+      end: { line: 0, column: 10 },
+    },
+    signature: options.isImport ? `import "${name}";` : `function ${name}()`,
+    astKind: options.isImport ? "import_statement" : "function_declaration",
+    isImport: options.isImport ?? false,
+    isExported: !options.isImport,
+  };
+}
+
+async function writeFakeAstGrepOutline(directory: string, output: unknown): Promise<void> {
+  const executable = path.join(directory, "ast-grep");
+  await Bun.write(
+    executable,
+    `#!/usr/bin/env bun\nprocess.stdout.write(${JSON.stringify(JSON.stringify(output))});\n`,
+  );
+  await chmod(executable, 0o755);
+}
+
+function manifestShardConfig(maxShards?: number) {
+  return {
+    ...config,
+    limits: {
+      diffManifest: {
+        ...(maxShards === undefined ? {} : { maxShards }),
+        fullMaxBytes: 1,
+        fullMaxEstimatedTokens: 1,
+        condensedMaxBytes: 1_200,
+        condensedMaxEstimatedTokens: 10_000,
+      },
+    },
+  };
+}
+
+function manyFileShardingManifest(fileCount = 8): DiffManifest {
+  const manifest = reviewTestManifestWithDocs();
+  const seedFile = manifest.files[0];
+  if (!seedFile) {
+    throw new Error("expected a changed file");
+  }
+  return {
+    ...manifest,
+    files: Array.from({ length: fileCount }, (_, index) => {
+      const filePath = `src/file-${index}.ts`;
+      const contentHash = index.toString(16).padStart(12, "0");
+      return {
+        ...seedFile,
+        path: filePath,
+        hunks: seedFile.hunks.map((hunk) => ({ ...hunk, contentHash })),
+        commentableRanges: seedFile.commentableRanges.map((range, rangeIndex) => ({
+          ...range,
+          id: `range-${index}-${rangeIndex}`,
+          path: filePath,
+          hunkContentHash: contentHash,
+        })),
+      };
+    }),
+  };
+}
+
+function manyHunkSingleFileManifest(): DiffManifest {
+  const manifest = reviewTestManifestWithDocs();
+  const seedFile = manifest.files[0];
+  if (!seedFile) {
+    throw new Error("expected a changed file");
+  }
+  return {
+    ...manifest,
+    files: [
+      {
+        ...seedFile,
+        hunks: Array.from({ length: 8 }, (_, index) => {
+          const line = index + 1;
+          return {
+            hunkIndex: line,
+            header: `@@ -${line},1 +${line},1 @@`,
+            oldStart: line,
+            oldLines: 1,
+            newStart: line,
+            newLines: 1,
+            contentHash: index.toString(16).padStart(12, "0"),
+          };
+        }),
+        commentableRanges: Array.from({ length: 8 }, (_, index) => {
+          const line = index + 1;
+          const header = `@@ -${line},1 +${line},1 @@`;
+          return {
+            id: `single-range-${index}`,
+            path: seedFile.path,
+            side: "RIGHT" as const,
+            startLine: line,
+            endLine: line,
+            kind: "added" as const,
+            hunkIndex: line,
+            hunkHeader: header,
+            hunkContentHash: index.toString(16).padStart(12, "0"),
+            preview: `changed line ${line}`,
+          };
+        }),
+      },
+    ],
+  };
+}
+
+function expectPromptCoverage(prompts: readonly string[], fileCount: number): void {
+  const combined = prompts.join("\n");
+  for (let index = 0; index < fileCount; index += 1) {
+    const contentHash = index.toString(16).padStart(12, "0");
+    expect(combined).toContain(`"path": "src/file-${index}.ts"`);
+    expect(combined).toContain(`"contentHash": "${contentHash}"`);
+    expect(combined).toContain(`"id": "range-${index}-0"`);
+    expect(combined).toContain(`"id": "range-${index}-1"`);
+  }
+}

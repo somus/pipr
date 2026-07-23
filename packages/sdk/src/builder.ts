@@ -328,6 +328,7 @@ const checksOptionsSchema: z.ZodType<ChecksOptions> = z.strictObject({
 });
 
 const diffManifestLimitsSchema: z.ZodType<DiffManifestLimits> = z.strictObject({
+  maxShards: z.number().int().positive().optional(),
   fullMaxBytes: z.number().int().positive().optional(),
   fullMaxEstimatedTokens: z.number().int().positive().optional(),
   condensedMaxBytes: z.number().int().positive().optional(),
@@ -337,6 +338,7 @@ const diffManifestLimitsSchema: z.ZodType<DiffManifestLimits> = z.strictObject({
 
 const runtimeLimitsSchema: z.ZodType<RuntimeLimits> = z.strictObject({
   timeoutSeconds: z.number().int().positive().max(3600).optional(),
+  maxAgentRuns: z.number().int().positive().optional(),
   diffManifest: diffManifestLimitsSchema.optional(),
 });
 

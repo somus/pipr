@@ -96,6 +96,8 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(configTs).toContain("hasConcurrencySignals(manifest)");
     expect(configTs).toContain("Promise.all");
     expect(configTs).toContain('name: "deep-concurrency-reviewer"');
+    expect(configTs).toContain("maxAgentRuns: 16");
+    expect(project.plan.limits).toMatchObject({ maxAgentRuns: 16 });
     expect(inspection.agents).toEqual(["deep-reviewer"]);
     expect(inspection.tasks).toEqual(["deep-review"]);
     expect(inspection.commands).toEqual([
@@ -255,7 +257,10 @@ describe("initOfficialMinimalProject: generated recipes", () => {
 
     const result = await runTaskRuntime({
       workspace: rootDir,
-      config: project.settings.config,
+      config: {
+        ...project.settings.config,
+        limits: { ...project.settings.config.limits, maxAgentRuns: 32 },
+      },
       event: eventContext(),
       plan: project.plan,
       diffManifestBuilder: () => manifest,
@@ -331,7 +336,10 @@ describe("initOfficialMinimalProject: generated recipes", () => {
 
     await runTaskRuntime({
       workspace: rootDir,
-      config: project.settings.config,
+      config: {
+        ...project.settings.config,
+        limits: { ...project.settings.config.limits, maxAgentRuns: 32 },
+      },
       event: eventContext(),
       plan: project.plan,
       diffManifestBuilder: () => manifest,

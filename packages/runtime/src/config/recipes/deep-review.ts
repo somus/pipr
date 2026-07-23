@@ -29,7 +29,10 @@ export default definePipr((pipr) => {
     options: { thinking: "high" },
   });
 
-  pipr.config({ publication: { maxInlineComments: 25 } });
+  pipr.config({
+    publication: { maxInlineComments: 25 },
+    limits: { maxAgentRuns: 16 },
+  });
 
   const reviewer = pipr.agent({
     name: "deep-reviewer",

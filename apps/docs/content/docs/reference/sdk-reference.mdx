@@ -528,7 +528,9 @@ Set global execution limits through `pipr.config(...)`.
 pipr.config({
   limits: {
     timeoutSeconds: 300,
+    maxAgentRuns: 16,
     diffManifest: {
+      maxShards: 4,
       fullMaxBytes: 131072,
       fullMaxEstimatedTokens: 32000,
       condensedMaxBytes: 262144,
@@ -539,7 +541,16 @@ pipr.config({
 });
 ```
 
-These limits control runtime timeout and Diff Manifest prompt sizing.
+These limits control runtime timeout, provider-call count, and Diff Manifest prompt sizing.
+
+| Field | Values and default | Behavior |
+| --- | --- | --- |
+| `limits.diffManifest.maxShards` | Positive integer; defaults to `4` | Caps automatic fan-out from one review invocation. Set it to `1` to disable splitting. |
+| `limits.maxAgentRuns` | Positive integer; unlimited when omitted | Caps total provider invocations across all tasks and agents in one Review Run. |
+
+Each shard, invalid-output repair, transient retry, and model fallback consumes one agent run. Pipr reserves an agent run immediately before starting Pi. The reservation remains consumed if the invocation fails or is aborted. After the budget is exhausted, Pipr fails before starting another provider process.
+
+Increase `maxShards` if a capped condensed shard exceeds your provider's context limit. Higher values can make more provider calls, which also count against `maxAgentRuns` when configured.
 
 ## Plugins
 
