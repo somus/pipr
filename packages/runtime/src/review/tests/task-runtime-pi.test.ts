@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentTool, DiffManifest } from "@usepipr/sdk";
 import { createDiffRangeIndex } from "../../diff/ranges.js";
+import { createRuntimeLog } from "../../shared/logging.js";
+import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import { extractPriorReviewState } from "../prior-state.js";
 import {
   config,
@@ -245,6 +247,40 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect([...rangeIds].sort()).toEqual(
       Array.from({ length: 8 }, (_, index) => `single-range-${index}`).sort(),
     );
+  });
+
+  it("warns when the shard cap requires oversized condensed prompts", async () => {
+    const logs = memoryRuntimeLogSink();
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            maxShards: 2,
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 900,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: manyHunkSingleFileManifest,
+      env: { ...process.env, PATH: "" },
+      log: createRuntimeLog({ logSink: logs.logSink }),
+      piRunner: noFindingsPiRunner(),
+    });
+
+    expect(logs.records).toContainEqual({
+      level: "warning",
+      event: "diff manifest shard cap requires oversized condensed prompts",
+      fields: {
+        maxShards: 2,
+        uncappedShards: 8,
+        oversizedShards: 2,
+      },
+    });
   });
 
   it("runs one complete condensed review for an oversized empty manifest", async () => {

@@ -5,7 +5,10 @@ import path from "node:path";
 import { z } from "zod";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { DiffManifest, DiffManifestFile, DiffManifestLimitsConfig } from "../types.js";
-import { partitionDiffManifestForPrompt } from "./manifest-projection.js";
+import {
+  partitionDiffManifestForPrompt,
+  prepareDiffManifestPrompt,
+} from "./manifest-projection.js";
 
 const outlineItemSchema = z.object({
   name: z.string(),
@@ -34,7 +37,7 @@ export async function shardDiffManifestForPrompt(options: {
     return [options.manifest];
   }
 
-  const fallback = cappedPromptShards(options.manifest, options.config, maxShards);
+  const fallback = cappedPromptShards(options.manifest, options.config, maxShards, options.log);
   if (fallback.length <= 1) {
     return fallback;
   }
@@ -45,13 +48,14 @@ export async function shardDiffManifestForPrompt(options: {
   }
 
   const files = orderFilesByStructuralRelationships(options.manifest, outlines);
-  return cappedPromptShards({ ...options.manifest, files }, options.config, maxShards);
+  return cappedPromptShards({ ...options.manifest, files }, options.config, maxShards, options.log);
 }
 
 function cappedPromptShards(
   manifest: DiffManifest,
   config: DiffManifestLimitsConfig | undefined,
   maxShards: number,
+  log: RuntimeLog | undefined,
 ): DiffManifest[] {
   let shards: DiffManifest[];
   try {
@@ -62,7 +66,7 @@ function cappedPromptShards(
   if (shards.length <= maxShards) {
     return shards;
   }
-  return Array.from({ length: maxShards }, (_, index) => {
+  const capped = Array.from({ length: maxShards }, (_, index) => {
     const start = Math.floor((index * shards.length) / maxShards);
     const end = Math.floor(((index + 1) * shards.length) / maxShards);
     return {
@@ -70,6 +74,24 @@ function cappedPromptShards(
       files: mergeManifestFileSlices(shards.slice(start, end).flatMap((shard) => shard.files)),
     };
   });
+  const oversizedShards = capped.filter((shard) => {
+    const prompt = prepareDiffManifestPrompt(shard, config, {
+      allowOversizedCondensed: true,
+    });
+    return (
+      prompt.mode === "condensed" &&
+      (prompt.metrics.selected.bytes > prompt.limits.condensedMaxBytes ||
+        prompt.metrics.selected.estimatedTokens > prompt.limits.condensedMaxEstimatedTokens)
+    );
+  }).length;
+  if (oversizedShards > 0) {
+    log?.warning("diff manifest shard cap requires oversized condensed prompts", {
+      maxShards,
+      uncappedShards: shards.length,
+      oversizedShards,
+    });
+  }
+  return capped;
 }
 
 function mergeManifestFileSlices(files: readonly DiffManifestFile[]): DiffManifestFile[] {
