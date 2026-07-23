@@ -1,0 +1,35 @@
+apps/docs/content/docs/concepts/runtime.mdx
+  s_557d1dbcfbaf62::t_151e7372eefad2 164
+apps/docs/content/docs/guide/configuration.mdx
+  s_557d1dbcfbaf62::t_151e7372eefad2 144
+packages/sdk/src/types/task.ts
+  s_557d1dbcfbaf62::t_947d1c893c4fa7 279
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_557d1dbcfbaf62::t_d207012c3270b1 382
+  s_557d1dbcfbaf62::t_02ffae389ec604 377-381,383-385
+  s_557d1dbcfbaf62::t_1793cc74ee9a65 374-376,386-402
+  s_557d1dbcfbaf62::t_f09897685e0a63 327-373
+packages/runtime/src/review/agent/review-run.ts
+  s_557d1dbcfbaf62::t_947d1c893c4fa7 194-198,201
+  s_557d1dbcfbaf62::t_2f8467f9933388 103-106
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_557d1dbcfbaf62::t_151e7372eefad2 133
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_557d1dbcfbaf62::t_151e7372eefad2 551-552
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "6fb2f3eb0498aa84aa39643208186621d7f663c3",
+  "prompts": {},
+  "sessions": {
+    "s_557d1dbcfbaf62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8a4a-b25d-71b1-9ad3-b2d217f77b29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
