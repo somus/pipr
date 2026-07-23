@@ -1,0 +1,24 @@
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_557d1dbcfbaf62::t_317ca36227dd48 140-187,190-236,1463-1469,1475-1477,1518-1519
+  s_557d1dbcfbaf62::t_5760e7b909d652 188-189,1462
+packages/runtime/src/diff/manifest-sharding.ts
+  s_557d1dbcfbaf62::t_a8f16d5cfe5138 305
+  s_557d1dbcfbaf62::t_295906898e6466 235-238,244,248,250-277,279-285,287-294,297-304,306-310,313-334
+  s_557d1dbcfbaf62::t_5760e7b909d652 234,286
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "21baeb5fcb2e4fd6207c5829a67e5174c65bf5e2",
+  "prompts": {},
+  "sessions": {
+    "s_557d1dbcfbaf62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8a4a-b25d-71b1-9ad3-b2d217f77b29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
