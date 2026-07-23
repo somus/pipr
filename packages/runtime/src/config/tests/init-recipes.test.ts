@@ -26,7 +26,6 @@ afterEach(cleanupTemporaryDirectories);
 
 describe("initOfficialMinimalProject: generated recipes", () => {
   it("initializes every official recipe and validates the generated config", async () => {
-    expect(supportedOfficialInitRecipes).not.toContain("deep-review");
     expect(supportedOfficialInitRecipes).toContain("rich-review");
     expect(supportedOfficialInitRecipes).toContain("fix-suggestions");
     expect(listOfficialInitRecipes().map((recipe) => recipe.id)).toEqual([

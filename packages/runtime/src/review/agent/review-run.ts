@@ -100,6 +100,10 @@ type AgentAttemptResult =
 export async function runReviewAgent(
   options: RunReviewAgentOptions,
 ): Promise<RunReviewAgentResult> {
+  const maxShards = options.runOptions?.maxShards;
+  if (maxShards !== undefined && (!Number.isInteger(maxShards) || maxShards <= 0)) {
+    throw new Error("Pi run maxShards must be a positive integer");
+  }
   const manifests = await scheduledReviewManifests(options);
   if (!manifests) {
     return await runReviewAgentOnce(options);
@@ -187,9 +191,14 @@ async function scheduledReviewManifests(options: RunReviewAgentOptions) {
   if (!manifest) {
     return undefined;
   }
+  const maxShards = options.runOptions?.maxShards;
+  const config =
+    maxShards === undefined
+      ? options.runtime.config.limits?.diffManifest
+      : { ...options.runtime.config.limits?.diffManifest, maxShards };
   return await shardDiffManifestForPrompt({
     manifest,
-    config: options.runtime.config.limits?.diffManifest,
+    config,
     workspace: options.runtime.workspace,
     env: options.runtime.env,
     log: options.runtime.log,

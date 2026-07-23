@@ -130,7 +130,7 @@ const manifest = await ctx.change.diffManifest({
 
 ### Pass manifest to Pi
 
-Pass the manifest into Pi with the reserved `manifest` input key. Pipr injects full or condensed manifest content into the prompt and attaches bounded Diff Read Tools when the manifest is condensed. If a Review-schema manifest exceeds the condensed limit, Pipr uses ast-grep outlines to form at most `limits.diffManifest.maxShards` units and merges their Review results, so one `ctx.pi.run(...)` call can make multiple model calls. The default is four shards; set `maxShards: 1` to disable splitting.
+Pass the manifest into Pi with the reserved `manifest` input key. Pipr injects full or condensed manifest content into the prompt and attaches bounded Diff Read Tools when the manifest is condensed. If a Review-schema manifest exceeds the condensed limit, Pipr uses ast-grep outlines to form at most `limits.diffManifest.maxShards` units and merges their Review results, so one `ctx.pi.run(...)` call can make multiple model calls. The default is four shards. Pass `{ maxShards: 1 }` as the run options to disable splitting for one invocation, or use another positive integer to give separate calls different caps.
 
 Do not also interpolate the manifest in the agent prompt. Pass it to aggregators that independently revalidate findings; omit it only when changed-code context is not needed.
 

@@ -276,6 +276,7 @@ export type PiRunner = {
       instructions?: PromptSource;
       timeout?: DurationInput;
       paths?: PathFilter;
+      maxShards?: number;
     },
   ): Promise<Output>;
 };

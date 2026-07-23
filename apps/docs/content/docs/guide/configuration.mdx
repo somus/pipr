@@ -141,7 +141,7 @@ Pipr sends the full Diff Manifest while it fits configured limits. If the full m
 
 If the condensed manifest is also too large for a Review-schema agent, Pipr uses ast-grep outlines to keep changed importers and dependencies together where prompt limits allow, runs the bounded units sequentially, and merges their structured Review results. `maxShards` accepts a positive integer, defaults to `4`, and limits automatic fan-out from one review invocation.
 
-Set `maxShards: 1` to disable splitting and send one complete condensed manifest with Diff Read Tools. Increase `maxShards` if a capped condensed shard exceeds your provider's context limit; a higher value can make more provider calls.
+Set `maxShards: 1` to disable splitting and send one complete condensed manifest with Diff Read Tools. Pass `{ maxShards }` to `ctx.pi.run(...)` to override the global limit for one invocation. Increase `maxShards` if a capped condensed shard exceeds your provider's context limit; a higher value can make more provider calls.
 
 Pipr also enforces a fixed 16 MiB construction limit after excluding binary, removed, lock, generated-output, and oversized files. If the remaining reviewable patch exceeds the limit, the review fails before Pi runs instead of producing a partial Diff Manifest.
 

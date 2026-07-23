@@ -324,6 +324,82 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expectPromptCoverage(prompts, 8);
   });
 
+  it("lets each Pi run override the global Diff Manifest shard limit", async () => {
+    const oneShardMarker = "ONE_SHARD_RUN";
+    const twoShardMarker = "TWO_SHARD_RUN";
+    const plan = testPlan((pipr) => {
+      const model = deepseekModel(pipr);
+      const oneShardAgent = defaultReviewAgent(pipr, {
+        name: "one-shard-reviewer",
+        model,
+        prompt: () => oneShardMarker,
+      });
+      const twoShardAgent = defaultReviewAgent(pipr, {
+        name: "two-shard-reviewer",
+        model,
+        prompt: () => twoShardMarker,
+      });
+      const task = pipr.task({
+        name: "run-specific-sharding",
+        async run(ctx) {
+          const manifest = await ctx.change.diffManifest();
+          await ctx.pi.run(oneShardAgent, { manifest }, { maxShards: 1 });
+          await ctx.pi.run(twoShardAgent, { manifest }, { maxShards: 2 });
+          await ctx.comment("Run-specific sharding complete.");
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+    const prompts: string[] = [];
+
+    await runRuntime({
+      plan,
+      config: manifestShardConfig(4),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return noFindingsPiResult();
+      },
+    });
+
+    const oneShardPrompts = prompts.filter((prompt) => prompt.includes(oneShardMarker));
+    const twoShardPrompts = prompts.filter((prompt) => prompt.includes(twoShardMarker));
+    expect(oneShardPrompts).toHaveLength(1);
+    expect(twoShardPrompts).toHaveLength(2);
+    expectPromptCoverage(oneShardPrompts, 8);
+    expectPromptCoverage(twoShardPrompts, 8);
+  });
+
+  it("rejects invalid per-run Diff Manifest shard limits before starting Pi", async () => {
+    for (const maxShards of [0, 1.5]) {
+      let calls = 0;
+      const plan = testPlan((pipr) => {
+        const agent = defaultReviewAgent(pipr);
+        const task = pipr.task({
+          name: "invalid-run-sharding",
+          async run(ctx) {
+            await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() }, { maxShards });
+          },
+        });
+        pipr.on.changeRequest({ actions: ["opened"], task });
+      });
+
+      await expect(
+        runRuntime({
+          plan,
+          config: manifestShardConfig(4),
+          diffManifestBuilder: () => manyFileShardingManifest(),
+          piRunner: async () => {
+            calls += 1;
+            return noFindingsPiResult();
+          },
+        }),
+      ).rejects.toThrow("Pi run maxShards must be a positive integer");
+      expect(calls).toBe(0);
+    }
+  });
+
   it("preserves files, hunks, and ranges under the same AST and fallback shard cap", async () => {
     const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
     try {
