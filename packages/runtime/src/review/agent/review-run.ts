@@ -94,7 +94,7 @@ export async function runReviewAgent(
   options: RunReviewAgentOptions,
 ): Promise<RunReviewAgentResult> {
   const manifests = scheduledReviewManifests(options);
-  if (!manifests || manifests.length === 1) {
+  if (!manifests) {
     return await runReviewAgentOnce(options);
   }
   const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
