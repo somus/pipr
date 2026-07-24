@@ -4,6 +4,22 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.5.1](https://github.com/somus/pipr/compare/v0.5.0...v0.5.1) (2026-07-24)
+
+
+### Features
+
+* **review:** add deep review recipe ([#116](https://github.com/somus/pipr/issues/116)) ([380f98d](https://github.com/somus/pipr/commit/380f98d8c7802186892bbe5642e1359b887bd646))
+* **runtime:** add shared structural analysis ([#117](https://github.com/somus/pipr/issues/117)) ([fe063b0](https://github.com/somus/pipr/commit/fe063b04aefe09762367aaafc2f3a76c0cc77393))
+* **runtime:** add structural manifest context ([#119](https://github.com/somus/pipr/issues/119)) ([5eb7746](https://github.com/somus/pipr/commit/5eb7746ca78e02fd436b14fc15b3e19636729d33))
+* **runtime:** add structural review tools ([#118](https://github.com/somus/pipr/issues/118)) ([676bc42](https://github.com/somus/pipr/commit/676bc426d7d1064c8ece1394a7b47cee72b261c9))
+
+
+### Bug Fixes
+
+* **release:** fetch history for audit ([4d208be](https://github.com/somus/pipr/commit/4d208be18be1cceac2fd066bd86ff68fae0fced6))
+* review defects in moved code ([#114](https://github.com/somus/pipr/issues/114)) ([e138c45](https://github.com/somus/pipr/commit/e138c450c8bf92459a7984c5c354d6e9a05d395f))
+
 ## [0.5.0](https://github.com/somus/pipr/compare/v0.4.3...v0.5.0) (2026-07-20)
 
 
