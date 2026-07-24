@@ -64,6 +64,7 @@ export type RunReviewAgentOptions = {
     plan: RuntimePlan;
     env?: NodeJS.ProcessEnv;
     piExecutable?: string;
+    piAgentDir?: string;
     piRunner?: PiRunner;
     taskContext?: TaskContext;
     priorReviewState?: PriorReviewState;
@@ -475,6 +476,7 @@ async function runPiForPrompt(
       prompt,
       env: options.runtime.env,
       piExecutable: options.runtime.piExecutable,
+      piAgentDir: options.runtime.piAgentDir,
       builtinTools,
       runtimeTools,
       customTools,

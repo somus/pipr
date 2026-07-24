@@ -13,7 +13,7 @@ Each run mode uses a different source for config, diff data, secrets, and writes
 | --- | --- | --- | --- |
 | Config source | Current local workspace | Change-request base commit | Change-request base commit |
 | Diff source | Local git refs or working tree | Exact proposed head and base | Exact proposed head and base |
-| Secret source | Exported env vars or Bun-loaded env files | Provider CI secret store | Trusted worker environment |
+| Secret source | Local Pi agent authentication, exported env vars, or Bun-loaded env files | Provider CI secret store | Trusted worker environment |
 | Model-visible code context | Diff Manifest plus read-only local workspace access through Pi | Diff Manifest plus read-only CI workspace access through Pi | Diff Manifest plus read-only worker workspace access through Pi |
 | Code-host writes | Disabled | Native comments and statuses when configured | Native comments, command responses, and statuses when configured |
 | Best use | Prompt and config iteration | Trusted same-repository CI | Forks, commands, replies, and providers without a trusted CI path |

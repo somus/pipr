@@ -7,6 +7,7 @@ import {
   expectPiNotCalled,
   localReviewSelectionConfigTs,
   removeWorkspace,
+  reviewConfigTs,
 } from "./commands-fixtures.js";
 
 describe("runLocalReviewCommand", () => {
@@ -63,6 +64,38 @@ describe("runLocalReviewCommand", () => {
       expect(logs.messages.join("\n")).toContain('"event":"config warning"');
       expect(logs.messages.join("\n")).toContain(".pipr/package.json pins @usepipr/sdk 0.1.0");
     } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("uses the process Pi agent directory when env is omitted", async () => {
+    const config = reviewConfigTs({ subscriptionModel: true });
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: config,
+      headConfigTs: config,
+    });
+    const piAgentDir = path.join(workspace.rootDir, "process-pi-agent");
+    const previousPiAgentDir = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = piAgentDir;
+    try {
+      const result = await runLocalReviewCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        baseSha: workspace.baseSha,
+        headSha: workspace.headSha,
+        piExecutable: workspace.piExecutable,
+      });
+
+      expect(result.kind).toBe("review");
+      expect((await Bun.file(path.join(workspace.rootDir, "pi-agent-dir")).text()).trim()).toBe(
+        piAgentDir,
+      );
+    } finally {
+      if (previousPiAgentDir === undefined) {
+        delete process.env.PI_CODING_AGENT_DIR;
+      } else {
+        process.env.PI_CODING_AGENT_DIR = previousPiAgentDir;
+      }
       await removeWorkspace(workspace.rootDir);
     }
   });

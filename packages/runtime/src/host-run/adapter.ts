@@ -14,7 +14,7 @@ export function assertTrustedHostRunProviderEnv(
   const env = options.env ?? process.env;
   const missing: string[] = [];
   for (const provider of trustedConfig.providers) {
-    if (!env[provider.apiKeyEnv]) {
+    if (provider.apiKeyEnv && !env[provider.apiKeyEnv]) {
       missing.push(provider.apiKeyEnv);
     }
   }

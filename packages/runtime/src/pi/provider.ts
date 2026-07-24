@@ -9,7 +9,6 @@ export function toPiProviderInvocation(provider: ProviderConfig): PiProviderInvo
   return parsePiProviderInvocation({
     provider: provider.provider,
     model: provider.model,
-    apiKeyEnv: provider.apiKeyEnv,
     thinking: provider.thinking ?? "high",
     tools: piReadOnlyToolNames,
   });

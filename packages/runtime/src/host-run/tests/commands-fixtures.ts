@@ -134,9 +134,12 @@ export async function writePiExecutable(piExecutable: string, stdout: string): P
 }
 
 function piExecutableScript(stdout: string): string {
-  return ["#!/bin/sh", 'touch "$(dirname "$0")/pi-called"', `printf '%s\\n' '${stdout}'`].join(
-    "\n",
-  );
+  return [
+    "#!/bin/sh",
+    'touch "$(dirname "$0")/pi-called"',
+    'printf "%s\\n" "$PI_CODING_AGENT_DIR" > "$(dirname "$0")/pi-agent-dir"',
+    `printf '%s\\n' '${stdout}'`,
+  ].join("\n");
 }
 
 export async function runIssueCommentCommand(
@@ -357,6 +360,7 @@ export function reviewConfigTs(
     parseSideEffect?: boolean;
     checks?: boolean;
     autoResolve?: false | "userRepliesDisabled" | "any";
+    subscriptionModel?: boolean;
   } = {},
 ): string {
   const template = "$";
@@ -373,9 +377,13 @@ export function reviewConfigTs(
     "",
     "export default definePipr((pipr) => {",
     "  const model = pipr.model({",
-    '    provider: "deepseek",',
-    '    model: "deepseek-reasoner",',
-    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
+    ...(options.subscriptionModel
+      ? ['    provider: "openai-codex",', '    model: "gpt-5.5",']
+      : [
+          '    provider: "deepseek",',
+          '    model: "deepseek-reasoner",',
+          '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
+        ]),
     '    options: { thinking: "high" },',
     "  });",
     "  const reviewer = pipr.agent({",

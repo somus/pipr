@@ -121,6 +121,51 @@ Pipr passes the configured provider and model IDs to Pi. [Browse Pi's Model Cata
 
 Provider secrets are env-only. `pipr.secret({ name: "DEEPSEEK_API_KEY" })` records the env var name and does not put raw secret values in the runtime plan.
 
+### Local subscription models
+
+Omit `apiKey` when a model should authenticate through your local Pi agent directory. Select it from the Review Task when `ctx.run.trigger` is `local`, and keep the hosted model explicit for other runs:
+
+```ts twoslash
+// @include: pipr-builder
+const localModel = pipr.model({
+  provider: "openai-codex",
+  model: "gpt-5.5",
+});
+const hostedModel = pipr.model({
+  provider: "deepseek",
+  model: "deepseek-v4-pro",
+  apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+});
+pipr.config({
+  publication: { autoResolve: { model: hostedModel } },
+});
+const reviewer = pipr.agent({
+  name: "reviewer",
+  model: hostedModel,
+  instructions: "Review this change.",
+  output: pipr.schemas.review,
+  prompt: () => "Review the change request.",
+});
+const task = pipr.task({
+  name: "review",
+  async run(ctx) {
+    const manifest = await ctx.change.diffManifest({ compressed: true });
+    const model = ctx.run.trigger === "local" ? localModel : hostedModel;
+    const result = await ctx.pi.run(reviewer, { manifest }, { model });
+    await ctx.comment({
+      main: result.summary.body,
+      inlineFindings: result.inlineFindings,
+    });
+  },
+});
+
+pipr.on.changeRequest({ actions: ["opened", "updated"], task });
+```
+
+Local review resolves the Pi agent directory from `--pi-agent-dir`, `PI_CODING_AGENT_DIR`, or `$HOME/.pi/agent`, in that order. Hosted runs don't receive this directory, so select a model with `apiKey` outside local runs.
+
+The explicit `publication.autoResolve.model` keeps hosted synchronization and review-reply verification on the API-key model. These internal verifier runs don't use the task's `ctx.run.trigger` selection.
+
 ### Explicit ids
 
 Model ids default to `<provider>/<model>`. Set an explicit `id` only when two profiles use the same provider and model with different options.

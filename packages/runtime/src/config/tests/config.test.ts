@@ -190,6 +190,56 @@ describe("loadRuntimeProject", () => {
     ).rejects.toThrow("Missing provider env vars: DEEPSEEK_API_KEY");
   });
 
+  it("allows a local Pi authenticated model alongside an API-key model", async () => {
+    const rootDir = await newConfigProject(`import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const localModel = pipr.model({
+    provider: "openai-codex",
+    model: "gpt-5.5",
+  });
+  const hostedModel = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+  pipr.review({
+    id: "review",
+    model: hostedModel,
+    instructions: "Review this change.",
+  });
+  void localModel;
+});
+`);
+
+    const runtime = await loadRuntimeProject({
+      rootDir,
+      env: { DEEPSEEK_API_KEY: "hosted-key" },
+      requireProviderEnv: true,
+    });
+
+    expect(runtime).toMatchObject({
+      settings: {
+        config: {
+          providers: [
+            {
+              id: "openai-codex/gpt-5.5",
+              provider: "openai-codex",
+              model: "gpt-5.5",
+            },
+            {
+              id: "deepseek/deepseek-v4-pro",
+              apiKeyEnv: "DEEPSEEK_API_KEY",
+            },
+          ],
+        },
+      },
+    });
+    await expect(
+      loadRuntimeProject({ rootDir, env: {}, requireProviderEnv: true }),
+    ).rejects.toThrow("Missing provider env vars: DEEPSEEK_API_KEY");
+  });
+
   it("type-checks .pipr/config.ts during validation", async () => {
     const rootDir = await newInitializedProject();
     await writePiprConfig(

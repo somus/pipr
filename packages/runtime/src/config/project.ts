@@ -181,15 +181,12 @@ function normalizeUserReplyAutoResolveConfig(
 }
 
 function modelToProvider(model: ModelProfile): ProviderConfig {
-  if (!model.apiKey) {
-    throw new Error(`Model '${model.id}' must declare apiKey: pipr.secret({ name: "ENV_NAME" })`);
-  }
   const thinking = model.options?.thinking;
   return parseProviderConfig({
     id: model.id,
     provider: model.provider,
     model: model.model,
-    apiKeyEnv: model.apiKey.name,
+    apiKeyEnv: model.apiKey?.name,
     thinking: typeof thinking === "string" ? thinking : undefined,
   });
 }
@@ -212,7 +209,10 @@ function assertRequiredProviderEnv(
     return;
   }
   const env = options.env ?? process.env;
-  const missing = providers.filter((provider) => !env[provider.apiKeyEnv]);
+  const missing = providers.filter(
+    (provider): provider is ProviderConfig & { apiKeyEnv: string } =>
+      provider.apiKeyEnv !== undefined && !env[provider.apiKeyEnv],
+  );
   if (missing.length > 0) {
     throw new Error(
       `Missing provider env vars: ${missing.map((provider) => provider.apiKeyEnv).join(", ")}`,
