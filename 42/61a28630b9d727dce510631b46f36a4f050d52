@@ -1,0 +1,47 @@
+packages/runtime/src/review/tests/review-run.test.ts
+  s_87f449b385ea97::t_94507f1c452cd8 5,48-57,62-112
+  s_87f449b385ea97::t_1c358cc26dbb44 58-61
+packages/runtime/src/pi/runner.ts
+  s_87f449b385ea97::t_5fed6ace5d76e7 209,218,221,241
+  s_87f449b385ea97::t_9bf92cacd04730 324-330,335
+packages/runtime/src/pi/runtime-tools-core.ts
+  s_87f449b385ea97::t_f37404061ca5c6 406-407
+  s_87f449b385ea97::t_bae38b082f93e0 395,404-405
+packages/runtime/src/pi/tests/runtime-tools.test.ts
+  s_87f449b385ea97::t_e8931a2056dcc0 409-417,422
+  s_87f449b385ea97::t_fc2c536f4b6873 1133
+  s_87f449b385ea97::t_21a08df72e8123 341-377,383-403,418-421,423-439,526-533,573-579,1122-1132
+  s_87f449b385ea97::t_1c358cc26dbb44 378-382,404-408
+packages/runtime/src/pi/runtime-tools-extension.ts
+  s_87f449b385ea97::t_f3c73d4352d28d 22,331,363,365,370-421
+  s_87f449b385ea97::t_1ab6eab68d6e47 364
+packages/runtime/src/review/tests/manifest-payload.test.ts
+  s_87f449b385ea97::t_e8931a2056dcc0 240,243,246,249
+  s_87f449b385ea97::t_4a06779d06620b 170-239,241-242,244-245,247-248,250-253
+packages/runtime/src/pi/runtime-tools.ts
+  s_87f449b385ea97::t_1ab6eab68d6e47 104
+  s_87f449b385ea97::t_ad2ff70b3fecdd 297
+  s_87f449b385ea97::t_76a800764550aa 40-47,56-59,65,74,101,106,118-150,159,234,265-269,289-296
+packages/runtime/src/pi/tests/pi.test.ts
+  s_87f449b385ea97::t_21a08df72e8123 522-552
+packages/runtime/src/review/agent/review-run.ts
+  s_87f449b385ea97::t_9bf92cacd04730 75,157
+packages/runtime/src/review/task/task-runtime.ts
+  s_87f449b385ea97::t_9bf92cacd04730 229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "4261a28630b9d727dce510631b46f36a4f050d52",
+  "prompts": {},
+  "sessions": {
+    "s_87f449b385ea97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9234-c679-7a23-a5fb-18a0862843e3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
