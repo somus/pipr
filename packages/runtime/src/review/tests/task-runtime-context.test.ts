@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { z } from "@usepipr/sdk";
 import type { DiffManifest } from "../../types.js";
 import {
@@ -60,7 +63,134 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
 
     expect(result.mainComment).toContain('"preview":"const x = fail();"');
     expect(result.mainComment).toContain('"hasSignals":false');
-    expect(result.mainComment).toContain('"hasChangedSymbols":false');
+    expect(result.mainComment).toContain('"hasChangedSymbols":true');
+  });
+
+  it("adds best-effort structural metadata and retains it in compressed projections", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      await writeFakeAstGrepOutline(executableDirectory, [
+        {
+          path: "src/a.ts",
+          language: "TypeScript",
+          items: [outlineItem("reviewChange", 8, 24), outlineItem("unrelated", 30, 40)],
+        },
+      ]);
+      const source = reviewTestManifestWithContext();
+      const sourceFile = source.files[0];
+      if (!sourceFile) {
+        throw new Error("expected a changed file");
+      }
+      const manifest = {
+        ...source,
+        files: [
+          {
+            ...sourceFile,
+            changedSymbols: ["callerProvided"],
+            commentableRanges: sourceFile.commentableRanges.map((range, index) => {
+              if (index === 1) {
+                return { ...range, summary: "Caller-provided summary" };
+              }
+              const { summary: _summary, ...withoutSummary } = range;
+              return withoutSummary;
+            }),
+          },
+        ],
+      };
+      const plan = testPlan((pipr) => {
+        const task = pipr.task({
+          name: "review",
+          async run(ctx) {
+            const projected = await ctx.change.diffManifest({ compressed: true });
+            await ctx.comment(JSON.stringify(projected.files[0]));
+          },
+        });
+        pipr.on.changeRequest({ actions: ["opened"], task });
+      });
+
+      const result = await runRuntime({
+        plan,
+        diffManifestBuilder: manifestBuilder(manifest),
+        env: {
+          ...process.env,
+          PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+        },
+      });
+
+      expect(result.mainComment).toContain('"changedSymbols":["callerProvided","reviewChange"]');
+      expect(result.mainComment).toContain(
+        '"summary":"Enclosing declaration: function reviewChange"',
+      );
+      expect(result.mainComment).toContain('"summary":"Caller-provided summary"');
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("bounds derived structural metadata deterministically across the manifest", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      const manifest = cappedMetadataManifest();
+      await writeFakeAstGrepOutline(
+        executableDirectory,
+        manifest.files.map((file) => ({
+          path: file.path,
+          language: "TypeScript",
+          items: Array.from({ length: 40 }, (_, index) =>
+            outlineItem(`symbol-${index}-${"x".repeat(140)}`, index + 1, index + 1),
+          ),
+        })),
+      );
+      const plan = testPlan((pipr) => {
+        const task = pipr.task({
+          name: "review",
+          async run(ctx) {
+            const projected = await ctx.change.diffManifest({ compressed: true });
+            const strings = projected.files.flatMap((file) => [
+              ...(file.changedSymbols ?? []),
+              ...file.commentableRanges.flatMap((range) =>
+                range.summary === undefined ? [] : [range.summary],
+              ),
+            ]);
+            await ctx.comment(
+              JSON.stringify({
+                bytes: strings.reduce((sum, value) => sum + Buffer.byteLength(value), 0),
+                symbolCounts: projected.files.map((file) => file.changedSymbols?.length ?? 0),
+                maxSymbolLength: Math.max(
+                  ...projected.files.flatMap((file) =>
+                    (file.changedSymbols ?? []).map((symbol) => symbol.length),
+                  ),
+                ),
+                maxSummaryLength: Math.max(
+                  ...projected.files.flatMap((file) =>
+                    file.commentableRanges.flatMap((range) =>
+                      range.summary === undefined ? [] : [range.summary.length],
+                    ),
+                  ),
+                ),
+              }),
+            );
+          },
+        });
+        pipr.on.changeRequest({ actions: ["opened"], task });
+      });
+
+      const result = await runRuntime({
+        plan,
+        diffManifestBuilder: manifestBuilder(manifest),
+        env: {
+          ...process.env,
+          PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+        },
+      });
+
+      expect(result.mainComment).toContain('"bytes":32730');
+      expect(result.mainComment).toContain('"symbolCounts":[32,32,27,0]');
+      expect(result.mainComment).toContain('"maxSymbolLength":120');
+      expect(result.mainComment).toContain('"maxSummaryLength":182');
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
   });
 
   it("filters Diff Manifest files by configured paths", async () => {
@@ -749,3 +879,65 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     expect(result.mainComment).toContain('{"ok":true}');
   });
 });
+
+function outlineItem(name: string, startLine: number, endLine: number) {
+  return {
+    role: "item",
+    symbolType: "function",
+    name,
+    range: {
+      byteOffset: { start: 0, end: 1 },
+      start: { line: startLine - 1, column: 0 },
+      end: { line: endLine - 1, column: 1 },
+    },
+    signature: `function ${name}()`,
+    astKind: "function_declaration",
+    isImport: false,
+    isExported: false,
+  };
+}
+
+function cappedMetadataManifest(): DiffManifest {
+  const source = reviewTestManifestWithContext();
+  const seed = source.files[0];
+  const seedRange = seed?.commentableRanges[0];
+  if (!seed || !seedRange) {
+    throw new Error("expected a changed file and range");
+  }
+  return {
+    ...source,
+    files: Array.from({ length: 4 }, (_, fileIndex) => {
+      const filePath = `src/capped-${fileIndex}.ts`;
+      return {
+        ...seed,
+        path: filePath,
+        changedSymbols: undefined,
+        commentableRanges: Array.from({ length: 40 }, (_, rangeIndex) => ({
+          ...seedRange,
+          id: `capped-${fileIndex}-${rangeIndex}`,
+          path: filePath,
+          startLine: rangeIndex + 1,
+          endLine: rangeIndex + 1,
+          summary: undefined,
+        })),
+      };
+    }),
+  };
+}
+
+async function writeFakeAstGrepOutline(directory: string, output: unknown): Promise<void> {
+  const executable = path.join(directory, "ast-grep");
+  await Bun.write(
+    executable,
+    [
+      "#!/usr/bin/env bun",
+      'if (process.argv.includes("--version")) {',
+      '  process.stdout.write("ast-grep 0.44.1\\n");',
+      "} else {",
+      `  process.stdout.write(${JSON.stringify(JSON.stringify(output))});`,
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await chmod(executable, 0o755);
+}

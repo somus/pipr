@@ -6,7 +6,9 @@ import type {
   DiffManifestPromptMetrics,
 } from "../types.js";
 import { parseDiffManifest } from "../types.js";
+import { findEnclosingDeclaration } from "./manifest-structure.js";
 import { filterDiffManifestByPaths } from "./path-filter.js";
+import type { DiffStructuralAnalysis } from "./structural-analysis.js";
 
 export type DiffManifestPromptMode = "full" | "condensed";
 
@@ -100,6 +102,7 @@ export function prepareDiffManifestPrompt(
 export function partitionDiffManifestForPrompt(
   manifest: DiffManifest,
   config: DiffManifestLimitsConfig | undefined,
+  structuralAnalysis?: DiffStructuralAnalysis,
 ): DiffManifest[] {
   if (diffManifestFitsPrompt(manifest, config)) {
     return [manifest];
@@ -117,7 +120,7 @@ export function partitionDiffManifestForPrompt(
         units.push(manifestWithFiles(manifest, files));
         files = [];
       }
-      units.push(...splitOversizedManifestFile(manifest, file, config));
+      units.push(...splitOversizedManifestFile(manifest, file, config, structuralAnalysis));
       continue;
     }
 
@@ -182,7 +185,7 @@ function withoutCompressedFileFields(
   if (!compressed) {
     return file;
   }
-  const { signals: _signals, changedSymbols: _changedSymbols, ...rest } = file;
+  const { signals: _signals, ...rest } = file;
   return rest;
 }
 
@@ -193,8 +196,7 @@ function withoutCompressedRangeFields(
   if (!compressed) {
     return range;
   }
-  const { summary: _summary, ...rest } = range;
-  return rest;
+  return range;
 }
 
 function rangeFieldsForOptions(
@@ -227,6 +229,7 @@ function condenseDiffManifestFile(file: DiffManifestFile): DiffManifestFile {
     language: file.language,
     additions: file.additions,
     deletions: file.deletions,
+    changedSymbols: file.changedSymbols,
     hunks: file.hunks.map((hunk) => ({
       hunkIndex: hunk.hunkIndex,
       header: hunk.header,
@@ -246,6 +249,7 @@ function condenseDiffManifestFile(file: DiffManifestFile): DiffManifestFile {
       hunkIndex: range.hunkIndex,
       hunkHeader: range.hunkHeader,
       hunkContentHash: range.hunkContentHash,
+      summary: range.summary,
     })),
     excludedReason: file.excludedReason,
   };
@@ -255,6 +259,7 @@ function splitOversizedManifestFile(
   manifest: DiffManifest,
   file: DiffManifestFile,
   config: DiffManifestLimitsConfig | undefined,
+  structuralAnalysis: DiffStructuralAnalysis | undefined,
 ): DiffManifest[] {
   if (file.hunks.length === 0) {
     return [ensureManifestFitsPrompt(manifestWithFiles(manifest, [file]), config)];
@@ -266,8 +271,89 @@ function splitOversizedManifestFile(
     ranges.push(range);
     rangesByHunk.set(range.hunkIndex, ranges);
   }
+  if (structuralAnalysis?.available) {
+    return splitFileByDeclarations(manifest, file, rangesByHunk, config, structuralAnalysis);
+  }
   return file.hunks.flatMap((hunk) =>
     splitManifestHunk(manifest, file, hunk, rangesByHunk.get(hunk.hunkIndex) ?? [], config),
+  );
+}
+
+function splitFileByDeclarations(
+  manifest: DiffManifest,
+  file: DiffManifestFile,
+  rangesByHunk: ReadonlyMap<number, DiffManifestFile["commentableRanges"]>,
+  config: DiffManifestLimitsConfig | undefined,
+  structuralAnalysis: DiffStructuralAnalysis,
+): DiffManifest[] {
+  const units: Array<{
+    hunks: Array<DiffManifestFile["hunks"][number]>;
+    ranges: Array<DiffManifestFile["commentableRanges"][number]>;
+  }> = [];
+  const declarationUnitIndex = new Map<string, number>();
+  for (const hunk of file.hunks) {
+    const ranges = rangesByHunk.get(hunk.hunkIndex) ?? [];
+    const ownerKey = hunkDeclarationKey(file, ranges, structuralAnalysis);
+    const existingIndex = ownerKey ? declarationUnitIndex.get(ownerKey) : undefined;
+    if (existingIndex !== undefined) {
+      const existing = units[existingIndex];
+      if (!existing) {
+        throw new Error(`Missing declaration unit at index ${existingIndex}`);
+      }
+      existing.hunks.push(hunk);
+      existing.ranges.push(...ranges);
+      continue;
+    }
+    const unit = { hunks: [hunk], ranges: [...ranges] };
+    if (ownerKey) {
+      declarationUnitIndex.set(ownerKey, units.length);
+    }
+    units.push(unit);
+  }
+
+  return units.flatMap((unit) => {
+    const candidate = manifestWithFileSlice(manifest, file, unit.hunks, unit.ranges);
+    if (diffManifestFitsPrompt(candidate, config)) {
+      return [candidate];
+    }
+    return unit.hunks.flatMap((hunk) =>
+      splitManifestHunk(manifest, file, hunk, rangesByHunk.get(hunk.hunkIndex) ?? [], config),
+    );
+  });
+}
+
+function hunkDeclarationKey(
+  file: DiffManifestFile,
+  ranges: DiffManifestFile["commentableRanges"],
+  structuralAnalysis: DiffStructuralAnalysis,
+): string | undefined {
+  if (ranges.length === 0) {
+    return undefined;
+  }
+  const owners = ranges.map((range) => findEnclosingDeclaration(file, range, structuralAnalysis));
+  const first = owners[0];
+  if (!first || owners.some((owner) => !sameDeclarationOwner(owner, first))) {
+    return undefined;
+  }
+  return [
+    first.ref,
+    first.sourcePath,
+    first.declaration.startLine,
+    first.declaration.endLine,
+    first.declaration.qualifiedName,
+  ].join(":");
+}
+
+function sameDeclarationOwner(
+  left: ReturnType<typeof findEnclosingDeclaration>,
+  right: NonNullable<ReturnType<typeof findEnclosingDeclaration>>,
+): boolean {
+  return (
+    left?.ref === right.ref &&
+    left.sourcePath === right.sourcePath &&
+    left.declaration.startLine === right.declaration.startLine &&
+    left.declaration.endLine === right.declaration.endLine &&
+    left.declaration.qualifiedName === right.declaration.qualifiedName
   );
 }
 

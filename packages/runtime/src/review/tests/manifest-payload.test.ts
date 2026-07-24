@@ -35,6 +35,7 @@ describe("Diff Manifest prompt payload", () => {
       status: "modified",
       additions: 1,
       deletions: 0,
+      changedSymbols: ["changedSymbol"],
       hunks: [
         {
           hunkIndex: 1,
@@ -52,6 +53,7 @@ describe("Diff Manifest prompt payload", () => {
           kind: "added",
           hunkHeader: "@@ -9,1 +10,3 @@",
           hunkContentHash: "deadbeefcafe",
+          summary: "large summary ".repeat(100),
         },
         {
           id: "range-2",
@@ -60,7 +62,7 @@ describe("Diff Manifest prompt payload", () => {
     });
     expect(JSON.stringify(prepared.manifest)).not.toContain("large preview");
     expect(JSON.stringify(prepared.manifest)).not.toContain("large signal");
-    expect(JSON.stringify(prepared.manifest)).not.toContain("changedSymbol");
+    expect(JSON.stringify(prepared.manifest)).toContain("changedSymbol");
   });
 
   it("condenses when estimated token limits are exceeded", () => {

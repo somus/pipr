@@ -191,6 +191,38 @@ describe("Diff Manifest sharding", () => {
 
     expect(JSON.stringify(unavailable)).toBe(JSON.stringify(availableWithoutRelationships));
   });
+
+  it("keeps hunks owned by the same declaration in one partition unit", async () => {
+    const manifest = declarationGroupingManifest();
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 1_500),
+      workspace: process.cwd(),
+      structuralAnalysis: declarationGroupingAnalysis,
+    });
+
+    expect(
+      shards.map((shard) =>
+        shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
+      ),
+    ).toEqual([[1, 2], [3]]);
+  });
+
+  it("falls back to hunk splitting when a declaration unit is oversized", async () => {
+    const manifest = declarationGroupingManifest();
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 900),
+      workspace: process.cwd(),
+      structuralAnalysis: declarationGroupingAnalysis,
+    });
+
+    expect(
+      shards.map((shard) =>
+        shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
+      ),
+    ).toEqual([[1], [2], [3]]);
+  });
 });
 
 function shardConfig(maxShards: number, condensedMaxBytes: number) {
@@ -294,5 +326,75 @@ function manyHunkSingleFileManifest(): DiffManifest {
         }),
       },
     ],
+  };
+}
+
+function declarationGroupingManifest(): DiffManifest {
+  const manifest = manyHunkSingleFileManifest();
+  const file = requiredFile(manifest);
+  const selectedHunks = file.hunks.slice(0, 3).map((hunk, index) => {
+    const line = index === 2 ? 20 : index * 10 + 1;
+    return {
+      ...hunk,
+      hunkIndex: index + 1,
+      header: `@@ -${line},1 +${line},1 @@`,
+      oldStart: line,
+      newStart: line,
+    };
+  });
+  const [firstRange, secondRange, thirdRange] = file.commentableRanges;
+  if (!firstRange || !secondRange || !thirdRange) {
+    throw new Error("expected three commentable ranges");
+  }
+  const selectedRanges = [firstRange, secondRange, thirdRange];
+  return {
+    ...manifest,
+    files: [
+      {
+        ...file,
+        hunks: selectedHunks,
+        commentableRanges: selectedHunks.map((hunk, index) => ({
+          ...selectedRanges[index],
+          id: `declaration-range-${index}`,
+          startLine: hunk.newStart,
+          endLine: hunk.newStart,
+          hunkIndex: hunk.hunkIndex,
+          hunkHeader: hunk.header,
+          hunkContentHash: hunk.contentHash,
+        })),
+      },
+    ],
+  };
+}
+
+async function declarationGroupingAnalysis() {
+  return {
+    available: true as const,
+    version: "0.44.1",
+    headFiles: [
+      {
+        path: "src/a.ts",
+        language: "TypeScript",
+        imports: [],
+        declarations: [
+          {
+            qualifiedName: "shared",
+            kind: "function",
+            startLine: 1,
+            endLine: 12,
+            isExported: false,
+          },
+          {
+            qualifiedName: "separate",
+            kind: "function",
+            startLine: 20,
+            endLine: 24,
+            isExported: false,
+          },
+        ],
+      },
+    ],
+    baseFiles: [],
+    diagnostics: { durationMs: 1, fileCount: 1, declarationCount: 2 },
   };
 }
