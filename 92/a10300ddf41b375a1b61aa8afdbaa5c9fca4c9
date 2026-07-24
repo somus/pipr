@@ -1,0 +1,368 @@
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 47,55,62-77,102,109
+  s_fbbcc7f4f67718::t_2ef259a04b73cf 3,12,154
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 47,624,631
+apps/docs/source.config.ts
+  s_fbbcc7f4f67718::t_1202cb20dac71f 26-27,29-30
+apps/docs/content/docs/guide/entrypoints.mdx
+  s_fbbcc7f4f67718::t_bafe9a8043a08b 19,26-27,37,40-41
+packages/e2e/scenarios.ts
+  s_fbbcc7f4f67718::t_eade1d8cff458e 64
+  s_fbbcc7f4f67718::t_ce3c75843a2e51 249-252
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 59,102,108,155
+packages/cli/src/tests/main.test.ts
+  s_fbbcc7f4f67718::t_3b18c25fffae59 1207
+  s_fbbcc7f4f67718::t_0001ef83c50ee0 528,549
+  s_fbbcc7f4f67718::t_8330b3b1e40443 1203-1205,1209-1211,1213-1218
+  s_fbbcc7f4f67718::t_79cc3a9aaeeddd 1162
+  s_fbbcc7f4f67718::t_7cf63d800bcbfe 687
+  s_fbbcc7f4f67718::t_d7b4f2ff823371 1206,1208
+  s_fbbcc7f4f67718::t_de04ca1f2306ef 1165,1212
+  s_fbbcc7f4f67718::t_93cf8eef516236 999,1001-1002
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_fbbcc7f4f67718::t_bafe9a8043a08b 15-19
+packages/runtime/src/review/agent/review-schema.ts
+  s_fbbcc7f4f67718::t_13d00c55c7c565 37-40,47-48,50-56,117-118
+  s_fbbcc7f4f67718::t_eade1d8cff458e 58-59,61-63,67-75
+  s_fbbcc7f4f67718::t_d39176b2debb2b 45-46,49,57,60,66,101,104,116
+  s_fbbcc7f4f67718::t_104b802f89cf3a 84,98-100,102-103,105-115
+  s_fbbcc7f4f67718::t_09d3c4952212fc 41-44,64-65,76-83,85-97
+apps/docs/content/docs/reference/architecture.mdx
+  s_fbbcc7f4f67718::t_0551bea85dfe0a 60
+packages/runtime/src/config/recipes/ci-triage-command.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 15
+apps/docs/content/docs/concepts/comments.mdx
+  s_fbbcc7f4f67718::t_bafe9a8043a08b 201,228
+  s_fbbcc7f4f67718::t_5164aa45d538b7 40,58,61
+  s_fbbcc7f4f67718::t_901f347011048d 62
+packages/runtime/src/config/recipes/security-sast.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 37
+  s_fbbcc7f4f67718::t_acbf07b92432df 5
+apps/docs/content/docs/recipes/ci-triage-command.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 46,141,148
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_fbbcc7f4f67718::t_5164aa45d538b7 403,419-425
+  s_fbbcc7f4f67718::t_1202cb20dac71f 27,41,66,75-81,123-127,138,140,143-144,146-149,153,474,510
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 56
+  s_fbbcc7f4f67718::t_0551bea85dfe0a 62
+  s_fbbcc7f4f67718::t_65e3f9f6a83017 426
+packages/sdk/src/index.ts
+  s_fbbcc7f4f67718::t_d1d703d035f96e 99
+  s_fbbcc7f4f67718::t_00358723557977 49,56
+  s_fbbcc7f4f67718::t_8cd8bad88ba35e 12-17,20,24
+  s_fbbcc7f4f67718::t_c881e5fb682bf1 120-122
+  s_fbbcc7f4f67718::t_7c94aa4ac4b1d1 100,111,123
+packages/runtime/src/config/recipes/multi-agent-review.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 17,25
+  s_fbbcc7f4f67718::t_acbf07b92432df 5
+README.md
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 114
+  s_fbbcc7f4f67718::t_1202cb20dac71f 121-129,141
+  s_fbbcc7f4f67718::t_5164aa45d538b7 70,77
+packages/runtime/src/config/tests/init-project.test.ts
+  s_fbbcc7f4f67718::t_ee2590598d464d 49
+  s_fbbcc7f4f67718::t_a400f7aa4dbb35 48,50,85
+packages/runtime/src/config/recipes/types.ts
+  s_fbbcc7f4f67718::t_acbf07b92432df 19
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 47,112,119
+skills/pipr-setup/SKILL.md
+  s_fbbcc7f4f67718::t_6dd67b6fddd7ed 90
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 46,139,146
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 46,237,244
+apps/docs/content/docs/reference/cli.mdx
+  s_fbbcc7f4f67718::t_5164aa45d538b7 188
+apps/docs/scripts/sync-recipes.ts
+  s_fbbcc7f4f67718::t_5164aa45d538b7 18,22,178,185
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 47,323,330
+apps/docs/content/docs/recipes/index.mdx
+  s_fbbcc7f4f67718::t_2ef259a04b73cf 76-77
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 16
+packages/runtime/src/config/recipes/diff-diagnostics.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 16
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 50,443,450
+docs/adr/0005-pipr-owned-comment-publishing.md
+  s_fbbcc7f4f67718::t_3e5ef7dfb76ed1 12-13
+packages/runtime/src/config/recipes.ts
+  s_fbbcc7f4f67718::t_acbf07b92432df 79-82
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_fbbcc7f4f67718::t_890b0738f59fc3 228
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_fbbcc7f4f67718::t_43165913df7fda 40-44,120-180,211,226-227,257,260-261,272,274,278
+  s_fbbcc7f4f67718::t_b392f3bfd528e7 55,90,309
+  s_fbbcc7f4f67718::t_e28127ac48189c 99-112,116-118
+  s_fbbcc7f4f67718::t_425e04843ef37b 75-87
+  s_fbbcc7f4f67718::t_2ae9974a9f65ba 113-115,119,273,275,281,286
+  s_fbbcc7f4f67718::t_0d160a2b5a428f 353
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 66-69,73,91,93-94,97-98,190,193-206,208,215-216,228-229,231,238-256,258-259,262,264-266,271,276-277,279-280,311,315,319,369,376
+  s_fbbcc7f4f67718::t_2ef259a04b73cf 417
+  s_fbbcc7f4f67718::t_c881e5fb682bf1 263
+packages/runtime/src/config/recipes/quality-gate.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 17
+  s_fbbcc7f4f67718::t_acbf07b92432df 5
+skills/pipr-setup/references/config-patterns.md
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 29
+  s_fbbcc7f4f67718::t_6dd67b6fddd7ed 37-44,58-61,95-98
+  s_fbbcc7f4f67718::t_8080309372412c 7-17,130-133,160-161,179
+  s_fbbcc7f4f67718::t_09d3c4952212fc 50
+apps/docs/content/docs/guide/configuration.mdx
+  s_fbbcc7f4f67718::t_0551bea85dfe0a 125
+  s_fbbcc7f4f67718::t_1202cb20dac71f 42-50,57,63,70,73-74,254
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 28,113
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_fbbcc7f4f67718::t_1202cb20dac71f 176-177
+  s_fbbcc7f4f67718::t_0551bea85dfe0a 20
+apps/docs/content/docs/index.mdx
+  s_fbbcc7f4f67718::t_5164aa45d538b7 51
+packages/sdk/src/review-contract.ts
+  s_fbbcc7f4f67718::t_8cd8bad88ba35e 21-25,27,50-54,66-68
+  s_fbbcc7f4f67718::t_685900102d305c 69-70
+packages/runtime/src/config/recipes/changelog-draft.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 15
+packages/runtime/src/config/recipes/dependency-risk.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 15
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 46,103,110
+packages/runtime/src/config/recipes/pr-briefing.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 15
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_fbbcc7f4f67718::t_a045225a56e2a3 809,925,927
+  s_fbbcc7f4f67718::t_5382e9ae784676 121-126
+  s_fbbcc7f4f67718::t_516c28517aa29f 226-229,233-234,237,244,328,332-335,337,831-838,931,1837,1868
+  s_fbbcc7f4f67718::t_90499a4a69b511 727
+  s_fbbcc7f4f67718::t_21857aba89b516 27
+  s_fbbcc7f4f67718::t_93cf8eef516236 130-200,235,238-242
+  s_fbbcc7f4f67718::t_43ce92a6a1a7b2 757
+  s_fbbcc7f4f67718::t_f93ca8fcf14e4b 255-272,274-284
+  s_fbbcc7f4f67718::t_d39176b2debb2b 236,1838,1869
+  s_fbbcc7f4f67718::t_c8a0d7922ad8bb 36-68,74-101,111-120,127-129
+  s_fbbcc7f4f67718::t_f2ff929bbb7791 102-110
+  s_fbbcc7f4f67718::t_969088750a0999 208,306,791,815,920,1736-1739
+  s_fbbcc7f4f67718::t_483b4a4c62964f 747-749,755
+  s_fbbcc7f4f67718::t_ee2590598d464d 5,70-72
+  s_fbbcc7f4f67718::t_185d1beef9f324 273
+  s_fbbcc7f4f67718::t_09d3c4952212fc 750-754,761
+  s_fbbcc7f4f67718::t_8080309372412c 394-399,742-745,877-879,941-943,1114-1119,1132-1135,1301-1303,1309-1311,1348-1350,1356-1358,1395-1397,1490-1493,1523-1525,1556-1558,1630-1632,1745-1748,1763-1766,1803-1806,1823-1826,1833-1836,1854-1857,1864-1867,1929-1933
+  s_fbbcc7f4f67718::t_499542558e1784 69,73
+apps/docs/content/docs/guide/quickstart.mdx
+  s_fbbcc7f4f67718::t_5164aa45d538b7 154,161
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_fbbcc7f4f67718::t_e6a8bdcdd98f2b 459
+  s_fbbcc7f4f67718::t_4665a5da8c57a0 418,420
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 46,96,103
+packages/sdk/src/types/agent.ts
+  s_fbbcc7f4f67718::t_ee2590598d464d 2
+  s_fbbcc7f4f67718::t_8cd8bad88ba35e 15
+packages/runtime/src/review/agent/review-run.ts
+  s_fbbcc7f4f67718::t_13d00c55c7c565 114-115,118,138,207-213,225,233,245-246,248-253,255,259-260,263-267,286-311
+  s_fbbcc7f4f67718::t_eade1d8cff458e 44-47,256-257,261
+  s_fbbcc7f4f67718::t_790d78b0f96e11 258,262
+  s_fbbcc7f4f67718::t_ee2590598d464d 254
+  s_fbbcc7f4f67718::t_49538346b127d0 312
+packages/runtime/src/config/tests/helpers/third-party-config.ts
+  s_fbbcc7f4f67718::t_ce3c75843a2e51 65
+packages/runtime/src/review/tests/task-runtime-context.test.ts
+  s_fbbcc7f4f67718::t_969088750a0999 229
+  s_fbbcc7f4f67718::t_4665a5da8c57a0 25,232-233
+packages/runtime/src/config/recipes/bug-hunter.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 16,24
+  s_fbbcc7f4f67718::t_9a0e750f42d427 31-46
+docs/adr/0004-pipr-owned-review-run.md
+  s_fbbcc7f4f67718::t_3e5ef7dfb76ed1 5,10-13,18
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_fbbcc7f4f67718::t_5164aa45d538b7 110,205
+packages/runtime/src/review/tests/task-runtime-outputs.test.ts
+  s_fbbcc7f4f67718::t_f5961e92ff9144 149
+  s_fbbcc7f4f67718::t_50c8705d98ce75 140-148,150-152
+  s_fbbcc7f4f67718::t_9cd28e3c7cf414 128-139
+.github/workflows/pipr.yml
+  s_fbbcc7f4f67718::t_a5d1e73f84212d 5,12
+docs/adr/0002-docker-action-with-read-only-pi-workspace.md
+  s_fbbcc7f4f67718::t_0551bea85dfe0a 7
+apps/docs/content/docs/guide/github-action.mdx
+  s_fbbcc7f4f67718::t_5164aa45d538b7 21,28,86
+  s_fbbcc7f4f67718::t_0551bea85dfe0a 73
+  s_fbbcc7f4f67718::t_c1db4c57891b63 79,81
+packages/runtime/src/host-run/tests/git-project.test.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 40
+  s_fbbcc7f4f67718::t_acc6ac1d898d83 45-48,60-63
+packages/runtime/src/config/recipes/interactive-ask.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 15
+apps/docs/content/docs/guide/local-runs.mdx
+  s_fbbcc7f4f67718::t_bafe9a8043a08b 107,110-111
+  s_fbbcc7f4f67718::t_0551bea85dfe0a 218
+packages/runtime/src/config/tests/config.test.ts
+  s_fbbcc7f4f67718::t_790d78b0f96e11 366
+  s_fbbcc7f4f67718::t_e6a08dbf70f03f 336,345-349,353,364,384-403
+  s_fbbcc7f4f67718::t_fcbf316f8e9c05 369-371,373-375,377-379,381
+  s_fbbcc7f4f67718::t_93cf8eef516236 367-368,372,376,380,382-383
+  s_fbbcc7f4f67718::t_ee2590598d464d 365
+  s_fbbcc7f4f67718::t_ce3c75843a2e51 209,234,476-480,509,526-530
+packages/evals/src/tests/runner.test.ts
+  s_fbbcc7f4f67718::t_06175cae2353cf 84-88,95-96
+packages/runtime/src/host-run/tests/commands-fixtures.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 379,574
+packages/runtime/src/config/recipes/plugin-tool-review.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 312
+packages/sdk/src/types/task.ts
+  s_fbbcc7f4f67718::t_eade1d8cff458e 162-180,182-184,186
+  s_fbbcc7f4f67718::t_895c9fa8c68f33 102-105,137-140,154,181,185
+  s_fbbcc7f4f67718::t_3f64a1120e5d89 34,36-39
+  s_fbbcc7f4f67718::t_543ed617800455 187
+packages/runtime/src/config/project.ts
+  s_fbbcc7f4f67718::t_0819d74ae3bc6b 251
+  s_fbbcc7f4f67718::t_bf16d00e560304 5-8,10,40-62,91-92,108-136
+  s_fbbcc7f4f67718::t_ee2590598d464d 9
+apps/docs/content/docs/recipes/multi-agent-review.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 47,55,150,157
+packages/runtime/src/config/recipes/pr-hygiene.ts
+  s_fbbcc7f4f67718::t_acbf07b92432df 5
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 17
+packages/sdk/src/types/config.ts
+  s_fbbcc7f4f67718::t_00358723557977 5-6,34,44
+packages/evals/src/runner.ts
+  s_fbbcc7f4f67718::t_9a0e750f42d427 383-386
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 374,401
+packages/sdk/src/builder.ts
+  s_fbbcc7f4f67718::t_895c9fa8c68f33 41,259-261,430-435,438-440,442-443,446-451,454,456,459-460,463,465,472-473,489-490,497-498,509-512
+  s_fbbcc7f4f67718::t_eade1d8cff458e 151-153,458,461-462,464,499-504,507,528-544,546-547,549-565
+  s_fbbcc7f4f67718::t_00358723557977 121-123,131,754
+  s_fbbcc7f4f67718::t_d3e4e3f8176cec 356-367,381-382,384
+  s_fbbcc7f4f67718::t_ee2590598d464d 7,34,383
+  s_fbbcc7f4f67718::t_6b9a7263b9eb37 545,548
+  s_fbbcc7f4f67718::t_e41036eb8c1e4c 385-386
+  s_fbbcc7f4f67718::t_db8e6f8c1533ed 505-506
+  s_fbbcc7f4f67718::t_7adb61d714387c 508
+  s_fbbcc7f4f67718::t_07337015998501 566-567
+packages/runtime/src/config/check-settings.ts
+  s_fbbcc7f4f67718::t_bf16d00e560304 1-37
+packages/runtime/src/host-run/runtime-checks.ts
+  s_fbbcc7f4f67718::t_ee2590598d464d 2
+  s_fbbcc7f4f67718::t_bf16d00e560304 39-40
+packages/runtime/src/config/tests/init-recipes.test.ts
+  s_fbbcc7f4f67718::t_bb44e31ee0a1be 399,449-460,465-466,483,485
+  s_fbbcc7f4f67718::t_8080309372412c 86,1050-1059,1142-1148,1255-1258,1294-1308,1314-1318,1369-1378,1384-1388,1591-1594,1839-1844
+  s_fbbcc7f4f67718::t_d39176b2debb2b 73-74,162,247,400,486
+  s_fbbcc7f4f67718::t_d1d703d035f96e 172,193-195,217-219
+  s_fbbcc7f4f67718::t_d0c095f381bf3e 297,309,341-344
+  s_fbbcc7f4f67718::t_1a08d633618720 310-317,331-340
+  s_fbbcc7f4f67718::t_93cf8eef516236 76
+  s_fbbcc7f4f67718::t_c4431f5c1f03a7 401-448,461-464,467-482,484,487-488
+  s_fbbcc7f4f67718::t_5755be5537dcbb 75,84-85,129-131,138,240-246,248-257,264,365-382,389
+  s_fbbcc7f4f67718::t_80de9a396e58aa 161,163-171,173-192,196-216,220-222
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 67,366,373
+packages/runtime/src/config/recipes/default-review.ts
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 15
+  s_fbbcc7f4f67718::t_9a0e750f42d427 23-34
+apps/docs/content/docs/concepts/runtime.mdx
+  s_fbbcc7f4f67718::t_0551bea85dfe0a 282
+.pipr/config.ts
+  s_fbbcc7f4f67718::t_5e0ec8144c8997 75-92,160,175-176,221,223
+  s_fbbcc7f4f67718::t_8080309372412c 68-70,230,235,276-279
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 139
+  s_fbbcc7f4f67718::t_d0c095f381bf3e 13,48,258
+  s_fbbcc7f4f67718::t_d1d703d035f96e 212
+  s_fbbcc7f4f67718::t_4f5be383c1e56c 58-67,71-73
+  s_fbbcc7f4f67718::t_6a7815fc771e5e 24-27,31,49,51-52,55-56,142-155,157,164-165,177-178,180,187-205,207-208,211,213-215,220,225-226,228-229,260,264,268
+  s_fbbcc7f4f67718::t_68c770360b11ca 33-45
+  s_fbbcc7f4f67718::t_af8fbf284975f0 93-129,206,209-210,227
+  s_fbbcc7f4f67718::t_610d625f13df8c 303
+  s_fbbcc7f4f67718::t_9133772604e90a 57
+  s_fbbcc7f4f67718::t_bb729ba2fbb1e5 74
+  s_fbbcc7f4f67718::t_220c60ad91899f 222
+  s_fbbcc7f4f67718::t_27013431d87d60 224
+  s_885ffd5deba70b::t_1b5a648155b895 1
+apps/docs/content/docs/recipes/default-review.mdx
+  s_fbbcc7f4f67718::t_2ef259a04b73cf 3,12
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 46,54-65,109,116
+packages/evals/src/fake-pi.ts
+  s_fbbcc7f4f67718::t_610d625f13df8c 139-141
+  s_fbbcc7f4f67718::t_06175cae2353cf 217-219
+  s_fbbcc7f4f67718::t_28d25f0c9c660d 92-98,191-199
+packages/runtime/src/review/tests/review-schema.test.ts
+  s_fbbcc7f4f67718::t_d39176b2debb2b 24,54,74,76,91
+  s_fbbcc7f4f67718::t_93cf8eef516236 1-23,25-33,116
+  s_fbbcc7f4f67718::t_09d3c4952212fc 34-53,55-73,75,77-85
+  s_fbbcc7f4f67718::t_104b802f89cf3a 86-90,92-115
+packages/runtime/src/pi/contract.ts
+  s_fbbcc7f4f67718::t_0819d74ae3bc6b 1,4
+packages/runtime/src/review/task/task-output.ts
+  s_fbbcc7f4f67718::t_3f64a1120e5d89 275-277
+apps/docs/content/docs/concepts/index.mdx
+  s_fbbcc7f4f67718::t_1202cb20dac71f 26,34
+docs/CONTEXT.md
+  s_fbbcc7f4f67718::t_3e5ef7dfb76ed1 60-63
+packages/sdk/src/schema.ts
+  s_fbbcc7f4f67718::t_ee2590598d464d 2
+  s_fbbcc7f4f67718::t_8cd8bad88ba35e 4,40-43
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_fbbcc7f4f67718::t_6ae9d63d3f47d2 47,198,205
+packages/sdk/src/tests/index.test.ts
+  s_fbbcc7f4f67718::t_93cf8eef516236 410-425
+  s_fbbcc7f4f67718::t_592e6f0019cdc9 197-200,522-525,947-950,1543-1548
+  s_fbbcc7f4f67718::t_10f3f197334e0f 209-213
+  s_fbbcc7f4f67718::t_ee2590598d464d 488,739
+  s_fbbcc7f4f67718::t_d3e4e3f8176cec 403-409
+  s_fbbcc7f4f67718::t_a9f20717e619a7 475-482,489-492
+  s_fbbcc7f4f67718::t_9aed58974f9c47 547,556-560,575-578,589,599-603,633,721-724
+  s_fbbcc7f4f67718::t_101c927612ace4 951,1220-1239
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 1267,1274,1293,1309
+  s_fbbcc7f4f67718::t_5bb2f6d3aeba86 42,46,1450,1454,1456-1459
+  s_fbbcc7f4f67718::t_c355311c467173 590,634-636,658
+  s_fbbcc7f4f67718::t_a210c5b9ff4677 659-711
+  s_fbbcc7f4f67718::t_ce3c75843a2e51 391
+  s_fbbcc7f4f67718::t_483b4a4c62964f 399
+packages/runtime/src/config/recipes/rich-review.ts
+  s_fbbcc7f4f67718::t_af8fbf284975f0 9-13,107-149,226,229-230,247
+  s_fbbcc7f4f67718::t_d0c095f381bf3e 24,59,255,278
+  s_fbbcc7f4f67718::t_4f5be383c1e56c 68,70-87
+  s_fbbcc7f4f67718::t_68c770360b11ca 44-56
+  s_fbbcc7f4f67718::t_5e0ec8144c8997 88-106,180,195-196,241-243
+  s_fbbcc7f4f67718::t_afb712b1dbba7a 159
+  s_fbbcc7f4f67718::t_55b352fae87ed1 35-38,42,60,62-63,66-67,162-175,177,184-185,197-198,200,207-225,227-228,231,233-235,240,244-246,248-250,280,284,288
+  s_fbbcc7f4f67718::t_d1d703d035f96e 232
+  s_fbbcc7f4f67718::t_610d625f13df8c 322
+  s_fbbcc7f4f67718::t_513be6df4f918a 69
+packages/runtime/src/config/official-github-workflow.ts
+  s_fbbcc7f4f67718::t_acbf07b92432df 1-4,25,32,35-39,48
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_fbbcc7f4f67718::t_ce3c75843a2e51 84-87,110-114,245-248,293-296,331-335,362-365,411-415
+packages/runtime/src/review/tests/task-runtime-fixtures.ts
+  s_fbbcc7f4f67718::t_516c28517aa29f 305-306
+  s_fbbcc7f4f67718::t_21857aba89b516 528,544-561
+  s_fbbcc7f4f67718::t_c913929b7bb0a0 562-563
+scripts/tests/release-scripts.test.ts
+  s_fbbcc7f4f67718::t_ce3c75843a2e51 503-506
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "92a10300ddf41b375a1b61aa8afdbaa5c9fca4c9",
+  "prompts": {},
+  "sessions": {
+    "s_885ffd5deba70b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f944e-4659-7d43-86e1-15d580be8f95",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_fbbcc7f4f67718": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f944d-50d0-75a1-9a33-0dcbce2ede63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
