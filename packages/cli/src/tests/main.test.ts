@@ -525,7 +525,7 @@ describe("pipr CLI", () => {
       expect(result.stderr).toContain("pipr task runtime start");
       expect(result.stderr).toContain("pipr local review complete");
       expect(result.stderr).not.toContain('{"level":');
-      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(1);
+      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(2);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -546,7 +546,7 @@ describe("pipr CLI", () => {
       expect(result.stderr).toContain("diffTarget=working-tree");
       expect(result.stderr).toContain("pipr diff manifest");
       expect(result.stderr).toContain("files=1");
-      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(1);
+      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(2);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -684,7 +684,7 @@ describe("pipr CLI", () => {
       );
 
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
-      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(1);
+      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(2);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -996,7 +996,10 @@ describe("pipr CLI", () => {
       expect(inspect.stdout).toContain("tools");
       expect(inspect.stdout).toContain("schemas");
       expect(inspect.stdout).toContain("core/pr-review");
+      expect(inspect.stdout).toContain("core/inline-findings");
       expect(inspect.stdout).toContain("core/summary");
+      expect(inspect.stdout).toContain("maxInlineComments");
+      expect(inspect.stdout).toContain("aggregate");
       expect(inspect.stdout).not.toContain("core/review-candidates");
       expect(inspect.stdout).not.toContain("core/consolidated-review");
       expect(inspect.stdout).toContain("deepseek");
@@ -1156,14 +1159,10 @@ async function createLocalReviewWorkspace(
   await runCommand("git", ["add", "."], rootDir);
   await runCommand("git", ["commit", "--no-verify", "-m", "head"], rootDir);
   const headSha = (await runCommand("git", ["rev-parse", "HEAD"], rootDir)).trim();
-  const piExecutable = path.join(rootDir, options.findings ? "fake-pi.ts" : "fake-pi.sh");
+  const piExecutable = path.join(rootDir, "fake-pi.ts");
   await Bun.write(
     piExecutable,
-    options.findings
-      ? reviewFindingsExecutable()
-      : ["#!/bin/sh", 'printf "1\\n" >> "$(dirname "$0")/pi-called"', noFindingsJsonCommand()].join(
-          "\n",
-        ),
+    options.findings ? reviewFindingsExecutable() : noFindingsExecutable(),
   );
   await chmod(piExecutable, 0o755);
   return { rootDir, baseSha, headSha, piExecutable };
@@ -1201,8 +1200,22 @@ function localReviewConfig(options: { taskLog?: boolean; local?: boolean }): str
   ].join("\n");
 }
 
-function noFindingsJsonCommand(): string {
-  return 'printf \'%s\\n\' \'{"summary":{"body":"No findings."},"inlineFindings":[]}\'';
+function noFindingsExecutable(): string {
+  return [
+    "#!/usr/bin/env bun",
+    'const callLog = import.meta.dir + "/pi-called";',
+    'const previousCalls = (await Bun.file(callLog).exists()) ? await Bun.file(callLog).text() : "";',
+    'await Bun.write(callLog, previousCalls + "1\\n");',
+    'const promptArg = process.argv.at(-1) ?? "";',
+    'const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;',
+    'if (prompt.includes("Schema ID: core/inline-findings.")) {',
+    "  console.log(JSON.stringify({ inlineFindings: [] }));",
+    '} else if (prompt.includes("Schema ID: core/summary.")) {',
+    '  console.log(JSON.stringify({ body: "No findings." }));',
+    "} else {",
+    '  console.log(JSON.stringify({ summary: { body: "No findings." }, inlineFindings: [] }));',
+    "}",
+  ].join("\n");
 }
 
 function reviewFindingsExecutable(): string {

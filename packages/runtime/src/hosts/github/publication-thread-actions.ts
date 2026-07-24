@@ -214,6 +214,10 @@ async function resolveReviewThread(
   if (!threadId) {
     return `GitHub review thread not found for pipr finding '${action.findingId}'`;
   }
+  const capabilityError = reviewThreadResolutionCapabilityError(thread, threadId, action.findingId);
+  if (capabilityError) {
+    return capabilityError;
+  }
   try {
     if (thread?.isResolved) {
       return undefined;
@@ -224,6 +228,21 @@ async function resolveReviewThread(
     const message = error instanceof Error ? error.message : String(error);
     return `resolve thread '${threadId}' for finding '${action.findingId}': ${message}`;
   }
+}
+
+function reviewThreadResolutionCapabilityError(
+  thread: GitHubReviewThread | undefined,
+  threadId: string,
+  findingId: string,
+): string | undefined {
+  if (!thread || thread.viewerCanResolve) {
+    return undefined;
+  }
+  return (
+    `resolve thread '${threadId}' for finding '${findingId}': ` +
+    "the GitHub credential cannot resolve this review thread; configure GITHUB_TOKEN " +
+    "with a user credential that can resolve pull request review threads"
+  );
 }
 
 function threadForAction(

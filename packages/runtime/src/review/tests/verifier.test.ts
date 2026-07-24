@@ -334,6 +334,65 @@ describe("runInternalVerifier", () => {
     expect(invented.threadActions).toEqual([]);
   });
 
+  it("repairs incomplete synchronize verdicts before resolving threads", async () => {
+    const secondFinding = {
+      ...(priorReviewState.findings[0] as PriorReviewState["findings"][number]),
+      id: "fnd_second",
+      path: "src/b.ts",
+      rangeId: "range-2",
+    };
+    const result = await runVerifier({
+      mode: { kind: "synchronize" },
+      priorReviewState: {
+        ...priorReviewState,
+        findings: [
+          priorReviewState.findings[0] as PriorReviewState["findings"][number],
+          secondFinding,
+        ],
+      },
+      threadContexts: [
+        threadContext,
+        {
+          ...threadContext,
+          findingId: "fnd_second",
+          parentCommentId: "20",
+          parentBody:
+            "<!-- pipr:finding id=fnd_second head=old-head -->\nThis second issue is fixed.",
+          threadId: "thread-2",
+          comments: [
+            {
+              id: "20",
+              body: "This second issue is fixed.",
+              authorLogin: "github-actions[bot]",
+            },
+          ],
+        },
+      ],
+      output: (attempt: number) =>
+        attempt === 0
+          ? { findings: [{ id: "fnd_existing", status: "still-valid" }] }
+          : {
+              findings: [
+                { id: "fnd_existing", status: "still-valid" },
+                { id: "fnd_second", status: "fixed" },
+              ],
+            },
+    });
+
+    expect(result.priorReviewState?.findings.map((finding) => finding.status)).toEqual([
+      "open",
+      "resolved",
+    ]);
+    expect(result.threadActions).toEqual([
+      expect.objectContaining({
+        kind: "resolve",
+        findingId: "fnd_second",
+        commentId: "20",
+        threadId: "thread-2",
+      }),
+    ]);
+  });
+
   it("uses the selected verifier model for user replies", async () => {
     const verifierProvider: ProviderConfig = {
       ...provider,
@@ -362,7 +421,7 @@ describe("runInternalVerifier", () => {
     expect(result.providerModels).toEqual(["fast-verifier-model"]);
   });
 
-  it("runs the verifier without repository read tools", async () => {
+  it("runs the verifier with repository read tools for current-head evidence", async () => {
     let observedPrompt = "";
     let observedBuiltinTools: unknown;
     let observedRuntimeTools: unknown;
@@ -390,12 +449,18 @@ describe("runInternalVerifier", () => {
       output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
     });
 
-    expect(observedPrompt).toContain("Available tools: none.");
-    expect(observedPrompt).not.toContain("Available tools: read");
-    expect(observedPrompt).not.toContain("pipr_read_diff");
-    expect(observedPrompt).toContain("Do not request repository, filesystem, network");
-    expect(observedBuiltinTools).toEqual([]);
-    expect(observedRuntimeTools).toBeUndefined();
+    expect(observedPrompt).toContain(
+      "Available tools: read, grep, find, ls, pipr_read_diff, pipr_read_at_ref.",
+    );
+    expect(observedPrompt).toContain(
+      "Inspect the current head file at every supplied finding path",
+    );
+    expect(observedBuiltinTools).toEqual(["read", "grep", "find", "ls"]);
+    expect(observedRuntimeTools).toEqual(
+      expect.objectContaining({
+        manifest: diffManifest,
+      }),
+    );
   });
 
   it("passes the supplied stable run id to verifier input", async () => {
@@ -506,7 +571,7 @@ describe("runInternalVerifier", () => {
 });
 
 async function runVerifier(options: {
-  output: unknown;
+  output: unknown | ((attempt: number) => unknown);
   config?: PiprConfig;
   mode?: { kind: "synchronize" };
   priorReviewState?: PriorReviewState;
@@ -522,12 +587,15 @@ async function runVerifier(options: {
   runId?: string;
   diffManifest?: DiffManifest;
 }) {
+  let attempt = 0;
   const piRunner: PiRunner = async (run) => {
     options.observeRun?.(run);
     options.observePrompt?.(run.prompt);
     options.observeModel?.(run.provider.model);
+    const output = typeof options.output === "function" ? options.output(attempt) : options.output;
+    attempt += 1;
     return {
-      stdout: JSON.stringify(options.output),
+      stdout: JSON.stringify(output),
       stderr: "",
       exitCode: 0,
       durationMs: 1,

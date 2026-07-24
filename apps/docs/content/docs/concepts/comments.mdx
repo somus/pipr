@@ -37,7 +37,7 @@ Start with the Main Review Comment, then inspect Inline Review Comments only for
 | Prior state | Repeated finding ids and open locations | Pipr is tracking findings across reruns. |
 | Verifier reply | A reply on a Pipr-owned inline thread | Pipr rechecked whether the finding is fixed or still valid. |
 
-This shape keeps review finite: one summary, bounded inline issues, and explicit state for what changed across reruns.
+This shape keeps review finite: an optional summary, bounded inline issues, and explicit state for what changed across reruns.
 
 ### Debug outputs
 
@@ -55,7 +55,10 @@ Tasks choose one final output shape. Pipr rejects missing or duplicate final out
 | --- | --- |
 | `ctx.comment(markdown)` | Publishes or updates the Main Review Comment only. |
 | `ctx.comment({ main, inlineFindings })` | Publishes or updates the Main Review Comment and valid Inline Review Comments. |
+| `ctx.comment({ inlineFindings })` | Publishes valid Inline Review Comments without a Main Review Comment. |
 | `ctx.command?.reply(markdown)` | Publishes or updates a command response issue comment keyed to the source command. |
+
+Structured comment output must contain `main`, `inlineFindings`, or both. `{ inlineFindings: [] }` is valid and publishes no comments; `{}` is rejected.
 
 ## Main Review Comment
 
@@ -195,7 +198,7 @@ Dropped findings do not fail the whole review because the remaining valid findin
 Cap inline comments to keep reviews useful and avoid flooding a change request.
 
 ```ts twoslash
-// @include: pipr-reviewer
+// @include: pipr-builder
 pipr.config({ publication: { maxInlineComments: 5 } });
 ```
 
@@ -222,7 +225,7 @@ State tracks:
 Pipr stores at most 50 finding records by default. Set `publication.maxStoredFindings` from 0 to 100 to change that limit:
 
 ```ts twoslash
-// @include: pipr-reviewer
+// @include: pipr-builder
 pipr.config({ publication: { maxStoredFindings: 25 } });
 ```
 

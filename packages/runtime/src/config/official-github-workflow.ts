@@ -1,4 +1,7 @@
-import { officialInitRecipeWorkflowEnvSecrets } from "./recipes.js";
+import {
+  officialInitRecipeRequiresChecksPermission,
+  officialInitRecipeWorkflowEnvSecrets,
+} from "./recipes.js";
 
 const defaultWorkflowActionRef = "somus/pipr@v0.5.0"; // x-release-please-version
 
@@ -19,16 +22,21 @@ export function renderOfficialGithubWorkflow(
     "",
     "on:",
     "  pull_request:",
+    "    types: [opened, synchronize, reopened, ready_for_review]",
     "  issue_comment:",
     "    types: [created]",
     "  pull_request_review_comment:",
     "    types: [created]",
     "",
     "permissions:",
-    "  contents: write",
+    "  contents: read",
     "  pull-requests: write",
     "  issues: write",
-    "  checks: write",
+  ];
+  if (officialInitRecipeRequiresChecksPermission(options.recipe)) {
+    lines.push("  checks: write");
+  }
+  lines.push(
     "",
     "jobs:",
     "  review:",
@@ -37,7 +45,7 @@ export function renderOfficialGithubWorkflow(
     "      - uses: actions/checkout@v6",
     "        with:",
     "          fetch-depth: 0",
-  ];
+  );
   if (!options.minimal) {
     lines.push(
       "      - uses: actions/cache@v4",

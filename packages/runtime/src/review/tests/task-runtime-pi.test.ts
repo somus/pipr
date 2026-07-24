@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AgentTool, DiffManifest } from "@usepipr/sdk";
+import { type AgentTool, type DiffManifest, z } from "@usepipr/sdk";
 import { createDiffRangeIndex } from "../../diff/ranges.js";
 import { createRuntimeLog } from "../../shared/logging.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
@@ -24,6 +24,7 @@ import {
   providerFailurePiRunner,
   registerPiReviewTask,
   reviewPiResult,
+  reviewPiResultForPrompt,
   reviewTestManifestWithDocs,
   runRuntime,
   runWithInsideOutsideFindings,
@@ -32,6 +33,171 @@ import {
 } from "./task-runtime-fixtures.js";
 
 describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication limits", () => {
+  it("shards and merges custom canonical findings while preserving metadata", async () => {
+    let merged: Array<{ severity: "high"; path: string }> = [];
+    const plan = testPlan((pipr) => {
+      const output = pipr.schema({
+        id: "review/categorized-findings",
+        schema: z.strictObject({
+          inlineFindings: z.array(
+            z.strictObject({
+              severity: z.literal("high"),
+              body: z.string(),
+              path: z.string(),
+              rangeId: z.string(),
+              side: z.enum(["RIGHT", "LEFT"]),
+              startLine: z.number().int().positive(),
+              endLine: z.number().int().positive(),
+            }),
+          ),
+        }),
+      });
+      const agent = pipr.agent({
+        name: "categorized-reviewer",
+        model: deepseekModel(pipr),
+        instructions: "Review.",
+        output,
+        prompt: () => "CUSTOM_CANONICAL_FINDINGS",
+      });
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, {
+            manifest: await ctx.change.diffManifest(),
+          });
+          merged = result.inlineFindings;
+          await ctx.comment({
+            inlineFindings: result.inlineFindings.map(
+              ({ severity: _severity, ...finding }) => finding,
+            ),
+          });
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+    const prompts: string[] = [];
+
+    await runRuntime({
+      plan,
+      config: manifestShardConfig(),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        const match = options.prompt.match(/"path": "src\/file-(\d+)\.ts"/);
+        const index = Number(match?.[1] ?? 0);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            inlineFindings: [
+              {
+                severity: "high",
+                body: `Defect ${index}.`,
+                path: `src/file-${index}.ts`,
+                rangeId: `range-${index}-0`,
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              },
+              {
+                severity: "high",
+                body: `Defect ${index}.`,
+                path: `src/file-${index}.ts`,
+                rangeId: `range-${index}-0`,
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              },
+            ],
+          }),
+          stderr: "",
+          durationMs: 1,
+        };
+      },
+    });
+
+    expect(prompts).toHaveLength(4);
+    expect(merged).toHaveLength(4);
+    expect(merged.map((item) => item.path)).toEqual(
+      prompts.map((prompt) => {
+        const match = prompt.match(/"path": "src\/file-(\d+)\.ts"/);
+        return `src/file-${Number(match?.[1] ?? 0)}.ts`;
+      }),
+    );
+    expect(merged.every((item) => item.severity === "high")).toBe(true);
+  });
+
+  it("honors a custom canonical schema's merged finding limit", async () => {
+    let merged: Array<{ body: string }> = [];
+    const plan = testPlan((pipr) => {
+      const output = pipr.schema({
+        id: "review/limited-findings",
+        schema: z.strictObject({
+          inlineFindings: z
+            .array(
+              z.strictObject({
+                body: z.string(),
+                path: z.string(),
+                rangeId: z.string(),
+                side: z.enum(["RIGHT", "LEFT"]),
+                startLine: z.number().int().positive(),
+                endLine: z.number().int().positive(),
+              }),
+            )
+            .max(2),
+        }),
+      });
+      const agent = pipr.agent({
+        name: "limited-reviewer",
+        model: deepseekModel(pipr),
+        instructions: "Review.",
+        output,
+        prompt: () => "LIMITED_CANONICAL_FINDINGS",
+      });
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, {
+            manifest: await ctx.change.diffManifest(),
+          });
+          merged = result.inlineFindings;
+          await ctx.comment({ inlineFindings: result.inlineFindings });
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+
+    await runRuntime({
+      plan,
+      config: manifestShardConfig(),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        const match = options.prompt.match(/"path": "src\/file-(\d+)\.ts"/);
+        const index = Number(match?.[1] ?? 0);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            inlineFindings: [
+              {
+                body: `Defect ${index}.`,
+                path: `src/file-${index}.ts`,
+                rangeId: `range-${index}-0`,
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              },
+            ],
+          }),
+          stderr: "",
+          durationMs: 1,
+        };
+      },
+    });
+
+    expect(merged.map((item) => item.body)).toEqual(["Defect 0.", "Defect 2."]);
+  });
+
   it("schedules oversized core reviews into bounded manifest units", async () => {
     const prompts: string[] = [];
     const result = await runRuntime({
@@ -39,7 +205,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: "Review.",
+          instructions: { findings: "Review.", summary: "Summarize." },
           entrypoints: { command: false },
         });
       }),
@@ -57,15 +223,25 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       diffManifestBuilder: () => reviewTestManifestWithDocs(),
       piRunner: async (options) => {
         prompts.push(options.prompt);
-        return options.prompt.includes('"path": "docs/readme.md"')
-          ? reviewPiResult([finding("docs defect", "docs-range-1", 1, "docs/readme.md")])
-          : reviewPiResult([finding("source defect", "range-1", 10)]);
+        const findings = options.prompt.includes('"path": "docs/readme.md"')
+          ? [finding("docs defect", "docs-range-1", 1, "docs/readme.md")]
+          : [finding("source defect", "range-1", 10)];
+        return reviewPiResultForPrompt(options.prompt, findings);
       },
     });
 
-    expect(prompts).toHaveLength(2);
+    const findingsPrompts = prompts.filter((prompt) =>
+      prompt.includes("Schema ID: core/inline-findings."),
+    );
+    const summaryPrompts = prompts.filter((prompt) => prompt.includes("Schema ID: core/summary."));
+    expect(findingsPrompts).toHaveLength(2);
+    expect(summaryPrompts).toHaveLength(1);
+    expect(summaryPrompts[0]).toContain("source defect body");
+    expect(summaryPrompts[0]).toContain("docs defect body");
+    expect(summaryPrompts[0]).toContain("Scoped compressed manifest");
+    expect(summaryPrompts[0]).not.toContain("Diff Manifest:");
     expect(
-      prompts.every(
+      findingsPrompts.every(
         (prompt) =>
           !prompt.includes('"path": "src/a.ts"') || !prompt.includes('"path": "docs/readme.md"'),
       ),
@@ -74,6 +250,36 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       "source defect body",
       "docs defect body",
     ]);
+  });
+
+  it("fails before the summary provider call when merged findings exceed the handoff limit", async () => {
+    let calls = 0;
+
+    await expect(
+      runRuntime({
+        plan: testPlan((pipr) => {
+          pipr.review({
+            id: "review",
+            model: deepseekModel(pipr),
+            instructions: { findings: "Review.", summary: "Summarize." },
+            entrypoints: { command: false },
+          });
+        }),
+        piRunner: async (options) => {
+          calls += 1;
+          if (options.prompt.includes("Schema ID: core/summary.")) {
+            throw new Error("summary provider should not run");
+          }
+          return reviewPiResultForPrompt(options.prompt, [
+            {
+              ...finding("oversized handoff", "range-1", 10),
+              body: "x".repeat(60_001),
+            },
+          ]);
+        },
+      }),
+    ).rejects.toThrow("JSON prompt value exceeded 60000 characters");
+    expect(calls).toBe(1);
   });
 
   it("keeps changed importers with their dependencies when sharding", async () => {
@@ -97,7 +303,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           pipr.review({
             id: "review",
             model: deepseekModel(pipr),
-            instructions: "Review.",
+            instructions: { findings: "Review.", summary: "Summarize." },
             entrypoints: { command: false },
           });
         }),
@@ -119,13 +325,16 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         },
         piRunner: async (options) => {
           prompts.push(options.prompt);
-          return noFindingsPiResult();
+          return reviewPiResultForPrompt(options.prompt, []);
         },
       });
 
-      expect(prompts).toHaveLength(2);
+      const findingsPrompts = prompts.filter((prompt) =>
+        prompt.includes("Schema ID: core/inline-findings."),
+      );
+      expect(findingsPrompts).toHaveLength(2);
       expect(
-        prompts.some(
+        findingsPrompts.some(
           (prompt) =>
             prompt.includes('"path": "src/caller.ts"') &&
             prompt.includes('"path": "src/dependency.ts"') &&
@@ -182,7 +391,12 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         await writeFakeAstGrepOutline(executableDirectory, [
           outlineFile(
             testCase.importer,
-            [outlineItem(testCase.importedName, { isImport: true, symbolType: "module" })],
+            [
+              outlineItem(testCase.importedName, {
+                isImport: true,
+                symbolType: "module",
+              }),
+            ],
             testCase.language,
           ),
           outlineFile(testCase.unrelated, [outlineItem("unrelated")], testCase.language),
@@ -510,7 +724,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
   });
 
   it("runs one complete condensed review for an oversized empty manifest", async () => {
-    let calls = 0;
+    const calls: string[] = [];
 
     await runRuntime({
       plan: defaultReviewPlan(),
@@ -525,15 +739,26 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           },
         },
       },
-      diffManifestBuilder: () => ({ ...reviewTestManifestWithDocs(), files: [] }),
+      diffManifestBuilder: () => ({
+        ...reviewTestManifestWithDocs(),
+        files: [],
+      }),
       piRunner: async (options) => {
-        calls += 1;
+        calls.push(
+          options.prompt.includes("Schema ID: core/inline-findings.")
+            ? "core/inline-findings"
+            : options.prompt.includes("Schema ID: core/summary.")
+              ? "core/summary"
+              : options.prompt.includes("Schema ID: core/pr-review.")
+                ? "core/pr-review"
+                : "unknown",
+        );
         expect(options.runtimeTools?.manifest.files).toEqual([]);
-        return noFindingsPiResult();
+        return reviewPiResultForPrompt(options.prompt, []);
       },
     });
 
-    expect(calls).toBe(1);
+    expect(calls).toEqual(["core/pr-review"]);
   });
 
   it("rejects invalid runtime Review Run and Diff Manifest fan-out limits", async () => {
@@ -563,7 +788,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           pipr.review({
             id: "review",
             model: deepseekModel(pipr),
-            instructions: "Review.",
+            instructions: { findings: "Review.", summary: "Summarize." },
             entrypoints: { command: false },
           });
         }),
@@ -581,13 +806,13 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
   });
 
   it("deduplicates only exact same-anchor findings from scheduled review units", async () => {
-    let calls = 0;
+    let findingsCalls = 0;
     const result = await runRuntime({
       plan: testPlan((pipr) => {
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: "Review.",
+          instructions: { findings: "Review.", summary: "Summarize." },
           entrypoints: { command: false },
         });
       }),
@@ -603,10 +828,14 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         },
       },
       diffManifestBuilder: () => reviewTestManifestWithDocs(),
-      piRunner: async () => {
-        calls += 1;
-        return reviewPiResult(
-          calls === 1
+      piRunner: async (options) => {
+        if (options.prompt.includes("Schema ID: core/summary.")) {
+          return reviewPiResultForPrompt(options.prompt, []);
+        }
+        findingsCalls += 1;
+        return reviewPiResultForPrompt(
+          options.prompt,
+          findingsCalls === 1
             ? [
                 {
                   ...finding("discarded config", "range-1", 10),
@@ -645,7 +874,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       const task = pipr.task({
         name: "review",
         async run(ctx) {
-          const result = await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          const result = await ctx.pi.run(agent, {
+            manifest: await ctx.change.diffManifest(),
+          });
           observedTitle = result.summary.title;
           await ctx.comment(result.summary.body);
         },
@@ -686,18 +917,18 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: "Review.",
+          instructions: { findings: "Review.", summary: "Summarize." },
           entrypoints: { command: false },
         });
       }),
       diffManifestBuilder: () => reviewTestManifestWithDocs(),
-      piRunner: async () => {
+      piRunner: async (options) => {
         calls += 1;
-        return noFindingsPiResult();
+        return reviewPiResultForPrompt(options.prompt, []);
       },
     });
 
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
   });
 
   it("preserves provider output when a core review schedules one manifest", async () => {
@@ -707,7 +938,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       const task = pipr.task({
         name: "review",
         async run(ctx) {
-          const result = await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          const result = await ctx.pi.run(agent, {
+            manifest: await ctx.change.diffManifest(),
+          });
           observedFindingCount = result.inlineFindings.length;
           await ctx.comment(result.summary.body);
         },
@@ -878,7 +1111,12 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
             exitCode: 0,
             stdout: JSON.stringify({
               summary: { body: "Review." },
-              inlineFindings: [{ ...finding("unsupported id", "range-1", 10), id: "finding-1" }],
+              inlineFindings: [
+                {
+                  ...finding("unsupported id", "range-1", 10),
+                  id: "finding-1",
+                },
+              ],
             }),
             stderr: "",
             durationMs: 1,
@@ -891,7 +1129,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
   it("uses run model and fallbacks in order", async () => {
     const calls: string[] = [];
-    const plan = fallbackReviewPlan({ agentModel: "fallback", runOverridesModel: true });
+    const plan = fallbackReviewPlan({
+      agentModel: "fallback",
+      runOverridesModel: true,
+    });
 
     await runRuntime({
       config: fallbackConfig,
@@ -1057,13 +1298,17 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       const first = pipr.task({
         name: "first",
         async run(ctx) {
-          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.pi.run(agent, {
+            manifest: await ctx.change.diffManifest(),
+          });
         },
       });
       const second = pipr.task({
         name: "second",
         async run(ctx) {
-          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.pi.run(agent, {
+            manifest: await ctx.change.diffManifest(),
+          });
           await ctx.comment("Parallel review complete.");
         },
       });
@@ -1100,13 +1345,17 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       const first = pipr.task({
         name: "first",
         async run(ctx) {
-          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.pi.run(agent, {
+            manifest: await ctx.change.diffManifest(),
+          });
         },
       });
       const second = pipr.task({
         name: "second",
         async run(ctx) {
-          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.pi.run(agent, {
+            manifest: await ctx.change.diffManifest(),
+          });
           await ctx.comment("Parallel review complete.");
         },
       });
@@ -1143,7 +1392,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         name: "review",
         async run(ctx) {
           for (let index = 0; index < 5; index += 1) {
-            await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+            await ctx.pi.run(agent, {
+              manifest: await ctx.change.diffManifest(),
+            });
           }
           await ctx.comment("Unlimited review complete.");
         },
@@ -1236,7 +1487,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
   it("marks cumulative usage partial when an earlier rerun did not report usage", async () => {
     const first = await runRuntime({
       plan: defaultReviewPlan(),
-      piRunner: async () => ({ ...noFindingsPiResult(), models: ["unreported-model"] }),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["unreported-model"],
+      }),
     });
     const second = await runRuntime({
       plan: defaultReviewPlan(),
@@ -1266,7 +1520,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     let call = 0;
     const result = await runRuntime({
       config: { ...fallbackConfig, limits: { maxAgentRuns: 2 } },
-      plan: fallbackReviewPlan({ agentPatch: { retry: { transientFailure: 1 } } }),
+      plan: fallbackReviewPlan({
+        agentPatch: { retry: { transientFailure: 1 } },
+      }),
       piRunner: async () => {
         call += 1;
         if (call === 1) {
@@ -1297,7 +1553,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
   it("retries transient failures per model before falling back", async () => {
     const calls: string[] = [];
-    const plan = fallbackReviewPlan({ agentPatch: { retry: { transientFailure: 1 } } });
+    const plan = fallbackReviewPlan({
+      agentPatch: { retry: { transientFailure: 1 } },
+    });
 
     await runRuntime({
       config: fallbackConfig,
@@ -1369,7 +1627,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       const customTool = memoryTool(pipr);
       registerPiReviewTask(
         pipr,
-        defaultReviewAgent(pipr, { tools: [...pipr.tools.readOnly, customTool] }),
+        defaultReviewAgent(pipr, {
+          tools: [...pipr.tools.readOnly, customTool],
+        }),
       );
     });
 
@@ -1473,13 +1733,19 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "correctness",
         model,
-        instructions: "Review correctness.",
+        instructions: {
+          findings: "Review correctness.",
+          summary: "Summarize correctness risk.",
+        },
         entrypoints: { command: false },
       });
       pipr.review({
         id: "security",
         model,
-        instructions: "Review security.",
+        instructions: {
+          findings: "Review security.",
+          summary: "Summarize security risk.",
+        },
         entrypoints: { command: false },
       });
     });
@@ -1494,7 +1760,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
-        instructions: "Review docs.",
+        instructions: {
+          findings: "Review docs.",
+          summary: "Summarize docs changes.",
+        },
         paths: { include: ["docs/**"] },
         entrypoints: { command: false },
       });
@@ -1531,7 +1800,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
-        instructions: "Review source.",
+        instructions: {
+          findings: "Review source.",
+          summary: "Summarize source changes.",
+        },
         paths: { include: ["src/**"] },
         entrypoints: { command: false },
       });
@@ -1548,15 +1820,22 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
-        instructions: "Review source.",
+        instructions: {
+          findings: "Review source.",
+          summary: "Summarize source changes.",
+        },
         entrypoints: { command: false },
       });
     });
 
     const result = await runRuntime({
       plan,
-      config: { ...config, publication: { ...config.publication, maxInlineComments: 0 } },
-      piRunner: async () => reviewPiResult([finding("hidden", "range-1", 10)]),
+      config: {
+        ...config,
+        publication: { ...config.publication, maxInlineComments: 0 },
+      },
+      piRunner: async (options) =>
+        reviewPiResultForPrompt(options.prompt, [finding("hidden", "range-1", 10)]),
     });
 
     expect(result.review.inlineFindings).toHaveLength(1);
@@ -1572,15 +1851,22 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
-        instructions: "Review source.",
+        instructions: {
+          findings: "Review source.",
+          summary: "Summarize source changes.",
+        },
         entrypoints: { command: false },
       });
     });
 
     const result = await runRuntime({
       plan,
-      config: { ...config, publication: { ...config.publication, maxStoredFindings: 0 } },
-      piRunner: async () => reviewPiResult([finding("retained for this run", "range-1", 10)]),
+      config: {
+        ...config,
+        publication: { ...config.publication, maxStoredFindings: 0 },
+      },
+      piRunner: async (options) =>
+        reviewPiResultForPrompt(options.prompt, [finding("retained for this run", "range-1", 10)]),
     });
 
     expect(result.review.inlineFindings).toHaveLength(1);
@@ -1640,7 +1926,11 @@ function multiAgentShardingPlan() {
         ]);
         const result = await ctx.pi.run(aggregator, {
           manifest,
-          specialistResults: { securityResult, testResult, maintainabilityResult },
+          specialistResults: {
+            securityResult,
+            testResult,
+            maintainabilityResult,
+          },
         });
         await ctx.comment({
           main: result.summary.body,

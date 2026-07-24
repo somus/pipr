@@ -48,6 +48,7 @@ const githubReviewCommentSchema = z
 const githubReviewThreadSchema = z.strictObject({
   id: z.string().min(1),
   isResolved: z.boolean(),
+  viewerCanResolve: z.boolean(),
   commentIds: z.array(z.number().int().positive()),
 });
 
@@ -65,7 +66,8 @@ const githubReviewThreadsPageSchema = z
               nodes: z.array(
                 z.looseObject({
                   id: z.string().min(1),
-                  isResolved: z.boolean().optional(),
+                  isResolved: z.boolean(),
+                  viewerCanResolve: z.boolean(),
                   comments: z.looseObject({
                     nodes: z.array(
                       z.looseObject({
@@ -95,7 +97,8 @@ const githubReviewThreadsPageSchema = z
       threads: reviewThreads.nodes.map((thread) =>
         githubReviewThreadSchema.parse({
           id: thread.id,
-          isResolved: thread.isResolved ?? false,
+          isResolved: thread.isResolved,
+          viewerCanResolve: thread.viewerCanResolve,
           commentIds: thread.comments.nodes.flatMap((comment) =>
             comment.databaseId === undefined || comment.databaseId === null
               ? []
@@ -350,6 +353,7 @@ const githubReviewThreadsQuery = /* GraphQL */ `
           nodes {
             id
             isResolved
+            viewerCanResolve
             comments(first: 100) {
               nodes {
                 databaseId

@@ -34,6 +34,88 @@ export function schemaContainsReviewFinding(value: unknown): boolean {
   return reachableSchemaContainsReviewFinding(value, value, new Set());
 }
 
+export function schemaHasCanonicalInlineFindingsRoot(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const canonicalRoot = resolveCanonicalRootSchema(value);
+  if (!canonicalRoot || !schemaClosesCanonicalRoot(canonicalRoot)) {
+    return false;
+  }
+  const properties = isRecord(canonicalRoot.properties) ? canonicalRoot.properties : undefined;
+  if (!properties || Object.keys(properties).some((key) => key !== "inlineFindings")) {
+    return false;
+  }
+  const required = Array.isArray(canonicalRoot.required) ? canonicalRoot.required : [];
+  if (required.length !== 1 || required[0] !== "inlineFindings") {
+    return false;
+  }
+  const collection = properties.inlineFindings;
+  if (!isRecord(collection) || collection.type !== "array") {
+    return false;
+  }
+  return reachableSchemaContainsReviewFinding(collection.items, value, new Set());
+}
+
+export function canonicalInlineFindingsMaxItems(value: unknown): number | undefined {
+  if (!schemaHasCanonicalInlineFindingsRoot(value) || !isRecord(value)) {
+    return undefined;
+  }
+  const canonicalRoot = resolveCanonicalRootSchema(value);
+  const properties =
+    canonicalRoot && isRecord(canonicalRoot.properties) ? canonicalRoot.properties : undefined;
+  const collection = properties?.inlineFindings;
+  if (!isRecord(collection)) {
+    return undefined;
+  }
+  return typeof collection.maxItems === "number" &&
+    Number.isInteger(collection.maxItems) &&
+    collection.maxItems >= 0
+    ? collection.maxItems
+    : undefined;
+}
+
+function resolveCanonicalRootSchema(
+  rootSchema: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  let current = rootSchema;
+  const visited = new Set<unknown>();
+  while (typeof current.$ref === "string") {
+    if (visited.has(current) || schemaReferenceHasConstraints(current)) {
+      return undefined;
+    }
+    visited.add(current);
+    const referenced = resolveLocalSchemaReference(rootSchema, current.$ref);
+    if (!isRecord(referenced)) {
+      return undefined;
+    }
+    current = referenced;
+  }
+  return current;
+}
+
+function schemaClosesCanonicalRoot(schema: Record<string, unknown>): boolean {
+  const patternProperties = isRecord(schema.patternProperties)
+    ? Object.keys(schema.patternProperties)
+    : [];
+  return schema.additionalProperties === false && patternProperties.length === 0;
+}
+
+function schemaReferenceHasConstraints(schema: Record<string, unknown>): boolean {
+  const annotationKeywords = new Set([
+    "$comment",
+    "$defs",
+    "$id",
+    "$ref",
+    "$schema",
+    "definitions",
+    "description",
+    "examples",
+    "title",
+  ]);
+  return Object.keys(schema).some((keyword) => !annotationKeywords.has(keyword));
+}
+
 function reachableSchemaContainsReviewFinding(
   schema: unknown,
   rootSchema: Record<string, unknown>,

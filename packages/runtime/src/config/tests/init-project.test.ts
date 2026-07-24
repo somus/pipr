@@ -45,6 +45,9 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
 
     expect(documentedWorkflow.replace(" # x-release-please-version", "")).toBe(runtimeWorkflow);
     expect(runtimeWorkflow).toContain("actions/cache@v4");
+    expect(runtimeWorkflow).toContain("checks: write");
+    expect(runtimeWorkflow).toContain("types: [opened, synchronize, reopened, ready_for_review]");
+    expect(runtimeWorkflow).toContain("contents: read");
   });
 
   it("creates the official minimal .pipr tree and validates it", async () => {
@@ -79,7 +82,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(workflow).toContain("uses: somus/pipr@v0.5.0"); // x-release-please-version
     expect(workflow).toContain("actions/cache@v4");
     expect(workflow).toContain("hashFiles('.pipr/bun.lock')");
-    expect(workflow).toContain("checks: write");
+    expect(workflow).not.toContain("checks: write");
     expect(workflow).toContain("pull_request_review_comment:");
     expect(workflow).toContain("types: [created]");
     expect(workflow).not.toContain("config-dir:");

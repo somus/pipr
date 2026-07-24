@@ -17,7 +17,7 @@ A workflow composes four pieces, all registered in `.pipr/config.ts`:
 
 | Block | Builder | Job |
 | --- | --- | --- |
-| Model | `pipr.model(...)` | Provider, model name, API key env var, options. |
+| Model | `pipr.model(...)` | Provider, model name, API key env var, and thinking level. |
 | Agent | `pipr.agent(...)` | Instructions, typed output schema, optional tools. |
 | Task | `pipr.task(...)` | Orchestration: read the diff, run agents, emit output. |
 | Entrypoint | `pipr.on.changeRequest(...)` or `pipr.command(...)` | When the task runs. |
@@ -172,6 +172,8 @@ const securityAgent = pipr.agent({
 Core adds the review candidate gate, contract tracing, summary grounding, and schema-aware `suggestedFix` rules for `pipr.schemas.review`.
 
 Custom output receives the same policy when its schema contains an object with the standard Review Finding fields: `body`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. Collection names, nesting, and additional metadata do not affect detection. Keep only repository-specific review policy in agent instructions.
+
+For automatic large-diff sharding, use a schema rooted at `{ inlineFindings: [...] }` and include those six fields in every item. Pipr preserves extra item metadata, deduplicates by anchor plus body, and reparses the merged result with your schema. `pipr.schemas.inlineFindings` is the built-in form of this contract; `pipr.schemas.review` remains available for a manual agent that returns both summary and findings.
 
 ### Intermediate schemas
 

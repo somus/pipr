@@ -2,6 +2,12 @@ import type { AutoResolveOptions, ModelProfile } from "@usepipr/sdk";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import type { AutoResolveConfig, ProviderConfig, RuntimeSettings } from "../types.js";
 import { parseProviderConfig, parseRuntimeSettings } from "../types.js";
+import {
+  aggregateCheckSettings,
+  type NormalizedAggregateCheckSettings,
+  type NormalizedTaskCheckSettings,
+  taskCheckSettings,
+} from "./check-settings.js";
 import { loadTypescriptConfig } from "./ts-loader.js";
 import type { ConfigVersionCompatibility } from "./version-compat.js";
 
@@ -31,6 +37,29 @@ export type InspectRuntimePlan = {
   commands: Array<{ pattern: string; task: string; permission: string }>;
   tools: string[];
   schemas: string[];
+  publication: {
+    maxInlineComments?: number;
+    maxStoredFindings?: number;
+    showHeader: boolean;
+    showFooter: boolean;
+    showStats: boolean;
+    autoResolve: {
+      enabled: boolean;
+      model?: string;
+      synchronize: boolean;
+      userReplies: {
+        enabled: boolean;
+        respondWhenStillValid: boolean;
+        allowedActors: "author-or-write" | "write" | "any";
+      };
+      hasCustomInstructions: boolean;
+    };
+  };
+  limits: NonNullable<RuntimePlan["limits"]>;
+  checks: {
+    aggregate: NormalizedAggregateCheckSettings;
+    tasks: Array<NormalizedTaskCheckSettings & { task: string }>;
+  };
 };
 
 export async function loadRuntimeProject(
@@ -59,6 +88,8 @@ export async function validateProject(
 }
 
 export function inspectRuntimePlan(plan: RuntimePlan, source: string): InspectRuntimePlan {
+  const defaultModel = plan.models[0]?.id;
+  const autoResolve = normalizeAutoResolveConfig(plan.publication.autoResolve, defaultModel ?? "");
   return {
     source,
     models: plan.models.map((model) => model.id),
@@ -74,7 +105,35 @@ export function inspectRuntimePlan(plan: RuntimePlan, source: string): InspectRu
       permission: command.permission,
     })),
     tools: plan.tools.map((tool) => tool.name),
-    schemas: ["core/pr-review", "core/summary"],
+    schemas: ["core/pr-review", "core/inline-findings", "core/summary"],
+    publication: {
+      ...(plan.publication.maxInlineComments === undefined
+        ? {}
+        : { maxInlineComments: plan.publication.maxInlineComments }),
+      ...(plan.publication.maxStoredFindings === undefined
+        ? {}
+        : { maxStoredFindings: plan.publication.maxStoredFindings }),
+      showHeader: plan.publication.showHeader ?? true,
+      showFooter: plan.publication.showFooter ?? true,
+      showStats: plan.publication.showStats ?? true,
+      autoResolve: {
+        enabled: autoResolve.enabled,
+        ...(autoResolve.model === undefined ? {} : { model: autoResolve.model }),
+        synchronize: autoResolve.synchronize,
+        userReplies: autoResolve.userReplies,
+        hasCustomInstructions:
+          typeof plan.publication.autoResolve === "object" &&
+          plan.publication.autoResolve.instructions !== undefined,
+      },
+    },
+    limits: plan.limits ?? {},
+    checks: {
+      aggregate: aggregateCheckSettings(plan.checks?.aggregate),
+      tasks: plan.tasks.map((task) => ({
+        task: task.name,
+        ...taskCheckSettings(task),
+      })),
+    },
   };
 }
 
@@ -184,13 +243,12 @@ function modelToProvider(model: ModelProfile): ProviderConfig {
   if (!model.apiKey) {
     throw new Error(`Model '${model.id}' must declare apiKey: pipr.secret({ name: "ENV_NAME" })`);
   }
-  const thinking = model.options?.thinking;
   return parseProviderConfig({
     id: model.id,
     provider: model.provider,
     model: model.model,
     apiKeyEnv: model.apiKey.name,
-    thinking: typeof thinking === "string" ? thinking : undefined,
+    thinking: model.thinking,
   });
 }
 

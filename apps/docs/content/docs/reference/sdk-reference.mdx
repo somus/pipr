@@ -24,7 +24,7 @@ The SDK maps directly to Pipr's runtime primitives. Use this table to choose the
 | Entrypoint | `pipr.review(...)`, `pipr.on.changeRequest(...)`, `pipr.command(...)`, `defaultReviewEntrypoints` |
 | Review Task | `pipr.task(...)`, `TaskContext` |
 | Diff Manifest | `ctx.change.diffManifest(...)`, `DiffManifest`, `ReviewFinding.rangeId` |
-| Agent | `pipr.reviewer(...)`, `pipr.agent(...)`, `ctx.pi.run(...)` |
+| Agent | `pipr.agent(...)`, `ctx.pi.run(...)` |
 | Review Output | `ctx.comment(...)`, `ctx.command?.reply(...)`, `CommentValue` |
 | Publication | `pipr.config({ publication })`, Pipr runtime validation and code host adapters |
 
@@ -38,7 +38,7 @@ Every config must default-export a synchronous factory:
 import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  // register models, reviewers, tasks, commands, limits, tools
+  // register models, agents, tasks, commands, limits, tools
 });
 ```
 
@@ -53,34 +53,32 @@ const model = pipr.model({
   provider: "deepseek",
   model: "deepseek-v4-pro",
   apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  options: { thinking: "high" },
+  thinking: "high",
 });
 ```
 
 <auto-type-table path="packages/sdk/src/index.ts" name="ModelOptions" />
 
-Pipr passes provider and model IDs to Pi. [Browse Pi's Model Catalog](https://pi.dev/models) for current identifiers, providers, context limits, and pricing. Use `id` only when you configure the same provider and model with different API keys or options. `pipr.secret({ name })` stores only the environment variable name. It does not read or serialize the secret during plan creation.
+Pipr passes provider and model IDs to Pi. [Browse Pi's Model Catalog](https://pi.dev/models) for current identifiers, providers, context limits, and pricing. Use `id` only when you configure the same provider and model with different API keys or thinking levels. `pipr.secret({ name })` stores only the environment variable name. It does not read or serialize the secret during plan creation.
 
 ## Review recipe
 
-`pipr.reviewer(...)` creates the default structured change request reviewer. `pipr.review(...)` wires that reviewer into change request and command entrypoints.
+`pipr.review(...)` is the quick structured review wrapper. It creates separate findings and summary agents, then wires their Review Task into change request and command entrypoints.
 
 ```ts
 import { defaultReviewEntrypoints } from "@usepipr/sdk";
-
-const reviewer = pipr.reviewer({
-  name: "reviewer",
-  model,
-  instructions: "Review the change for correctness and security.",
-  tools: pipr.tools.readOnly,
-  timeout: "10m",
-});
 
 pipr.config({ publication: { maxInlineComments: 5 } });
 
 pipr.review({
   id: "review",
-  reviewer,
+  model,
+  instructions: {
+    findings: "Review the change for actionable correctness and security defects.",
+    summary: "Summarize changed behavior, risk, and reviewer focus.",
+  },
+  tools: pipr.tools.readOnly,
+  timeout: "10m",
   paths: {
     include: ["packages/runtime/**"],
     exclude: ["**/*.test.ts"],
@@ -122,7 +120,11 @@ To disable one entrypoint:
 ```ts
 pipr.review({
   id: "review",
-  reviewer,
+  model,
+  instructions: {
+    findings: "Review for actionable defects.",
+    summary: "Summarize changed behavior and risk.",
+  },
   entrypoints: {
     command: false,
   },
@@ -133,19 +135,22 @@ pipr.review({
 
 <auto-type-table path="packages/sdk/src/index.ts" name="ReviewRecipeOptions" />
 
-## Custom reviewer prompt
+## Review prompts
 
-Pipr injects bounded change request metadata, the Diff Manifest, tool contract, review policy, and output contract into the Pi prompt. Override the reviewer prompt only when the model needs repository-specific policy:
+The wrapper exposes separate stable instructions for findings and summary. Its built-in prompts are fixed so the runtime can supply the scoped Diff Manifest and merged findings consistently:
 
 ```ts
-const reviewer = pipr.reviewer({
+pipr.review({
+  id: "review",
   model,
-  instructions: "Prioritize broken public API contracts.",
-  prompt: () => "Review changed behavior for contract regressions.",
+  instructions: {
+    findings: "Prioritize broken public API contracts.",
+    summary: "Explain the changed contract, risk, and reviewer focus.",
+  },
 });
 ```
 
-Do not repeat the change number, title, description, JSON output contract, or generic `suggestedFix` rules in agent instructions. Core supplies those sections once.
+Use `pipr.agent(...)` and `pipr.task(...)` when you need a custom per-run `prompt`. Do not repeat the change number, title, description, JSON output contract, or generic `suggestedFix` rules in instructions. Core supplies those sections once.
 
 ## Agents
 
@@ -369,7 +374,7 @@ pipr.config({
 
 `showHeader`, `showFooter`, and `showStats` independently control the generated Pipr title, attribution footer, and collapsed review statistics. All three default to `true`. Hidden publication markers and `PublicationResult.metadata.stats` remain available when their visible sections are disabled.
 
-`publication.autoResolve` defaults to enabled. Use `autoResolve: false` to disable verifier-driven thread cleanup and user-reply handling. If `model` is omitted, Pipr uses the default provider. Use `instructions` to add project-specific guidance for the internal verifier.
+`publication.autoResolve` defaults to enabled. Use `autoResolve: false` to disable verifier-driven thread cleanup and user-reply handling. If `model` is omitted, Pipr uses the default provider. Use `instructions` to add project-specific guidance for the internal verifier. Native thread cleanup still depends on the active code-host credential; on GitHub, the credential must have `viewerCanResolve: true`.
 
 `userReplies.allowedActors` controls who can trigger verifier replies:
 
@@ -395,7 +400,7 @@ Use `ctx.comment(...)` for Main Review Comment markdown:
 await ctx.comment("## Security review\n\nNo exploitable findings.");
 ```
 
-Use object form when also publishing inline findings:
+Use object form to publish a Main Review Comment, Inline Review Comments, or both:
 
 ```ts
 await ctx.comment({
@@ -410,6 +415,14 @@ await ctx.comment({
   }],
 });
 ```
+
+For findings-only output, omit `main`:
+
+```ts
+await ctx.comment({ inlineFindings });
+```
+
+Structured output must contain `main`, `inlineFindings`, or both. `{ inlineFindings: [] }` is valid; `{}` is rejected.
 
 Pipr validates findings against the Diff Manifest, drops invalid findings, dedupes finding markers, and caps inline publication.
 Subjective labels such as severity, confidence, or category are not part of the built-in finding contract. Define them in a custom schema or render them into your own `ctx.comment(...)` markdown when your workflow needs them.
@@ -458,6 +471,7 @@ Built-in schemas:
 | Schema | Use |
 | --- | --- |
 | `pipr.schemas.review` | Main review result with summary and inline findings. |
+| `pipr.schemas.inlineFindings` | Inline findings without a summary. |
 | `pipr.schemas.summary` | Main-comment summary block. |
 
 Custom schemas are useful for intermediate agents and workflows that map their final output into Pipr publication calls:
@@ -493,7 +507,7 @@ export default definePipr((pipr) => {
 
 Use `pipr.schemas.review` when an agent directly returns publishable Inline Review Comments. `suggestedFix` is optional exact replacement code for the selected range. GitHub and GitLab render it as a native suggestion; Azure DevOps and Bitbucket render fenced replacement code.
 
-Custom output receives Pipr's review policy automatically when its schema contains an object with the standard Review Finding fields. The object may be nested, use any collection name, and include metadata such as severity or category. Schemas without those fields do not receive inline-review instructions.
+Custom output receives Pipr's review policy automatically when its schema contains an object with the standard Review Finding fields. A schema rooted exactly at `{ inlineFindings: [...] }` is also automatically sharded and merged; each item may carry extra metadata. Nested, summary-only, and arbitrary schemas run once.
 
 The `z` export is the recommended typed path for JSON-Schema-representable schemas. Generated `.pipr/types` include a standalone Zod authoring subset so `pipr init` projects type-check without installing `zod`; use `pipr.jsonSchema<T>()` for advanced JSON Schema shapes or when a Zod helper is outside that generated subset.
 

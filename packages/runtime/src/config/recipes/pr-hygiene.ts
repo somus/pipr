@@ -2,6 +2,7 @@ import type { OfficialInitRecipe } from "./types.js";
 
 export const prHygieneRecipe = {
   id: "pr-hygiene",
+  requiresChecksPermission: true,
   title: "PR Hygiene",
   description: "Change request hygiene checks for tests, docs, lockfiles, and size.",
   sourceTools: ["Danger JS"],
@@ -13,7 +14,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "medium" },
+    thinking: "medium",
   });
 
   pipr.config({ publication: { maxInlineComments: 5 } });

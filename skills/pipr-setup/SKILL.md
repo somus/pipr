@@ -87,7 +87,7 @@ While customizing:
 
 - Keep config load synchronous. Runtime work belongs inside `pipr.task(...)`.
 - Use `pipr.secret({ name })`; never write raw secret values.
-- Prefer `pipr.review(...)` until the interview requires multiple Pi calls, command input, custom schemas, plugin tools, explicit checks, or main-comment-only output.
+- Prefer `pipr.review(...)` for the built-in findings-plus-summary flow. Use custom agents and tasks for custom prompts, additional Pi calls, command input, custom schemas, plugin tools, explicit checks, or main-comment-only output.
 - For custom tasks, pass `{ manifest }` to `ctx.pi.run(...)`; do not interpolate the Diff Manifest into prompts yourself.
 - Core already adds bounded change request metadata and schema-aware `suggestedFix` rules to agent prompts. Do not duplicate them in `instructions` or prompt input.
 - Emit exactly one final output from each selected task: `ctx.comment(...)` or `ctx.command.reply(...)`.

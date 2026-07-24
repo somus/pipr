@@ -415,8 +415,9 @@ describe("renderAgentPrompt", () => {
     );
     expect(prompt).toContain("Do not include step-by-step reasoning, broad context");
     expect(prompt).toContain(
-      "Never copy a secret-looking literal from changed code into the review summary",
+      "Never copy a secret-looking literal from changed code into any publishable output field",
     );
+    expect(prompt).toContain("custom title or rationale");
     expect(prompt).toContain("one inline finding");
     expect(prompt).toContain(
       "path, rangeId, and side must identify one Diff Manifest commentable range",
@@ -455,6 +456,7 @@ describe("renderAgentPrompt", () => {
     expect(prompt).toContain("Omit speculative, style-only, broad refactor");
     expect(prompt).toContain(`at most ${maxInlineFindingBodyCharacters} characters`);
     expect(prompt).toContain("Inline Review Selection Policy:");
+    expect(prompt).toContain("custom title or rationale");
   });
 
   it("includes review policy for custom finding definitions with additional metadata", async () => {

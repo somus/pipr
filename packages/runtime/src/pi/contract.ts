@@ -1,6 +1,7 @@
+import { modelThinkingLevels } from "@usepipr/sdk";
 import { z } from "zod";
 
-export const piThinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+export const piThinkingLevels = modelThinkingLevels;
 export const piBuiltinToolNames = ["read", "bash", "edit", "write", "grep", "find", "ls"] as const;
 export const piReadOnlyToolNames = ["read", "grep", "find", "ls"] as const;
 export type PiReadOnlyToolName = (typeof piReadOnlyToolNames)[number];

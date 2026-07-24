@@ -376,7 +376,7 @@ export function reviewConfigTs(
     '    provider: "deepseek",',
     '    model: "deepseek-reasoner",',
     '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-    '    options: { thinking: "high" },',
+    '    thinking: "high",',
     "  });",
     "  const reviewer = pipr.agent({",
     '    name: "reviewer",',
@@ -571,7 +571,7 @@ export function explicitModelIdConfigTs(): string {
     '    provider: "deepseek",',
     '    model: "deepseek-reasoner",',
     '    apiKey: pipr.secret({ name: "FAST_DEEPSEEK_API_KEY" }),',
-    '    options: { thinking: "high" },',
+    '    thinking: "high",',
     "  });",
     "  const reviewer = pipr.agent({",
     '    name: "reviewer",',
@@ -851,7 +851,14 @@ export function verifierPublicationClient(
       return reviewComments;
     },
     async listReviewThreads() {
-      return [{ id: "thread-1", isResolved: false, commentIds: [parentCommentId, replyCommentId] }];
+      return [
+        {
+          id: "thread-1",
+          isResolved: false,
+          viewerCanResolve: true,
+          commentIds: [parentCommentId, replyCommentId],
+        },
+      ];
     },
     async createReviewCommentReply(options: { commentId: number; body: string }) {
       reviewReplies.push(options);

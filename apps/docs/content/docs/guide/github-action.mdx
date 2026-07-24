@@ -18,16 +18,16 @@ name: pipr
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
   pull_request_review_comment:
     types: [created]
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
   issues: write
-  checks: write
 
 jobs:
   review:
@@ -70,22 +70,34 @@ Use the default unless the repository deliberately stores Pipr config elsewhere.
 | --- | --- | --- |
 | `config-dir` | `.pipr` | Directory containing `config.ts`. Local type support files are not required by the Action. |
 
-Provider settings come from the base-commit `.pipr/config.ts`, not from pull request code. The Action uses the base config's default model and configured fallbacks, including provider backend, model name, API key env name, and provider options.
+Provider settings come from the base-commit `.pipr/config.ts`, not from pull request code. The Action uses the base config's default model and configured fallbacks, including provider backend, model name, API key env name, and thinking level.
 
 ### Permissions
 
 Use the generated permission block unless you have intentionally disabled the matching feature in `.pipr/config.ts`.
 
-| Feature | GitHub write | Required permission |
+| Feature | GitHub operation | Required permission |
 | --- | --- | --- |
+| Repository checkout | Read the reviewed repository and its history | `contents: read` |
 | Main Review Comment | Create or update a pull request issue comment | `issues: write` |
 | Command response | Create or update the reply for one source `@pipr` command comment | `issues: write` |
 | Inline Review Comments | Publish comments on valid diff ranges | `pull-requests: write` |
 | Inline verifier replies | Reply to user comments on Pipr-owned Inline Review Comments | `pull-requests: write` |
-| Review thread resolution | Resolve GitHub review threads for findings the verifier marks fixed | `contents: write` and `pull-requests: write` |
+| Review thread resolution | Resolve GitHub review threads for findings the verifier marks fixed | `pull-requests: write` and a credential for which GitHub reports `viewerCanResolve: true` |
 | Task or aggregate Check Runs | Create and update GitHub Check Runs when checks are enabled | `checks: write` |
 
 Command help is exposed through the `main-comment` output. If GitHub denies verifier cleanup or the API fails, the review still succeeds and increments `result.publication.inlineResolutionErrorCount`.
+
+`${{ github.token }}` can publish verifier replies, but GitHub may report that this workflow credential cannot resolve the native thread. If you require native thread cleanup, create a repository secret containing a user credential that has the permissions in the table, then pass it to Pipr:
+
+```yaml
+- uses: somus/pipr@v0.5.0 # x-release-please-version
+  env:
+    DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    GITHUB_TOKEN: ${{ secrets.PIPR_GITHUB_TOKEN }}
+```
+
+Pipr checks GitHub's `viewerCanResolve` value before calling the resolution mutation. If the credential lacks that capability, Pipr posts the fixed-finding reply, records the finding as resolved in Pipr state, leaves the native thread open, and reports an actionable inline-resolution error.
 
 ### Secret redaction
 

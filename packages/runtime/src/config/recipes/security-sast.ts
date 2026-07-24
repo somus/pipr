@@ -2,6 +2,7 @@ import type { OfficialInitRecipe } from "./types.js";
 
 export const securitySastRecipe = {
   id: "security-sast",
+  requiresChecksPermission: true,
   title: "Security SAST",
   description: "Security review with custom severity and category output.",
   sourceTools: ["Semgrep", "Snyk", "GitHub CodeQL/code scanning"],
@@ -33,7 +34,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
 
   const securityOutput = pipr.jsonSchema<SecurityReview>({
