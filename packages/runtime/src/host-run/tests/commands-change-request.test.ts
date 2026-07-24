@@ -165,6 +165,21 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
+  it("does not expose a local Pi agent directory to hosted subscription models", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ subscriptionModel: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    try {
+      await expect(runPullRequestAction(workspace)).rejects.toThrow(
+        "does not declare apiKey and requires a Pi agent directory",
+      );
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("does not publish GitHub statuses for non-pull_request change events", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: reviewConfigTs({ checks: true }),

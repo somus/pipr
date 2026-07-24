@@ -40,6 +40,7 @@ type CliOptions = {
   base?: string;
   head?: string;
   piExecutable?: string;
+  piAgentDir?: string;
   json?: boolean;
   limit?: string;
 };
@@ -149,6 +150,7 @@ function createProgram(options: { exitOverride?: boolean } = {}): Command {
     .option("--head <sha>", "Head commit SHA or ref; omitted reviews the working tree")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .option("--pi-executable <path>", "Pi executable path")
+    .option("--pi-agent-dir <path>", "Pi agent directory for local authentication")
     .option("--json", "Print structured JSON output")
     .action(runLocalReview);
 
@@ -436,6 +438,7 @@ async function runLocalReview(options: CliOptions & { base: string }): Promise<v
     baseSha: options.base,
     headSha: options.head,
     piExecutable: options.piExecutable,
+    piAgentDir: options.piAgentDir,
     logSink: localConsoleLogSink,
     taskLog: stderrTaskLog,
   });

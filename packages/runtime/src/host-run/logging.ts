@@ -64,6 +64,8 @@ export function addProviderSecrets(
   env: NodeJS.ProcessEnv | undefined,
 ): void {
   for (const provider of config.providers) {
-    log.addSecret((env ?? process.env)[provider.apiKeyEnv]);
+    if (provider.apiKeyEnv) {
+      log.addSecret((env ?? process.env)[provider.apiKeyEnv]);
+    }
   }
 }

@@ -83,7 +83,6 @@ describe("Pi contract", () => {
       parsePiProviderInvocation({
         provider: "deepseek",
         model: "deepseek-v4-pro",
-        apiKeyEnv: "DEEPSEEK_API_KEY",
         thinking: "high",
         tools: ["read", "grep", "find", "ls"],
       }),
@@ -93,7 +92,6 @@ describe("Pi contract", () => {
       parsePiProviderInvocation({
         provider: "deepseek",
         model: "deepseek-v4-pro",
-        apiKeyEnv: "DEEPSEEK_API_KEY",
         thinking: "high",
         tools: ["read", "bash", "grep", "find", "ls"],
       }),
@@ -334,6 +332,7 @@ describe("buildPiArgs", () => {
 
   it("does not leak unrelated parent env vars into Pi", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piAgentDir = await mkdtemp(path.join(os.tmpdir(), "pipr-agent-"));
     const piExecutable = path.join(workspace, "fake-pi.sh");
     const previousProviderKey = process.env.DEEPSEEK_API_KEY;
     const previousSecret = process.env.SECRET_SHOULD_NOT_LEAK;
@@ -346,6 +345,7 @@ describe("buildPiArgs", () => {
       const result = await runPi({
         workspace,
         piExecutable,
+        piAgentDir,
         prompt: "Review this diff.",
         provider: {
           id: "backup",
@@ -361,6 +361,7 @@ describe("buildPiArgs", () => {
       expect(result.stdout).toContain("DEEPSEEK_API_KEY=provider-key");
       expect(result.stdout).toContain("HOME=");
       expect(result.stdout).toContain("PI_CODING_AGENT_DIR=");
+      expect(envLine(result.stdout, "PI_CODING_AGENT_DIR")).not.toBe(piAgentDir);
       expect(result.stdout).toContain("PI_CODING_AGENT_SESSION_DIR=");
       expect(result.stdout).toContain("PIPR_PROVIDER_ID=backup");
       expect(result.stdout).not.toContain(`HOME=${hostHome}`);
@@ -372,6 +373,96 @@ describe("buildPiArgs", () => {
     } finally {
       restoreEnv("DEEPSEEK_API_KEY", previousProviderKey);
       restoreEnv("SECRET_SHOULD_NOT_LEAK", previousSecret);
+      await rm(workspace, { recursive: true, force: true });
+      await rm(piAgentDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the supplied Pi agent directory for a model without an API key", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piAgentDir = await mkdtemp(path.join(os.tmpdir(), "pipr-agent-"));
+    const piExecutable = path.join(workspace, "fake-pi.sh");
+    try {
+      await Bun.write(piExecutable, "#!/bin/sh\nprintenv\n");
+      await chmod(piExecutable, 0o755);
+
+      const result = await runPi({
+        workspace,
+        piExecutable,
+        piAgentDir,
+        prompt: "Review this diff.",
+        env: {
+          PATH: process.env.PATH,
+          SECRET_SHOULD_NOT_LEAK: "hidden",
+        },
+        provider: {
+          id: "local-review",
+          provider: "openai-codex",
+          model: "gpt-5.5",
+          thinking: "high",
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(envLine(result.stdout, "PI_CODING_AGENT_DIR")).toBe(piAgentDir);
+      expect(envLine(result.stdout, "HOME")).not.toBe(os.homedir());
+      expect(result.stdout).not.toContain("SECRET_SHOULD_NOT_LEAK");
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+      await rm(piAgentDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a model without an API key when no Pi agent directory is supplied", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi.sh");
+    try {
+      await Bun.write(piExecutable, "#!/bin/sh\nexit 0\n");
+      await chmod(piExecutable, 0o755);
+
+      await expect(
+        runPi({
+          workspace,
+          piExecutable,
+          prompt: "Review this diff.",
+          provider: {
+            id: "local-review",
+            provider: "openai-codex",
+            model: "gpt-5.5",
+            thinking: "high",
+          },
+        }),
+      ).rejects.toThrow(
+        "Model 'local-review' does not declare apiKey and requires a Pi agent directory",
+      );
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a selected API-key model when its provider env var is missing", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
+    const piExecutable = path.join(workspace, "fake-pi.sh");
+    try {
+      await Bun.write(piExecutable, "#!/bin/sh\nexit 0\n");
+      await chmod(piExecutable, 0o755);
+
+      await expect(
+        runPi({
+          workspace,
+          piExecutable,
+          prompt: "Review this diff.",
+          env: { PATH: process.env.PATH },
+          provider: {
+            id: "hosted-review",
+            provider: "deepseek",
+            model: "deepseek-v4-pro",
+            apiKeyEnv: "DEEPSEEK_API_KEY",
+            thinking: "high",
+          },
+        }),
+      ).rejects.toThrow("Missing provider env var for model 'hosted-review': DEEPSEEK_API_KEY");
+    } finally {
       await rm(workspace, { recursive: true, force: true });
     }
   });
