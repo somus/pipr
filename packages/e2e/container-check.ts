@@ -36,6 +36,7 @@ if (scenarioArg && selectedScenarios.length === 0) {
 
 assertDockerImageExists(actionImage);
 await checkPiContract({ cwd: sourceRoot, image: actionImage });
+assertAstGrepContract(actionImage);
 assertWebhookEntrypoint(actionImage);
 await assertWebhookHealth(actionImage);
 
@@ -205,6 +206,42 @@ function assertDockerImageExists(image: string): void {
   if (result.exitCode !== 0) {
     throw new Error(`Docker image '${image}' not found; build it before check:container`);
   }
+}
+
+function assertAstGrepContract(image: string): void {
+  const version = runOutput(
+    "docker",
+    [
+      "run",
+      "--rm",
+      "--user",
+      "1000:1000",
+      "--entrypoint",
+      "/usr/local/bin/ast-grep",
+      image,
+      "--version",
+    ],
+    sourceRoot,
+  );
+  if (version.stdout.trim() !== "ast-grep 0.44.1") {
+    throw new Error(`container ast-grep version mismatch: '${version.stdout.trim()}'`);
+  }
+  runOutput(
+    "docker",
+    [
+      "run",
+      "--rm",
+      "--user",
+      "1000:1000",
+      "--entrypoint",
+      "/usr/local/bin/ast-grep",
+      image,
+      "outline",
+      "--help",
+    ],
+    sourceRoot,
+  );
+  console.log("container ast-grep contract ok");
 }
 
 function assertWebhookEntrypoint(image: string): void {

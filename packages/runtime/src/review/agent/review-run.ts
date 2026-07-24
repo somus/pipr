@@ -9,6 +9,7 @@ import {
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
 import { shardDiffManifestForPrompt } from "../../diff/manifest-sharding.js";
+import type { DiffStructuralAnalysisLoader } from "../../diff/structural-analysis.js";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
 import {
@@ -70,6 +71,7 @@ export type RunReviewAgentOptions = {
     log?: RuntimeLog;
     piRunSink?: (run: PiRunStats) => void;
     agentRunBudget?: AgentRunBudget;
+    structuralAnalysis?: DiffStructuralAnalysisLoader;
   };
 };
 
@@ -202,6 +204,7 @@ async function scheduledReviewManifests(options: RunReviewAgentOptions) {
     workspace: options.runtime.workspace,
     env: options.runtime.env,
     log: options.runtime.log,
+    structuralAnalysis: options.runtime.structuralAnalysis,
   });
 }
 

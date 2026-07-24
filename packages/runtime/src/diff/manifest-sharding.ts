@@ -1,28 +1,16 @@
-import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
-import { z } from "zod";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { DiffManifest, DiffManifestFile, DiffManifestLimitsConfig } from "../types.js";
 import {
   partitionDiffManifestForPrompt,
   prepareDiffManifestPrompt,
 } from "./manifest-projection.js";
+import {
+  analyzeDiffStructure,
+  type DiffStructuralAnalysisLoader,
+  type StructuralFile,
+} from "./structural-analysis.js";
 
-const outlineItemSchema = z.object({
-  name: z.string(),
-  isImport: z.boolean(),
-});
-
-const outlineFileSchema = z.object({
-  path: z.string(),
-  items: z.array(outlineItemSchema),
-});
-
-const outlineOutputSchema = z.array(outlineFileSchema);
-
-type OutlineFile = z.infer<typeof outlineFileSchema>;
 const defaultMaxShards = 4;
 
 export async function shardDiffManifestForPrompt(options: {
@@ -31,6 +19,7 @@ export async function shardDiffManifestForPrompt(options: {
   workspace: string;
   env?: NodeJS.ProcessEnv;
   log?: RuntimeLog;
+  structuralAnalysis?: DiffStructuralAnalysisLoader;
 }): Promise<DiffManifest[]> {
   const maxShards = options.config?.maxShards ?? defaultMaxShards;
   if (maxShards === 1) {
@@ -42,12 +31,21 @@ export async function shardDiffManifestForPrompt(options: {
     return fallback;
   }
 
-  const outlines = await loadChangedFileOutlines(options);
-  if (!outlines) {
+  const analysis = await (
+    options.structuralAnalysis ??
+    (() =>
+      analyzeDiffStructure({
+        manifest: options.manifest,
+        workspace: options.workspace,
+        env: options.env,
+        log: options.log,
+      }))
+  )();
+  if (!analysis.available) {
     return fallback;
   }
 
-  const files = orderFilesByStructuralRelationships(options.manifest, outlines);
+  const files = orderFilesByStructuralRelationships(options.manifest, analysis.headFiles);
   return cappedPromptShards({ ...options.manifest, files }, options.config, maxShards, options.log);
 }
 
@@ -122,80 +120,9 @@ function mergeManifestFileSlices(files: readonly DiffManifestFile[]): DiffManife
   return merged;
 }
 
-async function loadChangedFileOutlines(options: {
-  manifest: DiffManifest;
-  workspace: string;
-  env?: NodeJS.ProcessEnv;
-  log?: RuntimeLog;
-}): Promise<OutlineFile[] | undefined> {
-  const filePaths = options.manifest.files
-    .filter((file) => file.status !== "removed" && file.hunks.length > 0)
-    .map((file) => file.path);
-  if (filePaths.length === 0) {
-    return undefined;
-  }
-
-  const configPath = path.join(os.tmpdir(), `pipr-ast-grep-${randomUUID()}.yml`);
-  try {
-    await Bun.write(configPath, "{}\n");
-    const child = Bun.spawn(
-      [
-        "ast-grep",
-        "outline",
-        "--items",
-        "all",
-        "--view",
-        "expanded",
-        "--json=compact",
-        "--color",
-        "never",
-        "--config",
-        configPath,
-        "--",
-        ...filePaths,
-      ],
-      {
-        cwd: options.workspace,
-        env: options.env ?? process.env,
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (exitCode !== 0) {
-      options.log?.warning("diff manifest structural sharding fallback", {
-        reason: "ast-grep-exit",
-        exitCode,
-      });
-      options.log?.textSnippet("debug", "ast-grep outline stderr", stderr);
-      return undefined;
-    }
-    const parsed = outlineOutputSchema.safeParse(JSON.parse(stdout));
-    if (!parsed.success) {
-      options.log?.warning("diff manifest structural sharding fallback", {
-        reason: "invalid-outline-output",
-      });
-      return undefined;
-    }
-    return parsed.data;
-  } catch {
-    options.log?.warning("diff manifest structural sharding fallback", {
-      reason: "ast-grep-unavailable",
-    });
-    return undefined;
-  } finally {
-    await rm(configPath, { force: true });
-  }
-}
-
 function orderFilesByStructuralRelationships(
   manifest: DiffManifest,
-  outlines: readonly OutlineFile[],
+  outlines: readonly StructuralFile[],
 ): DiffManifest["files"] {
   const fileIndexByPath = new Map(manifest.files.map((file, index) => [file.path, index]));
   const parents = manifest.files.map((_, index) => index);
@@ -218,7 +145,7 @@ function orderFilesByStructuralRelationships(
 }
 
 function connectChangedImports(
-  outlines: readonly OutlineFile[],
+  outlines: readonly StructuralFile[],
   fileIndexByPath: ReadonlyMap<string, number>,
   parents: number[],
 ): void {
@@ -227,11 +154,12 @@ function connectChangedImports(
     if (sourceIndex === undefined) {
       continue;
     }
-    for (const item of outline.items) {
-      if (!item.isImport) {
-        continue;
-      }
-      for (const targetPath of resolveChangedImports(outline.path, item.name, fileIndexByPath)) {
+    for (const importSpecifier of outline.imports) {
+      for (const targetPath of resolveChangedImports(
+        outline.path,
+        importSpecifier,
+        fileIndexByPath,
+      )) {
         const targetIndex = fileIndexByPath.get(targetPath);
         if (targetIndex !== undefined) {
           union(parents, sourceIndex, targetIndex);

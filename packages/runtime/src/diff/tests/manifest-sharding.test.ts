@@ -70,10 +70,20 @@ describe("Diff Manifest sharding", () => {
       await writeFakeAstGrepOutline(executableDirectory, [
         {
           path: "src/importer.ts",
-          items: [{ name: "./dependency", isImport: true }],
+          language: "TypeScript",
+          items: [
+            {
+              role: "item",
+              symbolType: "module",
+              name: "./dependency",
+              range: outlineRange(),
+              isImport: true,
+              isExported: false,
+            },
+          ],
         },
-        { path: "src/unrelated.ts", items: [] },
-        { path: "src/dependency.ts", items: [] },
+        { path: "src/unrelated.ts", language: "TypeScript", items: [] },
+        { path: "src/dependency.ts", language: "TypeScript", items: [] },
       ]);
 
       const shards = await shardDiffManifestForPrompt({
@@ -140,6 +150,13 @@ function shardConfig(maxShards: number, condensedMaxBytes: number) {
   };
 }
 
+function outlineRange() {
+  return {
+    start: { line: 0, column: 0 },
+    end: { line: 0, column: 1 },
+  };
+}
+
 function requiredFile(manifest: DiffManifest): DiffManifestFile {
   const file = manifest.files[0];
   if (!file) {
@@ -174,7 +191,15 @@ async function writeFakeAstGrepOutline(directory: string, output: unknown): Prom
   const executable = path.join(directory, "ast-grep");
   await Bun.write(
     executable,
-    `#!/usr/bin/env bun\nprocess.stdout.write(${JSON.stringify(JSON.stringify(output))});\n`,
+    [
+      "#!/usr/bin/env bun",
+      'if (process.argv.includes("--version")) {',
+      '  process.stdout.write("ast-grep 0.44.1\\n");',
+      "} else {",
+      `  process.stdout.write(${JSON.stringify(JSON.stringify(output))});`,
+      "}",
+      "",
+    ].join("\n"),
   );
   await chmod(executable, 0o755);
 }
