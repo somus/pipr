@@ -1,0 +1,35 @@
+packages/runtime/src/diff/tests/structural-analysis.test.ts
+  s_87f449b385ea97::t_e31a30295d9404 298-335,355-364,384-387,391,394-399,454-470,485,488
+  s_87f449b385ea97::t_49ff0661020404 120-191,203-208,435-453,486-487,489-502
+  s_87f449b385ea97::t_1ce3fbaf1fa930 286,483
+  s_87f449b385ea97::t_45d80664375554 260-285,287-297,471-482,484
+  s_87f449b385ea97::t_e3ff5fa9190e97 192-202
+  s_87f449b385ea97::t_4ce6d75a7d5e2d 209-259
+  s_87f449b385ea97::t_7b5bdf822cfe2d 503
+packages/runtime/src/review/task/task-runtime.ts
+  s_87f449b385ea97::t_b1822e65130efe 85,210
+packages/runtime/src/diff/structural-analysis.ts
+  s_87f449b385ea97::t_243364c64109cb 68-72,107,136-139,145,154,156,167,176,277,286,288-290,306
+  s_87f449b385ea97::t_b1822e65130efe 118,144,146-148,150-153,155
+  s_87f449b385ea97::t_3fc29b6f54987f 44,57,149,157-162,171,281,293,295-298,301-303,305,484
+packages/runtime/src/diff/tests/manifest-sharding.test.ts
+  s_87f449b385ea97::t_26c8e5b7168ff8 10-31,163-193
+packages/runtime/src/host-run/commands.ts
+  s_87f449b385ea97::t_b1822e65130efe 163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "162c03256f302788dd8c8b25b0ee8da4ee6b6e22",
+  "prompts": {},
+  "sessions": {
+    "s_87f449b385ea97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9234-c679-7a23-a5fb-18a0862843e3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
