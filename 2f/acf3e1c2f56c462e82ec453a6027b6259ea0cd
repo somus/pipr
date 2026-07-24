@@ -1,0 +1,43 @@
+packages/runtime/src/pi/tests/pi.test.ts
+  s_87f449b385ea97::t_21a08df72e8123 522-552
+packages/runtime/src/review/agent/review-run.ts
+  s_87f449b385ea97::t_9bf92cacd04730 75,157
+packages/runtime/src/pi/tests/runtime-tools.test.ts
+  s_87f449b385ea97::t_21a08df72e8123 341-401,411-414,416-432,519-526,566-572,1115-1125
+  s_87f449b385ea97::t_e8931a2056dcc0 402-410,415
+  s_87f449b385ea97::t_fc2c536f4b6873 1126
+packages/runtime/src/pi/runtime-tools-extension.ts
+  s_87f449b385ea97::t_f3c73d4352d28d 22,331,363-365,370-421
+packages/runtime/src/review/task/task-runtime.ts
+  s_87f449b385ea97::t_9bf92cacd04730 229
+packages/runtime/src/review/tests/review-run.test.ts
+  s_87f449b385ea97::t_94507f1c452cd8 5,48-109
+packages/runtime/src/pi/runtime-tools-core.ts
+  s_87f449b385ea97::t_bae38b082f93e0 395,404-405
+  s_87f449b385ea97::t_f37404061ca5c6 406-407
+packages/runtime/src/review/tests/manifest-payload.test.ts
+  s_87f449b385ea97::t_4a06779d06620b 170-239,241-242,244-245,247-248,250-253
+  s_87f449b385ea97::t_e8931a2056dcc0 240,243,246,249
+packages/runtime/src/pi/runtime-tools.ts
+  s_87f449b385ea97::t_76a800764550aa 40-47,56-59,65,74,101,104,106,118-150,159,234,265-269,289-296
+  s_87f449b385ea97::t_ad2ff70b3fecdd 297
+packages/runtime/src/pi/runner.ts
+  s_87f449b385ea97::t_5fed6ace5d76e7 209,218,221,241
+  s_87f449b385ea97::t_9bf92cacd04730 324-330,335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2facf3e1c2f56c462e82ec453a6027b6259ea0cd",
+  "prompts": {},
+  "sessions": {
+    "s_87f449b385ea97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9234-c679-7a23-a5fb-18a0862843e3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
