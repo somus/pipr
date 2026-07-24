@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { access, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -9,7 +9,7 @@ import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js"
 import type { DiffManifest } from "../../types.js";
 import { preparePiCustomTools } from "../custom-tools.js";
 import { preparePiRuntimeReadTools, readAtRef } from "../runtime-tools.js";
-import { readDiffFromRuntimeData } from "../runtime-tools-core.js";
+import { readDiffFromRuntimeData, runAstGrepSearch } from "../runtime-tools-core.js";
 
 describe("pipr runtime Pi read tools", () => {
   it("reads bounded Diff Manifest data by path and range id", () => {
@@ -256,6 +256,218 @@ describe("pipr runtime Pi read tools", () => {
     } finally {
       await removeTree(repo.root);
       await removeTree(toolRoot);
+    }
+  });
+
+  it("reads bounded head and base enclosing declarations from structural analysis", async () => {
+    const repo = await createGitRepo({
+      baseContent: "function before() {\n  return 1;\n}\n",
+      headContent: "function after() {\n  return 2;\n}\n",
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-declaration-tools-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest,
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      expect(prepared.toolNames).toEqual([
+        "pipr_read_diff",
+        "pipr_read_at_ref",
+        "pipr_read_declaration",
+        "pipr_ast_grep",
+      ]);
+      const tool = await loadExtensionTool(
+        prepared.extensionPath,
+        "pipr_read_declaration",
+        prepared.dataPath,
+      );
+
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "head",
+          rangeId: "range-1",
+        }),
+      ).resolves.toMatchObject({
+        available: true,
+        sourcePath: "src/new.ts",
+        declaration: {
+          qualifiedName: "after",
+          kind: "function",
+          startLine: 1,
+          endLine: 3,
+        },
+        content: "function after() {\n  return 2;\n}\n",
+        truncated: false,
+      });
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "base",
+          rangeId: "range-left",
+        }),
+      ).resolves.toMatchObject({
+        available: true,
+        sourcePath: "src/old.ts",
+        declaration: {
+          qualifiedName: "before",
+          startLine: 1,
+          endLine: 3,
+        },
+        content: "function before() {\n  return 1;\n}\n",
+      });
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "base",
+          rangeId: "range-1",
+        }),
+      ).resolves.toMatchObject({
+        available: false,
+        sourcePath: "src/old.ts",
+      });
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  });
+
+  it("runs bounded read-only structural searches over explicit safe paths", async () => {
+    const repo = await createGitRepo();
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-tool-"));
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-bin-"));
+    const argsPath = path.join(executableDirectory, "args.json");
+    const previousPath = process.env.PATH;
+    try {
+      await writeFakeAstGrepRun(executableDirectory, argsPath);
+      await symlink(path.join(repo.root, "src"), path.join(repo.root, "linked-src"));
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest: renamedManifest(repo.baseSha, repo.headSha),
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      const tool = await loadExtensionTool(
+        prepared.extensionPath,
+        "pipr_ast_grep",
+        prepared.dataPath,
+      );
+      process.env.PATH = `${executableDirectory}:${previousPath ?? ""}`;
+
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "function $NAME() { $$$BODY }",
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).resolves.toMatchObject({
+        available: true,
+        matches: [
+          {
+            path: "src/new.ts",
+            startLine: 1,
+            endLine: 3,
+            text: "x".repeat(2048),
+          },
+        ],
+        truncated: false,
+      });
+      expect(JSON.parse(await Bun.file(argsPath).text())).toEqual([
+        "run",
+        "--pattern",
+        "function $NAME() { $$$BODY }",
+        "--lang",
+        "ts",
+        "--json=compact",
+        "--color",
+        "never",
+        "--",
+        "src",
+      ]);
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "none",
+          language: "ts",
+          paths: ["."],
+        }),
+      ).resolves.toEqual({ available: true, matches: [], truncated: false });
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "many",
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).resolves.toMatchObject({
+        available: true,
+        matches: expect.arrayContaining([
+          {
+            path: "src/new.ts",
+            startLine: 1,
+            endLine: 3,
+            text: "match 0",
+          },
+        ]),
+        truncated: true,
+      });
+      const capped = (await executeExtensionTool(tool, repo.root, {
+        pattern: "many",
+        language: "ts",
+        paths: ["src"],
+      })) as { matches: unknown[] };
+      expect(capped.matches).toHaveLength(100);
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "malformed",
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).rejects.toThrow("pipr_ast_grep returned invalid output");
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "failure",
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).rejects.toThrow("pipr_ast_grep failed");
+      await expect(
+        runAstGrepSearch({
+          cwd: repo.root,
+          params: { pattern: "sleep", language: "ts", paths: ["src"] },
+          maxBytes: 10_000,
+          env: process.env,
+          timeoutMs: 10,
+        }),
+      ).rejects.toThrow("pipr_ast_grep timed out");
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "x".repeat(4097),
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).rejects.toThrow();
+      for (const unsafePath of ["../src", ".git", "src/*.ts", "linked-src"]) {
+        await expect(
+          executeExtensionTool(tool, repo.root, {
+            pattern: "$A",
+            language: "ts",
+            paths: [unsafePath],
+          }),
+        ).rejects.toThrow();
+      }
+    } finally {
+      restoreEnv("PATH", previousPath);
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+      await removeTree(executableDirectory);
     }
   });
 
@@ -567,6 +779,90 @@ function manifestWithPreviousPath(filePath: string, previousPath: string): DiffM
     ...manifestForPath(filePath),
     files: [{ ...file, previousPath }],
   };
+}
+
+function structuralAnalysisForRenamedFile() {
+  return {
+    available: true as const,
+    version: "0.44.1",
+    headFiles: [
+      {
+        path: "src/new.ts",
+        language: "TypeScript",
+        imports: [],
+        declarations: [
+          {
+            qualifiedName: "after",
+            kind: "function",
+            startLine: 1,
+            endLine: 3,
+            isExported: false,
+          },
+        ],
+      },
+    ],
+    baseFiles: [
+      {
+        path: "src/old.ts",
+        language: "TypeScript",
+        imports: [],
+        declarations: [
+          {
+            qualifiedName: "before",
+            kind: "function",
+            startLine: 1,
+            endLine: 3,
+            isExported: false,
+          },
+        ],
+      },
+    ],
+    diagnostics: { durationMs: 1, fileCount: 2, declarationCount: 2 },
+  };
+}
+
+async function writeFakeAstGrepRun(directory: string, argsPath: string): Promise<void> {
+  const executable = path.join(directory, "ast-grep");
+  const match = [
+    {
+      text: "x".repeat(3000),
+      file: "src/new.ts",
+      range: {
+        start: { line: 0, column: 0 },
+        end: { line: 2, column: 1 },
+      },
+    },
+  ];
+  await Bun.write(
+    executable,
+    [
+      "#!/usr/bin/env bun",
+      `await Bun.write(${JSON.stringify(argsPath)}, JSON.stringify(process.argv.slice(2)));`,
+      'const patternIndex = process.argv.indexOf("--pattern");',
+      'if (process.argv[patternIndex + 1] === "none") {',
+      '  process.stdout.write("[]");',
+      "  process.exit(1);",
+      "}",
+      'if (process.argv[patternIndex + 1] === "malformed") {',
+      '  process.stdout.write("not json");',
+      "  process.exit(0);",
+      "}",
+      'if (process.argv[patternIndex + 1] === "failure") {',
+      '  process.stderr.write("untrusted error details");',
+      "  process.exit(2);",
+      "}",
+      'if (process.argv[patternIndex + 1] === "sleep") {',
+      "  await Bun.sleep(1_000);",
+      "}",
+      'if (process.argv[patternIndex + 1] === "many") {',
+      `  process.stdout.write(JSON.stringify(Array.from({ length: 101 }, (_, index) => ({ ...${JSON.stringify(match[0])}, text: \`match \${index}\` }))));`,
+      "  process.exit(0);",
+      "}",
+      `process.stdout.write(${JSON.stringify(JSON.stringify(match))});`,
+      "",
+    ].join("\n"),
+  );
+  await chmod(executable, 0o755);
 }
 
 function runGit(cwd: string, args: string[]): string {

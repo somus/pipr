@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { compact, isPlainObject } from "lodash-es";
 import { z } from "zod";
-import type { DiffManifest, ProviderConfig } from "../types.js";
+import type { ProviderConfig } from "../types.js";
 import type { PiReadOnlyToolName } from "./contract.js";
 import {
   type PiCustomToolRequest,
@@ -13,6 +13,7 @@ import {
   preparePiCustomTools,
 } from "./custom-tools.js";
 import { toPiProviderInvocation } from "./provider.js";
+import type { PiRuntimeReadToolRequest } from "./runtime-tools.js";
 import { type PreparedPiRuntimeReadTools, preparePiRuntimeReadTools } from "./runtime-tools.js";
 
 export type PiRunOptions = {
@@ -23,10 +24,7 @@ export type PiRunOptions = {
   piExecutable?: string;
   timeoutSeconds?: number;
   builtinTools?: readonly PiReadOnlyToolName[];
-  runtimeTools?: {
-    manifest: DiffManifest;
-    toolResponseMaxBytes: number;
-  };
+  runtimeTools?: PiRuntimeReadToolRequest;
   customTools?: PiCustomToolRequest;
   streamLimits?: PiStreamLimits;
 };

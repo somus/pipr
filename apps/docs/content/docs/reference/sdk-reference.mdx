@@ -296,6 +296,10 @@ Task handlers use this context to read change data, run Pi, publish results, and
 
 `ctx.change.diffManifest(...)` returns commentable file ranges. Findings must reference those ranges by `rangeId`.
 
+For languages supported by the installed ast-grep executable, Pipr can add `DiffManifestFile.changedSymbols` and `CommentableRange.summary` values derived from enclosing declarations. Caller-provided values take precedence. Derived values are best effort and bounded to 32 symbols per file, 120 characters per symbol, 200 characters per summary, and 32 KiB across one manifest. Compressed and automatically condensed projections retain symbols and summaries but continue to remove `signals` and range previews as applicable.
+
+The Docker Action provides ast-grep `0.44.1`. Local runtimes use the same structural behavior when ast-grep is on `PATH`; otherwise, they return the ordinary Diff Manifest without failing the Review Run.
+
 `ctx.command.reply(...)` emits a normal change-request comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
 
 When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. The manifest is filtered to matching files, the prompt carries the path scope, and Pipr drops findings from that scoped Pi result when `result.inlineFindings` is passed directly to `ctx.comment(...)`. If a task maps, spreads, or clones the returned finding array, Pipr treats the transformed findings as task-authored output and applies normal Diff Manifest range validation.
@@ -547,6 +551,8 @@ These limits control runtime timeout, provider-call count, and Diff Manifest pro
 | --- | --- | --- |
 | `limits.diffManifest.maxShards` | Positive integer; defaults to `4` | Caps automatic fan-out from one review invocation. Set it to `1` to disable splitting. |
 | `limits.maxAgentRuns` | Positive integer; unlimited when omitted | Caps total provider invocations across all tasks and agents in one Review Run. |
+
+`limits.diffManifest.toolResponseMaxBytes` also bounds condensed helper responses. Condensed runs with structural capability register `pipr_read_declaration(path, ref, rangeId)` and `pipr_ast_grep(pattern, language, paths)` in addition to the manifest read tools. `pipr_ast_grep` searches only the head workspace, accepts 1 to 16 explicit safe paths, returns at most 100 matches, and truncates each matched text to 2 KiB.
 
 `ctx.pi.run(agent, input, { maxShards })` overrides `limits.diffManifest.maxShards` for that invocation. Omit it to inherit the global value; set it to `1` to disable splitting for only that call.
 

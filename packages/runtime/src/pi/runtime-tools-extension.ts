@@ -5,15 +5,20 @@ import { compact } from "lodash-es";
 import { z } from "zod";
 import {
   assertNoSymlinkPath,
+  astGrepSearchParams,
+  type BaseDeclarationSnapshot,
   type BaseRangeSnapshot,
   boundedLineSlice,
   type ReadAtRefParams,
   type RuntimeToolData,
   readAtRefParams,
+  readDeclarationParams,
   readDiffFromRuntimeData,
   readDiffParams,
   resolveAllowedPath,
+  resolveDeclarationRequest,
   resolveReadAtRefRequest,
+  runAstGrepSearch,
   unavailableReadAtRefResult,
 } from "./runtime-tools-core.js";
 
@@ -62,6 +67,29 @@ const readableBaseSnapshotSchema = z.looseObject({
   bytes: z.number().optional(),
   truncated: z.boolean().optional(),
 });
+const readableBaseDeclarationSnapshotSchema = z.looseObject({
+  path: z.string(),
+  ref: z.literal("base"),
+  sourcePath: z.string(),
+  rangeId: z.string(),
+  declaration: z.looseObject({
+    qualifiedName: z.string(),
+    kind: z.string(),
+    startLine: z.number(),
+    endLine: z.number(),
+  }),
+  available: z.literal(true),
+  relativePath: z.string(),
+  bytes: z.number().optional(),
+  truncated: z.boolean().optional(),
+});
+const runtimeStructuralCapabilitySchema = z.looseObject({
+  structuralAnalysis: z
+    .looseObject({
+      available: z.literal(true),
+    })
+    .optional(),
+});
 
 /** Registers pipr runtime read tools and config-defined custom tools with Pi. */
 export default function piprRuntimeTools(pi: PiExtensionHost): void {
@@ -93,6 +121,9 @@ function registration(
 
 function registerRuntimeReadTools(pi: PiExtensionHost, dataPath: string): void {
   const dataRoot = path.dirname(dataPath);
+  const structuralEnabled = runtimeStructuralCapabilitySchema.parse(
+    JSON.parse(readFileSync(dataPath, "utf8")),
+  ).structuralAnalysis;
 
   pi.registerTool({
     name: "pipr_read_diff",
@@ -131,6 +162,64 @@ function registerRuntimeReadTools(pi: PiExtensionHost, dataPath: string): void {
       const cwd = typeof ctx?.cwd === "string" ? ctx.cwd : "";
       const data = (await Bun.file(dataPath).json()) as RuntimeToolData;
       const result = await readAtRef(dataRoot, data, readAtRefParams(params), cwd);
+      return textResult(result);
+    },
+  });
+
+  if (!structuralEnabled) {
+    return;
+  }
+
+  pi.registerTool({
+    name: "pipr_read_declaration",
+    label: "Read enclosing declaration",
+    description:
+      "Read bounded enclosing declaration context for one Diff Manifest path, ref, and range id.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["path", "ref", "rangeId"],
+      properties: {
+        path: { type: "string" },
+        ref: { type: "string", enum: ["base", "head"] },
+        rangeId: { type: "string" },
+      },
+    },
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const cwd = typeof ctx?.cwd === "string" ? ctx.cwd : "";
+      const data = (await Bun.file(dataPath).json()) as RuntimeToolData;
+      const result = await readDeclaration(dataRoot, data, readDeclarationParams(params), cwd);
+      return textResult(result);
+    },
+  });
+
+  pi.registerTool({
+    name: "pipr_ast_grep",
+    label: "Search repository structure",
+    description: "Search syntax-specific patterns in explicit safe paths in the head workspace.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["pattern", "language", "paths"],
+      properties: {
+        pattern: { type: "string", maxLength: 4096 },
+        language: { type: "string" },
+        paths: {
+          type: "array",
+          minItems: 1,
+          maxItems: 16,
+          items: { type: "string" },
+        },
+      },
+    },
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const cwd = typeof ctx?.cwd === "string" ? ctx.cwd : "";
+      const data = (await Bun.file(dataPath).json()) as RuntimeToolData;
+      const result = await runAstGrepSearch({
+        cwd,
+        params: astGrepSearchParams(params),
+        maxBytes: data.toolResponseMaxBytes,
+      });
       return textResult(result);
     },
   });
@@ -257,6 +346,76 @@ async function readAtRef(
     return await readBaseSnapshot(dataRoot, data.baseRanges[params.rangeId], params, request);
   }
   return await readHeadWorkspaceFile(cwd, data.toolResponseMaxBytes, params, request);
+}
+
+async function readDeclaration(
+  dataRoot: string,
+  data: RuntimeToolData,
+  params: ReturnType<typeof readDeclarationParams>,
+  cwd: string,
+): Promise<unknown> {
+  const request = resolveDeclarationRequest(data, params);
+  if (!request.available) {
+    return request;
+  }
+  if (params.ref === "base") {
+    return await readBaseDeclarationSnapshot(
+      dataRoot,
+      data.baseDeclarations?.[params.rangeId],
+      request,
+    );
+  }
+  const target = resolveAllowedPath(cwd, request.sourcePath);
+  await assertNoSymlinkPath(cwd, request.sourcePath);
+  return {
+    ...request,
+    declaration: declarationResult(request.declaration),
+    ...boundedLineSlice(
+      await Bun.file(target).text(),
+      {
+        startLine: request.declaration.startLine,
+        endLine: request.declaration.endLine,
+      },
+      data.toolResponseMaxBytes,
+    ),
+  };
+}
+
+async function readBaseDeclarationSnapshot(
+  dataRoot: string,
+  snapshot: BaseDeclarationSnapshot | undefined,
+  request: Extract<ReturnType<typeof resolveDeclarationRequest>, { available: true }>,
+): Promise<unknown> {
+  const readable = readableBaseDeclarationSnapshotSchema.safeParse(snapshot);
+  if (!readable.success) {
+    const { declaration: _declaration, ...unavailable } = request;
+    return { ...unavailable, available: false };
+  }
+  return {
+    path: request.path,
+    sourcePath: request.sourcePath,
+    ref: request.ref,
+    rangeId: request.rangeId,
+    declaration: declarationResult(request.declaration),
+    available: true,
+    content: await Bun.file(path.join(dataRoot, readable.data.relativePath)).text(),
+    bytes: readable.data.bytes,
+    truncated: readable.data.truncated,
+  };
+}
+
+function declarationResult(declaration: {
+  qualifiedName: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+}) {
+  return {
+    qualifiedName: declaration.qualifiedName,
+    kind: declaration.kind,
+    startLine: declaration.startLine,
+    endLine: declaration.endLine,
+  };
 }
 
 async function readBaseSnapshot(

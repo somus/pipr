@@ -1,9 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { findEnclosingDeclaration } from "../diff/manifest-structure.js";
+import type { DiffStructuralAnalysis } from "../diff/structural-analysis.js";
 import type { DiffManifest } from "../types.js";
 import {
   assertNoSymlinkPath,
+  type BaseDeclarationSnapshot,
   type BaseRangeSnapshot,
   boundedLineSlice,
   type LineWindow,
@@ -16,12 +19,16 @@ import {
 } from "./runtime-tools-core.js";
 
 export const piRuntimeReadToolNames = ["pipr_read_diff", "pipr_read_at_ref"] as const;
+export const piRuntimeStructuralToolNames = ["pipr_read_declaration", "pipr_ast_grep"] as const;
 
-export type PiRuntimeReadToolName = (typeof piRuntimeReadToolNames)[number];
+export type PiRuntimeReadToolName =
+  | (typeof piRuntimeReadToolNames)[number]
+  | (typeof piRuntimeStructuralToolNames)[number];
 
 export type PiRuntimeReadToolRequest = {
   manifest: DiffManifest;
   toolResponseMaxBytes: number;
+  structuralAnalysis?: Extract<DiffStructuralAnalysis, { available: true }>;
 };
 
 export type PreparedPiRuntimeReadTools = {
@@ -44,18 +51,81 @@ export async function preparePiRuntimeReadTools(options: {
     sourceWorkspace: options.sourceWorkspace,
     maxBytes: options.request.toolResponseMaxBytes,
   });
+  const baseDeclarations = options.request.structuralAnalysis
+    ? await materializeBaseDeclarationSnapshots({
+        baseRoot,
+        manifest: options.request.manifest,
+        structuralAnalysis: options.request.structuralAnalysis,
+        sourceWorkspace: options.sourceWorkspace,
+        maxBytes: options.request.toolResponseMaxBytes,
+      })
+    : {};
   const data: RuntimeToolData = {
     manifest: options.request.manifest,
     toolResponseMaxBytes: options.request.toolResponseMaxBytes,
     baseRanges,
+    baseDeclarations,
+    structuralAnalysis: options.request.structuralAnalysis,
   };
   const dataPath = path.join(toolRoot, "data.json");
   await Bun.write(dataPath, JSON.stringify(data));
   return {
     extensionPath: await piRuntimeToolsExtensionPath(),
     dataPath,
-    toolNames: piRuntimeReadToolNames,
+    toolNames: options.request.structuralAnalysis
+      ? [...piRuntimeReadToolNames, ...piRuntimeStructuralToolNames]
+      : piRuntimeReadToolNames,
   };
+}
+
+async function materializeBaseDeclarationSnapshots(options: {
+  baseRoot: string;
+  manifest: DiffManifest;
+  structuralAnalysis: Extract<DiffStructuralAnalysis, { available: true }>;
+  sourceWorkspace: string;
+  maxBytes: number;
+}): Promise<Record<string, BaseDeclarationSnapshot>> {
+  const declarations: Record<string, BaseDeclarationSnapshot> = {};
+  for (const [fileIndex, file] of options.manifest.files.entries()) {
+    for (const [rangeIndex, range] of file.commentableRanges.entries()) {
+      if (range.side !== "LEFT") {
+        continue;
+      }
+      const owner = findEnclosingDeclaration(file, range, options.structuralAnalysis);
+      if (owner?.ref !== "base") {
+        continue;
+      }
+      const window = {
+        startLine: owner.declaration.startLine,
+        endLine: owner.declaration.endLine,
+      };
+      const blob = readGitBlobSlice({
+        cwd: options.sourceWorkspace,
+        ref: options.manifest.mergeBaseSha,
+        filePath: owner.sourcePath,
+        window,
+        maxBytes: options.maxBytes,
+        allowMissing: true,
+      });
+      if (!blob.available || blob.content === undefined) {
+        continue;
+      }
+      const snapshotName = `declaration-${fileIndex}-${rangeIndex}.txt`;
+      await Bun.write(path.join(options.baseRoot, snapshotName), blob.content);
+      declarations[range.id] = {
+        path: file.path,
+        ref: "base",
+        sourcePath: owner.sourcePath,
+        rangeId: range.id,
+        declaration: owner.declaration,
+        available: true,
+        relativePath: path.join("base", snapshotName),
+        bytes: blob.bytes,
+        truncated: blob.truncated,
+      };
+    }
+  }
+  return declarations;
 }
 
 export async function piRuntimeToolsExtensionPath(): Promise<string> {

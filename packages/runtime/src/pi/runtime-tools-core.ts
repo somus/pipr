@@ -1,7 +1,10 @@
+import { spawn } from "node:child_process";
 import { lstat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { findEnclosingDeclaration } from "../diff/manifest-structure.js";
 import { createDiffRangeIndex } from "../diff/ranges.js";
+import type { DiffStructuralAnalysis, StructuralDeclaration } from "../diff/structural-analysis.js";
 import { isRecord } from "../shared/record.js";
 import type { CommentableRange, DiffHunk, DiffManifest, DiffManifestFile } from "../types.js";
 
@@ -22,6 +25,8 @@ export type RuntimeToolData = {
   manifest: DiffManifest;
   toolResponseMaxBytes: number;
   baseRanges: Record<string, BaseRangeSnapshot>;
+  baseDeclarations?: Record<string, BaseDeclarationSnapshot>;
+  structuralAnalysis?: Extract<DiffStructuralAnalysis, { available: true }>;
 };
 
 export type BaseRangeSnapshot = {
@@ -35,6 +40,30 @@ export type BaseRangeSnapshot = {
   relativePath?: string;
   bytes?: number;
   truncated?: boolean;
+};
+
+export type BaseDeclarationSnapshot = {
+  path: string;
+  ref: "base";
+  sourcePath: string;
+  rangeId: string;
+  declaration: StructuralDeclaration;
+  available: boolean;
+  relativePath?: string;
+  bytes?: number;
+  truncated?: boolean;
+};
+
+export type ReadDeclarationParams = {
+  path: string;
+  ref: "base" | "head";
+  rangeId: string;
+};
+
+export type AstGrepSearchParams = {
+  pattern: string;
+  language: string;
+  paths: string[];
 };
 
 export type ReadAtRefRequest = {
@@ -82,7 +111,26 @@ const readAtRefParamsSchema = z.preprocess(
     rangeId: z.string({ error: "rangeId must be a string" }),
   }),
 );
-
+const astGrepSearchParamsSchema = z.strictObject({
+  pattern: z.string().min(1).max(4096),
+  language: z.string().min(1).max(64),
+  paths: z.array(z.string()).min(1).max(16),
+});
+const astGrepMatchSchema = z.looseObject({
+  text: z.string(),
+  file: z.string(),
+  range: z.object({
+    start: z.object({
+      line: z.number().int().nonnegative(),
+      column: z.number().int().nonnegative(),
+    }),
+    end: z.object({
+      line: z.number().int().nonnegative(),
+      column: z.number().int().nonnegative(),
+    }),
+  }),
+});
+const astGrepMatchesSchema = z.array(astGrepMatchSchema);
 export function readDiffFromRuntimeData(data: RuntimeToolData, params: ReadDiffParams): unknown {
   const { rangeId } = params;
   const filePath = params.path === undefined ? undefined : parseManifestPath(params.path);
@@ -210,6 +258,149 @@ export function readAtRefParams(params: unknown): ReadAtRefParams {
   return { path: parseManifestPath(parsed.path), ref: parsed.ref, rangeId: parsed.rangeId };
 }
 
+export function readDeclarationParams(params: unknown): ReadDeclarationParams {
+  return readAtRefParams(params);
+}
+
+export function astGrepSearchParams(params: unknown): AstGrepSearchParams {
+  const parsed = astGrepSearchParamsSchema.parse(params);
+  return {
+    pattern: parsed.pattern,
+    language: parsed.language,
+    paths: parsed.paths.map(parseSearchPath),
+  };
+}
+
+export function resolveDeclarationRequest(
+  data: RuntimeToolData,
+  params: ReadDeclarationParams,
+):
+  | {
+      available: true;
+      path: string;
+      sourcePath: string;
+      ref: "base" | "head";
+      rangeId: string;
+      declaration: StructuralDeclaration;
+    }
+  | {
+      available: false;
+      path: string;
+      sourcePath: string;
+      ref: "base" | "head";
+      rangeId: string;
+    } {
+  const filePath = parseManifestPath(params.path);
+  const ranges = createDiffRangeIndex(data.manifest);
+  const file = ranges.requireFile(filePath);
+  const range = ranges.requireRangeInFile(file, params.rangeId);
+  const sourcePath = parseManifestPath(
+    params.ref === "base" ? (file.previousPath ?? file.path) : file.path,
+  );
+  const expectedSide = params.ref === "base" ? "LEFT" : "RIGHT";
+  if (!data.structuralAnalysis || range.side !== expectedSide) {
+    return {
+      available: false,
+      path: file.path,
+      sourcePath,
+      ref: params.ref,
+      rangeId: range.id,
+    };
+  }
+  const owner = findEnclosingDeclaration(file, range, data.structuralAnalysis);
+  if (!owner || owner.ref !== params.ref) {
+    return {
+      available: false,
+      path: file.path,
+      sourcePath,
+      ref: params.ref,
+      rangeId: range.id,
+    };
+  }
+  return {
+    available: true,
+    path: file.path,
+    sourcePath: owner.sourcePath,
+    ref: params.ref,
+    rangeId: range.id,
+    declaration: owner.declaration,
+  };
+}
+
+export async function runAstGrepSearch(options: {
+  cwd: string;
+  params: AstGrepSearchParams;
+  maxBytes: number;
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+}): Promise<unknown> {
+  for (const searchPath of options.params.paths) {
+    if (searchPath !== ".") {
+      resolveAllowedPath(options.cwd, searchPath);
+      await assertNoSymlinkPath(options.cwd, searchPath);
+    }
+  }
+  const result = await runAstGrepProcess(
+    [
+      "ast-grep",
+      "run",
+      "--pattern",
+      options.params.pattern,
+      "--lang",
+      options.params.language,
+      "--json=compact",
+      "--color",
+      "never",
+      "--",
+      ...options.params.paths,
+    ],
+    {
+      cwd: options.cwd,
+      env: options.env,
+      timeoutMs: options.timeoutMs ?? 10_000,
+    },
+  );
+  const output = result.stdout.trim();
+  if (result.exitCode === 1 && (output === "" || output === "[]")) {
+    return { available: true, matches: [], truncated: false };
+  }
+  if (result.exitCode !== 0) {
+    throw new Error("pipr_ast_grep failed");
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(output);
+  } catch {
+    throw new Error("pipr_ast_grep returned invalid output");
+  }
+  const parsed = astGrepMatchesSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new Error("pipr_ast_grep returned invalid output");
+  }
+  const matches: Array<{
+    path: string;
+    startLine: number;
+    endLine: number;
+    text: string;
+  }> = [];
+  let truncated = parsed.data.length > 100;
+  for (const match of parsed.data.slice(0, 100)) {
+    const normalized = {
+      path: parseSearchResultPath(match.file),
+      startLine: match.range.start.line + 1,
+      endLine: match.range.end.line + 1,
+      text: truncateUtf8(match.text, 2 * 1024),
+    };
+    const candidate = { available: true, matches: [...matches, normalized], truncated };
+    if (Buffer.byteLength(JSON.stringify(candidate), "utf8") > options.maxBytes) {
+      truncated = true;
+      break;
+    }
+    matches.push(normalized);
+  }
+  return { available: true, matches, truncated };
+}
+
 function filterManifestFileRanges(
   file: DiffManifestFile,
   rangeId: string | undefined,
@@ -242,4 +433,91 @@ function lineWindowForRange(
     startLine: Math.max(hunkStart, range.startLine - readAtRefContextLines),
     endLine: Math.min(hunkEnd, range.endLine + readAtRefContextLines),
   };
+}
+
+function parseSearchPath(value: string): string {
+  if (value === ".") {
+    return value;
+  }
+  if (
+    value.includes("\\") ||
+    /[*?[\]{}]/.test(value) ||
+    path.isAbsolute(value) ||
+    value.includes("\0") ||
+    value.split("/").some((part) => part === "" || part === "." || part === ".." || part === ".git")
+  ) {
+    throw new Error(`Unsafe structural search path '${value}'`);
+  }
+  return value;
+}
+
+function parseSearchResultPath(value: string): string {
+  try {
+    return parseSearchPath(value);
+  } catch {
+    throw new Error("pipr_ast_grep returned an unsafe path");
+  }
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  const buffer = Buffer.from(value, "utf8");
+  return buffer.byteLength <= maxBytes ? value : buffer.subarray(0, maxBytes).toString("utf8");
+}
+
+async function runAstGrepProcess(
+  command: [string, ...string[]],
+  options: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+    timeoutMs: number;
+  },
+): Promise<{ stdout: string; exitCode: number }> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command[0], command.slice(1), {
+      cwd: options.cwd,
+      env: options.env ?? process.env,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let settled = false;
+    const fail = (message: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      child.kill("SIGKILL");
+      reject(new Error(message));
+    };
+    const timer = setTimeout(() => fail("pipr_ast_grep timed out"), options.timeoutMs);
+    child.on("error", () => fail("pipr_ast_grep is unavailable"));
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutBytes += chunk.byteLength;
+      if (stdoutBytes > 16 * 1024 * 1024) {
+        fail("pipr_ast_grep exceeded its output limit");
+        return;
+      }
+      stdout.push(chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrBytes += chunk.byteLength;
+      if (stderrBytes > 1024 * 1024) {
+        fail("pipr_ast_grep exceeded its output limit");
+      }
+    });
+    child.on("close", (exitCode) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        exitCode: exitCode ?? -1,
+      });
+    });
+  });
 }

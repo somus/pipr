@@ -161,11 +161,20 @@ Diff Manifest prompt injection is reserved opt-in. When `ctx.pi.run(...)` receiv
 
 ### Condensed reads
 
-If the full manifest is too large but its condensed form fits, Pipr sends one condensed manifest and attaches bounded Diff Read Tools. If the condensed form is also too large for a Review-schema agent, Pipr uses ast-grep outlines to keep structurally related changed files together where prompt limits allow, runs the bounded units sequentially, and merges their Review results. `limits.diffManifest.maxShards` limits this automatic fan-out for one review invocation and defaults to `4`; set it to `1` to disable splitting. A task can override the global value for one invocation with `ctx.pi.run(agent, input, { maxShards })`. When the cap requires a larger unit, Pipr preserves its complete mapping data and sends the condensed form with Diff Read Tools.
+Pipr uses ast-grep outlines as best-effort structural context. Supported files can include `changedSymbols` on the file and an `Enclosing declaration: <kind> <name>` summary on each range. Pipr preserves caller-provided metadata, bounds derived metadata, and keeps structural symbols and summaries in full, compressed, and condensed manifests. The Docker Action includes ast-grep `0.44.1`; local runs continue without structural metadata when the executable or language support is unavailable.
+
+If the full manifest is too large but its condensed form fits, Pipr sends one condensed manifest and attaches bounded Diff Read Tools. When structural context is available, condensed reviews also receive:
+
+- `pipr_read_declaration` reads the enclosing head or merge-base declaration for one manifest range.
+- `pipr_ast_grep` searches a syntax pattern across up to 16 explicit safe head-workspace paths.
+
+Pipr tells the agent to start from the manifest, keep queries narrow, treat tool output as evidence, and omit findings when the evidence remains insufficient. The structural search tool rejects absolute paths, parent traversal, `.git`, globs, and symlink traversal. It doesn't expose rewrite or update options.
+
+If the condensed form is also too large for a Review-schema agent, Pipr keeps changed import relationships, test/source pairs, and same-declaration hunks together where prompt limits allow. It runs the bounded units sequentially and merges their Review results. `limits.diffManifest.maxShards` limits this automatic fan-out for one review invocation and defaults to `4`; set it to `1` to disable splitting. A task can override the global value for one invocation with `ctx.pi.run(agent, input, { maxShards })`. When the cap requires a larger unit, Pipr preserves its complete mapping data and sends the condensed form with Diff Read Tools.
 
 `limits.maxAgentRuns` limits total provider invocations across all tasks and agents in one Review Run. Shards, repairs, transient retries, and model fallbacks each consume one invocation. Pipr reserves an agent run immediately before starting Pi. The reservation remains consumed if the invocation fails or is aborted. After the budget is exhausted, Pipr fails before starting another provider process. The limit is optional and provider invocations are unlimited when it is omitted.
 
-The model can ask for more range-scoped context without receiving shell or arbitrary filesystem access. If an agent runs with `toolMode: "none"`, Pipr still injects manifest prompt context when `manifest` is passed, but it does not attach Diff Read Tools.
+The model can ask for more range-scoped context without receiving shell or write access. Its normal read-only tools can inspect the head workspace, while `pipr_read_at_ref` and `pipr_read_declaration` provide bounded merge-base content. If an agent runs with `toolMode: "none"`, Pipr still injects manifest prompt context when `manifest` is passed, but it doesn't attach Diff Read Tools.
 
 ### Path scope
 

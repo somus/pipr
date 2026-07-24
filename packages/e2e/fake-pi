@@ -167,7 +167,7 @@ async function assertCondensedRuntimeTools() {
 
   assertEqual(
     toolNames,
-    "read,grep,find,ls,pipr_read_diff,pipr_read_at_ref",
+    "read,grep,find,ls,pipr_read_diff,pipr_read_at_ref,pipr_read_declaration,pipr_ast_grep",
     "unexpected condensed Pi tool allowlist",
   );
   for (const forbidden of ["bash", "edit", "write"]) {
@@ -181,11 +181,13 @@ async function assertCondensedRuntimeTools() {
 
   const payload = parsePromptJson("\nPayload:", "\nManifest:");
   assertEqual(payload.mode, "condensed", "expected condensed manifest payload");
-  assert(prompt.includes("pipr_read_diff(path?, rangeId?)"), "prompt did not describe pipr_read_diff");
+  assert(prompt.includes("pipr_read_diff returns"), "prompt did not describe pipr_read_diff");
   assert(
-    prompt.includes("pipr_read_at_ref(path, ref, rangeId?)"),
+    prompt.includes("pipr_read_at_ref reads"),
     "prompt did not describe pipr_read_at_ref",
   );
+  assert(prompt.includes("pipr_read_declaration retrieves"), "prompt did not describe pipr_read_declaration");
+  assert(prompt.includes("pipr_ast_grep verifies"), "prompt did not describe pipr_ast_grep");
 
   const manifest = parsePromptJson("\nManifest:");
   const file = manifest.files.find((item) => item.path === "packages/e2e/fixtures/act/project/sample.ts");
@@ -211,6 +213,8 @@ async function assertCondensedRuntimeTools() {
   const tools = await loadRuntimeTools(extensionPath);
   const diffTool = assertTool(tools, "pipr_read_diff");
   const atRefTool = assertTool(tools, "pipr_read_at_ref");
+  const declarationTool = assertTool(tools, "pipr_read_declaration");
+  const astGrepTool = assertTool(tools, "pipr_ast_grep");
   const leftRange = file.commentableRanges.find((item) => item.side === "LEFT");
   assert(leftRange, "condensed manifest missing LEFT range for base read");
 
@@ -256,6 +260,40 @@ async function assertCondensedRuntimeTools() {
     rangeId: range.id,
   });
   assertEqual(oppositeSideBase.available, false, "pipr_read_at_ref widened opposite-side base read");
+
+  const headDeclaration = await executeTool(declarationTool, {
+    path: file.path,
+    ref: "head",
+    rangeId: range.id,
+  });
+  assert(headDeclaration.content.includes("normalized"), "pipr_read_declaration missed head declaration");
+  assertEqual(
+    headDeclaration.declaration.qualifiedName,
+    "reviewTarget",
+    "pipr_read_declaration returned wrong declaration",
+  );
+
+  const baseDeclaration = await executeTool(declarationTool, {
+    path: file.path,
+    ref: "base",
+    rangeId: leftRange.id,
+  });
+  assert(baseDeclaration.content.includes("legacy.trim()"), "pipr_read_declaration missed base declaration");
+
+  const structuralMatches = await executeTool(astGrepTool, {
+    pattern: "function $NAME($$$ARGS): $RET { $$$BODY }",
+    language: "ts",
+    paths: [file.path],
+  });
+  assertEqual(structuralMatches.matches.length, 1, "pipr_ast_grep returned wrong match count");
+  assertEqual(structuralMatches.matches[0].path, file.path, "pipr_ast_grep returned wrong path");
+
+  const noStructuralMatches = await executeTool(astGrepTool, {
+    pattern: "class $NAME { $$$BODY }",
+    language: "ts",
+    paths: [file.path],
+  });
+  assertEqual(noStructuralMatches.matches.length, 0, "pipr_ast_grep no-match result was not empty");
 
   await assertRejects(
     () => executeTool(diffTool, { path: "packages/e2e/fixtures/act/project/missing.ts" }),

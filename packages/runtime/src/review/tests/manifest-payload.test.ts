@@ -4,7 +4,7 @@ import {
   measureDiffManifestPrompt,
   prepareDiffManifestPrompt,
 } from "../../diff/manifest-projection.js";
-import { piRuntimeReadToolNames } from "../../pi/runtime-tools.js";
+import { piRuntimeReadToolNames, piRuntimeStructuralToolNames } from "../../pi/runtime-tools.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import { prepareDiffManifestContext } from "../agent/diff-manifest-context.js";
 
@@ -135,6 +135,36 @@ describe("Diff Manifest prompt payload", () => {
     });
     expect(context?.body).toContain('"mode": "condensed"');
     expect(context?.body).toContain("pipr_read_diff");
+    expect(context?.body).not.toContain("pipr_read_declaration");
+  });
+
+  it("advertises structural tools only when condensed structural capability is available", () => {
+    const manifest = largeContextManifest();
+    const context = prepareDiffManifestContext({
+      input: { manifest },
+      limits: {
+        fullMaxBytes: 128,
+        fullMaxEstimatedTokens: 100_000,
+        condensedMaxBytes: 100_000,
+        condensedMaxEstimatedTokens: 100_000,
+      },
+      toolMode: "read-only",
+      structuralAnalysis: {
+        available: true,
+        version: "0.44.1",
+        headFiles: [],
+        baseFiles: [],
+        diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+      },
+    });
+
+    expect(context?.runtimeToolNames).toEqual([
+      ...piRuntimeReadToolNames,
+      ...piRuntimeStructuralToolNames,
+    ]);
+    expect(context?.runtimeToolRequest?.structuralAnalysis?.available).toBe(true);
+    expect(context?.body).toContain("pipr_read_declaration");
+    expect(context?.body).toContain("pipr_ast_grep");
   });
 
   it("does not attach runtime read tools when tool mode is none", () => {
@@ -147,12 +177,20 @@ describe("Diff Manifest prompt payload", () => {
         condensedMaxEstimatedTokens: 100_000,
       },
       toolMode: "none",
+      structuralAnalysis: {
+        available: true,
+        version: "0.44.1",
+        headFiles: [],
+        baseFiles: [],
+        diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+      },
     });
 
     expect(context?.mode).toBe("condensed");
     expect(context?.runtimeToolNames).toEqual([]);
     expect(context?.runtimeToolRequest).toBeUndefined();
     expect(context?.body).not.toContain("pipr_read_diff");
+    expect(context?.body).not.toContain("pipr_ast_grep");
   });
 
   it("only prepares context for the reserved manifest input key", () => {
