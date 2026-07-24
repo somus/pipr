@@ -191,6 +191,74 @@ describe("Diff Manifest sharding", () => {
 
     expect(JSON.stringify(unavailable)).toBe(JSON.stringify(availableWithoutRelationships));
   });
+
+  it("keeps hunks owned by the same declaration in one partition unit", async () => {
+    const manifest = declarationGroupingManifest();
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 1_500),
+      workspace: process.cwd(),
+      structuralAnalysis: declarationGroupingAnalysis,
+    });
+
+    expect(
+      shards.map((shard) =>
+        shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
+      ),
+    ).toEqual([[1, 2], [3]]);
+    expectExactCoverage(manifest, shards);
+  });
+
+  it("groups replacement hunks owned by the same declaration across base and head", async () => {
+    const manifest = mixedSideDeclarationGroupingManifest();
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 2_200),
+      workspace: process.cwd(),
+      structuralAnalysis: mixedSideDeclarationGroupingAnalysis,
+    });
+
+    expect(
+      shards.map((shard) =>
+        shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
+      ),
+    ).toEqual([[1, 2], [3]]);
+    expectExactCoverage(manifest, shards);
+  });
+
+  it("keeps multi-owner hunks independent while grouping single-owner hunks", async () => {
+    const manifest = multiOwnerHunkManifest();
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 1_500),
+      workspace: process.cwd(),
+      structuralAnalysis: declarationGroupingAnalysis,
+    });
+
+    expect(
+      shards.map((shard) =>
+        shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
+      ),
+    ).toEqual([[1], [2, 3]]);
+    expectExactCoverage(manifest, shards);
+  });
+
+  it("falls back to hunk splitting when a declaration unit is oversized", async () => {
+    const manifest = declarationGroupingManifest();
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 900),
+      workspace: process.cwd(),
+      structuralAnalysis: declarationGroupingAnalysis,
+    });
+
+    expect(
+      shards.map((shard) =>
+        shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
+      ),
+    ).toEqual([[1], [2], [3]]);
+    expectExactCoverage(manifest, shards);
+  });
 });
 
 function shardConfig(maxShards: number, condensedMaxBytes: number) {
@@ -216,6 +284,46 @@ function requiredFile(manifest: DiffManifest): DiffManifestFile {
     throw new Error("expected a changed file");
   }
   return file;
+}
+
+function expectExactCoverage(manifest: DiffManifest, shards: readonly DiffManifest[]): void {
+  const expectedFiles = manifest.files.flatMap((file) =>
+    file.hunks.map((hunk) => `${file.path}:${hunk.hunkIndex}:${hunk.contentHash}`),
+  );
+  const actualFiles = shards.flatMap((shard) =>
+    shard.files.flatMap((file) =>
+      file.hunks.map((hunk) => `${file.path}:${hunk.hunkIndex}:${hunk.contentHash}`),
+    ),
+  );
+  const expectedRanges = manifest.files.flatMap((file) =>
+    file.commentableRanges.map((range) =>
+      JSON.stringify({
+        path: file.path,
+        id: range.id,
+        side: range.side,
+        startLine: range.startLine,
+        endLine: range.endLine,
+        hunkIndex: range.hunkIndex,
+      }),
+    ),
+  );
+  const actualRanges = shards.flatMap((shard) =>
+    shard.files.flatMap((file) =>
+      file.commentableRanges.map((range) =>
+        JSON.stringify({
+          path: file.path,
+          id: range.id,
+          side: range.side,
+          startLine: range.startLine,
+          endLine: range.endLine,
+          hunkIndex: range.hunkIndex,
+        }),
+      ),
+    ),
+  );
+
+  expect(actualFiles.sort()).toEqual(expectedFiles.sort());
+  expect(actualRanges.sort()).toEqual(expectedRanges.sort());
 }
 
 function relatedFileManifest(): DiffManifest {
@@ -294,5 +402,180 @@ function manyHunkSingleFileManifest(): DiffManifest {
         }),
       },
     ],
+  };
+}
+
+function declarationGroupingManifest(): DiffManifest {
+  const manifest = manyHunkSingleFileManifest();
+  const file = requiredFile(manifest);
+  const selectedHunks = file.hunks.slice(0, 3).map((hunk, index) => {
+    const line = index === 2 ? 20 : index * 10 + 1;
+    return {
+      ...hunk,
+      hunkIndex: index + 1,
+      header: `@@ -${line},1 +${line},1 @@`,
+      oldStart: line,
+      newStart: line,
+    };
+  });
+  const [firstRange, secondRange, thirdRange] = file.commentableRanges;
+  if (!firstRange || !secondRange || !thirdRange) {
+    throw new Error("expected three commentable ranges");
+  }
+  const selectedRanges = [firstRange, secondRange, thirdRange];
+  return {
+    ...manifest,
+    files: [
+      {
+        ...file,
+        hunks: selectedHunks,
+        commentableRanges: selectedHunks.map((hunk, index) => ({
+          ...selectedRanges[index],
+          id: `declaration-range-${index}`,
+          startLine: hunk.newStart,
+          endLine: hunk.newStart,
+          hunkIndex: hunk.hunkIndex,
+          hunkHeader: hunk.header,
+          hunkContentHash: hunk.contentHash,
+        })),
+      },
+    ],
+  };
+}
+
+function mixedSideDeclarationGroupingManifest(): DiffManifest {
+  const manifest = declarationGroupingManifest();
+  const file = requiredFile(manifest);
+  const baseLines = [3, 13, 22];
+  return {
+    ...manifest,
+    files: [
+      {
+        ...file,
+        commentableRanges: file.commentableRanges.flatMap((range, index) => [
+          {
+            ...range,
+            id: `${range.id}-left`,
+            side: "LEFT" as const,
+            startLine: baseLines[index] ?? range.startLine,
+            endLine: baseLines[index] ?? range.endLine,
+            kind: "deleted" as const,
+          },
+          range,
+        ]),
+      },
+    ],
+  };
+}
+
+function multiOwnerHunkManifest(): DiffManifest {
+  const manifest = declarationGroupingManifest();
+  const file = requiredFile(manifest);
+  const [firstHunk, secondHunk, thirdHunk] = file.hunks;
+  const [firstRange, secondRange, thirdRange] = file.commentableRanges;
+  if (!firstHunk || !secondHunk || !thirdHunk || !firstRange || !secondRange || !thirdRange) {
+    throw new Error("expected three hunks and ranges");
+  }
+  const spanningHeader = "@@ -1,20 +1,20 @@";
+  const sharedThirdHunk = {
+    ...thirdHunk,
+    header: "@@ -2,1 +2,1 @@",
+    oldStart: 2,
+    newStart: 2,
+  };
+  return {
+    ...manifest,
+    files: [
+      {
+        ...file,
+        hunks: [
+          { ...firstHunk, header: spanningHeader, oldLines: 20, newLines: 20 },
+          secondHunk,
+          sharedThirdHunk,
+        ],
+        commentableRanges: [
+          { ...firstRange, hunkHeader: spanningHeader },
+          {
+            ...thirdRange,
+            hunkIndex: firstHunk.hunkIndex,
+            hunkHeader: spanningHeader,
+            hunkContentHash: firstHunk.contentHash,
+          },
+          secondRange,
+          {
+            ...firstRange,
+            id: "declaration-range-shared-third",
+            startLine: 2,
+            endLine: 2,
+            hunkIndex: sharedThirdHunk.hunkIndex,
+            hunkHeader: sharedThirdHunk.header,
+            hunkContentHash: sharedThirdHunk.contentHash,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+async function declarationGroupingAnalysis() {
+  return {
+    available: true as const,
+    version: "0.44.1",
+    headFiles: [
+      {
+        path: "src/a.ts",
+        language: "TypeScript",
+        imports: [],
+        declarations: [
+          {
+            qualifiedName: "shared",
+            kind: "function",
+            startLine: 1,
+            endLine: 12,
+            isExported: false,
+          },
+          {
+            qualifiedName: "separate",
+            kind: "function",
+            startLine: 20,
+            endLine: 24,
+            isExported: false,
+          },
+        ],
+      },
+    ],
+    baseFiles: [],
+    diagnostics: { durationMs: 1, fileCount: 1, declarationCount: 2 },
+  };
+}
+
+async function mixedSideDeclarationGroupingAnalysis() {
+  const analysis = await declarationGroupingAnalysis();
+  return {
+    ...analysis,
+    baseFiles: [
+      {
+        path: "src/a.ts",
+        language: "TypeScript",
+        imports: [],
+        declarations: [
+          {
+            qualifiedName: "shared",
+            kind: "function",
+            startLine: 3,
+            endLine: 14,
+            isExported: false,
+          },
+          {
+            qualifiedName: "separate",
+            kind: "function",
+            startLine: 22,
+            endLine: 26,
+            isExported: false,
+          },
+        ],
+      },
+    ],
+    diagnostics: { durationMs: 1, fileCount: 2, declarationCount: 4 },
   };
 }

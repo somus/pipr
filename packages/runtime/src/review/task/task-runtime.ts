@@ -11,6 +11,7 @@ import { uniq } from "lodash-es";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/diff.js";
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
+import { enrichDiffManifestWithStructure } from "../../diff/manifest-structure.js";
 import {
   createDiffStructuralAnalysisLoader,
   type DiffStructuralAnalysisLoader,
@@ -211,6 +212,13 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     env: options.env,
     log: options.log,
   });
+  let structuralManifestPromise: Promise<DiffManifest> | undefined;
+  const structuralManifest = () => {
+    structuralManifestPromise ??= structuralAnalysis().then((analysis) =>
+      enrichDiffManifestWithStructure(diffManifest, analysis),
+    );
+    return structuralManifestPromise;
+  };
   const runtimeOptions = {
     ...options,
     priorReviewState,
@@ -218,6 +226,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     run,
     agentRunBudget,
     structuralAnalysis,
+    structuralManifest,
     piRunSink(run: PiRunStats) {
       piRuns.push(run);
     },
@@ -571,6 +580,7 @@ function createTaskContext(
     piRunSink: (run: PiRunStats) => void;
     agentRunBudget: AgentRunBudget;
     structuralAnalysis: DiffStructuralAnalysisLoader;
+    structuralManifest: () => Promise<DiffManifest>;
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");
@@ -597,7 +607,7 @@ function createTaskContext(
         if (cached) {
           return cloneDiffManifest(cached);
         }
-        const manifest = projectDiffManifest(options.diffManifest, manifestOptions);
+        const manifest = projectDiffManifest(await options.structuralManifest(), manifestOptions);
         options.manifestCache.set(key, manifest);
         return cloneDiffManifest(manifest);
       },

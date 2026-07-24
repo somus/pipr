@@ -398,6 +398,86 @@ describe("Diff structural analysis", () => {
     expect((await Bun.file(callsPath).text()).trim().split("\n")).toHaveLength(2);
     await rm(executableDirectory, { recursive: true, force: true });
   });
+
+  it("analyzes renamed LEFT ranges from the merge-base path", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-structure-repo-"));
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      await Bun.write(path.join(workspace, "old.ts"), "function before() {\n  return 1;\n}\n");
+      runGit(workspace, ["init", "-q"]);
+      runGit(workspace, ["add", "old.ts"]);
+      runGit(workspace, [
+        "-c",
+        "user.name=Pipr Tests",
+        "-c",
+        "user.email=pipr@example.test",
+        "commit",
+        "-qm",
+        "base",
+      ]);
+      const mergeBaseSha = runGit(workspace, ["rev-parse", "HEAD"]).trim();
+      await writeFakeAstGrep(executableDirectory, [
+        {
+          path: "old.ts",
+          language: "TypeScript",
+          items: [
+            {
+              role: "item",
+              symbolType: "function",
+              name: "before",
+              range: sourceRange(0, 2),
+              signature: "function before() {",
+              astKind: "function_declaration",
+              isImport: false,
+              isExported: false,
+            },
+          ],
+        },
+      ]);
+      const source = reviewTestManifest();
+      const file = source.files[0];
+      if (!file) {
+        throw new Error("expected a changed file");
+      }
+
+      const result = await analyzeDiffStructure({
+        manifest: {
+          ...source,
+          mergeBaseSha,
+          files: [
+            {
+              ...file,
+              path: "new.ts",
+              previousPath: "old.ts",
+              status: "renamed",
+              commentableRanges: file.commentableRanges.map((range) => ({
+                ...range,
+                path: "new.ts",
+                side: "LEFT",
+                startLine: 1,
+                endLine: 2,
+              })),
+            },
+          ],
+        },
+        workspace,
+        env: pathWithExecutable(executableDirectory),
+      });
+
+      expect(result).toMatchObject({
+        available: true,
+        baseFiles: [
+          {
+            path: "old.ts",
+            declarations: [{ qualifiedName: "before", startLine: 1, endLine: 3 }],
+          },
+        ],
+      });
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
 });
 
 function sourceRange(startLine: number, endLine: number) {
@@ -506,4 +586,16 @@ function pathWithExecutable(directory: string): NodeJS.ProcessEnv {
     ...process.env,
     PATH: `${directory}:${process.env.PATH ?? ""}`,
   };
+}
+
+function runGit(cwd: string, args: string[]): string {
+  const result = Bun.spawnSync(["git", ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.toString());
+  }
+  return result.stdout.toString();
 }

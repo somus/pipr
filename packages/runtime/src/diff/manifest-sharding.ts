@@ -7,6 +7,7 @@ import {
 } from "./manifest-projection.js";
 import {
   analyzeDiffStructure,
+  type DiffStructuralAnalysis,
   type DiffStructuralAnalysisLoader,
   type StructuralFile,
 } from "./structural-analysis.js";
@@ -46,7 +47,13 @@ export async function shardDiffManifestForPrompt(options: {
   }
 
   const files = orderFilesByStructuralRelationships(options.manifest, analysis.headFiles);
-  return cappedPromptShards({ ...options.manifest, files }, options.config, maxShards, options.log);
+  return cappedPromptShards(
+    { ...options.manifest, files },
+    options.config,
+    maxShards,
+    options.log,
+    analysis,
+  );
 }
 
 function cappedPromptShards(
@@ -54,10 +61,11 @@ function cappedPromptShards(
   config: DiffManifestLimitsConfig | undefined,
   maxShards: number,
   log: RuntimeLog | undefined,
+  structuralAnalysis?: DiffStructuralAnalysis,
 ): DiffManifest[] {
   let shards: DiffManifest[];
   try {
-    shards = partitionDiffManifestForPrompt(manifest, config);
+    shards = partitionDiffManifestForPrompt(manifest, config, structuralAnalysis);
   } catch {
     return [manifest];
   }

@@ -1093,6 +1093,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
   it("reserves maxAgentRuns atomically across parallel Review Tasks", async () => {
     const release = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
     let calls = 0;
     const plan = testPlan((pipr) => {
       const agent = defaultReviewAgent(pipr);
@@ -1118,11 +1119,12 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       config: { ...config, limits: { maxAgentRuns: 1 } },
       piRunner: async () => {
         calls += 1;
+        started.resolve();
         await release.promise;
         return noFindingsPiResult();
       },
     });
-    await Bun.sleep(20);
+    await started.promise;
     const callsBeforeRelease = calls;
     release.resolve();
 
