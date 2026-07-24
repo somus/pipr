@@ -421,7 +421,7 @@ describe("runInternalVerifier", () => {
     expect(result.providerModels).toEqual(["fast-verifier-model"]);
   });
 
-  it("runs the verifier without repository read tools", async () => {
+  it("runs the verifier with repository read tools for current-head evidence", async () => {
     let observedPrompt = "";
     let observedBuiltinTools: unknown;
     let observedRuntimeTools: unknown;
@@ -449,12 +449,18 @@ describe("runInternalVerifier", () => {
       output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
     });
 
-    expect(observedPrompt).toContain("Available tools: none.");
-    expect(observedPrompt).not.toContain("Available tools: read");
-    expect(observedPrompt).not.toContain("pipr_read_diff");
-    expect(observedPrompt).toContain("Do not request repository, filesystem, network");
-    expect(observedBuiltinTools).toEqual([]);
-    expect(observedRuntimeTools).toBeUndefined();
+    expect(observedPrompt).toContain(
+      "Available tools: read, grep, find, ls, pipr_read_diff, pipr_read_at_ref.",
+    );
+    expect(observedPrompt).toContain(
+      "Inspect the current head file at every supplied finding path",
+    );
+    expect(observedBuiltinTools).toEqual(["read", "grep", "find", "ls"]);
+    expect(observedRuntimeTools).toEqual(
+      expect.objectContaining({
+        manifest: diffManifest,
+      }),
+    );
   });
 
   it("passes the supplied stable run id to verifier input", async () => {

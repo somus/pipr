@@ -100,7 +100,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
       agent,
       input: verifierInput(options, prior, candidates),
       runOptions: { model: modelProfile(options.verifierProvider) },
-      toolMode: "none",
+      toolMode: "read-only",
       runtime: {
         workspace: options.workspace,
         config: options.config,
@@ -316,6 +316,8 @@ function internalVerifierAgent(
         "Return fixed when the issue is no longer valid, or when the user explains a deliberate contract, accepted risk, test-only change, equivalent behavior, or project-specific reason that makes the requested change unnecessary.",
         "Return still-valid only when the issue still applies after considering the user's explanation and you can identify a concrete remaining risk.",
         "Return unknown when evidence is insufficient.",
+        "Inspect the current head file at every supplied finding path before deciding whether the issue is fixed or still valid.",
+        "Use read-only tools when the Diff Manifest does not contain enough current-head evidence.",
         "Return exactly one verdict for every supplied finding ID.",
         "Use only supplied finding IDs; never invent an ID.",
         "For user-reply mode, include a concise response for fixed and still-valid findings.",
