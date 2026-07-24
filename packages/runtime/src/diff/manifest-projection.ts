@@ -344,7 +344,7 @@ function sameDeclarationOwner(
 ): boolean {
   return (
     left?.declaration.kind === right.declaration.kind &&
-    left.declaration.qualifiedName === right.declaration.qualifiedName
+    left?.declaration.qualifiedName === right.declaration.qualifiedName
   );
 }
 

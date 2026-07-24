@@ -226,6 +226,23 @@ describe("Diff Manifest sharding", () => {
     expectExactCoverage(manifest, shards);
   });
 
+  it("keeps multi-owner hunks independent while grouping single-owner hunks", async () => {
+    const manifest = multiOwnerHunkManifest();
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 1_500),
+      workspace: process.cwd(),
+      structuralAnalysis: declarationGroupingAnalysis,
+    });
+
+    expect(
+      shards.map((shard) =>
+        shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
+      ),
+    ).toEqual([[1], [2, 3]]);
+    expectExactCoverage(manifest, shards);
+  });
+
   it("falls back to hunk splitting when a declaration unit is oversized", async () => {
     const manifest = declarationGroupingManifest();
     const shards = await shardDiffManifestForPrompt({
@@ -446,6 +463,55 @@ function mixedSideDeclarationGroupingManifest(): DiffManifest {
           },
           range,
         ]),
+      },
+    ],
+  };
+}
+
+function multiOwnerHunkManifest(): DiffManifest {
+  const manifest = declarationGroupingManifest();
+  const file = requiredFile(manifest);
+  const [firstHunk, secondHunk, thirdHunk] = file.hunks;
+  const [firstRange, secondRange, thirdRange] = file.commentableRanges;
+  if (!firstHunk || !secondHunk || !thirdHunk || !firstRange || !secondRange || !thirdRange) {
+    throw new Error("expected three hunks and ranges");
+  }
+  const spanningHeader = "@@ -1,20 +1,20 @@";
+  const sharedThirdHunk = {
+    ...thirdHunk,
+    header: "@@ -2,1 +2,1 @@",
+    oldStart: 2,
+    newStart: 2,
+  };
+  return {
+    ...manifest,
+    files: [
+      {
+        ...file,
+        hunks: [
+          { ...firstHunk, header: spanningHeader, oldLines: 20, newLines: 20 },
+          secondHunk,
+          sharedThirdHunk,
+        ],
+        commentableRanges: [
+          { ...firstRange, hunkHeader: spanningHeader },
+          {
+            ...thirdRange,
+            hunkIndex: firstHunk.hunkIndex,
+            hunkHeader: spanningHeader,
+            hunkContentHash: firstHunk.contentHash,
+          },
+          secondRange,
+          {
+            ...firstRange,
+            id: "declaration-range-shared-third",
+            startLine: 2,
+            endLine: 2,
+            hunkIndex: sharedThirdHunk.hunkIndex,
+            hunkHeader: sharedThirdHunk.header,
+            hunkContentHash: sharedThirdHunk.contentHash,
+          },
+        ],
       },
     ],
   };
