@@ -83,10 +83,21 @@ Use the generated permission block unless you have intentionally disabled the ma
 | Command response | Create or update the reply for one source `@pipr` command comment | `issues: write` |
 | Inline Review Comments | Publish comments on valid diff ranges | `pull-requests: write` |
 | Inline verifier replies | Reply to user comments on Pipr-owned Inline Review Comments | `pull-requests: write` |
-| Review thread resolution | Resolve GitHub review threads for findings the verifier marks fixed | `pull-requests: write` |
+| Review thread resolution | Resolve GitHub review threads for findings the verifier marks fixed | `pull-requests: write` and a credential for which GitHub reports `viewerCanResolve: true` |
 | Task or aggregate Check Runs | Create and update GitHub Check Runs when checks are enabled | `checks: write` |
 
 Command help is exposed through the `main-comment` output. If GitHub denies verifier cleanup or the API fails, the review still succeeds and increments `result.publication.inlineResolutionErrorCount`.
+
+`${{ github.token }}` can publish verifier replies, but GitHub may report that this workflow credential cannot resolve the native thread. If you require native thread cleanup, create a repository secret containing a user credential that has the permissions in the table, then pass it to Pipr:
+
+```yaml
+- uses: somus/pipr@v0.5.0 # x-release-please-version
+  env:
+    DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    GITHUB_TOKEN: ${{ secrets.PIPR_GITHUB_TOKEN }}
+```
+
+Pipr checks GitHub's `viewerCanResolve` value before calling the resolution mutation. If the credential lacks that capability, Pipr posts the fixed-finding reply, records the finding as resolved in Pipr state, leaves the native thread open, and reports an actionable inline-resolution error.
 
 ### Secret redaction
 

@@ -188,6 +188,7 @@ Structured Review keeps Pipr's core finding contract small while asking one agen
 - Add or remove categories to match the risks your maintainers already discuss in review.
 - Keep rationale in the collapsed main-comment details so inline comments stay short in the diff.
 - The generated task validates anchors and deduplicates by location plus body before rendering either comment surface.
+- On GitHub, native thread resolution requires a credential for which GitHub reports \`viewerCanResolve: true\`; see [GitHub Action](/docs/guide/github-action#permissions).
 `,
   ],
   [

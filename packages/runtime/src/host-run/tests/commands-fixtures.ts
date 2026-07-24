@@ -851,7 +851,14 @@ export function verifierPublicationClient(
       return reviewComments;
     },
     async listReviewThreads() {
-      return [{ id: "thread-1", isResolved: false, commentIds: [parentCommentId, replyCommentId] }];
+      return [
+        {
+          id: "thread-1",
+          isResolved: false,
+          viewerCanResolve: true,
+          commentIds: [parentCommentId, replyCommentId],
+        },
+      ];
     },
     async createReviewCommentReply(options: { commentId: number; body: string }) {
       reviewReplies.push(options);

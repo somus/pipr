@@ -186,7 +186,7 @@ When a review runs, Pipr may send the configured model provider:
 
 Provider API keys are read from environment variables such as `DEEPSEEK_API_KEY`. `pipr.secret({ name })` stores the variable name in the runtime plan, not the secret value.
 
-On GitHub, Pipr uses `GITHUB_TOKEN` to read pull request metadata, publish the Main Review Comment and Inline Review Comments, and resolve review threads for fixed findings. Published comments become part of the repository's normal GitHub pull request record. Local runs do not publish comments.
+On GitHub, Pipr uses `GITHUB_TOKEN` to read pull request metadata and publish the Main Review Comment, Inline Review Comments, and verifier replies. Pipr also resolves review threads for fixed findings when that credential has GitHub's native thread-resolution capability. The default `${{ github.token }}` can publish replies but may not receive that capability; see [GitHub Action](https://pipr.run/docs/guide/github-action#permissions) to configure a user credential when native thread cleanup is required. Published comments become part of the repository's normal GitHub pull request record. Local runs do not publish comments.
 
 Do not run Pipr on code you are not permitted to send to the configured model provider.
 

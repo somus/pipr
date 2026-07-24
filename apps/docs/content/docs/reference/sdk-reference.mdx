@@ -374,7 +374,7 @@ pipr.config({
 
 `showHeader`, `showFooter`, and `showStats` independently control the generated Pipr title, attribution footer, and collapsed review statistics. All three default to `true`. Hidden publication markers and `PublicationResult.metadata.stats` remain available when their visible sections are disabled.
 
-`publication.autoResolve` defaults to enabled. Use `autoResolve: false` to disable verifier-driven thread cleanup and user-reply handling. If `model` is omitted, Pipr uses the default provider. Use `instructions` to add project-specific guidance for the internal verifier.
+`publication.autoResolve` defaults to enabled. Use `autoResolve: false` to disable verifier-driven thread cleanup and user-reply handling. If `model` is omitted, Pipr uses the default provider. Use `instructions` to add project-specific guidance for the internal verifier. Native thread cleanup still depends on the active code-host credential; on GitHub, the credential must have `viewerCanResolve: true`.
 
 `userReplies.allowedActors` controls who can trigger verifier replies:
 

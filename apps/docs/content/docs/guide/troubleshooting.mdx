@@ -204,6 +204,8 @@ The verifier can reply to Pipr-owned Inline Review Comments and resolve GitHub r
 
 If the API call fails, Pipr increments `result.publication.inlineResolutionErrorCount` and keeps the review run successful. Check that the workflow grants `pull-requests: write`.
 
+If Pipr reports that the GitHub credential cannot resolve the review thread, GitHub returned `viewerCanResolve: false` for that credential. `${{ github.token }}` can still publish the verifier's fixed-finding reply, but native resolution requires a user credential with pull request write access. Store that credential as a repository secret and pass it as `GITHUB_TOKEN`; see [GitHub Action](/docs/guide/github-action#permissions) for the workflow example.
+
 ## Next steps
 
 Use these pages when the first diagnostic identifies the failing area.

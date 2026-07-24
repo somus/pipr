@@ -484,7 +484,12 @@ class StatefulGitHubClient implements GitHubCommandClient, GitHubPublicationClie
       startSide: options.start_side,
     };
     this.reviewComments.push(comment);
-    this.threads.push({ id: `thread-${id}`, isResolved: false, commentIds: [id] });
+    this.threads.push({
+      id: `thread-${id}`,
+      isResolved: false,
+      viewerCanResolve: true,
+      commentIds: [id],
+    });
     return { id };
   }
 
