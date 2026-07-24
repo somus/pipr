@@ -690,6 +690,79 @@ describe("pipr CLI", () => {
     }
   });
 
+  it("prefers an explicit Pi agent directory for a locally selected subscription model", async () => {
+    const workspace = await createLocalReviewWorkspace({ subscriptionModel: true });
+    const piAgentDir = path.join(workspace.rootDir, "local-pi-agent");
+    const envPiAgentDir = path.join(workspace.rootDir, "env-pi-agent");
+    const userHome = path.join(workspace.rootDir, "home");
+    try {
+      await mkdir(piAgentDir);
+
+      const result = await runCli(
+        [
+          "review",
+          "--base",
+          workspace.baseSha,
+          "--pi-executable",
+          workspace.piExecutable,
+          "--pi-agent-dir",
+          piAgentDir,
+        ],
+        { HOME: userHome, PI_CODING_AGENT_DIR: envPiAgentDir },
+        workspace.rootDir,
+      );
+
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect((await Bun.file(path.join(workspace.rootDir, "pi-agent-dir")).text()).trim()).toBe(
+        piAgentDir,
+      );
+      expect(await Bun.file(path.join(workspace.rootDir, "pi-args")).text()).toContain(
+        "--provider openai-codex --model gpt-5.5",
+      );
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("prefers PI_CODING_AGENT_DIR over the default local Pi agent directory", async () => {
+    const workspace = await createLocalReviewWorkspace({ subscriptionModel: true });
+    const piAgentDir = path.join(workspace.rootDir, "env-pi-agent");
+    const userHome = path.join(workspace.rootDir, "home");
+    try {
+      const result = await runCli(
+        ["review", "--base", workspace.baseSha, "--pi-executable", workspace.piExecutable],
+        { HOME: userHome, PI_CODING_AGENT_DIR: piAgentDir },
+        workspace.rootDir,
+      );
+
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect((await Bun.file(path.join(workspace.rootDir, "pi-agent-dir")).text()).trim()).toBe(
+        piAgentDir,
+      );
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("defaults local Pi authentication to the user's Pi agent directory", async () => {
+    const workspace = await createLocalReviewWorkspace({ subscriptionModel: true });
+    const userHome = path.join(workspace.rootDir, "home");
+    try {
+      const result = await runCli(
+        ["review", "--base", workspace.baseSha, "--pi-executable", workspace.piExecutable],
+        { HOME: userHome },
+        workspace.rootDir,
+      );
+
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect((await Bun.file(path.join(workspace.rootDir, "pi-agent-dir")).text()).trim()).toBe(
+        path.join(userHome, ".pi", "agent"),
+      );
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("initializes and checks the TypeScript config", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
     try {
@@ -1130,7 +1203,12 @@ async function runHostRunWithGitWorkspace(options: {
 }
 
 async function createLocalReviewWorkspace(
-  options: { taskLog?: boolean; local?: boolean; findings?: boolean } = {},
+  options: {
+    taskLog?: boolean;
+    local?: boolean;
+    findings?: boolean;
+    subscriptionModel?: boolean;
+  } = {},
 ): Promise<{
   rootDir: string;
   baseSha: string;
@@ -1144,8 +1222,11 @@ async function createLocalReviewWorkspace(
   await runCommand("git", ["config", "core.hooksPath", "/dev/null"], rootDir);
   await runCommand("git", ["config", "commit.gpgsign", "false"], rootDir);
   await initWorkspaceConfig(rootDir);
-  if (options.taskLog || options.local === false) {
-    await Bun.write(path.join(rootDir, ".pipr", "config.ts"), localReviewConfig(options));
+  if (options.taskLog || options.local === false || options.subscriptionModel) {
+    await Bun.write(
+      path.join(rootDir, ".pipr", "config.ts"),
+      options.subscriptionModel ? localSubscriptionReviewConfig() : localReviewConfig(options),
+    );
   }
   await mkdir(path.join(rootDir, "src"));
   await Bun.write(path.join(rootDir, "src/a.ts"), "export const value = 1;\n");
@@ -1161,9 +1242,13 @@ async function createLocalReviewWorkspace(
     piExecutable,
     options.findings
       ? reviewFindingsExecutable()
-      : ["#!/bin/sh", 'printf "1\\n" >> "$(dirname "$0")/pi-called"', noFindingsJsonCommand()].join(
-          "\n",
-        ),
+      : [
+          "#!/bin/sh",
+          'printf "1\\n" >> "$(dirname "$0")/pi-called"',
+          'printf "%s\\n" "$PI_CODING_AGENT_DIR" > "$(dirname "$0")/pi-agent-dir"',
+          'printf "%s\\n" "$*" > "$(dirname "$0")/pi-args"',
+          noFindingsJsonCommand(),
+        ].join("\n"),
   );
   await chmod(piExecutable, 0o755);
   return { rootDir, baseSha, headSha, piExecutable };
@@ -1193,6 +1278,42 @@ function localReviewConfig(options: { taskLog?: boolean; local?: boolean }): str
     ...(options.taskLog ? ['      ctx.log.info("running local review");'] : []),
     "      const manifest = await ctx.change.diffManifest({ compressed: true });",
     "      const result = await ctx.pi.run(reviewer, { manifest });",
+    "      await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });",
+    "    },",
+    "  });",
+    '  pipr.on.changeRequest({ actions: ["opened", "updated"], task });',
+    "});",
+  ].join("\n");
+}
+
+function localSubscriptionReviewConfig(): string {
+  return [
+    'import { definePipr } from "@usepipr/sdk";',
+    "",
+    "export default definePipr((pipr) => {",
+    "  const localModel = pipr.model({",
+    '    provider: "openai-codex",',
+    '    model: "gpt-5.5",',
+    "  });",
+    "  const hostedModel = pipr.model({",
+    '    provider: "deepseek",',
+    '    model: "deepseek-v4-pro",',
+    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
+    "  });",
+    "  pipr.config({ publication: { autoResolve: { model: hostedModel } } });",
+    "  const reviewer = pipr.agent({",
+    '    name: "reviewer",',
+    "    model: hostedModel,",
+    '    instructions: "Review this change.",',
+    "    output: pipr.schemas.review,",
+    '    prompt: () => "Review.",',
+    "  });",
+    "  const task = pipr.task({",
+    '    name: "review",',
+    "    async run(ctx) {",
+    "      const manifest = await ctx.change.diffManifest({ compressed: true });",
+    '      const model = ctx.run.trigger === "local" ? localModel : hostedModel;',
+    "      const result = await ctx.pi.run(reviewer, { manifest }, { model });",
     "      await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });",
     "    },",
     "  });",

@@ -17,12 +17,14 @@ A workflow composes four pieces, all registered in `.pipr/config.ts`:
 
 | Block | Builder | Job |
 | --- | --- | --- |
-| Model | `pipr.model(...)` | Provider, model name, API key env var, options. |
+| Model | `pipr.model(...)` | Provider, model name, optional API key env var or local Pi authentication, options. |
 | Agent | `pipr.agent(...)` | Instructions, typed output schema, optional tools. |
 | Task | `pipr.task(...)` | Orchestration: read the diff, run agents, emit output. |
 | Entrypoint | `pipr.on.changeRequest(...)` or `pipr.command(...)` | When the task runs. |
 
 Every recipe in [Recipes](/docs/recipes) is these same blocks arranged differently, so any recipe page doubles as a worked example for this guide.
+
+See [Local subscription models](/docs/guide/configuration#local-subscription-models) when a local task should authenticate through your Pi agent directory.
 
 For the full concept map, see [How Pipr works](/docs/concepts).
 

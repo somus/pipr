@@ -23,7 +23,7 @@ export type SecretOptions = {
   name: string;
 };
 
-/** Options for registering a model provider and model id. */
+/** Options for registering a model. Omit apiKey only for local Pi authentication. */
 export type ModelOptions = {
   id?: string;
   provider: string;

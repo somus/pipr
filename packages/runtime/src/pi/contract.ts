@@ -39,14 +39,13 @@ export const piProviderProfileSchema = z.strictObject({
   id: piProviderIdSchema,
   provider: nonEmptyStringSchema,
   model: nonEmptyStringSchema,
-  apiKeyEnv: piApiKeyEnvNameSchema,
+  apiKeyEnv: piApiKeyEnvNameSchema.optional(),
   thinking: piThinkingLevelSchema.optional(),
 });
 
 const piProviderInvocationSchema = z.strictObject({
   provider: nonEmptyStringSchema,
   model: nonEmptyStringSchema,
-  apiKeyEnv: piApiKeyEnvNameSchema,
   thinking: piThinkingLevelSchema,
   tools: piReadOnlyToolNamesSchema,
 });

@@ -43,6 +43,16 @@ Use a custom Pi executable during local development:
 pipr review --base origin/main --pi-executable /path/to/pi
 ```
 
+### Local Pi agent directory
+
+For a model without `apiKey`, local review uses your Pi agent directory for authentication. Pipr resolves it from `--pi-agent-dir`, then `PI_CODING_AGENT_DIR`, and finally `$HOME/.pi/agent`:
+
+```bash
+pipr review --base origin/main --pi-agent-dir /path/to/pi-agent
+```
+
+Pipr still passes the provider and model from `.pipr/config.ts`; it doesn't use Pi's default model from `settings.json`.
+
 ## What local runs do
 
 Local review exercises config, diff construction, Pi execution, and rendering while keeping provider publication disabled.
@@ -172,11 +182,11 @@ Runtime publication plans, Diff Manifests, native comment IDs, provider credenti
 
 ## Environment
 
-Provide model credentials through the trusted local process environment.
+Authenticate API-key models through the trusted local process environment. Authenticate subscription models through your local Pi agent directory.
 
 ### Provider secrets
 
-Local runs read provider secrets from the process environment. Because the CLI runs on Bun, standard Bun env files in the working directory are loaded automatically:
+Models that declare `apiKey` read that provider secret from the process environment when selected. Because the CLI runs on Bun, standard Bun env files in the working directory are loaded automatically:
 
 ```bash
 DEEPSEEK_API_KEY=...
@@ -188,6 +198,14 @@ When running the CLI from source, pass explicit env files with Bun:
 ```bash
 bun --env-file=.pipr/.env packages/cli/src/main.ts review --base origin/main
 ```
+
+### Subscription authentication
+
+Models that omit `apiKey` authenticate through Pi's local `auth.json`. Pi owns that file and may update OAuth credentials when it refreshes a subscription token. Pipr doesn't read, copy, or log its contents.
+
+Local review keeps Pi extensions, skills, prompt templates, themes, context files, and approval flows disabled. Hosted runs don't receive a local Pi agent directory, so selecting a model without `apiKey` fails unless the task chooses a hosted model instead.
+
+See [Configure models](/docs/guide/configuration#local-subscription-models) to select different local and hosted models from one Review Task.
 
 ### Source checkout trust
 
@@ -230,7 +248,7 @@ Use the hosted path when the result must reach the code host.
 | Diff source | Working tree by default, or local git refs with `--head` | Exact change-request head and base |
 | Comments | Disabled | Enabled when publication succeeds |
 | Commands | Not dispatched | Run from native comment events through the selected adapter |
-| Provider secrets | Exported env vars or Bun-loaded `.env` files | CI or trusted-worker secret store |
+| Model authentication | Declared API-key env vars or local Pi authentication | Declared API-key env vars from the CI or trusted-worker secret store |
 | Logs | Human-readable stderr | CI or trusted-worker logs |
 | Best use | Config iteration and prompt debugging | Production change-request review |
 

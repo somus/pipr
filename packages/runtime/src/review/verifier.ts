@@ -44,6 +44,7 @@ export type RunVerifierOptions = {
   plan: Parameters<typeof runReviewAgent>[0]["runtime"]["plan"];
   env?: NodeJS.ProcessEnv;
   piExecutable?: string;
+  piAgentDir?: string;
   piRunner?: PiRunner;
   diffManifest: DiffManifest;
   priorReviewState?: PriorReviewState;
@@ -121,6 +122,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         plan: options.plan,
         env: options.env,
         piExecutable: options.piExecutable,
+        piAgentDir: options.piAgentDir,
         piRunner: options.piRunner,
         run: options.run,
         log: options.log,
