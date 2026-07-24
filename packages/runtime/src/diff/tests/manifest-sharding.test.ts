@@ -206,6 +206,24 @@ describe("Diff Manifest sharding", () => {
         shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
       ),
     ).toEqual([[1, 2], [3]]);
+    expectExactCoverage(manifest, shards);
+  });
+
+  it("groups replacement hunks owned by the same declaration across base and head", async () => {
+    const manifest = mixedSideDeclarationGroupingManifest();
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 2_200),
+      workspace: process.cwd(),
+      structuralAnalysis: mixedSideDeclarationGroupingAnalysis,
+    });
+
+    expect(
+      shards.map((shard) =>
+        shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
+      ),
+    ).toEqual([[1, 2], [3]]);
+    expectExactCoverage(manifest, shards);
   });
 
   it("falls back to hunk splitting when a declaration unit is oversized", async () => {
@@ -222,6 +240,7 @@ describe("Diff Manifest sharding", () => {
         shard.files.flatMap((file) => file.hunks.map((hunk) => hunk.hunkIndex)),
       ),
     ).toEqual([[1], [2], [3]]);
+    expectExactCoverage(manifest, shards);
   });
 });
 
@@ -248,6 +267,46 @@ function requiredFile(manifest: DiffManifest): DiffManifestFile {
     throw new Error("expected a changed file");
   }
   return file;
+}
+
+function expectExactCoverage(manifest: DiffManifest, shards: readonly DiffManifest[]): void {
+  const expectedFiles = manifest.files.flatMap((file) =>
+    file.hunks.map((hunk) => `${file.path}:${hunk.hunkIndex}:${hunk.contentHash}`),
+  );
+  const actualFiles = shards.flatMap((shard) =>
+    shard.files.flatMap((file) =>
+      file.hunks.map((hunk) => `${file.path}:${hunk.hunkIndex}:${hunk.contentHash}`),
+    ),
+  );
+  const expectedRanges = manifest.files.flatMap((file) =>
+    file.commentableRanges.map((range) =>
+      JSON.stringify({
+        path: file.path,
+        id: range.id,
+        side: range.side,
+        startLine: range.startLine,
+        endLine: range.endLine,
+        hunkIndex: range.hunkIndex,
+      }),
+    ),
+  );
+  const actualRanges = shards.flatMap((shard) =>
+    shard.files.flatMap((file) =>
+      file.commentableRanges.map((range) =>
+        JSON.stringify({
+          path: file.path,
+          id: range.id,
+          side: range.side,
+          startLine: range.startLine,
+          endLine: range.endLine,
+          hunkIndex: range.hunkIndex,
+        }),
+      ),
+    ),
+  );
+
+  expect(actualFiles.sort()).toEqual(expectedFiles.sort());
+  expect(actualRanges.sort()).toEqual(expectedRanges.sort());
 }
 
 function relatedFileManifest(): DiffManifest {
@@ -367,6 +426,31 @@ function declarationGroupingManifest(): DiffManifest {
   };
 }
 
+function mixedSideDeclarationGroupingManifest(): DiffManifest {
+  const manifest = declarationGroupingManifest();
+  const file = requiredFile(manifest);
+  const baseLines = [3, 13, 22];
+  return {
+    ...manifest,
+    files: [
+      {
+        ...file,
+        commentableRanges: file.commentableRanges.flatMap((range, index) => [
+          {
+            ...range,
+            id: `${range.id}-left`,
+            side: "LEFT" as const,
+            startLine: baseLines[index] ?? range.startLine,
+            endLine: baseLines[index] ?? range.endLine,
+            kind: "deleted" as const,
+          },
+          range,
+        ]),
+      },
+    ],
+  };
+}
+
 async function declarationGroupingAnalysis() {
   return {
     available: true as const,
@@ -396,5 +480,36 @@ async function declarationGroupingAnalysis() {
     ],
     baseFiles: [],
     diagnostics: { durationMs: 1, fileCount: 1, declarationCount: 2 },
+  };
+}
+
+async function mixedSideDeclarationGroupingAnalysis() {
+  const analysis = await declarationGroupingAnalysis();
+  return {
+    ...analysis,
+    baseFiles: [
+      {
+        path: "src/a.ts",
+        language: "TypeScript",
+        imports: [],
+        declarations: [
+          {
+            qualifiedName: "shared",
+            kind: "function",
+            startLine: 3,
+            endLine: 14,
+            isExported: false,
+          },
+          {
+            qualifiedName: "separate",
+            kind: "function",
+            startLine: 22,
+            endLine: 26,
+            isExported: false,
+          },
+        ],
+      },
+    ],
+    diagnostics: { durationMs: 1, fileCount: 2, declarationCount: 4 },
   };
 }

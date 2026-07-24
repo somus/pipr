@@ -335,13 +335,7 @@ function hunkDeclarationKey(
   if (!first || owners.some((owner) => !sameDeclarationOwner(owner, first))) {
     return undefined;
   }
-  return [
-    first.ref,
-    first.sourcePath,
-    first.declaration.startLine,
-    first.declaration.endLine,
-    first.declaration.qualifiedName,
-  ].join(":");
+  return JSON.stringify([first.declaration.kind, first.declaration.qualifiedName]);
 }
 
 function sameDeclarationOwner(
@@ -349,10 +343,7 @@ function sameDeclarationOwner(
   right: NonNullable<ReturnType<typeof findEnclosingDeclaration>>,
 ): boolean {
   return (
-    left?.ref === right.ref &&
-    left.sourcePath === right.sourcePath &&
-    left.declaration.startLine === right.declaration.startLine &&
-    left.declaration.endLine === right.declaration.endLine &&
+    left?.declaration.kind === right.declaration.kind &&
     left.declaration.qualifiedName === right.declaration.qualifiedName
   );
 }
