@@ -1,0 +1,66 @@
+packages/runtime/src/review/agent/diff-manifest-context.ts
+  s_87f449b385ea97::t_48ab2ac92c85d6 35,48,50,56-57,83,85,104,108-124
+  s_87f449b385ea97::t_2f34b269b9de80 9,49
+  s_87f449b385ea97::t_eb59da6acbcd01 45-47,63
+  s_87f449b385ea97::t_43f85f53a8ee90 7
+packages/runtime/src/pi/runtime-tools.ts
+  s_87f449b385ea97::t_2f34b269b9de80 22
+  s_87f449b385ea97::t_27bdb56151ed4f 24-26,31,54-62,67-68,75-77,81-94,96-128
+  s_87f449b385ea97::t_a83f1a981741b3 95
+  s_87f449b385ea97::t_67a83d60b062a3 4-5,9,129-130
+packages/runtime/src/review/tests/manifest-payload.test.ts
+  s_87f449b385ea97::t_1d214ea3f58cef 138-167
+  s_87f449b385ea97::t_2ad1dd2620a098 180-186,193
+  s_87f449b385ea97::t_2f34b269b9de80 7
+packages/e2e/fake-pi
+  s_87f449b385ea97::t_87022eafa6f3a3 170,184,186,189-190,216-217,264-283,285-296
+  s_87f449b385ea97::t_c109fa01318a25 284
+  s_87f449b385ea97::t_511020aa4a4462 297
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_87f449b385ea97::t_101bf016f52a5b 133-139
+packages/runtime/src/review/tests/task-runtime-context.test.ts
+  s_87f449b385ea97::t_2f34b269b9de80 792-793
+  s_87f449b385ea97::t_fea48b013016e9 789,795,798,800-801
+apps/docs/content/docs/concepts/runtime.mdx
+  s_87f449b385ea97::t_101bf016f52a5b 164-173,177
+packages/runtime/src/pi/runtime-tools-core.ts
+  s_87f449b385ea97::t_2f34b269b9de80 464
+  s_87f449b385ea97::t_05354a54890152 1,63-68,114-133,265-273,328-401
+  s_87f449b385ea97::t_27bdb56151ed4f 5,7,28-29,45-62,261-264,274-327
+  s_87f449b385ea97::t_d1ff99eda1f11b 402,437-463,465-523
+  s_87f449b385ea97::t_b1357997efda1f 403
+packages/runtime/src/review/agent/review-run.ts
+  s_87f449b385ea97::t_48ab2ac92c85d6 146,151-162
+packages/runtime/src/pi/tests/runtime-tools.test.ts
+  s_87f449b385ea97::t_8d23007764a593 2,865
+  s_87f449b385ea97::t_b6e9cb942c1373 12,403-456,845-859
+  s_87f449b385ea97::t_c35d8a70c9d459 262-402,457-473,784-844,860-864,866
+  s_87f449b385ea97::t_c1183dd8af624a 867
+packages/runtime/src/pi/runtime-tools-extension.ts
+  s_87f449b385ea97::t_cb52bdcaccf761 8-9,15,19,21,70-92,124-126,168-190,192-198,200-225,351-419
+  s_87f449b385ea97::t_2f34b269b9de80 191,199
+  s_87f449b385ea97::t_495cf08a83d2c6 420
+packages/runtime/src/pi/runner.ts
+  s_87f449b385ea97::t_810cd229564da6 8
+  s_87f449b385ea97::t_48ab2ac92c85d6 27
+  s_87f449b385ea97::t_e8cc19cb98d055 16
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_87f449b385ea97::t_101bf016f52a5b 299-302,555
+  s_87f449b385ea97::t_4df2d1ad7e1c91 556
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "8df133df4b2f786c2182cb1e623b86c71056ca9f",
+  "prompts": {},
+  "sessions": {
+    "s_87f449b385ea97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9234-c679-7a23-a5fb-18a0862843e3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
