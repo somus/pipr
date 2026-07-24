@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { access, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -9,7 +9,7 @@ import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js"
 import type { DiffManifest } from "../../types.js";
 import { preparePiCustomTools } from "../custom-tools.js";
 import { preparePiRuntimeReadTools, readAtRef } from "../runtime-tools.js";
-import { readDiffFromRuntimeData } from "../runtime-tools-core.js";
+import { readDiffFromRuntimeData, runAstGrepSearch } from "../runtime-tools-core.js";
 
 describe("pipr runtime Pi read tools", () => {
   it("reads bounded Diff Manifest data by path and range id", () => {
@@ -256,6 +256,450 @@ describe("pipr runtime Pi read tools", () => {
     } finally {
       await removeTree(repo.root);
       await removeTree(toolRoot);
+    }
+  });
+
+  it("reads bounded head and base enclosing declarations from structural analysis", async () => {
+    const repo = await createGitRepo({
+      baseContent: "function before() {\n  return 1;\n}\n",
+      headContent: "function after() {\n  return 2;\n}\n",
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-declaration-tools-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest,
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      expect(prepared.toolNames).toEqual([
+        "pipr_read_diff",
+        "pipr_read_at_ref",
+        "pipr_read_declaration",
+        "pipr_ast_grep",
+      ]);
+      const tool = await loadExtensionTool(
+        prepared.extensionPath,
+        "pipr_read_declaration",
+        prepared.dataPath,
+      );
+
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "head",
+          rangeId: "range-1",
+        }),
+      ).resolves.toMatchObject({
+        available: true,
+        sourcePath: "src/new.ts",
+        declaration: {
+          qualifiedName: "after",
+          kind: "function",
+          startLine: 1,
+          endLine: 3,
+        },
+        content: "function after() {\n  return 2;\n}\n",
+        truncated: false,
+      });
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "base",
+          rangeId: "range-left",
+        }),
+      ).resolves.toMatchObject({
+        available: true,
+        sourcePath: "src/old.ts",
+        declaration: {
+          qualifiedName: "before",
+          startLine: 1,
+          endLine: 3,
+        },
+        content: "function before() {\n  return 1;\n}\n",
+      });
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "base",
+          rangeId: "range-1",
+        }),
+      ).resolves.toMatchObject({
+        available: false,
+        sourcePath: "src/old.ts",
+      });
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  });
+
+  it("bounds serialized declaration responses and returns unavailable without an owner", async () => {
+    const repo = await createGitRepo({
+      baseContent: `function before() {\n  return "${"b".repeat(1_000)}";\n}\n`,
+      headContent: `function after() {\n  return "${"h".repeat(1_000)}";\n}\n`,
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-declaration-cap-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const maxBytes = 320;
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest,
+          toolResponseMaxBytes: maxBytes,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      const tool = await loadExtensionTool(
+        prepared.extensionPath,
+        "pipr_read_declaration",
+        prepared.dataPath,
+      );
+      for (const params of [
+        { path: "src/new.ts", ref: "head", rangeId: "range-1" },
+        { path: "src/new.ts", ref: "base", rangeId: "range-left" },
+      ]) {
+        const result = await executeExtensionToolResult(tool, repo.root, params);
+        expect(Buffer.byteLength(result.content[0]?.text ?? "", "utf8")).toBeLessThanOrEqual(
+          maxBytes,
+        );
+        expect(result.details).toMatchObject({ available: true, truncated: true });
+      }
+
+      const data = (await Bun.file(prepared.dataPath).json()) as {
+        structuralAnalysis: { headFiles: Array<{ declarations: unknown[] }> };
+        toolResponseMaxBytes: number;
+      };
+      const headFile = data.structuralAnalysis.headFiles[0];
+      if (!headFile) {
+        throw new Error("expected structural head file");
+      }
+      headFile.declarations = [];
+      await Bun.write(prepared.dataPath, JSON.stringify(data));
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "head",
+          rangeId: "range-1",
+        }),
+      ).resolves.toMatchObject({ available: false });
+
+      data.toolResponseMaxBytes = 1;
+      await Bun.write(prepared.dataPath, JSON.stringify(data));
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "head",
+          rangeId: "range-1",
+        }),
+      ).rejects.toThrow("pipr_read_declaration response limit is too small");
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  });
+
+  it("deduplicates base declaration snapshots for ranges with the same owner", async () => {
+    const repo = await createGitRepo({
+      baseContent: "function before() {\n  return 1;\n}\n",
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-declaration-dedupe-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const file = manifest.files[0];
+      const left = file?.commentableRanges.find((range) => range.id === "range-left");
+      if (!file || !left) {
+        throw new Error("expected renamed file and LEFT range");
+      }
+      const duplicateManifest = {
+        ...manifest,
+        files: [
+          {
+            ...file,
+            commentableRanges: [...file.commentableRanges, { ...left, id: "range-left-2" }],
+          },
+        ],
+      };
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest: duplicateManifest,
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      const data = (await Bun.file(prepared.dataPath).json()) as {
+        baseDeclarations: Record<string, { relativePath: string }>;
+      };
+
+      expect(data.baseDeclarations["range-left"]?.relativePath).toBe(
+        data.baseDeclarations["range-left-2"]?.relativePath,
+      );
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  });
+
+  it("shares the aggregate base snapshot file budget across ranges and declarations", async () => {
+    const repo = await createGitRepo({
+      baseContent: "function before() {\n  return 1;\n}\n",
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-snapshot-budget-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const file = manifest.files[0];
+      const left = file?.commentableRanges.find((range) => range.id === "range-left");
+      if (!file || !left) {
+        throw new Error("expected renamed file and LEFT range");
+      }
+      const ranges = Array.from({ length: 513 }, (_, index) => ({
+        ...left,
+        id: `range-left-${index}`,
+      }));
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest: {
+            ...manifest,
+            files: [{ ...file, commentableRanges: ranges }],
+          },
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      const data = (await Bun.file(prepared.dataPath).json()) as {
+        baseDeclarations: Record<string, unknown>;
+        baseRanges: Record<string, { available: boolean }>;
+      };
+
+      expect(Object.values(data.baseRanges).filter((range) => range.available)).toHaveLength(512);
+      expect(data.baseRanges["range-left-512"]?.available).toBe(false);
+      expect(data.baseDeclarations).toEqual({});
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  }, 15_000);
+
+  it("caps aggregate base snapshots at 16 MiB", async () => {
+    const repo = await createGitRepo({
+      baseContent: `${"x".repeat(9 * 1024 * 1024)}\n`,
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-snapshot-bytes-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const file = manifest.files[0];
+      const left = file?.commentableRanges.find((range) => range.id === "range-left");
+      if (!file || !left) {
+        throw new Error("expected renamed file and LEFT range");
+      }
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest: {
+            ...manifest,
+            files: [
+              {
+                ...file,
+                commentableRanges: [
+                  { ...left, id: "range-left-large-1" },
+                  { ...left, id: "range-left-large-2" },
+                ],
+              },
+            ],
+          },
+          toolResponseMaxBytes: 10 * 1024 * 1024,
+        },
+      });
+      const data = (await Bun.file(prepared.dataPath).json()) as {
+        baseRanges: Record<string, { available: boolean }>;
+      };
+
+      expect(data.baseRanges["range-left-large-1"]?.available).toBe(true);
+      expect(data.baseRanges["range-left-large-2"]?.available).toBe(false);
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  });
+
+  it("runs bounded read-only structural searches over explicit safe paths", async () => {
+    const repo = await createGitRepo();
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-tool-"));
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-bin-"));
+    const argsPath = path.join(executableDirectory, "args.json");
+    const previousPath = process.env.PATH;
+    try {
+      await writeFakeAstGrepRun(executableDirectory, argsPath);
+      await symlink(path.join(repo.root, "src"), path.join(repo.root, "linked-src"));
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest: renamedManifest(repo.baseSha, repo.headSha),
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      const tool = await loadExtensionTool(
+        prepared.extensionPath,
+        "pipr_ast_grep",
+        prepared.dataPath,
+      );
+      process.env.PATH = `${executableDirectory}:${previousPath ?? ""}`;
+
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "function $NAME() { $$$BODY }",
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).resolves.toMatchObject({
+        available: true,
+        matches: [
+          {
+            path: "src/new.ts",
+            startLine: 1,
+            endLine: 3,
+            text: "x".repeat(2048),
+          },
+        ],
+        truncated: false,
+      });
+      expect(JSON.parse(await Bun.file(argsPath).text())).toEqual([
+        "run",
+        "--pattern",
+        "function $NAME() { $$$BODY }",
+        "--lang",
+        "ts",
+        "--json=compact",
+        "--color",
+        "never",
+        "--",
+        "src",
+      ]);
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "none",
+          language: "ts",
+          paths: ["."],
+        }),
+      ).resolves.toEqual({ available: true, matches: [], truncated: false });
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "many",
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).resolves.toMatchObject({
+        available: true,
+        matches: expect.arrayContaining([
+          {
+            path: "src/new.ts",
+            startLine: 1,
+            endLine: 3,
+            text: "match 0",
+          },
+        ]),
+        truncated: true,
+      });
+      const capped = (await executeExtensionTool(tool, repo.root, {
+        pattern: "many",
+        language: "ts",
+        paths: ["src"],
+      })) as { matches: unknown[] };
+      expect(capped.matches).toHaveLength(100);
+      const byteCapped = await runAstGrepSearch({
+        cwd: repo.root,
+        params: { pattern: "many", language: "ts", paths: ["src"] },
+        maxBytes: 180,
+        env: process.env,
+      });
+      expect(Buffer.byteLength(JSON.stringify(byteCapped), "utf8")).toBeLessThanOrEqual(180);
+      expect(byteCapped).toMatchObject({ truncated: true });
+      await expect(
+        runAstGrepSearch({
+          cwd: repo.root,
+          params: { pattern: "none", language: "ts", paths: ["src"] },
+          maxBytes: 1,
+          env: process.env,
+        }),
+      ).rejects.toThrow("pipr_ast_grep response limit is too small");
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "malformed",
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).rejects.toThrow("pipr_ast_grep returned invalid output");
+      for (const pattern of [
+        "unsafe-result-traversal",
+        "unsafe-result-absolute",
+        "unsafe-result-git",
+        "unsafe-result-glob",
+      ]) {
+        await expect(
+          executeExtensionTool(tool, repo.root, {
+            pattern,
+            language: "ts",
+            paths: ["src"],
+          }),
+        ).rejects.toThrow("pipr_ast_grep returned an unsafe path");
+      }
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "failure",
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).rejects.toThrow("pipr_ast_grep failed");
+      await expect(
+        runAstGrepSearch({
+          cwd: repo.root,
+          params: { pattern: "sleep", language: "ts", paths: ["src"] },
+          maxBytes: 10_000,
+          env: process.env,
+          timeoutMs: 10,
+        }),
+      ).rejects.toThrow("pipr_ast_grep timed out");
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "x".repeat(4097),
+          language: "ts",
+          paths: ["src"],
+        }),
+      ).rejects.toThrow();
+      for (const unsafePath of ["../src", ".git", "src/*.ts", "linked-src"]) {
+        await expect(
+          executeExtensionTool(tool, repo.root, {
+            pattern: "$A",
+            language: "ts",
+            paths: [unsafePath],
+          }),
+        ).rejects.toThrow();
+      }
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "$A",
+          language: "ts",
+          paths: Array.from({ length: 17 }, () => "src"),
+        }),
+      ).rejects.toThrow();
+    } finally {
+      restoreEnv("PATH", previousPath);
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+      await removeTree(executableDirectory);
     }
   });
 
@@ -569,6 +1013,97 @@ function manifestWithPreviousPath(filePath: string, previousPath: string): DiffM
   };
 }
 
+function structuralAnalysisForRenamedFile() {
+  return {
+    available: true as const,
+    version: "0.44.1",
+    headFiles: [
+      {
+        path: "src/new.ts",
+        language: "TypeScript",
+        imports: [],
+        declarations: [
+          {
+            qualifiedName: "after",
+            kind: "function",
+            startLine: 1,
+            endLine: 3,
+            isExported: false,
+          },
+        ],
+      },
+    ],
+    baseFiles: [
+      {
+        path: "src/old.ts",
+        language: "TypeScript",
+        imports: [],
+        declarations: [
+          {
+            qualifiedName: "before",
+            kind: "function",
+            startLine: 1,
+            endLine: 3,
+            isExported: false,
+          },
+        ],
+      },
+    ],
+    diagnostics: { durationMs: 1, fileCount: 2, declarationCount: 2 },
+  };
+}
+
+async function writeFakeAstGrepRun(directory: string, argsPath: string): Promise<void> {
+  const executable = path.join(directory, "ast-grep");
+  const match = [
+    {
+      text: "x".repeat(3000),
+      file: "src/new.ts",
+      range: {
+        start: { line: 0, column: 0 },
+        end: { line: 2, column: 1 },
+      },
+    },
+  ];
+  await Bun.write(
+    executable,
+    [
+      "#!/usr/bin/env bun",
+      `await Bun.write(${JSON.stringify(argsPath)}, JSON.stringify(process.argv.slice(2)));`,
+      'const patternIndex = process.argv.indexOf("--pattern");',
+      'if (process.argv[patternIndex + 1] === "none") {',
+      '  process.stdout.write("[]");',
+      "  process.exit(1);",
+      "}",
+      'if (process.argv[patternIndex + 1] === "malformed") {',
+      '  process.stdout.write("not json");',
+      "  process.exit(0);",
+      "}",
+      'const unsafeResultPaths = { "unsafe-result-traversal": "../outside.ts", "unsafe-result-absolute": "/outside.ts", "unsafe-result-git": ".git/config", "unsafe-result-glob": "src/*.ts" };',
+      "if (unsafeResultPaths[process.argv[patternIndex + 1]]) {",
+      `  process.stdout.write(JSON.stringify([{ ...${JSON.stringify(
+        match[0],
+      )}, file: unsafeResultPaths[process.argv[patternIndex + 1]] }]));`,
+      "  process.exit(0);",
+      "}",
+      'if (process.argv[patternIndex + 1] === "failure") {',
+      '  process.stderr.write("untrusted error details");',
+      "  process.exit(2);",
+      "}",
+      'if (process.argv[patternIndex + 1] === "sleep") {',
+      "  await Bun.sleep(1_000);",
+      "}",
+      'if (process.argv[patternIndex + 1] === "many") {',
+      `  process.stdout.write(JSON.stringify(Array.from({ length: 101 }, (_, index) => ({ ...${JSON.stringify(match[0])}, text: \`match \${index}\` }))));`,
+      "  process.exit(0);",
+      "}",
+      `process.stdout.write(${JSON.stringify(JSON.stringify(match))});`,
+      "",
+    ].join("\n"),
+  );
+  await chmod(executable, 0o755);
+}
+
 function runGit(cwd: string, args: string[]): string {
   return runGitCommand(args, cwd);
 }
@@ -708,4 +1243,16 @@ async function executeExtensionTool(
 ): Promise<unknown> {
   const result = await tool.execute("test", params, undefined, undefined, { cwd });
   return result.details ?? JSON.parse(result.content[0]?.text ?? "{}");
+}
+
+async function executeExtensionToolResult(
+  tool: {
+    execute: (
+      ...args: unknown[]
+    ) => Promise<{ details?: unknown; content: Array<{ text: string }> }>;
+  },
+  cwd: string,
+  params: Record<string, unknown>,
+) {
+  return await tool.execute("test", params, undefined, undefined, { cwd });
 }

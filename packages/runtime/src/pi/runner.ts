@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { compact, isPlainObject } from "lodash-es";
 import { z } from "zod";
-import type { DiffManifest, ProviderConfig } from "../types.js";
+import type { ProviderConfig } from "../types.js";
 import type { PiReadOnlyToolName } from "./contract.js";
 import {
   type PiCustomToolRequest,
@@ -13,6 +13,7 @@ import {
   preparePiCustomTools,
 } from "./custom-tools.js";
 import { toPiProviderInvocation } from "./provider.js";
+import type { PiRuntimeReadToolRequest } from "./runtime-tools.js";
 import { type PreparedPiRuntimeReadTools, preparePiRuntimeReadTools } from "./runtime-tools.js";
 
 export type PiRunOptions = {
@@ -23,10 +24,7 @@ export type PiRunOptions = {
   piExecutable?: string;
   timeoutSeconds?: number;
   builtinTools?: readonly PiReadOnlyToolName[];
-  runtimeTools?: {
-    manifest: DiffManifest;
-    toolResponseMaxBytes: number;
-  };
+  runtimeTools?: PiRuntimeReadToolRequest;
   customTools?: PiCustomToolRequest;
   streamLimits?: PiStreamLimits;
 };
@@ -208,6 +206,7 @@ async function runPiAttempt(
   assertWorkspaceScope(options.workspace, processIdentity, workspaceScope);
   const sandbox = await createPiRunSandbox(options.workspace, workspaceScope?.workspace);
   let preparedTools: PreparedPiTools | undefined;
+  let preparedCustomTools: PreparedPiCustomTools | undefined;
   try {
     const runtimeRead = options.runtimeTools
       ? await preparePiRuntimeReadTools({
@@ -216,10 +215,10 @@ async function runPiAttempt(
           request: options.runtimeTools,
         })
       : undefined;
-    const customTools = options.customTools
+    preparedCustomTools = options.customTools
       ? await preparePiCustomTools({ root: sandbox.root, request: options.customTools })
       : undefined;
-    preparedTools = mergePreparedPiTools(runtimeRead, customTools);
+    preparedTools = mergePreparedPiTools(runtimeRead, preparedCustomTools);
     const promptPath = path.join(sandbox.root, "prompt.md");
     await Bun.write(promptPath, options.prompt);
     const args = buildPiArgs(
@@ -239,7 +238,7 @@ async function runPiAttempt(
       streamLimits: options.streamLimits ?? defaultPiStreamLimits,
     });
   } finally {
-    await preparedTools?.custom?.close();
+    await preparedCustomTools?.close();
     await removeSandboxRoot(sandbox.root);
   }
 }
@@ -322,11 +321,18 @@ function mergePreparedPiTools(
     return undefined;
   }
   assertSharedExtensionPath(tools);
+  const toolNames = tools.flatMap((tool) => [...tool.toolNames]);
+  const duplicateToolName = toolNames.find(
+    (toolName, index) => toolNames.indexOf(toolName) !== index,
+  );
+  if (duplicateToolName) {
+    throw new Error(`Pi tool name '${duplicateToolName}' is registered more than once`);
+  }
   return {
     extensionPath: first.extensionPath,
     runtimeRead,
     custom,
-    toolNames: tools.flatMap((tool) => [...tool.toolNames]),
+    toolNames,
   };
 }
 

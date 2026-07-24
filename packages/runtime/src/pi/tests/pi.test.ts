@@ -519,6 +519,37 @@ describe("buildPiArgs", () => {
     expect(result.stdout).not.toContain("PIPR_RUNTIME_TOOLS_DATA=");
   });
 
+  it("rejects custom tools that collide with structural runtime tools", async () => {
+    await expect(
+      runFakePiWithToolOptions({
+        runtimeTools: {
+          manifest: emptyDiffManifest(),
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: {
+            available: true,
+            version: "0.44.1",
+            headFiles: [],
+            baseFiles: [],
+            diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+          },
+        },
+        customTools: {
+          context: { run: { id: "test" } },
+          tools: [
+            {
+              name: "pipr_ast_grep",
+              input: passthroughSchema(),
+              output: passthroughSchema(),
+              async execute(_context, input) {
+                return input;
+              },
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow("Pi tool name 'pipr_ast_grep' is registered more than once");
+  });
+
   it("copies provider keys from the supplied source env", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-source-"));
     const piExecutable = path.join(workspace, "fake-pi.sh");

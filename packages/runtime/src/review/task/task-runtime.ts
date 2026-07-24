@@ -226,6 +226,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     run,
     agentRunBudget,
     structuralAnalysis,
+    structuralToolsEnabled: options.structuralHeadRef === undefined,
     structuralManifest,
     piRunSink(run: PiRunStats) {
       piRuns.push(run);

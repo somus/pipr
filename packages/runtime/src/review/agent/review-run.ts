@@ -72,6 +72,7 @@ export type RunReviewAgentOptions = {
     piRunSink?: (run: PiRunStats) => void;
     agentRunBudget?: AgentRunBudget;
     structuralAnalysis?: DiffStructuralAnalysisLoader;
+    structuralToolsEnabled?: boolean;
   };
 };
 
@@ -143,12 +144,24 @@ export async function runReviewAgent(
 async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunReviewAgentResult> {
   const agentTools = resolveAgentTools(options.agent, options.runtime.plan);
   const agentRunContext = createAgentRunContext(options.runtime);
-  const diffManifest = prepareDiffManifestContext({
+  const diffManifestOptions = {
     input: options.input,
     limits: options.runtime.config.limits?.diffManifest,
     toolMode: options.toolMode ?? "read-only",
     allowOversizedCondensed: options.allowOversizedCondensedManifest,
-  });
+  } as const;
+  let diffManifest = prepareDiffManifestContext(diffManifestOptions);
+  if (
+    diffManifest?.mode === "condensed" &&
+    diffManifestOptions.toolMode === "read-only" &&
+    options.runtime.structuralToolsEnabled !== false &&
+    options.runtime.structuralAnalysis
+  ) {
+    diffManifest = prepareDiffManifestContext({
+      ...diffManifestOptions,
+      structuralAnalysis: await options.runtime.structuralAnalysis(),
+    });
+  }
   const prepared: PreparedAgentContext = { agentTools, agentRunContext, diffManifest };
   const prompt = await renderAgentPrompt({ ...options, ...prepared });
   const providers = selectProviders(options.runtime, options.agent, options.runOptions);
