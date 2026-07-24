@@ -1,0 +1,27 @@
+packages/runtime/src/diff/tests/manifest-sharding.test.ts
+  s_87f449b385ea97::t_7e76ce4603f91e 209,226,243,272-309
+  s_87f449b385ea97::t_d5c5150aeaf475 212-225,429-453,485-513
+  s_87f449b385ea97::t_e93c62aa769f93 210-211
+  s_87f449b385ea97::t_870721bb5c3078 310-311
+  s_87f449b385ea97::t_2b45dcb02ab9fb 514-515
+packages/runtime/src/diff/manifest-projection.ts
+  s_87f449b385ea97::t_f2878b559dddb7 338,346
+packages/runtime/src/diff/tests/manifest-structure.test.ts
+  s_87f449b385ea97::t_7e76ce4603f91e 1-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "32d517c9baa9d5d3e55d4ce7b7f09e3bb6b776a2",
+  "prompts": {},
+  "sessions": {
+    "s_87f449b385ea97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9234-c679-7a23-a5fb-18a0862843e3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
