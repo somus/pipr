@@ -160,6 +160,7 @@ export async function runLocalReviewCommand(
     selectedTasks,
     emptyTasksReason: "No change-request tasks are configured for local review",
     piExecutable: options.piExecutable,
+    structuralHeadRef: includeWorkingTree ? undefined : headSha,
     diffManifestBuilder: includeWorkingTree
       ? (diffOptions) => buildDiffManifest({ ...diffOptions, includeWorkingTree: true })
       : undefined,

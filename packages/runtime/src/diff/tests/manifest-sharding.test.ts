@@ -7,6 +7,28 @@ import type { DiffManifest, DiffManifestFile } from "../../types.js";
 import { shardDiffManifestForPrompt } from "../manifest-sharding.js";
 
 describe("Diff Manifest sharding", () => {
+  it("does not load structural analysis when the fallback already fits one shard", async () => {
+    const manifest = reviewTestManifest();
+    let analysisCalls = 0;
+
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 100_000),
+      workspace: process.cwd(),
+      structuralAnalysis: async () => {
+        analysisCalls += 1;
+        return {
+          available: false,
+          reason: "missing-executable",
+          diagnostics: { durationMs: 0, fileCount: 0, declarationCount: 0 },
+        };
+      },
+    });
+
+    expect(shards).toEqual([manifest]);
+    expect(analysisCalls).toBe(0);
+  });
+
   it("preserves an individually oversized range in one complete manifest", async () => {
     const manifest = reviewTestManifest();
     const oversizedRangeId = `range-${"x".repeat(2_048)}`;
@@ -70,10 +92,20 @@ describe("Diff Manifest sharding", () => {
       await writeFakeAstGrepOutline(executableDirectory, [
         {
           path: "src/importer.ts",
-          items: [{ name: "./dependency", isImport: true }],
+          language: "TypeScript",
+          items: [
+            {
+              role: "item",
+              symbolType: "module",
+              name: "./dependency",
+              range: outlineRange(),
+              isImport: true,
+              isExported: false,
+            },
+          ],
         },
-        { path: "src/unrelated.ts", items: [] },
-        { path: "src/dependency.ts", items: [] },
+        { path: "src/unrelated.ts", language: "TypeScript", items: [] },
+        { path: "src/dependency.ts", language: "TypeScript", items: [] },
       ]);
 
       const shards = await shardDiffManifestForPrompt({
@@ -128,6 +160,37 @@ describe("Diff Manifest sharding", () => {
         .sort(),
     );
   });
+
+  it("preserves the exact fallback shards when structural analysis is unavailable", async () => {
+    const manifest = manyHunkSingleFileManifest();
+    const config = shardConfig(2, 900);
+    const diagnostics = { durationMs: 0, fileCount: 0, declarationCount: 0 };
+
+    const unavailable = await shardDiffManifestForPrompt({
+      manifest,
+      config,
+      workspace: process.cwd(),
+      structuralAnalysis: async () => ({
+        available: false,
+        reason: "missing-executable",
+        diagnostics,
+      }),
+    });
+    const availableWithoutRelationships = await shardDiffManifestForPrompt({
+      manifest,
+      config,
+      workspace: process.cwd(),
+      structuralAnalysis: async () => ({
+        available: true,
+        version: "0.44.1",
+        headFiles: [],
+        baseFiles: [],
+        diagnostics,
+      }),
+    });
+
+    expect(JSON.stringify(unavailable)).toBe(JSON.stringify(availableWithoutRelationships));
+  });
 });
 
 function shardConfig(maxShards: number, condensedMaxBytes: number) {
@@ -137,6 +200,13 @@ function shardConfig(maxShards: number, condensedMaxBytes: number) {
     fullMaxEstimatedTokens: 1,
     condensedMaxBytes,
     condensedMaxEstimatedTokens: 10_000,
+  };
+}
+
+function outlineRange() {
+  return {
+    start: { line: 0, column: 0 },
+    end: { line: 0, column: 1 },
   };
 }
 
@@ -174,7 +244,15 @@ async function writeFakeAstGrepOutline(directory: string, output: unknown): Prom
   const executable = path.join(directory, "ast-grep");
   await Bun.write(
     executable,
-    `#!/usr/bin/env bun\nprocess.stdout.write(${JSON.stringify(JSON.stringify(output))});\n`,
+    [
+      "#!/usr/bin/env bun",
+      'if (process.argv.includes("--version")) {',
+      '  process.stdout.write("ast-grep 0.44.1\\n");',
+      "} else {",
+      `  process.stdout.write(${JSON.stringify(JSON.stringify(output))});`,
+      "}",
+      "",
+    ].join("\n"),
   );
   await chmod(executable, 0o755);
 }

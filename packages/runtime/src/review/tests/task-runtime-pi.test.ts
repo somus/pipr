@@ -1728,7 +1728,15 @@ async function writeFakeAstGrepOutline(directory: string, output: unknown): Prom
   const executable = path.join(directory, "ast-grep");
   await Bun.write(
     executable,
-    `#!/usr/bin/env bun\nprocess.stdout.write(${JSON.stringify(JSON.stringify(output))});\n`,
+    [
+      "#!/usr/bin/env bun",
+      'if (process.argv.includes("--version")) {',
+      '  process.stdout.write("ast-grep 0.44.1\\n");',
+      "} else {",
+      `  process.stdout.write(${JSON.stringify(JSON.stringify(output))});`,
+      "}",
+      "",
+    ].join("\n"),
   );
   await chmod(executable, 0o755);
 }

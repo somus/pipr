@@ -11,6 +11,10 @@ import { uniq } from "lodash-es";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/diff.js";
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
+import {
+  createDiffStructuralAnalysisLoader,
+  type DiffStructuralAnalysisLoader,
+} from "../../diff/structural-analysis.js";
 import { selectRuntimeTasks } from "../../host-run/entry-dispatch.js";
 import type { RuntimeLog } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
@@ -78,6 +82,7 @@ export type RunTaskRuntimeOptions = {
   trustedConfigHash?: string;
   piExecutable?: string;
   piRunner?: PiRunner;
+  structuralHeadRef?: string;
   diffManifestBuilder?: DiffManifestBuilder;
   priorReviewState?: PriorReviewState;
   priorMainComment?: string;
@@ -199,12 +204,20 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   const priorReviewState = priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks);
   const piRuns: PiRunStats[] = [];
   const agentRunBudget = createAgentRunBudget(config.limits?.maxAgentRuns);
+  const structuralAnalysis = createDiffStructuralAnalysisLoader({
+    manifest: diffManifest,
+    workspace: options.workspace,
+    headRef: options.structuralHeadRef,
+    env: options.env,
+    log: options.log,
+  });
   const runtimeOptions = {
     ...options,
     priorReviewState,
     priorMainComment,
     run,
     agentRunBudget,
+    structuralAnalysis,
     piRunSink(run: PiRunStats) {
       piRuns.push(run);
     },
@@ -557,6 +570,7 @@ function createTaskContext(
     run: PiprRunContext;
     piRunSink: (run: PiRunStats) => void;
     agentRunBudget: AgentRunBudget;
+    structuralAnalysis: DiffStructuralAnalysisLoader;
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");
