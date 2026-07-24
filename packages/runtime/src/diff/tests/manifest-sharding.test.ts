@@ -7,6 +7,28 @@ import type { DiffManifest, DiffManifestFile } from "../../types.js";
 import { shardDiffManifestForPrompt } from "../manifest-sharding.js";
 
 describe("Diff Manifest sharding", () => {
+  it("does not load structural analysis when the fallback already fits one shard", async () => {
+    const manifest = reviewTestManifest();
+    let analysisCalls = 0;
+
+    const shards = await shardDiffManifestForPrompt({
+      manifest,
+      config: shardConfig(4, 100_000),
+      workspace: process.cwd(),
+      structuralAnalysis: async () => {
+        analysisCalls += 1;
+        return {
+          available: false,
+          reason: "missing-executable",
+          diagnostics: { durationMs: 0, fileCount: 0, declarationCount: 0 },
+        };
+      },
+    });
+
+    expect(shards).toEqual([manifest]);
+    expect(analysisCalls).toBe(0);
+  });
+
   it("preserves an individually oversized range in one complete manifest", async () => {
     const manifest = reviewTestManifest();
     const oversizedRangeId = `range-${"x".repeat(2_048)}`;
@@ -137,6 +159,37 @@ describe("Diff Manifest sharding", () => {
         .commentableRanges.map((range) => range.id)
         .sort(),
     );
+  });
+
+  it("preserves the exact fallback shards when structural analysis is unavailable", async () => {
+    const manifest = manyHunkSingleFileManifest();
+    const config = shardConfig(2, 900);
+    const diagnostics = { durationMs: 0, fileCount: 0, declarationCount: 0 };
+
+    const unavailable = await shardDiffManifestForPrompt({
+      manifest,
+      config,
+      workspace: process.cwd(),
+      structuralAnalysis: async () => ({
+        available: false,
+        reason: "missing-executable",
+        diagnostics,
+      }),
+    });
+    const availableWithoutRelationships = await shardDiffManifestForPrompt({
+      manifest,
+      config,
+      workspace: process.cwd(),
+      structuralAnalysis: async () => ({
+        available: true,
+        version: "0.44.1",
+        headFiles: [],
+        baseFiles: [],
+        diagnostics,
+      }),
+    });
+
+    expect(JSON.stringify(unavailable)).toBe(JSON.stringify(availableWithoutRelationships));
   });
 });
 

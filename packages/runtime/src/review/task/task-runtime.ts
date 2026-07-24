@@ -82,6 +82,7 @@ export type RunTaskRuntimeOptions = {
   trustedConfigHash?: string;
   piExecutable?: string;
   piRunner?: PiRunner;
+  structuralHeadRef?: string;
   diffManifestBuilder?: DiffManifestBuilder;
   priorReviewState?: PriorReviewState;
   priorMainComment?: string;
@@ -206,6 +207,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   const structuralAnalysis = createDiffStructuralAnalysisLoader({
     manifest: diffManifest,
     workspace: options.workspace,
+    headRef: options.structuralHeadRef,
     env: options.env,
     log: options.log,
   });
