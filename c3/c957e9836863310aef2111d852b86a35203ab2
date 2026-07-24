@@ -1,0 +1,45 @@
+packages/runtime/src/review/tests/publish.test.ts
+  s_fbbcc7f4f67718::t_aa6f25fcaaefdb 183-188,573-578,933-940,1044-1049,1160
+  s_fbbcc7f4f67718::t_bcd32a9d7333ce 542-546
+  s_fbbcc7f4f67718::t_39c27d66424caf 540-541,547-560
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_fbbcc7f4f67718::t_aa6f25fcaaefdb 487-492
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_fbbcc7f4f67718::t_1c628b35fbc2cd 377
+packages/runtime/src/hosts/github/publication-thread-actions.ts
+  s_fbbcc7f4f67718::t_f71c552007bc5b 217-220,233-245
+  s_fbbcc7f4f67718::t_b24bb27ee5ef0c 246-247
+packages/runtime/src/hosts/github/publication-client.ts
+  s_fbbcc7f4f67718::t_aa6f25fcaaefdb 51,69-70,100-101,356
+apps/docs/content/docs/guide/quickstart.mdx
+  s_fbbcc7f4f67718::t_1c628b35fbc2cd 188
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_fbbcc7f4f67718::t_817bfdc5751063 423
+README.md
+  s_fbbcc7f4f67718::t_1c628b35fbc2cd 189
+apps/docs/scripts/sync-recipes.ts
+  s_fbbcc7f4f67718::t_7bfb2799f6e40f 191
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_fbbcc7f4f67718::t_1c628b35fbc2cd 207-208
+packages/runtime/src/host-run/tests/commands-fixtures.ts
+  s_fbbcc7f4f67718::t_aa6f25fcaaefdb 854-861
+apps/docs/content/docs/guide/github-action.mdx
+  s_fbbcc7f4f67718::t_1c628b35fbc2cd 86,91-100
+  s_fbbcc7f4f67718::t_b0342e6879ad01 101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "c3c957e9836863310aef2111d852b86a35203ab2",
+  "prompts": {},
+  "sessions": {
+    "s_fbbcc7f4f67718": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f944d-50d0-75a1-9a33-0dcbce2ede63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
