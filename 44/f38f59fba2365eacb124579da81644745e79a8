@@ -1,0 +1,57 @@
+packages/runtime/src/review/tests/review-run.test.ts
+  s_87f449b385ea97::t_94507f1c452cd8 5,48-57,62-112
+  s_87f449b385ea97::t_1c358cc26dbb44 58-61
+packages/runtime/src/review/tests/manifest-payload.test.ts
+  s_87f449b385ea97::t_4a06779d06620b 170-239,241-242,244-245,247-248,250-253
+  s_87f449b385ea97::t_e8931a2056dcc0 240,243,246,249
+packages/runtime/src/review/agent/review-run.ts
+  s_87f449b385ea97::t_9bf92cacd04730 75,157
+packages/runtime/src/pi/runtime-tools.ts
+  s_87f449b385ea97::t_76a800764550aa 40-44,51-53,62-65,71,80,107,112,131,141,265,296-300,320-327
+  s_87f449b385ea97::t_67a83d60b062a3 195-196
+  s_87f449b385ea97::t_3712713fe0de11 45-50,110,124-127,129,148-194
+  s_87f449b385ea97::t_ad2ff70b3fecdd 328
+packages/runtime/src/pi/runtime-tools-core.ts
+  s_87f449b385ea97::t_bae38b082f93e0 399,413
+  s_87f449b385ea97::t_55bd2308574d61 365-369,405-409,414-431,435-455
+  s_87f449b385ea97::t_d1ff99eda1f11b 410
+  s_87f449b385ea97::t_b1357997efda1f 411
+  s_87f449b385ea97::t_77a62860c5f45c 412,432-434
+packages/runtime/src/pi/tests/pi.test.ts
+  s_87f449b385ea97::t_21a08df72e8123 522-552
+packages/runtime/src/pi/tests/runtime-tools.test.ts
+  s_87f449b385ea97::t_6823bbfc807db1 562-566,990-993
+  s_87f449b385ea97::t_fc2c536f4b6873 1165
+  s_87f449b385ea97::t_21a08df72e8123 341-376,378,384-391,402-414,429-432,434-450,537-544,599-605,1154-1164
+  s_87f449b385ea97::t_e8931a2056dcc0 420-428,433
+  s_87f449b385ea97::t_b6e9cb942c1373 560-561,994-995
+  s_87f449b385ea97::t_cf2a44b974fbe4 377,392-401,545-552
+  s_87f449b385ea97::t_1c358cc26dbb44 379-383,415-419
+packages/runtime/src/pi/runtime-tools-extension.ts
+  s_87f449b385ea97::t_cc4a75628238e4 13
+  s_87f449b385ea97::t_cade6b0af30705 377,399,404-408,410-424
+  s_87f449b385ea97::t_77a62860c5f45c 391-392
+  s_87f449b385ea97::t_478f320952efe9 8,361-365
+  s_87f449b385ea97::t_f3c73d4352d28d 332,372,378-390
+packages/runtime/src/review/task/task-runtime.ts
+  s_87f449b385ea97::t_9bf92cacd04730 229
+packages/runtime/src/pi/runner.ts
+  s_87f449b385ea97::t_5fed6ace5d76e7 209,218,221,241
+  s_87f449b385ea97::t_9bf92cacd04730 324-330,335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "44f38f59fba2365eacb124579da81644745e79a8",
+  "prompts": {},
+  "sessions": {
+    "s_87f449b385ea97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9234-c679-7a23-a5fb-18a0862843e3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
