@@ -21,6 +21,7 @@ packages/runtime/src/diff/tests/manifest-sharding.test.ts
   s_87f449b385ea97::t_75b16290e89deb 345-346,349
   s_87f449b385ea97::t_a7894e9a45b46a 201
   s_87f449b385ea97::t_26c8e5b7168ff8 10-31,163-193
+  s_87f449b385ea97::t_311b0b87450a15 194
 packages/runtime/src/review/task/task-runtime.ts
   s_87f449b385ea97::t_f66f72220a9f3e 15-18,208-210,212-214,228,582
   s_87f449b385ea97::t_52b4a7be64fa4c 14,215-221,229,583,610
