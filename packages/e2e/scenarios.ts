@@ -56,12 +56,12 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
   const reviewer = pipr.agent({
     name: "review",
     model,
-    instructions: "Review the act fixture change.",
+    instructions: "Review the act fixture change and summarize the result.",
     output: pipr.schemas.review,
     tools: pipr.tools.readOnly,
     prompt: () => "Review this change.",
@@ -99,13 +99,13 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
   const fallback = pipr.model({
     provider: "deepseek",
     model: "deepseek-v4-fallback",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
   pipr.config({
     publication: { maxInlineComments: 5 },
@@ -152,7 +152,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
   const specialistOutput = pipr.schema({
     id: "fixture/specialist-output",
@@ -246,7 +246,10 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: "Review the act fixture change.",
+    instructions: {
+      findings: "Review the act fixture change.",
+      summary: "Summarize the act fixture change.",
+    },
   });
 });
 `;

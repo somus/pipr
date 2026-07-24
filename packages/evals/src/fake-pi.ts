@@ -89,7 +89,13 @@ const diffManifestPromptSchema = z.object({
   ),
 });
 
-if (!prompt.includes("Diff Manifest:")) {
+const isBuiltInSummaryPrompt = prompt.includes("Schema ID: core/summary.");
+if (isBuiltInSummaryPrompt) {
+  assert(
+    prompt.includes("Scoped compressed manifest") && prompt.includes("Merged inline findings"),
+    "fake-pi could not find bounded summary context in prompt",
+  );
+} else if (!prompt.includes("Diff Manifest:")) {
   throw new Error("fake-pi could not find Diff Manifest in prompt");
 }
 
@@ -130,6 +136,9 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
     prompt.includes("untrusted intent context"),
     "change request context lost its trust-boundary label",
   );
+  if (prompt.includes("Schema ID: core/summary.")) {
+    return;
+  }
   assert(prompt.includes("Review Policy:"), "review policy missing from rendered agent prompt");
   assert(
     prompt.includes("Review only changed behavior."),
@@ -179,6 +188,15 @@ function assertPromptEvalPrompt(systemPrompt: string): void {
 }
 
 function promptEvalReview() {
+  if (isBuiltInSummaryPrompt) {
+    const findingsStart = prompt.indexOf("Merged inline findings");
+    const hasFindings = prompt.indexOf('"body":', findingsStart) !== -1;
+    return {
+      body: hasFindings
+        ? "Found actionable review findings in the scoped source change."
+        : "No actionable findings in the scoped source change.",
+    };
+  }
   const manifest = parsePromptJson("\nManifest:");
   const findings = markerReviews.flatMap((review) => promptEvalFinding(manifest, review));
   if (prompt.includes("Schema ID: eval/categorized-review.")) {
@@ -195,6 +213,9 @@ function promptEvalReview() {
         ...finding,
       })),
     };
+  }
+  if (prompt.includes("Schema ID: core/inline-findings.")) {
+    return { inlineFindings: findings };
   }
   return {
     summary: {

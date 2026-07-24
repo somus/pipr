@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { ReviewResult, ReviewSummary } from "./review-contract.js";
+import type { ReviewFindingsResult, ReviewResult, ReviewSummary } from "./review-contract.js";
 import {
+  reviewFindingsResultSchema as coreReviewFindingsResultSchema,
   reviewResultSchema as coreReviewResultSchema,
   reviewSummarySchema as coreReviewSummarySchema,
 } from "./review-contract.js";
@@ -36,6 +37,10 @@ export function jsonSchema<T>(definition: JsonSchemaDefinition): Schema<T> {
 
 /** Built-in schemas available as reusable agent output contracts. */
 export const schemas: BuiltinSchemaCatalog = {
+  inlineFindings: createZodSchema<ReviewFindingsResult>(
+    "core/inline-findings",
+    coreReviewFindingsResultSchema,
+  ),
   review: createZodSchema<ReviewResult>(coreReviewOutputSchemaId, coreReviewResultSchema),
   summary: createZodSchema<ReviewSummary>("core/summary", coreReviewSummarySchema),
 };

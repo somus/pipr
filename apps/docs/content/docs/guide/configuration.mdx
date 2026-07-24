@@ -25,17 +25,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
-  });
-
-  const reviewer = pipr.reviewer({
-    name: "reviewer",
-    model,
-    instructions: `
-      Review the change request diff for correctness, security,
-      maintainability, and test coverage.
-      Return only actionable findings that target valid diff ranges.
-    `,
+    thinking: "high",
   });
 
   pipr.config({
@@ -49,30 +39,39 @@ export default definePipr((pipr) => {
 
   pipr.review({
     id: "review",
-    reviewer,
+    model,
+    instructions: {
+      findings: `
+        Review the change request diff for correctness, security,
+        maintainability, and test coverage. Return only actionable findings
+        that target valid diff ranges.
+      `,
+      summary: "Summarize the changed behavior, risk, and reviewer focus.",
+    },
     entrypoints: defaultReviewEntrypoints,
     timeout: "10m",
   });
 });
 ```
 
-`pipr.review` registers a Review Task and the default Entrypoints unless `entrypoints` disables or replaces them.
+`pipr.review` registers a Review Task and the default Entrypoints unless `entrypoints` disables or replaces them. Its findings agent can shard large manifests; its summary agent runs once with all merged candidate findings.
 
 The three `show*` publication options default to `true`. Set one to `false` to hide only Pipr's generated title, attribution footer, or collapsed review statistics; the task-authored Main Review Comment body is unchanged.
 
 ### Review registration
 
-Use `pipr.review(...)` for the default path: one reviewer, one Review Task, optional path scope, optional command, and optional task check. Use `pipr.config(...)` for publication caps.
+Use `pipr.review(...)` for the default path: separate findings and summary agents inside one Review Task, optional path scope, optional command, and optional task check. Use `pipr.config(...)` for publication caps.
 
 ### Path scope
 
 Use `paths` to scope a review recipe to matching repository paths:
 
 ```ts twoslash
-// @include: pipr-reviewer
+// @include: pipr-review
 pipr.review({
   id: "runtime-review",
-  reviewer,
+  model,
+  instructions: reviewInstructions,
   paths: {
     include: ["packages/runtime/**"],
     exclude: ["**/*.test.ts"],
@@ -111,7 +110,7 @@ const primary = pipr.model({
   provider: "deepseek",
   model: "deepseek-v4-pro",
   apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  options: { thinking: "high" },
+  thinking: "high",
 });
 ```
 
@@ -123,7 +122,7 @@ Provider secrets are env-only. `pipr.secret({ name: "DEEPSEEK_API_KEY" })` recor
 
 ### Explicit ids
 
-Model ids default to `<provider>/<model>`. Set an explicit `id` only when two profiles use the same provider and model with different options.
+Model ids default to `<provider>/<model>`. Set an explicit `id` only when two profiles use the same provider and model with different API keys or thinking levels.
 
 ## Runtime limits
 
@@ -252,7 +251,7 @@ The runtime includes schema details in the Pi prompt when they are available. Ta
 
 To publish inline comments from a custom schema, map the custom output into `ReviewFinding[]` and pass it to `ctx.comment({ inlineFindings })`. Validate and deduplicate custom anchors against the task's Diff Manifest before using the same filtered collection in main-comment summaries, checks, and `ctx.comment(...)`.
 
-Core recognizes a custom reviewer when its output schema contains an object with the standard Review Finding fields: `body`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. It applies the built-in reviewer's evidence, suppression, body-quality, anchoring, and inline-selection policy. Collection names, nesting, and additional metadata do not affect detection. Non-review schemas do not receive inline-review instructions.
+Core applies review policy when a custom schema contains an object with the standard Review Finding fields: `body`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. It also shards and deterministically merges a custom output whose root is exactly `{ inlineFindings: [...] }`; extra fields on each finding are preserved, and the merged value is reparsed with the custom schema. Summary-only, nested, and arbitrary schemas run once.
 
 When an output schema contains `suggestedFix`, Core adds the generic exact-replacement, range-selection, and secret-safety rules to the agent prompt. Do not repeat them in `instructions`. Custom suggestion workflows may add stricter deterministic and semantic validation before publication.
 

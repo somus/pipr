@@ -500,7 +500,10 @@ export default definePipr((pipr) => {
       ...defaultReviewEntrypoints,
       changeRequest: defaultReviewActions,
     },
-    instructions: "Review the change.",
+    instructions: {
+      findings: "Review the change.",
+      summary: "Summarize the change.",
+    },
   });
 });
 `,

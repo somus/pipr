@@ -104,10 +104,11 @@ Local review runs each unique change-request task unless the task explicitly opt
 `pipr review` runs tasks registered for change-request events:
 
 ```ts twoslash
-// @include: pipr-reviewer
+// @include: pipr-review
 pipr.review({
   id: "review",
-  reviewer,
+  model,
+  instructions: reviewInstructions,
   entrypoints: {
     changeRequest: ["opened", "updated", "reopened", "ready"],
   },
@@ -214,7 +215,7 @@ pipr inspect
 pipr check --require-env
 ```
 
-`pipr inspect` prints the registered models, agents, tasks, commands, tools, publication settings, and limits.
+`pipr inspect` prints the registered models, agents, tasks, change request triggers, commands, tools, schemas, publication settings, limits, aggregate-check policy, and normalized per-task check behavior.
 
 ## Local versus hosted runs
 

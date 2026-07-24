@@ -16,5 +16,6 @@ export type OfficialInitRecipe = {
   configTs: string;
   files?: readonly OfficialInitRecipeFile[];
   workflowEnvSecrets?: readonly OfficialInitRecipeWorkflowEnvSecret[];
+  requiresChecksPermission?: boolean;
   docsDetailsMdx?: string;
 };

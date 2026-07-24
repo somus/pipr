@@ -23,10 +23,11 @@ declare const pipr: PiprBuilder;
 // ---cut---`,
   ],
   [
-    "pipr-reviewer",
-    `import type { PiprBuilder, Reviewer } from "@usepipr/sdk";
+    "pipr-review",
+    `import type { ModelProfile, PiprBuilder, ReviewInstructions } from "@usepipr/sdk";
 declare const pipr: PiprBuilder;
-declare const reviewer: Reviewer;
+declare const model: ModelProfile;
+declare const reviewInstructions: ReviewInstructions;
 // ---cut---`,
   ],
   [

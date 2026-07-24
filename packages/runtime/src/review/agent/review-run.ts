@@ -41,6 +41,10 @@ import {
   reserveAgentRun,
 } from "./agent-run-budget.js";
 import { prepareDiffManifestContext, readReservedInputManifest } from "./diff-manifest-context.js";
+import {
+  canonicalInlineFindingsMaxItems,
+  schemaHasCanonicalInlineFindingsRoot,
+} from "./review-schema.js";
 
 export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
 
@@ -107,10 +111,11 @@ export async function runReviewAgent(
   if (maxShards !== undefined && (!Number.isInteger(maxShards) || maxShards <= 0)) {
     throw new Error("Pi run maxShards must be a positive integer");
   }
-  const manifests = await scheduledReviewManifests(options);
-  if (!manifests) {
+  const scheduled = await scheduledReviewManifests(options);
+  if (!scheduled) {
     return await runReviewAgentOnce(options);
   }
+  const { manifests } = scheduled;
   if (manifests.length === 1) {
     return await runReviewAgentOnce({
       ...options,
@@ -130,7 +135,7 @@ export async function runReviewAgent(
         }),
       );
     }
-    return mergeScheduledReviewAgentResults(results);
+    return mergeScheduledReviewAgentResults(results, options, scheduled.kind);
   };
   if (options.runtime.piRunner) {
     return await runScheduled(options.runtime.piRunner);
@@ -199,7 +204,13 @@ async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunRe
 }
 
 async function scheduledReviewManifests(options: RunReviewAgentOptions) {
-  if (options.agent.definition.output.id !== reviewResultSchemaId) {
+  const kind =
+    options.agent.definition.output.id === reviewResultSchemaId
+      ? "review"
+      : schemaHasCanonicalInlineFindingsRoot(options.agent.definition.output.jsonSchema)
+        ? "inlineFindings"
+        : undefined;
+  if (!kind) {
     return undefined;
   }
   const manifest = readReservedInputManifest(options.input);
@@ -211,7 +222,7 @@ async function scheduledReviewManifests(options: RunReviewAgentOptions) {
     maxShards === undefined
       ? options.runtime.config.limits?.diffManifest
       : { ...options.runtime.config.limits?.diffManifest, maxShards };
-  return await shardDiffManifestForPrompt({
+  const manifests = await shardDiffManifestForPrompt({
     manifest,
     config,
     workspace: options.runtime.workspace,
@@ -219,6 +230,7 @@ async function scheduledReviewManifests(options: RunReviewAgentOptions) {
     log: options.runtime.log,
     structuralAnalysis: options.runtime.structuralAnalysis,
   });
+  return { kind, manifests } as const;
 }
 
 function inputWithManifest(input: unknown, manifest: DiffManifest): Record<string, unknown> {
@@ -230,7 +242,29 @@ function inputWithManifest(input: unknown, manifest: DiffManifest): Record<strin
 
 function mergeScheduledReviewAgentResults(
   results: readonly RunReviewAgentResult[],
+  options: RunReviewAgentOptions,
+  kind: "review" | "inlineFindings",
 ): RunReviewAgentResult {
+  if (kind === "inlineFindings") {
+    const parsed = results.map((result) => options.agent.definition.output.parse(result.value));
+    const findings = parsed.flatMap((value) =>
+      typeof value === "object" &&
+      value !== null &&
+      Array.isArray((value as { inlineFindings?: unknown }).inlineFindings)
+        ? (value as { inlineFindings: unknown[] }).inlineFindings
+        : [],
+    );
+    const deduplicatedFindings = deduplicateScheduledFindingValues(findings);
+    const maxItems = canonicalInlineFindingsMaxItems(options.agent.definition.output.jsonSchema);
+    return {
+      value: options.agent.definition.output.parse({
+        inlineFindings:
+          maxItems === undefined ? deduplicatedFindings : deduplicatedFindings.slice(0, maxItems),
+      }),
+      repairAttempted: results.some((result) => result.repairAttempted),
+      providerModels: results.flatMap((result) => result.providerModels),
+    };
+  }
   const reviews = results.map((result) => parseReviewResult(result.value));
   const summaries = [...new Set(reviews.map((review) => review.summary.body))];
   const titles = [...new Set(reviews.flatMap((review) => review.summary.title ?? []))];
@@ -247,6 +281,33 @@ function mergeScheduledReviewAgentResults(
     repairAttempted: results.some((result) => result.repairAttempted),
     providerModels: results.flatMap((result) => result.providerModels),
   };
+}
+
+function deduplicateScheduledFindingValues(findings: readonly unknown[]): unknown[] {
+  const unique: unknown[] = [];
+  for (const finding of findings) {
+    const duplicate = unique.some(
+      (candidate) =>
+        sameFindingValueAnchor(candidate, finding) &&
+        findingValueField(candidate, "body") === findingValueField(finding, "body"),
+    );
+    if (!duplicate) {
+      unique.push(finding);
+    }
+  }
+  return unique;
+}
+
+function sameFindingValueAnchor(left: unknown, right: unknown): boolean {
+  return ["path", "rangeId", "side", "startLine", "endLine"].every(
+    (field) => findingValueField(left, field) === findingValueField(right, field),
+  );
+}
+
+function findingValueField(value: unknown, field: string): unknown {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)[field]
+    : undefined;
 }
 
 function deduplicateScheduledFindings(findings: ReviewResult["inlineFindings"]) {

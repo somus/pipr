@@ -15,11 +15,11 @@ const expected = new Map<string, string>();
 const recipeDescriptions = new Map([
   [
     "default-review",
-    "Start with one general change request reviewer that runs from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
+    "Start with one general change request review that runs separate findings and summary agents from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
   ],
   [
     "bug-hunter",
-    "Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with a reviewer tuned for actionable bug reports.",
+    "Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with separate findings and summary agents tuned for actionable bug reports.",
   ],
   [
     "rich-review",
@@ -175,14 +175,14 @@ Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by 
 
 - Expand \`paths.exclude\` for generated files, snapshots, vendored code, or fixtures that produce noisy findings.
 - Keep the command entrypoint \`@pipr bugs\` for manual reruns on risky PRs that did not need a full review.
-- Tune the reviewer instructions around the bug classes your project sees: data loss, race conditions, migrations, API compatibility, or missed tests.
+- Tune the findings instructions around the bug classes your project sees: data loss, race conditions, migrations, API compatibility, or missed tests.
 `,
   ],
   [
     "rich-review",
     `## Recipe notes
 
-Structured Review keeps Pipr's core finding contract small while asking the reviewer for severity and category metadata in a custom schema. The task renders that metadata in the Main Review Comment and prefixes each Inline Review Comment body before publishing normal \`ReviewFinding[]\`.
+Structured Review keeps Pipr's core finding contract small while asking one agent for severity and category metadata in a custom findings schema. The task selects up to eight findings by severity, gives them to a separate summary agent, and prefixes each Inline Review Comment body before publishing normal \`ReviewFinding[]\`.
 
 - Tune the severity definitions before using them as merge policy.
 - Add or remove categories to match the risks your maintainers already discuss in review.

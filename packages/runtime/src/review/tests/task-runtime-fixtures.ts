@@ -302,8 +302,8 @@ export function scopedPiReviewPlan() {
 export async function runWithInsideOutsideFindings(plan: RunTaskRuntimeOptions["plan"]) {
   return await runRuntime({
     plan,
-    piRunner: async () =>
-      reviewPiResult([
+    piRunner: async (options) =>
+      reviewPiResultForPrompt(options.prompt, [
         finding("inside", "range-1", 10),
         finding("outside", "range-1", 10, "docs/readme.md"),
       ]),
@@ -525,7 +525,7 @@ function expectDroppedOutsideConfiguredPaths(result: ReviewOnlyRuntimeResult): v
 }
 
 export function noFindingsPiRunner(): PiRunner {
-  return async () => noFindingsPiResult();
+  return async (options) => reviewPiResultForPrompt(options.prompt, []);
 }
 
 export function providerFailurePiRunner(calls: string[]): PiRunner {
@@ -539,6 +539,26 @@ export function providerFailurePiRunner(calls: string[]): PiRunner {
 
 export function noFindingsPiResult() {
   return reviewPiResult([]);
+}
+
+export function reviewPiResultForPrompt(prompt: string, findings: ReviewFinding[]) {
+  if (prompt.includes("Schema ID: core/inline-findings.")) {
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({ inlineFindings: findings }),
+      stderr: "",
+      durationMs: 1,
+    };
+  }
+  if (prompt.includes("Schema ID: core/summary.")) {
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({ body: "No findings." }),
+      stderr: "",
+      durationMs: 1,
+    };
+  }
+  return reviewPiResult(findings);
 }
 
 export function reviewPiResult(findings: ReviewFinding[]) {

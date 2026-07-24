@@ -76,6 +76,10 @@ export function officialInitRecipeWorkflowEnvSecrets(
   return resolveOfficialInitRecipe(recipe).workflowEnvSecrets ?? [];
 }
 
+export function officialInitRecipeRequiresChecksPermission(recipe?: string): boolean {
+  return resolveOfficialInitRecipe(recipe).requiresChecksPermission ?? false;
+}
+
 function resolveOfficialInitRecipe(
   recipe?: string,
 ): OfficialInitRecipe & { id: OfficialInitRecipeId } {

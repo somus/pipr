@@ -2,6 +2,7 @@ import type { OfficialInitRecipe } from "./types.js";
 
 export const qualityGateRecipe = {
   id: "quality-gate",
+  requiresChecksPermission: true,
   title: "Quality Gate",
   description: "Required review check that fails on blocking correctness and test risks.",
   sourceTools: ["SonarQube", "Snyk"],
@@ -13,7 +14,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
 
   pipr.config({

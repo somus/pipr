@@ -1,4 +1,5 @@
 import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
+import { aggregateCheckSettings, taskCheckSettings } from "../config/check-settings.js";
 import type { CodeHostAdapter, CodeHostStatus, CodeHostStatusState } from "../hosts/types.js";
 import type { RuntimeCheckSink, RuntimeTaskCheckResult } from "../review/task/task-runtime.js";
 import type { RuntimeLog } from "../shared/logging.js";
@@ -35,11 +36,8 @@ export async function startRuntimeChecks(options: {
     return undefined;
   }
   const tasks = options.selectedTasks;
-  const aggregate = options.plan.checks?.aggregate;
-  const aggregateName =
-    aggregate === undefined || aggregate === false || aggregate.enabled === false
-      ? undefined
-      : (aggregate.name ?? "all");
+  const aggregate = aggregateCheckSettings(options.plan.checks?.aggregate);
+  const aggregateName = aggregate.enabled ? aggregate.name : undefined;
   const taskRuns = new Map<string, CodeHostStatus>();
   if (!aggregateName && !tasks.some((task) => taskCheckSettings(task).individual)) {
     return undefined;
@@ -248,23 +246,4 @@ function aggregateCheckConclusion(
   return failedRequired
     ? { conclusion: "failure", summary: "One or more required pipr tasks failed." }
     : { conclusion: "success", summary: "All required pipr tasks completed." };
-}
-
-function taskCheckSettings(task: RuntimeTask): {
-  individual: boolean;
-  aggregate: boolean;
-  name: string;
-  required: boolean;
-} {
-  const check = task.check;
-  if (check === false) {
-    return { individual: false, aggregate: false, name: task.name, required: false };
-  }
-  const options = typeof check === "object" ? check : undefined;
-  return {
-    individual: options !== undefined && options.enabled !== false,
-    aggregate: true,
-    name: options?.name ?? task.name,
-    required: options?.required ?? true,
-  };
 }

@@ -9,7 +9,8 @@ Comment Publishing:
 - requires exactly one final output call per selected run: `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication
 - renders one deterministic Main Review Comment body from review output
 - renders and publishes command response output as a normal pull request issue comment keyed to the source command comment
-- leaves multi-agent or multi-task summary composition to user configuration
+- accepts summary-only, findings-only, or combined task output while rejecting an empty structured comment
+- combines the built-in review wrapper's findings and summary agents before rendering; custom multi-agent or multi-task composition remains user configuration
 - verifies the current change request head SHA before publication writes
 - upserts the Main Review Comment by hidden marker and stores Pipr-owned review state on that marker
 - caps Inline Review Comments only when `publication.maxInlineComments` is configured

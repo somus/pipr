@@ -28,7 +28,6 @@ import type {
   PiprResult,
   PiprRunSummary,
   PromptText,
-  Reviewer,
   Task,
   TaskContext,
 } from "../index.js";
@@ -40,9 +39,11 @@ import {
   jsonSchema,
   parsePiprResult,
   parseReviewFinding,
+  parseReviewFindingsResult,
   parseReviewResult,
   piprResultSchema,
   reviewFindingSchema,
+  reviewFindingsResultSchema,
   reviewResultSchema,
   reviewSummarySchema,
   schema,
@@ -193,7 +194,10 @@ describe("definePipr", () => {
       pipr.review({
         id: "scoped",
         model,
-        instructions: "Review scoped files.",
+        instructions: {
+          findings: "Review scoped files.",
+          summary: "Summarize scoped files.",
+        },
         paths: { include: ["docs/**"] },
         entrypoints: { changeRequest: false, command: false },
       });
@@ -202,7 +206,11 @@ describe("definePipr", () => {
     const plan = buildPiprPlan(factory);
 
     expect(plan.models.map((model) => model.id)).toEqual(["deepseek/deepseek-v4-pro"]);
-    expect(plan.agents.map((agent) => agent.name)).toEqual(["reviewer", "scoped"]);
+    expect(plan.agents.map((agent) => agent.name)).toEqual([
+      "reviewer",
+      "scoped-findings",
+      "scoped-summary",
+    ]);
     expect(plan.tasks.map((task) => task.name)).toEqual(["review", "scoped"]);
     expect(plan.tasks[0]?.local).toBe(false);
     expect(plan.changeRequestTriggers[0]).toMatchObject({ actions: ["opened"] });
@@ -380,7 +388,7 @@ describe("definePipr", () => {
         pipr.review({
           id: "review",
           model,
-          instructions: "Review.",
+          instructions: { findings: "Review.", summary: "Summarize." },
           command: false,
         } as never),
       ).toThrow("pipr.review received unsupported option fields: command");
@@ -388,10 +396,33 @@ describe("definePipr", () => {
         pipr.review({
           id: "review",
           model,
-          instructions: "Review.",
+          instructions: { findings: "Review.", summary: "Summarize." },
           entrypoints: { local: false },
         } as never),
       ).toThrow("pipr.review entrypoints received unsupported fields: local");
+      expect(() =>
+        pipr.review({
+          id: "review",
+          model,
+          instructions: { findings: "Review." },
+        } as never),
+      ).toThrow("pipr.review instructions require both findings and summary");
+      expect(() =>
+        pipr.review({
+          id: "review",
+          model: {
+            ...model,
+            id: "unregistered/deepseek-v4-pro",
+          },
+          instructions: { findings: "Review.", summary: "Summarize." },
+        }),
+      ).toThrow("pipr.review requires a registered model");
+      expect(() =>
+        pipr.review({
+          id: "review",
+          instructions: { findings: "Review.", summary: "Summarize." },
+        } as never),
+      ).toThrow("pipr.review requires a registered model");
     });
 
     buildPiprPlan(factory);
@@ -441,13 +472,24 @@ describe("definePipr", () => {
         apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
       });
       pipr.config({ publication: { maxInlineComments: 3 } });
-      pipr.review({ id: "review", model, instructions: "Review." });
+      pipr.review({
+        id: "review",
+        model,
+        instructions: {
+          findings: "Find actionable defects.",
+          summary: "Summarize the change.",
+        },
+      });
     });
 
     const plan = buildPiprPlan(factory);
 
     expect(plan.models).toHaveLength(1);
-    expect(plan.agents.map((agent) => agent.name)).toEqual(["review"]);
+    expect(plan.agents.map((agent) => agent.name)).toEqual(["review-findings", "review-summary"]);
+    expect(plan.agents.map((agent) => agent.definition.instructions)).toEqual([
+      "Find actionable defects.",
+      "Summarize the change.",
+    ]);
     expect(plan.tasks.map((task) => task.name)).toEqual(["review"]);
     expect(plan.changeRequestTriggers[0]?.actions).toEqual([
       "opened",
@@ -477,7 +519,10 @@ describe("definePipr", () => {
       pipr.review({
         id: "review",
         model,
-        instructions: "Review.",
+        instructions: {
+          findings: "Review.",
+          summary: "Summarize.",
+        },
         entrypoints: defaultReviewEntrypoints,
       });
     });
@@ -499,21 +544,20 @@ describe("definePipr", () => {
     expect(plan.changeRequestTriggers[0]?.actions).toEqual([...defaultReviewActions]);
   });
 
-  it("reuses explicit reviewers and registers provider-neutral entrypoints", () => {
+  it("registers provider-neutral entrypoints for the built-in review", () => {
     const factory = definePipr((pipr) => {
       const model = pipr.model({
         provider: "deepseek",
         model: "deepseek-v4-pro",
         apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
       });
-      const reviewer = pipr.reviewer({
-        name: "correctness-reviewer",
-        model,
-        instructions: "Review correctness.",
-      });
       pipr.review({
         id: "correctness",
-        reviewer,
+        model,
+        instructions: {
+          findings: "Review correctness.",
+          summary: "Summarize correctness risk.",
+        },
         entrypoints: {
           changeRequest: false,
           command: {
@@ -528,7 +572,10 @@ describe("definePipr", () => {
 
     const plan = buildPiprPlan(factory);
 
-    expect(plan.agents.map((agent) => agent.name)).toEqual(["correctness-reviewer"]);
+    expect(plan.agents.map((agent) => agent.name)).toEqual([
+      "correctness-findings",
+      "correctness-summary",
+    ]);
     expect(plan.tasks.map((task) => task.name)).toEqual(["correctness"]);
     expect(plan.changeRequestTriggers).toHaveLength(0);
     expect(plan.commands[0]).toMatchObject({
@@ -539,21 +586,21 @@ describe("definePipr", () => {
     expect(plan.publication.maxInlineComments).toBeUndefined();
   });
 
-  it("passes review-level timeout when reusing an explicit reviewer", async () => {
-    let runTimeout: unknown;
+  it("runs findings before summary and applies the review timeout to both", async () => {
+    const runs: Array<{ timeout: unknown; input: unknown }> = [];
     const factory = definePipr((pipr) => {
       const model = pipr.model({
         provider: "deepseek",
         model: "deepseek-v4-pro",
         apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
       });
-      const reviewer = pipr.reviewer({
-        model,
-        instructions: "Review.",
-      });
       pipr.review({
         id: "review",
-        reviewer,
+        model,
+        instructions: {
+          findings: "Find defects.",
+          summary: "Summarize the change.",
+        },
         timeout: "5m",
         entrypoints: {
           changeRequest: false,
@@ -583,9 +630,10 @@ describe("definePipr", () => {
           },
         },
         pi: {
-          async run(_agent, _input, options) {
-            runTimeout = options?.timeout;
-            return { summary: { body: "Done." }, inlineFindings: [] } as never;
+          async run(agent, input, options) {
+            void agent;
+            runs.push({ timeout: options?.timeout, input });
+            return (runs.length === 1 ? { inlineFindings: [] } : { body: "Done." }) as never;
           },
         },
         review: {
@@ -607,7 +655,60 @@ describe("definePipr", () => {
       undefined,
     );
 
-    expect(runTimeout).toBe("5m");
+    expect(runs.map(({ timeout }) => timeout)).toEqual(["5m", "5m"]);
+    expect(runs[1]?.input).toMatchObject({
+      manifestSummary: {
+        baseSha: "base",
+        headSha: "head",
+        mergeBaseSha: "base",
+        fileCount: 0,
+        omittedFileCount: 0,
+        files: [],
+      },
+      inlineFindings: [],
+    });
+    expect(runs[1]?.input).not.toHaveProperty("manifest");
+  });
+
+  it("does not publish when the built-in summary agent fails", async () => {
+    let piRuns = 0;
+    let comments = 0;
+    const factory = definePipr((pipr) => {
+      const model = pipr.model({ provider: "deepseek", model: "deepseek-v4-pro" });
+      pipr.review({
+        id: "review",
+        model,
+        instructions: {
+          findings: "Find defects.",
+          summary: "Summarize the change.",
+        },
+        entrypoints: { changeRequest: false, command: false },
+      });
+    });
+    const task = buildPiprPlan(factory).tasks[0];
+
+    await expect(
+      task?.handler(
+        {
+          ...fakeTaskContext(),
+          pi: {
+            async run() {
+              piRuns += 1;
+              if (piRuns === 1) {
+                return { inlineFindings: [] } as never;
+              }
+              throw new Error("summary failed");
+            },
+          },
+          async comment() {
+            comments += 1;
+          },
+        },
+        undefined,
+      ),
+    ).rejects.toThrow("summary failed");
+    expect(piRuns).toBe(2);
+    expect(comments).toBe(0);
   });
 
   it("passes the Review Run context to custom review comment renderers", async () => {
@@ -617,7 +718,10 @@ describe("definePipr", () => {
       pipr.review({
         id: "review",
         model,
-        instructions: "Review.",
+        instructions: {
+          findings: "Find defects.",
+          summary: "Summarize the change.",
+        },
         entrypoints: { changeRequest: false, command: false },
         comment(_result, context) {
           observedRun = context.run;
@@ -632,7 +736,7 @@ describe("definePipr", () => {
         ...fakeTaskContext(),
         pi: {
           async run() {
-            return { summary: { body: "Done." }, inlineFindings: [] } as never;
+            return { inlineFindings: [] } as never;
           },
         },
       },
@@ -840,7 +944,11 @@ describe("definePipr", () => {
         checks: { aggregate: { enabled: true } },
         limits: { timeoutSeconds: 300 },
       });
-      pipr.review({ id: "review", model, instructions: "Review." });
+      pipr.review({
+        id: "review",
+        model,
+        instructions: { findings: "Review.", summary: "Summarize." },
+      });
     });
 
     const plan = buildPiprPlan(factory);
@@ -1109,6 +1217,26 @@ describe("definePipr", () => {
     expect(buildPiprPlan(factory).models[0]?.id).toBe("deepseek/deepseek-v4-pro");
   });
 
+  it("registers and validates typed model thinking", () => {
+    const factory = definePipr((pipr) => {
+      pipr.model({
+        provider: "deepseek",
+        model: "deepseek-v4-pro",
+        thinking: "xhigh",
+      });
+    });
+    const invalidFactory = definePipr((pipr) => {
+      pipr.model({
+        provider: "deepseek",
+        model: "deepseek-v4-pro",
+        thinking: "enabled",
+      } as never);
+    });
+
+    expect(buildPiprPlan(factory).models[0]?.thinking).toBe("xhigh");
+    expect(() => buildPiprPlan(invalidFactory)).toThrow("thinking");
+  });
+
   it("rejects duplicate explicit model ids", () => {
     const factory = definePipr((pipr) => {
       pipr.model({
@@ -1136,14 +1264,14 @@ describe("definePipr", () => {
         provider: "deepseek",
         model: "deepseek-v4-pro",
         apiKey,
-        options: { thinking: "high" },
+        thinking: "high",
       });
       pipr.model({
         id: "duplicate",
         provider: "deepseek",
         model: "deepseek-v4-pro",
         apiKey,
-        options: { thinking: "high" },
+        thinking: "high",
       });
     });
 
@@ -1162,7 +1290,7 @@ describe("definePipr", () => {
         provider: "deepseek",
         model: "deepseek-v4-pro",
         apiKey,
-        options: { thinking: "high" },
+        thinking: "high",
       });
     });
     const explicitIdFactory = definePipr((pipr) => {
@@ -1178,7 +1306,7 @@ describe("definePipr", () => {
         provider: "deepseek",
         model: "deepseek-v4-pro",
         apiKey,
-        options: { thinking: "high" },
+        thinking: "high",
       });
     });
 
@@ -1319,10 +1447,16 @@ describe("review schema exports", () => {
       endLine: 1,
     };
     const result = { summary, inlineFindings: [finding] };
+    const findingsResult = { inlineFindings: [finding] };
 
     expect(reviewSummarySchema.parse(summary)).toEqual(summary);
     expect(parseReviewFinding(finding)).toEqual(finding);
+    expect(parseReviewFindingsResult(findingsResult)).toEqual(findingsResult);
     expect(parseReviewResult(result)).toEqual(result);
+    expect(reviewFindingsResultSchema.safeParse({ inlineFindings: [finding] }).success).toBe(true);
+    expect(
+      reviewFindingsResultSchema.safeParse({ summary, inlineFindings: [finding] }).success,
+    ).toBe(false);
     expect(reviewFindingSchema.safeParse({ ...finding, startLine: 0 }).success).toBe(false);
     expect(reviewFindingSchema.safeParse({ ...finding, issueKey: "internal-only" }).success).toBe(
       false,
@@ -1352,17 +1486,6 @@ function expectSchemaRequiresZod(pipr: PiprBuilder): void {
 }
 
 void expectSchemaRequiresZod;
-
-function expectExplicitReviewerRejectsConstructionFields(
-  pipr: PiprBuilder,
-  reviewer: Reviewer,
-  model: ModelProfile,
-): void {
-  // @ts-expect-error explicit reviewer recipes do not accept reviewer construction fields
-  pipr.review({ reviewer, model, instructions: "Ignored." });
-}
-
-void expectExplicitReviewerRejectsConstructionFields;
 
 function expectChangeRequestTasksRequireVoidInput(pipr: PiprBuilder): void {
   const changeRequestTask = pipr.task({ name: "review", run() {} });
@@ -1417,7 +1540,12 @@ function expectReadonlySdkCollections(
   const fallbacks = [model] as const;
 
   void context.change.diffManifest({ paths });
-  pipr.reviewer({ model, fallbacks, instructions: "Review." });
+  pipr.review({
+    id: "review",
+    model,
+    fallbacks,
+    instructions: { findings: "Review.", summary: "Summarize." },
+  });
 
   // @ts-expect-error Diff Manifest files are runtime-owned readonly collections.
   manifest.files.push();

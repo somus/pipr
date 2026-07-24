@@ -2,6 +2,8 @@ import type { RuntimeLimits } from "./manifest.js";
 
 export const defaultMaxStoredFindings = 50;
 export const maxStoredFindingsLimit = 100;
+export const modelThinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+export type ModelThinkingLevel = (typeof modelThinkingLevels)[number];
 
 /** Repository permission levels used to authorize pipr commands. */
 export type RepositoryPermission = "read" | "triage" | "write" | "maintain" | "admin";
@@ -29,7 +31,7 @@ export type ModelOptions = {
   provider: string;
   model: string;
   apiKey?: SecretRef;
-  options?: Record<string, unknown>;
+  thinking?: ModelThinkingLevel;
 };
 
 /** Registered model profile that can be used by reviewers and agents. */
@@ -39,7 +41,7 @@ export type ModelProfile = {
   readonly provider: string;
   readonly model: string;
   readonly apiKey?: SecretRef;
-  readonly options?: Record<string, unknown>;
+  readonly thinking?: ModelThinkingLevel;
 };
 
 /** Aggregate check-run options for a Pipr review run. */

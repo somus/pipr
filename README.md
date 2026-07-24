@@ -67,16 +67,16 @@ name: pipr
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
   pull_request_review_comment:
     types: [created]
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
   issues: write
-  checks: write
 
 jobs:
   review:
@@ -111,24 +111,22 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
-  });
-
-  const reviewer = pipr.reviewer({
-    name: "reviewer",
-    model,
-    instructions: `
-      Review the change request diff for correctness, security,
-      maintainability, and test coverage.
-      Return only actionable findings that target valid diff ranges.
-    `,
+    thinking: "high",
   });
 
   pipr.config({ publication: { maxInlineComments: 5 } });
 
   pipr.review({
     id: "review",
-    reviewer,
+    model,
+    instructions: {
+      findings: `
+        Review the change request diff for correctness, security,
+        maintainability, and test coverage. Return only actionable findings
+        that target valid diff ranges.
+      `,
+      summary: "Summarize the changed behavior, risk, and reviewer focus.",
+    },
     entrypoints: {
       changeRequest: ["opened", "updated", "reopened", "ready"],
       command: { pattern: "@pipr review", permission: "write" },
@@ -140,7 +138,7 @@ export default definePipr((pipr) => {
 
 The SDK also supports custom agents, tasks, `@pipr` commands, model fallback, local-disabled tasks, and retry settings. See [Configuration](https://pipr.run/docs/guide/configuration).
 
-Pipr adds bounded change request metadata, the tool contract, and the output schema to every agent prompt. Review-schema prompts also include Core's finding and `suggestedFix` rules. Keep repository-specific policy in `instructions`; do not repeat those Core contracts.
+The built-in review runs separate findings and summary agents with the same model, fallbacks, tools, path scope, and timeout. Pipr adds bounded change request metadata, the tool contract, and the output schema to every agent prompt. Review-schema prompts also include Core's finding and `suggestedFix` rules. Keep repository-specific policy in the two instruction fields; use `pipr.agent()` and `pipr.task()` when you need custom prompts or orchestration.
 
 ## Docs
 

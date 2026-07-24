@@ -22,6 +22,7 @@ import {
   registerCommentingAgentTask,
   registerPiReviewTask,
   reviewPiResult,
+  reviewPiResultForPrompt,
   reviewTestManifestWithContext,
   reviewTestManifestWithDocs,
   runCustomOkPlan,
@@ -225,10 +226,11 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: "Review.",
+          instructions: { findings: "Review.", summary: "Summarize." },
         });
       }),
-      piRunner: async () => reviewPiResult([finding("unscoped", "range-1", 10)]),
+      piRunner: async (options) =>
+        reviewPiResultForPrompt(options.prompt, [finding("unscoped", "range-1", 10)]),
     });
 
     expect(result.validated.validFindings.map((item) => item.body)).toEqual(["unscoped body"]);

@@ -62,7 +62,7 @@ export async function writeThirdPartyPiprProject(
       "  pipr.review({",
       '    id: "review",',
       "    model,",
-      `    instructions: ${JSON.stringify(options.instructions ?? "Review with deps.")},`,
+      `    instructions: { findings: ${JSON.stringify(options.instructions ?? "Review with deps.")}, summary: "Summarize this change." },`,
       "  });",
       "});",
     ].join("\n"),

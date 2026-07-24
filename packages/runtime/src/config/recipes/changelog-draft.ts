@@ -12,7 +12,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "medium" },
+    thinking: "medium",
   });
 
   const changelogOutput = pipr.schema({
