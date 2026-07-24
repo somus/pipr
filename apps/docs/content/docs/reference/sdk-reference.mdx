@@ -552,7 +552,7 @@ These limits control runtime timeout, provider-call count, and Diff Manifest pro
 | `limits.diffManifest.maxShards` | Positive integer; defaults to `4` | Caps automatic fan-out from one review invocation. Set it to `1` to disable splitting. |
 | `limits.maxAgentRuns` | Positive integer; unlimited when omitted | Caps total provider invocations across all tasks and agents in one Review Run. |
 
-`limits.diffManifest.toolResponseMaxBytes` also bounds condensed helper responses. Condensed runs with structural capability register `pipr_read_declaration(path, ref, rangeId)` and `pipr_ast_grep(pattern, language, paths)` in addition to the manifest read tools. `pipr_ast_grep` searches only the head workspace, accepts 1 to 16 explicit safe paths, returns at most 100 matches, and truncates each matched text to 2 KiB.
+`limits.diffManifest.toolResponseMaxBytes` also bounds condensed helper responses. Condensed runs with structural capability register `pipr_read_declaration(path, ref, rangeId)` and `pipr_ast_grep(pattern, language, paths)` in addition to the manifest read tools when the reviewed head is the current workspace. Local ref-to-ref reviews with `pipr review --head <ref>` keep the standard read tools because the workspace may not match that ref. `pipr_ast_grep` searches only the head workspace, accepts 1 to 16 explicit safe paths, returns at most 100 matches, and truncates each matched text to 2 KiB.
 
 `ctx.pi.run(agent, input, { maxShards })` overrides `limits.diffManifest.maxShards` for that invocation. Omit it to inherit the global value; set it to `1` to disable splitting for only that call.
 

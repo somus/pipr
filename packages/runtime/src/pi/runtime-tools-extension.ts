@@ -5,10 +5,12 @@ import { compact } from "lodash-es";
 import { z } from "zod";
 import {
   assertNoSymlinkPath,
+  assertSerializedToolResponseFits,
   astGrepSearchParams,
   type BaseDeclarationSnapshot,
   type BaseRangeSnapshot,
   boundedLineSlice,
+  boundToolResponseContent,
   type ReadAtRefParams,
   type RuntimeToolData,
   readAtRefParams,
@@ -327,7 +329,7 @@ function assertCustomToolBridgeOk(
 
 function textResult(value: unknown): ToolResult {
   return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
+    content: [{ type: "text", text: JSON.stringify(value) }],
     details: value,
   };
 }
@@ -356,52 +358,70 @@ async function readDeclaration(
 ): Promise<unknown> {
   const request = resolveDeclarationRequest(data, params);
   if (!request.available) {
-    return request;
+    return assertSerializedToolResponseFits(
+      request,
+      data.toolResponseMaxBytes,
+      "pipr_read_declaration response limit is too small",
+    );
   }
   if (params.ref === "base") {
     return await readBaseDeclarationSnapshot(
       dataRoot,
       data.baseDeclarations?.[params.rangeId],
       request,
+      data.toolResponseMaxBytes,
     );
   }
   const target = resolveAllowedPath(cwd, request.sourcePath);
   await assertNoSymlinkPath(cwd, request.sourcePath);
-  return {
-    ...request,
-    declaration: declarationResult(request.declaration),
-    ...boundedLineSlice(
-      await Bun.file(target).text(),
-      {
-        startLine: request.declaration.startLine,
-        endLine: request.declaration.endLine,
-      },
-      data.toolResponseMaxBytes,
-    ),
-  };
+  return boundToolResponseContent(
+    {
+      ...request,
+      declaration: declarationResult(request.declaration),
+      ...boundedLineSlice(
+        await Bun.file(target).text(),
+        {
+          startLine: request.declaration.startLine,
+          endLine: request.declaration.endLine,
+        },
+        data.toolResponseMaxBytes,
+      ),
+    },
+    data.toolResponseMaxBytes,
+    "pipr_read_declaration response limit is too small",
+  );
 }
 
 async function readBaseDeclarationSnapshot(
   dataRoot: string,
   snapshot: BaseDeclarationSnapshot | undefined,
   request: Extract<ReturnType<typeof resolveDeclarationRequest>, { available: true }>,
+  maxBytes: number,
 ): Promise<unknown> {
   const readable = readableBaseDeclarationSnapshotSchema.safeParse(snapshot);
   if (!readable.success) {
     const { declaration: _declaration, ...unavailable } = request;
-    return { ...unavailable, available: false };
+    return assertSerializedToolResponseFits(
+      { ...unavailable, available: false },
+      maxBytes,
+      "pipr_read_declaration response limit is too small",
+    );
   }
-  return {
-    path: request.path,
-    sourcePath: request.sourcePath,
-    ref: request.ref,
-    rangeId: request.rangeId,
-    declaration: declarationResult(request.declaration),
-    available: true,
-    content: await Bun.file(path.join(dataRoot, readable.data.relativePath)).text(),
-    bytes: readable.data.bytes,
-    truncated: readable.data.truncated,
-  };
+  return boundToolResponseContent(
+    {
+      path: request.path,
+      sourcePath: request.sourcePath,
+      ref: request.ref,
+      rangeId: request.rangeId,
+      declaration: declarationResult(request.declaration),
+      available: true,
+      content: await Bun.file(path.join(dataRoot, readable.data.relativePath)).text(),
+      bytes: readable.data.bytes,
+      truncated: readable.data.truncated,
+    },
+    maxBytes,
+    "pipr_read_declaration response limit is too small",
+  );
 }
 
 function declarationResult(declaration: {

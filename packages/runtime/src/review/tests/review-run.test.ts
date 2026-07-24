@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { definePipr, type Schema, z } from "@usepipr/sdk";
 import { buildPiprPlan } from "@usepipr/sdk/internal";
 import { createRuntimeLog, type RuntimeLogRecord } from "../../shared/logging.js";
+import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
 import { runReviewAgent } from "../agent/review-run.js";
 
@@ -44,6 +45,71 @@ const outputSchema: Schema<unknown> = {
 };
 
 describe("runReviewAgent", () => {
+  it("does not expose structural tools when the reviewed head differs from the workspace", async () => {
+    const factory = definePipr((pipr) => {
+      pipr.agent({
+        name: "reviewer",
+        instructions: "Review.",
+        output: outputSchema,
+        prompt: () => "Review.",
+      });
+    });
+    const plan = buildPiprPlan(factory);
+    const agent = plan.agents[0];
+    if (!agent) {
+      throw new Error("test fixture missing agent");
+    }
+    let observedPrompt = "";
+    let observedStructuralCapability: unknown;
+    let analysisCalls = 0;
+
+    await runReviewAgent({
+      agent,
+      input: { manifest: reviewTestManifest() },
+      runOptions: undefined,
+      runtime: {
+        workspace: process.cwd(),
+        config: {
+          ...config,
+          limits: {
+            diffManifest: {
+              fullMaxBytes: 1,
+              fullMaxEstimatedTokens: 1,
+              condensedMaxBytes: 100_000,
+              condensedMaxEstimatedTokens: 100_000,
+            },
+          },
+        },
+        event: eventContext(),
+        provider,
+        plan,
+        run: { id: "test-run", trigger: "change-request" },
+        structuralToolsEnabled: false,
+        structuralAnalysis: async () => {
+          analysisCalls += 1;
+          return {
+            available: true,
+            version: "0.44.1",
+            headFiles: [],
+            baseFiles: [],
+            diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+          };
+        },
+        piRunner: async (options) => {
+          observedPrompt = options.prompt;
+          observedStructuralCapability = options.runtimeTools?.structuralAnalysis;
+          return { exitCode: 0, stdout: "{}", stderr: "", durationMs: 1 };
+        },
+      },
+    });
+
+    expect(analysisCalls).toBe(0);
+    expect(observedStructuralCapability).toBeUndefined();
+    expect(observedPrompt).toContain("pipr_read_diff");
+    expect(observedPrompt).not.toContain("pipr_read_declaration");
+    expect(observedPrompt).not.toContain("pipr_ast_grep");
+  });
+
   it("logs bounded Pi stream statistics without event content", async () => {
     const factory = definePipr((pipr) => {
       pipr.agent({

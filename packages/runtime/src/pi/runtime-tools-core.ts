@@ -362,7 +362,11 @@ export async function runAstGrepSearch(options: {
   );
   const output = result.stdout.trim();
   if (result.exitCode === 1 && (output === "" || output === "[]")) {
-    return { available: true, matches: [], truncated: false };
+    return assertSerializedToolResponseFits(
+      { available: true, matches: [], truncated: false },
+      options.maxBytes,
+      "pipr_ast_grep response limit is too small",
+    );
   }
   if (result.exitCode !== 0) {
     throw new Error("pipr_ast_grep failed");
@@ -392,13 +396,63 @@ export async function runAstGrepSearch(options: {
       text: truncateUtf8(match.text, 2 * 1024),
     };
     const candidate = { available: true, matches: [...matches, normalized], truncated };
-    if (Buffer.byteLength(JSON.stringify(candidate), "utf8") > options.maxBytes) {
+    if (serializedToolResponseBytes(candidate) > options.maxBytes) {
       truncated = true;
       break;
     }
     matches.push(normalized);
   }
-  return { available: true, matches, truncated };
+  return assertSerializedToolResponseFits(
+    { available: true, matches, truncated },
+    options.maxBytes,
+    "pipr_ast_grep response limit is too small",
+  );
+}
+
+function serializedToolResponseBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+export function assertSerializedToolResponseFits<T>(
+  value: T,
+  maxBytes: number,
+  errorMessage: string,
+): T {
+  if (serializedToolResponseBytes(value) > maxBytes) {
+    throw new Error(errorMessage);
+  }
+  return value;
+}
+
+export function boundToolResponseContent<T extends { content: string }>(
+  value: T,
+  maxBytes: number,
+  errorMessage: string,
+): T & { truncated: boolean } {
+  if (serializedToolResponseBytes(value) <= maxBytes) {
+    return value as T & { truncated: boolean };
+  }
+  const empty = { ...value, content: "", truncated: true };
+  assertSerializedToolResponseFits(empty, maxBytes, errorMessage);
+  const originalBuffer = Buffer.from(value.content, "utf8");
+  let low = 0;
+  let high = originalBuffer.byteLength;
+  let best = empty;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const candidate = {
+      ...value,
+      content: originalBuffer.subarray(0, middle).toString("utf8"),
+      truncated: true,
+    };
+    if (serializedToolResponseBytes(candidate) <= maxBytes) {
+      best = candidate;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return best;
 }
 
 function filterManifestFileRanges(

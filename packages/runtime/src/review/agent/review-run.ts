@@ -72,6 +72,7 @@ export type RunReviewAgentOptions = {
     piRunSink?: (run: PiRunStats) => void;
     agentRunBudget?: AgentRunBudget;
     structuralAnalysis?: DiffStructuralAnalysisLoader;
+    structuralToolsEnabled?: boolean;
   };
 };
 
@@ -153,6 +154,7 @@ async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunRe
   if (
     diffManifest?.mode === "condensed" &&
     diffManifestOptions.toolMode === "read-only" &&
+    options.runtime.structuralToolsEnabled !== false &&
     options.runtime.structuralAnalysis
   ) {
     diffManifest = prepareDiffManifestContext({

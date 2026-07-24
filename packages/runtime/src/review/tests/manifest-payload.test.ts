@@ -167,6 +167,90 @@ describe("Diff Manifest prompt payload", () => {
     expect(context?.body).toContain("pipr_ast_grep");
   });
 
+  it("keeps structural tool registration and prompt instructions in capability parity", () => {
+    const available = {
+      available: true as const,
+      version: "0.44.1",
+      headFiles: [],
+      baseFiles: [],
+      diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+    };
+    const unavailable = {
+      available: false as const,
+      reason: "missing-executable" as const,
+      diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+    };
+    const cases = [
+      {
+        name: "full available",
+        manifest: reviewTestManifest(),
+        limits: undefined,
+        toolMode: "read-only" as const,
+        structuralAnalysis: available,
+        expected: [],
+      },
+      {
+        name: "condensed unavailable",
+        manifest: largeContextManifest(),
+        limits: {
+          fullMaxBytes: 128,
+          fullMaxEstimatedTokens: 100_000,
+          condensedMaxBytes: 100_000,
+          condensedMaxEstimatedTokens: 100_000,
+        },
+        toolMode: "read-only" as const,
+        structuralAnalysis: unavailable,
+        expected: [...piRuntimeReadToolNames],
+      },
+      {
+        name: "condensed available",
+        manifest: largeContextManifest(),
+        limits: {
+          fullMaxBytes: 128,
+          fullMaxEstimatedTokens: 100_000,
+          condensedMaxBytes: 100_000,
+          condensedMaxEstimatedTokens: 100_000,
+        },
+        toolMode: "read-only" as const,
+        structuralAnalysis: available,
+        expected: [...piRuntimeReadToolNames, ...piRuntimeStructuralToolNames],
+      },
+      {
+        name: "none available",
+        manifest: largeContextManifest(),
+        limits: {
+          fullMaxBytes: 128,
+          fullMaxEstimatedTokens: 100_000,
+          condensedMaxBytes: 100_000,
+          condensedMaxEstimatedTokens: 100_000,
+        },
+        toolMode: "none" as const,
+        structuralAnalysis: available,
+        expected: [],
+      },
+    ];
+
+    for (const testCase of cases) {
+      const context = prepareDiffManifestContext({
+        input: { manifest: testCase.manifest },
+        limits: testCase.limits,
+        toolMode: testCase.toolMode,
+        structuralAnalysis: testCase.structuralAnalysis,
+      });
+      const expectedToolNames: readonly string[] = testCase.expected;
+      expect(context?.runtimeToolNames, testCase.name).toEqual(testCase.expected);
+      expect(context?.body.includes("pipr_read_declaration"), testCase.name).toBe(
+        expectedToolNames.includes("pipr_read_declaration"),
+      );
+      expect(context?.body.includes("pipr_ast_grep"), testCase.name).toBe(
+        expectedToolNames.includes("pipr_ast_grep"),
+      );
+      expect(context?.runtimeToolRequest?.structuralAnalysis?.available, testCase.name).toBe(
+        expectedToolNames.includes("pipr_ast_grep") ? true : undefined,
+      );
+    }
+  });
+
   it("does not attach runtime read tools when tool mode is none", () => {
     const context = prepareDiffManifestContext({
       input: { manifest: largeContextManifest() },

@@ -338,6 +338,201 @@ describe("pipr runtime Pi read tools", () => {
     }
   });
 
+  it("bounds serialized declaration responses and returns unavailable without an owner", async () => {
+    const repo = await createGitRepo({
+      baseContent: `function before() {\n  return "${"b".repeat(1_000)}";\n}\n`,
+      headContent: `function after() {\n  return "${"h".repeat(1_000)}";\n}\n`,
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-declaration-cap-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const maxBytes = 320;
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest,
+          toolResponseMaxBytes: maxBytes,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      const tool = await loadExtensionTool(
+        prepared.extensionPath,
+        "pipr_read_declaration",
+        prepared.dataPath,
+      );
+      for (const params of [
+        { path: "src/new.ts", ref: "head", rangeId: "range-1" },
+        { path: "src/new.ts", ref: "base", rangeId: "range-left" },
+      ]) {
+        const result = await executeExtensionToolResult(tool, repo.root, params);
+        expect(Buffer.byteLength(result.content[0]?.text ?? "", "utf8")).toBeLessThanOrEqual(
+          maxBytes,
+        );
+        expect(result.details).toMatchObject({ available: true, truncated: true });
+      }
+
+      const data = (await Bun.file(prepared.dataPath).json()) as {
+        structuralAnalysis: { headFiles: Array<{ declarations: unknown[] }> };
+        toolResponseMaxBytes: number;
+      };
+      const headFile = data.structuralAnalysis.headFiles[0];
+      if (!headFile) {
+        throw new Error("expected structural head file");
+      }
+      headFile.declarations = [];
+      await Bun.write(prepared.dataPath, JSON.stringify(data));
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "head",
+          rangeId: "range-1",
+        }),
+      ).resolves.toMatchObject({ available: false });
+
+      data.toolResponseMaxBytes = 1;
+      await Bun.write(prepared.dataPath, JSON.stringify(data));
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          path: "src/new.ts",
+          ref: "head",
+          rangeId: "range-1",
+        }),
+      ).rejects.toThrow("pipr_read_declaration response limit is too small");
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  });
+
+  it("deduplicates base declaration snapshots for ranges with the same owner", async () => {
+    const repo = await createGitRepo({
+      baseContent: "function before() {\n  return 1;\n}\n",
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-declaration-dedupe-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const file = manifest.files[0];
+      const left = file?.commentableRanges.find((range) => range.id === "range-left");
+      if (!file || !left) {
+        throw new Error("expected renamed file and LEFT range");
+      }
+      const duplicateManifest = {
+        ...manifest,
+        files: [
+          {
+            ...file,
+            commentableRanges: [...file.commentableRanges, { ...left, id: "range-left-2" }],
+          },
+        ],
+      };
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest: duplicateManifest,
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      const data = (await Bun.file(prepared.dataPath).json()) as {
+        baseDeclarations: Record<string, { relativePath: string }>;
+      };
+
+      expect(data.baseDeclarations["range-left"]?.relativePath).toBe(
+        data.baseDeclarations["range-left-2"]?.relativePath,
+      );
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  });
+
+  it("shares the aggregate base snapshot file budget across ranges and declarations", async () => {
+    const repo = await createGitRepo({
+      baseContent: "function before() {\n  return 1;\n}\n",
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-snapshot-budget-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const file = manifest.files[0];
+      const left = file?.commentableRanges.find((range) => range.id === "range-left");
+      if (!file || !left) {
+        throw new Error("expected renamed file and LEFT range");
+      }
+      const ranges = Array.from({ length: 513 }, (_, index) => ({
+        ...left,
+        id: `range-left-${index}`,
+      }));
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest: {
+            ...manifest,
+            files: [{ ...file, commentableRanges: ranges }],
+          },
+          toolResponseMaxBytes: 10_000,
+          structuralAnalysis: structuralAnalysisForRenamedFile(),
+        },
+      });
+      const data = (await Bun.file(prepared.dataPath).json()) as {
+        baseDeclarations: Record<string, unknown>;
+        baseRanges: Record<string, { available: boolean }>;
+      };
+
+      expect(Object.values(data.baseRanges).filter((range) => range.available)).toHaveLength(512);
+      expect(data.baseRanges["range-left-512"]?.available).toBe(false);
+      expect(data.baseDeclarations).toEqual({});
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  }, 15_000);
+
+  it("caps aggregate base snapshots at 16 MiB", async () => {
+    const repo = await createGitRepo({
+      baseContent: `${"x".repeat(9 * 1024 * 1024)}\n`,
+    });
+    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-snapshot-bytes-"));
+    try {
+      const manifest = renamedManifest(repo.baseSha, repo.headSha);
+      const file = manifest.files[0];
+      const left = file?.commentableRanges.find((range) => range.id === "range-left");
+      if (!file || !left) {
+        throw new Error("expected renamed file and LEFT range");
+      }
+      const prepared = await preparePiRuntimeReadTools({
+        root: toolRoot,
+        sourceWorkspace: repo.root,
+        request: {
+          manifest: {
+            ...manifest,
+            files: [
+              {
+                ...file,
+                commentableRanges: [
+                  { ...left, id: "range-left-large-1" },
+                  { ...left, id: "range-left-large-2" },
+                ],
+              },
+            ],
+          },
+          toolResponseMaxBytes: 10 * 1024 * 1024,
+        },
+      });
+      const data = (await Bun.file(prepared.dataPath).json()) as {
+        baseRanges: Record<string, { available: boolean }>;
+      };
+
+      expect(data.baseRanges["range-left-large-1"]?.available).toBe(true);
+      expect(data.baseRanges["range-left-large-2"]?.available).toBe(false);
+    } finally {
+      await removeTree(repo.root);
+      await removeTree(toolRoot);
+    }
+  });
+
   it("runs bounded read-only structural searches over explicit safe paths", async () => {
     const repo = await createGitRepo();
     const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-tool-"));
@@ -424,6 +619,22 @@ describe("pipr runtime Pi read tools", () => {
         paths: ["src"],
       })) as { matches: unknown[] };
       expect(capped.matches).toHaveLength(100);
+      const byteCapped = await runAstGrepSearch({
+        cwd: repo.root,
+        params: { pattern: "many", language: "ts", paths: ["src"] },
+        maxBytes: 180,
+        env: process.env,
+      });
+      expect(Buffer.byteLength(JSON.stringify(byteCapped), "utf8")).toBeLessThanOrEqual(180);
+      expect(byteCapped).toMatchObject({ truncated: true });
+      await expect(
+        runAstGrepSearch({
+          cwd: repo.root,
+          params: { pattern: "none", language: "ts", paths: ["src"] },
+          maxBytes: 1,
+          env: process.env,
+        }),
+      ).rejects.toThrow("pipr_ast_grep response limit is too small");
       await expect(
         executeExtensionTool(tool, repo.root, {
           pattern: "malformed",
@@ -431,6 +642,20 @@ describe("pipr runtime Pi read tools", () => {
           paths: ["src"],
         }),
       ).rejects.toThrow("pipr_ast_grep returned invalid output");
+      for (const pattern of [
+        "unsafe-result-traversal",
+        "unsafe-result-absolute",
+        "unsafe-result-git",
+        "unsafe-result-glob",
+      ]) {
+        await expect(
+          executeExtensionTool(tool, repo.root, {
+            pattern,
+            language: "ts",
+            paths: ["src"],
+          }),
+        ).rejects.toThrow("pipr_ast_grep returned an unsafe path");
+      }
       await expect(
         executeExtensionTool(tool, repo.root, {
           pattern: "failure",
@@ -463,6 +688,13 @@ describe("pipr runtime Pi read tools", () => {
           }),
         ).rejects.toThrow();
       }
+      await expect(
+        executeExtensionTool(tool, repo.root, {
+          pattern: "$A",
+          language: "ts",
+          paths: Array.from({ length: 17 }, () => "src"),
+        }),
+      ).rejects.toThrow();
     } finally {
       restoreEnv("PATH", previousPath);
       await removeTree(repo.root);
@@ -847,6 +1079,13 @@ async function writeFakeAstGrepRun(directory: string, argsPath: string): Promise
       '  process.stdout.write("not json");',
       "  process.exit(0);",
       "}",
+      'const unsafeResultPaths = { "unsafe-result-traversal": "../outside.ts", "unsafe-result-absolute": "/outside.ts", "unsafe-result-git": ".git/config", "unsafe-result-glob": "src/*.ts" };',
+      "if (unsafeResultPaths[process.argv[patternIndex + 1]]) {",
+      `  process.stdout.write(JSON.stringify([{ ...${JSON.stringify(
+        match[0],
+      )}, file: unsafeResultPaths[process.argv[patternIndex + 1]] }]));`,
+      "  process.exit(0);",
+      "}",
       'if (process.argv[patternIndex + 1] === "failure") {',
       '  process.stderr.write("untrusted error details");',
       "  process.exit(2);",
@@ -1004,4 +1243,16 @@ async function executeExtensionTool(
 ): Promise<unknown> {
   const result = await tool.execute("test", params, undefined, undefined, { cwd });
   return result.details ?? JSON.parse(result.content[0]?.text ?? "{}");
+}
+
+async function executeExtensionToolResult(
+  tool: {
+    execute: (
+      ...args: unknown[]
+    ) => Promise<{ details?: unknown; content: Array<{ text: string }> }>;
+  },
+  cwd: string,
+  params: Record<string, unknown>,
+) {
+  return await tool.execute("test", params, undefined, undefined, { cwd });
 }
