@@ -1,0 +1,91 @@
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_416479bec6c153::t_13c62cbed5c676 20,27
+  s_416479bec6c153::t_e94cd2c5041cdb 28
+packages/runtime/src/config/project.ts
+  s_416479bec6c153::t_af6673606211e0 189,212-215
+packages/cli/src/runner.ts
+  s_416479bec6c153::t_c3a1f6cf361a78 43,153,441
+packages/runtime/src/host-run/commands.ts
+  s_416479bec6c153::t_13c62cbed5c676 188-189,192
+  s_416479bec6c153::t_fa1ec52f93ad14 122
+  s_416479bec6c153::t_c3a1f6cf361a78 1-2,165,187,190-191
+  s_416479bec6c153::t_dfa7ff5e1b7e21 193-194
+packages/cli/src/tests/main.test.ts
+  s_416479bec6c153::t_9f6266dfc06297 694-695,698-710,712-715,719-726,1206-1211,1225-1229,1245-1251,1289-1302,1304-1314,1316,1319
+  s_416479bec6c153::t_d51f64e48857c7 753
+  s_416479bec6c153::t_8ab1db22ac6117 716-718,739-741,758-760,1315
+  s_416479bec6c153::t_850e5681398701 693,696-697,711,727,730,734,1303
+  s_416479bec6c153::t_ddfc5ccc003cfa 728-729,731-733,735-738,742-752,754-757,761-765
+  s_416479bec6c153::t_d289a9c2f3de17 1317-1318
+  s_416479bec6c153::t_dc80a7d64365e8 1320-1322
+  s_416479bec6c153::t_bc629325ad75f3 1323-1324
+packages/runtime/src/config/tests/config.test.ts
+  s_416479bec6c153::t_f613e24f8846ca 215-221
+  s_416479bec6c153::t_946072283b2609 238-240
+  s_416479bec6c153::t_5b0d7164a91b6e 193-214,222-237,241-242
+packages/runtime/src/pi/contract.ts
+  s_416479bec6c153::t_af6673606211e0 42
+packages/runtime/src/host-run/logging.ts
+  s_416479bec6c153::t_8449d2dd3233aa 67-69
+apps/docs/content/docs/guide/local-runs.mdx
+  s_416479bec6c153::t_d378bdee3a0002 46-55,185,189,202-209,251
+packages/runtime/src/host-run/tests/commands-fixtures.ts
+  s_416479bec6c153::t_13c62cbed5c676 137-142
+  s_416479bec6c153::t_850e5681398701 363,380-386
+apps/docs/content/docs/guide/configuration.mdx
+  s_416479bec6c153::t_c2cf314bd00eb5 147
+  s_416479bec6c153::t_d378bdee3a0002 124-138,142-146,148-165,168
+  s_416479bec6c153::t_850e5681398701 139-141,166-167
+packages/runtime/src/host-run/tests/commands-change-request.test.ts
+  s_416479bec6c153::t_850e5681398701 168-182
+packages/runtime/src/host-run/tests/commands-local-review.test.ts
+  s_416479bec6c153::t_b8e7d07d39e556 10,71-98
+  s_416479bec6c153::t_d211944414bbf0 99-101
+  s_416479bec6c153::t_9883f2eb386326 102
+packages/runtime/src/review/agent/review-run.ts
+  s_416479bec6c153::t_c3a1f6cf361a78 67,479
+packages/runtime/src/host-run/adapter.ts
+  s_416479bec6c153::t_822284eb5a9060 17
+packages/runtime/src/pi/runner.ts
+  s_416479bec6c153::t_4cb64926d0d1be 205,297,304,319-324,326-356
+  s_416479bec6c153::t_2a2451f1706ddb 221-224
+  s_416479bec6c153::t_e09873a478d143 25,293
+  s_416479bec6c153::t_bebcf7d0feadac 239,325
+  s_416479bec6c153::t_b51e80d133bec9 357
+packages/sdk/src/types/config.ts
+  s_416479bec6c153::t_d378bdee3a0002 26
+apps/docs/content/docs/concepts/trust-security.mdx
+  s_416479bec6c153::t_850e5681398701 16
+packages/runtime/src/pi/tests/pi.test.ts
+  s_416479bec6c153::t_a2dc0b92243955 413-414,416-442
+  s_416479bec6c153::t_260c66e2979e48 335,348,364,377
+  s_416479bec6c153::t_2e0f9bb7e1c7ff 378-412
+  s_416479bec6c153::t_367fbdc31d18a4 443-466
+  s_416479bec6c153::t_abbd1db5372d17 415
+packages/runtime/src/review/task/task-runtime.ts
+  s_416479bec6c153::t_c3a1f6cf361a78 85,560
+packages/runtime/src/host-run/types.ts
+  s_416479bec6c153::t_c3a1f6cf361a78 52
+apps/docs/content/docs/reference/cli.mdx
+  s_416479bec6c153::t_d378bdee3a0002 224
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_416479bec6c153::t_d378bdee3a0002 64-65
+packages/runtime/src/review/verifier.ts
+  s_416479bec6c153::t_c3a1f6cf361a78 47,125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "97c02bdea1ec217d203d2d11dbe57b0b196c1cc3",
+  "prompts": {},
+  "sessions": {
+    "s_416479bec6c153": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f94b2-bbfb-7aa2-9d00-92781faa99cc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
