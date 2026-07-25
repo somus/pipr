@@ -192,8 +192,8 @@ assert(
   "Release Please must update the webhook Compose image tag",
 );
 assert(
-  selfReviewWorkflow.includes(`uses: somus/pipr@v${rootPackage.version}`),
-  "Pipr self-review workflow must pin the current release action",
+  selfReviewWorkflow.includes(`uses: somus/pipr@v${selfReviewSdkVersion}`),
+  "Pipr self-review workflow must match the dogfood SDK version",
 );
 assert(
   releaseWorkflow.includes("id-token: write"),
@@ -336,6 +336,14 @@ assert(
 assert(
   releaseWorkflow.includes("bun install --cwd .pipr"),
   "release workflow must refresh the dogfood lockfile after bumping the SDK",
+);
+assert(
+  releaseWorkflow.includes("bun run sync:release-lockfile"),
+  "release workflow must synchronize dogfood release metadata after publish",
+);
+assert(
+  releaseWorkflow.includes("git add .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml"),
+  "release workflow dogfood PR must include the self-review workflow",
 );
 assert(
   releaseWorkflow.includes("bun run check:release-metadata"),

@@ -230,9 +230,10 @@ jobs:
           await Bun.write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
           '
           bun install --cwd .pipr
+          bun run sync:release-lockfile
           bun run check:release-metadata
 
-          if git diff --quiet -- .pipr/package.json .pipr/bun.lock; then
+          if git diff --quiet -- .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml; then
             echo "Dogfood SDK already matches ${PIPR_RELEASE_VERSION}."
             exit 0
           fi
@@ -245,7 +246,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .pipr/package.json .pipr/bun.lock
+          git add .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml
           git commit -m "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}"
           git fetch origin main
           git rebase origin/main
@@ -257,6 +258,7 @@ jobs:
 
           - Updates dogfood \`.pipr\` to the just-published \`@usepipr/sdk@${PIPR_RELEASE_VERSION}\`.
           - Refreshes \`.pipr/bun.lock\` after npm publish.
+          - Pins the self-review workflow to the just-published Pipr Action.
 
           ## Verification
 

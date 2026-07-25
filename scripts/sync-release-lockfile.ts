@@ -98,7 +98,7 @@ await Bun.write(webhookComposePath, webhookCompose);
 let selfReviewWorkflow = await Bun.file(selfReviewWorkflowPath).text();
 selfReviewWorkflow = selfReviewWorkflow.replace(
   /somus\/pipr@v[0-9]+\.[0-9]+\.[0-9]+/g,
-  `somus/pipr@v${rootPackage.version}`,
+  `somus/pipr@v${selfReviewSdkVersion}`,
 );
 await Bun.write(selfReviewWorkflowPath, selfReviewWorkflow);
 
