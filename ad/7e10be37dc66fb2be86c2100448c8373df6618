@@ -1,0 +1,31 @@
+Dockerfile
+  s_9a4e88dda3662a::t_31f79bc126c722 1,6
+apps/docs/content/docs/concepts/runtime.mdx
+  s_9a4e88dda3662a::t_6d2af84846807b 164
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_9a4e88dda3662a::t_7e312afc24b2f6 135
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_9a4e88dda3662a::t_acf7dda1202f55 306
+build/ast-grep/Dockerfile
+  s_9a4e88dda3662a::t_a2728ea0ab07d7 1-40
+build/ast-grep/README.md
+  s_9a4e88dda3662a::t_8c023e39a26822 1-76
+packages/e2e/container-check.ts
+  s_9a4e88dda3662a::t_a84940edd2c35d 226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ad7e10be37dc66fb2be86c2100448c8373df6618",
+  "prompts": {},
+  "sessions": {
+    "s_9a4e88dda3662a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f99d2-4483-7df2-a9b3-f56147530de9",
+        "model": "unknown"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
