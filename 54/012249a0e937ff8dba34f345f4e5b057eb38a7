@@ -1,0 +1,22 @@
+scripts/check-release-metadata.ts
+  s_48810bcb4432a5::t_afd5843bb41ed5 38,317-335
+.github/workflows/release.yml
+  s_48810bcb4432a5::t_b5581ea2f6d90c 111-112,195-210,212-216,219-220,276
+  s_48810bcb4432a5::t_682a102f69c1bb 211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "54012249a0e937ff8dba34f345f4e5b057eb38a7",
+  "prompts": {},
+  "sessions": {
+    "s_48810bcb4432a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9a32-3894-7233-a379-d52416dcf0f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
