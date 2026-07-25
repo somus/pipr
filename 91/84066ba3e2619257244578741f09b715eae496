@@ -1,6 +1,7 @@
 apps/docs/content/docs/guide/custom-tasks.mdx
   s_416479bec6c153::t_13c62cbed5c676 27
   s_416479bec6c153::t_e94cd2c5041cdb 28
+  s_416479bec6c153::t_a11ad2ee56ce95 20
 packages/runtime/src/config/project.ts
   s_416479bec6c153::t_af6673606211e0 247,270-273
 packages/cli/src/runner.ts
@@ -19,10 +20,13 @@ packages/cli/src/tests/main.test.ts
   s_416479bec6c153::t_d289a9c2f3de17 1312-1313
   s_416479bec6c153::t_dc80a7d64365e8 1315-1317
   s_416479bec6c153::t_bc629325ad75f3 1318-1319
+  s_416479bec6c153::t_a11ad2ee56ce95 1326-1327
 packages/runtime/src/config/tests/config.test.ts
   s_416479bec6c153::t_f613e24f8846ca 215-221
   s_416479bec6c153::t_946072283b2609 238-240
   s_416479bec6c153::t_5b0d7164a91b6e 193-208,210-214,222-237,241-242
+  s_416479bec6c153::t_17d6ea67c053e3 209
+  s_416479bec6c153::t_c487ca4781d563 191
 packages/runtime/src/pi/contract.ts
   s_416479bec6c153::t_af6673606211e0 43
 packages/runtime/src/host-run/logging.ts
