@@ -1,0 +1,235 @@
+apps/docs/content/docs/index.mdx
+  s_416479bec6c153::t_2b39e209abbd95 51
+packages/sdk/src/schema.ts
+  s_416479bec6c153::t_2b39e209abbd95 2,4,40-43
+packages/runtime/src/config/recipes/ci-triage-command.ts
+  s_416479bec6c153::t_2b39e209abbd95 15
+packages/sdk/src/types/config.ts
+  s_416479bec6c153::t_2b39e209abbd95 5-6,34,44
+apps/docs/content/docs/guide/local-runs.mdx
+  s_416479bec6c153::t_2b39e209abbd95 117,120-121,236
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_416479bec6c153::t_2b39e209abbd95 47,112,119
+.github/workflows/ci.yml
+  s_416479bec6c153::t_2b39e209abbd95 148
+apps/docs/content/docs/concepts/comments.mdx
+  s_416479bec6c153::t_2b39e209abbd95 40,58,61-62,201,228
+packages/runtime/src/pi/contract.ts
+  s_416479bec6c153::t_2b39e209abbd95 1,4
+packages/runtime/src/hosts/github/publication-client.ts
+  s_416479bec6c153::t_2b39e209abbd95 51,69-70,100-101,356
+packages/runtime/src/review/tests/verifier.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 337-395,424,452-463,574,590,595-596,598
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_416479bec6c153::t_2b39e209abbd95 67,366,373
+packages/runtime/src/review/tests/publish.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 183-188,540-560,573-578,933-940,1044-1049,1160
+packages/runtime/src/review/tests/agent-prompt.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 418,420,459
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_416479bec6c153::t_2b39e209abbd95 46,139,146
+packages/runtime/src/config/recipes/pr-hygiene.ts
+  s_416479bec6c153::t_2b39e209abbd95 5,17
+apps/docs/content/docs/guide/quickstart.mdx
+  s_416479bec6c153::t_2b39e209abbd95 154,161,188
+packages/runtime/src/config/recipes/interactive-ask.ts
+  s_416479bec6c153::t_2b39e209abbd95 15
+packages/runtime/src/config/recipes/quality-gate.ts
+  s_416479bec6c153::t_2b39e209abbd95 5,17
+apps/docs/content/docs/reference/cli.mdx
+  s_416479bec6c153::t_2b39e209abbd95 188
+packages/runtime/src/config/tests/config.test.ts
+  s_416479bec6c153::t_6425d1d0763a2d 209
+  s_416479bec6c153::t_2b39e209abbd95 259,284,386,395-399,403,414-453,526-530,559,576-580
+packages/runtime/src/host-run/tests/commands-fixtures.ts
+  s_416479bec6c153::t_2b39e209abbd95 387,582,862-869
+skills/pipr-setup/SKILL.md
+  s_416479bec6c153::t_2b39e209abbd95 90
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_416479bec6c153::t_2b39e209abbd95 46,237,244
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_416479bec6c153::t_2b39e209abbd95 50,443,450
+packages/runtime/src/config/recipes/bug-hunter.ts
+  s_416479bec6c153::t_2b39e209abbd95 16,24,31-46
+packages/runtime/src/config/tests/init-project.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 48-50,85
+packages/sdk/src/review-contract.ts
+  s_416479bec6c153::t_2b39e209abbd95 21-25,27,50-54,66-68
+  s_416479bec6c153::t_1fe6a21ac7a175 69-70
+apps/docs/content/docs/recipes/ci-triage-command.mdx
+  s_416479bec6c153::t_2b39e209abbd95 46,141,148
+apps/docs/content/docs/reference/architecture.mdx
+  s_416479bec6c153::t_2b39e209abbd95 60
+packages/runtime/src/hosts/github/publication-thread-actions.ts
+  s_416479bec6c153::t_2b39e209abbd95 217-220,233-245
+  s_416479bec6c153::t_c155b5fb6ee436 246-247
+packages/runtime/src/config/recipes/dependency-risk.ts
+  s_416479bec6c153::t_2b39e209abbd95 15
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_416479bec6c153::t_2b39e209abbd95 46,96,103
+README.md
+  s_416479bec6c153::t_2b39e209abbd95 70,77,114,121-129,141,189
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_416479bec6c153::t_2b39e209abbd95 3,12,47,55,62-77,102,109,154
+packages/runtime/src/config/project.ts
+  s_416479bec6c153::t_2b39e209abbd95 5-10,40-62,91-92,108-136,248
+packages/runtime/src/config/recipes/fix-suggestions.ts
+  s_416479bec6c153::t_2b39e209abbd95 16
+packages/evals/src/runner.ts
+  s_416479bec6c153::t_2b39e209abbd95 374,383-386,401
+.pipr/config.ts
+  s_416479bec6c153::t_2b39e209abbd95 1,13,24-27,31,33-45,48-49,51-52,55-129,139,142-160,162,165,169-170,180-183,185,192-220,225-235,240,263,265,269,273,281-284,308
+apps/docs/content/docs/recipes/index.mdx
+  s_416479bec6c153::t_2b39e209abbd95 76-77
+packages/evals/src/fake-pi.ts
+  s_416479bec6c153::t_2b39e209abbd95 92-98,139-141,191-199,217-219
+packages/runtime/src/config/recipes/plugin-tool-review.ts
+  s_416479bec6c153::t_2b39e209abbd95 312
+packages/runtime/src/config/tests/init-recipes.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 73-76,84-86,129-131,138,161-222,240-257,264,297,309-317,331-344,365-382,389,399-488,1050-1059,1142-1148,1255-1258,1294-1308,1314-1318,1369-1378,1384-1388,1591-1594,1839-1844
+packages/runtime/src/config/check-settings.ts
+  s_416479bec6c153::t_2b39e209abbd95 1-37
+docs/adr/0002-docker-action-with-read-only-pi-workspace.md
+  s_416479bec6c153::t_2b39e209abbd95 7
+packages/cli/src/tests/main.test.ts
+  s_416479bec6c153::t_a68e1d9790355f 1246
+  s_416479bec6c153::t_2b39e209abbd95 528,549,687,1072,1074-1075,1243,1320-1325,1328-1337
+  s_416479bec6c153::t_31ad34d93f9c89 1326-1327
+packages/runtime/src/review/agent/review-run.ts
+  s_416479bec6c153::t_2b39e209abbd95 44-47,115-116,119,139,208-214,226,234,246-247,249-268,287-312
+  s_416479bec6c153::t_723380279f2c4c 313
+packages/sdk/src/tests/index.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 42,46,197-200,209-213,391,399,403-425,475-482,488-492,522-525,547,556-560,575-578,589-590,599-603,633-636,658-711,721-724,739,947-951,1220-1239,1267,1274,1293,1309,1450,1454,1456-1459,1543-1548
+packages/sdk/src/types/agent.ts
+  s_416479bec6c153::t_2b39e209abbd95 2,15
+apps/docs/source.config.ts
+  s_416479bec6c153::t_2b39e209abbd95 26-27,29-30
+apps/docs/content/docs/guide/github-action.mdx
+  s_416479bec6c153::t_2b39e209abbd95 21,28,73,79,81,86,91-100
+  s_416479bec6c153::t_10cfe352625e6e 101
+apps/docs/content/docs/guide/troubleshooting.mdx
+  s_416479bec6c153::t_2b39e209abbd95 110,205-207
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_416479bec6c153::t_2b39e209abbd95 40-44,55,66-69,73,75-87,90-91,93-94,97-180,190,193-206,208,211,215-216,226-229,231,238-266,271-281,286,309,311,315,319,353,369,376,417,423
+apps/docs/scripts/sync-recipes.ts
+  s_416479bec6c153::t_2b39e209abbd95 18,22,178,185,191
+packages/runtime/src/config/recipes/changelog-draft.ts
+  s_416479bec6c153::t_2b39e209abbd95 15
+packages/e2e/scenarios.ts
+  s_416479bec6c153::t_2b39e209abbd95 59,64,102,108,155,249-252
+packages/runtime/src/config/recipes/default-review.ts
+  s_416479bec6c153::t_2b39e209abbd95 15,23-34
+packages/runtime/src/config/recipes/pr-briefing.ts
+  s_416479bec6c153::t_2b39e209abbd95 15
+packages/runtime/src/config/recipes/types.ts
+  s_416479bec6c153::t_2b39e209abbd95 19
+packages/runtime/src/config/recipes.ts
+  s_416479bec6c153::t_2b39e209abbd95 79-82
+packages/runtime/src/config/tests/ts-loader.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 84-87,110-114,245-248,293-296,331-335,362-365,411-415
+apps/docs/content/docs/reference/sdk-reference.mdx
+  s_416479bec6c153::t_2b39e209abbd95 27,41,56,62,68,77-83,125-129,140,142,145-146,148-151,155,379,405,421-428,476,512
+packages/runtime/src/hosts/github/tests/contract.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 487-492
+apps/docs/content/docs/concepts/runtime.mdx
+  s_416479bec6c153::t_2b39e209abbd95 282
+packages/runtime/src/review/tests/task-runtime-context.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 25,229,232-233
+packages/sdk/src/index.ts
+  s_416479bec6c153::t_2b39e209abbd95 12-17,20,24,49,56,99-100,111,120-122
+  s_416479bec6c153::t_94b1cc226db3ed 123
+docs/adr/0005-pipr-owned-comment-publishing.md
+  s_416479bec6c153::t_2b39e209abbd95 12-13
+packages/runtime/src/config/official-github-workflow.ts
+  s_416479bec6c153::t_2b39e209abbd95 1-4,25,32,35-39,48
+packages/runtime/src/config/recipes/security-sast.ts
+  s_416479bec6c153::t_2b39e209abbd95 5,37
+packages/runtime/src/host-run/tests/git-project.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 40,45-48,60-63
+packages/runtime/src/config/tests/helpers/third-party-config.ts
+  s_416479bec6c153::t_2b39e209abbd95 65
+packages/runtime/src/review/task/task-output.ts
+  s_416479bec6c153::t_2b39e209abbd95 275-277
+docs/adr/0004-pipr-owned-review-run.md
+  s_416479bec6c153::t_2b39e209abbd95 5,10-13,18
+apps/docs/content/docs/guide/configuration.mdx
+  s_416479bec6c153::t_2b39e209abbd95 28,42-50,57,63,70,73-74,113,170,299
+packages/runtime/src/review/tests/review-schema.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 1-116
+packages/runtime/src/config/recipes/multi-agent-review.ts
+  s_416479bec6c153::t_2b39e209abbd95 5,17,25
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 5,27,36-200,208,226-229,233-242,244,255-284,306,328,332-335,337,394-399,727,742-745,747-755,757,761,791,809,815,831-838,877-879,920,925,927,931,941-943,1114-1119,1132-1135,1301-1303,1309-1311,1348-1350,1356-1358,1395-1397,1490-1493,1523-1525,1556-1558,1630-1632,1736-1739,1745-1748,1763-1766,1803-1806,1823-1826,1833-1838,1854-1857,1864-1869,1929-1933
+apps/docs/content/docs/recipes/multi-agent-review.mdx
+  s_416479bec6c153::t_2b39e209abbd95 47,55,150,157
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_416479bec6c153::t_2b39e209abbd95 46,103,110
+docs/CONTEXT.md
+  s_416479bec6c153::t_2b39e209abbd95 60-63
+packages/runtime/src/review/agent/agent-prompt.ts
+  s_416479bec6c153::t_2b39e209abbd95 228
+apps/docs/content/docs/recipes/default-review.mdx
+  s_416479bec6c153::t_2b39e209abbd95 3,12,46,54-65,109,116
+packages/runtime/src/review/verifier.ts
+  s_416479bec6c153::t_2b39e209abbd95 96-99,104,122,303-307,312,321-322,343-376
+  s_416479bec6c153::t_5e21b3f49c02e3 377-379
+packages/sdk/src/builder.ts
+  s_416479bec6c153::t_2b39e209abbd95 7,34,41,121-123,131,151-153,259-261,356-367,381-386,430-435,438-440,442-443,446-451,454,456,458-465,472-473,489-490,497-512,528-567,754
+scripts/tests/release-scripts.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 347-357,514-516
+  s_416479bec6c153::t_3475814f49d267 517
+packages/runtime/src/review/agent/review-schema.ts
+  s_416479bec6c153::t_2b39e209abbd95 37-118
+packages/runtime/src/config/recipes/diff-diagnostics.ts
+  s_416479bec6c153::t_2b39e209abbd95 16
+packages/runtime/src/review/tests/task-runtime-outputs.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 128-152
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_416479bec6c153::t_2b39e209abbd95 47,198,205
+packages/evals/src/tests/runner.test.ts
+  s_416479bec6c153::t_2b39e209abbd95 84-88,95-96
+.github/workflows/pipr.yml
+  s_416479bec6c153::t_2b39e209abbd95 5,12
+apps/docs/content/docs/reference/code-host-adapters.mdx
+  s_416479bec6c153::t_2b39e209abbd95 15-19
+packages/runtime/src/config/recipes/rich-review.ts
+  s_416479bec6c153::t_2b39e209abbd95 9-13,24,35-38,42,44-56,59-60,62-63,66-149,159,162-175,177,180,184-185,195-198,200,207-235,240-250,255,278,280,284,288,322
+apps/docs/content/docs/guide/entrypoints.mdx
+  s_416479bec6c153::t_2b39e209abbd95 19,26-27,37,40-41
+packages/runtime/src/review/tests/task-runtime-fixtures.ts
+  s_416479bec6c153::t_2b39e209abbd95 305-306,528,544-561
+  s_416479bec6c153::t_19e56c31d474af 562-563
+skills/pipr-setup/references/config-patterns.md
+  s_416479bec6c153::t_2b39e209abbd95 7-17,29,37-44,50,58-61,95-98,130-133,160-161,179
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_416479bec6c153::t_2b39e209abbd95 47,624,631
+apps/docs/content/docs/guide/custom-tasks.mdx
+  s_416479bec6c153::t_2b39e209abbd95 178
+  s_416479bec6c153::t_31ad34d93f9c89 20
+  s_416479bec6c153::t_592e846aee3775 179
+apps/docs/content/docs/concepts/index.mdx
+  s_416479bec6c153::t_2b39e209abbd95 26,34
+packages/runtime/src/host-run/runtime-checks.ts
+  s_416479bec6c153::t_2b39e209abbd95 2,39-40
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_416479bec6c153::t_2b39e209abbd95 47,323,330
+packages/sdk/src/types/task.ts
+  s_416479bec6c153::t_2b39e209abbd95 34,36-39,102-105,137-140,154,162-186
+  s_416479bec6c153::t_2f4ae9d9c081af 187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "8f3522dcdd2f2d5678c98d26794e55f6981a88f4",
+  "prompts": {},
+  "sessions": {
+    "s_416479bec6c153": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f94b2-bbfb-7aa2-9d00-92781faa99cc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
