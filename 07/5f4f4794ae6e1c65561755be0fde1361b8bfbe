@@ -1,0 +1,29 @@
+.github/workflows/ci.yml
+  s_e6bf4218597da0::t_bc6ab6c3c1ebd2 25,30,50,53,90-91,104-105,118,121,138-139,157-158
+.github/workflows/evals.yml
+  s_e6bf4218597da0::t_bc6ab6c3c1ebd2 20
+.github/workflows/docker-image.yml
+  s_e6bf4218597da0::t_bc6ab6c3c1ebd2 17-18
+.github/workflows/pipr.yml
+  s_e6bf4218597da0::t_bc6ab6c3c1ebd2 33
+.github/workflows/release-please.yml
+  s_e6bf4218597da0::t_bc6ab6c3c1ebd2 24,29
+.github/workflows/release.yml
+  s_e6bf4218597da0::t_bc6ab6c3c1ebd2 43,114,118,123,176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "075f4f4794ae6e1c65561755be0fde1361b8bfbe",
+  "prompts": {},
+  "sessions": {
+    "s_e6bf4218597da0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f99dd-9531-7bd1-9e2a-bd357a5edf55",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
