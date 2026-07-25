@@ -1,0 +1,40 @@
+packages/runtime/src/observability/tests/archive.test.ts
+  s_dea394ec8da4dc::t_b26e525703c874 259-270
+packages/runtime/src/observability/archive-extraction.ts
+  s_dea394ec8da4dc::t_78a8afb511ff78 147-148,156
+packages/cli/src/runs.ts
+  s_dea394ec8da4dc::t_c8e6dfeefbde17 281,284-287,292-297
+  s_dea394ec8da4dc::t_78a8afb511ff78 288
+  s_dea394ec8da4dc::t_eccfadcc70bb6a 298-299
+packages/cli/src/tests/main.test.ts
+  s_dea394ec8da4dc::t_b26e525703c874 56,66
+packages/runtime/src/observability/recorder.ts
+  s_dea394ec8da4dc::t_78a8afb511ff78 738,740-745
+packages/cli/src/tests/runs.test.ts
+  s_dea394ec8da4dc::t_b26e525703c874 132-133,137,140,145
+  s_dea394ec8da4dc::t_c8e6dfeefbde17 1,134-136,138-139,141-144
+  s_dea394ec8da4dc::t_139c1834359624 131
+packages/runtime/src/observability/otlp.ts
+  s_dea394ec8da4dc::t_78a8afb511ff78 33-36,49,52-55,74-75,77,81-84
+  s_dea394ec8da4dc::t_a78c46acf53c67 85-86
+packages/runtime/src/observability/tests/recorder.test.ts
+  s_dea394ec8da4dc::t_b26e525703c874 284-301
+packages/cli/src/runner.ts
+  s_dea394ec8da4dc::t_78a8afb511ff78 330,333-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "bc5750efd6d56f638bf4e1cda81d213bdaa60faa",
+  "prompts": {},
+  "sessions": {
+    "s_dea394ec8da4dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7ef7-96df-75a0-8d1e-8df4fab8bb81",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
