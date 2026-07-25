@@ -137,6 +137,27 @@ describe("run store retention", () => {
       await readActiveCaptureMarker(activePath, new Date("2026-07-20T00:00:00.000Z")),
     ).toMatchObject({ active: false });
   });
+
+  it("preserves captures when an active marker cannot be read safely", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-retention-"));
+    temporaryDirectories.push(root);
+    const executionId = "9".repeat(32);
+    const directory = path.join(root, executionId);
+    const activePath = path.join(directory, "active.json");
+    await mkdir(directory);
+    await writeFile(activePath, "{");
+    await writeFile(path.join(directory, "partial.log"), "x".repeat(1_000));
+
+    await expect(readActiveCaptureMarker(activePath)).rejects.toThrow();
+    const result = await enforceRunStoreRetention({
+      rootDirectory: root,
+      retentionDays: 14,
+      maxBytes: 100,
+    });
+
+    expect(result.quota).toEqual([]);
+    expect(await directoryExists(directory)).toBe(true);
+  });
 });
 
 async function writeFinishedRun(

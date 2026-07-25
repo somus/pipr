@@ -79,12 +79,17 @@ export async function readActiveCaptureMarker(
     };
   } catch (error) {
     if (isMissingFileError(error)) return undefined;
-    return undefined;
+    throw error;
   }
 }
 
 async function activeCaptureExists(activePath: string): Promise<boolean> {
-  return (await readActiveCaptureMarker(activePath))?.active ?? false;
+  try {
+    return (await readActiveCaptureMarker(activePath))?.active ?? false;
+  } catch {
+    // Retention must not delete a capture whose active marker cannot be read safely.
+    return true;
+  }
 }
 
 async function readStoredManifest(directory: string): Promise<RunBundleManifest | undefined> {

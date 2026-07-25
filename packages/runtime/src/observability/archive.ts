@@ -481,7 +481,9 @@ async function readStoredRecord(rootDirectory: string, executionId: string): Pro
   try {
     return recordFromManifest((await loadValidatedRunBundle(directory)).manifest);
   } catch {
-    const active = await readActiveCaptureMarker(path.join(directory, "active.json"));
+    const active = await readActiveCaptureMarker(path.join(directory, "active.json")).catch(
+      () => undefined,
+    );
     return {
       executionId,
       ...(active?.startedAt ? { startedAt: active.startedAt } : {}),
