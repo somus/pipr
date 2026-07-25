@@ -140,6 +140,11 @@ export default definePipr((pipr) => {
   });
 
   pipr.config({
+    limits: {
+      diffManifest: {
+        maxShards: 8,
+      },
+    },
     publication: {
       maxInlineComments: 8,
       autoResolve: {
