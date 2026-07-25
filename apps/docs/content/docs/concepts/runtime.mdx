@@ -161,7 +161,7 @@ Diff Manifest prompt injection is reserved opt-in. When `ctx.pi.run(...)` receiv
 
 ### Condensed reads
 
-Pipr uses ast-grep outlines as best-effort structural context. Supported files can include `changedSymbols` on the file and an `Enclosing declaration: <kind> <name>` summary on each range. Pipr preserves caller-provided metadata, bounds derived metadata, and keeps structural symbols and summaries in full, compressed, and condensed manifests. The Docker Action includes ast-grep `0.44.1`; local runs continue without structural metadata when the executable or language support is unavailable.
+Pipr uses ast-grep outlines as best-effort structural context. Supported files can include `changedSymbols` on the file and an `Enclosing declaration: <kind> <name>` summary on each range. Pipr preserves caller-provided metadata, bounds derived metadata, and keeps structural symbols and summaries in full, compressed, and condensed manifests. The Docker Action includes ast-grep `0.45.0`; local runs continue without structural metadata when the executable or language support is unavailable.
 
 If the full manifest is too large but its condensed form fits, Pipr sends one condensed manifest and attaches bounded Diff Read Tools. When structural context is available and the reviewed head is the current workspace, condensed reviews also receive:
 
