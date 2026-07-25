@@ -1,0 +1,23 @@
+.github/workflows/pipr.yml
+  s_fbbcc7f4f67718::t_94fa5c9c068f2b 36
+.pipr/package.json
+  s_fbbcc7f4f67718::t_94fa5c9c068f2b 4
+.pipr/bun.lock
+  s_fbbcc7f4f67718::t_e46c48d74777c8 7,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f4d8056991ecc94f9c07209eda5304086394ff3f",
+  "prompts": {},
+  "sessions": {
+    "s_fbbcc7f4f67718": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f944d-50d0-75a1-9a33-0dcbce2ede63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
