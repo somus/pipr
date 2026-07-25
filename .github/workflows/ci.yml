@@ -145,7 +145,7 @@ jobs:
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run check:docs
       - run: bun run docker:docs-e2e
-      - run: bunx playwright install --with-deps chromium
+      - run: bun run --cwd apps/docs playwright install --with-deps chromium
       - run: bun run --cwd apps/docs test:browser
 
   docker-e2e:

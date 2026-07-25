@@ -344,6 +344,17 @@ describe("developer checks", () => {
     expect(turbo.tasks?.["test:generated"]?.dependsOn).toContain("typegen");
   });
 
+  it("installs the docs browser with the pinned workspace Playwright", () => {
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const installStep = workflow.jobs.docs?.steps?.find((step) =>
+      step.run?.includes("playwright install"),
+    );
+
+    expect(installStep?.run).toBe(
+      "bun run --cwd apps/docs playwright install --with-deps chromium",
+    );
+  });
+
   it("runs the runtime CI package gate once", () => {
     const workflow = parseWorkflow(".github/workflows/ci.yml");
     const matrix = workflow.jobs.packages?.strategy?.matrix?.include ?? [];
