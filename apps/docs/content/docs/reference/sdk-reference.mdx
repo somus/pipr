@@ -305,7 +305,7 @@ Task handlers use this context to read change data, run Pi, publish results, and
 
 For languages supported by the installed ast-grep executable, Pipr can add `DiffManifestFile.changedSymbols` and `CommentableRange.summary` values derived from enclosing declarations. Caller-provided values take precedence. Derived values are best effort and bounded to 32 symbols per file, 120 characters per symbol, 200 characters per summary, and 32 KiB across one manifest. Compressed and automatically condensed projections retain symbols and summaries but continue to remove `signals` and range previews as applicable.
 
-The Docker Action provides ast-grep `0.44.1`. Local runtimes use the same structural behavior when ast-grep is on `PATH`; otherwise, they return the ordinary Diff Manifest without failing the Review Run.
+The Docker Action provides ast-grep `0.45.0`. Local runtimes use the same structural behavior when ast-grep is on `PATH`; otherwise, they return the ordinary Diff Manifest without failing the Review Run.
 
 `ctx.command.reply(...)` emits a normal change-request comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
 

@@ -223,7 +223,7 @@ function assertAstGrepContract(image: string): void {
     ],
     sourceRoot,
   );
-  if (version.stdout.trim() !== "ast-grep 0.44.1") {
+  if (version.stdout.trim() !== "ast-grep 0.45.0") {
     throw new Error(`container ast-grep version mismatch: '${version.stdout.trim()}'`);
   }
   runOutput(
