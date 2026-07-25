@@ -1,0 +1,61 @@
+packages/runtime/src/observability/archive.ts
+  s_dea394ec8da4dc::t_3826e4be5cee4d 226
+  s_dea394ec8da4dc::t_41d7718b32c168 326,330-346
+  s_dea394ec8da4dc::t_4312ae3690bf9d 105-126,227-231,264-288,293-325,327-329,347
+  s_dea394ec8da4dc::t_2e0f753c43aac1 348
+packages/runtime/src/observability/types.ts
+  s_dea394ec8da4dc::t_118685009a3b87 50,53-55
+packages/runtime/src/observability/tests/archive.test.ts
+  s_dea394ec8da4dc::t_41d7718b32c168 240
+  s_dea394ec8da4dc::t_6d2b23e546cfba 207,209
+  s_dea394ec8da4dc::t_1101cf758b0437 117-140,174-177,220-239,241-242
+packages/runtime/src/observability/recorder.ts
+  s_dea394ec8da4dc::t_6d2b23e546cfba 1100,1104
+  s_dea394ec8da4dc::t_58db79e93eaba1 370-374,381-390,597-607,1047,1057-1061,1079-1081,1086-1099,1101-1103,1105-1107,1117-1120
+  s_e3011e7202345a::t_4f4872e0c2bb22 1121
+packages/runtime/src/review/task/task-runtime.ts
+  s_dea394ec8da4dc::t_118685009a3b87 266-269
+packages/runtime/src/review/tests/task-runtime-pi.test.ts
+  s_dea394ec8da4dc::t_c94821767db5e1 7,204,226-231,261-272
+  s_e3011e7202345a::t_ddc0392b60584a 273
+packages/cli/src/tests/runs.test.ts
+  s_dea394ec8da4dc::t_41d7718b32c168 93-95
+  s_dea394ec8da4dc::t_c0eea0c5a64ea8 86-92,505-513,519-548,553-564
+  s_dea394ec8da4dc::t_681a11b0334775 565
+packages/runtime/src/observability/tests/recorder.test.ts
+  s_dea394ec8da4dc::t_1101cf758b0437 143-237
+packages/cli/src/runs.ts
+  s_dea394ec8da4dc::t_87083445a16512 728-738,742-764
+  s_dea394ec8da4dc::t_22979704cc348f 695,707-708,712-715,739-741
+  s_dea394ec8da4dc::t_30eb2d96edafc8 716-718,725-727
+  s_dea394ec8da4dc::t_a90a00786678b6 765
+  s_dea394ec8da4dc::t_e7404a8138a2f4 719-724
+packages/runtime/src/review/agent/review-run.ts
+  s_dea394ec8da4dc::t_118685009a3b87 68,81,137-142,144,150,764,790,823,841,844-847,860-866,868
+  s_dea394ec8da4dc::t_3826e4be5cee4d 867
+  s_dea394ec8da4dc::t_9bf195065f88e8 869-870
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "b921aa86dabdceb0387ca5890cf250595089c64f",
+  "prompts": {},
+  "sessions": {
+    "s_dea394ec8da4dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7ef7-96df-75a0-8d1e-8df4fab8bb81",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    },
+    "s_e3011e7202345a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f99ea-ddee-7b21-ad95-3073b5473809",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
