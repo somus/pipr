@@ -22,6 +22,7 @@ export type PiRunOptions = {
   prompt: string;
   env?: NodeJS.ProcessEnv;
   piExecutable?: string;
+  piAgentDir?: string;
   timeoutSeconds?: number;
   builtinTools?: readonly PiReadOnlyToolName[];
   runtimeTools?: PiRuntimeReadToolRequest;
@@ -201,6 +202,7 @@ async function runPiAttempt(
   options: PiRunOptions,
   workspaceScope?: PiWorkspaceScope,
 ): Promise<PiRunResult> {
+  assertPiAuthentication(options);
   const started = Date.now();
   const processIdentity = resolvePiProcessIdentity(options.env ?? process.env);
   assertWorkspaceScope(options.workspace, processIdentity, workspaceScope);
@@ -216,7 +218,10 @@ async function runPiAttempt(
         })
       : undefined;
     preparedCustomTools = options.customTools
-      ? await preparePiCustomTools({ root: sandbox.root, request: options.customTools })
+      ? await preparePiCustomTools({
+          root: sandbox.root,
+          request: options.customTools,
+        })
       : undefined;
     preparedTools = mergePreparedPiTools(runtimeRead, preparedCustomTools);
     const promptPath = path.join(sandbox.root, "prompt.md");
@@ -231,7 +236,7 @@ async function runPiAttempt(
     await sealPiRunSandbox(sandbox, processIdentity);
     return await runProcess(options.piExecutable ?? "pi", args, {
       cwd: sandbox.workspace,
-      env: buildPiEnv(options.provider, sandbox, options.env, preparedTools),
+      env: buildPiEnv(options.provider, sandbox, options.env, preparedTools, options.piAgentDir),
       processIdentity,
       started,
       timeoutSeconds: options.timeoutSeconds,
@@ -285,17 +290,18 @@ function buildPiEnv(
   sandbox: Pick<PiRunSandbox, "home" | "sessionDir" | "tmp">,
   sourceEnv: NodeJS.ProcessEnv = process.env,
   runtimeTools?: PreparedPiTools,
+  piAgentDir?: string,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     HOME: sandbox.home,
-    PI_CODING_AGENT_DIR: path.join(sandbox.home, ".pi", "agent"),
+    PI_CODING_AGENT_DIR: resolvePiAgentDir(provider, sandbox.home, piAgentDir),
     PI_CODING_AGENT_SESSION_DIR: sandbox.sessionDir,
     PI_TELEMETRY: "0",
     PIPR_PROVIDER_ID: provider.id,
-    PIPR_PROVIDER_API_KEY_ENV: provider.apiKeyEnv,
     TMPDIR: sandbox.tmp,
     USER: "pipr",
   };
+  addProviderApiKeyEnv(env, sourceEnv, provider);
   if (runtimeTools?.runtimeRead) {
     env.PIPR_RUNTIME_TOOLS_DATA = runtimeTools.runtimeRead.dataPath;
   }
@@ -307,8 +313,46 @@ function buildPiEnv(
   for (const key of ["BUN_INSTALL", "LANG", "PATH"]) {
     copyEnvValue(env, sourceEnv, key);
   }
-  copyEnvValue(env, sourceEnv, provider.apiKeyEnv);
   return env;
+}
+
+function assertPiAuthentication(
+  options: Pick<PiRunOptions, "provider" | "env" | "piAgentDir">,
+): void {
+  const apiKeyEnv = options.provider.apiKeyEnv;
+  if (apiKeyEnv) {
+    if (!(options.env ?? process.env)[apiKeyEnv]) {
+      throw new Error(`Missing provider env var for model '${options.provider.id}': ${apiKeyEnv}`);
+    }
+    return;
+  }
+  if (!options.piAgentDir) {
+    throw new Error(
+      `Model '${options.provider.id}' does not declare apiKey and requires a Pi agent directory`,
+    );
+  }
+}
+
+function resolvePiAgentDir(
+  provider: ProviderConfig,
+  sandboxHome: string,
+  piAgentDir?: string,
+): string {
+  return provider.apiKeyEnv === undefined && piAgentDir
+    ? piAgentDir
+    : path.join(sandboxHome, ".pi", "agent");
+}
+
+function addProviderApiKeyEnv(
+  env: NodeJS.ProcessEnv,
+  sourceEnv: NodeJS.ProcessEnv,
+  provider: ProviderConfig,
+): void {
+  if (!provider.apiKeyEnv) {
+    return;
+  }
+  env.PIPR_PROVIDER_API_KEY_ENV = provider.apiKeyEnv;
+  copyEnvValue(env, sourceEnv, provider.apiKeyEnv);
 }
 
 function mergePreparedPiTools(

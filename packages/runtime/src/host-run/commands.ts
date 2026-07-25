@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import {
   type InitOfficialMinimalProjectResult,
   initOfficialMinimalProject,
@@ -117,7 +119,7 @@ export async function runLocalReviewCommand(
   });
   const runtime = await loadRuntimeProject({
     ...options,
-    requireProviderEnv: true,
+    requireProviderEnv: false,
   });
   log?.notice("local config loaded", {
     source: runtime.settings.source,
@@ -160,6 +162,7 @@ export async function runLocalReviewCommand(
     selectedTasks,
     emptyTasksReason: "No change-request tasks are configured for local review",
     piExecutable: options.piExecutable,
+    piAgentDir: resolveLocalPiAgentDir(options),
     structuralHeadRef: includeWorkingTree ? undefined : headSha,
     diffManifestBuilder: includeWorkingTree
       ? (diffOptions) => buildDiffManifest({ ...diffOptions, includeWorkingTree: true })
@@ -179,6 +182,14 @@ export async function runLocalReviewCommand(
     inlineDrafts: result.kind === "review" ? result.inlineCommentDrafts.length : undefined,
   });
   return result as LocalReviewCommandResult;
+}
+
+function resolveLocalPiAgentDir(options: LocalReviewCommandOptions): string {
+  const env = options.env ?? process.env;
+  const configured = options.piAgentDir ?? env.PI_CODING_AGENT_DIR;
+  return configured
+    ? path.resolve(options.rootDir, configured)
+    : path.join(env.HOME ?? os.homedir(), ".pi", "agent");
 }
 
 /** Runs a normalized code host event through the selected adapter. */

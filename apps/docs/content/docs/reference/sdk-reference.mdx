@@ -61,6 +61,8 @@ const model = pipr.model({
 
 Pipr passes provider and model IDs to Pi. [Browse Pi's Model Catalog](https://pi.dev/models) for current identifiers, providers, context limits, and pricing. Use `id` only when you configure the same provider and model with different API keys or thinking levels. `pipr.secret({ name })` stores only the environment variable name. It does not read or serialize the secret during plan creation.
 
+Omit `apiKey` only for a model that a local Review Task selects through local Pi authentication. Hosted runs don't receive your Pi agent directory, so hosted model selections must declare `apiKey`.
+
 ## Review recipe
 
 `pipr.review(...)` is the quick structured review wrapper. It creates separate findings and summary agents, then wires their Review Task into change request and command entrypoints.

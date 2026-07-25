@@ -82,6 +82,7 @@ export type RunTaskRuntimeOptions = {
   trustedConfigSha?: string;
   trustedConfigHash?: string;
   piExecutable?: string;
+  piAgentDir?: string;
   piRunner?: PiRunner;
   structuralHeadRef?: string;
   diffManifestBuilder?: DiffManifestBuilder;
@@ -556,6 +557,7 @@ async function runSynchronizeVerifier(options: {
     plan: options.options.plan,
     env: options.options.env,
     piExecutable: options.options.piExecutable,
+    piAgentDir: options.options.piAgentDir,
     piRunner: options.options.piRunner,
     log: options.options.log,
     diffManifest: options.diffManifest,
