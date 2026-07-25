@@ -327,9 +327,13 @@ async function publishBitbucketRunBundle(
   upload: typeof uploadBitbucketRunBundle,
 ): Promise<void> {
   if (!env.BITBUCKET_BUILD_NUMBER) return;
+  const repository = bundle.repository?.repository;
   const result = await upload({
     directory: bundle.directory,
-    repository: bundle.repository?.repository,
+    repository:
+      repository?.includes("/") || !repository || !env.BITBUCKET_WORKSPACE
+        ? repository
+        : `${env.BITBUCKET_WORKSPACE}/${repository}`,
     changeNumber,
     executionId: bundle.executionId,
     email: env.BITBUCKET_ARTIFACT_EMAIL,

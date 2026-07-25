@@ -735,8 +735,14 @@ export async function startFileRunRecorder(options: {
       }),
       deadline,
     );
-    manifest.export.otlp = otlpResult ?? "timed-out";
+    manifest.export.otlp = otlpResult?.status ?? "timed-out";
     manifest.capture.finalizationTimedOut = otlpResult === undefined;
+    if (otlpResult?.error) {
+      const message = `OTLP export failed: ${redactor.redact(otlpResult.error).value}`;
+      captureErrors.push(message);
+      console.error(`pipr warning ${message}`);
+      refreshCaptureStatus(manifest);
+    }
     const temporaryManifest = path.join(directory, "run.json.tmp");
     await writePrivateFile(temporaryManifest, `${JSON.stringify(manifest, null, 2)}\n`);
     await rename(temporaryManifest, path.join(directory, "run.json"));

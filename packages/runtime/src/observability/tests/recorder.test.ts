@@ -281,6 +281,24 @@ describe("file run recorder", () => {
     }
   });
 
+  it("records OTLP configuration failures in the bundle", async () => {
+    const recorder = await startFileRunRecorder({
+      rootDirectory: await temporaryDirectory(),
+      env: {
+        OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example.test",
+        OTEL_EXPORTER_OTLP_HEADERS: "authorization=%",
+      },
+    });
+
+    await recorder.finish({ kind: "review", outcome: "succeeded" });
+
+    const manifest = parseRunBundleManifest(
+      JSON.parse(await readFile(path.join(recorder.directory, "run.json"), "utf8")),
+    );
+    expect(manifest.export.otlp).toBe("failed");
+    expect(manifest.capture.errors).toContainEqual(expect.stringContaining("OTLP export failed"));
+  });
+
   it("caps finalization and OTLP flush at two seconds without failing the run", async () => {
     const server = Bun.serve({
       port: 0,

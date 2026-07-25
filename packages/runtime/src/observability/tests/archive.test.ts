@@ -256,6 +256,18 @@ describe("provider archive extraction", () => {
     );
   });
 
+  it("accepts directory entries in tar.gz archives", async () => {
+    const destination = path.join(await temporaryDirectory(), "bundle");
+
+    await expect(
+      extractRunArchive({
+        archive: tarGzEntry("nested/", "5"),
+        format: "tar.gz",
+        destination,
+      }),
+    ).rejects.toThrow("exactly one run.json");
+  });
+
   it("rejects traversal and link entries in tar.gz archives", async () => {
     const root = await temporaryDirectory();
     await expect(

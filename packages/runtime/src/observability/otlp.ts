@@ -30,6 +30,10 @@ import type {
 } from "@usepipr/sdk";
 
 export type OtlpExportStatus = "disabled" | "succeeded" | "failed";
+export type OtlpExportResult = {
+  status: OtlpExportStatus;
+  error?: string;
+};
 
 type OtlpSignal = "traces" | "metrics" | "logs";
 
@@ -42,12 +46,14 @@ export async function exportRunTelemetry(options: {
   spans: RunSpanRecord[];
   logs: RunLogRecord[];
   metrics: RunMetricsSnapshot;
-}): Promise<OtlpExportStatus> {
+}): Promise<OtlpExportResult> {
   const enabledSignals = signalEndpoints(options.env);
   if (enabledSignals.size === 0 || options.env.OTEL_SDK_DISABLED?.toLowerCase() === "true") {
-    return "disabled";
+    return { status: "disabled" };
   }
-  if (!usesHttpProtobuf(options.env)) return "failed";
+  if (!usesHttpProtobuf(options.env)) {
+    return { status: "failed", error: "OTLP export supports HTTP/protobuf only" };
+  }
   const resources = telemetryResources(options.manifest);
   const shutdown: Shutdown[] = [];
 
@@ -65,11 +71,17 @@ export async function exportRunTelemetry(options: {
       shutdown.push(startMetricExport(options, resources.metrics));
     }
     await closeExporters(shutdown);
-    return "succeeded";
-  } catch {
+    return { status: "succeeded" };
+  } catch (error) {
     await Promise.allSettled(shutdown.map((close) => close()));
-    return "failed";
+    return { status: "failed", error: exportErrorMessage(error) };
   }
+}
+
+function exportErrorMessage(error: unknown): string {
+  return error instanceof Error
+    ? `${error.name}: ${error.message}`.slice(0, 1000)
+    : "unknown OTLP exporter error";
 }
 
 function telemetryResources(manifest: RunBundleManifest) {

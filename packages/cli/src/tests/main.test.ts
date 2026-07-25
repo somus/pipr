@@ -53,7 +53,7 @@ describe("pipr CLI", () => {
           outcome: "succeeded",
           repository: {
             host: "bitbucket",
-            repository: "workspace/pipr",
+            repository: "pipr",
             changeNumber: 42,
           },
         },
@@ -63,6 +63,7 @@ describe("pipr CLI", () => {
             GITHUB_ACTIONS: "true",
             TF_BUILD: "True",
             BITBUCKET_BUILD_NUMBER: "7",
+            BITBUCKET_WORKSPACE: "workspace",
             BITBUCKET_ARTIFACT_EMAIL: "bot@example.test",
             BITBUCKET_ARTIFACT_API_TOKEN: "upload-token",
           },

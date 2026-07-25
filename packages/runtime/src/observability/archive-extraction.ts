@@ -144,7 +144,8 @@ function tarEntry(tar: Uint8Array, offset: number): TarEntry | undefined {
   const name = tarString(header.subarray(0, 100));
   const prefix = tarString(header.subarray(345, 500));
   const relativePath = prefix ? `${prefix}/${name}` : name;
-  validateArchivePath(relativePath);
+  const type = header[156];
+  validateArchivePath(relativePath, type === "5".charCodeAt(0));
   const size = Number.parseInt(tarString(header.subarray(124, 136)).trim() || "0", 8);
   if (!Number.isSafeInteger(size) || size < 0) throw new Error("Run tar has an invalid size");
   const bodyStart = offset + 512;
@@ -152,7 +153,7 @@ function tarEntry(tar: Uint8Array, offset: number): TarEntry | undefined {
   if (bodyEnd > tar.byteLength) throw new Error("Run tar entry exceeds the archive bounds");
   return {
     relativePath,
-    type: header[156],
+    type,
     contents: tar.subarray(bodyStart, bodyEnd),
     nextOffset: bodyStart + Math.ceil(size / 512) * 512,
   };

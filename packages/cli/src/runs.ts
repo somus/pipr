@@ -278,12 +278,23 @@ export async function defaultLocalTraceStore(cwd: string, env: NodeJS.ProcessEnv
     .update(identity)
     .digest("hex")
     .slice(0, 12)}`;
+  const home = env.HOME ?? resolvedHomeDirectory();
   const stateRoot = env.XDG_STATE_HOME
     ? path.join(env.XDG_STATE_HOME, "pipr")
-    : process.platform === "darwin" && env.HOME
-      ? path.join(env.HOME, "Library", "Application Support", "pipr")
-      : path.join(env.HOME ?? os.homedir(), ".local", "state", "pipr");
+    : process.platform === "darwin" && home
+      ? path.join(home, "Library", "Application Support", "pipr")
+      : home
+        ? path.join(home, ".local", "state", "pipr")
+        : path.join(os.tmpdir(), "pipr-state");
   return path.join(stateRoot, "runs", partition);
+}
+
+function resolvedHomeDirectory(): string | undefined {
+  try {
+    return os.homedir() || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function resolveRepositorySelector(options: {

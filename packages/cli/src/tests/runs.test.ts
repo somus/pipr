@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -127,6 +127,21 @@ describe("pipr runs", () => {
     });
 
     expect(JSON.parse(output).manifest.executionId).toBe(executionId);
+  });
+
+  it("uses a temporary state root when no home directory is configured", async () => {
+    const cwd = await temporaryDirectory();
+    const homedir = spyOn(os, "homedir").mockImplementation(() => {
+      throw new Error("home unavailable");
+    });
+
+    try {
+      const store = await defaultLocalTraceStore(cwd, {});
+
+      expect(store.startsWith(path.join(os.tmpdir(), "pipr-state", "runs"))).toBe(true);
+    } finally {
+      homedir.mockRestore();
+    }
   });
 
   it("uses explicit provider selectors for download outside a checkout", async () => {
