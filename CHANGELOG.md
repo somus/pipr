@@ -4,6 +4,18 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.6.1](https://github.com/somus/pipr/compare/v0.6.0...v0.6.1) (2026-07-25)
+
+
+### Features
+
+* support local Pi subscription authentication ([#121](https://github.com/somus/pipr/issues/121)) ([e9a071a](https://github.com/somus/pipr/commit/e9a071a3d6e846c0505fd27b1fbe1570e5d797b2))
+
+
+### Performance Improvements
+
+* **docker:** use precompiled ast-grep image ([#124](https://github.com/somus/pipr/issues/124)) ([44ea825](https://github.com/somus/pipr/commit/44ea82576986d89124aefaa499582a34415b84f7))
+
 ## [0.6.0](https://github.com/somus/pipr/compare/v0.5.0...v0.6.0) (2026-07-25)
 
 
