@@ -1,0 +1,89 @@
+apps/docs/content/docs/recipes/diff-diagnostics.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 134
+apps/docs/content/docs/guide/github-action.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 43,104,127
+packages/cli/src/tests/main.test.ts
+  s_dea394ec8da4dc::t_119ad8c011f833 851
+apps/docs/content/docs/guide/bitbucket.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 25
+packages/runtime/src/config/official-github-workflow.ts
+  s_dea394ec8da4dc::t_119ad8c011f833 6
+packages/cli/package.json
+  s_dea394ec8da4dc::t_119ad8c011f833 3,40-41
+packages/runtime/src/config/init.ts
+  s_dea394ec8da4dc::t_119ad8c011f833 44-45
+packages/runtime/src/config/tests/init-project.test.ts
+  s_dea394ec8da4dc::t_119ad8c011f833 82,227,255
+README.md
+  s_dea394ec8da4dc::t_119ad8c011f833 92
+packages/sdk/package.json
+  s_dea394ec8da4dc::t_119ad8c011f833 3
+apps/docs/content/docs/recipes/plugin-tool-review.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 465
+package.json
+  s_dea394ec8da4dc::t_119ad8c011f833 3
+apps/docs/content/docs/guide/quickstart.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 48,176
+.release-please-manifest.json
+  s_dea394ec8da4dc::t_119ad8c011f833 2
+apps/docs/content/docs/recipes/pr-hygiene.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 221
+apps/docs/content/docs/recipes/default-review.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 131
+apps/docs/content/docs/recipes/changelog-draft.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 125
+apps/docs/content/docs/guide/azure-devops.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 63
+apps/docs/content/docs/recipes/quality-gate.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 346
+apps/docs/content/docs/recipes/ci-triage-command.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 163
+apps/docs/content/docs/project/development.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 214,245-246,270,342
+apps/docs/content/docs/recipes/security-sast.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 389
+packages/runtime/package.json
+  s_dea394ec8da4dc::t_119ad8c011f833 3,82
+apps/docs/content/docs/guide/gitlab.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 25
+apps/docs/content/docs/recipes/rich-review.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 391
+apps/docs/content/docs/recipes/pr-briefing.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 259
+apps/docs/content/docs/recipes/bug-hunter.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 124
+apps/docs/content/docs/recipes/dependency-risk.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 161
+apps/docs/content/docs/recipes/multi-agent-review.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 173
+apps/docs/content/docs/guide/webhook-docker.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 39,41,45
+deploy/webhook/compose.yml
+  s_dea394ec8da4dc::t_119ad8c011f833 3
+apps/docs/content/docs/recipes/fix-suggestions.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 646
+CHANGELOG.md
+  s_dea394ec8da4dc::t_119ad8c011f833 7-18
+action.yml
+  s_dea394ec8da4dc::t_119ad8c011f833 24
+apps/docs/content/docs/recipes/interactive-ask.mdx
+  s_dea394ec8da4dc::t_119ad8c011f833 118
+bun.lock
+  s_dea394ec8da4dc::t_c8c39a3180d741 59,65-66,98,111,126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "b12925f1797a09b83d7bb7e5ce85f20379d98085",
+  "prompts": {},
+  "sessions": {
+    "s_dea394ec8da4dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7ef7-96df-75a0-8d1e-8df4fab8bb81",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Somasundaram Ayyappan <1802828+somus@users.noreply.github.com>"
+    }
+  }
+}
