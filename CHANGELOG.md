@@ -4,6 +4,13 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.6.2](https://github.com/somus/pipr/compare/v0.6.1...v0.6.2) (2026-07-25)
+
+
+### Bug Fixes
+
+* **release:** authenticate dogfood update with release token ([5401224](https://github.com/somus/pipr/commit/54012249a0e937ff8dba34f345f4e5b057eb38a7))
+
 ## [0.6.1](https://github.com/somus/pipr/compare/v0.6.0...v0.6.1) (2026-07-25)
 
 

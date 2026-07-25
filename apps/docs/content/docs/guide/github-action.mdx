@@ -40,7 +40,7 @@ jobs:
         with:
           path: /home/runner/work/_temp/_github_home/.bun/install/cache
           key: pipr-bun-${{ hashFiles('.pipr/bun.lock') }}
-      - uses: somus/pipr@v0.6.1 # x-release-please-version
+      - uses: somus/pipr@v0.6.2 # x-release-please-version
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -91,7 +91,7 @@ Command help is exposed through the `main-comment` output. If GitHub denies veri
 `${{ github.token }}` can publish verifier replies, but GitHub may report that this workflow credential cannot resolve the native thread. If you require native thread cleanup, create a repository secret containing a user credential that has the permissions in the table, then pass it to Pipr:
 
 ```yaml
-- uses: somus/pipr@v0.6.1 # x-release-please-version
+- uses: somus/pipr@v0.6.2 # x-release-please-version
   env:
     DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
     GITHUB_TOKEN: ${{ secrets.PIPR_GITHUB_TOKEN }}
@@ -114,7 +114,7 @@ Pin the Action to the released version you intend to run.
 Use the release tag you trust in production:
 
 ```yaml
-- uses: somus/pipr@v0.6.1 # x-release-please-version
+- uses: somus/pipr@v0.6.2 # x-release-please-version
 ```
 
 Use `somus/pipr@main` only when you intentionally want the current main-branch Action. The generated workflow uses the latest released tag at generation time.

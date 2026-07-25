@@ -1,6 +1,6 @@
 {
   "name": "@usepipr/cli",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Command-line interface for Pipr code host review automation",
   "type": "module",
   "license": "MIT",
@@ -37,8 +37,8 @@
   },
   "dependencies": {
     "@actions/core": "3.0.1",
-    "@usepipr/runtime": "0.6.1",
-    "@usepipr/sdk": "0.6.1",
+    "@usepipr/runtime": "0.6.2",
+    "@usepipr/sdk": "0.6.2",
     "commander": "15.0.0"
   }
 }
