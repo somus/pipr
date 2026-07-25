@@ -125,6 +125,31 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
     expect(result.run.durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  it("rejects a structured comment without main content or inline findings", async () => {
+    const plan = singleTaskPlan({
+      async run(ctx) {
+        await ctx.comment({} as never);
+      },
+    });
+
+    await expect(runRuntime({ plan })).rejects.toThrow(
+      "ctx.comment(...) requires main or inlineFindings",
+    );
+  });
+
+  it("accepts a findings-only structured comment with an empty findings array", async () => {
+    const plan = singleTaskPlan({
+      async run(ctx) {
+        await ctx.comment({ inlineFindings: [] });
+      },
+    });
+
+    const result = await runRuntime({ plan });
+
+    expect(result.validated.review.summary.body).toBe("Review completed.");
+    expect(result.validated.validFindings).toEqual([]);
+  });
+
   it("redacts known runtime secrets before building the publication plan", async () => {
     const detected = "registered-runtime-secret";
     const plan = singleTaskPlan({

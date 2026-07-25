@@ -58,6 +58,7 @@ export type LocalReviewCommandOptions = RuntimeCommandOptions & {
   baseSha: string;
   headSha?: string;
   piExecutable?: string;
+  piAgentDir?: string;
   logSink?: RuntimeLogSink;
   taskLog?: LocalReviewTaskLog;
   traceDirectory?: string;

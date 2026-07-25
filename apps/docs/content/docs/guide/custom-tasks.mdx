@@ -17,12 +17,14 @@ A workflow composes four pieces, all registered in `.pipr/config.ts`:
 
 | Block | Builder | Job |
 | --- | --- | --- |
-| Model | `pipr.model(...)` | Provider, model name, API key env var, options. |
+| Model | `pipr.model(...)` | Provider, model name, optional API key env var or local Pi authentication, and thinking level. |
 | Agent | `pipr.agent(...)` | Instructions, typed output schema, optional tools. |
 | Task | `pipr.task(...)` | Orchestration: read the diff, run agents, emit output. |
 | Entrypoint | `pipr.on.changeRequest(...)` or `pipr.command(...)` | When the task runs. |
 
 Every recipe in [Recipes](/docs/recipes) is these same blocks arranged differently, so any recipe page doubles as a worked example for this guide.
+
+See [Local subscription models](/docs/guide/configuration#local-subscription-models) when a local task should authenticate through your Pi agent directory.
 
 For the full concept map, see [How Pipr works](/docs/concepts).
 
@@ -130,7 +132,15 @@ const manifest = await ctx.change.diffManifest({
 
 ### Pass manifest to Pi
 
-Pass the manifest into Pi with the reserved `manifest` input key. Pipr injects full or condensed manifest content into the prompt and attaches bounded Diff Read Tools when the manifest is condensed. Do not also interpolate the manifest in the agent prompt. Pass it to aggregators that independently revalidate findings; omit it only when changed-code context is not needed.
+Pass the manifest into Pi with the reserved `manifest` input key. Pipr injects full or condensed manifest content into the prompt and attaches bounded Diff Read Tools when the manifest is condensed.
+
+When ast-grep supports a changed file, `ctx.change.diffManifest(...)` adds best-effort `changedSymbols` and enclosing-declaration range summaries. These fields survive compressed and condensed projections within fixed metadata limits. The Docker Action includes ast-grep `0.45.0`; local runs fall back to the ordinary manifest when ast-grep is missing or can't analyze a file.
+
+Condensed reviews always get bounded manifest and base/head range reads. When structural analysis is available and the reviewed head is the current workspace, they also get `pipr_read_declaration` for enclosing declaration context and `pipr_ast_grep` for syntax-specific searches across explicit safe head-workspace paths. This includes hosted and local working-tree reviews; local ref-to-ref reviews with `pipr review --head <ref>` keep the standard read tools because the workspace may not match that ref. Pipr advertises only tools registered for that run, and no condensed helper tools are attached when `toolMode` is `"none"`.
+
+If a Review-schema manifest exceeds the condensed limit, Pipr uses import relationships, test/source names, and shared declaration ownership to form at most `limits.diffManifest.maxShards` units and merges their Review results. One `ctx.pi.run(...)` call can make multiple model calls. The default is four shards. Pass `{ maxShards: 1 }` as the run options to disable splitting for one invocation, or use another positive integer to give separate calls different caps.
+
+Do not also interpolate the manifest in the agent prompt. Pass it to aggregators that independently revalidate findings; omit it only when changed-code context is not needed.
 
 Every agent prompt already includes the change request number and title, plus up to 4,000 characters of its description when nonblank, as untrusted intent context. Do not copy `ctx.change` into the prompt just to repeat that metadata.
 
@@ -164,6 +174,8 @@ const securityAgent = pipr.agent({
 Core adds the review candidate gate, contract tracing, summary grounding, and schema-aware `suggestedFix` rules for `pipr.schemas.review`.
 
 Custom output receives the same policy when its schema contains an object with the standard Review Finding fields: `body`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. Collection names, nesting, and additional metadata do not affect detection. Keep only repository-specific review policy in agent instructions.
+
+For automatic large-diff sharding, use a schema rooted at `{ inlineFindings: [...] }` and include those six fields in every item. Pipr preserves extra item metadata, deduplicates by anchor plus body, and reparses the merged result with your schema. `pipr.schemas.inlineFindings` is the built-in form of this contract; `pipr.schemas.review` remains available for a manual agent that returns both summary and findings.
 
 ### Intermediate schemas
 

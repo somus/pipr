@@ -70,10 +70,10 @@ describe("initOfficialMinimalProject: generated recipes", () => {
 
     expect(configTs).toContain("reviewSummarySchema");
     expect(configTs).not.toContain("issueKey");
-    expect(configTs).toContain("changeSummary: z.array(z.string()).min(1).max(4)");
-    expect(configTs).toContain("reviewerFocus: z.array(z.string()).max(4)");
-    expect(configTs).toContain("summaryTable(result.summary)");
-    expect(configTs).not.toContain("commentableFindings");
+    expect(configTs).toContain("changeSummary: z.array(z.string().min(1).max(500)).min(1).max(4)");
+    expect(configTs).toContain("reviewerFocus: z.array(z.string().min(1).max(500)).max(4)");
+    expect(configTs).toContain("summaryTable(summary)");
+    expect(configTs).toContain("hasCommentableAnchor");
     expect(configTs).toContain("severity");
     expect(configTs).toContain("category");
     expect(configTs).not.toContain('"nit"');
@@ -81,7 +81,9 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(configTs).not.toContain('"## Findings"');
     expect(configTs).not.toContain('"## Review"');
     expect(configTs).not.toContain("rich-review");
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("reviewer");
+    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toEqual(
+      expect.arrayContaining(["findings-reviewer", "summary-reviewer"]),
+    );
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("review");
   });
 
@@ -124,16 +126,16 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       event: eventContext(),
       plan: project.plan,
       diffManifestBuilder: () => reviewTestManifest(),
-      piRunner: jsonPiRunner({
-        summary: {
+      piRunner: sequentialJsonPiRunner([
+        { inlineFindings: [] },
+        {
           headline: "Release automation skip is preserved",
           changeSummary: ["Adds an issue-comment guard for release-please release notes."],
           riskLevel: "low",
           riskSummary: "The event guard is narrow and leaves pull request behavior intact.",
           reviewerFocus: ["Confirm release-please comment markers stay stable."],
         },
-        findings: [],
-      }),
+      ]),
     });
 
     assertReviewResult(result);
@@ -156,6 +158,68 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(result.inlineCommentDrafts).toEqual([]);
   });
 
+  it("runs the rich-review summary once with a bounded oversized manifest projection", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "rich-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    const calls: string[] = [];
+    let summaryPrompt = "";
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: {
+        ...project.settings.config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1,
+            condensedMaxEstimatedTokens: 1,
+          },
+        },
+      },
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: async (options) => {
+        const summary = options.prompt.includes("Selected findings");
+        calls.push(summary ? "summary" : "findings");
+        if (summary) {
+          summaryPrompt = options.prompt;
+        }
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify(
+            summary
+              ? {
+                  headline: "Bounded summary",
+                  changeSummary: ["Changes request handling."],
+                  riskLevel: "low",
+                  riskSummary: "No findings.",
+                  reviewerFocus: [],
+                }
+              : { inlineFindings: [] },
+          ),
+          stderr: "",
+          durationMs: 1,
+        };
+      },
+    });
+
+    assertReviewResult(result);
+    expect(calls.filter((call) => call === "summary")).toEqual(["summary"]);
+    expect(summaryPrompt).toContain("Scoped compressed manifest");
+    expect(summaryPrompt).not.toContain("Diff Manifest:");
+    expect(summaryPrompt.length).toBeLessThan(70_000);
+    expect(result.mainComment).toContain("Bounded summary");
+  });
+
   it("renders concise rich-review comments with collapsed rationales", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
 
@@ -173,29 +237,31 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       event: eventContext(),
       plan: project.plan,
       diffManifestBuilder: () => reviewTestManifest(),
-      piRunner: jsonPiRunner({
-        summary: {
+      piRunner: sequentialJsonPiRunner([
+        {
+          inlineFindings: [
+            {
+              title: "Fallback **value** is skipped",
+              severity: "medium",
+              category: "correctness",
+              rationale: "The new branch returns </details> before the fallback can run.",
+              body: "This returns <early> before the fallback path can execute.",
+              path: "src/a.ts",
+              rangeId: "range-1",
+              side: "RIGHT",
+              startLine: 10,
+              endLine: 10,
+            },
+          ],
+        },
+        {
           headline: "One correctness risk needs review",
           changeSummary: ["Changes the return value used by the request handler."],
           riskLevel: "medium",
           riskSummary: "The changed path affects runtime behavior and has one concrete issue.",
           reviewerFocus: [],
         },
-        findings: [
-          {
-            title: "Fallback **value** is skipped",
-            severity: "medium",
-            category: "correctness",
-            rationale: "The new branch returns </details> before the fallback can run.",
-            body: "This returns <early> before the fallback path can execute.",
-            path: "src/a.ts",
-            rangeId: "range-1",
-            side: "RIGHT",
-            startLine: 10,
-            endLine: 10,
-          },
-        ],
-      }),
+      ]),
     });
 
     assertReviewResult(result);
@@ -228,7 +294,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(result.inlineCommentDrafts[0]?.body).not.toContain("**Issue**");
   });
 
-  it("rejects rich-review titles containing line breaks", async () => {
+  it("renders rich-review titles containing line breaks as one line", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
 
     await initOfficialMinimalProject({
@@ -240,22 +306,15 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     const project = await loadRuntimeProject({ rootDir });
 
     for (const title of ["First line\nSecond line", "First line\rSecond line"]) {
-      await expect(
-        runTaskRuntime({
-          workspace: rootDir,
-          config: project.settings.config,
-          event: eventContext(),
-          plan: project.plan,
-          diffManifestBuilder: () => reviewTestManifest(),
-          piRunner: jsonPiRunner({
-            summary: {
-              headline: "One correctness risk needs review",
-              changeSummary: ["Changes the return value used by the request handler."],
-              riskLevel: "medium",
-              riskSummary: "The changed path affects runtime behavior and has one concrete issue.",
-              reviewerFocus: [],
-            },
-            findings: [
+      const result = await runTaskRuntime({
+        workspace: rootDir,
+        config: project.settings.config,
+        event: eventContext(),
+        plan: project.plan,
+        diffManifestBuilder: () => reviewTestManifest(),
+        piRunner: sequentialJsonPiRunner([
+          {
+            inlineFindings: [
               {
                 title,
                 severity: "medium",
@@ -269,9 +328,20 @@ describe("initOfficialMinimalProject: generated recipes", () => {
                 endLine: 10,
               },
             ],
-          }),
-        }),
-      ).rejects.toThrow("Pi output failed schema validation after 1 repair attempt(s)");
+          },
+          {
+            headline: "Summary",
+            changeSummary: ["Changes behavior."],
+            riskLevel: "medium",
+            riskSummary: "One issue.",
+            reviewerFocus: [],
+          },
+        ]),
+      });
+      assertReviewResult(result);
+      expect(result.inlineCommentDrafts[0]?.body).toContain(
+        "**Medium correctness:** First line Second line",
+      );
     }
   });
 
@@ -292,29 +362,31 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       event: eventContext(),
       plan: project.plan,
       diffManifestBuilder: () => reviewTestManifest(),
-      piRunner: jsonPiRunner({
-        summary: {
+      piRunner: sequentialJsonPiRunner([
+        {
+          inlineFindings: [
+            {
+              title: "Invented location",
+              severity: "medium",
+              category: "correctness",
+              rationale: "This location does not exist.",
+              body: "This should never be rendered.",
+              path: "src/missing.ts",
+              rangeId: "missing-range",
+              side: "RIGHT",
+              startLine: 99,
+              endLine: 99,
+            },
+          ],
+        },
+        {
           headline: "Review completed",
           changeSummary: ["Changes request handling."],
           riskLevel: "medium",
           riskSummary: "One reported item did not map to the diff.",
           reviewerFocus: [],
         },
-        findings: [
-          {
-            title: "Invented location",
-            severity: "medium",
-            category: "correctness",
-            rationale: "This location does not exist.",
-            body: "This should never be rendered.",
-            path: "src/missing.ts",
-            rangeId: "missing-range",
-            side: "RIGHT",
-            startLine: 99,
-            endLine: 99,
-          },
-        ],
-      }),
+      ]),
     });
 
     assertReviewResult(result);
@@ -322,6 +394,96 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(result.mainComment).not.toContain("**Findings:**");
     expect(result.mainComment).not.toContain("Omitted 1 finding");
     expect(result.inlineCommentDrafts).toEqual([]);
+  });
+
+  it("filters invalid and duplicate rich-review findings before selecting eight", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: [],
+      recipe: "rich-review",
+      minimal: true,
+    });
+    const project = await loadRuntimeProject({ rootDir });
+    let summaryPrompt = "";
+
+    const result = await runTaskRuntime({
+      workspace: rootDir,
+      config: project.settings.config,
+      event: eventContext(),
+      plan: project.plan,
+      diffManifestBuilder: () => reviewTestManifest(),
+      piRunner: async (options) => {
+        if (options.prompt.includes("Selected findings")) {
+          summaryPrompt = options.prompt;
+          return {
+            exitCode: 0,
+            stdout: JSON.stringify({
+              headline: "One valid finding remains",
+              changeSummary: ["Changes request handling."],
+              riskLevel: "low",
+              riskSummary: "Only the commentable finding remains.",
+              reviewerFocus: [],
+            }),
+            stderr: "",
+            durationMs: 1,
+          };
+        }
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            inlineFindings: [
+              ...Array.from({ length: 8 }, (_, index) => ({
+                title: `Invalid blocker ${index}`,
+                severity: "critical",
+                category: "correctness",
+                rationale: "The reported location is not part of the diff.",
+                body: `Invalid finding ${index}.`,
+                path: `src/missing-${index}.ts`,
+                rangeId: `missing-${index}`,
+                side: "RIGHT",
+                startLine: 99,
+                endLine: 99,
+              })),
+              ...Array.from({ length: 8 }, () => ({
+                title: "Repeated blocker",
+                severity: "critical",
+                category: "correctness",
+                rationale: "The changed branch can return the wrong value.",
+                body: "The changed branch returns the wrong value.",
+                path: "src/a.ts",
+                rangeId: "range-1",
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              })),
+              {
+                title: "Valid lower-severity finding",
+                severity: "low",
+                category: "correctness",
+                rationale: "The changed branch can skip the fallback.",
+                body: "The changed branch skips the fallback.",
+                path: "src/a.ts",
+                rangeId: "range-1",
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              },
+            ],
+          }),
+          stderr: "",
+          durationMs: 1,
+        };
+      },
+    });
+
+    assertReviewResult(result);
+    expect(summaryPrompt).toContain("Valid lower-severity finding");
+    expect(summaryPrompt.match(/Repeated blocker/g)).toHaveLength(1);
+    expect(summaryPrompt).not.toContain("Invalid blocker");
+    expect(result.inlineCommentDrafts).toHaveLength(2);
+    expect(result.inlineCommentDrafts[1]?.body).toContain("Valid lower-severity finding");
   });
 
   it("renders the security SAST recipe as a clean security summary without a diagram", async () => {
@@ -885,8 +1047,16 @@ describe("initOfficialMinimalProject: generated recipes", () => {
           },
           {
             verdicts: [
-              { index: 0, accepted: true, reason: "The replacement fixes the stated defect." },
-              { index: 1, accepted: false, reason: "The replacement changes unrelated behavior." },
+              {
+                index: 0,
+                accepted: true,
+                reason: "The replacement fixes the stated defect.",
+              },
+              {
+                index: 1,
+                accepted: false,
+                reason: "The replacement changes unrelated behavior.",
+              },
               { index: 1, accepted: true, reason: "Duplicate verdict." },
               { index: 9, accepted: true, reason: "Invented index." },
             ],
@@ -969,7 +1139,13 @@ describe("initOfficialMinimalProject: generated recipes", () => {
           ],
         },
         {
-          verdicts: [{ index: 0, accepted: false, reason: "The patch changes the contract." }],
+          verdicts: [
+            {
+              index: 0,
+              accepted: false,
+              reason: "The patch changes the contract.",
+            },
+          ],
         },
       ]),
     });
@@ -1076,7 +1252,10 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       event: eventContext(),
       plan: project.plan,
       diffManifestBuilder: () => reviewTestManifest(),
-      piRunner: jsonPiRunner({ summary: "One blocker found.", blockers: [blocker, blocker] }),
+      piRunner: jsonPiRunner({
+        summary: "One blocker found.",
+        blockers: [blocker, blocker],
+      }),
     });
 
     assertReviewResult(result);
@@ -1112,15 +1291,31 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       piRunner: jsonPiRunner({
         summary: "Tests need attention.",
         checks: [
-          { policy: "tests", status: "attention", evidence: "Behavior changed without a test." },
-          { policy: "docs", status: "not-applicable", evidence: "No public docs changed." },
-          { policy: "lockfiles", status: "not-applicable", evidence: "No lockfiles changed." },
+          {
+            policy: "tests",
+            status: "attention",
+            evidence: "Behavior changed without a test.",
+          },
+          {
+            policy: "docs",
+            status: "not-applicable",
+            evidence: "No public docs changed.",
+          },
+          {
+            policy: "lockfiles",
+            status: "not-applicable",
+            evidence: "No lockfiles changed.",
+          },
           {
             policy: "generated-files",
             status: "not-applicable",
             evidence: "No generated files changed.",
           },
-          { policy: "change-size", status: "pass", evidence: "One source file changed." },
+          {
+            policy: "change-size",
+            status: "pass",
+            evidence: "One source file changed.",
+          },
         ],
         findings: [
           {
@@ -1171,14 +1366,26 @@ describe("initOfficialMinimalProject: generated recipes", () => {
           summary: "Hygiene review completed.",
           checks: [
             { policy: "tests", status: "pass", evidence: "Tests changed." },
-            { policy: "tests", status: "pass", evidence: "Duplicate tests verdict." },
-            { policy: "lockfiles", status: "not-applicable", evidence: "No lockfiles." },
+            {
+              policy: "tests",
+              status: "pass",
+              evidence: "Duplicate tests verdict.",
+            },
+            {
+              policy: "lockfiles",
+              status: "not-applicable",
+              evidence: "No lockfiles.",
+            },
             {
               policy: "generated-files",
               status: "not-applicable",
               evidence: "No generated files.",
             },
-            { policy: "change-size", status: "pass", evidence: "One source file." },
+            {
+              policy: "change-size",
+              status: "pass",
+              evidence: "One source file.",
+            },
           ],
           findings: [],
         }),
@@ -1381,7 +1588,10 @@ describe("initOfficialMinimalProject: generated recipes", () => {
           path: new URL(request.url).pathname,
           body: JSON.parse(await request.text()),
         });
-        return new Response(null, { status: 200, headers: { ETag: '"test-etag"' } });
+        return new Response(null, {
+          status: 200,
+          headers: { ETag: '"test-etag"' },
+        });
       },
     });
     const lesson = "Validate persisted reviewer guidance against the current diff.";
@@ -1626,7 +1836,12 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       "changelog-draft",
     ] as const) {
       const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${recipe}-`));
-      await initOfficialMinimalProject({ rootDir, adapters: [], recipe, minimal: true });
+      await initOfficialMinimalProject({
+        rootDir,
+        adapters: [],
+        recipe,
+        minimal: true,
+      });
       recipeConfigs.set(recipe, await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text());
     }
 

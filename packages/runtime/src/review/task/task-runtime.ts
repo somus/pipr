@@ -11,6 +11,11 @@ import { uniq } from "lodash-es";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/diff.js";
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
+import { enrichDiffManifestWithStructure } from "../../diff/manifest-structure.js";
+import {
+  createDiffStructuralAnalysisLoader,
+  type DiffStructuralAnalysisLoader,
+} from "../../diff/structural-analysis.js";
 import { selectRuntimeTasks } from "../../host-run/entry-dispatch.js";
 import type { RunObserver } from "../../observability/types.js";
 import { type RuntimeLog, runLoggedPhase } from "../../shared/logging.js";
@@ -24,6 +29,7 @@ import type {
   ValidatedReview,
 } from "../../types.js";
 import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../types.js";
+import { type AgentRunBudget, createAgentRunBudget } from "../agent/agent-run-budget.js";
 import {
   type PiRunner,
   type PiRunStats,
@@ -77,7 +83,9 @@ export type RunTaskRuntimeOptions = {
   trustedConfigSha?: string;
   trustedConfigHash?: string;
   piExecutable?: string;
+  piAgentDir?: string;
   piRunner?: PiRunner;
+  structuralHeadRef?: string;
   diffManifestBuilder?: DiffManifestBuilder;
   priorReviewState?: PriorReviewState;
   priorMainComment?: string;
@@ -214,11 +222,30 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     ));
   const priorReviewState = priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks);
   const piRuns: PiRunStats[] = [];
+  const agentRunBudget = createAgentRunBudget(config.limits?.maxAgentRuns);
+  const structuralAnalysis = createDiffStructuralAnalysisLoader({
+    manifest: diffManifest,
+    workspace: options.workspace,
+    headRef: options.structuralHeadRef,
+    env: options.env,
+    log: options.log,
+  });
+  let structuralManifestPromise: Promise<DiffManifest> | undefined;
+  const structuralManifest = () => {
+    structuralManifestPromise ??= structuralAnalysis().then((analysis) =>
+      enrichDiffManifestWithStructure(diffManifest, analysis),
+    );
+    return structuralManifestPromise;
+  };
   const runtimeOptions = {
     ...options,
     priorReviewState,
     priorMainComment,
     run,
+    agentRunBudget,
+    structuralAnalysis,
+    structuralToolsEnabled: options.structuralHeadRef === undefined,
+    structuralManifest,
     piRunSink(run: PiRunStats) {
       piRuns.push(run);
     },
@@ -289,6 +316,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     priorReviewState,
     run,
     piRunSink: runtimeOptions.piRunSink,
+    agentRunBudget,
   });
   const durationMs = Date.now() - runtimeStarted;
   const stats = reviewStatsForRuns(piRuns, durationMs);
@@ -380,6 +408,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
 function registerProviderSecrets(config: PiprConfig, options: RunTaskRuntimeOptions): void {
   const env = options.env ?? process.env;
   for (const provider of config.providers) {
+    if (!provider.apiKeyEnv) continue;
     const value = env[provider.apiKeyEnv];
     if (!value) continue;
     options.log?.addSecret(value);
@@ -576,6 +605,7 @@ async function runSynchronizeVerifier(options: {
   priorReviewState: PriorReviewState | undefined;
   run: PiprRunContext;
   piRunSink: (run: PiRunStats) => void;
+  agentRunBudget: AgentRunBudget;
 }): Promise<Awaited<ReturnType<typeof runInternalVerifier>>> {
   if (options.options.event.rawAction !== "synchronize") {
     return {
@@ -597,6 +627,7 @@ async function runSynchronizeVerifier(options: {
     plan: options.options.plan,
     env: options.options.env,
     piExecutable: options.options.piExecutable,
+    piAgentDir: options.options.piAgentDir,
     piRunner: options.options.piRunner,
     log: options.options.log,
     diffManifest: options.diffManifest,
@@ -609,6 +640,7 @@ async function runSynchronizeVerifier(options: {
     run: options.run,
     piRunSink: options.piRunSink,
     runObserver: options.options.runObserver,
+    agentRunBudget: options.agentRunBudget,
   });
 }
 
@@ -623,6 +655,9 @@ function createTaskContext(
     taskOrder: number;
     run: PiprRunContext;
     piRunSink: (run: PiRunStats) => void;
+    agentRunBudget: AgentRunBudget;
+    structuralAnalysis: DiffStructuralAnalysisLoader;
+    structuralManifest: () => Promise<DiffManifest>;
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");
@@ -649,7 +684,7 @@ function createTaskContext(
         if (cached) {
           return cloneDiffManifest(cached);
         }
-        const manifest = projectDiffManifest(options.diffManifest, manifestOptions);
+        const manifest = projectDiffManifest(await options.structuralManifest(), manifestOptions);
         options.manifestCache.set(key, manifest);
         return cloneDiffManifest(manifest);
       },

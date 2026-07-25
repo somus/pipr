@@ -18,10 +18,14 @@ export type ReviewFinding = {
   suggestedFix?: string;
 };
 
-/** Core structured review result accepted by pipr review publication. */
-export type ReviewResult = {
-  summary: ReviewSummary;
+/** Core structured collection of inline findings produced by a review agent. */
+export type ReviewFindingsResult = {
   inlineFindings: ReviewFinding[];
+};
+
+/** Core structured review result accepted by pipr review publication. */
+export type ReviewResult = ReviewFindingsResult & {
+  summary: ReviewSummary;
 };
 
 const nonEmptyStringSchema = z.string().min(1);
@@ -43,6 +47,11 @@ export const reviewFindingSchema: ZodSchema<ReviewFinding> = z.strictObject({
   suggestedFix: nonEmptyStringSchema.optional(),
 });
 
+/** Zod schema for Pipr's core inline-finding result. */
+export const reviewFindingsResultSchema: ZodSchema<ReviewFindingsResult> = z.strictObject({
+  inlineFindings: z.array(reviewFindingSchema),
+});
+
 /** Zod schema for Pipr's core change request review result. */
 export const reviewResultSchema: ZodSchema<ReviewResult> = z.strictObject({
   summary: reviewSummarySchema,
@@ -52,6 +61,11 @@ export const reviewResultSchema: ZodSchema<ReviewResult> = z.strictObject({
 /** Parses model output for Pipr's main change request review schema. */
 export function parseReviewResult(value: unknown): ReviewResult {
   return reviewResultSchema.parse(value) as ReviewResult;
+}
+
+/** Parses model output for Pipr's inline-finding schema. */
+export function parseReviewFindingsResult(value: unknown): ReviewFindingsResult {
+  return reviewFindingsResultSchema.parse(value) as ReviewFindingsResult;
 }
 
 /** Parses a review summary value. */

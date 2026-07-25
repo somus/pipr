@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import {
   type InitOfficialMinimalProjectResult,
@@ -138,7 +139,7 @@ export async function runLocalReviewCommand(
     });
     const runtime = await loadRuntimeProject({
       ...runOptions,
-      requireProviderEnv: true,
+      requireProviderEnv: false,
     });
     log?.notice("local config loaded", {
       source: runtime.settings.source,
@@ -184,6 +185,8 @@ export async function runLocalReviewCommand(
       selectedTasks,
       emptyTasksReason: "No change-request tasks are configured for local review",
       piExecutable: runOptions.piExecutable,
+      piAgentDir: resolveLocalPiAgentDir(runOptions),
+      structuralHeadRef: includeWorkingTree ? undefined : headSha,
       diffManifestBuilder: includeWorkingTree
         ? (diffOptions) => buildDiffManifest({ ...diffOptions, includeWorkingTree: true })
         : undefined,
@@ -298,6 +301,14 @@ async function finishRecorderSafely(
       error: error instanceof Error ? error.message : "unknown capture error",
     });
   }
+}
+
+function resolveLocalPiAgentDir(options: LocalReviewCommandOptions): string {
+  const env = options.env ?? process.env;
+  const configured = options.piAgentDir ?? env.PI_CODING_AGENT_DIR;
+  return configured
+    ? path.resolve(options.rootDir, configured)
+    : path.join(env.HOME ?? os.homedir(), ".pi", "agent");
 }
 
 /** Runs a normalized code host event through the selected adapter. */

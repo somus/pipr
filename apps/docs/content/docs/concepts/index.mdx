@@ -23,7 +23,7 @@ Entrypoint
 | Entrypoint | Starts a task from a change request event, an `@pipr` command, or a local review run. | `pipr.review(...)`, `pipr.on.changeRequest(...)`, `pipr.command(...)` |
 | Review Task | Orchestrates one unit of review work and emits one final output. | `pipr.task(...)` |
 | Diff Manifest | Describes changed files, hunks, and valid inline comment ranges. | `ctx.change.diffManifest(...)` |
-| Agent | Runs a typed Pi call with stable instructions and a per-run prompt. | `pipr.agent(...)`, `pipr.reviewer(...)`, `ctx.pi.run(...)` |
+| Agent | Runs a typed Pi call with stable instructions and a per-run prompt. | `pipr.agent(...)`, `ctx.pi.run(...)` |
 | Review Output | Carries a main comment body, optional Inline Review Comments, or a command reply. | `ctx.comment(...)`, `ctx.command?.reply(...)` |
 | Publication | Validates, caps, deduplicates, and writes comments through the active code host adapter. | Pipr runtime-owned |
 
@@ -31,7 +31,7 @@ Entrypoint
 
 You author review policy in TypeScript. A config registers models, agents, tasks, entrypoints, limits, schemas, commands, and plugin tools through `@usepipr/sdk`.
 
-Use `pipr.review(...)` for the default path. It creates one Review Task, wires the default change request and `@pipr review` entrypoints, runs one reviewer, and sends the result through the standard publication pipeline.
+Use `pipr.review(...)` for the default path. It creates one Review Task, wires the default change request and `@pipr review` entrypoints, runs a sharded findings agent followed by one summary agent, and sends their combined result through the standard publication pipeline.
 
 Use `pipr.task(...)` when you need custom orchestration. A task can build a Diff Manifest, call one or more Agents, read prior review state, emit a check, and return exactly one final output.
 

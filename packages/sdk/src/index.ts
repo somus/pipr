@@ -9,12 +9,19 @@ export type {
   PiprRunTrigger,
 } from "./result.js";
 export { parsePiprResult, piprResultSchema } from "./result.js";
-export type { ReviewFinding, ReviewResult, ReviewSummary } from "./review-contract.js";
+export type {
+  ReviewFinding,
+  ReviewFindingsResult,
+  ReviewResult,
+  ReviewSummary,
+} from "./review-contract.js";
 export {
   parseReviewFinding,
+  parseReviewFindingsResult,
   parseReviewResult,
   parseReviewSummary,
   reviewFindingSchema,
+  reviewFindingsResultSchema,
   reviewResultSchema,
   reviewSchemaExample,
   reviewSummarySchema,
@@ -57,12 +64,14 @@ export type {
   DurationInput,
   ModelOptions,
   ModelProfile,
+  ModelThinkingLevel,
   PiprConfigOptions,
   PublicationOptions,
   RepositoryPermission,
   SecretOptions,
   SecretRef,
 } from "./types/config.js";
+export { modelThinkingLevels } from "./types/config.js";
 export type {
   ChangedFile,
   CommentableRange,
@@ -105,6 +114,8 @@ export type {
   CommandRegistrationOptions,
   CommentValue,
   DefaultReviewInput,
+  DefaultReviewSummaryInput,
+  DefaultReviewSummaryManifest,
   PiprBuilder,
   PiprPlugin,
   PiRunner,
@@ -115,8 +126,7 @@ export type {
   RepositoryInfo,
   ReviewCommentContext,
   ReviewEntrypoints,
-  Reviewer,
-  ReviewerOptions,
+  ReviewInstructions,
   ReviewRecipeOptions,
   Task,
   TaskCheckOptions,
@@ -125,6 +135,9 @@ export type {
   TaskHandler,
   ToolRunOptions,
 } from "./types/task.js";
-export { defaultReviewActions, defaultReviewEntrypoints } from "./types/task.js";
+export {
+  defaultReviewActions,
+  defaultReviewEntrypoints,
+} from "./types/task.js";
 
 export { z };

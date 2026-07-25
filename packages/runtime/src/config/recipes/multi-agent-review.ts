@@ -2,6 +2,7 @@ import type { OfficialInitRecipe } from "./types.js";
 
 export const multiAgentReviewRecipe = {
   id: "multi-agent-review",
+  requiresChecksPermission: true,
   title: "Multi-agent Review",
   description: "Security, test, and maintainability agents with an aggregator agent.",
   sourceTools: ["PR-Agent", "CodeRabbit", "GitHub Copilot code review"],
@@ -13,7 +14,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
 
   const fast = pipr.model({
@@ -21,7 +22,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "medium" },
+    thinking: "medium",
   });
 
   const specialistPrompt = (input: { manifest: unknown; focus: string }) => pipr.prompt\`

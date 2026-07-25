@@ -9,6 +9,8 @@ import {
 } from "@usepipr/sdk/internal";
 import { uniqBy } from "lodash-es";
 import { z } from "zod";
+import { shardDiffManifestForPrompt } from "../../diff/manifest-sharding.js";
+import type { DiffStructuralAnalysisLoader } from "../../diff/structural-analysis.js";
 import type {
   AgentAttemptType,
   RunAgentAttemptObserver,
@@ -24,7 +26,13 @@ import {
   withPiRunWorkspace,
 } from "../../pi/runner.js";
 import { boundedLogSnippet, type RuntimeLog } from "../../shared/logging.js";
-import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
+import type {
+  ChangeRequestEventContext,
+  DiffManifest,
+  PiprConfig,
+  ProviderConfig,
+  ReviewResult,
+} from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
 import { parseReviewResult, reviewResultSchemaId } from "../review.js";
 import {
@@ -33,7 +41,16 @@ import {
   type PreparedAgentContext,
   renderAgentPrompt,
 } from "./agent-prompt.js";
-import { prepareDiffManifestContext } from "./diff-manifest-context.js";
+import {
+  type AgentRunBudget,
+  AgentRunBudgetExhaustedError,
+  reserveAgentRun,
+} from "./agent-run-budget.js";
+import { prepareDiffManifestContext, readReservedInputManifest } from "./diff-manifest-context.js";
+import {
+  canonicalInlineFindingsMaxItems,
+  schemaHasCanonicalInlineFindingsRoot,
+} from "./review-schema.js";
 
 export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
 
@@ -47,6 +64,7 @@ export type RunReviewAgentOptions = {
   input: unknown;
   runOptions: Parameters<TaskContext["pi"]["run"]>[2];
   toolMode?: "read-only" | "none";
+  allowOversizedCondensedManifest?: boolean;
   runtime: {
     workspace: string;
     config: PiprConfig;
@@ -56,6 +74,7 @@ export type RunReviewAgentOptions = {
     plan: RuntimePlan;
     env?: NodeJS.ProcessEnv;
     piExecutable?: string;
+    piAgentDir?: string;
     piRunner?: PiRunner;
     taskContext?: TaskContext;
     priorReviewState?: PriorReviewState;
@@ -63,6 +82,9 @@ export type RunReviewAgentOptions = {
     log?: RuntimeLog;
     piRunSink?: (run: PiRunStats) => void;
     runObserver?: RunObserver;
+    agentRunBudget?: AgentRunBudget;
+    structuralAnalysis?: DiffStructuralAnalysisLoader;
+    structuralToolsEnabled?: boolean;
   };
 };
 
@@ -93,13 +115,66 @@ type AgentAttemptResult =
 export async function runReviewAgent(
   options: RunReviewAgentOptions,
 ): Promise<RunReviewAgentResult> {
+  const maxShards = options.runOptions?.maxShards;
+  if (maxShards !== undefined && (!Number.isInteger(maxShards) || maxShards <= 0)) {
+    throw new Error("Pi run maxShards must be a positive integer");
+  }
+  const scheduled = await scheduledReviewManifests(options);
+  if (!scheduled) {
+    return await runReviewAgentOnce(options);
+  }
+  const { manifests } = scheduled;
+  if (manifests.length === 1) {
+    return await runReviewAgentOnce({
+      ...options,
+      input: inputWithManifest(options.input, manifests[0]),
+      allowOversizedCondensedManifest: true,
+    });
+  }
+  const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
+    const results: RunReviewAgentResult[] = [];
+    for (const manifest of manifests) {
+      results.push(
+        await runReviewAgentOnce({
+          ...options,
+          input: inputWithManifest(options.input, manifest),
+          allowOversizedCondensedManifest: true,
+          runtime: { ...options.runtime, piRunner },
+        }),
+      );
+    }
+    return mergeScheduledReviewAgentResults(results, options, scheduled.kind);
+  };
+  if (options.runtime.piRunner) {
+    return await runScheduled(options.runtime.piRunner);
+  }
+  return await withPiRunWorkspace(
+    { workspace: options.runtime.workspace, env: options.runtime.env },
+    runScheduled,
+  );
+}
+
+async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunReviewAgentResult> {
   const agentTools = resolveAgentTools(options.agent, options.runtime.plan);
   const agentRunContext = createAgentRunContext(options.runtime);
-  const diffManifest = prepareDiffManifestContext({
+  const diffManifestOptions = {
     input: options.input,
     limits: options.runtime.config.limits?.diffManifest,
     toolMode: options.toolMode ?? "read-only",
-  });
+    allowOversizedCondensed: options.allowOversizedCondensedManifest,
+  } as const;
+  let diffManifest = prepareDiffManifestContext(diffManifestOptions);
+  if (
+    diffManifest?.mode === "condensed" &&
+    diffManifestOptions.toolMode === "read-only" &&
+    options.runtime.structuralToolsEnabled !== false &&
+    options.runtime.structuralAnalysis
+  ) {
+    diffManifest = prepareDiffManifestContext({
+      ...diffManifestOptions,
+      structuralAnalysis: await options.runtime.structuralAnalysis(),
+    });
+  }
   const prepared: PreparedAgentContext = { agentTools, agentRunContext, diffManifest };
   const prompt = await renderAgentPrompt({ ...options, ...prepared });
   const providers = selectProviders(options.runtime, options.agent, options.runOptions);
@@ -139,6 +214,139 @@ export async function runReviewAgent(
   return await withPiRunWorkspace(
     { workspace: options.runtime.workspace, env: options.runtime.env },
     runProviders,
+  );
+}
+
+async function scheduledReviewManifests(options: RunReviewAgentOptions) {
+  const kind =
+    options.agent.definition.output.id === reviewResultSchemaId
+      ? "review"
+      : schemaHasCanonicalInlineFindingsRoot(options.agent.definition.output.jsonSchema)
+        ? "inlineFindings"
+        : undefined;
+  if (!kind) {
+    return undefined;
+  }
+  const manifest = readReservedInputManifest(options.input);
+  if (!manifest) {
+    return undefined;
+  }
+  const maxShards = options.runOptions?.maxShards;
+  const config =
+    maxShards === undefined
+      ? options.runtime.config.limits?.diffManifest
+      : { ...options.runtime.config.limits?.diffManifest, maxShards };
+  const manifests = await shardDiffManifestForPrompt({
+    manifest,
+    config,
+    workspace: options.runtime.workspace,
+    env: options.runtime.env,
+    log: options.runtime.log,
+    structuralAnalysis: options.runtime.structuralAnalysis,
+  });
+  return { kind, manifests } as const;
+}
+
+function inputWithManifest(input: unknown, manifest: DiffManifest): Record<string, unknown> {
+  if (typeof input !== "object" || input === null) {
+    throw new Error("Scheduled review input must contain a Diff Manifest");
+  }
+  return { ...input, manifest };
+}
+
+function mergeScheduledReviewAgentResults(
+  results: readonly RunReviewAgentResult[],
+  options: RunReviewAgentOptions,
+  kind: "review" | "inlineFindings",
+): RunReviewAgentResult {
+  if (kind === "inlineFindings") {
+    const parsed = results.map((result) => options.agent.definition.output.parse(result.value));
+    const findings = parsed.flatMap((value) =>
+      typeof value === "object" &&
+      value !== null &&
+      Array.isArray((value as { inlineFindings?: unknown }).inlineFindings)
+        ? (value as { inlineFindings: unknown[] }).inlineFindings
+        : [],
+    );
+    const deduplicatedFindings = deduplicateScheduledFindingValues(findings);
+    const maxItems = canonicalInlineFindingsMaxItems(options.agent.definition.output.jsonSchema);
+    return {
+      value: options.agent.definition.output.parse({
+        inlineFindings:
+          maxItems === undefined ? deduplicatedFindings : deduplicatedFindings.slice(0, maxItems),
+      }),
+      repairAttempted: results.some((result) => result.repairAttempted),
+      providerModels: results.flatMap((result) => result.providerModels),
+    };
+  }
+  const reviews = results.map((result) => parseReviewResult(result.value));
+  const summaries = [...new Set(reviews.map((review) => review.summary.body))];
+  const titles = [...new Set(reviews.flatMap((review) => review.summary.title ?? []))];
+  return {
+    value: parseReviewResult({
+      summary: {
+        ...(titles.length === 1 ? { title: titles[0] } : {}),
+        body: summaries.join("\n\n"),
+      },
+      inlineFindings: deduplicateScheduledFindings(
+        reviews.flatMap((review) => review.inlineFindings),
+      ),
+    }),
+    repairAttempted: results.some((result) => result.repairAttempted),
+    providerModels: results.flatMap((result) => result.providerModels),
+  };
+}
+
+function deduplicateScheduledFindingValues(findings: readonly unknown[]): unknown[] {
+  const unique: unknown[] = [];
+  for (const finding of findings) {
+    const duplicate = unique.some(
+      (candidate) =>
+        sameFindingValueAnchor(candidate, finding) &&
+        findingValueField(candidate, "body") === findingValueField(finding, "body"),
+    );
+    if (!duplicate) {
+      unique.push(finding);
+    }
+  }
+  return unique;
+}
+
+function sameFindingValueAnchor(left: unknown, right: unknown): boolean {
+  return ["path", "rangeId", "side", "startLine", "endLine"].every(
+    (field) => findingValueField(left, field) === findingValueField(right, field),
+  );
+}
+
+function findingValueField(value: unknown, field: string): unknown {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)[field]
+    : undefined;
+}
+
+function deduplicateScheduledFindings(findings: ReviewResult["inlineFindings"]) {
+  const unique: ReviewResult["inlineFindings"] = [];
+  for (const finding of findings) {
+    const duplicate = unique.some(
+      (candidate) => sameFindingAnchor(candidate, finding) && candidate.body === finding.body,
+    );
+    if (!duplicate) {
+      unique.push(finding);
+    }
+  }
+  return unique;
+}
+
+function sameFindingAnchor(
+  left: ReviewResult["inlineFindings"][number],
+  right: ReviewResult["inlineFindings"][number],
+): boolean {
+  return (
+    left.path === right.path &&
+    left.rangeId === right.rangeId &&
+    left.side === right.side &&
+    left.startLine === right.startLine &&
+    left.endLine === right.endLine
   );
 }
 
@@ -184,6 +392,7 @@ async function runAgentWithProvider(
     output = (await runPiWithTransientRetries(options, provider, prompt, retry, attemptType))
       .stdout;
   } catch (error) {
+    rethrowAgentRunBudgetExhaustion(error);
     return {
       ok: false,
       error: error instanceof Error ? error.message : String(error),
@@ -209,6 +418,7 @@ async function runAgentWithProvider(
         await runPiWithTransientRetries(options, provider, repairPrompt, retry, "repair")
       ).stdout;
     } catch (error) {
+      rethrowAgentRunBudgetExhaustion(error);
       return {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
@@ -255,10 +465,17 @@ async function runPiWithTransientRetries(
         attempt + 1,
       );
     } catch (error) {
+      rethrowAgentRunBudgetExhaustion(error);
       lastError = error;
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function rethrowAgentRunBudgetExhaustion(error: unknown): void {
+  if (error instanceof AgentRunBudgetExhaustedError) {
+    throw error;
+  }
 }
 
 function retrySettings(agent: RuntimeAgent): RetrySettings {
@@ -332,6 +549,7 @@ async function runPiForPrompt(
   attemptType: AgentAttemptType,
   attemptNumber: number,
 ): Promise<PiRunResult> {
+  reserveAgentRun(options.runtime.agentRunBudget);
   const builtinTools = builtinToolsForPrompt(options.toolMode ?? "read-only");
   const runtimeTools = runtimeToolsForRun(options);
   const customTools = customToolsForRun(options);
@@ -408,6 +626,7 @@ async function executeObservedPi(
     prompt,
     env: options.runtime.env,
     piExecutable: options.runtime.piExecutable,
+    piAgentDir: options.runtime.piAgentDir,
     builtinTools: tools.builtinTools,
     runtimeTools: tools.runtimeTools,
     customTools: tools.customTools,

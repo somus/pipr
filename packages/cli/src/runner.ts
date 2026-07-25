@@ -52,6 +52,7 @@ type CliOptions = {
   base?: string;
   head?: string;
   piExecutable?: string;
+  piAgentDir?: string;
   json?: boolean;
   limit?: string;
   trace?: string | boolean;
@@ -170,6 +171,7 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .option("--pi-executable <path>", "Pi executable path")
     .option("--trace [path]", "Capture a diagnostic run bundle")
+    .option("--pi-agent-dir <path>", "Pi agent directory for local authentication")
     .option("--json", "Print structured JSON output")
     .action(runLocalReview);
 
@@ -597,6 +599,7 @@ async function runLocalReview(options: CliOptions & { base: string }): Promise<v
     headSha: options.head,
     piExecutable: options.piExecutable,
     traceDirectory,
+    piAgentDir: options.piAgentDir,
     logSink: localConsoleLogSink,
     taskLog: stderrTaskLog,
   });

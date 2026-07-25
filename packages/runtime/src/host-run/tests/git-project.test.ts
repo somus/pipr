@@ -37,12 +37,15 @@ describe("loadRuntimeProjectFromGitCommit", () => {
         '    provider: "deepseek",',
         '    model: "deepseek-v4-pro",',
         '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-        '    options: { thinking: "high" },',
+        '    thinking: "high",',
         "  });",
         "  pipr.review({",
         '    id: "review",',
         "    model: deepseek,",
-        "    instructions: reviewerInstructions,",
+        "    instructions: {",
+        "      findings: reviewerInstructions,",
+        "      summary: reviewerInstructions,",
+        "    },",
         "  });",
         "});",
       ].join("\n"),
@@ -54,7 +57,10 @@ describe("loadRuntimeProjectFromGitCommit", () => {
       commitSha: baseSha,
     });
 
-    expect(runtime.plan.agents[0]?.definition.instructions).toBe("Review copy.");
+    expect(runtime.plan.agents.map((agent) => agent.definition.instructions)).toEqual([
+      "Review copy.",
+      "Review copy.",
+    ]);
   });
 
   it("fails clearly when the base commit does not contain pipr config", async () => {

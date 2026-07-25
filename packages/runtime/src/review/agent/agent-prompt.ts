@@ -225,7 +225,7 @@ function reviewPolicyPrompt(schema: Schema<unknown>): string | undefined {
       "Finding bodies must be publication-ready review prose, not analysis notes.",
       `State the concrete defect and user-visible or runtime impact directly. Keep each body to one short paragraph, at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters. Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target; prefer 250-450 characters when possible.`,
       "Do not include step-by-step reasoning, broad context, praise, restated diff, alternatives, or code snippets unless they are necessary to identify the defect.",
-      "Never copy a secret-looking literal from changed code into the review summary, inline finding body, or suggestedFix. Describe only the secret kind and location.",
+      "Never copy a secret-looking literal from changed code into any publishable output field, including a review summary, inline finding body, suggestedFix, custom title or rationale. Describe only the secret kind and location.",
       "Omit speculative, style-only, broad refactor, external-fact, and out-of-diff findings.",
       "Use read tools when more context is needed. If evidence is insufficient, omit the finding.",
       "Emit one inline finding per issue, anchored to a valid span within one Diff Manifest commentable range.",

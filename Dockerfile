@@ -1,6 +1,9 @@
+FROM ghcr.io/somus/ast-grep:0.45.0-alpine3.22@sha256:b6da090fc5db9eb80c57444c628637ed20f5170e214268a9572369a2986dc215 AS ast-grep
+
 FROM oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS base
 
 USER root
+COPY --from=ast-grep /usr/local/bin/ast-grep /usr/local/bin/ast-grep
 RUN apk add --no-cache bash fd git ripgrep su-exec=0.2-r3 \
   && ln -sf /usr/local/bin/bun /usr/local/bin/node \
   && mkdir -p /home/bun/.pi/agent/bin \
@@ -18,6 +21,7 @@ RUN bun add -g \
   @earendil-works/pi-ai@0.80.10 \
   @earendil-works/pi-tui@0.80.10 \
   @earendil-works/pi-agent-core@0.80.10 \
+  && ast-grep outline --help >/dev/null \
   && PI_OFFLINE=1 PI_TELEMETRY=0 pi --help >/dev/null
 
 WORKDIR /opt/pipr

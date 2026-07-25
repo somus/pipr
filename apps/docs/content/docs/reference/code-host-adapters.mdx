@@ -12,7 +12,11 @@ The public config stays provider-neutral:
 ```ts
 pipr.review({
   id: "review",
-  reviewer,
+  model,
+  instructions: {
+    findings: "Review for actionable defects.",
+    summary: "Summarize changed behavior and risk.",
+  },
   entrypoints: {
     changeRequest: ["opened", "updated"],
     command: { pattern: "@pipr review", permission: "write" },

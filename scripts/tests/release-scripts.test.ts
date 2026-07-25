@@ -344,6 +344,17 @@ describe("developer checks", () => {
     expect(turbo.tasks?.["test:generated"]?.dependsOn).toContain("typegen");
   });
 
+  it("installs the docs browser with the pinned workspace Playwright", () => {
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const installStep = workflow.jobs.docs?.steps?.find((step) =>
+      step.run?.includes("playwright install"),
+    );
+
+    expect(installStep?.run).toBe(
+      "bun run --cwd apps/docs playwright install --with-deps chromium",
+    );
+  });
+
   it("runs the runtime CI package gate once", () => {
     const workflow = parseWorkflow(".github/workflows/ci.yml");
     const matrix = workflow.jobs.packages?.strategy?.matrix?.include ?? [];
@@ -425,7 +436,7 @@ describe("sync-release-lockfile", () => {
       "image: ghcr.io/somus/pipr:v0.1.1",
     );
     expect(readFileSync(path.join(repository, ".github/workflows/pipr.yml"), "utf8")).toContain(
-      "uses: somus/pipr@v0.1.1",
+      `uses: somus/pipr@v${dogfoodSdkVersion}`,
     );
     const initProjectTests = readFileSync(
       path.join(repository, "packages/runtime/src/config/tests/init-project.test.ts"),
@@ -500,7 +511,10 @@ export default definePipr((pipr) => {
       ...defaultReviewEntrypoints,
       changeRequest: defaultReviewActions,
     },
-    instructions: "Review the change.",
+    instructions: {
+      findings: "Review the change.",
+      summary: "Summarize the change.",
+    },
   });
 });
 `,
@@ -803,6 +817,32 @@ describe("check-release-metadata", () => {
       readFileSync(workflowPath, "utf8").replace(
         "      - name: Open dogfood SDK update PR\n",
         "      - name: Update dogfood SDK without PR\n",
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("adds the self-review workflow to the post-publish dogfood update PR", () => {
+    const releaseWorkflow = readFileSync(
+      path.join(repoRoot, ".github/workflows/release.yml"),
+      "utf8",
+    );
+
+    expect(releaseWorkflow).toContain("bun run sync:release-lockfile");
+    expect(releaseWorkflow).toContain(
+      "git add .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml",
+    );
+  });
+
+  it("rejects a post-publish dogfood PR that omits the self-review workflow", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    write(
+      workflowPath,
+      readFileSync(workflowPath, "utf8").replace(
+        "git add .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml",
+        "git add .pipr/package.json .pipr/bun.lock",
       ),
     );
 

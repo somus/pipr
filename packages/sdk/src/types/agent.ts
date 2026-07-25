@@ -1,5 +1,5 @@
 import type { PiprRunContext } from "../result.js";
-import type { ReviewResult, ReviewSummary } from "../review-contract.js";
+import type { ReviewFindingsResult, ReviewResult, ReviewSummary } from "../review-contract.js";
 import type { DurationInput, ModelProfile } from "./config.js";
 import type { PromptSource } from "./prompt.js";
 import type { Schema } from "./schema.js";
@@ -12,6 +12,7 @@ export type BuiltinToolCatalog = {
 
 /** Built-in schema catalog exposed on the pipr builder. */
 export type BuiltinSchemaCatalog = {
+  readonly inlineFindings: Schema<ReviewFindingsResult>;
   readonly review: Schema<ReviewResult>;
   readonly summary: Schema<ReviewSummary>;
 };

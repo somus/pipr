@@ -116,7 +116,7 @@ Run `pipr runs show --pr <number>` first. A publication failure, stale-head cate
 - `actions/checkout` uses `fetch-depth: 0`.
 - `GITHUB_TOKEN` is present in the Action environment.
 - Workflow permissions include `pull-requests: write`, `issues: write`, and `checks: write` when checks are enabled.
-- `contents: write` is available when verifier thread resolution is enabled.
+- Workflow permissions include `contents: read`.
 - The pull request event action matches a configured change request entrypoint.
 - A command comment is on a pull request, not a plain issue.
 
@@ -161,7 +161,7 @@ Pipr drops invalid findings and continues the review. Read `droppedFindings` fro
 Common reasons:
 
 - `path` does not match a changed file in the Diff Manifest.
-- `rangeId` does not exist for that path.
+- `rangeId` does not exist, and the path, side, and line span do not identify exactly one range.
 - `side`, `startLine`, or `endLine` does not match the selected range.
 - The finding is outside direct scoped Pi result paths.
 - The file was excluded as generated, binary, removed, lockfile, or too large for inline review.
@@ -211,7 +211,9 @@ Thread replies and resolution require adapter support and sufficient native perm
 
 The verifier can reply to Pipr-owned Inline Review Comments and resolve GitHub review threads when permissions allow.
 
-If the API call fails, Pipr increments `result.publication.inlineResolutionErrorCount` and keeps the review run successful. Check that the workflow grants `contents: write` and `pull-requests: write`.
+If the API call fails, Pipr increments `result.publication.inlineResolutionErrorCount` and keeps the review run successful. Check that the workflow grants `pull-requests: write`.
+
+If Pipr reports that the GitHub credential cannot resolve the review thread, GitHub returned `viewerCanResolve: false` for that credential. `${{ github.token }}` can still publish the verifier's fixed-finding reply, but native resolution requires a user credential with pull request write access. Store that credential as a repository secret and pass it as `GITHUB_TOKEN`; see [GitHub Action](/docs/guide/github-action#permissions) for the workflow example.
 
 ## Next steps
 

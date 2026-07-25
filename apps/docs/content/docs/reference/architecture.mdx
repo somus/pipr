@@ -61,7 +61,7 @@ Run observability follows a separate provider-neutral path. `RunRecorder` captur
 
 For hosted change-request runs, Pipr loads `.pipr/config.ts` and local imports from the base commit. The proposed head is reviewed, but proposed config changes cannot change the current run's executable review settings.
 
-Provider backend, model, API-key env, and provider options come from the trusted base config, not proposed change request code.
+Provider backend, model, API-key env, and thinking level come from the trusted base config, not proposed change request code.
 
 Pi receives a read-only workspace copy. The official Docker Action seals the copy under the root supervisor, then runs Pi as UID and GID `1000`. Pi can use only read-only built-in tools and Pipr-owned Diff Read Tools for condensed manifest runs.
 

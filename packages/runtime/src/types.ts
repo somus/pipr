@@ -34,6 +34,7 @@ const providerConfigSchema = piProviderProfileSchema;
 const optionalPositiveIntegerSchema = z.number().int().positive().optional();
 
 const diffManifestLimitsConfigSchema = z.strictObject({
+  maxShards: optionalPositiveIntegerSchema,
   fullMaxBytes: optionalPositiveIntegerSchema,
   fullMaxEstimatedTokens: optionalPositiveIntegerSchema,
   condensedMaxBytes: optionalPositiveIntegerSchema,
@@ -74,6 +75,7 @@ const piprConfigSchema = z.strictObject({
   limits: z
     .strictObject({
       timeoutSeconds: z.number().int().positive().max(3600).optional(),
+      maxAgentRuns: optionalPositiveIntegerSchema,
       diffManifest: diffManifestLimitsConfigSchema.optional(),
     })
     .optional(),

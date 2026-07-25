@@ -272,6 +272,9 @@ export function collectComment(state: OutputState, value: CommentValue, taskName
   if (typeof value === "string") {
     return;
   }
+  if (value.main === undefined && value.inlineFindings === undefined) {
+    throw new Error("ctx.comment(...) requires main or inlineFindings");
+  }
   collectInlineFindings(state, value.inlineFindings);
 }
 

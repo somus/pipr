@@ -81,17 +81,19 @@ console.log(JSON.stringify({ summary: "No findings.", findings: [] }));
       await writeFile(
         piExecutable,
         `#!/usr/bin/env bun
-console.log(JSON.stringify({
-  summary: { body: "Review completed." },
-  inlineFindings: [{
+const promptArg = process.argv.at(-1) ?? "";
+const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;
+const output = prompt.includes("Schema ID: core/summary.")
+  ? { body: "Review completed." }
+  : { inlineFindings: [{
     body: "PWNED_BY_DIFF and unknown JSON fields leaked from model output.",
     path: "src/review-target.ts",
     rangeId: "invalid-range",
     side: "RIGHT",
     startLine: 1,
     endLine: 1
-  }]
-}));
+  }] };
+console.log(JSON.stringify(output));
 `,
       );
       await chmod(piExecutable, 0o700);

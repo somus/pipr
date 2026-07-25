@@ -180,7 +180,12 @@ describe("publishGitHubPublicationPlan", () => {
         authorLogin: client.ownerLogin,
       }),
     );
-    client.reviewThreads.push({ id: "thread-1", isResolved: false, commentIds: [10] });
+    client.reviewThreads.push({
+      id: "thread-1",
+      isResolved: false,
+      viewerCanResolve: true,
+      commentIds: [10],
+    });
     const initialState = publicationClientSideEffects(client);
 
     await expect(
@@ -532,6 +537,27 @@ describe("publishGitHubPublicationPlan", () => {
     expect(client.resolvedThreadIds).toEqual(["thread-1"]);
   });
 
+  it("reports when the GitHub credential cannot resolve review threads", async () => {
+    const { client, publicationPlan } = staleResolutionFixture({ resolved: false });
+    const thread = client.reviewThreads[0];
+    if (!thread) {
+      throw new Error("test fixture missing review thread");
+    }
+    thread.viewerCanResolve = false;
+
+    const result = await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: publicationPlan,
+    });
+
+    expect(result.metadata.inlineResolutionErrors).toEqual([
+      "resolve thread 'thread-1' for finding 'fnd_existing': the GitHub credential cannot resolve this review thread; configure GITHUB_TOKEN with a user credential that can resolve pull request review threads",
+    ]);
+    expect(client.reviewReplies).toHaveLength(1);
+    expect(client.resolvedThreadIds).toHaveLength(0);
+  });
+
   it("replies again when the same finding is reintroduced on a new inline thread", async () => {
     const { client, finding, publicationPlan } = staleResolutionFixture({
       resolved: false,
@@ -544,7 +570,12 @@ describe("publishGitHubPublicationPlan", () => {
         authorLogin: client.ownerLogin,
       }),
     );
-    client.reviewThreads.push({ id: "thread-2", isResolved: false, commentIds: [12] });
+    client.reviewThreads.push({
+      id: "thread-2",
+      isResolved: false,
+      viewerCanResolve: true,
+      commentIds: [12],
+    });
     publicationPlan.reviewState.findings[0] = {
       ...finding,
       lastCommentedHeadSha: "new-head",
@@ -899,7 +930,14 @@ describe("createGitHubPublicationClient", () => {
     ).resolves.toMatchObject({ id: 42, body: "resolved" });
     await expect(
       client.listReviewThreads({ repo: "local/pipr", pullRequestNumber: 1 }),
-    ).resolves.toEqual([{ id: "thread-1", isResolved: false, commentIds: [10, 42] }]);
+    ).resolves.toEqual([
+      {
+        id: "thread-1",
+        isResolved: false,
+        viewerCanResolve: true,
+        commentIds: [10, 42],
+      },
+    ]);
     await expect(client.resolveReviewThread({ threadId: "thread-1" })).resolves.toBeUndefined();
     expect(requests.map((request) => request.url)).toEqual([
       "https://api.github.test/repos/local/pipr/pulls/1/comments/10/replies",
@@ -1003,7 +1041,12 @@ function addStaleInlineThread(
     );
     commentIds.push(11);
   }
-  client.reviewThreads.push({ id: "thread-1", isResolved: options.resolved, commentIds });
+  client.reviewThreads.push({
+    id: "thread-1",
+    isResolved: options.resolved,
+    viewerCanResolve: true,
+    commentIds,
+  });
 }
 
 function addPriorMainComment(
@@ -1114,6 +1157,7 @@ function reviewThreadsGraphqlResponse() {
               {
                 id: "thread-1",
                 isResolved: false,
+                viewerCanResolve: true,
                 comments: {
                   nodes: [{ databaseId: 10 }, { databaseId: 42 }],
                 },

@@ -371,7 +371,7 @@ export default definePipr((pipr) => {
     provider: ${JSON.stringify(piprEvalModel.provider)},
     model: ${JSON.stringify(piprEvalModel.model)},
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
 
   pipr.config({ publication: { maxInlineComments: 3 } });
@@ -380,7 +380,10 @@ export default definePipr((pipr) => {
     id: "prompt-eval-review",
     model,
     paths: { include: ["src/**"] },
-    instructions: ${JSON.stringify(reviewInstructions)},
+    instructions: {
+      findings: ${JSON.stringify(reviewInstructions)},
+      summary: "Summarize changed behavior and risk using the merged findings.",
+    },
     timeout: "2m",
   });
 });
@@ -395,7 +398,7 @@ export default definePipr((pipr) => {
     provider: ${JSON.stringify(piprEvalModel.provider)},
     model: ${JSON.stringify(piprEvalModel.model)},
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
 
   pipr.config({ publication: { maxInlineComments: 3 } });

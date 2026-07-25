@@ -134,9 +134,12 @@ export async function writePiExecutable(piExecutable: string, stdout: string): P
 }
 
 function piExecutableScript(stdout: string): string {
-  return ["#!/bin/sh", 'touch "$(dirname "$0")/pi-called"', `printf '%s\\n' '${stdout}'`].join(
-    "\n",
-  );
+  return [
+    "#!/bin/sh",
+    'touch "$(dirname "$0")/pi-called"',
+    'printf "%s\\n" "$PI_CODING_AGENT_DIR" > "$(dirname "$0")/pi-agent-dir"',
+    `printf '%s\\n' '${stdout}'`,
+  ].join("\n");
 }
 
 export async function runIssueCommentCommand(
@@ -360,6 +363,7 @@ export function reviewConfigTs(
     parseSideEffect?: boolean;
     checks?: boolean;
     autoResolve?: false | "userRepliesDisabled" | "any";
+    subscriptionModel?: boolean;
   } = {},
 ): string {
   const template = "$";
@@ -376,10 +380,14 @@ export function reviewConfigTs(
     "",
     "export default definePipr((pipr) => {",
     "  const model = pipr.model({",
-    '    provider: "deepseek",',
-    '    model: "deepseek-reasoner",',
-    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-    '    options: { thinking: "high" },',
+    ...(options.subscriptionModel
+      ? ['    provider: "openai-codex",', '    model: "gpt-5.5",']
+      : [
+          '    provider: "deepseek",',
+          '    model: "deepseek-reasoner",',
+          '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
+        ]),
+    '    thinking: "high",',
     "  });",
     "  const reviewer = pipr.agent({",
     '    name: "reviewer",',
@@ -574,7 +582,7 @@ export function explicitModelIdConfigTs(): string {
     '    provider: "deepseek",',
     '    model: "deepseek-reasoner",',
     '    apiKey: pipr.secret({ name: "FAST_DEEPSEEK_API_KEY" }),',
-    '    options: { thinking: "high" },',
+    '    thinking: "high",',
     "  });",
     "  const reviewer = pipr.agent({",
     '    name: "reviewer",',
@@ -854,7 +862,14 @@ export function verifierPublicationClient(
       return reviewComments;
     },
     async listReviewThreads() {
-      return [{ id: "thread-1", isResolved: false, commentIds: [parentCommentId, replyCommentId] }];
+      return [
+        {
+          id: "thread-1",
+          isResolved: false,
+          viewerCanResolve: true,
+          commentIds: [parentCommentId, replyCommentId],
+        },
+      ];
     },
     async createReviewCommentReply(options: { commentId: number; body: string }) {
       reviewReplies.push(options);

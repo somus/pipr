@@ -1,9 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { findEnclosingDeclaration } from "../diff/manifest-structure.js";
+import type { DiffStructuralAnalysis } from "../diff/structural-analysis.js";
 import type { DiffManifest } from "../types.js";
 import {
   assertNoSymlinkPath,
+  type BaseDeclarationSnapshot,
   type BaseRangeSnapshot,
   boundedLineSlice,
   type LineWindow,
@@ -16,12 +19,16 @@ import {
 } from "./runtime-tools-core.js";
 
 export const piRuntimeReadToolNames = ["pipr_read_diff", "pipr_read_at_ref"] as const;
+export const piRuntimeStructuralToolNames = ["pipr_read_declaration", "pipr_ast_grep"] as const;
 
-export type PiRuntimeReadToolName = (typeof piRuntimeReadToolNames)[number];
+export type PiRuntimeReadToolName =
+  | (typeof piRuntimeReadToolNames)[number]
+  | (typeof piRuntimeStructuralToolNames)[number];
 
 export type PiRuntimeReadToolRequest = {
   manifest: DiffManifest;
   toolResponseMaxBytes: number;
+  structuralAnalysis?: Extract<DiffStructuralAnalysis, { available: true }>;
 };
 
 export type PreparedPiRuntimeReadTools = {
@@ -29,6 +36,20 @@ export type PreparedPiRuntimeReadTools = {
   dataPath: string;
   toolNames: readonly PiRuntimeReadToolName[];
 };
+
+type SnapshotBudget = {
+  remainingBytes: number;
+  remainingFiles: number;
+};
+
+type MaterializedSnapshot = {
+  relativePath: string;
+  bytes: number;
+  truncated: boolean;
+};
+
+const maxBaseSnapshotBytes = 16 * 1024 * 1024;
+const maxBaseSnapshotFiles = 512;
 
 export async function preparePiRuntimeReadTools(options: {
   root: string;
@@ -38,24 +59,139 @@ export async function preparePiRuntimeReadTools(options: {
   const toolRoot = path.join(options.root, "runtime-tools");
   const baseRoot = path.join(toolRoot, "base");
   await mkdir(baseRoot, { recursive: true });
+  const snapshotBudget: SnapshotBudget = {
+    remainingBytes: maxBaseSnapshotBytes,
+    remainingFiles: maxBaseSnapshotFiles,
+  };
   const baseRanges = await materializeBaseRangeSnapshots({
     baseRoot,
     manifest: options.request.manifest,
     sourceWorkspace: options.sourceWorkspace,
     maxBytes: options.request.toolResponseMaxBytes,
+    snapshotBudget,
   });
+  const baseDeclarations = options.request.structuralAnalysis
+    ? await materializeBaseDeclarationSnapshots({
+        baseRoot,
+        manifest: options.request.manifest,
+        structuralAnalysis: options.request.structuralAnalysis,
+        sourceWorkspace: options.sourceWorkspace,
+        maxBytes: options.request.toolResponseMaxBytes,
+        snapshotBudget,
+      })
+    : {};
   const data: RuntimeToolData = {
     manifest: options.request.manifest,
     toolResponseMaxBytes: options.request.toolResponseMaxBytes,
     baseRanges,
+    baseDeclarations,
+    structuralAnalysis: options.request.structuralAnalysis,
   };
   const dataPath = path.join(toolRoot, "data.json");
   await Bun.write(dataPath, JSON.stringify(data));
   return {
     extensionPath: await piRuntimeToolsExtensionPath(),
     dataPath,
-    toolNames: piRuntimeReadToolNames,
+    toolNames: options.request.structuralAnalysis
+      ? [...piRuntimeReadToolNames, ...piRuntimeStructuralToolNames]
+      : piRuntimeReadToolNames,
   };
+}
+
+async function materializeBaseDeclarationSnapshots(options: {
+  baseRoot: string;
+  manifest: DiffManifest;
+  structuralAnalysis: Extract<DiffStructuralAnalysis, { available: true }>;
+  sourceWorkspace: string;
+  maxBytes: number;
+  snapshotBudget: SnapshotBudget;
+}): Promise<Record<string, BaseDeclarationSnapshot>> {
+  const declarations: Record<string, BaseDeclarationSnapshot> = {};
+  const snapshots = new Map<string, MaterializedSnapshot>();
+  for (const [fileIndex, file] of options.manifest.files.entries()) {
+    for (const range of file.commentableRanges) {
+      if (range.side !== "LEFT") {
+        continue;
+      }
+      const owner = findEnclosingDeclaration(file, range, options.structuralAnalysis);
+      if (owner?.ref !== "base") {
+        continue;
+      }
+      const window = {
+        startLine: owner.declaration.startLine,
+        endLine: owner.declaration.endLine,
+      };
+      const snapshot = await materializeBaseDeclarationSnapshot({
+        ...options,
+        fileIndex,
+        sourcePath: owner.sourcePath,
+        window,
+        snapshots,
+      });
+      if (!snapshot) {
+        continue;
+      }
+      declarations[range.id] = {
+        path: file.path,
+        ref: "base",
+        sourcePath: owner.sourcePath,
+        rangeId: range.id,
+        declaration: owner.declaration,
+        available: true,
+        ...snapshot,
+      };
+    }
+  }
+  return declarations;
+}
+
+async function materializeBaseDeclarationSnapshot(options: {
+  baseRoot: string;
+  fileIndex: number;
+  manifest: DiffManifest;
+  maxBytes: number;
+  snapshotBudget: SnapshotBudget;
+  snapshots: Map<string, MaterializedSnapshot>;
+  sourcePath: string;
+  sourceWorkspace: string;
+  window: LineWindow;
+}): Promise<MaterializedSnapshot | undefined> {
+  const snapshotKey = JSON.stringify([
+    options.sourcePath,
+    options.window.startLine,
+    options.window.endLine,
+  ]);
+  const existing = options.snapshots.get(snapshotKey);
+  if (existing) {
+    return existing;
+  }
+  if (options.snapshotBudget.remainingFiles === 0 || options.snapshotBudget.remainingBytes === 0) {
+    return undefined;
+  }
+  const blob = readGitBlobSlice({
+    cwd: options.sourceWorkspace,
+    ref: options.manifest.mergeBaseSha,
+    filePath: options.sourcePath,
+    window: options.window,
+    maxBytes: Math.min(options.maxBytes, options.snapshotBudget.remainingBytes),
+    allowMissing: true,
+  });
+  if (!blob.available || blob.content === undefined) {
+    return undefined;
+  }
+  const contentBytes = Buffer.byteLength(blob.content, "utf8");
+  if (!consumeSnapshotBudget(options.snapshotBudget, contentBytes)) {
+    return undefined;
+  }
+  const snapshotName = `declaration-${options.fileIndex}-${options.snapshots.size}.txt`;
+  const snapshot = {
+    relativePath: path.join("base", snapshotName),
+    bytes: blob.bytes ?? contentBytes,
+    truncated: blob.truncated ?? false,
+  };
+  await Bun.write(path.join(options.baseRoot, snapshotName), blob.content);
+  options.snapshots.set(snapshotKey, snapshot);
+  return snapshot;
 }
 
 export async function piRuntimeToolsExtensionPath(): Promise<string> {
@@ -126,6 +262,7 @@ async function materializeBaseRangeSnapshots(options: {
   manifest: DiffManifest;
   sourceWorkspace: string;
   maxBytes: number;
+  snapshotBudget: SnapshotBudget;
 }): Promise<Record<string, BaseRangeSnapshot>> {
   const ranges: Record<string, BaseRangeSnapshot> = {};
   for (const [index, file] of options.manifest.files.entries()) {
@@ -156,6 +293,11 @@ async function materializeBaseRangeSnapshots(options: {
         ranges[range.id] = unavailableReadAtRefResult(request);
         continue;
       }
+      const contentBytes = Buffer.byteLength(blob.content, "utf8");
+      if (!consumeSnapshotBudget(options.snapshotBudget, contentBytes)) {
+        ranges[range.id] = unavailableReadAtRefResult(request);
+        continue;
+      }
       const snapshotName = `${index}-${rangeIndex}.txt`;
       await Bun.write(path.join(options.baseRoot, snapshotName), blob.content);
       ranges[range.id] = {
@@ -173,6 +315,15 @@ async function materializeBaseRangeSnapshots(options: {
     }
   }
   return ranges;
+}
+
+function consumeSnapshotBudget(budget: SnapshotBudget, bytes: number): boolean {
+  if (budget.remainingFiles === 0 || bytes > budget.remainingBytes) {
+    return false;
+  }
+  budget.remainingFiles -= 1;
+  budget.remainingBytes -= bytes;
+  return true;
 }
 
 function readGitBlobSlice(options: {

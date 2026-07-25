@@ -257,6 +257,7 @@ function registerVerifierProviderSecrets(
 ): void {
   const env = options.env ?? process.env;
   for (const provider of config.providers) {
+    if (!provider.apiKeyEnv) continue;
     const value = env[provider.apiKeyEnv];
     if (!value) continue;
     log.addSecret(value);

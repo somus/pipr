@@ -7,7 +7,7 @@ import path from "node:path";
 import { compact, isPlainObject } from "lodash-es";
 import { z } from "zod";
 import type { RunAgentEvent } from "../observability/types.js";
-import type { DiffManifest, ProviderConfig } from "../types.js";
+import type { ProviderConfig } from "../types.js";
 import type { PiReadOnlyToolName } from "./contract.js";
 import {
   type PiCustomToolRequest,
@@ -15,6 +15,7 @@ import {
   preparePiCustomTools,
 } from "./custom-tools.js";
 import { toPiProviderInvocation } from "./provider.js";
+import type { PiRuntimeReadToolRequest } from "./runtime-tools.js";
 import { type PreparedPiRuntimeReadTools, preparePiRuntimeReadTools } from "./runtime-tools.js";
 
 export type PiRunOptions = {
@@ -23,12 +24,10 @@ export type PiRunOptions = {
   prompt: string;
   env?: NodeJS.ProcessEnv;
   piExecutable?: string;
+  piAgentDir?: string;
   timeoutSeconds?: number;
   builtinTools?: readonly PiReadOnlyToolName[];
-  runtimeTools?: {
-    manifest: DiffManifest;
-    toolResponseMaxBytes: number;
-  };
+  runtimeTools?: PiRuntimeReadToolRequest;
   customTools?: PiCustomToolRequest;
   streamLimits?: PiStreamLimits;
   eventObserver?: (event: RunAgentEvent) => void;
@@ -207,11 +206,13 @@ async function runPiAttempt(
   options: PiRunOptions,
   workspaceScope?: PiWorkspaceScope,
 ): Promise<PiRunResult> {
+  assertPiAuthentication(options);
   const started = Date.now();
   const processIdentity = resolvePiProcessIdentity(options.env ?? process.env);
   assertWorkspaceScope(options.workspace, processIdentity, workspaceScope);
   const sandbox = await createPiRunSandbox(options.workspace, workspaceScope?.workspace);
   let preparedTools: PreparedPiTools | undefined;
+  let preparedCustomTools: PreparedPiCustomTools | undefined;
   try {
     const runtimeRead = options.runtimeTools
       ? await preparePiRuntimeReadTools({
@@ -220,10 +221,13 @@ async function runPiAttempt(
           request: options.runtimeTools,
         })
       : undefined;
-    const customTools = options.customTools
-      ? await preparePiCustomTools({ root: sandbox.root, request: options.customTools })
+    preparedCustomTools = options.customTools
+      ? await preparePiCustomTools({
+          root: sandbox.root,
+          request: options.customTools,
+        })
       : undefined;
-    preparedTools = mergePreparedPiTools(runtimeRead, customTools);
+    preparedTools = mergePreparedPiTools(runtimeRead, preparedCustomTools);
     const promptPath = path.join(sandbox.root, "prompt.md");
     await Bun.write(promptPath, options.prompt);
     const args = buildPiArgs(
@@ -236,7 +240,7 @@ async function runPiAttempt(
     await sealPiRunSandbox(sandbox, processIdentity);
     return await runProcess(options.piExecutable ?? "pi", args, {
       cwd: sandbox.workspace,
-      env: buildPiEnv(options.provider, sandbox, options.env, preparedTools),
+      env: buildPiEnv(options.provider, sandbox, options.env, preparedTools, options.piAgentDir),
       processIdentity,
       started,
       timeoutSeconds: options.timeoutSeconds,
@@ -244,7 +248,7 @@ async function runPiAttempt(
       eventObserver: options.eventObserver,
     });
   } finally {
-    await preparedTools?.custom?.close();
+    await preparedCustomTools?.close();
     await removeSandboxRoot(sandbox.root);
   }
 }
@@ -291,17 +295,18 @@ function buildPiEnv(
   sandbox: Pick<PiRunSandbox, "home" | "sessionDir" | "tmp">,
   sourceEnv: NodeJS.ProcessEnv = process.env,
   runtimeTools?: PreparedPiTools,
+  piAgentDir?: string,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     HOME: sandbox.home,
-    PI_CODING_AGENT_DIR: path.join(sandbox.home, ".pi", "agent"),
+    PI_CODING_AGENT_DIR: resolvePiAgentDir(provider, sandbox.home, piAgentDir),
     PI_CODING_AGENT_SESSION_DIR: sandbox.sessionDir,
     PI_TELEMETRY: "0",
     PIPR_PROVIDER_ID: provider.id,
-    PIPR_PROVIDER_API_KEY_ENV: provider.apiKeyEnv,
     TMPDIR: sandbox.tmp,
     USER: "pipr",
   };
+  addProviderApiKeyEnv(env, sourceEnv, provider);
   if (runtimeTools?.runtimeRead) {
     env.PIPR_RUNTIME_TOOLS_DATA = runtimeTools.runtimeRead.dataPath;
   }
@@ -313,8 +318,46 @@ function buildPiEnv(
   for (const key of ["BUN_INSTALL", "LANG", "PATH"]) {
     copyEnvValue(env, sourceEnv, key);
   }
-  copyEnvValue(env, sourceEnv, provider.apiKeyEnv);
   return env;
+}
+
+function assertPiAuthentication(
+  options: Pick<PiRunOptions, "provider" | "env" | "piAgentDir">,
+): void {
+  const apiKeyEnv = options.provider.apiKeyEnv;
+  if (apiKeyEnv) {
+    if (!(options.env ?? process.env)[apiKeyEnv]) {
+      throw new Error(`Missing provider env var for model '${options.provider.id}': ${apiKeyEnv}`);
+    }
+    return;
+  }
+  if (!options.piAgentDir) {
+    throw new Error(
+      `Model '${options.provider.id}' does not declare apiKey and requires a Pi agent directory`,
+    );
+  }
+}
+
+function resolvePiAgentDir(
+  provider: ProviderConfig,
+  sandboxHome: string,
+  piAgentDir?: string,
+): string {
+  return provider.apiKeyEnv === undefined && piAgentDir
+    ? piAgentDir
+    : path.join(sandboxHome, ".pi", "agent");
+}
+
+function addProviderApiKeyEnv(
+  env: NodeJS.ProcessEnv,
+  sourceEnv: NodeJS.ProcessEnv,
+  provider: ProviderConfig,
+): void {
+  if (!provider.apiKeyEnv) {
+    return;
+  }
+  env.PIPR_PROVIDER_API_KEY_ENV = provider.apiKeyEnv;
+  copyEnvValue(env, sourceEnv, provider.apiKeyEnv);
 }
 
 function mergePreparedPiTools(
@@ -327,11 +370,18 @@ function mergePreparedPiTools(
     return undefined;
   }
   assertSharedExtensionPath(tools);
+  const toolNames = tools.flatMap((tool) => [...tool.toolNames]);
+  const duplicateToolName = toolNames.find(
+    (toolName, index) => toolNames.indexOf(toolName) !== index,
+  );
+  if (duplicateToolName) {
+    throw new Error(`Pi tool name '${duplicateToolName}' is registered more than once`);
+  }
   return {
     extensionPath: first.extensionPath,
     runtimeRead,
     custom,
-    toolNames: tools.flatMap((tool) => [...tool.toolNames]),
+    toolNames,
   };
 }
 

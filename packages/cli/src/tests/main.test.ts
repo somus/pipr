@@ -600,7 +600,7 @@ describe("pipr CLI", () => {
       expect(result.stderr).toContain("pipr task runtime start");
       expect(result.stderr).toContain("pipr local review complete");
       expect(result.stderr).not.toContain('{"level":');
-      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(1);
+      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(2);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -621,7 +621,7 @@ describe("pipr CLI", () => {
       expect(result.stderr).toContain("diffTarget=working-tree");
       expect(result.stderr).toContain("pipr diff manifest");
       expect(result.stderr).toContain("files=1");
-      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(1);
+      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(2);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -696,8 +696,8 @@ describe("pipr CLI", () => {
               path: "src/a.ts",
               rangeId: "rng_missing",
               side: "RIGHT",
-              startLine: 1,
-              endLine: 1,
+              startLine: 2,
+              endLine: 2,
             },
             reason: expect.any(String),
           },
@@ -759,7 +759,80 @@ describe("pipr CLI", () => {
       );
 
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
-      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(1);
+      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(2);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("prefers an explicit Pi agent directory for a locally selected subscription model", async () => {
+    const workspace = await createLocalReviewWorkspace({ subscriptionModel: true });
+    const piAgentDir = path.join(workspace.rootDir, "local-pi-agent");
+    const envPiAgentDir = path.join(workspace.rootDir, "env-pi-agent");
+    const userHome = path.join(workspace.rootDir, "home");
+    try {
+      await mkdir(piAgentDir);
+
+      const result = await runCli(
+        [
+          "review",
+          "--base",
+          workspace.baseSha,
+          "--pi-executable",
+          workspace.piExecutable,
+          "--pi-agent-dir",
+          piAgentDir,
+        ],
+        { HOME: userHome, PI_CODING_AGENT_DIR: envPiAgentDir },
+        workspace.rootDir,
+      );
+
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect((await Bun.file(path.join(workspace.rootDir, "pi-agent-dir")).text()).trim()).toBe(
+        piAgentDir,
+      );
+      expect(await Bun.file(path.join(workspace.rootDir, "pi-args")).text()).toContain(
+        "--provider openai-codex --model gpt-5.5",
+      );
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("prefers PI_CODING_AGENT_DIR over the default local Pi agent directory", async () => {
+    const workspace = await createLocalReviewWorkspace({ subscriptionModel: true });
+    const piAgentDir = path.join(workspace.rootDir, "env-pi-agent");
+    const userHome = path.join(workspace.rootDir, "home");
+    try {
+      const result = await runCli(
+        ["review", "--base", workspace.baseSha, "--pi-executable", workspace.piExecutable],
+        { HOME: userHome, PI_CODING_AGENT_DIR: piAgentDir },
+        workspace.rootDir,
+      );
+
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect((await Bun.file(path.join(workspace.rootDir, "pi-agent-dir")).text()).trim()).toBe(
+        piAgentDir,
+      );
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("defaults local Pi authentication to the user's Pi agent directory", async () => {
+    const workspace = await createLocalReviewWorkspace({ subscriptionModel: true });
+    const userHome = path.join(workspace.rootDir, "home");
+    try {
+      const result = await runCli(
+        ["review", "--base", workspace.baseSha, "--pi-executable", workspace.piExecutable],
+        { HOME: userHome },
+        workspace.rootDir,
+      );
+
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect((await Bun.file(path.join(workspace.rootDir, "pi-agent-dir")).text()).trim()).toBe(
+        path.join(userHome, ".pi", "agent"),
+      );
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -775,7 +848,7 @@ describe("pipr CLI", () => {
       );
       expect(
         await Bun.file(path.join(workspace, ".github", "workflows", "pipr.yml")).text(),
-      ).toContain("uses: somus/pipr@v0.5.0"); // x-release-please-version
+      ).toContain("uses: somus/pipr@v0.6.0"); // x-release-please-version
     } finally {
       await removeWorkspace(workspace);
     }
@@ -1071,7 +1144,10 @@ describe("pipr CLI", () => {
       expect(inspect.stdout).toContain("tools");
       expect(inspect.stdout).toContain("schemas");
       expect(inspect.stdout).toContain("core/pr-review");
+      expect(inspect.stdout).toContain("core/inline-findings");
       expect(inspect.stdout).toContain("core/summary");
+      expect(inspect.stdout).toContain("maxInlineComments");
+      expect(inspect.stdout).toContain("aggregate");
       expect(inspect.stdout).not.toContain("core/review-candidates");
       expect(inspect.stdout).not.toContain("core/consolidated-review");
       expect(inspect.stdout).toContain("deepseek");
@@ -1205,7 +1281,12 @@ async function runHostRunWithGitWorkspace(options: {
 }
 
 async function createLocalReviewWorkspace(
-  options: { taskLog?: boolean; local?: boolean; findings?: boolean } = {},
+  options: {
+    taskLog?: boolean;
+    local?: boolean;
+    findings?: boolean;
+    subscriptionModel?: boolean;
+  } = {},
 ): Promise<{
   rootDir: string;
   baseSha: string;
@@ -1219,8 +1300,11 @@ async function createLocalReviewWorkspace(
   await runCommand("git", ["config", "core.hooksPath", "/dev/null"], rootDir);
   await runCommand("git", ["config", "commit.gpgsign", "false"], rootDir);
   await initWorkspaceConfig(rootDir);
-  if (options.taskLog || options.local === false) {
-    await Bun.write(path.join(rootDir, ".pipr", "config.ts"), localReviewConfig(options));
+  if (options.taskLog || options.local === false || options.subscriptionModel) {
+    await Bun.write(
+      path.join(rootDir, ".pipr", "config.ts"),
+      options.subscriptionModel ? localSubscriptionReviewConfig() : localReviewConfig(options),
+    );
   }
   await mkdir(path.join(rootDir, "src"));
   await Bun.write(path.join(rootDir, "src/a.ts"), "export const value = 1;\n");
@@ -1231,14 +1315,10 @@ async function createLocalReviewWorkspace(
   await runCommand("git", ["add", "."], rootDir);
   await runCommand("git", ["commit", "--no-verify", "-m", "head"], rootDir);
   const headSha = (await runCommand("git", ["rev-parse", "HEAD"], rootDir)).trim();
-  const piExecutable = path.join(rootDir, options.findings ? "fake-pi.ts" : "fake-pi.sh");
+  const piExecutable = path.join(rootDir, "fake-pi.ts");
   await Bun.write(
     piExecutable,
-    options.findings
-      ? reviewFindingsExecutable()
-      : ["#!/bin/sh", 'printf "1\\n" >> "$(dirname "$0")/pi-called"', noFindingsJsonCommand()].join(
-          "\n",
-        ),
+    options.findings ? reviewFindingsExecutable() : noFindingsExecutable(),
   );
   await chmod(piExecutable, 0o755);
   return { rootDir, baseSha, headSha, piExecutable };
@@ -1276,8 +1356,60 @@ function localReviewConfig(options: { taskLog?: boolean; local?: boolean }): str
   ].join("\n");
 }
 
-function noFindingsJsonCommand(): string {
-  return 'printf \'%s\\n\' \'{"summary":{"body":"No findings."},"inlineFindings":[]}\'';
+function localSubscriptionReviewConfig(): string {
+  return [
+    'import { definePipr } from "@usepipr/sdk";',
+    "",
+    "export default definePipr((pipr) => {",
+    "  const localModel = pipr.model({",
+    '    provider: "openai-codex",',
+    '    model: "gpt-5.5",',
+    "  });",
+    "  const hostedModel = pipr.model({",
+    '    provider: "deepseek",',
+    '    model: "deepseek-v4-pro",',
+    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
+    "  });",
+    "  pipr.config({ publication: { autoResolve: { model: hostedModel } } });",
+    "  const reviewer = pipr.agent({",
+    '    name: "reviewer",',
+    "    model: hostedModel,",
+    '    instructions: "Review this change.",',
+    "    output: pipr.schemas.review,",
+    '    prompt: () => "Review.",',
+    "  });",
+    "  const task = pipr.task({",
+    '    name: "review",',
+    "    async run(ctx) {",
+    "      const manifest = await ctx.change.diffManifest({ compressed: true });",
+    '      const model = ctx.run.trigger === "local" ? localModel : hostedModel;',
+    "      const result = await ctx.pi.run(reviewer, { manifest }, { model });",
+    "      await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });",
+    "    },",
+    "  });",
+    '  pipr.on.changeRequest({ actions: ["opened", "updated"], task });',
+    "});",
+  ].join("\n");
+}
+
+function noFindingsExecutable(): string {
+  return [
+    "#!/usr/bin/env bun",
+    'const callLog = import.meta.dir + "/pi-called";',
+    'const previousCalls = (await Bun.file(callLog).exists()) ? await Bun.file(callLog).text() : "";',
+    'await Bun.write(callLog, previousCalls + "1\\n");',
+    'await Bun.write(import.meta.dir + "/pi-agent-dir", (process.env.PI_CODING_AGENT_DIR ?? "") + "\\n");',
+    'await Bun.write(import.meta.dir + "/pi-args", process.argv.slice(2).join(" ") + "\\n");',
+    'const promptArg = process.argv.at(-1) ?? "";',
+    'const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;',
+    'if (prompt.includes("Schema ID: core/inline-findings.")) {',
+    "  console.log(JSON.stringify({ inlineFindings: [] }));",
+    '} else if (prompt.includes("Schema ID: core/summary.")) {',
+    '  console.log(JSON.stringify({ body: "No findings." }));',
+    "} else {",
+    '  console.log(JSON.stringify({ summary: { body: "No findings." }, inlineFindings: [] }));',
+    "}",
+  ].join("\n");
 }
 
 function reviewFindingsExecutable(): string {
@@ -1315,7 +1447,7 @@ function reviewFindingsExecutable(): string {
     '  summary: { body: "One finding.\\n<!-- pipr:header:hidden -->\\nTask marker example." },',
     "  inlineFindings: [",
     "    finding,",
-    '    { ...finding, body: "Invalid location.", rangeId: "rng_missing" },',
+    '    { ...finding, body: "Invalid location.", rangeId: "rng_missing", startLine: range.endLine + 1, endLine: range.endLine + 1 },',
     "  ],",
     "}));",
   ].join("\n");

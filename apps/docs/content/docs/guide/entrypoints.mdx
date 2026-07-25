@@ -16,14 +16,15 @@ The review helper registers hosted change-request, command, and local entrypoint
 The quickest setup sets a publication cap and uses `pipr.review(...)`:
 
 ```ts twoslash
-// @include: pipr-reviewer
+// @include: pipr-review
 import { defaultReviewEntrypoints } from "@usepipr/sdk";
 
 pipr.config({ publication: { maxInlineComments: 5 } });
 
 pipr.review({
   id: "review",
-  reviewer,
+  model,
+  instructions: reviewInstructions,
   entrypoints: defaultReviewEntrypoints,
 });
 ```
@@ -33,10 +34,11 @@ pipr.review({
 Set an entrypoint to `false` to disable it:
 
 ```ts twoslash
-// @include: pipr-reviewer
+// @include: pipr-review
 pipr.review({
   id: "review",
-  reviewer,
+  model,
+  instructions: reviewInstructions,
   entrypoints: {
     changeRequest: ["opened", "updated"],
     command: false,

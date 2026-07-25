@@ -2,19 +2,20 @@
 
 Status: Accepted
 
-The default `pipr.review()` recipe calls the Pipr-owned Review Run through `ctx.change.diffManifest()` and `ctx.pi.run()`. The TypeScript config does not expose diff creation or review validation as userland blocks.
+The default `pipr.review()` recipe calls the Pipr-owned Review Run through `ctx.change.diffManifest()` and `ctx.pi.run()`. It runs a canonical findings agent, merges any shards, then runs one summary agent with the scoped manifest and every merged candidate finding. The TypeScript config does not expose diff creation or review validation as userland blocks.
 
 The Review Run owns:
 
 - build the Diff Manifest from local git state
-- run Pi with the selected reviewer agent and provider
-- perform the single repair pass for invalid reviewer JSON
-- validate `ReviewResult` output against the Pipr-owned `core/pr-review` schema and Diff Manifest ranges
+- run Pi with the selected agent and provider
+- perform the single repair pass for invalid agent JSON
+- validate built-in output against `core/inline-findings`, `core/summary`, or `core/pr-review`
+- shard custom schemas rooted at `{ inlineFindings: [...] }` when each item contains the canonical finding fields, preserve extra item metadata, deduplicate by anchor plus body, and reparse the merged result
 - return a validated review for comment rendering
 
 Diff creation and review validation are internal to the runtime in the MVP. This keeps TypeScript tasks from bypassing the deterministic safety checks needed before Main Review Comment and Inline Review Comment publication.
 
-Tasks may compose around the Review Run, but model-facing inline review must use the Pipr-owned `core/pr-review` schema when it wants Inline Review Comments. Pull request event runs may select multiple tasks; Pipr computes the Diff Manifest once and runs selected tasks in parallel with isolated task state.
+Tasks may compose around the Review Run. Manual full-review agents can use `core/pr-review`; findings-only agents can use `core/inline-findings` or a compatible custom root schema. Summary-only and arbitrary custom schemas are not sharded. Pull request event runs may select multiple tasks; Pipr computes the Diff Manifest once and runs selected tasks in parallel with isolated task state.
 
 ## Durability guarantee
 

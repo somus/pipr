@@ -81,7 +81,10 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: \`Review. Example summary: \${example.summary.body}\`,
+    instructions: {
+      findings: \`Review. Example summary: \${example.summary.body}\`,
+      summary: "Summarize this change.",
+    },
   });
 });
 `,
@@ -104,7 +107,11 @@ export default definePipr((pipr) => {
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
   });
-  pipr.review({ id: "review", model, instructions: "Review this change." });
+  pipr.review({
+    id: "review",
+    model,
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+  });
 });
 `,
     );
@@ -235,7 +242,10 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: \`Review this change. Bun version: \${Bun.version}. Config exists: \${file(".pipr/config.ts").exists()}\`,
+    instructions: {
+      findings: \`Review this change. Bun version: \${Bun.version}. Config exists: \${file(".pipr/config.ts").exists()}\`,
+      summary: "Summarize this change.",
+    },
   });
 });
 `,
@@ -280,7 +290,10 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: \`Review this change. Local TS lib sentinel: \${sentinel}\`,
+    instructions: {
+      findings: \`Review this change. Local TS lib sentinel: \${sentinel}\`,
+      summary: "Summarize this change.",
+    },
   });
 });
 `,
@@ -315,7 +328,11 @@ export default definePipr((pipr) => {
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
   });
-  pipr.review({ id: "review", model, instructions: "Review this change." });
+  pipr.review({
+    id: "review",
+    model,
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+  });
 });
 `,
     );
@@ -342,7 +359,10 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: \`Review this change. TS target: \${ts.ScriptTarget.Latest}\`,
+    instructions: {
+      findings: \`Review this change. TS target: \${ts.ScriptTarget.Latest}\`,
+      summary: "Summarize this change.",
+    },
   });
 });
 `,
@@ -388,7 +408,11 @@ export default definePipr((pipr) => {
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
   });
-  pipr.review({ id: "review", model, instructions: "Review this change." });
+  pipr.review({
+    id: "review",
+    model,
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+  });
 });
 `,
     );

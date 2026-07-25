@@ -4,17 +4,17 @@ Use these patterns when customizing `.pipr/config.ts`.
 
 ## CLI commands
 
-| Command | Use |
-| --- | --- |
-| `pipr init` | Create `.pipr/config.ts`, `.pipr/package.json`, `.pipr/bun.lock`, `.pipr/tsconfig.json`, `.pipr/.gitignore`, and the default GitHub workflow. |
-| `pipr init --adapters <list>` | Generate selected adapter artifacts for `github`, `gitlab`, `azure-devops`, or `bitbucket`; use `none` to skip adapter files. |
-| `pipr init --minimal` | Create only `.pipr/config.ts`; editor types come from a repo-root `@usepipr/sdk` install. |
-| `pipr inspect` | Print models, agents, tasks, commands, tools, publication settings, checks, and limits. |
-| `pipr check` | Type-load config and validate the runtime plan. |
-| `pipr check --require-env` | Also require configured provider env vars. |
-| `pipr review --base <ref>` | Run change-request tasks locally without publishing comments. |
-| `pipr dry-run --host <host> --event <path>` | Load a native provider event and config without model calls or publication. |
-| `pipr webhook serve --host <host> --workspace <path> --repository <id>` | Run trusted webhook ingress for GitLab, Azure DevOps, or Bitbucket. |
+| Command                                                                 | Use                                                                                                                                           |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pipr init`                                                             | Create `.pipr/config.ts`, `.pipr/package.json`, `.pipr/bun.lock`, `.pipr/tsconfig.json`, `.pipr/.gitignore`, and the default GitHub workflow. |
+| `pipr init --adapters <list>`                                           | Generate selected adapter artifacts for `github`, `gitlab`, `azure-devops`, or `bitbucket`; use `none` to skip adapter files.                 |
+| `pipr init --minimal`                                                   | Create only `.pipr/config.ts`; editor types come from a repo-root `@usepipr/sdk` install.                                                     |
+| `pipr inspect`                                                          | Print models, agents, tasks, commands, tools, publication settings, checks, and limits.                                                       |
+| `pipr check`                                                            | Type-load config and validate the runtime plan.                                                                                               |
+| `pipr check --require-env`                                              | Also require configured provider env vars.                                                                                                    |
+| `pipr review --base <ref>`                                              | Run change-request tasks locally without publishing comments.                                                                                 |
+| `pipr dry-run --host <host> --event <path>`                             | Load a native provider event and config without model calls or publication.                                                                   |
+| `pipr webhook serve --host <host> --workspace <path> --repository <id>` | Run trusted webhook ingress for GitLab, Azure DevOps, or Bitbucket.                                                                           |
 
 ## Model and review basics
 
@@ -26,7 +26,7 @@ export default definePipr((pipr) => {
     provider: "deepseek",
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    options: { thinking: "high" },
+    thinking: "high",
   });
 
   pipr.config({ publication: { maxInlineComments: 5 } });
@@ -34,17 +34,20 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: `
-      Review the change request diff for correctness, security,
-      maintainability, and test coverage.
-      Return only actionable findings that target valid diff ranges.
-    `,
+    instructions: {
+      findings: `
+        Review the change request diff for correctness, security,
+        maintainability, and test coverage. Return only actionable findings
+        that target valid diff ranges.
+      `,
+      summary: "Summarize changed behavior, risk, and reviewer focus.",
+    },
     timeout: "10m",
   });
 });
 ```
 
-Use `id` on a model only when two model profiles share the same provider and model with different options.
+Use `id` on a model only when two profiles share the same provider and model with different API keys or thinking levels.
 
 ## Entrypoints
 
@@ -52,7 +55,10 @@ Use `id` on a model only when two model profiles share the same provider and mod
 pipr.review({
   id: "review",
   model,
-  instructions: "Review only actionable defects.",
+  instructions: {
+    findings: "Review only actionable defects.",
+    summary: "Summarize changed behavior and risk.",
+  },
   entrypoints: {
     changeRequest: ["opened", "updated", "reopened", "ready"],
     command: { pattern: "@pipr review", permission: "write" },
@@ -86,7 +92,10 @@ Use `paths` to filter the Diff Manifest and publishable Inline Review Comments:
 pipr.review({
   id: "runtime-review",
   model,
-  instructions: "Review runtime changes only.",
+  instructions: {
+    findings: "Review runtime changes only.",
+    summary: "Summarize runtime changes and risk.",
+  },
   paths: {
     include: ["packages/runtime/**"],
     exclude: ["**/*.test.ts"],
@@ -118,7 +127,10 @@ const task = pipr.task({
   async run(ctx) {
     const manifest = await ctx.change.diffManifest({ compressed: true });
     const result = await ctx.pi.run(security, { manifest });
-    await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
+    await ctx.comment({
+      main: result.summary.body,
+      inlineFindings: result.inlineFindings,
+    });
   },
 });
 
@@ -145,7 +157,8 @@ pipr.config({
     autoResolve: {
       enabled: true,
       model,
-      instructions: "Resolve only when the changed code addresses the finding directly.",
+      instructions:
+        "Resolve only when the changed code addresses the finding directly.",
       synchronize: true,
       userReplies: { enabled: true, allowedActors: "write" },
     },
@@ -163,7 +176,7 @@ Use required checks only when the user wants merge-gate behavior. Use comments f
 Use only secret names in config:
 
 ```ts
-apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" })
+apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" });
 ```
 
 Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab uses masked CI/CD variables; Azure DevOps and Bitbucket webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.

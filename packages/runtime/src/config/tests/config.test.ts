@@ -190,6 +190,56 @@ describe("loadRuntimeProject", () => {
     ).rejects.toThrow("Missing provider env vars: DEEPSEEK_API_KEY");
   });
 
+  it("allows a local Pi authenticated model alongside an API-key model", async () => {
+    const rootDir = await newConfigProject(`import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const localModel = pipr.model({
+    provider: "openai-codex",
+    model: "gpt-5.5",
+  });
+  const hostedModel = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+  pipr.review({
+    id: "review",
+    model: hostedModel,
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+  });
+  void localModel;
+});
+`);
+
+    const runtime = await loadRuntimeProject({
+      rootDir,
+      env: { DEEPSEEK_API_KEY: "hosted-key" },
+      requireProviderEnv: true,
+    });
+
+    expect(runtime).toMatchObject({
+      settings: {
+        config: {
+          providers: [
+            {
+              id: "openai-codex/gpt-5.5",
+              provider: "openai-codex",
+              model: "gpt-5.5",
+            },
+            {
+              id: "deepseek/deepseek-v4-pro",
+              apiKeyEnv: "DEEPSEEK_API_KEY",
+            },
+          ],
+        },
+      },
+    });
+    await expect(
+      loadRuntimeProject({ rootDir, env: {}, requireProviderEnv: true }),
+    ).rejects.toThrow("Missing provider env vars: DEEPSEEK_API_KEY");
+  });
+
   it("type-checks .pipr/config.ts during validation", async () => {
     const rootDir = await newInitializedProject();
     await writePiprConfig(
@@ -206,7 +256,7 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: "Review this change.",
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
   });
 });
 `,
@@ -231,7 +281,7 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: "Review this change.",
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
   });
 });
 `,
@@ -333,6 +383,7 @@ export default definePipr((pipr) => {
   });
   const task = pipr.task({
     name: "review",
+    check: { enabled: true, name: "review-check", required: false },
     async run(ctx) {
     const manifest = await ctx.change.diffManifest({ compressed: true, maxPreviewLines: 1 });
     const result = await ctx.pi.run(agent, { manifest });
@@ -341,10 +392,15 @@ export default definePipr((pipr) => {
   });
   pipr.on.changeRequest({ actions: ["opened"], task });
   pipr.command({ pattern: "@pipr review", permission: "write", task });
+  pipr.config({
+    publication: { maxInlineComments: 4 },
+    checks: { aggregate: { enabled: true, name: "all-review" } },
+    limits: { maxAgentRuns: 9 },
+  });
   pipr.review({
     id: "default-review",
     model,
-    instructions: "Review.",
+    instructions: { findings: "Review.", summary: "Summarize." },
     entrypoints: {
       changeRequest: false,
       command: false,
@@ -355,10 +411,46 @@ export default definePipr((pipr) => {
     );
 
     const loaded = await validateProject({ rootDir });
-    expect(inspectRuntimePlan(loaded.plan, ".pipr/config.ts").tools).toEqual([
-      "pipr_store_memory",
-      "pipr_search_memories",
-    ]);
+    const inspection = inspectRuntimePlan(loaded.plan, ".pipr/config.ts");
+    expect(inspection.tools).toEqual(["pipr_store_memory", "pipr_search_memories"]);
+    expect(inspection.schemas).toEqual(["core/pr-review", "core/inline-findings", "core/summary"]);
+    expect(inspection.publication).toEqual({
+      maxInlineComments: 4,
+      showHeader: true,
+      showFooter: true,
+      showStats: true,
+      autoResolve: {
+        enabled: true,
+        model: "deepseek/deepseek-v4-pro",
+        synchronize: true,
+        userReplies: {
+          enabled: true,
+          respondWhenStillValid: true,
+          allowedActors: "author-or-write",
+        },
+        hasCustomInstructions: false,
+      },
+    });
+    expect(inspection.limits).toEqual({ maxAgentRuns: 9 });
+    expect(inspection.checks).toEqual({
+      aggregate: { enabled: true, name: "all-review" },
+      tasks: [
+        {
+          task: "review",
+          individual: true,
+          aggregate: true,
+          name: "review-check",
+          required: false,
+        },
+        {
+          task: "default-review",
+          individual: false,
+          aggregate: true,
+          name: "default-review",
+          required: true,
+        },
+      ],
+    });
   });
 
   it("loads root SDK imports from the runtime stub", async () => {
@@ -431,7 +523,11 @@ ${bunUsage}  const model = pipr.model({
     model: "deepseek-v4-pro",
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
   });
-  pipr.review({ id: "review", model, instructions: "Review this change." });
+  pipr.review({
+    id: "review",
+    model,
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+  });
 });
 `;
 }
@@ -460,7 +556,7 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: "Review this change.",
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
   });
   void fastModel;
 });
@@ -477,7 +573,11 @@ export default definePipr((pipr) => {
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
   });
   pipr.config({ publication: ${publication} });
-  pipr.review({ id: "review", model, instructions: "Review this change." });
+  pipr.review({
+    id: "review",
+    model,
+    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+  });
 });
 `;
 }
