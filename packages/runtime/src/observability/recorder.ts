@@ -367,19 +367,27 @@ export async function startFileRunRecorder(options: {
   const observeInstantLog = (record: RuntimeLogRecord): void => {
     const spanName = instantLogSpanName(record.event);
     if (!spanName) return;
-    const now = new Date().toISOString();
+    const endedAt = new Date();
+    const durationMs = numberField(record, "durationMs") ?? 0;
+    const startedAt = new Date(endedAt.getTime() - durationMs);
+    const attributes = numericLogAttributes(record);
+    addInstantLogAttributes(record, attributes);
     queueSpan({
       formatVersion: 1,
       traceId: executionId,
       spanId: randomBytes(8).toString("hex"),
       parentSpanId: rootSpanId,
       name: spanName,
-      category: "phase",
-      startedAt: now,
-      endedAt: now,
-      durationMs: 0,
-      status: "ok",
-      attributes: numericLogAttributes(record),
+      category: instantLogSpanCategory(record.event),
+      startedAt: startedAt.toISOString(),
+      endedAt: endedAt.toISOString(),
+      durationMs,
+      status:
+        record.event === "diff structural analysis" &&
+        stringField(record, "status") === "unavailable"
+          ? "error"
+          : "ok",
+      attributes,
     });
   };
 
@@ -586,6 +594,17 @@ export async function startFileRunRecorder(options: {
       status: failed ? "error" : "ok",
       attributes: {
         "pipr.attempt.type": context.attempt.attemptType,
+        "pipr.agent.name": context.attempt.agent,
+        "pipr.provider.name": context.attempt.provider,
+        "pipr.model.name": context.attempt.model,
+        ...(context.attempt.task ? { "pipr.task.name": context.attempt.task } : {}),
+        ...(context.attempt.authMode ? { "pipr.auth.mode": context.attempt.authMode } : {}),
+        ...(context.attempt.shardIndex === undefined
+          ? {}
+          : { "pipr.shard.index": context.attempt.shardIndex }),
+        ...(context.attempt.shardCount === undefined
+          ? {}
+          : { "pipr.shard.count": context.attempt.shardCount }),
         "pipr.resource.cpu_user_ms": Math.max(
           0,
           ended.cpuUserMs - context.attemptStartedResources.cpuUserMs,
@@ -1025,7 +1044,7 @@ function modelSpanKey(record: RuntimeLogRecord): string {
 }
 
 function modelSpanAttributes(record: RuntimeLogRecord): RunSpanRecord["attributes"] {
-  return {
+  const attributes: RunSpanRecord["attributes"] = {
     [ATTR_GEN_AI_OPERATION_NAME]: "chat",
     [ATTR_GEN_AI_AGENT_NAME]: stringField(record, "agent"),
     [ATTR_GEN_AI_PROVIDER_NAME]: stringField(record, "provider"),
@@ -1035,6 +1054,11 @@ function modelSpanAttributes(record: RuntimeLogRecord): RunSpanRecord["attribute
     "pipr.attempt.id": stringField(record, "attemptId"),
     "pipr.prompt.bytes": numberField(record, "promptBytes") ?? 0,
   };
+  setDefined(attributes, "pipr.task.name", optionalStringField(record, "task"));
+  setDefined(attributes, "pipr.auth.mode", optionalStringField(record, "authMode"));
+  setDefined(attributes, "pipr.shard.index", numberField(record, "shardIndex"));
+  setDefined(attributes, "pipr.shard.count", numberField(record, "shardCount"));
+  return attributes;
 }
 
 function modelResultAttributes(record: RuntimeLogRecord): RunSpanRecord["attributes"] {
@@ -1052,8 +1076,33 @@ function modelResultAttributes(record: RuntimeLogRecord): RunSpanRecord["attribu
 function instantLogSpanName(event: string): string | undefined {
   return {
     "diff manifest": "pipr.diff.construct",
+    "diff structural analysis": "pipr.diff.structural_analysis",
+    "diff manifest sharded": "pipr.diff.sharding",
+    "agent run budget": "pipr.agent.run_budget",
     "review validated": "pipr.review.validate",
   }[event];
+}
+
+function instantLogSpanCategory(event: string): RunSpanRecord["category"] {
+  return event === "diff manifest sharded" || event === "agent run budget" ? "internal" : "phase";
+}
+
+function addInstantLogAttributes(
+  record: RuntimeLogRecord,
+  attributes: RunSpanRecord["attributes"],
+): void {
+  if (record.event === "diff structural analysis") {
+    setDefined(attributes, "pipr.structural.status", optionalStringField(record, "status"));
+    setDefined(attributes, "pipr.structural.version", optionalStringField(record, "version"));
+    setDefined(attributes, "pipr.structural.reason", optionalStringField(record, "reason"));
+  }
+  if (record.event === "diff manifest sharded") {
+    delete attributes["pipr.shardCount"];
+    setDefined(attributes, "pipr.agent.name", optionalStringField(record, "agent"));
+    setDefined(attributes, "pipr.task.name", optionalStringField(record, "task"));
+    setDefined(attributes, "pipr.shard.kind", optionalStringField(record, "kind"));
+    setDefined(attributes, "pipr.shard.count", numberField(record, "shardCount"));
+  }
 }
 
 function setDefined<T, Key extends keyof T>(target: T, key: Key, value: T[Key] | undefined): void {
@@ -1063,6 +1112,11 @@ function setDefined<T, Key extends keyof T>(target: T, key: Key, value: T[Key] |
 function stringField(record: RuntimeLogRecord, name: string): string {
   const value = record.fields[name];
   return typeof value === "string" ? value : "unknown";
+}
+
+function optionalStringField(record: RuntimeLogRecord, name: string): string | undefined {
+  const value = record.fields[name];
+  return typeof value === "string" ? value : undefined;
 }
 
 function numberField(record: RuntimeLogRecord, name: string): number | undefined {

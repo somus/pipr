@@ -83,6 +83,16 @@ describe("pipr runs", () => {
     expect(diagnosisOutput).toContain("read 100ms ok");
     expect(diagnosisOutput).toContain("Usage: 12 input, 5 output, $0.01");
     expect(diagnosisOutput).toContain("Resources: CPU 30ms, peak RSS 2048 bytes");
+    expect(diagnosisOutput).toContain("Agent runs: 2/4");
+    expect(diagnosisOutput).toContain(
+      "Structural analysis: available, 25ms, 3 files, 12 declarations",
+    );
+    expect(diagnosisOutput).toContain(
+      "reviewer (review) shard 1/2 openai/gpt-test initial#1 subscription 500ms ok",
+    );
+    expect(diagnosisOutput).toContain(
+      "task failed (review): Task failed; download the redacted bundle for details",
+    );
   });
 
   it("downloads a validated unpacked bundle", async () => {
@@ -492,16 +502,67 @@ async function writeBundle(
         durationMs: 500,
         status: "ok",
         attributes: {
+          "gen_ai.agent.name": "reviewer",
+          "gen_ai.provider.name": "openai",
+          "gen_ai.request.model": "gpt-test",
+          "pipr.attempt.type": "initial",
+          "pipr.attempt.number": 1,
+          "pipr.task.name": "review",
+          "pipr.auth.mode": "subscription",
+          "pipr.shard.index": 1,
+          "pipr.shard.count": 2,
           "gen_ai.usage.input_tokens": 12,
           "gen_ai.usage.output_tokens": 5,
           "pipr.usage.cost_usd": 0.01,
         },
       },
+      {
+        formatVersion: 1,
+        traceId: executionId,
+        spanId: "4123456789abcdef",
+        parentSpanId: "0123456789abcdef",
+        name: "pipr.diff.structural_analysis",
+        category: "phase",
+        startedAt,
+        endedAt,
+        durationMs: 25,
+        status: "ok",
+        attributes: {
+          "pipr.structural.status": "available",
+          "pipr.fileCount": 3,
+          "pipr.declarationCount": 12,
+        },
+      },
+      {
+        formatVersion: 1,
+        traceId: executionId,
+        spanId: "5123456789abcdef",
+        parentSpanId: "0123456789abcdef",
+        name: "pipr.agent.run_budget",
+        category: "internal",
+        startedAt,
+        endedAt,
+        durationMs: 0,
+        status: "ok",
+        attributes: { "pipr.used": 2, "pipr.limit": 4 },
+      },
     ]
       .map((span) => JSON.stringify(span))
       .join("\n")}\n`,
   );
-  await writeFile(path.join(directory, "logs.jsonl"), "");
+  await writeFile(
+    path.join(directory, "logs.jsonl"),
+    `${JSON.stringify({
+      formatVersion: 1,
+      timestamp: startedAt,
+      sequence: 0,
+      level: "error",
+      event: "task failed",
+      traceId: executionId,
+      spanId: "0123456789abcdef",
+      fields: { task: "review", error: "provider unavailable" },
+    })}\n`,
+  );
   await writeFile(
     path.join(directory, "metrics.json"),
     JSON.stringify({ formatVersion: 1, counters: [], histograms: [] }),

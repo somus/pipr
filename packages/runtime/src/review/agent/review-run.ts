@@ -65,6 +65,7 @@ export type RunReviewAgentOptions = {
   runOptions: Parameters<TaskContext["pi"]["run"]>[2];
   toolMode?: "read-only" | "none";
   allowOversizedCondensedManifest?: boolean;
+  shard?: { index: number; count: number };
   runtime: {
     workspace: string;
     config: PiprConfig;
@@ -77,6 +78,7 @@ export type RunReviewAgentOptions = {
     piAgentDir?: string;
     piRunner?: PiRunner;
     taskContext?: TaskContext;
+    taskName?: string;
     priorReviewState?: PriorReviewState;
     run: PiprRunContext;
     log?: RuntimeLog;
@@ -132,13 +134,20 @@ export async function runReviewAgent(
     });
   }
   const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
+    options.runtime.log?.info("diff manifest sharded", {
+      agent: options.agent.name ?? "anonymous-agent",
+      task: options.runtime.taskName,
+      kind: scheduled.kind,
+      shardCount: manifests.length,
+    });
     const results: RunReviewAgentResult[] = [];
-    for (const manifest of manifests) {
+    for (const [index, manifest] of manifests.entries()) {
       results.push(
         await runReviewAgentOnce({
           ...options,
           input: inputWithManifest(options.input, manifest),
           allowOversizedCondensedManifest: true,
+          shard: { index: index + 1, count: manifests.length },
           runtime: { ...options.runtime, piRunner },
         }),
       );
@@ -752,6 +761,7 @@ function logPiStart(
     attemptType,
     attemptNumber,
     attemptId,
+    ...attemptContextFields(options, provider),
     promptBytes: Buffer.byteLength(prompt, "utf8"),
     tools: [
       ...builtinTools,
@@ -777,6 +787,7 @@ function logPiResult(
     attemptType,
     attemptNumber,
     attemptId,
+    ...attemptContextFields(options, provider),
     exitCode: result.exitCode,
     durationMs: result.durationMs,
     stdoutBytes: result.stdout.length,
@@ -809,6 +820,7 @@ function logPiFailure(
     attemptType,
     attemptNumber,
     attemptId,
+    ...attemptContextFields(options, provider),
     exitCode: -1,
     durationMs,
     stdoutBytes: 0,
@@ -826,8 +838,13 @@ async function beginObservedAttempt(
     return await options.runtime.runObserver?.beginAgentAttempt({
       ...attempt,
       agent: options.agent.name ?? "anonymous-agent",
+      task: options.runtime.taskName,
       provider: provider.id,
       model: provider.model,
+      authMode: provider.apiKeyEnv ? "api-key" : "subscription",
+      ...(options.shard
+        ? { shardIndex: options.shard.index, shardCount: options.shard.count }
+        : {}),
       prompt,
     });
   } catch {
@@ -838,6 +855,17 @@ async function beginObservedAttempt(
     });
     return undefined;
   }
+}
+
+function attemptContextFields(
+  options: RunReviewAgentOptions,
+  provider: ProviderConfig,
+): Record<string, string | number | undefined> {
+  return {
+    task: options.runtime.taskName,
+    authMode: provider.apiKeyEnv ? "api-key" : "subscription",
+    ...(options.shard ? { shardIndex: options.shard.index, shardCount: options.shard.count } : {}),
+  };
 }
 
 async function finishObservedAttempt(

@@ -47,8 +47,12 @@ export type RunObserver = {
     attemptType: AgentAttemptType;
     attemptNumber: number;
     agent: string;
+    task?: string;
     provider: string;
     model: string;
+    authMode?: "api-key" | "subscription";
+    shardIndex?: number;
+    shardCount?: number;
     prompt: string;
   }): Promise<RunAgentAttemptObserver>;
 };

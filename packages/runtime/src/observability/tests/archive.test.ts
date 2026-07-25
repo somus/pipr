@@ -114,6 +114,30 @@ describe("deterministic run diagnosis", () => {
       event: "review publication",
       fields: { errors: 1 },
     });
+    recorder.logSink.log({
+      level: "info",
+      event: "diff structural analysis",
+      fields: {
+        status: "unavailable",
+        reason: "timeout",
+        durationMs: 25,
+        fileCount: 0,
+        declarationCount: 0,
+      },
+    });
+    recorder.logSink.log({
+      level: "info",
+      event: "agent run budget",
+      fields: { used: 4, limit: 4 },
+    });
+    recorder.logSink.log({
+      level: "error",
+      event: "task failed",
+      fields: {
+        task: "review",
+        error: "Review Run agent-call budget exhausted at /Users/private/project/file.ts",
+      },
+    });
     const attempt = await recorder.observer.beginAgentAttempt({
       attemptType: "repair",
       attemptNumber: 2,
@@ -147,6 +171,10 @@ describe("deterministic run diagnosis", () => {
         agent: "reviewer",
         provider: "openai",
         model: "gpt-test",
+        task: "review",
+        shardIndex: 2,
+        shardCount: 2,
+        authMode: "subscription",
       },
     });
     recorder.logSink.log({
@@ -176,9 +204,9 @@ describe("deterministic run diagnosis", () => {
       },
     });
     const diagnosis = diagnoseRunBundle(bundle);
-    expect(diagnosis.phaseDurations).toEqual([
+    expect(diagnosis.phaseDurations).toContainEqual(
       expect.objectContaining({ name: "pipr.workspace.prepare", durationMs: 20 }),
-    ]);
+    );
     expect(diagnosis.agentRetryAttempts).toBe(1);
     expect(diagnosis.modelRetryAttempts).toBe(1);
     expect(diagnosis.backoffDurationsMs).toEqual([2_000]);
@@ -189,6 +217,29 @@ describe("deterministic run diagnosis", () => {
     expect(diagnosis.validationDrops).toBe(2);
     expect(diagnosis.publicationFailures).toBe(1);
     expect(diagnosis.missingEvidence).toContain("diff manifest");
+    expect(diagnosis.structuralAnalysis).toEqual({
+      status: "unavailable",
+      reason: "timeout",
+      durationMs: 25,
+      fileCount: 0,
+      declarationCount: 0,
+    });
+    expect(diagnosis.agentRunBudget).toEqual({ used: 4, limit: 4 });
+    expect(diagnosis.modelAttempts).toContainEqual(
+      expect.objectContaining({
+        task: "review",
+        shardIndex: 2,
+        shardCount: 2,
+        authMode: "subscription",
+      }),
+    );
+    expect(diagnosis.failures).toEqual([
+      {
+        event: "task failed",
+        task: "review",
+        message: "Review Run agent-call budget exhausted",
+      },
+    ]);
   });
 });
 

@@ -263,6 +263,10 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
       manifestCache,
     },
   });
+  options.log?.info("agent run budget", {
+    used: agentRunBudget.reservedAgentRuns,
+    limit: agentRunBudget.maxAgentRuns,
+  });
   const taskChecks = taskResults.map((result) =>
     runtimeTaskCheckResult(result.taskName, result.output.check ?? { conclusion: "success" }),
   );

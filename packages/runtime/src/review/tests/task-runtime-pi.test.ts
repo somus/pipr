@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { type AgentTool, type DiffManifest, z } from "@usepipr/sdk";
 import { createDiffRangeIndex } from "../../diff/ranges.js";
+import type { RunObserver } from "../../observability/types.js";
 import { createRuntimeLog } from "../../shared/logging.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import { extractPriorReviewState } from "../prior-state.js";
@@ -200,6 +201,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
   it("schedules oversized core reviews into bounded manifest units", async () => {
     const prompts: string[] = [];
+    const observedAttempts: Array<Parameters<RunObserver["beginAgentAttempt"]>[0]> = [];
     const result = await runRuntime({
       plan: testPlan((pipr) => {
         pipr.review({
@@ -221,6 +223,12 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         },
       },
       diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      runObserver: {
+        async beginAgentAttempt(attempt) {
+          observedAttempts.push(attempt);
+          return { event() {}, async finish() {} };
+        },
+      },
       piRunner: async (options) => {
         prompts.push(options.prompt);
         const findings = options.prompt.includes('"path": "docs/readme.md"')
@@ -249,6 +257,19 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(result.validated.validFindings.map((item) => item.body)).toEqual([
       "source defect body",
       "docs defect body",
+    ]);
+    expect(
+      observedAttempts
+        .filter((attempt) => attempt.shardIndex !== undefined)
+        .map((attempt) => ({
+          task: attempt.task,
+          authMode: attempt.authMode,
+          shardIndex: attempt.shardIndex,
+          shardCount: attempt.shardCount,
+        })),
+    ).toEqual([
+      { task: "review", authMode: "api-key", shardIndex: 1, shardCount: 2 },
+      { task: "review", authMode: "api-key", shardIndex: 2, shardCount: 2 },
     ]);
   });
 

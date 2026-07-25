@@ -140,6 +140,101 @@ describe("file run recorder", () => {
     ]);
   });
 
+  it("records structural analysis, sharding, budgets, and attributed model attempts", async () => {
+    const recorder = await startFileRunRecorder({
+      rootDirectory: await temporaryDirectory(),
+      env: {},
+    });
+    recorder.logSink.log({
+      level: "info",
+      event: "diff structural analysis",
+      fields: {
+        status: "available",
+        version: "ast-grep 0.40.0",
+        durationMs: 25,
+        fileCount: 3,
+        declarationCount: 12,
+      },
+    });
+    recorder.logSink.log({
+      level: "info",
+      event: "diff manifest sharded",
+      fields: { agent: "reviewer", task: "review", kind: "review", shardCount: 2 },
+    });
+    recorder.logSink.log({
+      level: "info",
+      event: "agent run budget",
+      fields: { used: 2, limit: 4 },
+    });
+    recorder.logSink.log({
+      level: "info",
+      event: "pi start",
+      fields: {
+        attemptId: "attributed",
+        agent: "reviewer",
+        task: "review",
+        provider: "openai",
+        model: "gpt-test",
+        authMode: "subscription",
+        shardIndex: 2,
+        shardCount: 2,
+        attemptType: "initial",
+        attemptNumber: 1,
+      },
+    });
+    recorder.logSink.log({
+      level: "info",
+      event: "pi run",
+      fields: { attemptId: "attributed", exitCode: 0, durationMs: 10 },
+    });
+    const attempt = await recorder.observer.beginAgentAttempt({
+      attemptType: "initial",
+      attemptNumber: 1,
+      agent: "reviewer",
+      task: "review",
+      provider: "openai",
+      model: "gpt-test",
+      authMode: "subscription",
+      shardIndex: 2,
+      shardCount: 2,
+      prompt: "prompt",
+    });
+    await attempt.finish({ output: "output", exitCode: 0 });
+    await recorder.finish({ kind: "review", outcome: "succeeded" });
+
+    const { spans } = await loadValidatedRunBundle(recorder.directory);
+    expect(spans.find((span) => span.name === "pipr.diff.structural_analysis")).toMatchObject({
+      durationMs: 25,
+      status: "ok",
+      attributes: {
+        "pipr.structural.status": "available",
+        "pipr.structural.version": "ast-grep 0.40.0",
+        "pipr.fileCount": 3,
+        "pipr.declarationCount": 12,
+      },
+    });
+    expect(spans.find((span) => span.name === "pipr.diff.sharding")).toMatchObject({
+      attributes: {
+        "pipr.agent.name": "reviewer",
+        "pipr.task.name": "review",
+        "pipr.shard.count": 2,
+      },
+    });
+    expect(spans.find((span) => span.name === "pipr.agent.run_budget")).toMatchObject({
+      attributes: { "pipr.used": 2, "pipr.limit": 4 },
+    });
+    for (const spanName of ["gen_ai.chat", "pipr.agent.attempt_resources"]) {
+      expect(spans.find((span) => span.name === spanName)).toMatchObject({
+        attributes: {
+          "pipr.task.name": "review",
+          "pipr.auth.mode": "subscription",
+          "pipr.shard.index": 2,
+          "pipr.shard.count": 2,
+        },
+      });
+    }
+  });
+
   it("redacts secrets registered after recorder creation", async () => {
     const recorder = await startFileRunRecorder({
       rootDirectory: await temporaryDirectory(),

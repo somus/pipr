@@ -102,6 +102,28 @@ export type RunDiagnosis = {
   resources: RunBundleManifest["resources"];
   validationDrops: number;
   publicationFailures: number;
+  structuralAnalysis?: {
+    status: string;
+    reason?: string;
+    durationMs: number;
+    fileCount: number;
+    declarationCount: number;
+  };
+  agentRunBudget?: { used: number; limit?: number };
+  modelAttempts: Array<{
+    agent: string;
+    task?: string;
+    provider: string;
+    model: string;
+    attemptType: string;
+    attemptNumber: number;
+    authMode?: string;
+    shardIndex?: number;
+    shardCount?: number;
+    durationMs: number;
+    status: RunSpanRecord["status"];
+  }>;
+  failures: Array<{ event: string; task?: string; message: string }>;
   missingEvidence: string[];
 };
 
@@ -201,6 +223,12 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
     bundle.logs.filter((log) => log.event.includes("publication")),
     "errors",
   );
+  const structuralSpan = timedSpans.find((span) => span.name === "pipr.diff.structural_analysis");
+  const budgetSpan = bundle.spans.find((span) => span.name === "pipr.agent.run_budget");
+  const modelAttempts = timedSpans
+    .filter((span) => span.name === "gen_ai.chat")
+    .sort(compareSpans)
+    .map(modelAttemptDiagnosis);
 
   return {
     formatVersion: 1,
@@ -233,8 +261,89 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
         : bundle.manifest.failureCategory === "publication"
           ? 1
           : 0,
+    ...(structuralSpan
+      ? {
+          structuralAnalysis: {
+            status: stringAttribute(structuralSpan, "pipr.structural.status") ?? "unknown",
+            ...(stringAttribute(structuralSpan, "pipr.structural.reason")
+              ? { reason: stringAttribute(structuralSpan, "pipr.structural.reason") }
+              : {}),
+            durationMs: structuralSpan.durationMs,
+            fileCount: numberAttribute(structuralSpan, "pipr.fileCount"),
+            declarationCount: numberAttribute(structuralSpan, "pipr.declarationCount"),
+          },
+        }
+      : {}),
+    ...(budgetSpan
+      ? {
+          agentRunBudget: {
+            used: numberAttribute(budgetSpan, "pipr.used"),
+            ...(optionalNumberAttribute(budgetSpan, "pipr.limit") === undefined
+              ? {}
+              : { limit: optionalNumberAttribute(budgetSpan, "pipr.limit") }),
+          },
+        }
+      : {}),
+    modelAttempts,
+    failures: diagnosticFailures(bundle.logs),
     missingEvidence,
   };
+}
+
+function modelAttemptDiagnosis(
+  span: RunSpanRecord & { durationMs: number },
+): RunDiagnosis["modelAttempts"][number] {
+  return {
+    agent: stringAttribute(span, "gen_ai.agent.name") ?? "unknown",
+    ...(stringAttribute(span, "pipr.task.name")
+      ? { task: stringAttribute(span, "pipr.task.name") }
+      : {}),
+    provider: stringAttribute(span, "gen_ai.provider.name") ?? "unknown",
+    model: stringAttribute(span, "gen_ai.request.model") ?? "unknown",
+    attemptType: stringAttribute(span, "pipr.attempt.type") ?? "unknown",
+    attemptNumber: numberAttribute(span, "pipr.attempt.number"),
+    ...(stringAttribute(span, "pipr.auth.mode")
+      ? { authMode: stringAttribute(span, "pipr.auth.mode") }
+      : {}),
+    ...(optionalNumberAttribute(span, "pipr.shard.index") === undefined
+      ? {}
+      : { shardIndex: optionalNumberAttribute(span, "pipr.shard.index") }),
+    ...(optionalNumberAttribute(span, "pipr.shard.count") === undefined
+      ? {}
+      : { shardCount: optionalNumberAttribute(span, "pipr.shard.count") }),
+    durationMs: span.durationMs,
+    status: span.status,
+  };
+}
+
+function diagnosticFailures(logs: RunLogRecord[]): RunDiagnosis["failures"] {
+  return logs
+    .filter((log) => log.level === "error" && typeof log.fields.error === "string")
+    .slice(0, 20)
+    .map((log) => ({
+      event: log.event,
+      ...(typeof log.fields.task === "string" ? { task: log.fields.task } : {}),
+      message: diagnosticFailureMessage(log.event, log.fields.error as string),
+    }));
+}
+
+function diagnosticFailureMessage(event: string, error: string): string {
+  if (/agent-call budget exhausted/i.test(error)) {
+    return "Review Run agent-call budget exhausted";
+  }
+  if (/missing secret env var/i.test(error)) {
+    return "Required secret environment variable is missing";
+  }
+  if (/timed out|timeout/i.test(error)) {
+    return "Operation timed out";
+  }
+  if (/stale head|head (?:sha )?(?:changed|mismatch)/i.test(error)) {
+    return "Change request head changed before publication";
+  }
+  if (/publish|publication/i.test(event) || /publish|publication/i.test(error)) {
+    return "Publication failed";
+  }
+  return "Task failed; download the redacted bundle for details";
 }
 
 function recordFromManifest(manifest: RunBundleManifest): RunRecord {
