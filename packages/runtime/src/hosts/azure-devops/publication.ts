@@ -9,6 +9,11 @@ import {
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
+import {
+  extractReviewProgressToken,
+  type ReviewProgressLease,
+  ReviewProgressSupersededError,
+} from "../../review/progress.js";
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
@@ -25,6 +30,7 @@ export async function publishAzureDevOpsPlan(options: {
   client: AzureDevOpsClient;
   change: ChangeRequestEventContext;
   plan: PublicationPlan;
+  progressLease?: ReviewProgressLease;
 }): Promise<PublicationResult> {
   const coordinates = azureCoordinates(options.change);
   const native = await currentNativeChange(options.client, options.change);
@@ -38,22 +44,7 @@ export async function publishAzureDevOpsPlan(options: {
     owner.uniqueName,
     mainMarker(options.change.change.number),
   );
-  const main = existingMain
-    ? await options.client.updateComment(
-        coordinates.repositoryId,
-        options.change.change.number,
-        existingMain.id,
-        existingMain.comments[0]?.id ?? "",
-        options.plan.mainComment,
-      )
-    : (
-        await options.client.createThread(
-          coordinates.repositoryId,
-          options.change.change.number,
-          unpositionedThread(options.plan.mainComment),
-        )
-      ).comments[0];
-  if (!main) throw new Error("Azure DevOps did not return the Main Review Comment");
+  assertAzureProgressLease(existingMain, options.progressLease);
   const markerBodies = ownedThreadComments(threads, owner.uniqueName).map(
     (comment) => comment.content,
   );
@@ -83,14 +74,101 @@ export async function publishAzureDevOpsPlan(options: {
     threads,
     ownerUniqueName: owner.uniqueName,
   });
+  const current = await loadAzureWriteState(
+    options.client,
+    options.change,
+    options.plan.metadata.reviewedHeadSha,
+  );
+  const currentMain = ownedRootThread(
+    current.threads,
+    current.owner.uniqueName,
+    mainMarker(options.change.change.number),
+  );
+  assertAzureProgressLease(currentMain, options.progressLease);
+  const main = currentMain
+    ? await options.client.updateComment(
+        coordinates.repositoryId,
+        options.change.change.number,
+        currentMain.id,
+        currentMain.comments[0]?.id ?? "",
+        options.plan.mainComment,
+      )
+    : (
+        await options.client.createThread(
+          coordinates.repositoryId,
+          options.change.change.number,
+          unpositionedThread(options.plan.mainComment),
+        )
+      ).comments[0];
+  if (!main) throw new Error("Azure DevOps did not return the Main Review Comment");
   return completeHostPublication({
     provider: "Azure DevOps",
-    mainAction: existingMain ? "updated" : "created",
+    mainAction: options.progressLease?.mainCommentAction ?? (existingMain ? "updated" : "created"),
     mainId: main.id,
     inline,
     resolutionErrors: resolution.errors,
     metadata: options.plan.metadata,
   });
+}
+
+export async function publishAzureDevOpsReviewProgress(options: {
+  client: AzureDevOpsClient;
+  change: ChangeRequestEventContext;
+  body: string;
+  reviewedHeadSha: string;
+  expectedToken?: string;
+}) {
+  const coordinates = azureCoordinates(options.change);
+  const { owner, threads } = await loadAzureWriteState(
+    options.client,
+    options.change,
+    options.reviewedHeadSha,
+  );
+  const existing = ownedRootThread(
+    threads,
+    owner.uniqueName,
+    mainMarker(options.change.change.number),
+  );
+  if (
+    options.expectedToken &&
+    extractReviewProgressToken(existing?.comments[0]?.content) !== options.expectedToken
+  ) {
+    return { status: "superseded" as const };
+  }
+  if (existing) {
+    const comment = await options.client.updateComment(
+      coordinates.repositoryId,
+      options.change.change.number,
+      existing.id,
+      existing.comments[0]?.id ?? "",
+      options.body,
+    );
+    return { status: "published" as const, action: "updated" as const, id: comment.id };
+  }
+  if (options.expectedToken) return { status: "superseded" as const };
+  const comment = (
+    await options.client.createThread(
+      coordinates.repositoryId,
+      options.change.change.number,
+      unpositionedThread(options.body),
+    )
+  ).comments[0];
+  if (!comment) throw new Error("Azure DevOps did not return the progress comment");
+  return { status: "published" as const, action: "created" as const, id: comment.id };
+}
+
+function assertAzureProgressLease(
+  thread: AzureDevOpsThread | undefined,
+  lease: ReviewProgressLease | undefined,
+): void {
+  if (!lease) return;
+  const comment = thread?.comments[0];
+  if (
+    String(comment?.id ?? "") !== lease.mainCommentId ||
+    extractReviewProgressToken(comment?.content) !== lease.token
+  ) {
+    throw new ReviewProgressSupersededError();
+  }
 }
 
 function azureInlineLocations(

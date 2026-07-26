@@ -15,6 +15,7 @@ import {
   loadGitHubPriorReviewState,
   publishGitHubCommandResponse,
   publishGitHubPublicationPlan,
+  publishGitHubReviewProgress,
   publishGitHubThreadActions,
 } from "./publication.js";
 import { ensureGitHubHeadCheckout, ensureGitHubWorkspaceSafeDirectory } from "./workspace.js";
@@ -94,6 +95,13 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
           client: publicationClient,
           change: options.change,
           plan: options.plan,
+          progressLease: options.progressLease,
+        });
+      },
+      publishReviewProgress(options) {
+        return publishGitHubReviewProgress({
+          client: publicationClient,
+          ...options,
         });
       },
       publishCommandResponse(options) {

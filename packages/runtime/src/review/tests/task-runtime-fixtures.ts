@@ -42,6 +42,7 @@ export const config: PiprConfig = {
     showHeader: true,
     showFooter: true,
     showStats: true,
+    showProgress: true,
     autoResolve: {
       enabled: true,
       model: "deepseek/deepseek-v4-pro",

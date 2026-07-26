@@ -64,6 +64,7 @@ describe("loadRuntimeProject", () => {
       showHeader: true,
       showFooter: true,
       showStats: true,
+      showProgress: true,
     });
   });
 
@@ -80,7 +81,9 @@ describe("loadRuntimeProject", () => {
     const rootDir = await newInitializedProject();
     await writePiprConfig(
       rootDir,
-      configWithPresentation("{ showHeader: false, showFooter: false, showStats: false }"),
+      configWithPresentation(
+        "{ showHeader: false, showFooter: false, showStats: false, showProgress: false }",
+      ),
     );
 
     const settings = (await loadRuntimeProject({ rootDir })).settings;
@@ -89,6 +92,7 @@ describe("loadRuntimeProject", () => {
       showHeader: false,
       showFooter: false,
       showStats: false,
+      showProgress: false,
     });
   });
 
@@ -419,6 +423,7 @@ export default definePipr((pipr) => {
       showHeader: true,
       showFooter: true,
       showStats: true,
+      showProgress: true,
       autoResolve: {
         enabled: true,
         model: "deepseek/deepseek-v4-pro",

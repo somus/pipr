@@ -19,6 +19,7 @@ import {
   multiTaskCheckConfigTs,
   priorMainCommentBody,
   pullRequestEnv,
+  recordingCommandPublicationClient,
   removeWorkspace,
   restoreEnv,
   restoreGitConfigEnv,
@@ -117,6 +118,81 @@ describe("runHostRunCommand pull_request dispatch", () => {
 
       expect(result).toMatchObject({ kind: "review" });
       await expectReviewRanAtHead(result, workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("publishes progress only when the runtime stage changes, then replaces it with the review", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = recordingCommandPublicationClient(workspace);
+    try {
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).resolves.toMatchObject({ kind: "review" });
+
+      const bodies = [...publication.writes.created, ...publication.writes.updated];
+      const stages = bodies
+        .map((body) => body.match(/stage=([a-z-]+) state=running/)?.[1])
+        .filter((stage): stage is string => stage !== undefined);
+      expect(stages).toEqual([
+        "preparing-workspace",
+        "building-diff",
+        "running-review-tasks",
+        "validating-review",
+        "publishing-review",
+      ]);
+      expect(bodies.at(-1)).toContain("Review completed in ");
+      expect(bodies.at(-1)).toContain(
+        "[View workflow](<https://github.com/local/pipr/actions/runs/123>)",
+      );
+      expect(bodies.at(-1)).not.toContain("pipr:progress:start");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("retains the failed stage, redacted reason, and workflow URL", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = recordingCommandPublicationClient(workspace);
+    try {
+      await writeFailingPiExecutable(workspace.piExecutable);
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).rejects.toThrow("Pi agent failed with exit 42");
+
+      const failed = publication.writes.updated.at(-1) ?? publication.writes.created.at(-1) ?? "";
+      expect(failed).toContain("state=failed");
+      expect(failed).toContain("**Failed stage:** Running review tasks");
+      expect(failed).toContain("Pi agent failed with exit 42");
+      expect(failed).toContain("[View workflow](<https://github.com/local/pipr/actions/runs/123>)");
+      expect(failed).toContain("Pipr stopped while reviewing commit");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("does not create a progress placeholder when showProgress is disabled", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ showProgress: false }),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    try {
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).resolves.toMatchObject({ kind: "review" });
+
+      const bodies = [...publication.writes.created, ...publication.writes.updated];
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]).not.toContain("pipr:progress");
+      expect(bodies[0]).toContain("Review completed in ");
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

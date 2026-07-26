@@ -86,6 +86,7 @@ export type PublicationOptions = {
   showHeader?: boolean;
   showFooter?: boolean;
   showStats?: boolean;
+  showProgress?: boolean;
 };
 
 /** Top-level pipr config settings. */

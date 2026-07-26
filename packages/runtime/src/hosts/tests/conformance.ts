@@ -160,6 +160,54 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
+    it("guards progress and final publication with one ownership lease", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        const publication = requiredPublication(harness.adapter);
+        const publishProgress = requiredMethod(
+          publication.publishReviewProgress,
+          "review progress publication",
+        );
+        const token = "11111111-1111-4111-8111-111111111111";
+        const progress = await publishProgress({
+          change: harness.change,
+          reviewedHeadSha: harness.change.change.head.sha,
+          body: progressBody(harness.change, token),
+        });
+        expect(progress).toMatchObject({ status: "published", action: "created" });
+        if (progress.status !== "published") {
+          throw new Error("expected progress publication");
+        }
+
+        await expect(
+          publishProgress({
+            change: harness.change,
+            reviewedHeadSha: harness.change.change.head.sha,
+            expectedToken: "22222222-2222-4222-8222-222222222222",
+            body: progressBody(harness.change, token),
+          }),
+        ).resolves.toEqual({ status: "superseded" });
+        await expect(
+          publication.publish({
+            change: harness.change,
+            plan: publicationPlan(harness.change),
+            progressLease: {
+              token,
+              mainCommentId: progress.id,
+              mainCommentAction: progress.action,
+              reviewedHeadSha: harness.change.change.head.sha,
+            },
+          }),
+        ).resolves.toMatchObject({
+          mainComment: { action: "created", id: progress.id },
+        });
+        expect(harness.writes()).toMatchObject({
+          mainCreates: 1,
+          mainUpdates: 1,
+          inlineCreates: 2,
+        });
+      });
+    });
+
     it("rechecks the head before a command response write", async () => {
       await withHarness(options.createHarness, async (harness) => {
         harness.advanceHeadDuringPreflight();
@@ -449,6 +497,15 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     }
   });
+}
+
+function progressBody(change: ChangeRequestEventContext, token: string): string {
+  return [
+    `<!-- pipr:main-comment change=${change.change.number} version=1 -->`,
+    `<!-- pipr:progress:start token=${token} head=${change.change.head.sha} stage=preparing-workspace state=running -->`,
+    "## Progress",
+    "<!-- pipr:progress:end -->",
+  ].join("\n");
 }
 
 async function expectStaleWithoutWrites(

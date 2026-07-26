@@ -5,6 +5,7 @@ import {
   loadGitHubPriorReviewState,
   publishGitHubCommandResponse,
   publishGitHubPublicationPlan,
+  publishGitHubReviewProgress,
   publishGitHubThreadActions,
 } from "../../hosts/github/publication.js";
 import type { ChangeRequestEventContext, DiffManifest, ValidatedReview } from "../../types.js";
@@ -15,6 +16,7 @@ import {
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
 } from "../prior-state.js";
+import { ReviewProgressSupersededError } from "../progress.js";
 import { PublicationError } from "../publication-result.js";
 
 const event: ChangeRequestEventContext = {
@@ -116,6 +118,72 @@ afterEach(() => {
 });
 
 describe("publishGitHubPublicationPlan", () => {
+  it("replaces owned progress last and preserves the original main-comment action", async () => {
+    const client = new FakePublicationClient("head");
+    const token = "11111111-1111-4111-8111-111111111111";
+    const progress = await publishGitHubReviewProgress({
+      client,
+      change: event,
+      reviewedHeadSha: "head",
+      body: progressBody(token),
+    });
+    if (progress.status !== "published") {
+      throw new Error("expected progress publication");
+    }
+
+    const result = await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: plan({ maxInlineComments: 1 }),
+      progressLease: {
+        token,
+        mainCommentId: progress.id,
+        mainCommentAction: progress.action,
+        reviewedHeadSha: "head",
+      },
+    });
+
+    expect(result.mainComment.action).toBe("created");
+    expect(client.issueComments).toHaveLength(1);
+    expect(client.issueComments[0]?.body).toContain("Found issues.");
+    expect(client.issueComments[0]?.body).not.toContain("pipr:progress:start");
+    expect(client.reviewCommentPayloads).toHaveLength(1);
+  });
+
+  it("does not let a superseded run overwrite a newer main comment", async () => {
+    const client = new FakePublicationClient("head");
+    const oldToken = "11111111-1111-4111-8111-111111111111";
+    const progress = await publishGitHubReviewProgress({
+      client,
+      change: event,
+      reviewedHeadSha: "head",
+      body: progressBody(oldToken),
+    });
+    if (progress.status !== "published") {
+      throw new Error("expected progress publication");
+    }
+    const newerToken = "22222222-2222-4222-8222-222222222222";
+    const mainComment = client.issueComments[0];
+    if (!mainComment) throw new Error("expected Main Review Comment");
+    mainComment.body = progressBody(newerToken);
+
+    await expect(
+      publishGitHubPublicationPlan({
+        client,
+        change: event,
+        plan: plan({ maxInlineComments: 1 }),
+        progressLease: {
+          token: oldToken,
+          mainCommentId: progress.id,
+          mainCommentAction: progress.action,
+          reviewedHeadSha: "head",
+        },
+      }),
+    ).rejects.toBeInstanceOf(ReviewProgressSupersededError);
+    expect(client.issueComments[0]?.body).toBe(progressBody(newerToken));
+    expect(client.reviewCommentPayloads).toHaveLength(0);
+  });
+
   it("upserts the main comment and publishes inline comments", async () => {
     const client = new FakePublicationClient("head");
     const [firstFinding, secondFinding] = validated.validFindings;
@@ -1185,6 +1253,15 @@ function jsonResponse(value: unknown): Response {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function progressBody(token: string): string {
+  return [
+    "<!-- pipr:main-comment change=1 version=1 -->",
+    `<!-- pipr:progress:start token=${token} head=head stage=publishing-review state=running -->`,
+    "## Progress",
+    "<!-- pipr:progress:end -->",
+  ].join("\n");
 }
 
 function plan(options: { maxInlineComments?: number; validated?: ValidatedReview } = {}) {

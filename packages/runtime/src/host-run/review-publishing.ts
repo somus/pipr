@@ -4,6 +4,7 @@ import { publicationPlanForHostCapabilities } from "../review/comment.js";
 import { type RuntimeCommandInvocation, runTaskRuntime } from "../review/task/task-runtime.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
+import type { ReviewProgressReporter } from "./review-progress.js";
 import {
   finalizeRuntimeChecks,
   genericCheckFailureSummary,
@@ -24,6 +25,8 @@ export async function runTrustedReviewAndPublish(options: {
   taskInput?: unknown;
   selectedTasks: RuntimeTask[];
   commandInvocation?: RuntimeCommandInvocation;
+  workflowUrl?: string;
+  progress?: ReviewProgressReporter;
   log: RuntimeLog;
 }): Promise<TrustedReviewAndPublishResult> {
   const checks = await startRuntimeChecks({
@@ -51,6 +54,8 @@ export async function runTrustedReviewAndPublish(options: {
       log: options.log,
       checkSink: checks?.sink,
       secretRedactor: options.options.secretRedactor,
+      workflowUrl: options.workflowUrl,
+      progress: options.progress,
       loadPriorReviewState: () =>
         options.adapter.comments?.loadPriorReviewState?.({ change: options.event }) ??
         Promise.resolve(undefined),
@@ -84,6 +89,7 @@ export async function runTrustedReviewAndPublish(options: {
       throw new Error("review publication is not available for this code host");
     }
     const publication = await options.log.group("publish review", async () => {
+      await options.progress?.transition("publishing-review");
       const publicationPlan = publicationPlanForHostCapabilities(
         review.publicationPlan,
         options.adapter.capabilities,
@@ -95,6 +101,7 @@ export async function runTrustedReviewAndPublish(options: {
       const result = await publish({
         change: options.event,
         plan: publicationPlan,
+        progressLease: options.progress?.lease,
       });
       options.log.notice("publication result", {
         main: result.mainComment.action,

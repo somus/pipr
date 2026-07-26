@@ -293,8 +293,9 @@ export function priorReviewForTask(
   priorMainComment: string | undefined,
   priorReviewState: PriorReviewState | undefined,
 ): PriorReview {
+  const visibleMain = priorMainComment ? visibleMainComment(priorMainComment) : undefined;
   return {
-    ...(priorMainComment ? { main: visibleMainComment(priorMainComment) } : {}),
+    ...(visibleMain ? { main: visibleMain } : {}),
     ...(priorReviewState ? { reviewedHeadSha: priorReviewState.reviewedHeadSha } : {}),
     inlineFindings:
       priorReviewState?.findings.map((finding) => ({
@@ -318,6 +319,11 @@ function visibleMainComment(body: string): string {
         envelope.statsRange &&
         index >= envelope.statsRange.start &&
         index <= envelope.statsRange.end
+      ) &&
+      !(
+        envelope.progressRange &&
+        index >= envelope.progressRange.start &&
+        index <= envelope.progressRange.end
       ) &&
       index !== envelope.mainMarkerIndex &&
       index !== envelope.headerMarkerIndex &&

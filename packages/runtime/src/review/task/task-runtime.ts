@@ -38,6 +38,7 @@ import {
 import { type InlineCommentDraft, type PublicationPlan, runtimeVersion } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { type PriorReviewState, priorReviewStateForSelectedTasks } from "../prior-state.js";
+import type { ReviewProgressSink } from "../progress.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
 import { validateReviewResult } from "../review.js";
 import { type RuntimeCommandInvocation, stableReviewRunId } from "../run-identity.js";
@@ -97,6 +98,10 @@ export type RunTaskRuntimeOptions = {
   taskLog?: TaskContext["log"];
   secretRedactor?: SecretRedactor;
   runTrigger?: Exclude<PiprRunContext["trigger"], "verifier">;
+  workflowUrl?: string;
+  progress?: ReviewProgressSink & {
+    recordStats(stats: import("../review-stats.js").ReviewStats | undefined): void;
+  };
 };
 
 type ReviewRuntimeBaseResult = {
@@ -147,6 +152,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   const runtimeStarted = Date.now();
   const config = parsePiprConfig(options.config);
   const provider = taskRuntimeProvider(options, config);
+  await options.progress?.transition("building-diff");
   const diffManifest = parseDiffManifest(
     (options.diffManifestBuilder ?? buildDiffManifest)({
       cwd: options.workspace,
@@ -231,10 +237,12 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     structuralManifest,
     piRunSink(run: PiRunStats) {
       piRuns.push(run);
+      options.progress?.recordStats(reviewStatsForRuns(piRuns, Date.now() - runtimeStarted));
     },
   };
 
   const manifestCache = new Map<string, DiffManifest>();
+  await options.progress?.transition("running-review-tasks");
   const taskResults = await executeSelectedTasks({
     tasks,
     runtimeOptions: options,
@@ -285,6 +293,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   }
   assertReviewCommentOutput(output, options.commandInvocation !== undefined);
 
+  await options.progress?.transition("validating-review");
   const main = reviewMainComment(output);
   const review = collectedReview(output, main);
   const validated = validateReviewResult(review, diffManifest, {
@@ -335,6 +344,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
       validFindings: validated.validFindings.length,
       droppedFindings: validated.droppedFindings.length,
       ...(stats ? { stats } : {}),
+      workflowUrl: options.workflowUrl,
     },
   });
   const publicationPlan = publishing.publicationPlan;

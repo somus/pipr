@@ -8,6 +8,11 @@ import {
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
+import {
+  extractReviewProgressToken,
+  type ReviewProgressLease,
+  ReviewProgressSupersededError,
+} from "../../review/progress.js";
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
@@ -30,28 +35,18 @@ export async function publishGitLabPlan(options: {
   client: GitLabClient;
   change: ChangeRequestEventContext;
   plan: PublicationPlan;
+  progressLease?: ReviewProgressLease;
 }): Promise<PublicationResult> {
   const { projectId } = gitLabCoordinates(options.change);
   const owner = await options.client.currentUser();
   const notes = await options.client.listNotes(projectId, options.change.change.number);
   const existingMain = ownedNote(notes, owner.username, mainMarker(options.change.change.number));
+  assertGitLabProgressLease(existingMain, options.progressLease);
   const discussions = await options.client.listDiscussions(projectId, options.change.change.number);
   const ownedBodies = discussionNotes(discussions)
     .filter((note) => note.author?.username === owner.username)
     .map((note) => note.body);
   const mergeRequest = await assertCurrentHead(options.client, projectId, options.change);
-  const main = existingMain
-    ? await options.client.updateNote(
-        projectId,
-        options.change.change.number,
-        existingMain.id,
-        options.plan.mainComment,
-      )
-    : await options.client.createNote(
-        projectId,
-        options.change.change.number,
-        options.plan.mainComment,
-      );
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
     existingBodies: ownedBodies,
@@ -74,14 +69,82 @@ export async function publishGitLabPlan(options: {
     discussions,
     ownerUsername: owner.username,
   });
+  await assertCurrentHead(options.client, projectId, options.change);
+  const currentMain = ownedNote(
+    await options.client.listNotes(projectId, options.change.change.number),
+    owner.username,
+    mainMarker(options.change.change.number),
+  );
+  assertGitLabProgressLease(currentMain, options.progressLease);
+  const main = currentMain
+    ? await options.client.updateNote(
+        projectId,
+        options.change.change.number,
+        currentMain.id,
+        options.plan.mainComment,
+      )
+    : await options.client.createNote(
+        projectId,
+        options.change.change.number,
+        options.plan.mainComment,
+      );
   return completeHostPublication({
     provider: "GitLab",
-    mainAction: existingMain ? "updated" : "created",
+    mainAction: options.progressLease?.mainCommentAction ?? (existingMain ? "updated" : "created"),
     mainId: main.id,
     inline,
     resolutionErrors: resolution.errors,
     metadata: options.plan.metadata,
   });
+}
+
+export async function publishGitLabReviewProgress(options: {
+  client: GitLabClient;
+  change: ChangeRequestEventContext;
+  body: string;
+  reviewedHeadSha: string;
+  expectedToken?: string;
+}) {
+  const { projectId } = gitLabCoordinates(options.change);
+  const owner = await options.client.currentUser();
+  const notes = await options.client.listNotes(projectId, options.change.change.number);
+  const existing = ownedNote(notes, owner.username, mainMarker(options.change.change.number));
+  if (
+    options.expectedToken &&
+    extractReviewProgressToken(existing?.body) !== options.expectedToken
+  ) {
+    return { status: "superseded" as const };
+  }
+  await assertCurrentHead(options.client, projectId, options.change);
+  if (existing) {
+    const note = await options.client.updateNote(
+      projectId,
+      options.change.change.number,
+      existing.id,
+      options.body,
+    );
+    return { status: "published" as const, action: "updated" as const, id: note.id };
+  }
+  if (options.expectedToken) return { status: "superseded" as const };
+  const note = await options.client.createNote(
+    projectId,
+    options.change.change.number,
+    options.body,
+  );
+  return { status: "published" as const, action: "created" as const, id: note.id };
+}
+
+function assertGitLabProgressLease(
+  note: GitLabNote | undefined,
+  lease: ReviewProgressLease | undefined,
+): void {
+  if (!lease) return;
+  if (
+    String(note?.id ?? "") !== lease.mainCommentId ||
+    extractReviewProgressToken(note?.body) !== lease.token
+  ) {
+    throw new ReviewProgressSupersededError();
+  }
 }
 
 function gitLabInlineLocations(

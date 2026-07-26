@@ -55,7 +55,7 @@ describe("Azure DevOps host adapter", () => {
       mainComment: { action: "updated" },
       inlineComments: { posted: 0, skipped: 1, failed: 0 },
     });
-    expect(client.createdThreadBodies[1]).toMatchObject({
+    expect(client.createdThreadBodies[0]).toMatchObject({
       threadContext: {
         filePath: "/src/a.ts",
         rightFileStart: { line: 2, offset: 1 },
@@ -291,7 +291,7 @@ describe("Azure DevOps host adapter", () => {
     ];
 
     await adapter.publication?.publish({ change, plan });
-    expect(client.createdThreadBodies[1]).toMatchObject({
+    expect(client.createdThreadBodies[0]).toMatchObject({
       threadContext: {
         filePath: "/src/old.ts",
         leftFileStart: { line: 3, offset: 1 },
@@ -317,14 +317,14 @@ describe("Azure DevOps host adapter", () => {
 
     await adapter.publication?.publish({ change, plan });
 
-    expect(client.createdThreadBodies[1]).toMatchObject({
+    expect(client.createdThreadBodies[0]).toMatchObject({
       threadContext: {
         filePath: "/src/a.ts",
         rightFileStart: { line: 2, offset: 1 },
         rightFileEnd: { line: 2, offset: 1 },
       },
     });
-    const comments = client.createdThreadBodies[1]?.comments as
+    const comments = client.createdThreadBodies[0]?.comments as
       | Array<{ content: string }>
       | undefined;
     expect(comments?.[0]?.content).toContain("```\nconst value = 2;\n```");
@@ -391,7 +391,7 @@ describe("Azure DevOps host adapter", () => {
         change: unicodeChange,
         plan,
       });
-      expect(client.createdThreadBodies[1]).toMatchObject({
+      expect(client.createdThreadBodies[0]).toMatchObject({
         threadContext: { rightFileEnd: { line: 1, offset: 14 } },
       });
     } finally {

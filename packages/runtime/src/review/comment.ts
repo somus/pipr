@@ -113,6 +113,7 @@ const publicationMetadataSchema = z.strictObject({
   droppedFindings: z.number().int().min(0),
   cappedInlineFindings: z.number().int().min(0),
   stats: reviewStatsSchema.optional(),
+  workflowUrl: z.string().url().max(2_048).optional(),
 });
 
 export type PublicationMetadata = z.infer<typeof publicationMetadataSchema>;
@@ -375,7 +376,7 @@ function renderMainComment(options: {
     "",
     ...(!options.showStats || !options.metadata.stats ? [reviewStatsHiddenMarker, ""] : []),
     ...(options.showStats && options.metadata.stats
-      ? [renderReviewStats(options.metadata.stats), ""]
+      ? [renderReviewStats(options.metadata.stats, options.metadata.workflowUrl), ""]
       : []),
     ...(options.showFooter
       ? [renderMainCommentAttribution(options.metadata), ""]
@@ -383,26 +384,33 @@ function renderMainComment(options: {
   ].join("\n");
 }
 
-function renderReviewStats(stats: ReviewStats): string {
-  const usageSuffix = stats.usageStatus === "partial" ? " (reported)" : "";
-  const usageUnavailable = stats.usageStatus === "unavailable";
+function renderReviewStats(stats: ReviewStats, workflowUrl?: string): string {
   return [
     reviewStatsStartMarker,
     "<details>",
-    "<summary>Review stats</summary>",
+    `<summary>Review completed in ${formatReviewDuration(stats.durationMs)}</summary>`,
     "",
-    "| Metric | Total |",
-    "| --- | ---: |",
-    `| Models | ${stats.models.map(formatModel).join(", ")} |`,
-    `| Agent runs | ${stats.agentRuns} |`,
-    `| Elapsed | ${formatDuration(stats.durationMs)} |`,
-    `| Input tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.inputTokens)}${usageSuffix}`} |`,
-    `| Output tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.outputTokens)}${usageSuffix}`} |`,
-    `| Cost (USD) | ${usageUnavailable ? "Unavailable" : `${formatCost(stats.costUsd)}${usageSuffix}`} |`,
+    ...renderReviewStatsTable(stats, workflowUrl),
     "",
     "</details>",
     reviewStatsEndMarker,
   ].join("\n");
+}
+
+export function renderReviewStatsTable(stats: ReviewStats, workflowUrl?: string): string[] {
+  const usageSuffix = stats.usageStatus === "partial" ? " (reported)" : "";
+  const usageUnavailable = stats.usageStatus === "unavailable";
+  return [
+    "| Metric | Total |",
+    "| --- | ---: |",
+    `| Models | ${stats.models.map(formatModel).join(", ")} |`,
+    `| Agent runs | ${stats.agentRuns} |`,
+    `| Elapsed | ${formatReviewDuration(stats.durationMs)} |`,
+    `| Input tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.inputTokens)}${usageSuffix}`} |`,
+    `| Output tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.outputTokens)}${usageSuffix}`} |`,
+    `| Cost (USD) | ${usageUnavailable ? "Unavailable" : `${formatCost(stats.costUsd)}${usageSuffix}`} |`,
+    ...(workflowUrl ? [`| Workflow | [View workflow](<${workflowUrl}>) |`] : []),
+  ];
 }
 
 function formatModel(model: string): string {
@@ -418,7 +426,7 @@ function formatInteger(value: number): string {
   return value.toLocaleString("en-US");
 }
 
-function formatDuration(durationMs: number): string {
+export function formatReviewDuration(durationMs: number): string {
   if (durationMs < 1_000) {
     return `${durationMs}ms`;
   }

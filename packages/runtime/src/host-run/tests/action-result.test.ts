@@ -74,7 +74,7 @@ const inlineDraft = {
 };
 const visibleStats = [
   "<details>",
-  "<summary>Review stats</summary>",
+  "<summary>Review completed in 1.3s</summary>",
   "",
   "| Metric | Total |",
   "| --- | ---: |",

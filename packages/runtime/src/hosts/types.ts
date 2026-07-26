@@ -1,5 +1,6 @@
 import type { PublicationPlan, ThreadAction } from "../review/comment.js";
 import type { PriorReviewState } from "../review/prior-state.js";
+import type { ReviewProgressLease } from "../review/progress.js";
 import type { PublicationResult } from "../review/publication-result.js";
 import type {
   ChangeRequestEventContext,
@@ -120,7 +121,21 @@ export type CodeHostPublication = {
   publish(options: {
     plan: PublicationPlan;
     change: ChangeRequestEventContext;
+    progressLease?: ReviewProgressLease;
   }): Promise<PublicationResult>;
+  publishReviewProgress?(options: {
+    change: ChangeRequestEventContext;
+    body: string;
+    reviewedHeadSha: string;
+    expectedToken?: string;
+  }): Promise<
+    | {
+        status: "published";
+        action: "created" | "updated";
+        id: NativeId;
+      }
+    | { status: "superseded" }
+  >;
   publishCommandResponse?(options: {
     change: ChangeRequestEventContext;
     sourceCommentId: NativeId;

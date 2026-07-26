@@ -71,6 +71,7 @@ const piprConfigSchema = z.strictObject({
     showHeader: z.boolean().default(true),
     showFooter: z.boolean().default(true),
     showStats: z.boolean().default(true),
+    showProgress: z.boolean().default(true),
   }),
   limits: z
     .strictObject({

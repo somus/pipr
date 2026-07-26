@@ -312,6 +312,7 @@ const publicationOptionsSchema: z.ZodType<PublicationOptions> = z.strictObject({
   showHeader: z.boolean().optional(),
   showFooter: z.boolean().optional(),
   showStats: z.boolean().optional(),
+  showProgress: z.boolean().optional(),
 });
 
 const aggregateCheckOptionsSchema: z.ZodType<AggregateCheckOptions> = z.union([
@@ -660,6 +661,11 @@ function mergePublicationConfig(
     next.showFooter,
   );
   target.showStats = mergeConfigField("publication.showStats", target.showStats, next.showStats);
+  target.showProgress = mergeConfigField(
+    "publication.showProgress",
+    target.showProgress,
+    next.showProgress,
+  );
 }
 
 function mergeConfigField<T>(

@@ -8,6 +8,7 @@ import {
   loadBitbucketPriorReviewState,
   publishBitbucketCommandResponse,
   publishBitbucketPlan,
+  publishBitbucketReviewProgress,
   publishBitbucketThreadActions,
 } from "./publication.js";
 import { ensureBitbucketHeadCheckout } from "./workspace.js";
@@ -61,7 +62,9 @@ export function createBitbucketHostAdapter(
       },
     },
     publication: {
-      publish: ({ change, plan }) => publishBitbucketPlan({ client, change, plan }),
+      publish: ({ change, plan, progressLease }) =>
+        publishBitbucketPlan({ client, change, plan, progressLease }),
+      publishReviewProgress: (args) => publishBitbucketReviewProgress({ client, ...args }),
       publishCommandResponse: (args) => publishBitbucketCommandResponse({ client, ...args }),
       publishCommandStatus: (args) =>
         publishBitbucketCommandResponse({

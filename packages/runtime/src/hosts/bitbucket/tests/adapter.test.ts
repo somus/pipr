@@ -28,7 +28,7 @@ describe("Bitbucket Cloud adapter", () => {
       mainComment: { action: "updated" },
       inlineComments: { skipped: 1 },
     });
-    expect(client.createdBodies[1]).toMatchObject({
+    expect(client.createdBodies[0]).toMatchObject({
       inline: { path: "src/a.ts", to: 4, start_to: 2 },
     });
     const command = { change, sourceCommentId: "9", commandName: "ask", body: "answer" };
@@ -98,8 +98,8 @@ describe("Bitbucket Cloud adapter", () => {
       expect(body).not.toMatch(/<\/?[A-Za-z][^>]*>/);
       expect(body).toContain("[pipr-metadata-");
     }
-    expect(published[0]).toContain("# Pipr Review");
-    expect(published[1]).toContain("### Rationale");
+    expect(published[0]).toContain("### Rationale");
+    expect(published[1]).toContain("# Pipr Review");
 
     await expect(adapter.publication?.publish({ change, plan })).resolves.toMatchObject({
       mainComment: { action: "updated" },
@@ -173,7 +173,7 @@ describe("Bitbucket Cloud adapter", () => {
 
     await adapter.publication?.publish({ change, plan });
 
-    expect(client.createdBodies[1]).toMatchObject({
+    expect(client.createdBodies[0]).toMatchObject({
       inline: { path: "src/old.ts", from: 4, start_from: 2 },
     });
   });
