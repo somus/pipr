@@ -17,8 +17,10 @@ import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
   assertHostInlinePublicationSucceeded,
+  assertHostPublicationWriteAllowed,
   commandResponseBody,
   completeHostPublication,
+  hostPublicationActionError,
   nativeInlineLocation,
   publishUnseenInlineItems,
   threadActionReply,
@@ -408,17 +410,16 @@ async function publishBitbucketThreadAction(
           normalizeBitbucketMarkdown(comment.content.raw).includes(reply.marker),
       )
     ) {
-      await beforeWrite?.();
+      await assertHostPublicationWriteAllowed(beforeWrite);
       await client.replyToComment(changeNumber, root.id, renderBitbucketMarkdown(reply.body));
     }
     if (action.kind === "resolve" && root.resolution === undefined) {
-      await beforeWrite?.();
+      await assertHostPublicationWriteAllowed(beforeWrite);
       await client.resolveComment(changeNumber, root.id);
     }
     return undefined;
   } catch (error) {
-    if (error instanceof ReviewProgressSupersededError) throw error;
-    return error instanceof Error ? error.message : String(error);
+    return hostPublicationActionError(error);
   }
 }
 

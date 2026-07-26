@@ -75,15 +75,19 @@ function generatedReviewStatsRange(
     return undefined;
   }
   const start = lines.lastIndexOf(reviewStatsStartMarker, end - 2);
-  if (
-    start < 0 ||
-    lines[start + 1] !== "<details>" ||
-    !/^<summary>(?:Review stats|Review completed in .+)<\/summary>$/.test(lines[start + 2] ?? "") ||
-    !matchesGeneratedReviewStatsShape(lines, start, end)
-  ) {
+  if (!isGeneratedReviewStatsEnvelope(lines, start, end)) {
     return undefined;
   }
   return { start, end };
+}
+
+function isGeneratedReviewStatsEnvelope(lines: string[], start: number, end: number): boolean {
+  return (
+    start >= 0 &&
+    lines[start + 1] === "<details>" &&
+    /^<summary>(?:Review stats|Review completed in .+)<\/summary>$/.test(lines[start + 2] ?? "") &&
+    matchesGeneratedReviewStatsShape(lines, start, end)
+  );
 }
 
 function matchesGeneratedReviewStatsShape(lines: string[], start: number, end: number): boolean {

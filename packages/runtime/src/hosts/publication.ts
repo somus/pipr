@@ -12,6 +12,7 @@ import {
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
 } from "../review/prior-state.js";
+import { ReviewProgressSupersededError } from "../review/progress.js";
 import { PublicationError, type PublicationResult } from "../review/publication-result.js";
 import type { CommandLifecycleState } from "./types.js";
 
@@ -117,6 +118,17 @@ export function threadActionReply(action: ThreadAction): { body: string; marker:
     marker,
     body: [marker, "", action.body.replaceAll("<!--", "&lt;!--")].join("\n"),
   };
+}
+
+export async function assertHostPublicationWriteAllowed(
+  beforeWrite: (() => Promise<void>) | undefined,
+): Promise<void> {
+  await beforeWrite?.();
+}
+
+export function hostPublicationActionError(error: unknown): string {
+  if (error instanceof ReviewProgressSupersededError) throw error;
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function completeHostPublication(options: {

@@ -4,7 +4,7 @@ import {
   extractVerifierResponseMarkers,
 } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import { threadActionReply } from "../publication.js";
+import { assertHostPublicationWriteAllowed, threadActionReply } from "../publication.js";
 import type {
   GitHubPublicationClient,
   GitHubReviewComment,
@@ -135,7 +135,7 @@ async function postThreadActionReplyIfNeeded(
   if (threadActionReplyExists(context, action, markerKey)) {
     return undefined;
   }
-  await context.beforeWrite?.();
+  await assertHostPublicationWriteAllowed(context.beforeWrite);
   try {
     await context.client.createReviewCommentReply({
       repo: context.change.repository.slug,
@@ -225,7 +225,7 @@ async function resolveReviewThread(
   if (thread?.isResolved) {
     return undefined;
   }
-  await context.beforeWrite?.();
+  await assertHostPublicationWriteAllowed(context.beforeWrite);
   try {
     await context.client.resolveReviewThread({ threadId });
     return undefined;

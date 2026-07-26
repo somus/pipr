@@ -17,8 +17,10 @@ import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
   assertHostInlinePublicationSucceeded,
+  assertHostPublicationWriteAllowed,
   commandResponseBody,
   completeHostPublication,
+  hostPublicationActionError,
   nativeInlineLocation,
   publishUnseenInlineItems,
   threadActionReply,
@@ -392,7 +394,7 @@ async function publishGitLabThreadAction(options: {
           note.author?.username === options.ownerUsername && note.body.includes(reply.marker),
       )
     ) {
-      await options.beforeWrite?.();
+      await assertHostPublicationWriteAllowed(options.beforeWrite);
       await options.client.replyDiscussion(
         options.projectId,
         options.changeNumber,
@@ -401,7 +403,7 @@ async function publishGitLabThreadAction(options: {
       );
     }
     if (options.action.kind === "resolve" && !options.discussion.notes[0]?.resolved) {
-      await options.beforeWrite?.();
+      await assertHostPublicationWriteAllowed(options.beforeWrite);
       await options.client.resolveDiscussion(
         options.projectId,
         options.changeNumber,
@@ -409,8 +411,7 @@ async function publishGitLabThreadAction(options: {
       );
     }
   } catch (error) {
-    if (error instanceof ReviewProgressSupersededError) throw error;
-    return error instanceof Error ? error.message : String(error);
+    return hostPublicationActionError(error);
   }
   return undefined;
 }

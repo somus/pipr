@@ -88,6 +88,7 @@ export async function runTrustedReviewAndPublish(options: {
     if (!publish) {
       throw new Error("review publication is not available for this code host");
     }
+    await finalizeRuntimeChecks(checks, {});
     const publication = await options.log.group("publish review", async () => {
       await options.progress?.transition("publishing-review");
       const publicationPlan = publicationPlanForHostCapabilities(
@@ -112,7 +113,6 @@ export async function runTrustedReviewAndPublish(options: {
       });
       return result;
     });
-    await finalizeRuntimeChecks(checks, {});
     return { kind: "completed", review, publication };
   } catch (error) {
     await finalizeRuntimeChecks(checks, {

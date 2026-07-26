@@ -18,8 +18,10 @@ import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
   assertHostInlinePublicationSucceeded,
+  assertHostPublicationWriteAllowed,
   commandResponseBody,
   completeHostPublication,
+  hostPublicationActionError,
   nativeInlineLocation,
   publishUnseenInlineItems,
   threadActionReply,
@@ -424,7 +426,7 @@ async function publishAzureDevOpsThreadAction(options: {
           comment.content.includes(reply.marker),
       )
     ) {
-      await options.beforeWrite?.();
+      await assertHostPublicationWriteAllowed(options.beforeWrite);
       await options.client.createThreadComment(
         options.repositoryId,
         options.changeNumber,
@@ -437,7 +439,7 @@ async function publishAzureDevOpsThreadAction(options: {
       );
     }
     if (options.action.kind === "resolve" && !isResolved(options.thread)) {
-      await options.beforeWrite?.();
+      await assertHostPublicationWriteAllowed(options.beforeWrite);
       await options.client.updateThreadStatus(
         options.repositoryId,
         options.changeNumber,
@@ -446,8 +448,7 @@ async function publishAzureDevOpsThreadAction(options: {
       );
     }
   } catch (error) {
-    if (error instanceof ReviewProgressSupersededError) throw error;
-    return error instanceof Error ? error.message : String(error);
+    return hostPublicationActionError(error);
   }
   return undefined;
 }

@@ -222,6 +222,32 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
+  it("renders failed progress when status finalization fails", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    publication.client.updateCheckRun = async () => {
+      throw new Error("status finalization failed");
+    };
+    try {
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).rejects.toThrow("status finalization failed");
+
+      const body = publication.writes.updated.at(-1) ?? publication.writes.created.at(-1) ?? "";
+      expect(body).toContain("state=failed");
+      expect(body).toContain("**Failed stage:** Validating review");
+      expect(body).toContain("**Reason:** status finalization failed");
+      expect(body).not.toContain("Review completed in ");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("uses the trusted base config model id for pull_request runs", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: explicitModelIdConfigTs(),
