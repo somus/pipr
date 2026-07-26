@@ -29,7 +29,7 @@ describe("workflowUrlFromEnvironment", () => {
     [
       "bitbucket",
       {
-        BITBUCKET_GIT_HTTP_ORIGIN: "https://bitbucket.org/acme/repo",
+        BITBUCKET_GIT_HTTP_ORIGIN: "https://bitbucket.org/acme/repo.git",
         BITBUCKET_BUILD_NUMBER: "123",
       },
       "https://bitbucket.org/acme/repo/pipelines/results/123",

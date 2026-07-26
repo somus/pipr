@@ -40,7 +40,7 @@ function workflowUrlCandidate(host: string, env: NodeJS.ProcessEnv): string | un
       );
     case "bitbucket":
       return joinedUrl(
-        env.BITBUCKET_GIT_HTTP_ORIGIN,
+        env.BITBUCKET_GIT_HTTP_ORIGIN?.replace(/\.git\/?$/, ""),
         "pipelines",
         "results",
         env.BITBUCKET_BUILD_NUMBER,
