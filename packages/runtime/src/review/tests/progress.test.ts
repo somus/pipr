@@ -5,6 +5,7 @@ import {
   renderRunningReviewProgress,
   stripReviewProgress,
 } from "../progress.js";
+import { priorReviewForTask } from "../task/task-output.js";
 
 const options = {
   changeNumber: 42,
@@ -13,6 +14,7 @@ const options = {
   stage: "running-review-tasks" as const,
   showHeader: true,
   showFooter: true,
+  firstRun: true,
 };
 
 describe("review progress", () => {
@@ -42,11 +44,13 @@ describe("review progress", () => {
       ...options,
       body: prior,
       stage: "building-diff",
+      firstRun: false,
     });
     const second = renderRunningReviewProgress({
       ...options,
       body: first,
       stage: "validating-review",
+      firstRun: false,
     });
 
     expect(second.match(/## Progress/g)).toHaveLength(1);
@@ -56,6 +60,35 @@ describe("review progress", () => {
     );
     expect(second).toContain("<strong>Running: Validating review</strong>");
     expect(stripReviewProgress(second)).toBe(prior);
+  });
+
+  it("keeps first-run progress out of prior review context", () => {
+    const body = renderRunningReviewProgress(options);
+
+    expect(priorReviewForTask(body, undefined).main).toBeUndefined();
+  });
+
+  it("preserves task-authored blank lines while progress is inserted and removed", () => {
+    const prior = [
+      "<!-- pipr:main-comment change=42 version=1 -->",
+      "",
+      "# Prior review",
+      "",
+      "```text",
+      "first",
+      "",
+      "",
+      "second",
+      "```",
+    ].join("\n");
+    const running = renderRunningReviewProgress({
+      ...options,
+      body: prior,
+      firstRun: false,
+    });
+
+    expect(stripReviewProgress(running)).toBe(prior);
+    expect(running).toContain("first\n\n\nsecond");
   });
 
   it("retains a concise redacted failure and optional workflow details", () => {

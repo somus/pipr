@@ -29,28 +29,34 @@ export async function startReviewProgress(options: {
 }): Promise<ReviewProgressReporter | undefined> {
   if (!options.config.publication.showProgress) return undefined;
   const publish = options.adapter.publication?.publishReviewProgress;
-  const load = options.adapter.comments?.loadPriorMainComment;
-  if (!publish || !load) {
-    throw new Error("review progress publication is not available for this code host");
+  if (!publish) {
+    options.log.warning("review progress publication is not available for this code host", {
+      host: options.adapter.id,
+    });
+    return undefined;
   }
   const token = crypto.randomUUID();
   const reviewedHeadSha = options.event.change.head.sha;
   const startedAt = Date.now();
   let activeStage: ReviewProgressStage = "preparing-workspace";
   let stats: ReviewStats | undefined;
-  const currentBody = await load({ change: options.event });
+  let firstRun = false;
   const initial = await publish({
     change: options.event,
     reviewedHeadSha,
-    body: renderRunningReviewProgress({
-      body: currentBody,
-      changeNumber: options.event.change.number,
-      token,
-      reviewedHeadSha,
-      stage: activeStage,
-      showHeader: options.config.publication.showHeader,
-      showFooter: options.config.publication.showFooter,
-    }),
+    renderBody(currentBody) {
+      firstRun = currentBody === undefined;
+      return renderRunningReviewProgress({
+        body: currentBody,
+        changeNumber: options.event.change.number,
+        token,
+        reviewedHeadSha,
+        stage: activeStage,
+        showHeader: options.config.publication.showHeader,
+        showFooter: options.config.publication.showFooter,
+        firstRun,
+      });
+    },
   });
   if (initial.status === "superseded") throw new ReviewProgressSupersededError();
   const lease: ReviewProgressLease = {
@@ -70,20 +76,21 @@ export async function startReviewProgress(options: {
     },
     async transition(stage) {
       if (stage === activeStage) return;
-      const body = await load({ change: options.event });
       const result = await publish({
         change: options.event,
         reviewedHeadSha,
         expectedToken: token,
-        body: renderRunningReviewProgress({
-          body,
-          changeNumber: options.event.change.number,
-          token,
-          reviewedHeadSha,
-          stage,
-          showHeader: options.config.publication.showHeader,
-          showFooter: options.config.publication.showFooter,
-        }),
+        renderBody: (body) =>
+          renderRunningReviewProgress({
+            body,
+            changeNumber: options.event.change.number,
+            token,
+            reviewedHeadSha,
+            stage,
+            showHeader: options.config.publication.showHeader,
+            showFooter: options.config.publication.showFooter,
+            firstRun,
+          }),
       });
       if (result.status === "superseded") throw new ReviewProgressSupersededError();
       activeStage = stage;
@@ -93,25 +100,26 @@ export async function startReviewProgress(options: {
       const reason = error instanceof Error ? error.message : String(error);
       const redactedReason = options.secretRedactor?.redact(reason).value ?? reason;
       try {
-        const body = await load({ change: options.event });
         const result = await publish({
           change: options.event,
           reviewedHeadSha,
           expectedToken: token,
-          body: renderFailedReviewProgress({
-            body,
-            changeNumber: options.event.change.number,
-            token,
-            reviewedHeadSha,
-            stage: activeStage,
-            showHeader: options.config.publication.showHeader,
-            showFooter: options.config.publication.showFooter,
-            showStats: options.config.publication.showStats,
-            durationMs: Date.now() - startedAt,
-            reason: redactedReason,
-            workflowUrl: options.workflowUrl,
-            stats,
-          }),
+          renderBody: (body) =>
+            renderFailedReviewProgress({
+              body,
+              changeNumber: options.event.change.number,
+              token,
+              reviewedHeadSha,
+              stage: activeStage,
+              showHeader: options.config.publication.showHeader,
+              showFooter: options.config.publication.showFooter,
+              firstRun,
+              showStats: options.config.publication.showStats,
+              durationMs: Date.now() - startedAt,
+              reason: redactedReason,
+              workflowUrl: options.workflowUrl,
+              stats,
+            }),
         });
         if (result.status === "superseded") return;
       } catch (progressError) {

@@ -16,6 +16,7 @@ import {
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
+  assertHostInlinePublicationSucceeded,
   commandResponseBody,
   completeHostPublication,
   nativeInlineLocation,
@@ -47,11 +48,28 @@ export async function publishGitLabPlan(options: {
     .filter((note) => note.author?.username === owner.username)
     .map((note) => note.body);
   const mergeRequest = await assertCurrentHead(options.client, projectId, options.change);
+  const assertLease = async () => {
+    if (!options.progressLease) return;
+    await assertCurrentHead(
+      options.client,
+      projectId,
+      options.change,
+      options.plan.metadata.reviewedHeadSha,
+    );
+    const currentMain = await loadOwnedMainNote(
+      options.client,
+      projectId,
+      options.change.change.number,
+      owner.username,
+    );
+    assertGitLabProgressLease(currentMain, options.progressLease);
+  };
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
     existingBodies: ownedBodies,
     existingLocations: gitLabInlineLocations(discussions, owner.username),
     location: gitLabInlineLocation,
+    beforePublish: assertLease,
     publish: async (item) => {
       await options.client.createDiscussion(
         projectId,
@@ -68,12 +86,22 @@ export async function publishGitLabPlan(options: {
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     discussions,
     ownerUsername: owner.username,
+    beforeWrite: assertLease,
   });
+  if (options.progressLease) {
+    assertHostInlinePublicationSucceeded({
+      provider: "GitLab",
+      inline,
+      resolutionErrors: resolution.errors,
+      metadata: options.plan.metadata,
+    });
+  }
   await assertCurrentHead(options.client, projectId, options.change);
-  const currentMain = ownedNote(
-    await options.client.listNotes(projectId, options.change.change.number),
+  const currentMain = await loadOwnedMainNote(
+    options.client,
+    projectId,
+    options.change.change.number,
     owner.username,
-    mainMarker(options.change.change.number),
   );
   assertGitLabProgressLease(currentMain, options.progressLease);
   const main = currentMain
@@ -101,27 +129,38 @@ export async function publishGitLabPlan(options: {
 export async function publishGitLabReviewProgress(options: {
   client: GitLabClient;
   change: ChangeRequestEventContext;
-  body: string;
+  renderBody(currentBody: string | undefined): string;
   reviewedHeadSha: string;
   expectedToken?: string;
 }) {
   const { projectId } = gitLabCoordinates(options.change);
   const owner = await options.client.currentUser();
-  const notes = await options.client.listNotes(projectId, options.change.change.number);
-  const existing = ownedNote(notes, owner.username, mainMarker(options.change.change.number));
-  if (
-    options.expectedToken &&
-    extractReviewProgressToken(existing?.body) !== options.expectedToken
-  ) {
+  await assertCurrentHead(options.client, projectId, options.change);
+  let existing = await loadOwnedMainNote(
+    options.client,
+    projectId,
+    options.change.change.number,
+    owner.username,
+  );
+  if (progressUpdateWasSuperseded(existing, options.expectedToken)) {
     return { status: "superseded" as const };
   }
   await assertCurrentHead(options.client, projectId, options.change);
+  existing = await loadOwnedMainNote(
+    options.client,
+    projectId,
+    options.change.change.number,
+    owner.username,
+  );
+  if (progressUpdateWasSuperseded(existing, options.expectedToken)) {
+    return { status: "superseded" as const };
+  }
   if (existing) {
     const note = await options.client.updateNote(
       projectId,
       options.change.change.number,
       existing.id,
-      options.body,
+      options.renderBody(existing.body),
     );
     return { status: "published" as const, action: "updated" as const, id: note.id };
   }
@@ -129,7 +168,7 @@ export async function publishGitLabReviewProgress(options: {
   const note = await options.client.createNote(
     projectId,
     options.change.change.number,
-    options.body,
+    options.renderBody(undefined),
   );
   return { status: "published" as const, action: "created" as const, id: note.id };
 }
@@ -302,6 +341,7 @@ export async function publishGitLabThreadActions(options: {
   reviewedHeadSha: string;
   discussions?: GitLabDiscussion[];
   ownerUsername?: string;
+  beforeWrite?(): Promise<void>;
 }): Promise<{ errors: string[] }> {
   if (options.actions.length === 0) return { errors: [] };
   const { projectId } = gitLabCoordinates(options.change);
@@ -325,6 +365,7 @@ export async function publishGitLabThreadActions(options: {
       discussion: action.threadId
         ? discussions.find((candidate) => candidate.id === action.threadId)
         : byNote.get(action.commentId),
+      beforeWrite: options.beforeWrite,
     });
     if (error) errors.push(error);
   }
@@ -338,6 +379,7 @@ async function publishGitLabThreadAction(options: {
   action: ThreadAction;
   ownerUsername: string;
   discussion?: GitLabDiscussion;
+  beforeWrite?(): Promise<void>;
 }): Promise<string | undefined> {
   if (!options.discussion) {
     return `GitLab discussion not found for comment ${options.action.commentId}`;
@@ -350,6 +392,7 @@ async function publishGitLabThreadAction(options: {
           note.author?.username === options.ownerUsername && note.body.includes(reply.marker),
       )
     ) {
+      await options.beforeWrite?.();
       await options.client.replyDiscussion(
         options.projectId,
         options.changeNumber,
@@ -358,6 +401,7 @@ async function publishGitLabThreadAction(options: {
       );
     }
     if (options.action.kind === "resolve" && !options.discussion.notes[0]?.resolved) {
+      await options.beforeWrite?.();
       await options.client.resolveDiscussion(
         options.projectId,
         options.changeNumber,
@@ -365,6 +409,7 @@ async function publishGitLabThreadAction(options: {
       );
     }
   } catch (error) {
+    if (error instanceof ReviewProgressSupersededError) throw error;
     return error instanceof Error ? error.message : String(error);
   }
   return undefined;
@@ -440,4 +485,24 @@ function discussionNotes(discussions: GitLabDiscussion[]) {
 
 function mainMarker(changeNumber: number): string {
   return `<!-- pipr:main-comment change=${changeNumber} `;
+}
+
+async function loadOwnedMainNote(
+  client: GitLabClient,
+  projectId: string,
+  changeNumber: number,
+  ownerUsername: string,
+): Promise<GitLabNote | undefined> {
+  return ownedNote(
+    await client.listNotes(projectId, changeNumber),
+    ownerUsername,
+    mainMarker(changeNumber),
+  );
+}
+
+function progressUpdateWasSuperseded(
+  note: GitLabNote | undefined,
+  expectedToken: string | undefined,
+): boolean {
+  return expectedToken !== undefined && extractReviewProgressToken(note?.body) !== expectedToken;
 }

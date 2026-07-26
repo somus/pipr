@@ -783,6 +783,19 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
         };
       };
     },
+    supersedeProgressDuringPreflight(body) {
+      client.afterListThreads = () => {
+        client.afterListThreads = undefined;
+        client.threads = client.threads.map((thread) => ({
+          ...thread,
+          comments: thread.comments.map((comment) =>
+            comment.content?.includes("pipr:main-comment")
+              ? { ...comment, content: body }
+              : comment,
+          ),
+        }));
+      };
+    },
     failNextInline() {
       client.failInline = true;
     },

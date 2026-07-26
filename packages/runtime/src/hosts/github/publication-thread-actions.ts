@@ -39,6 +39,7 @@ export async function publishGitHubPublicationThreadActions(options: {
   plan?: PublicationPlan;
   reviewedHeadSha?: string;
   existingReviewComments: GitHubReviewComment[];
+  beforeWrite?(): Promise<void>;
 }): Promise<{ errors: string[] }> {
   const actions = options.actions ?? options.plan?.threadActions ?? [];
   if (actions.length === 0) {
@@ -58,6 +59,7 @@ export async function publishGitHubPublicationThreadActions(options: {
     ),
     threadById: new Map<string, GitHubReviewThread>(),
     threadByCommentId: new Map<number, GitHubReviewThread>(),
+    beforeWrite: options.beforeWrite,
   };
   const errors: string[] = [];
   const threadLoad = await loadThreadActionThreads(context, actions);
@@ -93,6 +95,7 @@ type ThreadActionContext = {
   responseMarkers: Set<string>;
   threadById: Map<string, GitHubReviewThread>;
   threadByCommentId: Map<number, GitHubReviewThread>;
+  beforeWrite?(): Promise<void>;
 };
 
 async function publishThreadAction(
@@ -132,6 +135,7 @@ async function postThreadActionReplyIfNeeded(
   if (threadActionReplyExists(context, action, markerKey)) {
     return undefined;
   }
+  await context.beforeWrite?.();
   try {
     await context.client.createReviewCommentReply({
       repo: context.change.repository.slug,
@@ -218,10 +222,11 @@ async function resolveReviewThread(
   if (capabilityError) {
     return capabilityError;
   }
+  if (thread?.isResolved) {
+    return undefined;
+  }
+  await context.beforeWrite?.();
   try {
-    if (thread?.isResolved) {
-      return undefined;
-    }
     await context.client.resolveReviewThread({ threadId });
     return undefined;
   } catch (error) {

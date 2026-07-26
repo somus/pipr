@@ -56,6 +56,7 @@ export type RenderReviewProgressOptions = {
   stage: ReviewProgressStage;
   showHeader: boolean;
   showFooter: boolean;
+  firstRun?: boolean;
 };
 
 export function renderRunningReviewProgress(options: RenderReviewProgressOptions): string {
@@ -75,6 +76,7 @@ export function renderRunningReviewProgress(options: RenderReviewProgressOptions
     `<td><img src="${piprProgressImageUrl}" width="48" height="48" alt=""></td>`,
     `<td>${rows.join("<br>")}</td>`,
     "</tr></table>",
+    ...progressFooter(options, "running"),
     reviewProgressEndMarker,
   ];
   return insertProgressBlock(body, block);
@@ -89,10 +91,7 @@ export function renderFailedReviewProgress(
     showStats: boolean;
   },
 ): string {
-  const body = baseMainComment(options).replace(
-    `<sub>Pipr is reviewing commit \`${options.reviewedHeadSha.slice(0, 7)}\`.</sub>`,
-    `<sub>Pipr stopped while reviewing commit \`${options.reviewedHeadSha.slice(0, 7)}\`.</sub>`,
-  );
+  const body = baseMainComment(options);
   const details = [
     progressStartMarker(options, "failed"),
     "<details>",
@@ -106,6 +105,7 @@ export function renderFailedReviewProgress(
       : []),
     "",
     "</details>",
+    ...progressFooter(options, "failed"),
     reviewProgressEndMarker,
   ];
   return insertProgressBlock(body, details);
@@ -130,7 +130,10 @@ export function stripReviewProgress(body: string): string {
   const range = reviewProgressRange(lines);
   if (!range) return body;
   lines.splice(range.start, range.end - range.start + 1);
-  return normalizeBlankLines(lines).join("\n").trimEnd();
+  if (lines[range.start] === "") {
+    lines.splice(range.start, 1);
+  }
+  return lines.join("\n").trimEnd();
 }
 
 function sanitizeProgressFailureReason(reason: string): string {
@@ -161,9 +164,6 @@ function baseMainComment(options: RenderReviewProgressOptions): string {
     "",
     ...(!options.showHeader ? [mainCommentHeaderHiddenMarker, ""] : []),
     ...(options.showHeader ? [mainCommentTitle, ""] : []),
-    ...(options.showFooter
-      ? [`<sub>Pipr is reviewing commit \`${options.reviewedHeadSha.slice(0, 7)}\`.</sub>`, ""]
-      : [mainCommentFooterHiddenMarker, ""]),
   ].join("\n");
 }
 
@@ -171,16 +171,17 @@ function insertProgressBlock(body: string, block: string[]): string {
   const lines = body.split("\n");
   const markerIndex = lines.findIndex((line) => line.startsWith("<!-- pipr:main-comment "));
   let insertionIndex = markerIndex >= 0 ? markerIndex + 1 : 0;
-  while (lines[insertionIndex] === "") insertionIndex += 1;
+  const firstContentOffset = lines.slice(insertionIndex).findIndex((line) => line !== "");
+  const firstContentIndex =
+    firstContentOffset >= 0 ? insertionIndex + firstContentOffset : insertionIndex;
   if (
-    lines[insertionIndex] === mainCommentHeaderHiddenMarker ||
-    mainCommentTitles.has(lines[insertionIndex] ?? "")
+    lines[firstContentIndex] === mainCommentHeaderHiddenMarker ||
+    mainCommentTitles.has(lines[firstContentIndex] ?? "")
   ) {
-    insertionIndex += 1;
-    while (lines[insertionIndex] === "") insertionIndex += 1;
+    insertionIndex = firstContentIndex + 1;
   }
   lines.splice(insertionIndex, 0, ...block, "");
-  return normalizeBlankLines(lines).join("\n").trimEnd();
+  return lines.join("\n").trimEnd();
 }
 
 function progressStartMarker(
@@ -190,13 +191,14 @@ function progressStartMarker(
   return `<!-- pipr:progress:start token=${options.token} head=${options.reviewedHeadSha} stage=${options.stage} state=${state} -->`;
 }
 
-function normalizeBlankLines(lines: string[]): string[] {
-  const normalized: string[] = [];
-  for (const line of lines) {
-    if (line === "" && normalized.at(-1) === "") continue;
-    normalized.push(line);
-  }
-  return normalized;
+function progressFooter(
+  options: Pick<RenderReviewProgressOptions, "firstRun" | "showFooter" | "reviewedHeadSha">,
+  state: "running" | "failed",
+): string[] {
+  if (!options.firstRun) return [];
+  if (!options.showFooter) return ["", mainCommentFooterHiddenMarker];
+  const verb = state === "running" ? "is reviewing" : "stopped while reviewing";
+  return ["", `<sub>Pipr ${verb} commit \`${options.reviewedHeadSha.slice(0, 7)}\`.</sub>`];
 }
 
 function escapeHtml(value: string): string {

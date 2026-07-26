@@ -533,6 +533,19 @@ async function createBitbucketConformanceHarness(): Promise<CodeHostAdapterConfo
         };
       };
     },
+    supersedeProgressDuringPreflight(body) {
+      client.afterListComments = () => {
+        client.afterListComments = undefined;
+        client.comments = client.comments.map((comment) =>
+          normalizeBitbucketMarkdown(comment.content.raw).includes("pipr:main-comment")
+            ? {
+                ...comment,
+                content: { ...comment.content, raw: renderBitbucketMarkdown(body) },
+              }
+            : comment,
+        );
+      };
+    },
     failNextInline() {
       client.failInline = true;
     },

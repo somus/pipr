@@ -125,7 +125,7 @@ describe("publishGitHubPublicationPlan", () => {
       client,
       change: event,
       reviewedHeadSha: "head",
-      body: progressBody(token),
+      renderBody: () => progressBody(token),
     });
     if (progress.status !== "published") {
       throw new Error("expected progress publication");
@@ -157,7 +157,7 @@ describe("publishGitHubPublicationPlan", () => {
       client,
       change: event,
       reviewedHeadSha: "head",
-      body: progressBody(oldToken),
+      renderBody: () => progressBody(oldToken),
     });
     if (progress.status !== "published") {
       throw new Error("expected progress publication");

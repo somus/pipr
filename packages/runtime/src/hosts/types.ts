@@ -125,7 +125,7 @@ export type CodeHostPublication = {
   }): Promise<PublicationResult>;
   publishReviewProgress?(options: {
     change: ChangeRequestEventContext;
-    body: string;
+    renderBody(currentBody: string | undefined): string;
     reviewedHeadSha: string;
     expectedToken?: string;
   }): Promise<

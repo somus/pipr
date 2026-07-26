@@ -625,6 +625,14 @@ async function createGitHubConformanceHarness(): Promise<CodeHostAdapterConforma
         client.currentHead = "new-head";
       };
     },
+    supersedeProgressDuringPreflight(body) {
+      client.afterListIssueComments = () => {
+        client.afterListIssueComments = undefined;
+        client.issueComments = client.issueComments.map((comment) =>
+          comment.body?.includes("pipr:main-comment") ? { ...comment, body } : comment,
+        );
+      };
+    },
     failNextInline() {
       client.failInline = true;
     },

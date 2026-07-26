@@ -169,6 +169,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
       expect(failed).toContain("state=failed");
       expect(failed).toContain("**Failed stage:** Running review tasks");
       expect(failed).toContain("Pi agent failed with exit 42");
+      expect(failed).not.toContain("provider-key");
       expect(failed).toContain("[View workflow](<https://github.com/local/pipr/actions/runs/123>)");
       expect(failed).toContain("Pipr stopped while reviewing commit");
     } finally {
