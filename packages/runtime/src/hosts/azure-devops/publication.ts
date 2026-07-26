@@ -144,18 +144,23 @@ export async function publishAzureDevOpsReviewProgress(options: {
   const threads = options.expectedToken
     ? await options.client.listThreads(coordinates.repositoryId, options.change.change.number)
     : loadedThreads;
-  const existing = ownedRootThread(
+  let existing = ownedRootThread(
     threads,
     owner.uniqueName,
     mainMarker(options.change.change.number),
   );
-  if (
-    options.expectedToken &&
-    extractReviewProgressToken(existing?.comments[0]?.content) !== options.expectedToken
-  ) {
+  if (azureProgressUpdateWasSuperseded(existing, options.expectedToken)) {
     return { status: "superseded" as const };
   }
   await currentPullRequest(options.client, options.change, options.reviewedHeadSha);
+  existing = ownedRootThread(
+    await options.client.listThreads(coordinates.repositoryId, options.change.change.number),
+    owner.uniqueName,
+    mainMarker(options.change.change.number),
+  );
+  if (azureProgressUpdateWasSuperseded(existing, options.expectedToken)) {
+    return { status: "superseded" as const };
+  }
   if (existing) {
     const comment = await options.client.updateComment(
       coordinates.repositoryId,
@@ -176,6 +181,15 @@ export async function publishAzureDevOpsReviewProgress(options: {
   ).comments[0];
   if (!comment) throw new Error("Azure DevOps did not return the progress comment");
   return { status: "published" as const, action: "created" as const, id: comment.id };
+}
+
+function azureProgressUpdateWasSuperseded(
+  thread: AzureDevOpsThread | undefined,
+  expectedToken: string | undefined,
+): boolean {
+  return Boolean(
+    expectedToken && extractReviewProgressToken(thread?.comments[0]?.content) !== expectedToken,
+  );
 }
 
 function assertAzureProgressLease(

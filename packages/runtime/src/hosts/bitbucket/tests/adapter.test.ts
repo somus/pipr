@@ -92,6 +92,40 @@ describe("Bitbucket Cloud adapter", () => {
     expect(client.mainCreates).toBe(0);
   });
 
+  it("rechecks the progress token immediately before an update write", async () => {
+    const client = new FakeBitbucketClient();
+    const adapter = createBitbucketHostAdapter({ client });
+    const publishProgress = adapter.publication?.publishReviewProgress;
+    if (!publishProgress) throw new Error("Expected progress publication");
+    await publishProgress({
+      change,
+      reviewedHeadSha: "head",
+      renderBody: () => progressBody("old-token"),
+    });
+    let headReads = 0;
+    client.afterGetPullRequest = () => {
+      headReads += 1;
+      if (headReads !== 2) return;
+      client.afterGetPullRequest = undefined;
+      const comment = client.comments[0];
+      if (!comment) throw new Error("Expected progress comment");
+      comment.content.raw = renderBitbucketMarkdown(progressBody("new-token"));
+    };
+
+    await expect(
+      publishProgress({
+        change,
+        reviewedHeadSha: "head",
+        expectedToken: "old-token",
+        renderBody: () => progressBody("old-token"),
+      }),
+    ).resolves.toEqual({ status: "superseded" });
+    expect(client.mainUpdates).toBe(0);
+    expect(normalizeBitbucketMarkdown(client.comments[0]?.content.raw ?? "")).toBe(
+      progressBody("new-token"),
+    );
+  });
+
   it("publishes Markdown-only comments while preserving hidden publication metadata", async () => {
     const client = new FakeBitbucketClient();
     const adapter = createBitbucketHostAdapter({ client });
@@ -287,6 +321,15 @@ const change: ChangeRequestEventContext = {
   },
   workspace: "/workspace",
 };
+
+function progressBody(token: string): string {
+  return [
+    "<!-- pipr:main-comment change=7 version=1 -->",
+    `<!-- pipr:progress:start token=${token} head=head stage=preparing-workspace state=running -->`,
+    "## Progress",
+    "<!-- pipr:progress:end -->",
+  ].join("\n");
+}
 
 function publicationPlan() {
   const item: InlinePublicationItem = {

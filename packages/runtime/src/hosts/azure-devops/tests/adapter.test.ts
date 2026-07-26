@@ -109,6 +109,38 @@ describe("Azure DevOps host adapter", () => {
     expect(client.mainCreates).toBe(0);
   });
 
+  it("rechecks the progress token immediately before an update write", async () => {
+    const client = new FakeAzureDevOpsClient();
+    const adapter = createAzureDevOpsHostAdapter({ client });
+    const publishProgress = adapter.publication?.publishReviewProgress;
+    if (!publishProgress) throw new Error("Expected progress publication");
+    await publishProgress({
+      change,
+      reviewedHeadSha: "head",
+      renderBody: () => progressBody("old-token"),
+    });
+    let headReads = 0;
+    client.afterGetPullRequest = () => {
+      headReads += 1;
+      if (headReads !== 2) return;
+      client.afterGetPullRequest = undefined;
+      const comment = client.threads[0]?.comments[0];
+      if (!comment) throw new Error("Expected progress comment");
+      comment.content = progressBody("new-token");
+    };
+
+    await expect(
+      publishProgress({
+        change,
+        reviewedHeadSha: "head",
+        expectedToken: "old-token",
+        renderBody: () => progressBody("old-token"),
+      }),
+    ).resolves.toEqual({ status: "superseded" });
+    expect(client.mainUpdates).toBe(0);
+    expect(client.threads[0]?.comments[0]?.content).toBe(progressBody("new-token"));
+  });
+
   it("reports an inline publication failure when the reviewed blob cannot be read", async () => {
     const client = new FakeAzureDevOpsClient();
     const adapter = createAzureDevOpsHostAdapter({ client });
@@ -447,6 +479,15 @@ const change: ChangeRequestEventContext = {
   },
   workspace: fixtureWorkspace,
 };
+
+function progressBody(token: string): string {
+  return [
+    "<!-- pipr:main-comment change=7 version=1 -->",
+    `<!-- pipr:progress:start token=${token} head=head stage=preparing-workspace state=running -->`,
+    "## Progress",
+    "<!-- pipr:progress:end -->",
+  ].join("\n");
+}
 
 function publicationPlan() {
   const inlineItem: InlinePublicationItem = {

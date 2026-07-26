@@ -138,24 +138,21 @@ export async function publishBitbucketReviewProgress(options: {
   const comments = options.expectedToken
     ? await options.client.listComments(options.change.change.number)
     : loadedComments;
-  const existing = comments.find(
-    (comment) =>
-      comment.user?.uuid === owner.uuid &&
-      normalizeBitbucketMarkdown(comment.content.raw).includes(
-        mainMarker(options.change.change.number),
-      ),
+  let existing = ownedBitbucketMainComment(comments, owner.uuid, options.change.change.number);
+  if (bitbucketProgressUpdateWasSuperseded(existing, options.expectedToken)) {
+    return { status: "superseded" as const };
+  }
+  await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
+  existing = ownedBitbucketMainComment(
+    await options.client.listComments(options.change.change.number),
+    owner.uuid,
+    options.change.change.number,
   );
-  if (
-    options.expectedToken &&
-    extractReviewProgressToken(
-      existing ? normalizeBitbucketMarkdown(existing.content.raw) : undefined,
-    ) !== options.expectedToken
-  ) {
+  if (bitbucketProgressUpdateWasSuperseded(existing, options.expectedToken)) {
     return { status: "superseded" as const };
   }
   const currentBody = existing ? normalizeBitbucketMarkdown(existing.content.raw) : undefined;
   const body = renderBitbucketMarkdown(options.renderBody(currentBody));
-  await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
   if (existing) {
     const comment = await options.client.updateComment(
       options.change.change.number,
@@ -169,6 +166,30 @@ export async function publishBitbucketReviewProgress(options: {
     content: { raw: body },
   });
   return { status: "published" as const, action: "created" as const, id: comment.id };
+}
+
+function ownedBitbucketMainComment(
+  comments: BitbucketComment[],
+  ownerUuid: string,
+  changeNumber: number,
+): BitbucketComment | undefined {
+  return comments.find(
+    (comment) =>
+      comment.user?.uuid === ownerUuid &&
+      normalizeBitbucketMarkdown(comment.content.raw).includes(mainMarker(changeNumber)),
+  );
+}
+
+function bitbucketProgressUpdateWasSuperseded(
+  comment: BitbucketComment | undefined,
+  expectedToken: string | undefined,
+): boolean {
+  return Boolean(
+    expectedToken &&
+      extractReviewProgressToken(
+        comment ? normalizeBitbucketMarkdown(comment.content.raw) : undefined,
+      ) !== expectedToken,
+  );
 }
 
 function assertBitbucketProgressLease(
