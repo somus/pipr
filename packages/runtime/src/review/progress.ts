@@ -150,6 +150,7 @@ function sanitizeProgressFailureReason(reason: string): string {
   if (!firstLine) return "Review failed; see runner logs.";
   const normalized = firstLine.replace(/\s+/g, " ").slice(0, 160);
   return normalized
+    .replaceAll("&", "&amp;")
     .replaceAll("\\", "\\\\")
     .replaceAll("`", "\\`")
     .replaceAll("*", "\\*")

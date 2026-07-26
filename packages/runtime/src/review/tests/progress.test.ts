@@ -97,14 +97,14 @@ describe("review progress", () => {
       ...options,
       body: running,
       durationMs: 301_000,
-      reason: "provider <failed> | secret\nverbose stack",
+      reason: "provider <failed> & unstable | secret\nverbose stack",
       workflowUrl: "https://github.com/acme/repo/actions/runs/123",
       showStats: false,
     });
 
     expect(failed).toContain("<summary>Review failed after 5m 1s</summary>");
     expect(failed).toContain("**Failed stage:** Running review tasks");
-    expect(failed).toContain("provider &lt;failed&gt; &#124; secret");
+    expect(failed).toContain("provider &lt;failed&gt; &amp; unstable &#124; secret");
     expect(failed).not.toContain("verbose stack");
     expect(failed).toContain("[View workflow](<https://github.com/acme/repo/actions/runs/123>)");
     expect(failed).toContain("Pipr stopped while reviewing commit `abcdef1`.");
