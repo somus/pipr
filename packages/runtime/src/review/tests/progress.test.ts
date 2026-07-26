@@ -111,6 +111,17 @@ describe("review progress", () => {
     expect(failed).not.toContain("| Metric | Total |");
   });
 
+  it("preserves backslash-prefixed markdown punctuation", () => {
+    const failed = renderFailedReviewProgress({
+      ...options,
+      durationMs: 1_000,
+      reason: String.raw`provider \*failed\*`,
+      showStats: false,
+    });
+
+    expect(failed).toContain(String.raw`provider \\\*failed\\\*`);
+  });
+
   it("preserves unavailable usage in failed review stats", () => {
     const failed = renderFailedReviewProgress({
       ...options,
