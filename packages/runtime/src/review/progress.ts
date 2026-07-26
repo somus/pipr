@@ -101,7 +101,13 @@ export function renderFailedReviewProgress(
     `**Reason:** ${sanitizeProgressFailureReason(options.reason)}`,
     ...(options.workflowUrl ? ["", `**Workflow:** [View workflow](<${options.workflowUrl}>)`] : []),
     ...(options.showStats && options.stats
-      ? ["", ...renderReviewStatsTable({ ...options.stats, usageStatus: "partial" })]
+      ? [
+          "",
+          ...renderReviewStatsTable({
+            ...options.stats,
+            usageStatus: options.stats.usageStatus === "unavailable" ? "unavailable" : "partial",
+          }),
+        ]
       : []),
     "",
     "</details>",

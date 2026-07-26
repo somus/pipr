@@ -110,4 +110,25 @@ describe("review progress", () => {
     expect(failed).toContain("Pipr stopped while reviewing commit `abcdef1`.");
     expect(failed).not.toContain("| Metric | Total |");
   });
+
+  it("preserves unavailable usage in failed review stats", () => {
+    const failed = renderFailedReviewProgress({
+      ...options,
+      durationMs: 1_000,
+      reason: "provider failed",
+      showStats: true,
+      stats: {
+        models: ["test/model"],
+        agentRuns: 1,
+        durationMs: 1_000,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        usageStatus: "unavailable",
+      },
+    });
+
+    expect(failed.match(/\| Unavailable \|/g)).toHaveLength(3);
+    expect(failed).not.toContain("(reported)");
+  });
 });
