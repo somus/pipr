@@ -155,6 +155,7 @@ export async function publishAzureDevOpsReviewProgress(options: {
   ) {
     return { status: "superseded" as const };
   }
+  await currentPullRequest(options.client, options.change, options.reviewedHeadSha);
   if (existing) {
     const comment = await options.client.updateComment(
       coordinates.repositoryId,

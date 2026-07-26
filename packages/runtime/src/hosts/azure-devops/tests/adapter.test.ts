@@ -88,6 +88,27 @@ describe("Azure DevOps host adapter", () => {
     expect(client.threads).toEqual([]);
   });
 
+  it("rechecks the head immediately before a progress write", async () => {
+    const client = new FakeAzureDevOpsClient();
+    client.afterGetPullRequest = () => {
+      client.afterGetPullRequest = undefined;
+      client.pullRequest = {
+        ...client.pullRequest,
+        lastMergeSourceCommit: { commitId: "new-head" },
+      };
+    };
+    const adapter = createAzureDevOpsHostAdapter({ client });
+
+    await expect(
+      adapter.publication?.publishReviewProgress?.({
+        change,
+        reviewedHeadSha: "head",
+        renderBody: () => "Progress.",
+      }),
+    ).rejects.toThrow("head changed");
+    expect(client.mainCreates).toBe(0);
+  });
+
   it("reports an inline publication failure when the reviewed blob cannot be read", async () => {
     const client = new FakeAzureDevOpsClient();
     const adapter = createAzureDevOpsHostAdapter({ client });
@@ -500,6 +521,7 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     summary?: string;
     headSha: string;
   }> = [];
+  afterGetPullRequest?: () => void;
   afterListThreads?: () => void;
   currentUserUniqueName: string | undefined = "pipr@example.com";
   pullRequest: AzureDevOpsPullRequest = {
@@ -527,7 +549,11 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     this.permissionActors.push(actor);
     return this.permission;
   };
-  getPullRequest = async () => this.pullRequest;
+  getPullRequest = async () => {
+    const pullRequest = this.pullRequest;
+    this.afterGetPullRequest?.();
+    return pullRequest;
+  };
   loadChange = async () => ({
     repository: change.repository,
     coordinates: {

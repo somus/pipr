@@ -155,6 +155,7 @@ export async function publishBitbucketReviewProgress(options: {
   }
   const currentBody = existing ? normalizeBitbucketMarkdown(existing.content.raw) : undefined;
   const body = renderBitbucketMarkdown(options.renderBody(currentBody));
+  await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
   if (existing) {
     const comment = await options.client.updateComment(
       options.change.change.number,

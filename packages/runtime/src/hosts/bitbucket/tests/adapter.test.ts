@@ -71,6 +71,27 @@ describe("Bitbucket Cloud adapter", () => {
     }
   });
 
+  it("rechecks the head immediately before a progress write", async () => {
+    const client = new FakeBitbucketClient();
+    client.afterGetPullRequest = () => {
+      client.afterGetPullRequest = undefined;
+      client.pullRequest = {
+        ...client.pullRequest,
+        source: { ...client.pullRequest.source, commit: { hash: "new-head" } },
+      };
+    };
+    const adapter = createBitbucketHostAdapter({ client });
+
+    await expect(
+      adapter.publication?.publishReviewProgress?.({
+        change,
+        reviewedHeadSha: "head",
+        renderBody: () => "Progress.",
+      }),
+    ).rejects.toThrow("endpoints changed");
+    expect(client.mainCreates).toBe(0);
+  });
+
   it("publishes Markdown-only comments while preserving hidden publication metadata", async () => {
     const client = new FakeBitbucketClient();
     const adapter = createBitbucketHostAdapter({ client });
@@ -341,6 +362,7 @@ class FakeBitbucketClient implements BitbucketClient {
     summary?: string;
     headSha: string;
   }> = [];
+  afterGetPullRequest?: () => void;
   afterListComments?: () => void;
   currentUserUuid: string | undefined = "{bot}";
   pullRequest: BitbucketPullRequest = {
@@ -365,7 +387,11 @@ class FakeBitbucketClient implements BitbucketClient {
     this.permissionActors.push(actor);
     return this.permission;
   };
-  getPullRequest = async () => this.pullRequest;
+  getPullRequest = async () => {
+    const pullRequest = this.pullRequest;
+    this.afterGetPullRequest?.();
+    return pullRequest;
+  };
   loadChange = async () => ({
     repository: change.repository,
     coordinates: change.coordinates as NonNullable<typeof change.coordinates>,
