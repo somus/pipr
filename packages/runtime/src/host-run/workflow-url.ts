@@ -36,7 +36,7 @@ function workflowUrlCandidate(host: string, env: NodeJS.ProcessEnv): string | un
         env.SYSTEM_TEAMFOUNDATIONCOLLECTIONURI,
         env.SYSTEM_TEAMPROJECT,
         "_build",
-        `results?buildId=${encodeURIComponent(env.BUILD_BUILDID ?? "")}`,
+        env.BUILD_BUILDID ? `results?buildId=${encodeURIComponent(env.BUILD_BUILDID)}` : undefined,
       );
     case "bitbucket":
       return joinedUrl(

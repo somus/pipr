@@ -46,6 +46,12 @@ describe("workflowUrlFromEnvironment", () => {
       }),
     ).toBeUndefined();
     expect(
+      workflowUrlFromEnvironment("azure-devops", {
+        SYSTEM_TEAMFOUNDATIONCOLLECTIONURI: "https://dev.azure.com/acme/",
+        SYSTEM_TEAMPROJECT: "Pipr Project",
+      }),
+    ).toBeUndefined();
+    expect(
       workflowUrlFromEnvironment("gitlab", {
         CI_PIPELINE_URL: "https://token@gitlab.com/acme/repo/-/pipelines/123",
       }),
