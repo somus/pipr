@@ -205,8 +205,8 @@ async function encryptedDiagnostic(
   | { state: "not-captured" | "encryption-failed" | "size-limit"; ciphertext?: undefined }
 > {
   if (recipients.length === 0) return { state: "not-captured" };
+  const archive = await createRunBundleTarGz(bundle.directory);
   try {
-    const archive = await createRunBundleTarGz(bundle.directory);
     const encrypter = new Encrypter();
     for (const recipient of recipients) encrypter.addRecipient(recipient);
     const ciphertext = await encrypter.encrypt(archive);

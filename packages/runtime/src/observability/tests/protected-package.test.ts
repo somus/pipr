@@ -131,6 +131,22 @@ describe("protected Run Bundle packages", () => {
     expect(await readdir(prepared.directory)).not.toContain("diagnostic.tar.gz.age");
   });
 
+  it("does not report diagnostic archive construction failures as encryption failures", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await diagnosticBundle(root, `${"a".repeat(101)}.md`);
+    const key = await generateRunBundleIdentity();
+    const published = path.join(root, "published");
+
+    await expect(
+      prepareRunBundlePackage({
+        bundleDirectory: recorder.directory,
+        destinationRoot: published,
+        recipients: [key.recipient],
+      }),
+    ).rejects.toThrow("too long for tar");
+    expect(await readdir(published)).toEqual([]);
+  });
+
   it("rejects extra files, symlinks, and hash mismatches", async () => {
     const root = await temporaryDirectory();
     const recorder = await diagnosticBundle(root);
@@ -166,7 +182,7 @@ const privateValues = [
   "/Users/private/project",
 ];
 
-async function diagnosticBundle(root: string) {
+async function diagnosticBundle(root: string, artifactName = "prompt-001-initial.md") {
   const recorder = await startFileRunRecorder({
     rootDirectory: path.join(root, "capture"),
     env: { PIPR_TEST_SECRET: "private environment secret" },
@@ -187,7 +203,7 @@ async function diagnosticBundle(root: string) {
   await recorder.logSink.group("private source body", async () => undefined);
   await recorder.addArtifact({
     kind: "prompt",
-    name: "prompt-001-initial.md",
+    name: artifactName,
     mediaType: "text/markdown",
     content: "private source body",
     sensitive: true,
