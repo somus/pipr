@@ -100,7 +100,36 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
-  it("captures Gitea Actions provider metadata by default", async () => {
+  it.each([
+    {
+      host: "gitea" as const,
+      providerEnv: {
+        GITEA_ACTIONS: "true",
+        GITHUB_RUN_ID: "200",
+        GITHUB_JOB: "review",
+        GITHUB_SERVER_URL: "https://gitea.example.com",
+      },
+      expectedProvider: {
+        runId: "200",
+        jobId: "review",
+        runUrl: "https://gitea.example.com/local/pipr/actions/runs/200",
+      },
+    },
+    {
+      host: "codeberg" as const,
+      providerEnv: {
+        FORGEJO_ACTIONS: "true",
+        FORGEJO_RUN_ID: "201",
+        FORGEJO_JOB: "review",
+        FORGEJO_SERVER_URL: "https://codeberg.org",
+      },
+      expectedProvider: {
+        runId: "201",
+        jobId: "review",
+        runUrl: "https://codeberg.org/local/pipr/actions/runs/201",
+      },
+    },
+  ])("captures $host Actions provider metadata by default", async (testCase) => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const traceDirectory = path.join(workspace.rootDir, "traces");
     const finalized: Array<{ executionId: string; directory: string }> = [];
@@ -114,17 +143,14 @@ describe("runHostRunCommand pull_request dispatch", () => {
         dryRun: false,
         env: {
           ...pullRequestEnv(workspace.rootDir, eventPath),
-          GITEA_ACTIONS: "true",
-          GITHUB_RUN_ID: "200",
-          GITHUB_JOB: "review",
-          GITHUB_SERVER_URL: "https://gitea.example.com",
+          ...testCase.providerEnv,
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         hostAdapter: {
           ...createGitHubHostAdapter({
             publicationClient: fakeGitHubPublicationClient(workspace),
           }),
-          id: "gitea",
+          id: testCase.host,
         },
         piExecutable: workspace.piExecutable,
         onRunBundleFinalized(bundle) {
@@ -140,15 +166,11 @@ describe("runHostRunCommand pull_request dispatch", () => {
       );
       expect(manifest).toMatchObject({
         repository: {
-          host: "gitea",
+          host: testCase.host,
           repository: "local/pipr",
           changeNumber: 1,
         },
-        provider: {
-          runId: "200",
-          jobId: "review",
-          runUrl: "https://gitea.example.com/local/pipr/actions/runs/200",
-        },
+        provider: testCase.expectedProvider,
         capture: { mode: "metadata" },
       });
     } finally {
