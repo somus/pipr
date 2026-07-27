@@ -636,6 +636,27 @@ describe("run PR selector", () => {
       }),
     ).toEqual({ host: "gitlab", repository: "group/pipr", changeNumber: 42 });
   });
+
+  it("keeps known GitLab remotes ahead of Azure Server path detection", async () => {
+    const cwd = await temporaryDirectory();
+    expect(Bun.spawnSync(["git", "init", cwd]).exitCode).toBe(0);
+    expect(
+      Bun.spawnSync([
+        "git",
+        "-C",
+        cwd,
+        "config",
+        "remote.origin.url",
+        "https://gitlab.example.test/group/subgroup/_git/repository.git",
+      ]).exitCode,
+    ).toBe(0);
+
+    await expect(resolveRunSelector({ pr: "42", cwd })).resolves.toEqual({
+      host: "gitlab",
+      repository: "group/subgroup/_git/repository",
+      changeNumber: 42,
+    });
+  });
 });
 
 async function writeBundle(

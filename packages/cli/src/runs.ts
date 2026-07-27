@@ -741,12 +741,10 @@ function parseUrl(value: string): URL | undefined {
 function selectorFromRemoteUrl(url: URL): Omit<RunSelector, "changeNumber"> | undefined {
   const repository = url.pathname.replace(/^\//, "").replace(/\.git$/, "");
   if (!repository) return undefined;
-  const azure = azureRemoteUrlSelector(repository);
-  if (azure) return azure;
   if (url.hostname === "github.com") return { host: "github", repository };
   if (url.hostname === "bitbucket.org") return { host: "bitbucket", repository };
   if (url.hostname.includes("gitlab")) return { host: "gitlab", repository };
-  return undefined;
+  return azureRemoteUrlSelector(repository);
 }
 
 function azureRemoteUrlSelector(repository: string): Omit<RunSelector, "changeNumber"> | undefined {

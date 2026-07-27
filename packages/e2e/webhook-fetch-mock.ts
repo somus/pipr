@@ -16,13 +16,21 @@ const responses: Record<string, unknown> = {
 };
 
 const mockFetch = async (input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
-  const url = new URL(input instanceof Request ? input.url : input);
+  const url = new URL(requestUrl(input));
+  return Response.json(responseForUrl(url));
+};
+
+function requestUrl(input: string | URL | Request): string | URL {
+  return input instanceof Request ? input.url : input;
+}
+
+function responseForUrl(url: URL): unknown {
   if (url.hostname === "dev.azure.com" && url.pathname.endsWith("/_apis/connectionData")) {
-    return Response.json({ authenticatedUser: {}, instanceId: "collection-id" });
+    return { authenticatedUser: {}, instanceId: "collection-id" };
   }
   const response = responses[url.hostname];
   if (!response) throw new Error(`unexpected webhook fixture request: ${url}`);
-  return Response.json(response);
-};
+  return response;
+}
 
 globalThis.fetch = Object.assign(mockFetch, { preconnect: originalFetch.preconnect });
