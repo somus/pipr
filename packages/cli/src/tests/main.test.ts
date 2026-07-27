@@ -854,6 +854,8 @@ describe("pipr CLI", () => {
         "registry.internal.example/pipr:v1",
         "--checkout-action",
         "git.internal.example/actions/checkout@v6",
+        "--github-runner",
+        "self-hosted",
       ]);
 
       const workflow = await Bun.file(
@@ -861,6 +863,7 @@ describe("pipr CLI", () => {
       ).text();
       expect(workflow).toContain("uses: docker://registry.internal.example/pipr:v1");
       expect(workflow).toContain("uses: git.internal.example/actions/checkout@v6");
+      expect(workflow).toContain("runs-on: self-hosted");
     } finally {
       await removeWorkspace(workspace);
     }

@@ -267,15 +267,34 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
       adapters: ["gitlab"],
     });
     const pipeline = await Bun.file(path.join(rootDir, ".gitlab-ci.yml")).text();
+    const environment = await Bun.file(path.join(rootDir, "gitlab.pipr.env.example")).text();
 
     expect(result.created).toContain(".gitlab-ci.yml");
+    expect(result.created).toContain("gitlab.pipr.env.example");
     expect(pipeline).toContain("ghcr.io/somus/pipr:v0.6.3"); // x-release-please-version
     expect(pipeline).toContain("pipr host-run --host gitlab --config-dir config/pipr");
     expect(pipeline).toContain('PIPR_CODE_HOST: "gitlab"');
     expect(pipeline).toContain('GIT_DEPTH: "0"');
     expect(pipeline).not.toContain("artifacts:");
     expect(pipeline).not.toContain(".pipr-runs/");
+    expect(environment).toContain("GITLAB_API_URL=");
+    expect(environment).toContain("GITLAB_TOKEN=");
+    expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
     expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
+  });
+
+  it("uses the selected GitHub runner in generated workflows", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: ["github"],
+      githubRunner: "self-hosted",
+    });
+
+    const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
+    expect(workflow).toContain("runs-on: self-hosted");
+    expect(workflow).not.toContain("runs-on: ubuntu-latest");
   });
 
   it("uses the selected runtime image in generated container-based adapters", async () => {
@@ -357,6 +376,12 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
         checkoutAction: "actions/checkout@v6\n    malicious: true",
       }),
     ).rejects.toThrow("checkout action");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        githubRunner: "self-hosted\n    malicious: true",
+      }),
+    ).rejects.toThrow("GitHub runner label");
     await expect(
       initOfficialMinimalProject({
         rootDir,

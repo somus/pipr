@@ -11,6 +11,7 @@ export type RenderOfficialGithubWorkflowOptions = {
   minimal?: boolean;
   runtimeImage?: string;
   checkoutAction?: string;
+  githubRunner?: string;
   includeReleasePleaseVersionMarker?: boolean;
 };
 
@@ -42,7 +43,7 @@ export function renderOfficialGithubWorkflow(
     "",
     "jobs:",
     "  review:",
-    "    runs-on: ubuntu-latest",
+    `    runs-on: ${options.githubRunner ?? "ubuntu-latest"}`,
     "    steps:",
     `      - uses: ${options.checkoutAction ?? "actions/checkout@v6"}`,
     "        with:",

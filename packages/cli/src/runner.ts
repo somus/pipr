@@ -57,6 +57,7 @@ type CliOptions = {
   minimal?: boolean;
   runtimeImage?: string;
   checkoutAction?: string;
+  githubRunner?: string;
   requireEnv?: boolean;
   base?: string;
   head?: string;
@@ -119,6 +120,7 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--minimal", "Scaffold a single-file .pipr/config.ts without package.json")
     .option("--runtime-image <image>", "Container image used by generated adapter setup")
     .option("--checkout-action <ref>", "Checkout action reference used by GitHub setup")
+    .option("--github-runner <label>", "Runner label used by generated GitHub setup")
     .option("--force", "Overwrite existing pipr files")
     .action(runInit);
 
@@ -520,6 +522,7 @@ async function runInit(options: CliOptions): Promise<void> {
     minimal: options.minimal === true,
     runtimeImage: options.runtimeImage,
     checkoutAction: options.checkoutAction,
+    githubRunner: options.githubRunner,
   });
   console.log(
     `created ${result.created.length} file(s)` +

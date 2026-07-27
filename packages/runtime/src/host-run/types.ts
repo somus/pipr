@@ -22,6 +22,7 @@ export type InitCommandOptions = RuntimeCommandOptions & {
   minimal?: boolean;
   runtimeImage?: string;
   checkoutAction?: string;
+  githubRunner?: string;
 };
 
 export type DryRunCommandOptions = RuntimeCommandOptions & {

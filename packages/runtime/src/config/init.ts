@@ -22,6 +22,7 @@ export type InitOfficialMinimalProjectOptions = {
   minimal?: boolean;
   runtimeImage?: string;
   checkoutAction?: string;
+  githubRunner?: string;
 };
 
 export type InitOfficialMinimalProjectResult = {
@@ -92,6 +93,7 @@ export async function initOfficialMinimalProject(
 ): Promise<InitOfficialMinimalProjectResult> {
   assertRuntimeImageReference(options.runtimeImage);
   assertCheckoutActionReference(options.checkoutAction);
+  assertGitHubRunnerLabel(options.githubRunner);
   const { configDir, relativeConfigDir, projectDir } = resolveContainedConfigDir(options);
   const adapters = resolveOfficialInitAdapters(options.adapters);
   assertDistinctAdapterTargets(adapters);
@@ -100,6 +102,7 @@ export async function initOfficialMinimalProject(
   const files = await starterFiles(relativeConfigDir, adapters, options.recipe, minimal, {
     runtimeImage: options.runtimeImage,
     checkoutAction: options.checkoutAction,
+    githubRunner: options.githubRunner,
   });
   const targets = files.map((file) => ({
     ...file,
@@ -221,6 +224,13 @@ function assertCheckoutActionReference(value: string | undefined): void {
   }
 }
 
+function assertGitHubRunnerLabel(value: string | undefined): void {
+  if (value === undefined) return;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value)) {
+    throw new Error("The GitHub runner label contains unsupported characters.");
+  }
+}
+
 function isBracketedIpv6Registry(component: string): boolean {
   const match = component.match(/^\[([0-9A-Fa-f:.]+)\](?::[0-9]+)?$/);
   return match !== null && isIP(match[1]) === 6;
@@ -258,7 +268,7 @@ async function starterFiles(
   adapters: readonly OfficialInitAdapter[],
   recipe?: string,
   minimal = false,
-  setup: { runtimeImage?: string; checkoutAction?: string } = {},
+  setup: { runtimeImage?: string; checkoutAction?: string; githubRunner?: string } = {},
 ): Promise<StarterFile[]> {
   const files: StarterFile[] = [
     {
@@ -298,7 +308,7 @@ function starterAdapterFiles(
   relativeConfigDir: string,
   recipe: string | undefined,
   minimal: boolean,
-  setup: { runtimeImage?: string; checkoutAction?: string },
+  setup: { runtimeImage?: string; checkoutAction?: string; githubRunner?: string },
 ): StarterFile[] {
   switch (adapter) {
     case "github":
@@ -311,11 +321,16 @@ function starterAdapterFiles(
             minimal,
             runtimeImage: setup.runtimeImage,
             checkoutAction: setup.checkoutAction,
+            githubRunner: setup.githubRunner,
           }),
         },
       ];
     case "gitlab":
       return [
+        {
+          relativePath: "gitlab.pipr.env.example",
+          contents: starterGitLabWebhookEnvironment(recipe),
+        },
         {
           relativePath: ".gitlab-ci.yml",
           contents: starterGitLabPipeline(relativeConfigDir, recipe, setup.runtimeImage),
@@ -373,7 +388,7 @@ function starterGiteaActionsWorkflow(
   adapter: "gitea" | "forgejo" | "codeberg",
   relativeConfigDir: string,
   recipe: string | undefined,
-  setup: { runtimeImage?: string; checkoutAction?: string },
+  setup: { runtimeImage?: string; checkoutAction?: string; githubRunner?: string },
 ): string {
   const tokenEnv = adapter === "gitea" ? "GITEA_TOKEN" : "FORGEJO_TOKEN";
   const lines = [
@@ -432,6 +447,18 @@ function starterGiteaWebhookEnvironment(
 
 function workflowExpression(value: string): string {
   return `$${["{{ ", value, " }}"].join("")}`;
+}
+
+function starterGitLabWebhookEnvironment(recipe?: string): string {
+  const lines = [
+    "# Copy these names into the trusted webhook runner's secret store.",
+    "GITLAB_API_URL=",
+    "GITLAB_TOKEN=",
+    "PIPR_WEBHOOK_SECRET=",
+  ];
+  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);
+  lines.push("");
+  return lines.join("\n");
 }
 
 function starterGitLabPipeline(

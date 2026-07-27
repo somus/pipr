@@ -2,6 +2,34 @@ import { describe, expect, it } from "bun:test";
 import { createGitLabClient } from "../client.js";
 
 describe("GitLab API client", () => {
+  it("uses the explicit API URL for a self-managed webhook runner", async () => {
+    const client = createGitLabClient(
+      {
+        GITLAB_TOKEN: "test-token",
+        GITLAB_API_URL: "https://gitlab.example.com/api/v4/",
+        CI_API_V4_URL: "https://gitlab.com/api/v4",
+      },
+      async (input) => {
+        expect(String(input)).toBe("https://gitlab.example.com/api/v4/projects/group%2Fproject");
+        return Response.json({ id: 42, path_with_namespace: "group/project" });
+      },
+    );
+
+    await client.getProject("group/project");
+  });
+
+  it("ignores an empty API URL from a copied environment template", async () => {
+    const client = createGitLabClient(
+      { GITLAB_TOKEN: "test-token", GITLAB_API_URL: "" },
+      async (input) => {
+        expect(String(input)).toBe("https://gitlab.com/api/v4/projects/group%2Fproject");
+        return Response.json({ id: 42, path_with_namespace: "group/project" });
+      },
+    );
+
+    await client.getProject("group/project");
+  });
+
   it("resolves canonical project coordinates", async () => {
     const client = createGitLabClient({ GITLAB_TOKEN: "test-token" }, async (input) => {
       expect(String(input)).toContain("projects/group%2Fproject");

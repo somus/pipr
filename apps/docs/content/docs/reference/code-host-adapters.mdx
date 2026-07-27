@@ -5,7 +5,7 @@ description: "Provider-neutral adapter boundary for code host integrations."
 
 Code host adapters are an internal runtime seam. They are not part of `.pipr/config.ts`.
 
-GitHub, GitLab.com, Azure DevOps Services, Bitbucket Cloud, Gitea, Forgejo, and Codeberg are supported.
+GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Bitbucket Cloud, Gitea, Forgejo, and Codeberg are supported.
 
 The public config stays provider-neutral:
 
@@ -90,7 +90,7 @@ Each adapter implements the same event, checkout, publication, status, and permi
 
 ### GitHub
 
-The GitHub adapter handles:
+The GitHub adapter uses GitHub's runtime API and server URLs on GitHub.com and GitHub Enterprise Server. It handles:
 
 - `pull_request` event parsing
 - `issue_comment` command parsing
@@ -108,9 +108,9 @@ The GitHub adapter handles:
 
 GitHub-specific setup stays in [GitHub Action](/docs/guide/github-action).
 
-### GitLab.com
+### GitLab
 
-The GitLab adapter maps merge requests, notes, discussions, member access levels, and external commit statuses into the same runtime contract. It accepts merge-request pipelines and validated webhook payloads, uses merge-request diff refs for inline positions, and checks the current head before writes.
+The GitLab adapter maps merge requests, notes, discussions, member access levels, and external commit statuses into the same runtime contract on GitLab.com and GitLab Self-Managed. It accepts merge-request pipelines and validated webhook payloads, uses merge-request diff refs for inline positions, and checks the current head before writes.
 
 See [GitLab](/docs/guide/gitlab) for CI and trusted webhook setup.
 

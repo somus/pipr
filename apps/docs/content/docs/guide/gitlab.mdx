@@ -1,9 +1,9 @@
 ---
 title: "GitLab"
-description: "Run Pipr reviews, commands, and reply verification on GitLab.com."
+description: "Run Pipr reviews, commands, and reply verification on GitLab.com or GitLab Self-Managed."
 ---
 
-Pipr supports GitLab.com merge requests through GitLab CI for automatic reviews and a trusted webhook runner for commands and reply verification. Use the webhook runner when merge requests can change pipeline code or come from forks.
+Pipr supports GitLab.com and GitLab Self-Managed merge requests through GitLab CI for automatic reviews and a trusted webhook runner for commands and reply verification. Both use the `gitlab` adapter. Use the webhook runner when merge requests can change pipeline code or come from forks.
 
 ## Automatic merge request reviews
 
@@ -35,6 +35,14 @@ pipr:
 
 GitLab provides the project and merge request coordinates as predefined CI variables. Store `GITLAB_TOKEN` and the configured model-provider key as masked CI/CD variables; don't write their values in `.gitlab-ci.yml`.
 
+On GitLab Self-Managed, CI also supplies `CI_API_V4_URL` and `CI_SERVER_URL`; Pipr uses them automatically. If runners can't pull from GHCR, pass an internal image when generating the pipeline:
+
+```bash
+pipr init \
+  --adapters gitlab \
+  --runtime-image registry.internal.example/pipr:v0.6.3 # x-release-please-version
+```
+
 Configure these masked CI/CD variables in GitLab:
 
 | Variable | Purpose |
@@ -52,6 +60,7 @@ Run one trusted checkout behind an HTTPS reverse proxy:
 
 ```bash
 export GITLAB_TOKEN="..."
+export GITLAB_API_URL="https://gitlab.example.com/api/v4"
 export PIPR_WEBHOOK_SECRET="..."
 export DEEPSEEK_API_KEY="..."
 
@@ -79,7 +88,9 @@ Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run t
 
 ## Supported behavior
 
-The GitLab.com adapter supports:
+For GitLab.com, omit `GITLAB_API_URL`; Pipr defaults to `https://gitlab.com/api/v4`. A trusted runner for GitLab Self-Managed must set the complete REST v4 root, including any relative URL prefix used by the installation.
+
+The GitLab adapter supports:
 
 - merge-request open, update, reopen, merge, and close normalization;
 - trusted base config and exact-head checkout;
@@ -105,8 +116,6 @@ GitLab displays the task summary as a merge-request note, publishes validated fi
   alt="GitLab merge request diff showing a Pipr discussion with a native suggestion for duplicate webhook delivery"
   src="/images/pipr/providers/gitlab-inline.png"
 />
-
-GitLab Dedicated and Self-Managed compatibility isn't part of this release.
 
 ## Next steps
 

@@ -7,6 +7,7 @@ Use these patterns when customizing `.pipr/config.ts`.
 | Command                                                                 | Use                                                                                                                                           |
 | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pipr init`                                                             | Create `.pipr/config.ts`, `.pipr/package.json`, `.pipr/bun.lock`, `.pipr/tsconfig.json`, `.pipr/.gitignore`, and the default GitHub workflow. |
+| `pipr init --github-runner self-hosted`                                | Generate the GitHub workflow for a GitHub Enterprise Server self-hosted runner.                                                            |
 | `pipr init --adapters <list>`                                           | Generate selected adapter artifacts for `github`, `gitlab`, `azure-devops`, `bitbucket`, `gitea`, `forgejo`, or `codeberg`; use `none` to skip adapter files. |
 | `pipr init --minimal`                                                   | Create only `.pipr/config.ts`; editor types come from a repo-root `@usepipr/sdk` install.                                                     |
 | `pipr inspect`                                                          | Print models, agents, tasks, commands, tools, publication settings, checks, and limits.                                                       |
@@ -179,4 +180,4 @@ Use only secret names in config:
 apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" });
 ```
 
-Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab uses masked CI/CD variables; Azure DevOps and Bitbucket webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.
+Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab CI uses masked CI/CD variables, while a GitLab Self-Managed webhook runner also sets `GITLAB_API_URL` to its REST v4 root; Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.
