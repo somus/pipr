@@ -326,7 +326,7 @@ function giteaApiUrl(host: GiteaFamilyHost, env: NodeJS.ProcessEnv): string {
   if (host === "forgejo") {
     return env.FORGEJO_API_URL ?? serverApiUrl(env.FORGEJO_SERVER_URL, "Forgejo");
   }
-  return env.FORGEJO_API_URL ?? "https://codeberg.org/api/v1";
+  return env.CODEBERG_API_URL ?? "https://codeberg.org/api/v1";
 }
 
 function serverApiUrl(serverUrl: string | undefined, provider: string): string {

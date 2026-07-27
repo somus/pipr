@@ -397,7 +397,7 @@ function starterGiteaActionsWorkflow(
     `          args: host-run --host ${adapter} --config-dir ${relativeConfigDir}`,
     "        env:",
     `          ${tokenEnv}: ${workflowExpression(`secrets.${tokenEnv}`)}`,
-    `          ${adapter === "gitea" ? "GITEA_API_URL" : "FORGEJO_API_URL"}: ${workflowExpression(`${adapter === "gitea" ? "gitea" : "forgejo"}.api_url`)}`,
+    `          ${adapter === "gitea" ? "GITEA_API_URL" : adapter === "forgejo" ? "FORGEJO_API_URL" : "CODEBERG_API_URL"}: ${workflowExpression(`${adapter === "gitea" ? "gitea" : "forgejo"}.api_url`)}`,
     `          PIPR_RUN_AGE_RECIPIENTS: ${workflowExpression("vars.PIPR_RUN_AGE_RECIPIENTS")}`,
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {

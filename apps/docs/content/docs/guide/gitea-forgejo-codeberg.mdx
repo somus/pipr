@@ -73,7 +73,7 @@ PIPR_WEBHOOK_SECRET=replace-with-webhook-secret
 DEEPSEEK_API_KEY=replace-with-model-key
 ```
 
-For Codeberg, set `CODEBERG_TOKEN`. The generated template pre-fills `FORGEJO_SERVER_URL=https://codeberg.org`, and Pipr defaults the API endpoint to `https://codeberg.org/api/v1`.
+For Codeberg, set `CODEBERG_TOKEN`. The generated template pre-fills `FORGEJO_SERVER_URL=https://codeberg.org`, and Pipr defaults `CODEBERG_API_URL` to `https://codeberg.org/api/v1`.
 
 The bot token must read repository and pull request metadata, inspect collaborator permissions, create and update issue comments, create review comments and replies, and create commit statuses. Limit the token to the target repository where the host supports repository-scoped tokens.
 

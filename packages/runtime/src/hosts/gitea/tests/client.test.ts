@@ -23,6 +23,27 @@ describe("Gitea-compatible API client", () => {
     expect(requests).toEqual(["https://gitea.example.com/api/v1/user"]);
   });
 
+  it("does not use a Forgejo API override for Codeberg", async () => {
+    const requests: string[] = [];
+    const client = createGiteaClient(
+      {
+        host: "codeberg",
+        env: {
+          CODEBERG_TOKEN: "test-token",
+          FORGEJO_API_URL: "https://forge.example.com/api/v1",
+        },
+      },
+      async (input) => {
+        requests.push(String(input));
+        return Response.json({ id: 9, login: "pipr-bot" });
+      },
+    );
+
+    await client.currentUser();
+
+    expect(requests).toEqual(["https://codeberg.org/api/v1/user"]);
+  });
+
   it("loads a Forgejo pull request through provider-neutral change coordinates", async () => {
     const requests: Array<{ url: string; authorization: string | null }> = [];
     const client = createGiteaClient(

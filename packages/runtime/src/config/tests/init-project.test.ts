@@ -323,7 +323,9 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
       expect(workflow).toContain(
         adapter === "gitea"
           ? "GITEA_API_URL: $" + "{{ gitea.api_url }}"
-          : "FORGEJO_API_URL: $" + "{{ forgejo.api_url }}",
+          : adapter === "forgejo"
+            ? "FORGEJO_API_URL: $" + "{{ forgejo.api_url }}"
+            : "CODEBERG_API_URL: $" + "{{ forgejo.api_url }}",
       );
       expect(result.created).toContain(`${adapter}.pipr.env.example`);
     }
