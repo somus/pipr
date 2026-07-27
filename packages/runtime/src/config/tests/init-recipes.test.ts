@@ -172,7 +172,14 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       });
 
       assertReviewResult(result);
+      const outcomeIndex = result.mainComment.indexOf(
+        "> ⚠️ **Needs attention:** 1 actionable finding was identified.",
+      );
+      const summaryIndex = result.mainComment.indexOf("## 🧭 Summary");
+      expect(outcomeIndex).toBeGreaterThan(-1);
+      expect(summaryIndex).toBeGreaterThan(outcomeIndex);
       expect(result.mainComment).toContain("## ⚠️ Findings\n\nSee inline comments in the diff.");
+      expect(result.mainComment).not.toContain("**Findings:** 1");
       expect(result.mainComment).not.toContain("## Review Result");
       expect(result.mainComment).not.toContain("| Inline findings |");
       expect(result.inlineCommentDrafts).toHaveLength(1);
