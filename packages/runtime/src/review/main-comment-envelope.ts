@@ -103,7 +103,9 @@ function isGeneratedReviewStatsEnvelope(lines: string[], start: number, end: num
   return (
     start >= 0 &&
     lines[start + 1] === "<details>" &&
-    /^<summary>(?:Review stats|Review completed in .+)<\/summary>$/.test(lines[start + 2] ?? "") &&
+    /^<summary>(?:Review stats|(?:📊 )?Review completed in .+)<\/summary>$/.test(
+      lines[start + 2] ?? "",
+    ) &&
     matchesGeneratedReviewStatsShape(lines, start, end)
   );
 }
@@ -111,7 +113,9 @@ function isGeneratedReviewStatsEnvelope(lines: string[], start: number, end: num
 function matchesGeneratedReviewStatsShape(lines: string[], start: number, end: number): boolean {
   const generatedShape = lines.slice(start + 3, end + 1);
   const workflowIndex = generatedShape.findIndex((line) =>
-    /^\| Workflow \| \[View workflow\]\(<https?:\/\/[^>]+>\) \|$/.test(line),
+    /^(?:\| Workflow \| \[View workflow\]\(<https?:\/\/[^>]+>\) \||\| Workflow runs \| \[Run 1\]\(<https?:\/\/[^>]+>\)(?:, \[Run \d+\]\(<https?:\/\/[^>]+>\))* \|)$/.test(
+      line,
+    ),
   );
   if (workflowIndex >= 0) {
     generatedShape.splice(workflowIndex, 1);

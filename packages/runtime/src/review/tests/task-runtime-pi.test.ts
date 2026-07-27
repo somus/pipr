@@ -1299,7 +1299,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       usageStatus: "complete",
     });
     expect(result.publicationPlan.metadata.stats?.durationMs).toBeLessThan(60_000);
-    expect(result.mainComment).toContain("<summary>Review completed in ");
+    expect(result.mainComment).toContain("<summary>📊 Review completed in ");
   });
 
   it("keeps aggregate usage safe when reported run totals overflow", async () => {
@@ -1531,7 +1531,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       usageStatus: "complete",
     });
     expect(second.publicationPlan.reviewState.stats).toEqual(second.publicationPlan.metadata.stats);
-    expect(second.mainComment).not.toContain("<summary>Review completed in ");
+    expect(second.mainComment).not.toContain("<summary>📊 Review completed in ");
 
     const third = await runRuntime({
       plan: defaultReviewPlan(),
@@ -1556,7 +1556,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       costUsd: 0.006,
       usageStatus: "complete",
     });
-    expect(third.mainComment).toContain("<summary>Review completed in ");
+    expect(third.mainComment).toContain("<summary>📊 Review completed in ");
   });
 
   it("marks cumulative usage partial when an earlier rerun did not report usage", async () => {

@@ -180,10 +180,13 @@ export function renderFailedReviewProgress(
     ...(options.showStats && options.stats
       ? [
           "",
-          ...renderReviewStatsTable({
-            ...options.stats,
-            usageStatus: options.stats.usageStatus === "unavailable" ? "unavailable" : "partial",
-          }),
+          ...renderReviewStatsTable(
+            {
+              ...options.stats,
+              usageStatus: options.stats.usageStatus === "unavailable" ? "unavailable" : "partial",
+            },
+            options.workflowUrl ? [options.workflowUrl] : undefined,
+          ),
         ]
       : []),
     "",

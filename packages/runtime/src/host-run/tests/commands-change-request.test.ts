@@ -152,9 +152,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
         ),
       ).toBe(true);
       expect(bodies.at(-1)).toContain("Review completed in ");
-      expect(bodies.at(-1)).toContain(
-        "[View workflow](<https://github.com/local/pipr/actions/runs/123>)",
-      );
+      expect(bodies.at(-1)).toContain("[Run 1](<https://github.com/local/pipr/actions/runs/123>)");
       expect(bodies.at(-1)).not.toContain("pipr:progress:start");
     } finally {
       await removeWorkspace(workspace.rootDir);

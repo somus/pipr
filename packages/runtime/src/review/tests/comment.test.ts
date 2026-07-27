@@ -196,7 +196,7 @@ describe("comments", () => {
       [
         "<!-- pipr:stats:start -->",
         "<details>",
-        "<summary>Review completed in 1m 5.4s</summary>",
+        "<summary>📊 Review completed in 1m 5.4s</summary>",
         "",
         "| Metric | Total |",
         "| --- | ---: |",
@@ -237,9 +237,9 @@ describe("comments", () => {
       },
     });
 
-    expect(plan.mainComment).toContain("<summary>Review completed in 5m 0s</summary>");
+    expect(plan.mainComment).toContain("<summary>📊 Review completed in 5m 0s</summary>");
     expect(plan.mainComment).toContain(
-      "| Workflow | [View workflow](<https://github.com/acme/repo/actions/runs/123>) |",
+      "| Workflow runs | [Run 1](<https://github.com/acme/repo/actions/runs/123>) |",
     );
   });
 
