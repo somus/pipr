@@ -4,6 +4,14 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.6.3](https://github.com/somus/pipr/compare/v0.6.2...v0.6.3) (2026-07-27)
+
+
+### Features
+
+* **config:** improve recipe comment layouts ([#130](https://github.com/somus/pipr/issues/130)) ([f731f15](https://github.com/somus/pipr/commit/f731f1567cf880cbfef3de9d0865920fbe70d9e3))
+* show live review progress ([#128](https://github.com/somus/pipr/issues/128)) ([e7a8bc3](https://github.com/somus/pipr/commit/e7a8bc3a84b2461043d0fc67027be551e5ab05d3))
+
 ## [0.6.2](https://github.com/somus/pipr/compare/v0.6.1...v0.6.2) (2026-07-25)
 
 

@@ -3,7 +3,7 @@ import {
   officialInitRecipeWorkflowEnvSecrets,
 } from "./recipes.js";
 
-const defaultWorkflowActionRef = "somus/pipr@v0.6.2"; // x-release-please-version
+const defaultWorkflowActionRef = "somus/pipr@v0.6.3"; // x-release-please-version
 
 export type RenderOfficialGithubWorkflowOptions = {
   relativeConfigDir?: string;
