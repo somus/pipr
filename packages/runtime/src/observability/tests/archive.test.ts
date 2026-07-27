@@ -92,6 +92,22 @@ describe("filesystem run archives", () => {
       expect.objectContaining({ executionId, state: "capture-failed" }),
     ]);
   });
+
+  it("surfaces a sanitized bundle validation failure when listing stored runs", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await completedReview(root, 46);
+    const artifactPath = path.join(recorder.directory, "artifacts", "validation.json");
+    const original = await readFile(artifactPath);
+    await writeFile(artifactPath, Buffer.alloc(original.byteLength, "x"));
+
+    expect(await new FileSystemRunArchiveSource(root).list({})).toEqual([
+      expect.objectContaining({
+        executionId: recorder.executionId,
+        state: "capture-failed",
+        error: "Run artifact hash mismatch: artifacts/validation.json",
+      }),
+    ]);
+  });
 });
 
 describe("deterministic run diagnosis", () => {

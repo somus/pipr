@@ -694,7 +694,7 @@ export function printRunList(runs: RunRecord[]): void {
         formatRunListColumn(run.outcome ?? "unknown", runListColumnWidths.outcome),
         formatRunListColumn(run.state, runListColumnWidths.state),
         formatRunListColumn(run.startedAt ?? "unknown", runListColumnWidths.startedAt),
-        run.nativeUrl ?? "-",
+        run.nativeUrl ?? run.error ?? "-",
       ].join("  "),
     );
   }

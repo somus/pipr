@@ -45,6 +45,22 @@ describe("pipr runs", () => {
     expect(row.indexOf(startedAt)).toBe(header.indexOf("STARTED"));
   });
 
+  it("prints the reason a stored run capture failed", async () => {
+    const output = await captureStdout(async () => {
+      printRunList([
+        {
+          executionId: "0".repeat(32),
+          state: "capture-failed",
+          source: "filesystem",
+          error: "Run artifact hash mismatch: artifacts/validation.json",
+          ref: { executionId: "0".repeat(32) },
+        },
+      ]);
+    });
+
+    expect(output).toContain("Run artifact hash mismatch: artifacts/validation.json");
+  });
+
   it("lists and shows local bundles without returning prompt bodies", async () => {
     const store = await temporaryDirectory();
     const executionId = "0123456789abcdef0123456789abcdef";

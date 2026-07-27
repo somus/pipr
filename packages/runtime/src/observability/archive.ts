@@ -49,6 +49,7 @@ export type RunRecord = {
   state: RunRecordState;
   source: "filesystem" | "github" | "gitlab" | "azure-devops" | "bitbucket";
   nativeUrl?: string;
+  error?: string;
   ref: RunRef;
 };
 
@@ -480,18 +481,52 @@ async function readStoredRecord(rootDirectory: string, executionId: string): Pro
   const directory = path.join(rootDirectory, executionId);
   try {
     return recordFromManifest((await loadValidatedRunBundle(directory)).manifest);
-  } catch {
-    const active = await readActiveCaptureMarker(path.join(directory, "active.json")).catch(
-      () => undefined,
-    );
+  } catch (bundleError) {
+    return await failedStoredRecord(directory, executionId, bundleError);
+  }
+}
+
+async function failedStoredRecord(
+  directory: string,
+  executionId: string,
+  bundleError: unknown,
+): Promise<RunRecord> {
+  const { active, error: activeMarkerError } = await storedActiveCapture(directory);
+  if (active?.active) {
     return {
       executionId,
-      ...(active?.startedAt ? { startedAt: active.startedAt } : {}),
-      state: active?.active ? "in-progress" : "capture-failed",
+      ...(active.startedAt ? { startedAt: active.startedAt } : {}),
+      state: "in-progress",
       source: "filesystem",
       ref: { executionId },
     };
   }
+  const errors = [runRecordErrorMessage(bundleError, directory)];
+  if (activeMarkerError) errors.push(`Active capture marker unreadable: ${activeMarkerError}`);
+  return {
+    executionId,
+    ...(active?.startedAt ? { startedAt: active.startedAt } : {}),
+    state: "capture-failed",
+    source: "filesystem",
+    error: errors.join("; "),
+    ref: { executionId },
+  };
+}
+
+async function storedActiveCapture(directory: string): Promise<{
+  active?: Awaited<ReturnType<typeof readActiveCaptureMarker>>;
+  error?: string;
+}> {
+  try {
+    return { active: await readActiveCaptureMarker(path.join(directory, "active.json")) };
+  } catch (error) {
+    return { error: runRecordErrorMessage(error, directory) };
+  }
+}
+
+function runRecordErrorMessage(error: unknown, directory: string): string {
+  const message = error instanceof Error ? error.message : "Unknown run bundle validation failure";
+  return message.replaceAll(directory, "<bundle>").slice(0, 1000);
 }
 
 async function validateBundleFileSet(
