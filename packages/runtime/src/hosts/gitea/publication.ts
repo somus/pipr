@@ -90,11 +90,18 @@ export async function publishGiteaPlan(options: {
         },
       ),
   });
+  const resolution = await publishGiteaThreadActions({
+    client: options.client,
+    change: options.change,
+    actions: options.plan.threadActions,
+    reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
+    beforeWrite: () => assertCurrentProgressLease(options, owner.login),
+  });
   if (options.progressLease) {
     assertHostInlinePublicationSucceeded({
       provider: displayName(options.client.host),
       inline,
-      resolutionErrors: [],
+      resolutionErrors: resolution.errors,
       metadata: options.plan.metadata,
     });
   }
@@ -134,7 +141,7 @@ export async function publishGiteaPlan(options: {
       options.progressLease?.mainCommentAction ?? (currentExisting ? "updated" : "created"),
     mainId: main.id,
     inline,
-    resolutionErrors: [],
+    resolutionErrors: resolution.errors,
     metadata: options.plan.metadata,
   });
 }
@@ -331,6 +338,7 @@ export async function publishGiteaThreadActions(options: {
   change: ChangeRequestEventContext;
   actions: ThreadAction[];
   reviewedHeadSha: string;
+  beforeWrite?: () => Promise<void>;
 }): Promise<{ errors: string[] }> {
   if (options.actions.length === 0) return { errors: [] };
   await assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha);
@@ -340,10 +348,6 @@ export async function publishGiteaThreadActions(options: {
   await assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha);
   const errors: string[] = [];
   for (const action of options.actions) {
-    if (action.kind === "resolve") {
-      errors.push(`${displayName(options.client.host)} does not support resolving review threads`);
-      continue;
-    }
     const reply = threadActionReply(action);
     const owned = comments.some(
       (comment) =>
@@ -353,9 +357,10 @@ export async function publishGiteaThreadActions(options: {
     );
     if (owned) continue;
     try {
-      await assertHostPublicationWriteAllowed(() =>
-        assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha),
-      );
+      await assertHostPublicationWriteAllowed(async () => {
+        await assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha);
+        await options.beforeWrite?.();
+      });
       await options.client.replyToReviewComment(
         coordinates.owner,
         coordinates.repository,

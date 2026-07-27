@@ -18,6 +18,15 @@ describe("workflowUrlFromEnvironment", () => {
       "https://gitlab.com/acme/repo/-/pipelines/123",
     ],
     [
+      "gitea",
+      {
+        GITHUB_SERVER_URL: "https://gitea.example.com",
+        GITHUB_REPOSITORY: "acme/repo",
+        GITHUB_RUN_ID: "123",
+      },
+      "https://gitea.example.com/acme/repo/actions/runs/123",
+    ],
+    [
       "forgejo",
       {
         FORGEJO_SERVER_URL: "https://forge.example.com",
@@ -25,6 +34,15 @@ describe("workflowUrlFromEnvironment", () => {
         FORGEJO_RUN_ID: "123",
       },
       "https://forge.example.com/acme/repo/actions/runs/123",
+    ],
+    [
+      "codeberg",
+      {
+        FORGEJO_SERVER_URL: "https://codeberg.org",
+        FORGEJO_REPOSITORY: "acme/repo",
+        FORGEJO_RUN_ID: "123",
+      },
+      "https://codeberg.org/acme/repo/actions/runs/123",
     ],
     [
       "azure-devops",

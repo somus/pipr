@@ -685,7 +685,7 @@ function providerRun(
     case "bitbucket":
       return bitbucketProviderRun(env);
     case "gitea":
-      return giteaProviderRun(env, "GITEA", repository);
+      return giteaProviderRun(env, "GITHUB", repository);
     case "forgejo":
     case "codeberg":
       return giteaProviderRun(env, "FORGEJO", repository);
@@ -696,7 +696,7 @@ function providerRun(
 
 function giteaProviderRun(
   env: NodeJS.ProcessEnv,
-  prefix: "GITEA" | "FORGEJO",
+  prefix: "GITHUB" | "FORGEJO",
   repository: string | undefined,
 ) {
   const runId = env[`${prefix}_RUN_ID`];

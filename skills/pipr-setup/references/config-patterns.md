@@ -14,7 +14,7 @@ Use these patterns when customizing `.pipr/config.ts`.
 | `pipr check --require-env`                                              | Also require configured provider env vars.                                                                                                    |
 | `pipr review --base <ref>`                                              | Run change-request tasks locally without publishing comments.                                                                                 |
 | `pipr dry-run --host <host> --event <path>`                             | Load a native provider event and config without model calls or publication.                                                                   |
-| `pipr webhook serve --host <host> --workspace <path> --repository <id>` | Run trusted webhook ingress for GitLab, Azure DevOps, or Bitbucket.                                                                           |
+| `pipr webhook serve --host <host> --workspace <path> --repository <id>` | Run trusted webhook ingress for GitLab, Azure DevOps, Bitbucket, Gitea, Forgejo, or Codeberg.                                                  |
 
 ## Model and review basics
 

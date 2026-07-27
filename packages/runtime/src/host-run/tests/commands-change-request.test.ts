@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
 import { runGit as runGitCommand } from "../../diff/git.js";
+import { createGitHubHostAdapter } from "../../hosts/github/adapter.js";
 import { runtimeVersion } from "../../shared/version.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import type { FakeCheckRuns } from "./commands-fixtures.js";
@@ -94,6 +95,62 @@ describe("runHostRunCommand pull_request dispatch", () => {
         }),
       ]);
       await expect(readdir(traceDirectory)).rejects.toThrow();
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("captures Gitea Actions provider metadata by default", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const traceDirectory = path.join(workspace.rootDir, "traces");
+    const finalized: Array<{ executionId: string; directory: string }> = [];
+    try {
+      const eventPath = path.join(workspace.rootDir, "event.json");
+      await writePullRequestEvent(eventPath, workspace);
+      const result = await runTestHostCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: {
+          ...pullRequestEnv(workspace.rootDir, eventPath),
+          GITEA_ACTIONS: "true",
+          GITHUB_RUN_ID: "200",
+          GITHUB_JOB: "review",
+          GITHUB_SERVER_URL: "https://gitea.example.com",
+          PIPR_RUN_STORE_DIR: traceDirectory,
+        },
+        hostAdapter: {
+          ...createGitHubHostAdapter({
+            publicationClient: fakeGitHubPublicationClient(workspace),
+          }),
+          id: "gitea",
+        },
+        piExecutable: workspace.piExecutable,
+        onRunBundleFinalized(bundle) {
+          finalized.push(bundle);
+        },
+      });
+      if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
+
+      const bundleDirectory = finalized[0]?.directory;
+      if (!bundleDirectory) throw new Error("Expected a finalized Run Bundle");
+      const manifest = parseRunBundleManifest(
+        JSON.parse(await readFile(path.join(bundleDirectory, "run.json"), "utf8")),
+      );
+      expect(manifest).toMatchObject({
+        repository: {
+          host: "gitea",
+          repository: "local/pipr",
+          changeNumber: 1,
+        },
+        provider: {
+          runId: "200",
+          jobId: "review",
+          runUrl: "https://gitea.example.com/local/pipr/actions/runs/200",
+        },
+        capture: { mode: "metadata" },
+      });
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

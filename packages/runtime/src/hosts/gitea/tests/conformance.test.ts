@@ -14,7 +14,7 @@ defineCodeHostAdapterConformanceSuite({
   name: "Forgejo",
   capabilities: {
     commandComments: true,
-    reviewCommentReplies: true,
+    reviewCommentReplies: false,
     threadResolution: false,
     multilineInlineComments: false,
     suggestedChanges: false,
@@ -223,9 +223,10 @@ async function createHarness(): Promise<CodeHostAdapterConformanceHarness> {
       await Bun.write(
         eventPath,
         JSON.stringify({
-          action: "created",
+          action: "reviewed",
+          number: 7,
           pull_request: { number: 7 },
-          comment: { id: 102, in_reply_to_id: 101, body: "Fixed." },
+          review: { type: "comment", content: "Fixed." },
           repository,
           sender,
         }),

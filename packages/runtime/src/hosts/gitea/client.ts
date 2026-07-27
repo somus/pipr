@@ -317,7 +317,11 @@ function giteaToken(host: GiteaFamilyHost, env: NodeJS.ProcessEnv): string {
 
 function giteaApiUrl(host: GiteaFamilyHost, env: NodeJS.ProcessEnv): string {
   if (host === "gitea") {
-    return env.GITEA_API_URL ?? serverApiUrl(env.GITEA_SERVER_URL, "Gitea");
+    return (
+      env.GITEA_API_URL ??
+      (env.GITEA_ACTIONS === "true" ? env.GITHUB_API_URL : undefined) ??
+      serverApiUrl(env.GITEA_SERVER_URL, "Gitea")
+    );
   }
   if (host === "forgejo") {
     return env.FORGEJO_API_URL ?? serverApiUrl(env.FORGEJO_SERVER_URL, "Forgejo");

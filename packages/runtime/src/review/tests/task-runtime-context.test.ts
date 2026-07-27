@@ -450,7 +450,7 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
           },
         },
       },
-      event: eventContext({ action: "opened", rawAction: "synchronize" }),
+      event: eventContext({ action: "opened", rawAction: "synchronized" }),
       priorReviewState: priorReviewStateForTasks(["review"]),
       loadInlineThreadContexts: async () => [
         {

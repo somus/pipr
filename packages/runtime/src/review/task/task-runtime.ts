@@ -640,7 +640,10 @@ async function runSynchronizeVerifier(options: {
   piRunSink: (run: PiRunStats) => void;
   agentRunBudget: AgentRunBudget;
 }): Promise<Awaited<ReturnType<typeof runInternalVerifier>>> {
-  if (options.options.event.rawAction !== "synchronize") {
+  if (
+    options.options.event.rawAction !== "synchronize" &&
+    options.options.event.rawAction !== "synchronized"
+  ) {
     return {
       priorReviewState: options.priorReviewState,
       threadActions: [],

@@ -25,7 +25,7 @@ export function createGiteaHostAdapter(options: {
     id: options.host,
     capabilities: {
       commandComments: true,
-      reviewCommentReplies: true,
+      reviewCommentReplies: false,
       threadResolution: false,
       multilineInlineComments: false,
       suggestedChanges: false,

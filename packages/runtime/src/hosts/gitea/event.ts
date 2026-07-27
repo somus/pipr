@@ -27,18 +27,6 @@ const issueCommentHookSchema = z.looseObject({
   repository: repositorySchema,
   sender: z.looseObject({ login: z.string().min(1) }),
 });
-const reviewCommentHookSchema = z.looseObject({
-  action: z.string().min(1),
-  pull_request: z.looseObject({ number: z.number().int().positive() }),
-  comment: z.looseObject({
-    id: z.union([z.number(), z.string()]).transform(String),
-    body: z.string(),
-    in_reply_to_id: z.union([z.number(), z.string()]).transform(String).optional(),
-  }),
-  repository: repositorySchema,
-  sender: z.looseObject({ login: z.string().min(1) }),
-});
-
 export type GiteaEventParseOptions = HostEventParseOptions & {
   host: GiteaFamilyHost;
   loadChangeRequest: (ref: {
@@ -58,7 +46,7 @@ export async function parseGiteaEvent(options: GiteaEventParseOptions): Promise<
     return issueCommentEvent(payload, options);
   }
   if (eventName === "pull_request_review_comment") {
-    return reviewCommentEvent(payload, options);
+    return { kind: "ignored", reason: "Gitea-compatible review replies are not supported" };
   }
   const hook = pullRequestHookSchema.parse(payload);
   if (hook.pull_request.draft === true) {
@@ -110,30 +98,6 @@ function issueCommentEvent(payload: unknown, options: GiteaEventParseOptions): C
   };
 }
 
-function reviewCommentEvent(payload: unknown, options: GiteaEventParseOptions): CodeHostEvent {
-  const hook = reviewCommentHookSchema.parse(payload);
-  const common = {
-    eventName: "pull_request_review_comment",
-    action: normalizeAction(hook.action),
-    rawAction: hook.action,
-    repository: {
-      slug: hook.repository.full_name,
-      url: hook.repository.html_url,
-    },
-    changeNumber: hook.pull_request.number,
-    commentId: hook.comment.id,
-    body: hook.comment.body,
-    actor: hook.sender.login,
-    workspace: options.workspace,
-  };
-  return hook.comment.in_reply_to_id
-    ? {
-        kind: "review-comment-reply",
-        reply: { ...common, parentCommentId: hook.comment.in_reply_to_id },
-      }
-    : { kind: "command-comment", comment: { ...common, isChangeRequest: true } };
-}
-
 function giteaEventName(options: GiteaEventParseOptions): string | undefined {
   return (
     options.env.PIPR_GITEA_EVENT_NAME ??
@@ -144,7 +108,10 @@ function giteaEventName(options: GiteaEventParseOptions): string | undefined {
 }
 
 function normalizeAction(action: string): string {
-  return action === "open" ? "opened" : action === "reopen" ? "reopened" : action;
+  if (action === "open") return "opened";
+  if (action === "reopen") return "reopened";
+  if (action === "synchronize" || action === "synchronized") return "updated";
+  return action;
 }
 
 function parseRepositorySlug(value: string): { owner: string; repository: string } {

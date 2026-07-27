@@ -2,6 +2,27 @@ import { describe, expect, it } from "bun:test";
 import { createGiteaClient } from "../client.js";
 
 describe("Gitea-compatible API client", () => {
+  it("uses the Gitea Actions API URL when explicit Gitea URLs are absent", async () => {
+    const requests: string[] = [];
+    const client = createGiteaClient(
+      {
+        host: "gitea",
+        env: {
+          GITEA_TOKEN: "test-token",
+          GITEA_ACTIONS: "true",
+          GITHUB_API_URL: "https://gitea.example.com/api/v1",
+        },
+      },
+      async (input) => {
+        requests.push(String(input));
+        return Response.json({ id: 9, login: "pipr-bot" });
+      },
+    );
+
+    await expect(client.currentUser()).resolves.toEqual({ id: 9, login: "pipr-bot" });
+    expect(requests).toEqual(["https://gitea.example.com/api/v1/user"]);
+  });
+
   it("loads a Forgejo pull request through provider-neutral change coordinates", async () => {
     const requests: Array<{ url: string; authorization: string | null }> = [];
     const client = createGiteaClient(

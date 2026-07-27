@@ -33,11 +33,11 @@ function workflowUrlCandidate(host: string, env: NodeJS.ProcessEnv): string | un
       return env.CI_PIPELINE_URL;
     case "gitea":
       return joinedUrl(
-        env.GITEA_SERVER_URL,
-        env.GITEA_REPOSITORY,
+        env.GITHUB_SERVER_URL,
+        env.GITHUB_REPOSITORY,
         "actions",
         "runs",
-        env.GITEA_RUN_ID,
+        env.GITHUB_RUN_ID,
       );
     case "forgejo":
     case "codeberg":

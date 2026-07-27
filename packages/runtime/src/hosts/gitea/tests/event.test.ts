@@ -41,13 +41,43 @@ describe("Gitea-compatible events", () => {
       kind: "change-request",
       change: {
         eventName: "pull_request",
-        action: "synchronized",
+        action: "updated",
+        rawAction: "synchronized",
         platform: { id: "forgejo", host: "https://forge.example.com" },
         repository: { slug: "acme/pipr" },
         coordinates: { provider: "gitea", owner: "acme", repository: "pipr" },
         change: { number: 7, head: { sha: "head" } },
         workspace: "/workspace",
       },
+    });
+  });
+
+  it("ignores native review payloads because they do not identify inline replies", async () => {
+    const eventPath = await writeEvent({
+      action: "reviewed",
+      number: 7,
+      pull_request: { number: 7 },
+      review: { type: "comment", content: "Looks good." },
+      repository: {
+        full_name: "acme/pipr",
+        html_url: "https://gitea.example.com/acme/pipr",
+      },
+      sender: { login: "reviewer" },
+    });
+
+    await expect(
+      parseGiteaEvent({
+        host: "gitea",
+        eventPath,
+        env: { GITEA_EVENT_NAME: "pull_request_review_comment" },
+        workspace: "/workspace",
+        loadChangeRequest: async () => {
+          throw new Error("review payload must not load a change request");
+        },
+      }),
+    ).resolves.toEqual({
+      kind: "ignored",
+      reason: "Gitea-compatible review replies are not supported",
     });
   });
 });

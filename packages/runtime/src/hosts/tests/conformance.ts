@@ -112,16 +112,20 @@ export function defineCodeHostAdapterConformanceSuite(options: {
             actor: "developer",
           },
         });
-        expect(events.reply).toMatchObject({
-          kind: "review-comment-reply",
-          reply: {
-            changeNumber: harness.change.change.number,
-            commentId: expect.any(String),
-            parentCommentId: expect.any(String),
-            body: "Fixed.",
-            actor: "developer",
-          },
-        });
+        if (options.capabilities.reviewCommentReplies) {
+          expect(events.reply).toMatchObject({
+            kind: "review-comment-reply",
+            reply: {
+              changeNumber: harness.change.change.number,
+              commentId: expect.any(String),
+              parentCommentId: expect.any(String),
+              body: "Fixed.",
+              actor: "developer",
+            },
+          });
+        } else {
+          expect(events.reply).toEqual({ kind: "ignored", reason: expect.any(String) });
+        }
         expect(events.draft).toEqual({ kind: "ignored", reason: expect.any(String) });
       });
     });

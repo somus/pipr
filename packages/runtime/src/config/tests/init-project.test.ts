@@ -317,8 +317,14 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
       expect(workflow).toContain(`host-run --host ${adapter} --config-dir .pipr`);
       expect(workflow).toContain("pull_request_target:");
       expect(workflow).not.toContain("\n  pull_request:\n");
+      expect(workflow).not.toContain("pull_request_review_comment:");
       expect(workflow).toContain("ghcr.io/somus/pipr:v0.6.3");
       expect(workflow).toContain(adapter === "gitea" ? "GITEA_TOKEN:" : "FORGEJO_TOKEN:");
+      expect(workflow).toContain(
+        adapter === "gitea"
+          ? "GITEA_API_URL: $" + "{{ gitea.api_url }}"
+          : "FORGEJO_API_URL: $" + "{{ forgejo.api_url }}",
+      );
       expect(result.created).toContain(`${adapter}.pipr.env.example`);
     }
   });

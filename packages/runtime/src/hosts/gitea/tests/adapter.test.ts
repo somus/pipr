@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
+import {
+  buildPublicationPlan,
+  type InlinePublicationItem,
+  type ThreadAction,
+} from "../../../review/comment.js";
 import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import { createGiteaHostAdapter } from "../adapter.js";
@@ -38,6 +42,45 @@ describe("Gitea-compatible host adapter", () => {
         side: "RIGHT",
       },
     ]);
+  });
+
+  it("publishes synchronization resolution actions once as fallback replies", async () => {
+    const client = new FakeGiteaClient();
+    client.reviewComments.push({
+      id: "10",
+      body: `${renderInlineFindingMarker("finding-1", "head")}\nFix this.`,
+      authorLogin: "pipr-bot",
+      path: "src/a.ts",
+      commitId: "head",
+      line: 4,
+      side: "RIGHT",
+    });
+    const adapter = createGiteaHostAdapter({ host: "forgejo", client });
+    const action: ThreadAction = {
+      kind: "resolve",
+      findingId: "finding-1",
+      findingHeadSha: "head",
+      commentId: "10",
+      body: "This finding was fixed.",
+      responseKey: "fixed",
+    };
+
+    const first = await adapter.publication?.publish({
+      change,
+      plan: publicationPlan(false, [action]),
+    });
+    const second = await adapter.publication?.publish({
+      change,
+      plan: publicationPlan(false, [action]),
+    });
+
+    expect(first?.metadata.inlineResolutionErrors).toEqual([]);
+    expect(second?.metadata.inlineResolutionErrors).toEqual([]);
+    expect(client.reviewComments).toHaveLength(2);
+    expect(client.reviewComments[1]).toMatchObject({
+      parentId: "10",
+      body: expect.stringContaining("This finding was fixed."),
+    });
   });
 
   it("creates and updates one response for a command comment", async () => {
@@ -128,7 +171,7 @@ const change: ChangeRequestEventContext = {
   workspace: "/workspace",
 };
 
-function publicationPlan(withInline = false) {
+function publicationPlan(withInline = false, threadActions: ThreadAction[] = []) {
   const finding = {
     body: "Fix this.",
     path: "src/a.ts",
@@ -168,6 +211,7 @@ function publicationPlan(withInline = false) {
       reviewedHeadSha: "head",
       selectedTasks: ["review"],
     }),
+    threadActions,
     metadata: {
       runtimeVersion: "0.6.3",
       reviewedHeadSha: "head",
