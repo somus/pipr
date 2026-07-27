@@ -241,6 +241,36 @@ describe("Bitbucket Cloud events", () => {
 });
 
 describe("Bitbucket Data Center events", () => {
+  it("ignores draft pull request webhooks before loading the change", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-dc-event-"));
+    try {
+      const eventPath = path.join(directory, "event.json");
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          ...dataCenterPayload,
+          pullRequest: { ...dataCenterPayload.pullRequest, draft: true },
+        }),
+      );
+
+      await expect(
+        parseBitbucketEvent({
+          eventPath,
+          env: {
+            BITBUCKET_BASE_URL: "https://bitbucket.example.com",
+            BITBUCKET_EVENT_KEY: "pr:opened",
+          },
+          workspace: "/workspace",
+          loadChangeRequest: () => {
+            throw new Error("draft pull requests must not load change data");
+          },
+        }),
+      ).resolves.toEqual({ kind: "ignored", reason: "pull request is a draft" });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("normalizes pull request and comment webhooks", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-dc-event-"));
     try {

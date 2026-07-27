@@ -70,6 +70,7 @@ const dataCenterCommentSchema = z.looseObject({
 const activitySchema = z.looseObject({
   action: z.string(),
   comment: z.unknown().optional(),
+  commentAnchor: anchorSchema,
 });
 const userPermissionSchema = z.looseObject({
   name: z.string().min(1).optional(),
@@ -169,7 +170,7 @@ export function createBitbucketDataCenterClient(
       const comments = new Map<string, DataCenterComment>();
       for (const activity of activities) {
         if (activity.action !== "COMMENTED" || activity.comment === undefined) continue;
-        for (const comment of flattenDataCenterComments(activity.comment)) {
+        for (const comment of flattenDataCenterComments(activity.comment, activity.commentAnchor)) {
           comments.set(comment.id, comment);
         }
       }
@@ -298,9 +299,15 @@ function normalizeCommentInline(anchor: DataCenterComment["anchor"]): BitbucketC
   };
 }
 
-function flattenDataCenterComments(value: unknown): DataCenterComment[] {
+function flattenDataCenterComments(
+  value: unknown,
+  anchor?: DataCenterComment["anchor"],
+): DataCenterComment[] {
   const comment = dataCenterCommentSchema.parse(value);
-  return [comment, ...comment.comments.flatMap((child) => flattenDataCenterComments(child))];
+  return [
+    { ...comment, anchor: anchor ?? comment.anchor },
+    ...comment.comments.flatMap((child) => flattenDataCenterComments(child)),
+  ];
 }
 
 async function dataCenterCommentRequest(

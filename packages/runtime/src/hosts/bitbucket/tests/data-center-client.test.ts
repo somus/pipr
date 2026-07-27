@@ -255,18 +255,18 @@ const dataCenterResponses = new Map<string, () => Response>([
         values: [
           {
             action: "COMMENTED",
+            commentAnchor: {
+              path: "src/a.ts",
+              srcPath: "src/old.ts",
+              line: 4,
+              fileType: "FROM",
+              multilineMarker: { startLine: 2, startLineType: "REMOVED" },
+            },
             comment: {
               id: 11,
               version: 2,
               text: "existing",
               author: { name: "pipr-bot", slug: "pipr-bot" },
-              anchor: {
-                path: "src/a.ts",
-                srcPath: "src/old.ts",
-                line: 4,
-                fileType: "FROM",
-                multilineMarker: { startLine: 2, startLineType: "REMOVED" },
-              },
               threadResolved: true,
               comments: [
                 {
