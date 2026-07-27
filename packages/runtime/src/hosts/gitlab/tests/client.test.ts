@@ -2,13 +2,27 @@ import { describe, expect, it } from "bun:test";
 import { createGitLabClient } from "../client.js";
 
 describe("GitLab API client", () => {
-  it("uses the explicit API URL for a self-managed webhook runner", async () => {
+  it("keeps the predefined CI API URL ahead of an explicit override", async () => {
     const client = createGitLabClient(
       {
         GITLAB_TOKEN: "test-token",
         GITLAB_API_URL: "https://gitlab.example.com/api/v4/",
-        CI_API_V4_URL: "https://gitlab.com/api/v4",
+        CI_API_V4_URL: "https://trusted-gitlab.example.com/api/v4",
       },
+      async (input) => {
+        expect(String(input)).toBe(
+          "https://trusted-gitlab.example.com/api/v4/projects/group%2Fproject",
+        );
+        return Response.json({ id: 42, path_with_namespace: "group/project" });
+      },
+    );
+
+    await client.getProject("group/project");
+  });
+
+  it("uses the explicit API URL for a self-managed webhook runner outside CI", async () => {
+    const client = createGitLabClient(
+      { GITLAB_TOKEN: "test-token", GITLAB_API_URL: "https://gitlab.example.com/api/v4/" },
       async (input) => {
         expect(String(input)).toBe("https://gitlab.example.com/api/v4/projects/group%2Fproject");
         return Response.json({ id: 42, path_with_namespace: "group/project" });
@@ -18,11 +32,15 @@ describe("GitLab API client", () => {
     await client.getProject("group/project");
   });
 
-  it("ignores an empty API URL from a copied environment template", async () => {
+  it("uses the predefined API URL when the explicit template value is empty", async () => {
     const client = createGitLabClient(
-      { GITLAB_TOKEN: "test-token", GITLAB_API_URL: "" },
+      {
+        GITLAB_TOKEN: "test-token",
+        GITLAB_API_URL: "",
+        CI_API_V4_URL: "https://gitlab.example.com/api/v4",
+      },
       async (input) => {
-        expect(String(input)).toBe("https://gitlab.com/api/v4/projects/group%2Fproject");
+        expect(String(input)).toBe("https://gitlab.example.com/api/v4/projects/group%2Fproject");
         return Response.json({ id: 42, path_with_namespace: "group/project" });
       },
     );

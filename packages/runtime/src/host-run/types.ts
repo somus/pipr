@@ -23,6 +23,7 @@ export type InitCommandOptions = RuntimeCommandOptions & {
   runtimeImage?: string;
   checkoutAction?: string;
   githubRunner?: string;
+  githubEnterpriseServer?: boolean;
 };
 
 export type DryRunCommandOptions = RuntimeCommandOptions & {

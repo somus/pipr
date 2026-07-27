@@ -58,6 +58,7 @@ type CliOptions = {
   runtimeImage?: string;
   checkoutAction?: string;
   githubRunner?: string;
+  githubEnterpriseServer?: boolean;
   requireEnv?: boolean;
   base?: string;
   head?: string;
@@ -121,6 +122,7 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--runtime-image <image>", "Container image used by generated adapter setup")
     .option("--checkout-action <ref>", "Checkout action reference used by GitHub setup")
     .option("--github-runner <label>", "Runner label used by generated GitHub setup")
+    .option("--github-enterprise-server", "Generate GitHub Enterprise Server-compatible setup")
     .option("--force", "Overwrite existing pipr files")
     .action(runInit);
 
@@ -523,6 +525,7 @@ async function runInit(options: CliOptions): Promise<void> {
     runtimeImage: options.runtimeImage,
     checkoutAction: options.checkoutAction,
     githubRunner: options.githubRunner,
+    githubEnterpriseServer: options.githubEnterpriseServer === true,
   });
   console.log(
     `created ${result.created.length} file(s)` +

@@ -76,7 +76,7 @@ Read [recipes.md](references/recipes.md) before selecting a starter recipe. Read
 For new setups:
 
 - Choose the smallest matching recipe and run `pipr init --recipe <id> --adapters <adapter-list>` when the user selected an adapter. Omit `--adapters` only for the default GitHub setup.
-- For GitHub Enterprise Server, add `--github-runner <label>` and use `--runtime-image` or `--checkout-action` when the runner requires internal mirrors.
+- For GitHub Enterprise Server, add `--github-enterprise-server`, optionally override its `self-hosted` label with `--github-runner <label>`, and use `--runtime-image` or `--checkout-action` when the runner requires internal mirrors.
 - Use `github` for `.github/workflows/pipr.yml`, `gitlab` for `.gitlab-ci.yml`, `gitea` for `.gitea/workflows/pipr.yml`, and `forgejo` or `codeberg` for `.forgejo/workflows/pipr.yml`. Azure DevOps, Bitbucket, and every Gitea-compatible adapter also generate trusted-webhook environment templates. Use `--adapters none` only when the user does not want generated adapter files.
 - Use `--minimal` only when the user chose a single-file config or Bun cannot be installed.
 

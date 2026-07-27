@@ -289,12 +289,27 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     await initOfficialMinimalProject({
       rootDir,
       adapters: ["github"],
-      githubRunner: "self-hosted",
+      githubRunner: "true",
     });
 
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
-    expect(workflow).toContain("runs-on: self-hosted");
+    expect(workflow).toContain('runs-on: "true"');
     expect(workflow).not.toContain("runs-on: ubuntu-latest");
+  });
+
+  it("generates a GHES-compatible workflow", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: ["github"],
+      githubEnterpriseServer: true,
+    });
+
+    const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
+    expect(workflow).toContain('runs-on: "self-hosted"');
+    expect(workflow).toContain("uses: actions/upload-artifact@v3.2.2-node20");
+    expect(workflow).toContain("include-hidden-files: true");
   });
 
   it("uses the selected runtime image in generated container-based adapters", async () => {

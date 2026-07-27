@@ -23,6 +23,7 @@ export type InitOfficialMinimalProjectOptions = {
   runtimeImage?: string;
   checkoutAction?: string;
   githubRunner?: string;
+  githubEnterpriseServer?: boolean;
 };
 
 export type InitOfficialMinimalProjectResult = {
@@ -103,6 +104,7 @@ export async function initOfficialMinimalProject(
     runtimeImage: options.runtimeImage,
     checkoutAction: options.checkoutAction,
     githubRunner: options.githubRunner,
+    githubEnterpriseServer: options.githubEnterpriseServer,
   });
   const targets = files.map((file) => ({
     ...file,
@@ -268,7 +270,12 @@ async function starterFiles(
   adapters: readonly OfficialInitAdapter[],
   recipe?: string,
   minimal = false,
-  setup: { runtimeImage?: string; checkoutAction?: string; githubRunner?: string } = {},
+  setup: {
+    runtimeImage?: string;
+    checkoutAction?: string;
+    githubRunner?: string;
+    githubEnterpriseServer?: boolean;
+  } = {},
 ): Promise<StarterFile[]> {
   const files: StarterFile[] = [
     {
@@ -308,7 +315,12 @@ function starterAdapterFiles(
   relativeConfigDir: string,
   recipe: string | undefined,
   minimal: boolean,
-  setup: { runtimeImage?: string; checkoutAction?: string; githubRunner?: string },
+  setup: {
+    runtimeImage?: string;
+    checkoutAction?: string;
+    githubRunner?: string;
+    githubEnterpriseServer?: boolean;
+  },
 ): StarterFile[] {
   switch (adapter) {
     case "github":
@@ -322,6 +334,7 @@ function starterAdapterFiles(
             runtimeImage: setup.runtimeImage,
             checkoutAction: setup.checkoutAction,
             githubRunner: setup.githubRunner,
+            githubEnterpriseServer: setup.githubEnterpriseServer,
           }),
         },
       ];
@@ -388,7 +401,12 @@ function starterGiteaActionsWorkflow(
   adapter: "gitea" | "forgejo" | "codeberg",
   relativeConfigDir: string,
   recipe: string | undefined,
-  setup: { runtimeImage?: string; checkoutAction?: string; githubRunner?: string },
+  setup: {
+    runtimeImage?: string;
+    checkoutAction?: string;
+    githubRunner?: string;
+    githubEnterpriseServer?: boolean;
+  },
 ): string {
   const tokenEnv = adapter === "gitea" ? "GITEA_TOKEN" : "FORGEJO_TOKEN";
   const lines = [
