@@ -240,6 +240,114 @@ describe("Bitbucket Cloud events", () => {
   });
 });
 
+describe("Bitbucket Data Center events", () => {
+  it("normalizes pull request and comment webhooks", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-dc-event-"));
+    try {
+      const eventPath = path.join(directory, "event.json");
+      const options = {
+        eventPath,
+        env: {
+          BITBUCKET_BASE_URL: "https://bitbucket.example.com",
+          BITBUCKET_EVENT_KEY: "pr:from_ref_updated",
+        },
+        workspace: "/workspace",
+        loadChangeRequest: async (ref: {
+          workspace: string;
+          repository: string;
+          changeNumber: number;
+        }) => {
+          expect(ref).toEqual({ workspace: "PRJ", repository: "pipr", changeNumber: 7 });
+          return {
+            ...loaded,
+            repository: {
+              slug: "PRJ/pipr",
+              url: "https://bitbucket.example.com/projects/PRJ/repos/pipr/browse",
+            },
+            coordinates: {
+              provider: "bitbucket" as const,
+              workspace: "PRJ",
+              repository: "pipr",
+              repositoryUuid: "42",
+            },
+          };
+        },
+      };
+      await Bun.write(eventPath, JSON.stringify(dataCenterPayload));
+      await expect(parseBitbucketEvent(options)).resolves.toMatchObject({
+        kind: "change-request",
+        change: {
+          action: "updated",
+          platform: { id: "bitbucket", host: "https://bitbucket.example.com" },
+          repository: { slug: "PRJ/pipr" },
+        },
+      });
+
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          ...dataCenterPayload,
+          comment: { id: 11, text: "@pipr review", parent: { id: 10 } },
+        }),
+      );
+      await expect(
+        parseBitbucketEvent({
+          ...options,
+          env: { ...options.env, BITBUCKET_EVENT_KEY: "pr:comment:added" },
+        }),
+      ).resolves.toMatchObject({
+        kind: "review-comment-reply",
+        reply: {
+          actor: "developer",
+          body: "@pipr review",
+          parentCommentId: "10",
+          repository: {
+            slug: "PRJ/pipr",
+            url: "https://bitbucket.example.com/projects/PRJ/repos/pipr/browse",
+          },
+        },
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("maps terminal Data Center pull request events and rejects unsupported events", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-bitbucket-dc-event-"));
+    try {
+      const eventPath = path.join(directory, "event.json");
+      await Bun.write(eventPath, JSON.stringify(dataCenterPayload));
+      const options = {
+        eventPath,
+        workspace: "/workspace",
+        loadChangeRequest: async () => loaded,
+      };
+      for (const eventKey of ["pr:merged", "pr:declined", "pr:deleted"]) {
+        await expect(
+          parseBitbucketEvent({
+            ...options,
+            env: {
+              BITBUCKET_BASE_URL: "https://bitbucket.example.com",
+              BITBUCKET_EVENT_KEY: eventKey,
+            },
+          }),
+        ).resolves.toMatchObject({ kind: "change-request", change: { action: "closed" } });
+      }
+      await expect(
+        parseBitbucketEvent({
+          ...options,
+          env: {
+            BITBUCKET_BASE_URL: "https://bitbucket.example.com",
+            BITBUCKET_EVENT_KEY: "pr:reviewer:approved",
+          },
+        }),
+      ).rejects.toThrow("Unsupported Bitbucket Data Center event");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 const repository = {
   uuid: "{repo}",
   name: "repository",
@@ -262,4 +370,15 @@ const loaded = {
     base: { sha: "base", ref: "main" },
     head: { sha: "head", ref: "feature" },
   },
+};
+
+const dataCenterPayload = {
+  actor: { name: "developer", slug: "developer" },
+  repository: {
+    id: 42,
+    name: "pipr",
+    slug: "pipr",
+    project: { key: "PRJ" },
+  },
+  pullRequest: { id: 7, draft: false },
 };

@@ -530,6 +530,11 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(environment).toContain("BITBUCKET_EMAIL=");
     expect(environment).toContain("BITBUCKET_API_TOKEN=");
     expect(environment).toContain("BITBUCKET_PERMISSION_API_TOKEN=");
+    expect(environment).toContain("BITBUCKET_BASE_URL=");
+    expect(environment).toContain("BITBUCKET_PROJECT_KEY=");
+    expect(environment).toContain("BITBUCKET_TOKEN=");
+    expect(environment).toContain("BITBUCKET_USER=");
+    expect(environment).toContain("BITBUCKET_PERMISSION_TOKEN=");
     expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
     expect(result.created).toContain("bitbucket-pipelines.yml");
     expect(pipeline).toContain("pipr host-run --host bitbucket --config-dir config/pipr");

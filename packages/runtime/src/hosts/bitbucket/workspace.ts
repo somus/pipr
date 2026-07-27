@@ -8,16 +8,20 @@ export function ensureBitbucketHeadCheckout(options: {
 }): Promise<void> {
   const ref = options.change.change.head.ref;
   if (!ref) throw new Error("Bitbucket pull request source ref is required for checkout");
-  const token = options.env?.BITBUCKET_API_TOKEN ?? process.env.BITBUCKET_API_TOKEN;
+  const env = options.env ?? process.env;
+  const dataCenter = Boolean(env.BITBUCKET_BASE_URL);
+  const token = dataCenter ? env.BITBUCKET_TOKEN : env.BITBUCKET_API_TOKEN;
   const fetchEnv =
     options.change.change.isFork && token
       ? {
-          ...options.env,
+          ...env,
           GIT_CONFIG_COUNT: "1",
           GIT_CONFIG_KEY_0: "http.extraHeader",
-          GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-bitbucket-api-token-auth:${token}`).toString("base64")}`,
+          GIT_CONFIG_VALUE_0: dataCenter
+            ? `Authorization: Bearer ${token}`
+            : `Authorization: Basic ${Buffer.from(`x-bitbucket-api-token-auth:${token}`).toString("base64")}`,
         }
-      : options.env;
+      : env;
   return ensureCodeHostHeadCheckout({
     rootDir: options.rootDir,
     headSha: options.change.change.head.sha,

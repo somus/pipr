@@ -42,6 +42,27 @@ describe("Bitbucket Cloud workspace", () => {
       await rm(fixture.root, { recursive: true, force: true });
     }
   });
+
+  it("fetches Data Center private forks with bearer authentication", async () => {
+    const fixture = await createFixture();
+    try {
+      await ensureBitbucketHeadCheckout({
+        rootDir: fixture.checkout,
+        change: change(fixture.remote, fixture.head, true),
+        env: {
+          ...fixture.env,
+          BITBUCKET_BASE_URL: "https://bitbucket.example.com",
+          BITBUCKET_TOKEN: "data-center-token",
+        },
+      });
+      expect(git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.head);
+      const log = await Bun.file(fixture.log).text();
+      expect(log).toContain("Authorization: Bearer data-center-token");
+      expect(log).not.toContain("x-bitbucket-api-token-auth");
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
 });
 
 async function createFixture() {

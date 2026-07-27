@@ -84,6 +84,7 @@ If your config uses another model provider, replace `DEEPSEEK_API_KEY` with the 
 | GitLab Self-Managed | `gitlab` | `GITLAB_API_URL` with the complete REST v4 root, and `GITLAB_TOKEN` |
 | Azure DevOps Services or Server | `azure-devops` | `AZURE_DEVOPS_ORGANIZATION` for Services or `AZURE_DEVOPS_COLLECTION_URL` plus `AZURE_DEVOPS_API_VERSION` for Server, `AZURE_DEVOPS_PROJECT`, `PIPR_AZURE_SUBSCRIPTION_ID`, and either `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` |
 | Bitbucket Cloud | `bitbucket` | `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, `BITBUCKET_PERMISSION_EMAIL`, and `BITBUCKET_PERMISSION_API_TOKEN` |
+| Bitbucket Data Center | `bitbucket` | `BITBUCKET_BASE_URL`, `BITBUCKET_PROJECT_KEY`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_TOKEN`, `BITBUCKET_USER`, and `BITBUCKET_PERMISSION_TOKEN` |
 | Gitea | `gitea` | `GITEA_SERVER_URL`, `GITEA_TOKEN` |
 | Forgejo | `forgejo` | `FORGEJO_SERVER_URL`, `FORGEJO_TOKEN` |
 | Codeberg | `codeberg` | `CODEBERG_TOKEN` |
@@ -156,6 +157,6 @@ Finish setup in the matching provider guide, then review the worker's trust boun
 
 - [Configure the GitLab webhook](/docs/guide/gitlab#commands-and-reply-verification) to select events and authenticate deliveries.
 - [Configure Azure DevOps service hooks](/docs/guide/azure-devops#commands-and-reply-verification) to bind one worker to one subscription.
-- [Configure Bitbucket Cloud webhooks](/docs/guide/bitbucket#configure-the-runner) to set event and API-token requirements.
+- [Configure Bitbucket webhooks](/docs/guide/bitbucket) to set Cloud or Data Center event and token requirements.
 - [Configure Gitea-compatible webhooks](/docs/guide/gitea-forgejo-codeberg#run-with-trusted-webhooks) for Gitea, Forgejo, or Codeberg.
 - [Review the trust model](/docs/concepts/trust-security) before accepting events from untrusted contributors.

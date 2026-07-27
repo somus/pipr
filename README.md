@@ -20,7 +20,7 @@
 
 Pipr runs AI review from your repository. It loads `.pipr/config.ts`, builds a deterministic Diff Manifest, runs Pi for structured review output, validates findings against commentable ranges, and publishes one Main Review Comment plus capped Inline Review Comments.
 
-GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Bitbucket Cloud, Gitea, Forgejo, and Codeberg are supported delivery targets. They use Code Host Adapters, so `.pipr/config.ts` stays provider-neutral.
+GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Azure DevOps Server, Bitbucket Cloud, Bitbucket Data Center, Gitea, Forgejo, and Codeberg are supported delivery targets. They use Code Host Adapters, so `.pipr/config.ts` stays provider-neutral.
 
 ## Why Pipr
 

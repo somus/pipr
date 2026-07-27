@@ -496,6 +496,36 @@ describe("webhook runner", () => {
     expect((await ingress(request(wrongRepository))).status).toBe(403);
   });
 
+  it("validates Bitbucket Data Center signatures and repository binding", async () => {
+    const store = new MemoryDeliveryStore();
+    const ingress = createWebhookIngress({
+      host: "bitbucket",
+      secret: "webhook-secret",
+      expectedRepository: { uuid: "42", fullName: "PRJ/pipr" },
+      store,
+    });
+    const payload = JSON.stringify({
+      repository: { id: 42, slug: "pipr", project: { key: "PRJ" } },
+      pullRequest: { id: 7 },
+    });
+    const request = (body: string) =>
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "X-Hub-Signature": `sha256=${createHmac("sha256", "webhook-secret").update(body).digest("hex")}`,
+          "X-Request-Id": "request-1",
+          "X-Event-Key": "pr:from_ref_updated",
+        },
+        body,
+      });
+
+    expect((await ingress(request(payload))).status).toBe(202);
+    expect((await ingress(request(payload))).status).toBe(200);
+    expect(store.deliveries[0]?.id).toStartWith("bitbucket:request-1:");
+    expect(store.deliveries[0]?.eventName).toBe("pr:from_ref_updated");
+    expect((await ingress(request(payload.replace('"id":42', '"id":43')))).status).toBe(403);
+  });
+
   it.each([
     { host: "gitea" as const, headerPrefix: "Gitea" },
     { host: "forgejo" as const, headerPrefix: "Forgejo" },

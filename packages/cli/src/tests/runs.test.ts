@@ -602,6 +602,13 @@ describe("run PR selector", () => {
     ).toEqual({ host: "bitbucket", repository: "workspace/pipr", changeNumber: 9 });
     expect(
       await resolveRunSelector({
+        pr: "https://bitbucket.example.com/projects/PRJ/repos/pipr/pull-requests/19/overview",
+        host: "bitbucket",
+        cwd: "/does/not/exist",
+      }),
+    ).toEqual({ host: "bitbucket", repository: "PRJ/pipr", changeNumber: 19 });
+    expect(
+      await resolveRunSelector({
         pr: "https://codeberg.org/somus/pipr/pulls/10",
         cwd: "/does/not/exist",
       }),

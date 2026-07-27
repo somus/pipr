@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { createCodeHostHttpClient } from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
+import { loadedBitbucketChange } from "./change.js";
+import { createBitbucketDataCenterClient } from "./data-center-client.js";
 import { bitbucketRepositorySchema } from "./schema.js";
 
 const userSchema = z.looseObject({
@@ -44,6 +46,7 @@ export type BitbucketPullRequest = z.infer<typeof pullRequestSchema>;
 export type BitbucketComment = z.infer<typeof commentSchema>;
 
 export type BitbucketClient = {
+  deployment: "cloud" | "data-center";
   workspace: string;
   repository: string;
   currentUser(): Promise<{ uuid?: string; nickname?: string; displayName?: string }>;
@@ -78,6 +81,7 @@ export function createBitbucketClient(
     init?: RequestInit,
   ) => Promise<Response> = globalThis.fetch,
 ): BitbucketClient {
+  if (env.BITBUCKET_BASE_URL) return createBitbucketDataCenterClient(env, fetch);
   const workspace = env.BITBUCKET_WORKSPACE;
   const repository = env.BITBUCKET_REPO_SLUG;
   const token = env.BITBUCKET_API_TOKEN;
@@ -99,6 +103,7 @@ export function createBitbucketClient(
   });
   const prPath = (id: number) => `pullrequests/${id}`;
   return {
+    deployment: "cloud",
     workspace,
     repository,
     async currentUser() {
@@ -145,37 +150,7 @@ export function createBitbucketClient(
       if (options.workspace !== workspace || options.repository !== repository)
         throw new Error("Bitbucket client coordinates do not match the requested repository");
       const pullRequest = await this.getPullRequest(options.changeNumber);
-      return {
-        repository: {
-          slug: pullRequest.destination.repository.full_name,
-          url: pullRequest.destination.repository.links.html.href,
-        },
-        coordinates: {
-          provider: "bitbucket",
-          workspace,
-          repository,
-          repositoryUuid: pullRequest.destination.repository.uuid,
-        },
-        change: {
-          number: pullRequest.id,
-          isDraft: pullRequest.draft,
-          title: pullRequest.title,
-          description: pullRequest.description,
-          url: pullRequest.links.html.href,
-          author: pullRequest.author?.nickname ? { login: pullRequest.author.nickname } : undefined,
-          base: {
-            sha: pullRequest.destination.commit.hash,
-            ref: pullRequest.destination.branch.name,
-            url: pullRequest.destination.repository.links.html.href,
-          },
-          head: {
-            sha: pullRequest.source.commit.hash,
-            ref: pullRequest.source.branch.name,
-            url: pullRequest.source.repository.links.html.href,
-          },
-          isFork: pullRequest.source.repository.uuid !== pullRequest.destination.repository.uuid,
-        },
-      };
+      return loadedBitbucketChange(pullRequest, workspace, repository);
     },
     async listComments(id) {
       return (

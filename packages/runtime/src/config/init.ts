@@ -582,6 +582,12 @@ function starterBitbucketWebhookEnvironment(recipe?: string): string {
     "BITBUCKET_API_TOKEN=",
     "BITBUCKET_PERMISSION_EMAIL=",
     "BITBUCKET_PERMISSION_API_TOKEN=",
+    "# Bitbucket Data Center only:",
+    "BITBUCKET_BASE_URL=",
+    "BITBUCKET_PROJECT_KEY=",
+    "BITBUCKET_TOKEN=",
+    "BITBUCKET_USER=",
+    "BITBUCKET_PERMISSION_TOKEN=",
     "PIPR_WEBHOOK_SECRET=",
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);

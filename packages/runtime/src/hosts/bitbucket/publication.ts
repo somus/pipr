@@ -73,7 +73,7 @@ export async function publishBitbucketPlan(options: {
     publish: (item) =>
       options.client.createComment(options.change.change.number, {
         content: { raw: renderBitbucketMarkdown(item.body) },
-        inline: bitbucketInline(item),
+        inline: bitbucketInline(item, options.client.deployment),
       }),
   });
   const resolution = await publishBitbucketThreadActions({
@@ -445,7 +445,7 @@ async function publishBitbucketThreadAction(
   }
 }
 
-function bitbucketInline(item: InlinePublicationItem) {
+function bitbucketInline(item: InlinePublicationItem, deployment: BitbucketClient["deployment"]) {
   return item.side === "RIGHT"
     ? {
         path: item.path,
@@ -453,7 +453,10 @@ function bitbucketInline(item: InlinePublicationItem) {
         ...(item.startLine !== item.endLine ? { start_to: item.startLine } : {}),
       }
     : {
-        path: item.previousPath ?? item.path,
+        path: deployment === "data-center" ? item.path : (item.previousPath ?? item.path),
+        ...(deployment === "data-center" && item.previousPath
+          ? { src_path: item.previousPath }
+          : {}),
         from: item.endLine,
         ...(item.startLine !== item.endLine ? { start_from: item.startLine } : {}),
       };

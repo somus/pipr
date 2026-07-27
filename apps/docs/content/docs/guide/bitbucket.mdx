@@ -1,9 +1,9 @@
 ---
-title: "Bitbucket Cloud"
-description: "Run Pipr reviews, commands, and reply verification on Bitbucket Cloud."
+title: "Bitbucket"
+description: "Run Pipr reviews, commands, and reply verification on Bitbucket Cloud or Data Center."
 ---
 
-Run Pipr on Bitbucket Cloud through a trusted repository-webhook runner. Bitbucket pull-request pipelines can launch same-repository reviews, but source-controlled pipeline YAML is not a safe place for write-capable repository tokens or model-provider keys.
+Run Pipr on Bitbucket Cloud or Bitbucket Data Center 9.2 and later through the same `bitbucket` adapter. Use a trusted repository-webhook runner for Data Center and for Cloud repositories whose pull requests cannot safely access write-capable tokens and model-provider keys.
 
 ## Initialize the adapter
 
@@ -13,7 +13,7 @@ Generate the Bitbucket worker environment template with the repository config.
 pipr init --adapters bitbucket
 ```
 
-The command creates `bitbucket.pipr.env.example` and `bitbucket-pipelines.yml`. Copy the environment template's variable names into the trusted runner's secret store and leave the checked-in example values empty.
+The command creates `bitbucket.pipr.env.example` and `bitbucket-pipelines.yml`. The environment template contains separate Cloud and Data Center blocks; configure only the block for your deployment and leave the checked-in example values empty. The generated pipeline is for Bitbucket Cloud because Data Center does not provide Bitbucket Pipelines.
 
 ## Optional pull request pipeline
 
@@ -38,7 +38,7 @@ pipelines:
 
 Bitbucket supplies `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, and `BITBUCKET_PR_ID` to the step. This pipeline handles automatic reviews only. Use the webhook runner for `@pipr` commands and reply verification.
 
-## Configure the runner
+## Configure a Cloud runner
 
 Provide a review token, a separate permission token, the webhook secret, and the model credential.
 
@@ -69,9 +69,40 @@ The review token must be an Atlassian API token created with Bitbucket scopes. T
 
 Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run this command from the versioned Pipr image with persistent state and a container health check.
 
+## Configure a Data Center runner
+
+Data Center uses its installation URL, a project key, and HTTP access tokens instead of Cloud workspace coordinates and email-based API-token authentication.
+
+```bash
+export BITBUCKET_BASE_URL="https://bitbucket.example.com"
+export BITBUCKET_PROJECT_KEY="PRJ"
+export BITBUCKET_REPO_SLUG="your-repository"
+export BITBUCKET_TOKEN="..."
+export BITBUCKET_USER="pipr-bot"
+export BITBUCKET_PERMISSION_TOKEN="..."
+export PIPR_WEBHOOK_SECRET="..."
+export DEEPSEEK_API_KEY="..."
+
+pipr webhook serve \
+  --host bitbucket \
+  --repository your-repository \
+  --workspace /srv/pipr/repository \
+  --database /var/lib/pipr/webhooks.sqlite \
+  --hostname 127.0.0.1 \
+  --port 8787
+```
+
+`BITBUCKET_BASE_URL` must be the HTTPS application root, including any installation context path. Pipr refuses URLs containing credentials, query strings, or fragments before attaching tokens. Install any private certificate authority in the runner and container trust stores.
+
+Use a personal HTTP access token for `BITBUCKET_TOKEN`, grant repository read and write access, and set `BITBUCKET_USER` to that account's Bitbucket slug. Pipr sends the token with bearer authentication for REST requests and private-fork fetches. Command authorization requires a separate `BITBUCKET_PERMISSION_TOKEN` from a system administrator because Pipr uses the administrator-only user permission filter to evaluate effective `REPO_READ`, `REPO_WRITE`, and `REPO_ADMIN` access, including inherited permissions. Keep that credential read-only and isolated in the trusted runner.
+
+Create repository webhooks for `pr:opened`, `pr:from_ref_updated`, `pr:modified`, `pr:merged`, `pr:declined`, `pr:deleted`, and `pr:comment:added`. Configure the same secret as `PIPR_WEBHOOK_SECRET`. Pipr verifies `X-Hub-Signature`, binds each delivery to the configured repository ID, project key, and slug, and deduplicates retries by `X-Request-Id` and payload digest.
+
+Bitbucket Data Center 9.2 is the minimum supported release because that release added REST representations for multiline pull request comment anchors. Thread resolution requires the `threadResolved` comment contract introduced in 8.9.
+
 ## Supported behavior
 
-The Bitbucket Cloud adapter supports:
+The Bitbucket adapter supports the following behavior on Cloud and Data Center:
 
 - pull-request created and updated reviews, with terminal events normalized as closed;
 - Main Review Comment upsert and marker deduplication;
@@ -81,13 +112,13 @@ The Bitbucket Cloud adapter supports:
 - stable-key source-commit statuses;
 - fork source checkout and exact base/head stale checks.
 
-Bitbucket Cloud's public REST API does not document directly applicable suggestion syntax, so Pipr renders suggested fixes as ordinary fenced code. Bitbucket Data Center uses different APIs and is not supported by this adapter.
+Neither Bitbucket REST API documents directly applicable suggestion syntax, so Pipr renders suggested fixes as ordinary fenced code. Cloud uses `/2.0/repositories/...` payloads and Data Center uses `/rest/api/latest/projects/...`; Pipr selects the contract when `BITBUCKET_BASE_URL` is set.
 
-The public REST endpoint accepts added ranges as `start_to` plus `to` and deleted ranges as `start_from` plus `from`. Live Cloud probes created and returned both forms with the expected three-line context.
+Cloud accepts added ranges as `start_to` plus `to` and deleted ranges as `start_from` plus `from`. Data Center uses `multilineMarker` inside a commit diff anchor.
 
 ## Bitbucket review output
 
-Bitbucket displays the task summary in the pull request conversation, anchors findings to source or destination lines, and publishes source-commit statuses. Pipr emits Markdown-only Bitbucket comments because Bitbucket Cloud does not support arbitrary HTML in Markdown.
+Bitbucket displays the task summary in the pull request conversation, anchors findings to source or destination lines, and publishes source-commit statuses. Pipr emits the same Markdown-only comments on Cloud and Data Center so publication markers remain portable across both contracts.
 
 <img
   alt="Bitbucket pull request overview showing the successful Pipr review build status for the event-relay retry change"

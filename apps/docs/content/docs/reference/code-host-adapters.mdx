@@ -5,7 +5,7 @@ description: "Provider-neutral adapter boundary for code host integrations."
 
 Code host adapters are an internal runtime seam. They are not part of `.pipr/config.ts`.
 
-GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Azure DevOps Server, Bitbucket Cloud, Gitea, Forgejo, and Codeberg are supported.
+GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Azure DevOps Server, Bitbucket Cloud, Bitbucket Data Center, Gitea, Forgejo, and Codeberg are supported.
 
 The public config stays provider-neutral:
 
@@ -120,11 +120,11 @@ The Azure DevOps adapter maps branch-policy builds and service-hook events into 
 
 See [Azure DevOps](/docs/guide/azure-devops) for branch-policy and trusted service-hook setup.
 
-### Bitbucket Cloud
+### Bitbucket Cloud and Data Center
 
-The Bitbucket Cloud adapter maps repository webhooks, pull request comments, effective workspace permissions, and source-commit statuses into the same runtime contract. It publishes proven single-line `from` and `to` anchors plus multiline `start_from` and `start_to` ranges, and checks both pull request endpoints before writes.
+The Bitbucket adapter maps Cloud and Data Center repository webhooks, pull request comments, effective permissions, and source-commit statuses into the same runtime contract. Cloud uses `from` and `to` anchors with optional multiline starts; Data Center 9.2 and later uses commit diff anchors with `multilineMarker`. Both paths check pull request endpoints before writes.
 
-See [Bitbucket Cloud](/docs/guide/bitbucket) for trusted webhook setup and permission-token requirements.
+See [Bitbucket](/docs/guide/bitbucket) for Cloud and Data Center setup and permission-token requirements.
 
 ### Gitea, Forgejo, and Codeberg
 

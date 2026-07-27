@@ -390,6 +390,7 @@ function publicationPlan() {
 }
 
 class FakeBitbucketClient implements BitbucketClient {
+  deployment = "cloud" as const;
   workspace = "workspace";
   repository = "repository";
   comments: BitbucketComment[] = [];
