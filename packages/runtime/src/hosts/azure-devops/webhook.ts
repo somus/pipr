@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CodeHostWebhookProtocol } from "../webhook.js";
 import { parseWebhookJson, webhookSecretsEqual } from "../webhook-shared.js";
 import { createAzureDevOpsClient } from "./client.js";
-import { azureOrganizationFromUrl } from "./coordinates.js";
+import { azureOrganizationFromUrl, normalizeAzureCollectionUrl } from "./coordinates.js";
 
 const eventSchema = z.looseObject({
   id: z.string().min(1),
@@ -28,12 +28,14 @@ const eventSchema = z.looseObject({
   }),
   resourceContainers: z.looseObject({
     account: z.looseObject({ baseUrl: z.string().url() }),
+    collection: z.looseObject({ baseUrl: z.string().url() }).optional(),
     project: z.looseObject({ id: z.string().min(1) }),
   }),
 });
 
 type ExpectedRepository = {
   organization: string;
+  collectionUrl: string;
   projectId: string;
   repositoryId: string;
   subscriptionId: string;
@@ -50,6 +52,7 @@ export function createAzureDevOpsWebhookProtocol(): CodeHostWebhookProtocol {
         throw new Error("PIPR_AZURE_SUBSCRIPTION_ID is required for Azure DevOps webhooks");
       return {
         organization: client.organization,
+        collectionUrl: client.collectionUrl,
         projectId: resolved.projectId,
         repositoryId: resolved.id,
         subscriptionId,
@@ -65,16 +68,7 @@ export function createAzureDevOpsWebhookProtocol(): CodeHostWebhookProtocol {
       if (!isExpectedRepository(expected)) return false;
       const event = eventSchema.safeParse(parseWebhookJson(payload));
       if (!event.success) return false;
-      const repository =
-        event.data.resource.repository ?? event.data.resource.pullRequest?.repository;
-      return (
-        azureOrganizationFromUrl(event.data.resourceContainers.account.baseUrl) ===
-          expected.organization &&
-        event.data.resourceContainers.project.id === expected.projectId &&
-        repository?.project.id === expected.projectId &&
-        repository.id === expected.repositoryId &&
-        event.data.subscriptionId === expected.subscriptionId
-      );
+      return expectedRepositoryMatches(expected, eventRepository(event.data));
     },
     deliveryId(_headers, payload) {
       const event = eventSchema.safeParse(parseWebhookJson(payload));
@@ -90,10 +84,45 @@ function isExpectedRepository(value: unknown): value is ExpectedRepository {
     typeof value === "object" &&
     value !== null &&
     "organization" in value &&
+    "collectionUrl" in value &&
     "projectId" in value &&
     "repositoryId" in value &&
     "subscriptionId" in value
   );
+}
+
+function expectedRepositoryMatches(
+  expected: ExpectedRepository,
+  actual: Partial<ExpectedRepository>,
+): boolean {
+  return (Object.keys(expected) as Array<keyof ExpectedRepository>).every(
+    (key) => actual[key] === expected[key],
+  );
+}
+
+function eventRepository(event: z.infer<typeof eventSchema>): Partial<ExpectedRepository> {
+  const repository = event.resource.repository ?? event.resource.pullRequest?.repository;
+  const collectionUrl = safeCollectionUrl(
+    event.resourceContainers.collection?.baseUrl ?? event.resourceContainers.account.baseUrl,
+  );
+  const repositoryProjectId = repository?.project.id;
+  const projectId =
+    event.resourceContainers.project.id === repositoryProjectId ? repositoryProjectId : undefined;
+  return {
+    organization: collectionUrl ? azureOrganizationFromUrl(collectionUrl) : undefined,
+    collectionUrl,
+    projectId,
+    repositoryId: repository?.id,
+    subscriptionId: event.subscriptionId,
+  };
+}
+
+function safeCollectionUrl(value: string): string | undefined {
+  try {
+    return normalizeAzureCollectionUrl(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function basicPassword(value: string | null): string | null {

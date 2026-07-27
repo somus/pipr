@@ -47,7 +47,7 @@ Combine questions so the interview stays short.
 
 - Existing-file handling: config directory, selected adapter files, and whether existing Pipr files may be edited. Never use `pipr init --force` without explicit approval.
 - Recipe or review goal: general review, bugs, security, quality gate, dependency risk, PR hygiene, diagnostics, briefing, changelog, interactive ask, CI triage, multi-agent review, or durable memory tools.
-- Provider policy: GitHub.com or GitHub Enterprise Server, GitLab.com or GitLab Self-Managed, Azure DevOps, Bitbucket, Gitea, Forgejo, Codeberg, or no generated adapter files; model and code-host secret names; fallback model; and whether local runs should require provider env vars.
+- Provider policy: GitHub.com or GitHub Enterprise Server, GitLab.com or GitLab Self-Managed, Azure DevOps Services or Server, Bitbucket, Gitea, Forgejo, Codeberg, or no generated adapter files; model and code-host secret names; fallback model; and whether local runs should require provider env vars.
 - Trigger policy: automatic change request actions, `@pipr` commands, command permissions, local review behavior, and command-only workflows.
 - Publication policy: inline comment cap, check runs, aggregate checks, required gates, auto-resolve behavior, and who may trigger verifier replies.
 - Repo policy: path include/exclude scopes, generated or lockfile rules, test and docs expectations, package manager quirks, security-sensitive areas, and release-note conventions.

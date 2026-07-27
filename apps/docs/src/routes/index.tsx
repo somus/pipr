@@ -9,7 +9,7 @@ import { baseOptions } from "@/lib/layout.shared";
 import { appName, gitConfig, siteUrl } from "@/lib/shared";
 
 const landingDescription =
-  "Documentation for Pipr, code-owned AI review across GitHub, GitLab, Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg.";
+  "Documentation for Pipr, code-owned AI review across GitHub, GitLab, Azure DevOps Services and Server, Bitbucket, Gitea, Forgejo, and Codeberg.";
 const landingImageUrl = siteUrl("/og/docs/image.webp");
 const landingUrl = siteUrl("/");
 
@@ -174,8 +174,8 @@ function Hero() {
         Repository-owned review policy, one validated runtime.
       </p>
       <p className="mt-4 max-w-2xl font-mono text-xs leading-5 text-fd-muted-foreground">
-        GitHub.com and GHES · GitLab.com and Self-Managed · Azure DevOps · Bitbucket · Gitea ·
-        Forgejo · Codeberg
+        GitHub.com and GHES · GitLab.com and Self-Managed · Azure DevOps Services and Server ·
+        Bitbucket · Gitea · Forgejo · Codeberg
       </p>
     </header>
   );

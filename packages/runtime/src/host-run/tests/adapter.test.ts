@@ -30,7 +30,9 @@ describe("host-run adapter selection", () => {
   it("fails Azure DevOps selection before execution when coordinates are missing", () => {
     expect(() =>
       createHostRunAdapter({ host: "azure-devops", env: { AZURE_DEVOPS_TOKEN: "token" } }),
-    ).toThrow("AZURE_DEVOPS_ORGANIZATION is required");
+    ).toThrow(
+      "AZURE_DEVOPS_ORGANIZATION, AZURE_DEVOPS_COLLECTION_URL, or SYSTEM_COLLECTIONURI is required",
+    );
   });
 
   it("registers Bitbucket for explicit and native pipeline selection", () => {

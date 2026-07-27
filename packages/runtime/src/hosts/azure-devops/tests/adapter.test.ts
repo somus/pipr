@@ -550,6 +550,7 @@ function publicationPlan() {
 class FakeAzureDevOpsClient implements AzureDevOpsClient {
   organization = "org";
   project = "project";
+  collectionUrl = "https://dev.azure.com/org";
   threads: AzureDevOpsThread[] = [];
   createdThreadBodies: Array<Record<string, unknown>> = [];
   statusBodies: Array<Record<string, unknown>> = [];

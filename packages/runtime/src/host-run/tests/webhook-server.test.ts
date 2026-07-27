@@ -301,6 +301,7 @@ describe("webhook runner", () => {
       secret: "webhook-secret",
       expectedRepository: {
         organization: "org",
+        collectionUrl: "https://dev.azure.com/org",
         projectId: "project-id",
         repositoryId: "repo-id",
         subscriptionId: "subscription-1",
@@ -368,6 +369,22 @@ describe("webhook runner", () => {
               resource: {
                 pullRequestId: 7,
                 repository: { id: "other-repo", project: { id: "project-id" } },
+              },
+            }),
+          ),
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await ingress(
+          request(
+            payload({
+              id: "event-4",
+              resourceContainers: {
+                account: { baseUrl: "https://dev.azure.com/org/" },
+                collection: { baseUrl: "https://azure.example.test/tfs/org/" },
+                project: { id: "project-id" },
               },
             }),
           ),

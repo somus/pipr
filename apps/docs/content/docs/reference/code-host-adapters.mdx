@@ -5,7 +5,7 @@ description: "Provider-neutral adapter boundary for code host integrations."
 
 Code host adapters are an internal runtime seam. They are not part of `.pipr/config.ts`.
 
-GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Bitbucket Cloud, Gitea, Forgejo, and Codeberg are supported.
+GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Azure DevOps Server, Bitbucket Cloud, Gitea, Forgejo, and Codeberg are supported.
 
 The public config stays provider-neutral:
 
@@ -114,9 +114,9 @@ The GitLab adapter maps merge requests, notes, discussions, member access levels
 
 See [GitLab](/docs/guide/gitlab) for CI and trusted webhook setup.
 
-### Azure DevOps Services
+### Azure DevOps Services and Server
 
-The Azure DevOps adapter maps branch-policy builds and service-hook events into the same runtime contract. It uses pull request iterations and `changeTrackingId` values for native inline positions, evaluates inherited Git repository ACLs for commands, and publishes PR thread comments and statuses.
+The Azure DevOps adapter maps branch-policy builds and service-hook events into the same runtime contract on Services, Server 2022, and Server 2022.1. It targets the configured collection root and compatible REST API version, uses pull request iterations and `changeTrackingId` values for native inline positions, evaluates inherited Git repository ACLs for commands, and publishes PR thread comments and statuses.
 
 See [Azure DevOps](/docs/guide/azure-devops) for branch-policy and trusted service-hook setup.
 

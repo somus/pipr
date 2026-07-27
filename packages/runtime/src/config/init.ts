@@ -508,6 +508,8 @@ function starterAzureDevOpsWebhookEnvironment(recipe?: string): string {
   const lines = [
     "# Copy these names into the trusted webhook runner's secret store.",
     "AZURE_DEVOPS_ORGANIZATION=",
+    "AZURE_DEVOPS_COLLECTION_URL=",
+    "AZURE_DEVOPS_API_VERSION=7.1",
     "AZURE_DEVOPS_PROJECT=",
     "AZURE_DEVOPS_BEARER_TOKEN=",
     "PIPR_AZURE_SUBSCRIPTION_ID=",
@@ -545,6 +547,7 @@ function starterAzureDevOpsPipeline(
     "        --env BUILD_SOURCESDIRECTORY=/workspace \\",
     "        --env BUILD_BUILDID \\",
     "        --env BUILD_REPOSITORY_ID \\",
+    "        --env AZURE_DEVOPS_API_VERSION \\",
     "        --env SYSTEM_COLLECTIONURI \\",
     "        --env SYSTEM_JOBID \\",
     "        --env SYSTEM_PULLREQUEST_PULLREQUESTID \\",

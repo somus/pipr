@@ -30,6 +30,41 @@ describe("Azure DevOps event parser", () => {
     });
   });
 
+  it("preserves an Azure DevOps Server collection URL in pipeline events", async () => {
+    const loadedRefs: unknown[] = [];
+    await expect(
+      parseAzureDevOpsEvent({
+        env: {
+          SYSTEM_PULLREQUEST_PULLREQUESTID: "7",
+          SYSTEM_TEAMPROJECT: "project",
+          BUILD_REPOSITORY_ID: "repo-id",
+          SYSTEM_COLLECTIONURI: "https://azure.example.test/tfs/DefaultCollection/",
+        },
+        workspace: "/workspace",
+        loadChangeRequest: async (ref) => {
+          loadedRefs.push(ref);
+          return loaded;
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: "change-request",
+      change: {
+        platform: {
+          id: "azure-devops",
+          host: "https://azure.example.test/tfs/DefaultCollection",
+        },
+      },
+    });
+    expect(loadedRefs).toEqual([
+      {
+        organization: "DefaultCollection",
+        project: "project",
+        repositoryId: "repo-id",
+        changeNumber: 7,
+      },
+    ]);
+  });
+
   it("rejects invalid pipeline coordinates before loading the pull request", async () => {
     const validEnv: NodeJS.ProcessEnv = {
       SYSTEM_COLLECTIONURI: "https://dev.azure.com/org/",
@@ -120,6 +155,59 @@ describe("Azure DevOps event parser", () => {
       } finally {
         await rm(fixture.root, { recursive: true, force: true });
       }
+    }
+  });
+
+  it("uses the collection container for Azure DevOps Server service hooks", async () => {
+    const loadedRefs: unknown[] = [];
+    const fixture = await eventFixture({
+      id: "event-server",
+      eventType: "git.pullrequest.updated",
+      resource: {
+        pullRequestId: 7,
+        repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
+      },
+      resourceContainers: {
+        account: { baseUrl: "https://azure.example.test/" },
+        collection: {
+          baseUrl: "https://azure.example.test/tfs/DefaultCollection/",
+        },
+        project: {
+          id: "project-id",
+          baseUrl: "https://azure.example.test/tfs/DefaultCollection/project/",
+        },
+      },
+    });
+    try {
+      await expect(
+        parseAzureDevOpsEvent({
+          eventPath: fixture.path,
+          env: {},
+          workspace: fixture.root,
+          loadChangeRequest: async (ref) => {
+            loadedRefs.push(ref);
+            return loaded;
+          },
+        }),
+      ).resolves.toMatchObject({
+        kind: "change-request",
+        change: {
+          platform: {
+            id: "azure-devops",
+            host: "https://azure.example.test/tfs/DefaultCollection",
+          },
+        },
+      });
+      expect(loadedRefs).toEqual([
+        {
+          organization: "DefaultCollection",
+          project: "project",
+          repositoryId: "repo-id",
+          changeNumber: 7,
+        },
+      ]);
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
     }
   });
 

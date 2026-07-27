@@ -660,7 +660,7 @@ const azureUrlSelector: UrlSelectorParser = (_url, parts) => {
   if (pullRequest <= git || git < 2) return undefined;
   return selector(
     "azure-devops",
-    `${parts[0]}/${parts[1]}/${parts[git + 1]}`,
+    `${parts[git - 2]}/${parts[git - 1]}/${parts[git + 1]}`,
     parts[pullRequest + 1],
   );
 };
@@ -741,17 +741,22 @@ function parseUrl(value: string): URL | undefined {
 function selectorFromRemoteUrl(url: URL): Omit<RunSelector, "changeNumber"> | undefined {
   const repository = url.pathname.replace(/^\//, "").replace(/\.git$/, "");
   if (!repository) return undefined;
+  const azure = azureRemoteUrlSelector(repository);
+  if (azure) return azure;
   if (url.hostname === "github.com") return { host: "github", repository };
   if (url.hostname === "bitbucket.org") return { host: "bitbucket", repository };
   if (url.hostname.includes("gitlab")) return { host: "gitlab", repository };
-  return url.hostname.includes("dev.azure.com") ? azureRemoteUrlSelector(repository) : undefined;
+  return undefined;
 }
 
 function azureRemoteUrlSelector(repository: string): Omit<RunSelector, "changeNumber"> | undefined {
   const parts = repository.split("/");
   const git = parts.indexOf("_git");
   return git >= 2 && parts[git + 1]
-    ? { host: "azure-devops", repository: `${parts[0]}/${parts[1]}/${parts[git + 1]}` }
+    ? {
+        host: "azure-devops",
+        repository: `${parts[git - 2]}/${parts[git - 1]}/${parts[git + 1]}`,
+      }
     : undefined;
 }
 

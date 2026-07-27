@@ -180,4 +180,4 @@ Use only secret names in config:
 apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" });
 ```
 
-Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab CI uses masked CI/CD variables, while a GitLab Self-Managed webhook runner also sets `GITLAB_API_URL` to its REST v4 root; Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.
+Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab CI uses masked CI/CD variables, while a GitLab Self-Managed webhook runner also sets `GITLAB_API_URL` to its REST v4 root. Azure DevOps Server webhook runners set `AZURE_DEVOPS_COLLECTION_URL` and the matching `AZURE_DEVOPS_API_VERSION`; Azure DevOps Services, Bitbucket, Gitea, Forgejo, and Codeberg webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.

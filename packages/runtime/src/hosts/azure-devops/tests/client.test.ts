@@ -34,6 +34,96 @@ describe("Azure DevOps API client", () => {
     expect(authorizations).toEqual([`Basic ${Buffer.from(":test-token").toString("base64")}`]);
   });
 
+  it("uses an Azure DevOps Server collection URL and API version", async () => {
+    const requests: string[] = [];
+    const client = createAzureDevOpsClient(
+      {
+        AZURE_DEVOPS_COLLECTION_URL: "https://azure.example.test/tfs/DefaultCollection/",
+        AZURE_DEVOPS_API_VERSION: "7.0",
+        AZURE_DEVOPS_PROJECT: "project",
+        AZURE_DEVOPS_TOKEN: "test-token",
+      },
+      async (input) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.includes("/identities?")) {
+          return Response.json({ count: 0, value: [] });
+        }
+        if (url.includes("/git/repositories/")) {
+          return Response.json({
+            id: "repo-id",
+            name: "repository",
+            project: { id: "project-id", name: "project" },
+          });
+        }
+        return Response.json({ authenticatedUser: {} });
+      },
+    );
+
+    expect(client.organization).toBe("DefaultCollection");
+    expect(client.collectionUrl).toBe("https://azure.example.test/tfs/DefaultCollection");
+    await client.currentUser();
+    await client.getRepository("repository");
+    await expect(
+      client.getRepositoryPermission("developer@example.com", "project-id", "repo-id"),
+    ).resolves.toBe("none");
+
+    expect(requests).toContain(
+      "https://azure.example.test/tfs/DefaultCollection/_apis/connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",
+    );
+    expect(requests).toContain(
+      "https://azure.example.test/tfs/DefaultCollection/project/_apis/git/repositories/repository?api-version=7.0",
+    );
+    expect(
+      requests.some(
+        (url) =>
+          url.startsWith("https://azure.example.test/tfs/DefaultCollection/_apis/identities?") &&
+          url.includes("api-version=7.0"),
+      ),
+    ).toBe(true);
+    expect(requests.every((url) => !url.includes("dev.azure.com"))).toBe(true);
+  });
+
+  it("keeps the native pipeline collection URL ahead of an explicit override", async () => {
+    const requests: string[] = [];
+    const client = createAzureDevOpsClient(
+      {
+        SYSTEM_COLLECTIONURI: "https://azure.example.test/tfs/DefaultCollection/",
+        AZURE_DEVOPS_COLLECTION_URL: "https://attacker.example.test/collection",
+        SYSTEM_TEAMPROJECT: "project",
+        SYSTEM_ACCESSTOKEN: "pipeline-token",
+      },
+      async (input) => {
+        requests.push(String(input));
+        return Response.json({ authenticatedUser: {} });
+      },
+    );
+
+    await client.currentUser();
+    expect(requests).toEqual([
+      "https://azure.example.test/tfs/DefaultCollection/_apis/connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",
+    ]);
+  });
+
+  it("rejects unsupported API versions and unsafe collection URLs", () => {
+    expect(() =>
+      createAzureDevOpsClient({
+        AZURE_DEVOPS_COLLECTION_URL: "https://azure.example.test/tfs/DefaultCollection",
+        AZURE_DEVOPS_API_VERSION: "6.0",
+        AZURE_DEVOPS_PROJECT: "project",
+        AZURE_DEVOPS_TOKEN: "test-token",
+      }),
+    ).toThrow("AZURE_DEVOPS_API_VERSION must be 7.0 or 7.1");
+    expect(() =>
+      createAzureDevOpsClient({
+        AZURE_DEVOPS_COLLECTION_URL:
+          "https://user:password@azure.example.test/tfs/DefaultCollection",
+        AZURE_DEVOPS_PROJECT: "project",
+        AZURE_DEVOPS_TOKEN: "test-token",
+      }),
+    ).toThrow("Azure DevOps collection URL must be an HTTP(S) URL without credentials");
+  });
+
   it("normalizes Microsoft account identities from connection data", async () => {
     const client = createAzureDevOpsClient(azureEnv, async () =>
       Response.json({

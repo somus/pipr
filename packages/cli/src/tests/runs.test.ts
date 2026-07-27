@@ -586,6 +586,16 @@ describe("run PR selector", () => {
     ).toEqual({ host: "azure-devops", repository: "org/project/pipr", changeNumber: 8 });
     expect(
       await resolveRunSelector({
+        pr: "https://azure.example.test/tfs/DefaultCollection/project/_git/pipr/pullrequest/18",
+        cwd: "/does/not/exist",
+      }),
+    ).toEqual({
+      host: "azure-devops",
+      repository: "DefaultCollection/project/pipr",
+      changeNumber: 18,
+    });
+    expect(
+      await resolveRunSelector({
         pr: "https://bitbucket.org/workspace/pipr/pull-requests/9",
         cwd: "/does/not/exist",
       }),

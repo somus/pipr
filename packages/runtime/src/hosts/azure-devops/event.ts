@@ -2,7 +2,7 @@ import { z } from "zod";
 import { parseChangeRequestEventContext } from "../../types.js";
 import { positiveIntegerHostEnv, requiredHostEnv } from "../env.js";
 import type { CodeHostEvent, HostEventParseOptions, LoadedChangeRequest } from "../types.js";
-import { azureOrganizationFromUrl } from "./coordinates.js";
+import { azureOrganizationFromUrl, normalizeAzureCollectionUrl } from "./coordinates.js";
 
 const repositorySchema = z.looseObject({
   id: z.string().min(1),
@@ -16,6 +16,7 @@ const serviceHookSchema = z.looseObject({
   resource: z.unknown(),
   resourceContainers: z.looseObject({
     account: z.looseObject({ baseUrl: z.string().url() }),
+    collection: z.looseObject({ baseUrl: z.string().url() }).optional(),
     project: z.looseObject({ id: z.string().min(1), baseUrl: z.string().url() }).optional(),
   }),
 });
@@ -52,9 +53,10 @@ export async function parseAzureDevOpsEvent(
 }
 
 async function pipelineEvent(options: AzureDevOpsEventParseOptions): Promise<CodeHostEvent> {
-  const organization = organizationFromCollectionUri(
+  const collectionUrl = normalizeAzureCollectionUrl(
     requiredHostEnv(options.env, "SYSTEM_COLLECTIONURI", "Azure DevOps pipeline"),
   );
+  const organization = organizationFromCollectionUri(collectionUrl);
   const project = requiredHostEnv(options.env, "SYSTEM_TEAMPROJECT", "Azure DevOps pipeline");
   const repositoryId = requiredHostEnv(options.env, "BUILD_REPOSITORY_ID", "Azure DevOps pipeline");
   const changeNumber = positiveIntegerHostEnv(
@@ -68,7 +70,7 @@ async function pipelineEvent(options: AzureDevOpsEventParseOptions): Promise<Cod
     eventName: "azure_pipeline",
     action: options.env.PIPR_CHANGE_ACTION ?? "updated",
     rawAction: options.env.PIPR_CHANGE_ACTION,
-    host: `https://dev.azure.com/${organization}`,
+    host: collectionUrl,
     workspace: options.workspace,
   });
 }
@@ -76,7 +78,8 @@ async function pipelineEvent(options: AzureDevOpsEventParseOptions): Promise<Cod
 async function serviceHookEvent(options: AzureDevOpsEventParseOptions): Promise<CodeHostEvent> {
   const payload: unknown = await Bun.file(options.eventPath ?? "").json();
   const hook = serviceHookSchema.parse(payload);
-  const organization = organizationFromCollectionUri(hook.resourceContainers.account.baseUrl);
+  const collectionUrl = serviceHookCollectionUrl(hook.resourceContainers);
+  const organization = organizationFromCollectionUri(collectionUrl);
   if (hook.eventType === "ms.vss-code.git-pullrequest-comment-event") {
     const resource = commentResourceSchema.parse(hook.resource);
     const repository = resource.pullRequest.repository;
@@ -87,7 +90,7 @@ async function serviceHookEvent(options: AzureDevOpsEventParseOptions): Promise<
       repository: {
         slug: `${organization}/${repository.project.name}/${repository.name ?? repository.id}`,
         url: azureRepositoryUrl(
-          organization,
+          collectionUrl,
           repository.project.name,
           repository.name ?? repository.id,
         ),
@@ -110,7 +113,7 @@ async function serviceHookEvent(options: AzureDevOpsEventParseOptions): Promise<
     hook.eventType === "git.pullrequest.updated"
   ) {
     const resource = pullRequestResourceSchema.parse(hook.resource);
-    return pullRequestHookEvent(options, organization, hook.eventType, resource);
+    return pullRequestHookEvent(options, organization, collectionUrl, hook.eventType, resource);
   }
   throw new Error(`Unsupported Azure DevOps event '${hook.eventType}'`);
 }
@@ -118,6 +121,7 @@ async function serviceHookEvent(options: AzureDevOpsEventParseOptions): Promise<
 async function pullRequestHookEvent(
   options: AzureDevOpsEventParseOptions,
   organization: string,
+  collectionUrl: string,
   eventType: "git.pullrequest.created" | "git.pullrequest.updated",
   resource: z.infer<typeof pullRequestResourceSchema>,
 ): Promise<CodeHostEvent> {
@@ -132,7 +136,7 @@ async function pullRequestHookEvent(
     eventName: eventType,
     action: eventType === "git.pullrequest.created" ? "opened" : "updated",
     rawAction: eventType,
-    host: `https://dev.azure.com/${organization}`,
+    host: collectionUrl,
     workspace: options.workspace,
   });
 }
@@ -182,6 +186,12 @@ function organizationFromCollectionUri(value: string): string {
   return organization;
 }
 
-function azureRepositoryUrl(organization: string, project: string, repository: string): string {
-  return `https://dev.azure.com/${encodeURIComponent(organization)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repository)}`;
+function serviceHookCollectionUrl(
+  containers: z.infer<typeof serviceHookSchema>["resourceContainers"],
+): string {
+  return normalizeAzureCollectionUrl(containers.collection?.baseUrl ?? containers.account.baseUrl);
+}
+
+function azureRepositoryUrl(collectionUrl: string, project: string, repository: string): string {
+  return `${collectionUrl}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repository)}`;
 }

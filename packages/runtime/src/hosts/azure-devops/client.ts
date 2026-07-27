@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { createCodeHostHttpClient, createCodeHostSuccessThrottle } from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
-import { azureOrganizationFromUrl } from "./coordinates.js";
+import {
+  azureOrganizationFromUrl,
+  isAzureDevOpsServicesUrl,
+  normalizeAzureCollectionUrl,
+} from "./coordinates.js";
 
 const identitySchema = z
   .looseObject({
@@ -139,6 +143,7 @@ export type LoadedAzureDevOpsChangeRequest = LoadedChangeRequest & { iterationId
 export type AzureDevOpsClient = {
   organization: string;
   project: string;
+  collectionUrl: string;
   currentUser(): Promise<{ id?: string; uniqueName?: string; displayName?: string }>;
   getRepository(repository: string): Promise<{
     id: string;
@@ -207,17 +212,9 @@ export function createAzureDevOpsClient(
   ) => Promise<Response> = globalThis.fetch,
   options: { sleep?: (milliseconds: number) => Promise<void> } = {},
 ): AzureDevOpsClient {
-  const organization =
-    env.AZURE_DEVOPS_ORGANIZATION ?? organizationFromCollectionUri(env.SYSTEM_COLLECTIONURI);
-  const project = env.AZURE_DEVOPS_PROJECT ?? env.SYSTEM_TEAMPROJECT;
+  const { organization, collectionUrl, project, apiVersion } = azureDevOpsConnectionSettings(env);
   const pat = env.AZURE_DEVOPS_TOKEN;
   const bearerToken = env.AZURE_DEVOPS_BEARER_TOKEN ?? env.SYSTEM_ACCESSTOKEN;
-  if (!organization)
-    throw new Error("AZURE_DEVOPS_ORGANIZATION is required for Azure DevOps API calls");
-  if (!project)
-    throw new Error(
-      "AZURE_DEVOPS_PROJECT or SYSTEM_TEAMPROJECT is required for Azure DevOps API calls",
-    );
   if (!pat && !bearerToken)
     throw new Error(
       "AZURE_DEVOPS_TOKEN, AZURE_DEVOPS_BEARER_TOKEN, or SYSTEM_ACCESSTOKEN is required for Azure DevOps API calls",
@@ -227,19 +224,21 @@ export function createAzureDevOpsClient(
     : { Authorization: `Bearer ${bearerToken}` };
   const successThrottle = createCodeHostSuccessThrottle(options.sleep);
   const api = createCodeHostHttpClient({
-    baseUrl: `https://dev.azure.com/${encodeURIComponent(organization)}/${encodeURIComponent(project)}/_apis/`,
+    baseUrl: `${collectionUrl}/${encodeURIComponent(project)}/_apis/`,
     headers,
     fetch,
     successThrottle,
   });
   const organizationApi = createCodeHostHttpClient({
-    baseUrl: `https://dev.azure.com/${encodeURIComponent(organization)}/_apis/`,
+    baseUrl: `${collectionUrl}/_apis/`,
     headers,
     fetch,
     successThrottle,
   });
   const identityApi = createCodeHostHttpClient({
-    baseUrl: `https://vssps.dev.azure.com/${encodeURIComponent(organization)}/_apis/`,
+    baseUrl: isAzureDevOpsServicesUrl(collectionUrl)
+      ? `https://vssps.dev.azure.com/${encodeURIComponent(organization)}/_apis/`
+      : `${collectionUrl}/_apis/`,
     headers,
     fetch,
     successThrottle,
@@ -251,6 +250,7 @@ export function createAzureDevOpsClient(
   return {
     organization,
     project,
+    collectionUrl,
     async currentUser() {
       const result = await organizationApi.json(
         "connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",
@@ -260,7 +260,7 @@ export function createAzureDevOpsClient(
     },
     async getRepository(repository) {
       const value = await api.json(
-        withApiVersion(`git/repositories/${encodeURIComponent(repository)}`),
+        withApiVersion(`git/repositories/${encodeURIComponent(repository)}`, apiVersion),
         repositorySchema,
       );
       return {
@@ -272,7 +272,7 @@ export function createAzureDevOpsClient(
     },
     async getRepositoryPermission(actor, projectId, repositoryId) {
       const identities = await identityApi.json(
-        `identities?searchFilter=General&filterValue=${encodeURIComponent(actor)}&queryMembership=ExpandedUp&api-version=7.1`,
+        `identities?searchFilter=General&filterValue=${encodeURIComponent(actor)}&queryMembership=ExpandedUp&api-version=${apiVersion}`,
         collectionSchema(
           z.looseObject({
             descriptor: z.string().min(1),
@@ -300,7 +300,7 @@ export function createAzureDevOpsClient(
           descriptors: descriptors.join(","),
           includeExtendedInfo: "true",
           recurse: "false",
-          "api-version": "7.1",
+          "api-version": apiVersion,
         });
         return organizationApi.json(
           `accesscontrollists/2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87?${query}`,
@@ -320,10 +320,13 @@ export function createAzureDevOpsClient(
       return azurePermissionFromAcls(acls);
     },
     getPullRequest: (repositoryId, changeNumber) =>
-      api.json(withApiVersion(pullRequestPath(repositoryId, changeNumber)), pullRequestSchema),
+      api.json(
+        withApiVersion(pullRequestPath(repositoryId, changeNumber), apiVersion),
+        pullRequestSchema,
+      ),
     async listIterations(repositoryId, changeNumber) {
       const result = await api.json(
-        withApiVersion(`${pullRequestPath(repositoryId, changeNumber)}/iterations`),
+        withApiVersion(`${pullRequestPath(repositoryId, changeNumber)}/iterations`, apiVersion),
         collectionSchema(iterationSchema),
       );
       return result.value.map((iteration) => ({
@@ -349,7 +352,7 @@ export function createAzureDevOpsClient(
         repository: {
           slug: `${organization}/${pullRequest.repository.project.name}/${pullRequest.repository.name}`,
           url: repositoryWebUrl(
-            organization,
+            collectionUrl,
             pullRequest.repository.project.name,
             pullRequest.repository.name,
           ),
@@ -366,7 +369,7 @@ export function createAzureDevOpsClient(
           isDraft: pullRequest.isDraft,
           title: pullRequest.title,
           description: pullRequest.description ?? "",
-          url: `${repositoryWebUrl(organization, pullRequest.repository.project.name, pullRequest.repository.name)}/pullrequest/${pullRequest.pullRequestId}`,
+          url: `${repositoryWebUrl(collectionUrl, pullRequest.repository.project.name, pullRequest.repository.name)}/pullrequest/${pullRequest.pullRequestId}`,
           author: pullRequest.createdBy?.uniqueName
             ? { login: pullRequest.createdBy.uniqueName }
             : undefined,
@@ -390,7 +393,7 @@ export function createAzureDevOpsClient(
       for (;;) {
         const path = `${pullRequestPath(repositoryId, changeNumber)}/iterations/${iterationId}/changes?compareTo=0&$skip=${skip}&$top=${top}`;
         const page = await api.json(
-          withApiVersion(path),
+          withApiVersion(path, apiVersion),
           z.looseObject({
             changeEntries: z.array(iterationChangeSchema),
             nextSkip: z.number().int().nonnegative().optional(),
@@ -420,14 +423,14 @@ export function createAzureDevOpsClient(
     },
     async listThreads(repositoryId, changeNumber) {
       const result = await api.json(
-        withApiVersion(`${pullRequestPath(repositoryId, changeNumber)}/threads`),
+        withApiVersion(`${pullRequestPath(repositoryId, changeNumber)}/threads`, apiVersion),
         collectionSchema(threadSchema),
       );
       return result.value;
     },
     createThread: (repositoryId, changeNumber, body) =>
       api.json(
-        withApiVersion(`${pullRequestPath(repositoryId, changeNumber)}/threads`),
+        withApiVersion(`${pullRequestPath(repositoryId, changeNumber)}/threads`, apiVersion),
         threadSchema,
         jsonRequest("POST", body),
       ),
@@ -435,6 +438,7 @@ export function createAzureDevOpsClient(
       api.json(
         withApiVersion(
           `${pullRequestPath(repositoryId, changeNumber)}/threads/${encodeURIComponent(threadId)}/comments/${encodeURIComponent(commentId)}`,
+          apiVersion,
         ),
         threadCommentSchema,
         jsonRequest("PATCH", { content }),
@@ -443,6 +447,7 @@ export function createAzureDevOpsClient(
       api.json(
         withApiVersion(
           `${pullRequestPath(repositoryId, changeNumber)}/threads/${encodeURIComponent(threadId)}/comments`,
+          apiVersion,
         ),
         threadCommentSchema,
         jsonRequest("POST", body),
@@ -451,13 +456,14 @@ export function createAzureDevOpsClient(
       api.json(
         withApiVersion(
           `${pullRequestPath(repositoryId, changeNumber)}/threads/${encodeURIComponent(threadId)}`,
+          apiVersion,
         ),
         threadSchema,
         jsonRequest("PATCH", { status }),
       ),
     async createStatus(repositoryId, changeNumber, body) {
       const status = await api.json(
-        withApiVersion(`${pullRequestPath(repositoryId, changeNumber)}/statuses`),
+        withApiVersion(`${pullRequestPath(repositoryId, changeNumber)}/statuses`, apiVersion),
         statusSchema,
         jsonRequest("POST", body),
       );
@@ -504,8 +510,8 @@ function collectionSchema<T extends z.ZodType>(item: T) {
   return z.looseObject({ count: z.number().int().nonnegative(), value: z.array(item) });
 }
 
-function withApiVersion(path: string): string {
-  return `${path}${path.includes("?") ? "&" : "?"}api-version=7.1`;
+function withApiVersion(path: string, apiVersion: "7.0" | "7.1"): string {
+  return `${path}${path.includes("?") ? "&" : "?"}api-version=${apiVersion}`;
 }
 
 function jsonRequest(method: "POST" | "PATCH", body: Record<string, unknown>): RequestInit {
@@ -516,12 +522,58 @@ function organizationFromCollectionUri(value: string | undefined): string | unde
   return value ? azureOrganizationFromUrl(value) : undefined;
 }
 
+function azureDevOpsConnectionSettings(env: NodeJS.ProcessEnv): {
+  organization: string;
+  collectionUrl: string;
+  project: string;
+  apiVersion: "7.0" | "7.1";
+} {
+  const collectionUrl = azureCollectionUrl(env);
+  const organization = organizationFromCollectionUri(collectionUrl);
+  if (!organization)
+    throw new Error("Azure DevOps collection URL did not contain an organization or collection");
+  return {
+    organization,
+    collectionUrl,
+    project: azureProject(env),
+    apiVersion: azureApiVersion(env),
+  };
+}
+
+function azureCollectionUrl(env: NodeJS.ProcessEnv): string {
+  const configuredCollectionUrl = env.SYSTEM_COLLECTIONURI || env.AZURE_DEVOPS_COLLECTION_URL;
+  if (configuredCollectionUrl) return normalizeAzureCollectionUrl(configuredCollectionUrl);
+  if (env.AZURE_DEVOPS_ORGANIZATION) {
+    return `https://dev.azure.com/${encodeURIComponent(env.AZURE_DEVOPS_ORGANIZATION)}`;
+  }
+  throw new Error(
+    "AZURE_DEVOPS_ORGANIZATION, AZURE_DEVOPS_COLLECTION_URL, or SYSTEM_COLLECTIONURI is required for Azure DevOps API calls",
+  );
+}
+
+function azureProject(env: NodeJS.ProcessEnv): string {
+  const project = env.AZURE_DEVOPS_PROJECT ?? env.SYSTEM_TEAMPROJECT;
+  if (!project)
+    throw new Error(
+      "AZURE_DEVOPS_PROJECT or SYSTEM_TEAMPROJECT is required for Azure DevOps API calls",
+    );
+  return project;
+}
+
+function azureApiVersion(env: NodeJS.ProcessEnv): "7.0" | "7.1" {
+  const apiVersion = env.AZURE_DEVOPS_API_VERSION || "7.1";
+  if (apiVersion !== "7.0" && apiVersion !== "7.1") {
+    throw new Error("AZURE_DEVOPS_API_VERSION must be 7.0 or 7.1");
+  }
+  return apiVersion;
+}
+
 function branchName(ref: string): string {
   return ref.replace(/^refs\/heads\//, "");
 }
 
-function repositoryWebUrl(organization: string, project: string, repository: string): string {
-  return `https://dev.azure.com/${encodeURIComponent(organization)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repository)}`;
+function repositoryWebUrl(collectionUrl: string, project: string, repository: string): string {
+  return `${collectionUrl}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repository)}`;
 }
 
 function trimLeadingSlash(value: string): string {

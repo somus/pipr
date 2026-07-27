@@ -82,7 +82,7 @@ If your config uses another model provider, replace `DEEPSEEK_API_KEY` with the 
 | --- | --- | --- |
 | GitLab.com | `gitlab` | `GITLAB_TOKEN` |
 | GitLab Self-Managed | `gitlab` | `GITLAB_API_URL` with the complete REST v4 root, and `GITLAB_TOKEN` |
-| Azure DevOps Services | `azure-devops` | `AZURE_DEVOPS_ORGANIZATION`, `AZURE_DEVOPS_PROJECT`, `PIPR_AZURE_SUBSCRIPTION_ID`, and either `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` |
+| Azure DevOps Services or Server | `azure-devops` | `AZURE_DEVOPS_ORGANIZATION` for Services or `AZURE_DEVOPS_COLLECTION_URL` plus `AZURE_DEVOPS_API_VERSION` for Server, `AZURE_DEVOPS_PROJECT`, `PIPR_AZURE_SUBSCRIPTION_ID`, and either `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` |
 | Bitbucket Cloud | `bitbucket` | `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, `BITBUCKET_PERMISSION_EMAIL`, and `BITBUCKET_PERMISSION_API_TOKEN` |
 | Gitea | `gitea` | `GITEA_SERVER_URL`, `GITEA_TOKEN` |
 | Forgejo | `forgejo` | `FORGEJO_SERVER_URL`, `FORGEJO_TOKEN` |
