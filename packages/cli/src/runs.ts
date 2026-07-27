@@ -671,7 +671,7 @@ function bitbucketUrlSelector(
   parts: string[],
   explicitHost?: string,
 ): RunSelector | undefined {
-  const bitbucketPull = parts.indexOf("pull-requests");
+  const bitbucketPull = parts.lastIndexOf("pull-requests");
   if (bitbucketPull < 2) return undefined;
   if (url.hostname === "bitbucket.org") {
     return selector("bitbucket", parts.slice(0, bitbucketPull).join("/"), parts[bitbucketPull + 1]);
