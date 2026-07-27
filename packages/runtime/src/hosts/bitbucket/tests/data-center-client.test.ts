@@ -2,6 +2,27 @@ import { describe, expect, it } from "bun:test";
 import { createBitbucketClient } from "../client.js";
 
 describe("Bitbucket Data Center client", () => {
+  it("loads repository identity through the Data Center project API", async () => {
+    const requests: string[] = [];
+    const client = createBitbucketClient(
+      { ...env, BITBUCKET_BASE_URL: "https://bitbucket.example.com/context" },
+      async (input) => {
+        requests.push(String(input));
+        return Response.json(repository(42, "PRJ", "pipr"));
+      },
+    );
+
+    await expect(client.getRepository()).resolves.toEqual({
+      uuid: "42",
+      slug: "pipr",
+      fullName: "PRJ/pipr",
+      url: "https://bitbucket.example.com/context/projects/PRJ/repos/pipr/browse",
+    });
+    expect(requests).toEqual([
+      "https://bitbucket.example.com/context/rest/api/latest/projects/PRJ/repos/pipr",
+    ]);
+  });
+
   it("loads pull requests through the Data Center project API", async () => {
     const requests: string[] = [];
     const client = createBitbucketClient(env, async (input, init) => {
