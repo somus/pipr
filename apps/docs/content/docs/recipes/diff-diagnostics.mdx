@@ -90,7 +90,7 @@ export default definePipr((pipr) => {
         ...(diagnostic.suggestedFix ? { suggestedFix: diagnostic.suggestedFix } : {}),
       }));
       await ctx.comment({
-        main: result.summary,
+        main: ["## 🧭 Summary", "", result.summary].join("\n"),
         inlineFindings,
       });
     },

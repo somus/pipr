@@ -105,27 +105,46 @@ export default definePipr((pipr) => {
       };
       const manifest = await ctx.change.diffManifest({ compressed: true, paths });
       if (manifest.files.length === 0) {
-        await ctx.comment("No dependency files changed.");
+        await ctx.comment("> ℹ️ **Dependency review skipped:** No dependency files changed.");
         return;
       }
       const result = await ctx.pi.run(dependencyReviewer, { manifest }, { paths });
-      await ctx.comment(
-        [
-          result.summary,
-          "",
-          "## Risks",
-          ...result.risks.map((risk) => `- ${risk}`),
-          "",
-          "## Follow-ups",
-          ...result.followUps.map((followUp) => `- ${followUp}`),
-        ].join("\n"),
-      );
+      const sections = [
+        dependencyOutcome(result.risks),
+        "",
+        "## 🧭 Summary",
+        "",
+        result.summary,
+      ];
+      if (result.risks.length > 0) {
+        sections.push("", "## ⚠️ Risks", "", bulletList(result.risks));
+      }
+      if (result.followUps.length > 0) {
+        sections.push("", "## 🛠️ Follow-ups", "", bulletList(result.followUps));
+      }
+      await ctx.comment(sections.join("\n"));
     },
   });
 
   pipr.on.changeRequest({ actions: ["opened", "updated"], task });
   pipr.command({ pattern: "@pipr dependency-risk", permission: "write", task });
 });
+
+function dependencyOutcome(risks: string[]): string {
+  if (risks.length === 0) {
+    return "> ℹ️ **Dependency review completed:** No observed risks.";
+  }
+  const noun = risks.length === 1 ? "risk requires" : "risks require";
+  return `> ⚠️ **Dependency risks observed:** ${risks.length} ${noun} review.`;
+}
+
+function bulletList(items: string[]): string {
+  return items.map((item) => `- ${lineText(item)}`).join("\n");
+}
+
+function lineText(value: string): string {
+  return value.replace(/\r\n?|\n/g, " ").trim();
+}
 ```
 
 </RecipeFilePane>

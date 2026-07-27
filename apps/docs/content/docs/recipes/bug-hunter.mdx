@@ -78,6 +78,23 @@ export default definePipr((pipr) => {
     paths: {
       exclude: ["docs/**", "**/*.md"],
     },
+    comment: (result, context) => {
+      const sections = ["## 🧭 Summary", "", result.summary.body];
+      if (result.inlineFindings.length > 0) {
+        sections.push(
+          "",
+          "## ⚠️ Findings",
+          "",
+          context.run.trigger === "local"
+            ? result.inlineFindings.map((finding) => `- ${finding.body}`).join("\n")
+            : "See inline comments in the diff.",
+        );
+      }
+      return {
+        main: sections.join("\n"),
+        inlineFindings: result.inlineFindings,
+      };
+    },
     timeout: "7m",
     entrypoints: {
       changeRequest: ["opened", "updated", "reopened", "ready"],

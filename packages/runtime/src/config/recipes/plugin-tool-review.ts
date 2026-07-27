@@ -348,7 +348,7 @@ export default definePipr((pipr) => {
       const prior = await ctx.review.prior();
       const review = await ctx.pi.run(reviewer, { manifest, prior });
       await ctx.comment({
-        main: review.summary.body,
+        main: ["## 🧭 Summary", "", review.summary.body].join("\\n"),
         inlineFindings: review.inlineFindings,
       });
     },

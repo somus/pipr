@@ -61,7 +61,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(result.created).toEqual(expect.arrayContaining(packageInitFiles));
     expect(result.overwritten).toEqual([]);
     expect(configTs).toContain("pipr.review");
-    expect(configTs).toContain("## Review Result");
+    expect(configTs).toContain("## 🧭 Summary");
     expect(configTs).toContain("See inline comments in the diff.");
     expect(await Bun.file(path.join(rootDir, ".pipr", "tsconfig.json")).text()).toContain(
       "moduleResolution",

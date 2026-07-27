@@ -70,22 +70,14 @@ export default definePipr((pipr) => {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(briefing, { manifest });
       const sections = [
-        overviewTable(result, ctx.change.title),
-        "",
-        "## Summary",
+        "## 🧭 Summary",
         "",
         result.summary,
+        "",
+        metadataTable(result, ctx.change.title),
       ];
       if (result.changeMap.length > 0) {
-        sections.push("", "## Change Map", "", changeMapTable(result.changeMap));
-      }
-      if (result.reviewerFocus.length > 0) {
-        sections.push(
-          "",
-          "## Reviewer Focus",
-          "",
-          result.reviewerFocus.map((item) => \`- \${item}\`).join("\\n"),
-        );
+        sections.push("", "## 🗺️ Change Map", "", changeMapTable(result.changeMap));
       }
       if (result.notableFiles.length > 0) {
         sections.push("", "## Notable Files", "", notableFilesTable(result.notableFiles));
@@ -95,7 +87,15 @@ export default definePipr((pipr) => {
           "",
           "## Walkthrough",
           "",
-          result.walkthrough.map((item) => \`- \${item}\`).join("\\n"),
+          numberedList(result.walkthrough),
+        );
+      }
+      if (result.reviewerFocus.length > 0) {
+        sections.push(
+          "",
+          "## 🎯 Reviewer Focus",
+          "",
+          bulletList(result.reviewerFocus),
         );
       }
       const diagram = diagramBlock(result.diagramMermaid);
@@ -115,57 +115,71 @@ export default definePipr((pipr) => {
   });
 });
 
-function overviewTable(briefing: Briefing, title: string): string {
-  const titleCell = title.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
+function metadataTable(briefing: Briefing, title: string): string {
   const prType = briefing.prType.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
   const riskLevel = briefing.riskLevel
     .replaceAll("-", " ")
     .replace(/^./, (char) => char.toUpperCase());
-  const riskSummary = briefing.riskSummary.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
   return [
-    "| Change | Type | Risk | Risk summary |",
-    "| --- | --- | --- | --- |",
-    \`| \${titleCell} | \${prType} | \${riskLevel} | \${riskSummary} |\`,
+    "| Metadata | Value |",
+    "| --- | --- |",
+    \`| Change | \${tableCell(title)} |\`,
+    \`| Type | \${prType} |\`,
+    \`| Review risk | \${riskLevel} |\`,
+    \`| Risk summary | \${tableCell(briefing.riskSummary)} |\`,
   ].join("\\n");
 }
 
 function changeMapTable(changeMap: Briefing["changeMap"]): string {
-  if (changeMap.length === 0) {
-    return [
-      "| Area | Files | Change |",
-      "| --- | --- | --- |",
-      "| - | - | No changed areas summarized. |",
-    ].join("\\n");
-  }
   return [
     "| Area | Files | Change |",
     "| --- | --- | --- |",
     ...changeMap.map((item) => {
-      const area = item.area.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
-      const files = item.files.join("<br>").replaceAll("\\n", " ").replaceAll("|", "\\\\|");
-      const change = item.change.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
+      const area = tableCell(item.area);
+      const files = item.files.map((file) => tableCell(inlineCode(file))).join("<br>");
+      const change = tableCell(item.change);
       return \`| \${area} | \${files} | \${change} |\`;
     }),
   ].join("\\n");
 }
 
 function notableFilesTable(files: Briefing["notableFiles"]): string {
-  if (files.length === 0) {
-    return [
-      "| File | Why it matters |",
-      "| --- | --- |",
-      "| - | No notable files called out. |",
-    ].join("\\n");
-  }
   return [
     "| File | Why it matters |",
     "| --- | --- |",
     ...files.map((file) => {
-      const filePath = file.path.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
-      const reason = file.reason.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
+      const filePath = tableCell(inlineCode(file.path));
+      const reason = tableCell(file.reason);
       return \`| \${filePath} | \${reason} |\`;
     }),
   ].join("\\n");
+}
+
+function bulletList(items: string[]): string {
+  return items.map((item) => \`- \${lineText(item)}\`).join("\\n");
+}
+
+function numberedList(items: string[]): string {
+  return items.map((item, index) => \`\${index + 1}. \${lineText(item)}\`).join("\\n");
+}
+
+function tableCell(value: string): string {
+  return lineText(value).replaceAll("|", "\\\\|");
+}
+
+function inlineCode(value: string): string {
+  const text = lineText(value);
+  const longestBacktickRun = Math.max(
+    0,
+    ...[...text.matchAll(/\`+/g)].map((match) => match[0].length),
+  );
+  const fence = "\`".repeat(longestBacktickRun + 1);
+  const padding = text.startsWith("\`") || text.endsWith("\`") ? " " : "";
+  return fence + padding + text + padding + fence;
+}
+
+function lineText(value: string): string {
+  return value.replace(/\\r\\n?|\\n/g, " ").trim();
 }
 
 function diagramBlock(diagramMermaid: string | undefined): string {

@@ -106,27 +106,43 @@ type CiTriageResult = {
 
 function ciTriageComment(result: CiTriageResult): string {
   const sections = [
-    "## CI Triage",
+    ciTriageCallout(result.status),
     "",
-    "**Status:** " + labelValue(result.status),
+    "## 🧭 Summary",
     "",
     result.summary,
   ];
   appendList(sections, "Evidence", result.evidence);
   appendList(sections, "Likely Causes", result.likelyCauses);
-  appendList(sections, "Next Steps", result.nextSteps);
+  appendList(sections, "🛠️ Next Steps", result.nextSteps, true);
   return sections.join("\n");
 }
 
-function appendList(sections: string[], title: string, items: string[]): void {
+function ciTriageCallout(status: CiTriageResult["status"]): string {
+  return status === "diagnosed"
+    ? "> ℹ️ **CI triage diagnosed:** An actionable failure was identified."
+    : "> ℹ️ **CI triage needs more context:** The excerpt does not support a diagnosis.";
+}
+
+function appendList(
+  sections: string[],
+  title: string,
+  items: string[],
+  ordered = false,
+): void {
   if (items.length === 0) {
     return;
   }
-  sections.push("", "## " + title, "", ...items.map((item) => "- " + item));
+  sections.push(
+    "",
+    "## " + title,
+    "",
+    ...items.map((item, index) => (ordered ? index + 1 + ". " : "- ") + lineText(item)),
+  );
 }
 
-function labelValue(value: string): string {
-  return value.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
+function lineText(value: string): string {
+  return value.replace(/\r\n?|\n/g, " ").trim();
 }
 ```
 
