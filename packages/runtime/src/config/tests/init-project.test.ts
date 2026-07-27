@@ -82,6 +82,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(workflow).toContain("uses: somus/pipr@v0.6.2"); // x-release-please-version
     expect(workflow).toContain("actions/cache@v4");
     expect(workflow).toContain("actions/upload-artifact@v6");
+    expect(workflow).toContain("vars.PIPR_RUN_AGE_RECIPIENTS");
     expect(workflow).toContain("if: always() && steps.pipr.outputs.run-bundle-path != ''");
     expect(workflow).toContain("retention-days: 14");
     expect(workflow).toContain("hashFiles('.pipr/bun.lock')");
@@ -256,10 +257,8 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(pipeline).toContain("pipr host-run --host gitlab --config-dir config/pipr");
     expect(pipeline).toContain('PIPR_CODE_HOST: "gitlab"');
     expect(pipeline).toContain('GIT_DEPTH: "0"');
-    expect(pipeline).toContain("artifacts:");
-    expect(pipeline).toContain("when: always");
-    expect(pipeline).toContain("expire_in: 14 days");
-    expect(pipeline).toContain(".pipr-runs/");
+    expect(pipeline).not.toContain("artifacts:");
+    expect(pipeline).not.toContain(".pipr-runs/");
     expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
   });
 
@@ -279,9 +278,8 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(environment).toContain("PIPR_AZURE_SUBSCRIPTION_ID=");
     expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
     expect(result.created).toContain("azure-pipelines.pipr.yml");
-    expect(pipeline).toContain("PublishPipelineArtifact@1");
-    expect(pipeline).toContain("condition: and(always()");
-    expect(pipeline).toContain("PIPR_RUN_ARTIFACT_NAME");
+    expect(pipeline).toContain("host-run --host azure-devops --config-dir config/pipr");
+    expect(pipeline).not.toContain(".pipr-runs");
   });
 
   it("creates a Bitbucket trusted-runner environment template", async () => {
@@ -298,16 +296,11 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(environment).toContain("BITBUCKET_EMAIL=");
     expect(environment).toContain("BITBUCKET_API_TOKEN=");
     expect(environment).toContain("BITBUCKET_PERMISSION_API_TOKEN=");
-    expect(environment).toContain("BITBUCKET_ARTIFACT_EMAIL=");
-    expect(environment).toContain("BITBUCKET_ARTIFACT_API_TOKEN=");
     expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
     expect(result.created).toContain("bitbucket-pipelines.yml");
     expect(pipeline).toContain("pipr host-run --host bitbucket --config-dir config/pipr");
-    expect(pipeline).toContain("name: Pipr review (run bundle v1)");
-    expect(pipeline).toContain("name: pipr-run-v1");
-    expect(pipeline).toContain("type: scoped");
-    expect(pipeline).toContain("capture-on: always");
-    expect(pipeline).toContain(".pipr-runs/**");
+    expect(pipeline).toContain("name: Pipr review");
+    expect(pipeline).not.toContain(".pipr-runs");
   });
 
   it("rejects unsupported init adapters", async () => {

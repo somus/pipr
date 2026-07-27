@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR 0009](./0009-protected-public-repository-run-observability.md)
+
+The multi-provider artifact storage and retrieval implementations described below were removed.
+ADR 0009 defines the current GitHub-only remote observability scope.
 
 ## Context
 

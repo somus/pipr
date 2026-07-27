@@ -108,11 +108,15 @@ Pipr creates bundle directories with mode `0700` and files with mode `0600` wher
 
 Known runtime secrets are redacted before prompts, visible output, stderr, diffs, validation records, or publication evidence reach disk. Redaction matches values Pipr receives through its environment and secret APIs; it is not a general repository secret scanner.
 
-### Provider access
+### Provider access and diagnostic identities
 
-GitHub, GitLab, Azure DevOps, and Bitbucket retain bundles behind their native artifact authorization. Pipr does not copy provider credentials into the bundle and does not add a second authorization service.
+GitHub Actions never places plaintext diagnostic bundles in its artifact upload path. It publishes a fixed content-free metadata archive and, when `PIPR_RUN_AGE_RECIPIENTS` is configured, an age-encrypted diagnostic archive. Encryption happens before the package reaches the upload step.
 
-Use `pipr runs show --json` for content-free automation. Download a full bundle only when the receiving person or coding agent is authorized to read the repository and change request.
+GitHub credentials authorize discovery and download of the protected package. They do not authorize diagnostic content. A matching local X25519 age identity is required to decrypt diagnostics, so a public-repository artifact or a leaked read token does not expose prompts, model output, source, diffs, stderr, or tool payloads.
+
+Use `pipr runs show --json` without an identity for content-free automation. Give an identity only to a person or coding agent already authorized to read the repository and change request. Never store an identity beside its provider artifact. Recipient rotation protects future runs only, so retain old identities through the artifact retention window when old diagnostics remain useful.
+
+Trusted webhook stores and opt-in local captures remain plaintext under filesystem authorization on every supported code host. Pipr does not copy provider credentials into bundles or add a hosted authorization service.
 
 ### OTLP boundary
 

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
   parseRunBundle,
+  parseRunBundleEnvelope,
   parseRunBundleManifest,
+  type RunBundleEnvelope,
   type RunBundleManifest,
   type RunLogRecord,
   type RunMetricsSnapshot,
@@ -12,6 +14,60 @@ import {
   runMetricsSnapshotSchema,
   runSpanRecordSchema,
 } from "../index.js";
+
+describe("Run Bundle envelope", () => {
+  it("accepts a protected package with content-free metadata and encrypted diagnostics", () => {
+    const envelope = {
+      formatVersion: 1,
+      executionId: "0123456789abcdef0123456789abcdef",
+      protection: "age",
+      diagnosticState: "available",
+      metadata: {
+        path: "metadata.tar.gz",
+        mediaType: "application/gzip",
+        sizeBytes: 2048,
+        sha256: "a".repeat(64),
+      },
+      diagnostic: {
+        path: "diagnostic.tar.gz.age",
+        mediaType: "application/age",
+        sizeBytes: 4096,
+        sha256: "b".repeat(64),
+      },
+    } satisfies RunBundleEnvelope;
+
+    expect(parseRunBundleEnvelope(envelope)).toEqual(envelope);
+  });
+
+  it("rejects inconsistent protection, unexpected fields, and unsafe paths", () => {
+    const metadataOnly = {
+      formatVersion: 1,
+      executionId: "0123456789abcdef0123456789abcdef",
+      protection: "metadata",
+      diagnosticState: "not-captured",
+      metadata: {
+        path: "metadata.tar.gz",
+        mediaType: "application/gzip",
+        sizeBytes: 2048,
+        sha256: "a".repeat(64),
+      },
+    };
+
+    expect(() =>
+      parseRunBundleEnvelope({
+        ...metadataOnly,
+        protection: "age",
+      }),
+    ).toThrow();
+    expect(() =>
+      parseRunBundleEnvelope({
+        ...metadataOnly,
+        metadata: { ...metadataOnly.metadata, path: "../metadata.tar.gz" },
+      }),
+    ).toThrow();
+    expect(() => parseRunBundleEnvelope({ ...metadataOnly, privateData: "secret" })).toThrow();
+  });
+});
 
 describe("Run Bundle manifest", () => {
   it("accepts a complete version 1 diagnostic manifest", () => {
@@ -101,6 +157,12 @@ describe("Run Bundle manifest", () => {
     };
 
     expect(runBundleManifestSchema.safeParse({ ...base, privateField: true }).success).toBe(false);
+    expect(
+      runBundleManifestSchema.safeParse({
+        ...base,
+        export: { otlp: "disabled", externalUpload: "available" },
+      }).success,
+    ).toBe(false);
     expect(
       runBundleManifestSchema.safeParse({
         ...base,

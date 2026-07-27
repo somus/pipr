@@ -45,6 +45,7 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
+          PIPR_RUN_AGE_RECIPIENTS: ${{ vars.PIPR_RUN_AGE_RECIPIENTS }}
       - name: Upload Pipr run bundle
         if: always() && steps.pipr.outputs.run-bundle-path != ''
         uses: actions/upload-artifact@v6
@@ -138,14 +139,14 @@ The Action exposes one stable structured summary for diagnostics and integration
 | `main-comment` | Rendered Main Review Comment body, command response body, or command help body. |
 | `result` | Versioned JSON summary for review, ignored, dry-run, command-help, command-response, verifier, publication-error, and other fatal error outcomes. |
 | `execution-id` | OpenTelemetry trace ID for this Pipr process. |
-| `run-bundle-path` | Workspace-relative path to the finalized diagnostic bundle. |
-| `run-artifact-name` | Versioned artifact name used by `pipr runs`. |
+| `run-bundle-path` | Workspace-relative path to the protected Run Bundle package. |
+| `run-artifact-name` | Versioned artifact name including `metadata` or `age`, used by `pipr runs`. |
 
 Parse `result`, require `formatVersion: 2`, then branch on `kind`. Review, command-response, and verifier results include a bounded `run` summary with reviewed refs, selected tasks, elapsed time, models, agent-run count, tokens, cost, and usage completeness. Review publication is `{ state: "completed", ...counts }`.
 
 Pipr Result V2 does not expose raw errors, Diff Manifests, publication plans, internal markers or finding identity, native comment IDs, trusted configuration state, or provider credential metadata. V1 output is not supported.
 
-The upload step runs after success or failure and retains the diagnostic bundle for 14 days. Existing workflows must add the action `id` and upload step shown above; `pipr runs list --pr <number>` reads those artifacts through the GitHub Actions API.
+The upload step runs after success or failure and retains the protected package for 14 days. Configure the public recipient from `pipr runs keygen` as the repository variable `PIPR_RUN_AGE_RECIPIENTS` to include encrypted diagnostics. Without it, Pipr uploads content-free metadata only. Existing workflows must add the action `id`, recipient environment mapping, and upload step shown above; `pipr runs list --pr <number>` reads those artifacts through the GitHub Actions API.
 
 ## GitHub review output
 

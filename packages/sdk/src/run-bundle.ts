@@ -14,6 +14,53 @@ const bundlePath = text
     "path must stay inside the run bundle",
   );
 
+const packagedArchiveSchema = z.strictObject({
+  path: bundlePath,
+  mediaType: z.enum(["application/gzip", "application/age"]),
+  sizeBytes: count,
+  sha256,
+});
+
+export const runBundleEnvelopeSchema = z
+  .strictObject({
+    formatVersion: z.literal(1),
+    executionId: z.string().regex(/^[a-f0-9]{32}$/),
+    protection: z.enum(["metadata", "age"]),
+    diagnosticState: z.enum(["available", "not-captured", "encryption-failed", "size-limit"]),
+    metadata: packagedArchiveSchema.extend({
+      path: z.literal("metadata.tar.gz"),
+      mediaType: z.literal("application/gzip"),
+    }),
+    diagnostic: packagedArchiveSchema
+      .extend({
+        path: z.literal("diagnostic.tar.gz.age"),
+        mediaType: z.literal("application/age"),
+      })
+      .optional(),
+  })
+  .superRefine((envelope, context) => {
+    const encrypted =
+      envelope.protection === "age" &&
+      envelope.diagnosticState === "available" &&
+      envelope.diagnostic !== undefined;
+    const metadataOnly =
+      envelope.protection === "metadata" &&
+      envelope.diagnosticState !== "available" &&
+      envelope.diagnostic === undefined;
+    if (!encrypted && !metadataOnly) {
+      context.addIssue({
+        code: "custom",
+        message: "Run Bundle envelope protection and diagnostic state are inconsistent",
+      });
+    }
+  });
+
+export type RunBundleEnvelope = z.infer<typeof runBundleEnvelopeSchema>;
+
+export function parseRunBundleEnvelope(value: unknown): RunBundleEnvelope {
+  return runBundleEnvelopeSchema.parse(value);
+}
+
 export const runBundleArtifactSchema = z
   .strictObject({
     kind: z.enum([
@@ -212,7 +259,7 @@ const captureSchema = z.strictObject({
 
 const exportSchema = z.strictObject({
   otlp: z.enum(["disabled", "succeeded", "failed", "timed-out"]),
-  externalUpload: z.enum(["not-configured", "pending", "available", "failed"]),
+  externalUpload: z.enum(["not-configured", "pending"]),
 });
 
 const resourcesSchema = z.strictObject({

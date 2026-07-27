@@ -16,9 +16,9 @@ outputs:
   execution-id:
     description: OTel trace ID for the captured Pipr process
   run-bundle-path:
-    description: Workspace-relative path to the finalized diagnostic bundle
+    description: Workspace-relative path to the protected Run Bundle package
   run-artifact-name:
-    description: Provider artifact name for the finalized diagnostic bundle
+    description: GitHub Actions artifact name for the protected Run Bundle package
 runs:
   using: docker
   image: docker://ghcr.io/somus/pipr:v0.6.2 # x-release-please-version

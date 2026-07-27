@@ -62,6 +62,7 @@ export function renderOfficialGithubWorkflow(
     "        env:",
     `          DEEPSEEK_API_KEY: ${githubExpression("secrets.DEEPSEEK_API_KEY")}`,
     `          GITHUB_TOKEN: ${githubExpression("github.token")}`,
+    `          PIPR_RUN_AGE_RECIPIENTS: ${githubExpression("vars.PIPR_RUN_AGE_RECIPIENTS")}`,
   );
   for (const secret of officialInitRecipeWorkflowEnvSecrets(options.recipe)) {
     lines.push(`          ${secret.env}: ${githubExpression(`secrets.${secret.secret}`)}`);

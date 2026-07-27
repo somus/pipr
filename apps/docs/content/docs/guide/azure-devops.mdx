@@ -63,17 +63,9 @@ steps:
       PIPR_IMAGE: ghcr.io/somus/pipr:v0.6.2 # x-release-please-version
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       DEEPSEEK_API_KEY: $(DEEPSEEK_API_KEY)
-
-  - task: PublishPipelineArtifact@1
-    condition: and(always(), ne(variables['PIPR_RUN_BUNDLE_PATH'], ''))
-    inputs:
-      targetPath: $(PIPR_RUN_BUNDLE_PATH)
-      artifact: $(PIPR_RUN_ARTIFACT_NAME)
 ```
 
 Azure supplies the remaining `SYSTEM_*` and `BUILD_*` values during branch-policy validation. The full checkout lets Pipr load Trusted Base Config and build the Diff Manifest.
-
-The Pipr process emits the bundle path and artifact name as Azure logging-command variables. `PublishPipelineArtifact@1` runs after success or failure, and `pipr runs` retrieves the result with a credential that has `vso.build`. Existing branch-policy pipelines must add this task to expose bundles.
 
 ## Commands and reply verification
 

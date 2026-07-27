@@ -33,8 +33,10 @@ import {
   writePullRequestEvent,
 } from "./commands-fixtures.js";
 
+const runBundleRecipient = "age1cy0su9fwf3gf9mw868g5yut09p6nytfmmnktexz2ya5uqg9vl9sss4euqm";
+
 describe("runHostRunCommand pull_request dispatch", () => {
-  it("captures hosted reviews by default with provider and work identities", async () => {
+  it("captures content-free hosted metadata by default with provider and work identities", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const traceDirectory = path.join(workspace.rootDir, "traces");
     const finalized: Array<{ executionId: string; directory: string }> = [];
@@ -62,11 +64,11 @@ describe("runHostRunCommand pull_request dispatch", () => {
       });
       if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
 
-      const [executionId] = await readdir(traceDirectory);
+      const executionId = finalized[0]?.executionId;
+      const bundleDirectory = finalized[0]?.directory;
+      if (!executionId || !bundleDirectory) throw new Error("Expected a finalized Run Bundle");
       const manifest = parseRunBundleManifest(
-        JSON.parse(
-          await readFile(path.join(traceDirectory, executionId ?? "", "run.json"), "utf8"),
-        ),
+        JSON.parse(await readFile(path.join(bundleDirectory, "run.json"), "utf8")),
       );
       expect(manifest).toMatchObject({
         executionId,
@@ -82,14 +84,16 @@ describe("runHostRunCommand pull_request dispatch", () => {
         },
         provider: { runId: "100", jobId: "review" },
         pipr: { configHash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        capture: { mode: "metadata" },
         export: { externalUpload: "pending" },
       });
       expect(finalized).toEqual([
         expect.objectContaining({
           executionId,
-          directory: path.join(traceDirectory, executionId ?? ""),
+          directory: bundleDirectory,
         }),
       ]);
+      await expect(readdir(traceDirectory)).rejects.toThrow();
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -124,6 +128,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
   it("records nested lifecycle phases and model attempts as timed spans", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const traceDirectory = path.join(workspace.rootDir, "traces");
+    let bundleDirectory: string | undefined;
     try {
       const eventPath = path.join(workspace.rootDir, "event.json");
       await writePullRequestEvent(eventPath, workspace);
@@ -135,16 +140,18 @@ describe("runHostRunCommand pull_request dispatch", () => {
         env: {
           ...pullRequestEnv(workspace.rootDir, eventPath),
           GITHUB_ACTIONS: "true",
+          PIPR_RUN_AGE_RECIPIENTS: runBundleRecipient,
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         githubPublicationClient: fakeGitHubPublicationClient(workspace),
         piExecutable: workspace.piExecutable,
+        onRunBundleFinalized(bundle) {
+          bundleDirectory = bundle.directory;
+        },
       });
 
-      const [executionId] = await readdir(traceDirectory);
-      const spans = (
-        await readFile(path.join(traceDirectory, executionId ?? "", "spans.jsonl"), "utf8")
-      )
+      if (!bundleDirectory) throw new Error("Expected a finalized Run Bundle");
+      const spans = (await readFile(path.join(bundleDirectory, "spans.jsonl"), "utf8"))
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line) as { name: string; durationMs?: number });
@@ -176,6 +183,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
   it("stores each agent attempt prompt and visible output as diagnostic artifacts", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const traceDirectory = path.join(workspace.rootDir, "traces");
+    let bundleDirectory: string | undefined;
     try {
       const eventPath = path.join(workspace.rootDir, "event.json");
       await writePullRequestEvent(eventPath, workspace);
@@ -187,14 +195,17 @@ describe("runHostRunCommand pull_request dispatch", () => {
         env: {
           ...pullRequestEnv(workspace.rootDir, eventPath),
           GITHUB_ACTIONS: "true",
+          PIPR_RUN_AGE_RECIPIENTS: runBundleRecipient,
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         githubPublicationClient: fakeGitHubPublicationClient(workspace),
         piExecutable: workspace.piExecutable,
+        onRunBundleFinalized(bundle) {
+          bundleDirectory = bundle.directory;
+        },
       });
 
-      const [executionId] = await readdir(traceDirectory);
-      const bundleDirectory = path.join(traceDirectory, executionId ?? "");
+      if (!bundleDirectory) throw new Error("Expected a finalized Run Bundle");
       const manifest = parseRunBundleManifest(
         JSON.parse(await readFile(path.join(bundleDirectory, "run.json"), "utf8")),
       );
@@ -218,6 +229,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
   it("records tool timing and first response without retaining Pi event payloads", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const traceDirectory = path.join(workspace.rootDir, "traces");
+    let bundleDirectory: string | undefined;
     try {
       await writePiExecutable(
         workspace.piExecutable,
@@ -268,14 +280,17 @@ describe("runHostRunCommand pull_request dispatch", () => {
         env: {
           ...pullRequestEnv(workspace.rootDir, eventPath),
           GITHUB_ACTIONS: "true",
+          PIPR_RUN_AGE_RECIPIENTS: runBundleRecipient,
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         githubPublicationClient: fakeGitHubPublicationClient(workspace),
         piExecutable: workspace.piExecutable,
+        onRunBundleFinalized(bundle) {
+          bundleDirectory = bundle.directory;
+        },
       });
 
-      const [executionId] = await readdir(traceDirectory);
-      const bundleDirectory = path.join(traceDirectory, executionId ?? "");
+      if (!bundleDirectory) throw new Error("Expected a finalized Run Bundle");
       const spans = (await readFile(path.join(bundleDirectory, "spans.jsonl"), "utf8"))
         .trim()
         .split("\n")

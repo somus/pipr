@@ -45,15 +45,22 @@ export {
   FileSystemRunArchiveSource,
   loadValidatedRunBundle,
 } from "./observability/archive.js";
-export { uploadBitbucketRunBundle } from "./observability/bitbucket-upload.js";
-export { PartialRunArchiveListError } from "./observability/partial-list-error.js";
+export { GitHubRunArchiveSource } from "./observability/github-run-archive-source.js";
+export type {
+  OpenedRunBundlePackage,
+  PreparedRunBundlePackage,
+} from "./observability/protected-package.js";
 export {
-  AzureDevOpsRunArchiveSource,
-  BitbucketRunArchiveSource,
-  GitHubRunArchiveSource,
-  GitLabRunArchiveSource,
-} from "./observability/provider-sources.js";
+  copyRunBundlePackage,
+  generateRunBundleIdentity,
+  openRunBundlePackage,
+  parseRunBundleRecipients,
+  prepareRunBundlePackage,
+  validateRunBundlePackage,
+  validateRunBundleRecipients,
+} from "./observability/protected-package.js";
 export { enforceRunStoreRetention } from "./observability/retention.js";
+export { copyRunBundleInput } from "./observability/run-bundle-input.js";
 export type { PublicationResult } from "./review/publication-result.js";
 export { PublicationError } from "./review/publication-result.js";
 export type {

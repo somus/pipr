@@ -31,19 +31,15 @@ const repoRoot = path.resolve(cliProjectDir, "../..");
 const cliPath = path.join(cliProjectDir, "src", "main.ts");
 
 describe("pipr CLI", () => {
-  it("publishes finalized run metadata for GitHub, Azure, and Bitbucket", async () => {
+  it("publishes finalized run metadata only for GitHub", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-run-metadata-"));
     const outputPath = path.join(workspace, "github-output.txt");
     await Bun.write(outputPath, "");
     const originalOutput = process.env.GITHUB_OUTPUT;
     const originalLog = console.log;
-    const originalError = console.error;
     const logs: string[] = [];
-    const errors: string[] = [];
-    const uploads: unknown[] = [];
     process.env.GITHUB_OUTPUT = outputPath;
     console.log = (message?: unknown) => logs.push(String(message));
-    console.error = (message?: unknown) => errors.push(String(message));
     try {
       await publishRunBundleMetadata(
         {
@@ -51,6 +47,7 @@ describe("pipr CLI", () => {
           directory: path.join(workspace, "bundle;%]\n"),
           kind: "review",
           outcome: "succeeded",
+          protection: "age",
           repository: {
             host: "bitbucket",
             repository: "pipr",
@@ -63,15 +60,6 @@ describe("pipr CLI", () => {
             GITHUB_ACTIONS: "true",
             TF_BUILD: "True",
             BITBUCKET_BUILD_NUMBER: "7",
-            BITBUCKET_WORKSPACE: "workspace",
-            BITBUCKET_ARTIFACT_EMAIL: "bot@example.test",
-            BITBUCKET_ARTIFACT_API_TOKEN: "upload-token",
-          },
-        },
-        {
-          async upload(options) {
-            uploads.push(options);
-            return { status: "failed", error: "upload unavailable" };
           },
         },
       );
@@ -80,23 +68,12 @@ describe("pipr CLI", () => {
       expect(githubOutput).toContain("0123456789abcdef0123456789abcdef");
       expect(githubOutput).toContain("run-bundle-path");
       expect(githubOutput).toContain("run-artifact-name");
-      expect(logs).toContain(
-        "##vso[task.setvariable variable=PIPR_RUN_BUNDLE_PATH]bundle%3B%AZP25%5D%0A",
-      );
-      expect(uploads).toEqual([
-        expect.objectContaining({
-          repository: "workspace/pipr",
-          changeNumber: 42,
-          email: "bot@example.test",
-          token: "upload-token",
-        }),
-      ]);
-      expect(errors).toContain("pipr warning Bitbucket run upload failed: upload unavailable");
+      expect(githubOutput).toContain("pipr-run-v1-age-pr-42-0123456789abcdef0123456789abcdef");
+      expect(logs).toEqual([]);
     } finally {
       if (originalOutput === undefined) delete process.env.GITHUB_OUTPUT;
       else process.env.GITHUB_OUTPUT = originalOutput;
       console.log = originalLog;
-      console.error = originalError;
       await removeWorkspace(workspace);
     }
   });

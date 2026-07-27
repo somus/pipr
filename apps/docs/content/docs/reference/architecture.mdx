@@ -35,7 +35,8 @@ The runtime keeps provider parsing and publication around a shared review pipeli
 8. For review output, validate structured findings against the Diff Manifest and build the Main Review Comment and Inline Review Comments.
 9. For command response output, build a normal change-request comment keyed to the source command comment.
 10. Publish comments through the code host adapter after stale-head checks.
-11. Atomically finalize the Run Bundle, then let provider CI upload it.
+11. Atomically finalize the Run Bundle.
+12. For GitHub Actions, project content-free metadata, age-encrypt diagnostics when configured, remove plaintext, and upload only the protected package.
 
 ## Data flow
 
@@ -55,7 +56,7 @@ Data moves from native event input to validated provider-neutral output.
 
 The Diff Manifest is the central contract between git state, model-visible context, validation, and inline publication. Tasks should pass it into Pi instead of parsing raw diffs.
 
-Run observability follows a separate provider-neutral path. `RunRecorder` captures lifecycle evidence while `RunArchiveSource` discovers and validates local or provider archives; neither interface expands `CodeHostAdapter`.
+Run observability follows a separate provider-neutral path. `RunRecorder` captures lifecycle evidence on every host while `RunArchiveSource` validates filesystem stores and GitHub Actions artifacts; neither interface expands `CodeHostAdapter`. GitHub Actions packages a public metadata plane and an optional age-encrypted diagnostic plane. GitHub credentials discover artifacts, while local age identities authorize diagnostic decryption. Other hosts can feed manually persisted packages into `pipr runs inspect`.
 
 ## Trust boundaries
 

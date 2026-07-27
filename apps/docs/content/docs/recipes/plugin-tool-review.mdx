@@ -467,6 +467,7 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
+          PIPR_RUN_AGE_RECIPIENTS: ${{ vars.PIPR_RUN_AGE_RECIPIENTS }}
           PIPR_R2_MEMORY_BUCKET: ${{ secrets.PIPR_R2_MEMORY_BUCKET }}
           PIPR_R2_MEMORY_ENDPOINT: ${{ secrets.PIPR_R2_MEMORY_ENDPOINT }}
           PIPR_R2_MEMORY_ACCESS_KEY_ID: ${{ secrets.PIPR_R2_MEMORY_ACCESS_KEY_ID }}

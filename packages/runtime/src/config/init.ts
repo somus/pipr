@@ -224,12 +224,6 @@ function starterGitLabPipeline(relativeConfigDir: string, recipe?: string): stri
     '    PIPR_CODE_HOST: "gitlab"',
     "  script:",
     `    - pipr host-run --host gitlab --config-dir ${relativeConfigDir}`,
-    "  artifacts:",
-    "    when: always",
-    "    expire_in: 14 days",
-    '    name: "pipr-runs-pr-$CI_MERGE_REQUEST_IID-pipeline-$CI_PIPELINE_ID"',
-    "    paths:",
-    "      - .pipr-runs/",
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
     lines.push(`    # Configure ${secret.env} as a masked GitLab CI/CD variable.`);
@@ -294,13 +288,6 @@ function starterAzureDevOpsPipeline(relativeConfigDir: string, recipe?: string):
   for (const secret of secrets) {
     lines.push(`      ${secret.env}: $(${secret.env})`);
   }
-  lines.push(
-    "  - task: PublishPipelineArtifact@1",
-    "    condition: and(always(), ne(variables['PIPR_RUN_BUNDLE_PATH'], ''))",
-    "    inputs:",
-    "      targetPath: $(PIPR_RUN_BUNDLE_PATH)",
-    "      artifact: $(PIPR_RUN_ARTIFACT_NAME)",
-  );
   lines.push("");
   return lines.join("\n");
 }
@@ -314,8 +301,6 @@ function starterBitbucketWebhookEnvironment(recipe?: string): string {
     "BITBUCKET_API_TOKEN=",
     "BITBUCKET_PERMISSION_EMAIL=",
     "BITBUCKET_PERMISSION_API_TOKEN=",
-    "BITBUCKET_ARTIFACT_EMAIL=",
-    "BITBUCKET_ARTIFACT_API_TOKEN=",
     "PIPR_WEBHOOK_SECRET=",
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);
@@ -332,17 +317,10 @@ function starterBitbucketPipeline(relativeConfigDir: string, recipe?: string): s
     "  pull-requests:",
     "    '**':",
     "      - step:",
-    "          name: Pipr review (run bundle v1)",
+    "          name: Pipr review",
     `          image: ${defaultGitLabImageRef}`,
     "          script:",
     `            - pipr host-run --host bitbucket --config-dir ${relativeConfigDir}`,
-    "          artifacts:",
-    "            upload:",
-    "              - name: pipr-run-v1",
-    "                type: scoped",
-    "                paths:",
-    "                  - .pipr-runs/**",
-    "                capture-on: always",
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
     lines.push(`          # Configure ${secret.env} as a secured repository variable.`);

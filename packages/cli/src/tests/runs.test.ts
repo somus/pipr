@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
+import { generateRunBundleIdentity, prepareRunBundlePackage } from "@usepipr/runtime";
 import { runMain } from "../runner.js";
 import {
   defaultLocalTraceStore,
@@ -65,6 +67,19 @@ describe("pipr runs", () => {
     const store = await temporaryDirectory();
     const executionId = "0123456789abcdef0123456789abcdef";
     await writeBundle(store, executionId);
+    globalThis.fetch = Object.assign(
+      async (input: string | URL | Request) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname.endsWith("/actions/artifacts")) {
+          return Response.json({ artifacts: [] });
+        }
+        if (url.pathname.endsWith("/actions/runs")) {
+          return Response.json({ workflow_runs: [] });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+      { preconnect: originalFetch.preconnect },
+    );
 
     const listOutput = await captureStdout(async () => {
       await runMain({
@@ -90,12 +105,7 @@ describe("pipr runs", () => {
     expect(listed.runs).toHaveLength(1);
     expect(listed.runs[0]).toMatchObject({ executionId, state: "available" });
     expect(listed.runs[0]).not.toHaveProperty("archiveSource");
-    expect(listed.errors).toEqual([
-      expect.objectContaining({
-        source: "github",
-        message: expect.stringContaining("GITHUB_TOKEN"),
-      }),
-    ]);
+    expect(listed.errors).toEqual([]);
 
     const showOutput = await captureStdout(async () => {
       await runMain({
@@ -162,6 +172,172 @@ describe("pipr runs", () => {
     });
   });
 
+  it("generates a private age identity without printing its secret", async () => {
+    const cwd = await temporaryDirectory();
+    const sharedDirectory = path.join(cwd, "shared");
+    await mkdir(sharedDirectory, { mode: 0o755 });
+    await chmod(sharedDirectory, 0o755);
+    const identityPath = path.join(sharedDirectory, "run.agekey");
+    const output = await captureStdout(async () => {
+      await runMain({
+        argv: ["bun", "pipr", "runs", "keygen", "--output", identityPath],
+        env: { PIPR_UPDATE_NOTICE: "0" },
+      });
+    });
+
+    expect(output).toContain(`Identity: ${identityPath}`);
+    expect(output).toMatch(/Recipient: age1[a-z0-9]+/);
+    expect(output).not.toContain("AGE-SECRET-KEY");
+    expect((await lstat(sharedDirectory)).mode & 0o777).toBe(0o755);
+    expect((await lstat(identityPath)).mode & 0o777).toBe(0o600);
+    expect(await readFile(identityPath, "utf8")).toStartWith("AGE-SECRET-KEY-");
+    await expect(
+      runMain({
+        argv: ["bun", "pipr", "runs", "keygen", "--output", identityPath],
+        env: { PIPR_UPDATE_NOTICE: "0" },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("shows public metadata while locked and decrypts diagnostics with an identity", async () => {
+    const rawStore = await temporaryDirectory();
+    const protectedStore = await temporaryDirectory();
+    const outputRoot = await temporaryDirectory();
+    const executionId = "abababababababababababababababab";
+    await writeBundle(rawStore, executionId);
+    const key = await generateRunBundleIdentity();
+    const wrongKey = await generateRunBundleIdentity();
+    await prepareRunBundlePackage({
+      bundleDirectory: path.join(rawStore, executionId),
+      destinationRoot: protectedStore,
+      recipients: [key.recipient],
+    });
+    const identityPath = path.join(outputRoot, "run.agekey");
+    await writeFile(identityPath, `${key.identity}\n`, { mode: 0o600 });
+    const wrongIdentityPath = path.join(outputRoot, "wrong.agekey");
+    await writeFile(wrongIdentityPath, `${wrongKey.identity}\n`, { mode: 0o600 });
+
+    const lockedOutput = await captureStdout(async () => {
+      await runRunsShow(
+        executionId,
+        { store: protectedStore, json: true },
+        {
+          cwd: outputRoot,
+          env: {},
+        },
+      );
+    });
+    expect(JSON.parse(lockedOutput)).toMatchObject({
+      protection: "age",
+      diagnostic: "locked",
+      manifest: { capture: { mode: "metadata" } },
+    });
+
+    const unlockedOutput = await captureStdout(async () => {
+      await runRunsShow(
+        executionId,
+        { store: protectedStore, json: true, identity: [identityPath] },
+        { cwd: outputRoot, env: {} },
+      );
+    });
+    expect(JSON.parse(unlockedOutput)).toMatchObject({
+      protection: "age",
+      diagnostic: "available",
+      manifest: { capture: { mode: "diagnostic" } },
+    });
+    await expect(
+      runRunsShow(
+        executionId,
+        { store: protectedStore, json: true, identity: [wrongIdentityPath] },
+        { cwd: outputRoot, env: {} },
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      runRunsDownload(
+        executionId,
+        { store: protectedStore, output: path.join(outputRoot, "locked-download") },
+        { cwd: outputRoot, env: {} },
+      ),
+    ).rejects.toThrow("is encrypted");
+
+    const destination = path.join(outputRoot, "decrypted");
+    await captureStdout(async () => {
+      await runRunsDownload(
+        executionId,
+        { store: protectedStore, output: destination, identity: [identityPath] },
+        { cwd: outputRoot, env: {} },
+      );
+    });
+    expect(JSON.parse(await readFile(path.join(destination, "run.json"), "utf8"))).toMatchObject({
+      executionId,
+      capture: { mode: "diagnostic" },
+    });
+  });
+
+  it("inspects a manually downloaded protected package directory", async () => {
+    const rawStore = await temporaryDirectory();
+    const protectedStore = await temporaryDirectory();
+    const executionId = "bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc";
+    await writeBundle(rawStore, executionId);
+    const key = await generateRunBundleIdentity();
+    const prepared = await prepareRunBundlePackage({
+      bundleDirectory: path.join(rawStore, executionId),
+      destinationRoot: protectedStore,
+      recipients: [key.recipient],
+    });
+
+    const output = await captureStdout(async () => {
+      await runMain({
+        argv: ["bun", "pipr", "runs", "inspect", prepared.directory, "--json"],
+        env: { PIPR_UPDATE_NOTICE: "0" },
+      });
+    });
+
+    expect(JSON.parse(output)).toMatchObject({
+      protection: "age",
+      diagnostic: "locked",
+      manifest: {
+        executionId,
+        capture: { mode: "metadata" },
+      },
+    });
+  });
+
+  it("inspects and decrypts a manually downloaded tar.gz artifact archive", async () => {
+    const rawStore = await temporaryDirectory();
+    const protectedStore = await temporaryDirectory();
+    const outputRoot = await temporaryDirectory();
+    const executionId = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd";
+    await writeBundle(rawStore, executionId);
+    const key = await generateRunBundleIdentity();
+    const prepared = await prepareRunBundlePackage({
+      bundleDirectory: path.join(rawStore, executionId),
+      destinationRoot: protectedStore,
+      recipients: [key.recipient],
+    });
+    const archivePath = path.join(outputRoot, "pipr-artifact.tar.gz");
+    await writePackageTarGz(prepared.directory, archivePath, `.pipr-runs/${executionId}`);
+    const identityPath = path.join(outputRoot, "run.agekey");
+    await writeFile(identityPath, `${key.identity}\n`, { mode: 0o600 });
+
+    const output = await captureStdout(async () => {
+      await runMain({
+        argv: ["bun", "pipr", "runs", "inspect", archivePath, "--identity", identityPath, "--json"],
+        env: { PIPR_UPDATE_NOTICE: "0" },
+      });
+    });
+
+    expect(JSON.parse(output)).toMatchObject({
+      protection: "age",
+      diagnostic: "available",
+      manifest: {
+        executionId,
+        capture: { mode: "diagnostic" },
+      },
+    });
+  });
+
   it("discovers bare --trace captures from the platform state store", async () => {
     const cwd = await temporaryDirectory();
     const stateRoot = await temporaryDirectory();
@@ -192,7 +368,7 @@ describe("pipr runs", () => {
     }
   });
 
-  it("uses explicit provider selectors for download outside a checkout", async () => {
+  it("uses an explicit GitHub selector for download outside a checkout", async () => {
     const cwd = await temporaryDirectory();
     const executionId = "d".repeat(32);
     let archiveRequested = false;
@@ -236,7 +412,7 @@ describe("pipr runs", () => {
     expect(archiveRequested).toBe(true);
   });
 
-  it("deduplicates local and provider records and prefers the local archive", async () => {
+  it("deduplicates local and GitHub Actions records and prefers the local archive", async () => {
     const store = await temporaryDirectory();
     const outputRoot = await temporaryDirectory();
     const executionId = "e".repeat(32);
@@ -252,7 +428,7 @@ describe("pipr runs", () => {
         if (url.pathname.endsWith("/actions/runs")) {
           return Response.json({ workflow_runs: [] });
         }
-        throw new Error(`Provider archive should not be selected: ${url}`);
+        throw new Error(`GitHub Actions archive should not be selected: ${url}`);
       },
       { preconnect: originalFetch.preconnect },
     );
@@ -295,6 +471,7 @@ describe("pipr runs", () => {
       kind: "command",
       startedAt: "2026-07-20T11:00:00.000Z",
     });
+    globalThis.fetch = emptyGitHubFetch();
 
     const reviewOutput = await captureStdout(async () => {
       await runMain({
@@ -343,38 +520,18 @@ describe("pipr runs", () => {
     expect(JSON.parse(commandOutput).manifest.executionId).toBe(newestCommand);
   });
 
-  it("links Bitbucket native CI artifacts while surfacing Downloads API failures", async () => {
+  it("uses only local stores for non-GitHub PR selectors", async () => {
     const store = await temporaryDirectory();
-    const pipelineUrl = "https://bitbucket.org/workspace/pipr/pipelines/results/7";
+    const executionId = "c".repeat(32);
+    await writeBundle(store, executionId, {
+      host: "bitbucket",
+      repository: "workspace/pipr",
+    });
+    let requested = false;
     globalThis.fetch = Object.assign(
-      async (input: string | URL | Request) => {
-        const url = new URL(input instanceof Request ? input.url : String(input));
-        if (url.pathname.endsWith("/downloads")) {
-          return Response.json({ error: "payment required" }, { status: 402 });
-        }
-        if (url.pathname.endsWith("/pipelines/")) {
-          return Response.json({
-            values: [
-              {
-                uuid: "{pipeline-7}",
-                created_on: "2026-07-21T00:00:00Z",
-                completed_on: "2026-07-21T00:01:00Z",
-                state: { name: "COMPLETED", result: { name: "SUCCESSFUL" } },
-                target: { pullrequest: { id: 42 } },
-                links: {
-                  html: { href: pipelineUrl },
-                  steps: {
-                    href: "https://api.bitbucket.org/2.0/repositories/workspace/pipr/pipelines/pipeline-7/steps",
-                  },
-                },
-              },
-            ],
-          });
-        }
-        if (url.pathname.endsWith("/pipelines/pipeline-7/steps")) {
-          return Response.json({ values: [{ name: "Pipr review (run bundle v1)" }] });
-        }
-        throw new Error(`Unexpected request: ${url}`);
+      async () => {
+        requested = true;
+        throw new Error("Non-GitHub provider API must not be called");
       },
       { preconnect: originalFetch.preconnect },
     );
@@ -401,40 +558,14 @@ describe("pipr runs", () => {
     });
 
     const listed = JSON.parse(output);
-    expect(listed.runs).toEqual([
-      expect.objectContaining({ state: "available-in-ci", nativeUrl: pipelineUrl }),
-    ]);
-    expect(listed.errors).toEqual([
-      expect.objectContaining({
-        source: "bitbucket",
-        message: expect.stringContaining("Bitbucket Downloads lookup failed"),
-      }),
-    ]);
-
-    await expect(
-      runMain({
-        argv: [
-          "bun",
-          "pipr",
-          "runs",
-          "show",
-          "--pr",
-          "42",
-          "--host",
-          "bitbucket",
-          "--repository",
-          "workspace/pipr",
-          "--store",
-          store,
-        ],
-        env: { PIPR_UPDATE_NOTICE: "0", PIPR_BITBUCKET_TOKEN: "test-token" },
-      }),
-    ).rejects.toThrow(pipelineUrl);
+    expect(listed.runs).toEqual([expect.objectContaining({ executionId, source: "filesystem" })]);
+    expect(listed.errors).toEqual([]);
+    expect(requested).toBe(false);
   });
 });
 
 describe("run PR selector", () => {
-  it("parses provider PR URLs outside a checkout", async () => {
+  it("parses code-host PR URLs outside a checkout", async () => {
     expect(
       await resolveRunSelector({
         pr: "https://github.com/somus/pipr/pull/42",
@@ -479,6 +610,8 @@ async function writeBundle(
   options: {
     kind?: "review" | "command" | "verifier" | "startup";
     startedAt?: string;
+    host?: "github" | "gitlab" | "azure-devops" | "bitbucket";
+    repository?: string;
   } = {},
 ): Promise<void> {
   const directory = path.join(store, executionId);
@@ -616,8 +749,8 @@ async function writeBundle(
       endedAt,
       durationMs: 1000,
       repository: {
-        host: "github",
-        repository: "somus/pipr",
+        host: options.host ?? "github",
+        repository: options.repository ?? "somus/pipr",
         changeNumber: 42,
         baseSha: "base",
         headSha: "head",
@@ -671,4 +804,61 @@ async function temporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-runs-"));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function emptyGitHubFetch(): typeof fetch {
+  return Object.assign(
+    async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.pathname.endsWith("/actions/artifacts")) {
+        return Response.json({ artifacts: [] });
+      }
+      if (url.pathname.endsWith("/actions/runs")) {
+        return Response.json({ workflow_runs: [] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+}
+
+async function writePackageTarGz(
+  packageDirectory: string,
+  destination: string,
+  archiveRoot: string,
+): Promise<void> {
+  const blocks: Uint8Array[] = [];
+  for (const name of (await readdir(packageDirectory)).sort()) {
+    const contents = await readFile(path.join(packageDirectory, name));
+    blocks.push(testTarHeader(`${archiveRoot}/${name}`, contents.byteLength), contents);
+    const padding = (512 - (contents.byteLength % 512)) % 512;
+    if (padding > 0) blocks.push(new Uint8Array(padding));
+  }
+  blocks.push(new Uint8Array(1024));
+  await writeFile(destination, gzipSync(Buffer.concat(blocks)));
+}
+
+function testTarHeader(name: string, size: number): Uint8Array {
+  const header = new Uint8Array(512);
+  writeTestTarField(header, 0, 100, name);
+  writeTestTarField(header, 100, 8, "0000600\0");
+  writeTestTarField(header, 108, 8, "0000000\0");
+  writeTestTarField(header, 116, 8, "0000000\0");
+  writeTestTarField(header, 124, 12, `${size.toString(8).padStart(11, "0")}\0`);
+  writeTestTarField(header, 136, 12, "00000000000\0");
+  writeTestTarField(header, 148, 8, "        ");
+  header[156] = "0".charCodeAt(0);
+  writeTestTarField(header, 257, 8, "ustar\x000");
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  writeTestTarField(header, 148, 8, `${checksum.toString(8).padStart(6, "0")}\0 `);
+  return header;
+}
+
+function writeTestTarField(
+  target: Uint8Array,
+  offset: number,
+  length: number,
+  value: string,
+): void {
+  target.set(new TextEncoder().encode(value).subarray(0, length), offset);
 }

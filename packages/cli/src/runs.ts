@@ -1,15 +1,17 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  AzureDevOpsRunArchiveSource,
-  BitbucketRunArchiveSource,
+  copyRunBundleInput,
+  copyValidatedRunBundle,
+  type DownloadedBundle,
   diagnoseRunBundle,
   FileSystemRunArchiveSource,
   GitHubRunArchiveSource,
-  GitLabRunArchiveSource,
-  PartialRunArchiveListError,
+  generateRunBundleIdentity,
+  openRunBundlePackage,
   type RunArchiveSource,
   type RunQuery,
   type RunRecord,
@@ -35,6 +37,7 @@ export type RunsListOptions = {
 export type RunsShowOptions = Omit<RunsListOptions, "pr"> & {
   pr?: string;
   timeline?: boolean;
+  identity?: string[];
 };
 
 export type RunsDownloadOptions = {
@@ -43,6 +46,17 @@ export type RunsDownloadOptions = {
   output?: string;
   archive?: boolean;
   store?: string;
+  identity?: string[];
+};
+
+export type RunsInspectOptions = {
+  timeline?: boolean;
+  identity?: string[];
+  json?: boolean;
+};
+
+export type RunsKeygenOptions = {
+  output?: string;
 };
 
 export async function runRunsList(
@@ -86,7 +100,7 @@ export async function runRunsShow(
   const selected = await selectRunForShow(executionId, options, selector, sources);
   const resolvedExecutionId = validExecutionId(executionId ?? selected.executionId);
   requireAvailableRun(selected, resolvedExecutionId);
-  await renderSelectedRun(selected, resolvedExecutionId, options);
+  await renderSelectedRun(selected, resolvedExecutionId, options, context);
 }
 
 function requireShowSelector(executionId: string | undefined, pr: string | undefined): void {
@@ -118,10 +132,6 @@ async function selectRunForShow(
   });
   const selected = collected.records.find(isCompletedAvailableRun);
   if (selected) return selected;
-  const nativeCiArtifact = collected.records.find(
-    (record) => record.state === "available-in-ci" && record.outcome !== "in-progress",
-  );
-  if (nativeCiArtifact) return nativeCiArtifact;
   throw new Error(
     withLookupErrors("No completed Pipr run matched the PR selector", collected.errors),
   );
@@ -132,7 +142,7 @@ async function selectRunByExecutionId(
   sources: SourceEntry[],
 ): Promise<CollectedRecord> {
   const validId = validExecutionId(executionId);
-  const collected = await collectRecords(sources, {
+  const collected = await collectExactRecord(sources, {
     executionId: validId,
     kind: "all",
     limit: 1000,
@@ -141,7 +151,7 @@ async function selectRunByExecutionId(
   if (selected) return selected;
   throw new Error(
     withLookupErrors(
-      `Pipr run ${validId} was not found in local or provider storage`,
+      `Pipr run ${validId} was not found in local or GitHub storage`,
       collected.errors,
     ),
   );
@@ -165,9 +175,6 @@ function requireAvailableRun(selected: CollectedRecord, executionId: string): vo
 }
 
 function unavailableRunMessage(selected: RunRecord, executionId: string): string {
-  if (selected.state === "available-in-ci" && selected.nativeUrl) {
-    return `Pipr run ${executionId} is available in native CI artifacts at ${selected.nativeUrl}; automated download is unavailable`;
-  }
   return `Pipr run ${executionId} is ${selected.state} and cannot be downloaded`;
 }
 
@@ -175,6 +182,7 @@ async function renderSelectedRun(
   selected: CollectedRecord,
   executionId: string,
   options: RunsShowOptions,
+  context: { env: NodeJS.ProcessEnv; cwd: string },
 ): Promise<void> {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-runs-show-"));
   try {
@@ -182,24 +190,61 @@ async function renderSelectedRun(
       selected.ref,
       path.join(temporaryRoot, executionId),
     );
-    const { loadValidatedRunBundle } = await import("@usepipr/runtime");
-    const bundle = await loadValidatedRunBundle(downloaded.directory);
-    const diagnosis = diagnoseRunBundle(bundle);
-    if (options.json) return printRunJson(bundle, diagnosis);
-    printDiagnosis(bundle.manifest, diagnosis, options.timeline ? bundle.spans : undefined);
+    await renderDownloadedRun(downloaded, options, context, temporaryRoot);
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+export async function runRunsInspect(
+  inputPath: string,
+  options: RunsInspectOptions,
+  context: { env: NodeJS.ProcessEnv; cwd: string },
+): Promise<void> {
+  const source = path.resolve(context.cwd, inputPath);
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-runs-inspect-"));
+  try {
+    const destination = path.join(temporaryRoot, "downloaded");
+    const downloaded = await copyRunBundleInput(source, destination);
+    await renderDownloadedRun(downloaded, options, context, temporaryRoot);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+async function renderDownloadedRun(
+  downloaded: DownloadedBundle,
+  options: RunsInspectOptions,
+  context: { env: NodeJS.ProcessEnv; cwd: string },
+  temporaryRoot: string,
+): Promise<void> {
+  const view = await openDownloadedRunForShow(downloaded, options, {
+    ...context,
+    temporaryRoot,
+  });
+  const bundle = view.bundle;
+  const diagnosis = diagnoseRunBundle(bundle);
+  if (options.json) return printRunJson(bundle, diagnosis, view.protection, view.diagnostic);
+  printDiagnosis(bundle.manifest, diagnosis, options.timeline ? bundle.spans : undefined);
+  if (view.diagnostic === "locked") {
+    console.log("Diagnostics: locked; pass --identity <path> to decrypt diagnostic artifacts");
+  } else if (view.diagnostic !== "available") {
+    console.log(`Diagnostics: ${view.diagnostic}`);
   }
 }
 
 function printRunJson(
   bundle: Awaited<ReturnType<typeof import("@usepipr/runtime").loadValidatedRunBundle>>,
   diagnosis: ReturnType<typeof diagnoseRunBundle>,
+  protection: "plaintext" | "metadata" | "age",
+  diagnostic: "available" | "locked" | "not-captured" | "encryption-failed" | "size-limit",
 ): void {
   console.log(
     JSON.stringify(
       {
         formatVersion: 1,
+        protection,
+        diagnostic,
         manifest: bundle.manifest,
         spans: bundle.spans,
         diagnosis,
@@ -223,7 +268,7 @@ export async function runRunsDownload(
   const selector = await resolveRepositorySelector({ ...options, cwd: context.cwd }).catch(
     () => undefined,
   );
-  const collected = await collectRecords(await runSources(options.store, context, selector), {
+  const collected = await collectExactRecord(await runSources(options.store, context, selector), {
     executionId,
     kind: "all",
     limit: 1000,
@@ -232,7 +277,7 @@ export async function runRunsDownload(
   if (!selected) {
     throw new Error(
       withLookupErrors(
-        `Pipr run ${executionId} was not found in local or provider storage`,
+        `Pipr run ${executionId} was not found in local or GitHub storage`,
         collected.errors,
       ),
     );
@@ -240,12 +285,161 @@ export async function runRunsDownload(
   if (selected.state !== "available") {
     throw new Error(unavailableRunMessage(selected, executionId));
   }
-  const downloaded = await selected.archiveSource.download(
-    { ...selected.ref, preserveArchive: options.archive },
-    destination,
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-runs-download-"));
+  try {
+    const downloaded = await selected.archiveSource.download(
+      { ...selected.ref, preserveArchive: options.archive },
+      path.join(temporaryRoot, executionId),
+    );
+    if (downloaded.envelope?.protection === "age") {
+      const identities = await resolveIdentityContents(options.identity, context);
+      if (identities.values.length === 0) {
+        throw new Error(
+          `Pipr run ${executionId} is encrypted; pass --identity <path> or set PIPR_RUN_AGE_IDENTITY`,
+        );
+      }
+      if (!downloaded.packageDirectory) {
+        throw new Error("Encrypted Run Bundle package is missing its ciphertext directory");
+      }
+      await openRunBundlePackage({
+        packageDirectory: downloaded.packageDirectory,
+        destination,
+        identities: identities.values,
+      });
+    } else {
+      await copyValidatedRunBundle(downloaded.directory, destination);
+    }
+    console.log(destination);
+    if (downloaded.archivePath) {
+      const archivePath = `${destination}${path.extname(downloaded.archivePath) || ".archive"}`;
+      await copyFile(downloaded.archivePath, archivePath, fsConstants.COPYFILE_EXCL);
+      await chmod(archivePath, 0o600);
+      console.log(archivePath);
+    }
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+export async function runRunsKeygen(
+  options: RunsKeygenOptions,
+  context: { env: NodeJS.ProcessEnv; cwd: string },
+): Promise<void> {
+  const output = path.resolve(
+    context.cwd,
+    options.output ??
+      path.join(await defaultPiprStateRoot(context.env), "keys", "run-observability.agekey"),
   );
-  console.log(downloaded.directory);
-  if (downloaded.archivePath) console.log(downloaded.archivePath);
+  await ensurePrivateParent(path.dirname(output));
+  const key = await generateRunBundleIdentity();
+  await writeFile(output, `${key.identity}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  await chmod(output, 0o600);
+  console.log(`Identity: ${output}`);
+  console.log(`Recipient: ${key.recipient}`);
+}
+
+async function openDownloadedRunForShow(
+  downloaded: DownloadedBundle,
+  options: RunsShowOptions,
+  context: { env: NodeJS.ProcessEnv; cwd: string; temporaryRoot: string },
+): Promise<{
+  bundle: Awaited<ReturnType<typeof import("@usepipr/runtime").loadValidatedRunBundle>>;
+  protection: "plaintext" | "metadata" | "age";
+  diagnostic: "available" | "locked" | "not-captured" | "encryption-failed" | "size-limit";
+}> {
+  const { loadValidatedRunBundle } = await import("@usepipr/runtime");
+  if (!downloaded.envelope) {
+    return {
+      bundle: await loadValidatedRunBundle(downloaded.directory),
+      protection: "plaintext",
+      diagnostic: "available",
+    };
+  }
+  if (downloaded.envelope.protection === "age" && downloaded.packageDirectory) {
+    const identities = await resolveIdentityContents(options.identity, context);
+    if (identities.values.length > 0) {
+      try {
+        const opened = await openRunBundlePackage({
+          packageDirectory: downloaded.packageDirectory,
+          destination: path.join(context.temporaryRoot, "diagnostic"),
+          identities: identities.values,
+        });
+        return {
+          bundle: opened.bundle,
+          protection: "age",
+          diagnostic: "available",
+        };
+      } catch (error) {
+        if (identities.explicit) throw error;
+      }
+    }
+    return {
+      bundle: await loadValidatedRunBundle(downloaded.directory),
+      protection: "age",
+      diagnostic: "locked",
+    };
+  }
+  return {
+    bundle: await loadValidatedRunBundle(downloaded.directory),
+    protection: "metadata",
+    diagnostic: downloaded.envelope.diagnosticState,
+  };
+}
+
+async function resolveIdentityContents(
+  explicitPaths: string[] | undefined,
+  context: { env: NodeJS.ProcessEnv; cwd: string },
+): Promise<{ values: string[]; explicit: boolean }> {
+  const configured = explicitPaths?.length
+    ? explicitPaths
+    : context.env.PIPR_RUN_AGE_IDENTITY
+      ? [context.env.PIPR_RUN_AGE_IDENTITY]
+      : [];
+  if (configured.length > 0) {
+    return {
+      values: await Promise.all(
+        configured.map((identityPath) => readIdentity(identityPath, context.cwd)),
+      ),
+      explicit: true,
+    };
+  }
+  const defaultPath = path.join(
+    await defaultPiprStateRoot(context.env),
+    "keys",
+    "run-observability.agekey",
+  );
+  try {
+    return { values: [await readIdentity(defaultPath, context.cwd)], explicit: false };
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return { values: [], explicit: false };
+    }
+    throw error;
+  }
+}
+
+async function readIdentity(identityPath: string, cwd: string): Promise<string> {
+  const resolved = path.resolve(cwd, identityPath);
+  const stats = await lstat(resolved);
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    throw new Error(`Run Bundle identity must be a regular file: ${resolved}`);
+  }
+  const identity = (await readFile(resolved, "utf8")).trim();
+  if (!identity) throw new Error(`Run Bundle identity is empty: ${resolved}`);
+  return identity;
+}
+
+async function ensurePrivateParent(directory: string): Promise<void> {
+  const created = await mkdir(directory, { recursive: true, mode: 0o700 });
+  await requireKeyDirectory(directory);
+  if (created !== undefined) await chmod(directory, 0o700);
+}
+
+async function requireKeyDirectory(directory: string): Promise<void> {
+  const stats = await lstat(directory);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error(`Run Bundle key directory must be a real directory: ${directory}`);
+  }
 }
 
 export async function resolveRunSelector(options: {
@@ -278,6 +472,11 @@ export async function defaultLocalTraceStore(cwd: string, env: NodeJS.ProcessEnv
     .update(identity)
     .digest("hex")
     .slice(0, 12)}`;
+  const stateRoot = await defaultPiprStateRoot(env);
+  return path.join(stateRoot, "runs", partition);
+}
+
+async function defaultPiprStateRoot(env: NodeJS.ProcessEnv): Promise<string> {
   const home = env.HOME ?? resolvedHomeDirectory();
   const stateRoot = env.XDG_STATE_HOME
     ? path.join(env.XDG_STATE_HOME, "pipr")
@@ -286,7 +485,7 @@ export async function defaultLocalTraceStore(cwd: string, env: NodeJS.ProcessEnv
       : home
         ? path.join(home, ".local", "state", "pipr")
         : path.join(os.tmpdir(), "pipr-state");
-  return path.join(stateRoot, "runs", partition);
+  return stateRoot;
 }
 
 function resolvedHomeDirectory(): string | undefined {
@@ -346,82 +545,19 @@ async function runSources(
     name: "filesystem",
     archiveSource: localSource(localStore, context),
   }));
-  if (!selector) return sources;
-  const remote = providerSource(selector, context.env);
-  sources.push({ name: selector.host, archiveSource: remote });
-  return sources;
-}
-
-function providerSource(
-  selector: Omit<RunSelector, "changeNumber">,
-  env: NodeJS.ProcessEnv,
-): RunArchiveSource {
-  switch (selector.host) {
-    case "github":
-      return githubSource(selector.repository, env);
-    case "gitlab":
-      return gitlabSource(selector.repository, env);
-    case "azure-devops":
-      return azureSource(selector.repository, env);
-    case "bitbucket":
-      return bitbucketSource(selector.repository, env);
+  if (selector?.host === "github") {
+    sources.push({ name: "github", archiveSource: githubSource(selector.repository, context.env) });
   }
+  return sources;
 }
 
 function githubSource(repository: string, env: NodeJS.ProcessEnv): RunArchiveSource {
   const token = env.PIPR_GITHUB_TOKEN ?? env.GITHUB_TOKEN;
-  if (!token) return missingCredentialSource("GitHub", "PIPR_GITHUB_TOKEN or GITHUB_TOKEN");
   return new GitHubRunArchiveSource({
     repository,
-    token,
+    ...(token ? { token } : {}),
     ...(env.GITHUB_API_URL ? { apiBaseUrl: env.GITHUB_API_URL } : {}),
   });
-}
-
-function gitlabSource(repository: string, env: NodeJS.ProcessEnv): RunArchiveSource {
-  const token = env.PIPR_GITLAB_TOKEN ?? env.GITLAB_TOKEN;
-  if (!token) return missingCredentialSource("GitLab", "PIPR_GITLAB_TOKEN or GITLAB_TOKEN");
-  return new GitLabRunArchiveSource({
-    repository,
-    token,
-    ...(env.CI_API_V4_URL ? { apiBaseUrl: env.CI_API_V4_URL } : {}),
-  });
-}
-
-function azureSource(repository: string, env: NodeJS.ProcessEnv): RunArchiveSource {
-  const pat = env.PIPR_AZURE_DEVOPS_TOKEN ?? env.AZURE_DEVOPS_TOKEN;
-  const token = pat ?? env.SYSTEM_ACCESSTOKEN;
-  if (!token) {
-    return missingCredentialSource(
-      "Azure DevOps",
-      "PIPR_AZURE_DEVOPS_TOKEN, AZURE_DEVOPS_TOKEN, or SYSTEM_ACCESSTOKEN",
-    );
-  }
-  return new AzureDevOpsRunArchiveSource({
-    repository,
-    token,
-    authScheme: pat ? "basic" : "bearer",
-  });
-}
-
-function bitbucketSource(repository: string, env: NodeJS.ProcessEnv): RunArchiveSource {
-  const token = env.PIPR_BITBUCKET_TOKEN ?? env.BITBUCKET_API_TOKEN;
-  if (!token) {
-    return missingCredentialSource("Bitbucket", "PIPR_BITBUCKET_TOKEN or BITBUCKET_API_TOKEN");
-  }
-  return new BitbucketRunArchiveSource({ repository, token, email: env.BITBUCKET_EMAIL });
-}
-
-function missingCredentialSource(provider: string, variables: string): RunArchiveSource {
-  const message = `${provider} run retrieval requires ${variables}`;
-  return {
-    async list() {
-      throw new Error(message);
-    },
-    async download() {
-      throw new Error(message);
-    },
-  };
 }
 
 async function collectRecords(
@@ -451,15 +587,11 @@ async function collectRecords(
     if (result.status === "rejected") {
       errors.push({
         source: source.name,
-        message: result.reason instanceof Error ? result.reason.message : "provider lookup failed",
+        message:
+          result.reason instanceof Error ? result.reason.message : "run source lookup failed",
       });
     }
-    const records =
-      result.status === "fulfilled"
-        ? result.value.records
-        : result.reason instanceof PartialRunArchiveListError
-          ? result.reason.records
-          : [];
+    const records = result.status === "fulfilled" ? result.value.records : [];
     collectSourceRecords(source, records);
   }
   return {
@@ -470,15 +602,18 @@ async function collectRecords(
   };
 }
 
+async function collectExactRecord(
+  sources: SourceEntry[],
+  query: RunQuery & { executionId: string },
+): ReturnType<typeof collectRecords> {
+  const localSources = sources.filter((source) => source.name === "filesystem");
+  const local = await collectRecords(localSources, query);
+  if (local.records.some((record) => isCompletedAvailableRun(record))) return local;
+  return await collectRecords(sources, query);
+}
+
 function recordPreference(record: CollectedRecord): number {
-  const availability =
-    record.state === "available"
-      ? 10
-      : record.state === "available-in-ci"
-        ? 7
-        : record.state === "in-progress"
-          ? 5
-          : 0;
+  const availability = record.state === "available" ? 10 : record.state === "in-progress" ? 5 : 0;
   return availability + (record.source === "filesystem" ? 1 : 0);
 }
 
@@ -640,12 +775,10 @@ function parseKind(value: string | undefined, fallback: RunQuery["kind"]): RunQu
 function parseStatus(value: string): NonNullable<RunQuery["status"]> {
   const statuses = new Set([
     "available",
-    "available-in-ci",
     "in-progress",
     "expired",
     "capture-failed",
     "upload-failed",
-    "not-enabled",
     "indeterminate-missing",
     "succeeded",
     "failed",
@@ -668,6 +801,7 @@ const runListColumnWidths = {
   kind: 9,
   outcome: 12,
   state: 21,
+  protection: 10,
   startedAt: 25,
 } as const;
 
@@ -682,6 +816,7 @@ export function printRunList(runs: RunRecord[]): void {
       formatRunListColumn("KIND", runListColumnWidths.kind),
       formatRunListColumn("OUTCOME", runListColumnWidths.outcome),
       formatRunListColumn("STATE", runListColumnWidths.state),
+      formatRunListColumn("PROTECTION", runListColumnWidths.protection),
       formatRunListColumn("STARTED", runListColumnWidths.startedAt),
       "LOCATION",
     ].join("  "),
@@ -693,6 +828,7 @@ export function printRunList(runs: RunRecord[]): void {
         formatRunListColumn(run.kind ?? "unknown", runListColumnWidths.kind),
         formatRunListColumn(run.outcome ?? "unknown", runListColumnWidths.outcome),
         formatRunListColumn(run.state, runListColumnWidths.state),
+        formatRunListColumn(run.protection ?? "unknown", runListColumnWidths.protection),
         formatRunListColumn(run.startedAt ?? "unknown", runListColumnWidths.startedAt),
         run.nativeUrl ?? run.error ?? "-",
       ].join("  "),

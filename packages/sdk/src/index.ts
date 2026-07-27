@@ -29,6 +29,7 @@ export {
 export type {
   RunBundle,
   RunBundleArtifact,
+  RunBundleEnvelope,
   RunBundleManifest,
   RunLogRecord,
   RunMetricsSnapshot,
@@ -36,8 +37,10 @@ export type {
 } from "./run-bundle.js";
 export {
   parseRunBundle,
+  parseRunBundleEnvelope,
   parseRunBundleManifest,
   runBundleArtifactSchema,
+  runBundleEnvelopeSchema,
   runBundleManifestSchema,
   runBundleSchema,
   runLogRecordSchema,

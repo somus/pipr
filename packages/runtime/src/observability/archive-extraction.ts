@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import { Gunzip, Unzip, UnzipInflate } from "fflate";
-import { copyValidatedRunBundle, type DownloadedBundle } from "./archive.js";
+import { copyValidatedRunBundle, type DownloadedBundle } from "./bundle-validation.js";
 import { maximumRunBundleBytes } from "./types.js";
 
 export async function extractRunArchive(options: {
@@ -15,17 +15,29 @@ export async function extractRunArchive(options: {
   }
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-run-extract-"));
   const extractionRoot = path.join(temporaryRoot, "contents");
-  await mkdir(extractionRoot, { mode: 0o700 });
   try {
-    if (options.format === "zip") {
-      await extractZip(options.archive, extractionRoot);
-    } else {
-      await extractTarGz(options.archive, extractionRoot);
-    }
+    await extractRunArchiveFiles({ ...options, destination: extractionRoot });
     const bundleRoot = await locateBundleRoot(extractionRoot);
     return await copyValidatedRunBundle(bundleRoot, options.destination);
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+export async function extractRunArchiveFiles(options: {
+  archive: Uint8Array;
+  format: "zip" | "tar.gz";
+  destination: string;
+}): Promise<void> {
+  if (options.archive.byteLength > maximumRunBundleBytes) {
+    throw new Error("Run archive exceeds the 64 MiB bundle limit");
+  }
+  await mkdir(options.destination, { mode: 0o700 });
+  await chmod(options.destination, 0o700);
+  if (options.format === "zip") {
+    await extractZip(options.archive, options.destination);
+  } else {
+    await extractTarGz(options.archive, options.destination);
   }
 }
 

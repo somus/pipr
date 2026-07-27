@@ -6,6 +6,9 @@ decisions.
 
 ## Current assessments
 
+- [Public repository run observability](public-repository-run-observability.md):
+  access-boundary research and a secure design for diagnostic bundles from
+  public CI runs.
 - [Pi workspace-copy performance debt](performance-debt-assessment.md): evidence and
   mitigation status for repeated filtered-workspace copies across Pi attempts.
 

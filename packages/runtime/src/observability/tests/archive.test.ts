@@ -259,7 +259,7 @@ describe("deterministic run diagnosis", () => {
   });
 });
 
-describe("provider archive extraction", () => {
+describe("run archive extraction", () => {
   it("rejects traversal paths before writing archive entries", async () => {
     const destinationRoot = await temporaryDirectory();
     const destination = path.join(destinationRoot, "bundle");

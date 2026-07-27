@@ -127,6 +127,7 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
+          PIPR_RUN_AGE_RECIPIENTS: ${{ vars.PIPR_RUN_AGE_RECIPIENTS }}
       - name: Upload Pipr run bundle
         if: always() && steps.pipr.outputs.run-bundle-path != ''
         uses: actions/upload-artifact@v6

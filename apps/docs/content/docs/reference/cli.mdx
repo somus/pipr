@@ -141,11 +141,11 @@ The default table shows a bounded delivery ID, host, queue status, attempts, res
 
 ## `pipr runs list`
 
-List local and provider records for one pull or merge request:
+List local records for one pull or merge request and merge GitHub Actions records when the selector is a GitHub pull request:
 
 ```bash
 pipr runs list --pr 42
-pipr runs list --pr https://gitlab.com/group/project/-/merge_requests/42 --json
+pipr runs list --pr https://github.com/owner/repository/pull/42 --json
 ```
 
 | Option | Default | Purpose |
@@ -157,9 +157,9 @@ pipr runs list --pr https://gitlab.com/group/project/-/merge_requests/42 --json
 | `--status <status>` | all | Filter by run outcome or artifact state. |
 | `--limit <count>` | `20` | Return 1 to 1,000 records. |
 | `--json` | false | Print a versioned JSON envelope, including partial-source errors. |
-| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with provider records. |
+| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with GitHub Actions records for GitHub selectors. |
 
-A numeric selector derives the host and repository from `remote.origin.url`. A provider URL works outside a checkout. Explicit `--host` and `--repository` values override discovery.
+A numeric selector derives the host and repository from `remote.origin.url`. A provider URL works outside a checkout. Explicit `--host` and `--repository` values override discovery. GitLab, Azure DevOps, and Bitbucket selectors filter local stores only; Pipr does not call their remote APIs.
 
 ## `pipr runs show`
 
@@ -178,10 +178,31 @@ pipr runs show --pr 42 --timeline
 | `--repository <repository>` | Git remote or URL | Override the provider repository path. |
 | `--kind <kind>` | `review` with `--pr` | Select `command`, `verifier`, `startup`, or `all`. |
 | `--timeline` | false | Print the complete span timeline. |
+| `--identity <path>` | `PIPR_RUN_AGE_IDENTITY`, then the platform default | Decrypt age-protected diagnostics. Repeat for multiple identities. |
 | `--json` | false | Print the manifest, spans, diagnosis, and artifact descriptors without prompt or output bodies. |
-| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with provider records. |
+| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with GitHub Actions records for GitHub selectors. |
 
-The diagnosis is deterministic and does not invoke an LLM.
+The diagnosis is deterministic and does not invoke an LLM. Without a matching identity, an age-protected run returns the public metadata diagnosis with `diagnostic: "locked"`.
+
+## `pipr runs inspect`
+
+Validate and diagnose a Run Bundle that was downloaded manually:
+
+```bash
+pipr runs inspect ./pipr-run-artifact.tar.gz
+pipr runs inspect ./pipr-run-artifact --identity ./run-observability.agekey --timeline
+```
+
+The input can be a protected package directory or a validated plaintext bundle directory. It can also be a ZIP or tar.gz archive containing exactly one of those directories. This supports custom artifact storage on hosts without first-class remote retrieval.
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `<path>` | required | Select the downloaded archive or extracted directory. |
+| `--timeline` | false | Print the complete span timeline. |
+| `--identity <path>` | `PIPR_RUN_AGE_IDENTITY`, then the platform default | Decrypt age-protected diagnostics. Repeat for multiple identities. |
+| `--json` | false | Print the manifest, spans, diagnosis, and artifact descriptors without prompt or output bodies. |
+
+Without a matching identity, `inspect` returns the content-free metadata diagnosis and reports the diagnostic archive as locked. Pipr validates schemas, hashes, paths, symlinks, file sets, and expansion limits before rendering either plane.
 
 ## `pipr runs download`
 
@@ -197,10 +218,26 @@ pipr runs download 0123456789abcdef0123456789abcdef --output ./pipr-run
 | `--host <host>` | Git remote | Override the code host when downloading outside a checkout. |
 | `--repository <repository>` | Git remote | Override the provider repository path. |
 | `--output <path>` | `pipr-run-<execution-id>` | Write the validated unpacked directory. The destination must not exist. |
-| `--archive` | false | Preserve the original provider archive beside the directory. |
-| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with provider records. |
+| `--archive` | false | Preserve the original GitHub Actions archive beside the directory. |
+| `--identity <path>` | `PIPR_RUN_AGE_IDENTITY`, then the platform default | Required for an age-protected diagnostic. Repeat for multiple identities. |
+| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store merged with GitHub Actions records for GitHub selectors. |
 
-See [Debug captured runs](/docs/guide/run-observability) for provider credentials, capture settings, artifact states, and bundle security.
+See [Debug captured runs](/docs/guide/run-observability) for GitHub credentials, capture settings, artifact states, and bundle security.
+
+## `pipr runs keygen`
+
+Generate a standard X25519 age identity for encrypted diagnostic bundles:
+
+```bash
+pipr runs keygen
+pipr runs keygen --output ./pipr-observability.agekey
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--output <path>` | Pipr platform state key directory | Write the identity atomically with mode `0600`. Existing and symlinked targets are rejected. |
+
+The command prints only the identity path and public recipient. Configure the recipient in GitHub Actions through `PIPR_RUN_AGE_RECIPIENTS`; never place the secret identity in repository configuration.
 
 ## `pipr check`
 

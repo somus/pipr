@@ -1,8 +1,12 @@
+import { rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
   type HostRunCommandOptions,
+  parseRunBundleRecipients,
+  prepareRunBundlePackage,
   type RuntimeLogRecord,
   type RuntimeLogSink,
   runDryRunCommand,
@@ -13,7 +17,6 @@ import {
   runValidateCommand,
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
-  uploadBitbucketRunBundle,
 } from "@usepipr/runtime";
 import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
 import { stripPiprMainCommentMarkers, toPiprResult } from "@usepipr/runtime/internal/pipr-result";
@@ -22,9 +25,13 @@ import cliPackage from "../package.json" with { type: "json" };
 import {
   defaultLocalTraceStore,
   type RunsDownloadOptions,
+  type RunsInspectOptions,
+  type RunsKeygenOptions,
   type RunsListOptions,
   type RunsShowOptions,
   runRunsDownload,
+  runRunsInspect,
+  runRunsKeygen,
   runRunsList,
   runRunsShow,
 } from "./runs.js";
@@ -199,6 +206,12 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--repository <repository>", "Provider repository path")
     .option("--kind <kind>", "Run kind (review, command, verifier, startup, or all)")
     .option("--timeline", "Print the complete span timeline")
+    .option(
+      "--identity <path>",
+      "Age identity file; repeat for multiple identities",
+      collectOption,
+      [],
+    )
     .option("--json", "Print versioned JSON without prompt or output bodies")
     .option("--store <path>", "Local run store")
     .action(async (executionId: string | undefined, runOptions: RunsShowOptions) => {
@@ -211,10 +224,38 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--host <host>", "Code host")
     .option("--repository <repository>", "Provider repository path")
     .option("--output <path>", "Destination directory")
-    .option("--archive", "Preserve the provider archive beside the unpacked bundle")
+    .option("--archive", "Preserve the GitHub Actions archive beside the unpacked bundle")
+    .option(
+      "--identity <path>",
+      "Age identity file; repeat for multiple identities",
+      collectOption,
+      [],
+    )
     .option("--store <path>", "Local run store")
     .action(async (executionId: string, runOptions: RunsDownloadOptions) => {
       await runRunsDownload(executionId, runOptions, { env, cwd: process.cwd() });
+    });
+  runs
+    .command("inspect")
+    .description("Validate and diagnose a downloaded run bundle")
+    .argument("<path>", "Downloaded Run Bundle package, archive, or directory")
+    .option("--timeline", "Print the complete span timeline")
+    .option(
+      "--identity <path>",
+      "Age identity file; repeat for multiple identities",
+      collectOption,
+      [],
+    )
+    .option("--json", "Print versioned JSON without prompt or output bodies")
+    .action(async (inputPath: string, runOptions: RunsInspectOptions) => {
+      await runRunsInspect(inputPath, runOptions, { env, cwd: process.cwd() });
+    });
+  runs
+    .command("keygen")
+    .description("Generate an age identity for encrypted Run Bundles")
+    .option("--output <path>", "Identity file path")
+    .action(async (runOptions: RunsKeygenOptions) => {
+      await runRunsKeygen(runOptions, { env, cwd: process.cwd() });
     });
 
   program.command("version").description("Print the CLI version").action(runVersion);
@@ -231,6 +272,10 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .action(runSkillPath);
 
   return program;
+}
+
+function collectOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
 
 const agentHelpText = `
@@ -258,7 +303,7 @@ async function runHostRun(options: CliOptions): Promise<void> {
     dryRun: env.PIPR_DRY_RUN === "1",
     logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
     onRunBundleFinalized: async (bundle) => {
-      await publishRunBundleMetadata(bundle, { env, rootDir });
+      await prepareAndPublishRunBundle(bundle, { env, rootDir });
     },
   });
   if (isGitHubAction) {
@@ -278,22 +323,45 @@ async function runHostRun(options: CliOptions): Promise<void> {
   console.log(`pipr ${result.kind} completed for change #${result.event.change.number}`);
 }
 
-export async function publishRunBundleMetadata(
+async function prepareAndPublishRunBundle(
   bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0],
   options: { env: NodeJS.ProcessEnv; rootDir: string },
-  dependencies: { upload: typeof uploadBitbucketRunBundle } = {
-    upload: uploadBitbucketRunBundle,
+): Promise<void> {
+  const captureRoot = path.dirname(bundle.directory);
+  try {
+    const prepared = await prepareRunBundlePackage({
+      bundleDirectory: bundle.directory,
+      destinationRoot: options.env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"),
+      recipients: parseRunBundleRecipients(options.env.PIPR_RUN_AGE_RECIPIENTS),
+    });
+    await publishRunBundleMetadata(
+      { ...bundle, directory: prepared.directory, protection: prepared.envelope.protection },
+      options,
+    );
+  } finally {
+    if (
+      path.dirname(captureRoot) === path.resolve(os.tmpdir()) &&
+      path.basename(captureRoot).startsWith("pipr-run-capture-")
+    ) {
+      await rm(captureRoot, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+}
+
+export async function publishRunBundleMetadata(
+  bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0] & {
+    protection?: "metadata" | "age";
   },
+  options: { env: NodeJS.ProcessEnv; rootDir: string },
 ): Promise<void> {
   const relative = path.relative(options.rootDir, bundle.directory);
   const bundlePath = relative && !relative.startsWith("..") ? relative : bundle.directory;
   const changeNumber = bundle.repository?.changeNumber;
+  const protection = bundle.protection ?? "unknown";
   const artifactName = changeNumber
-    ? `pipr-run-v1-pr-${changeNumber}-${bundle.executionId}`
-    : `pipr-run-v1-${bundle.executionId}`;
+    ? `pipr-run-v1-${protection}-pr-${changeNumber}-${bundle.executionId}`
+    : `pipr-run-v1-${protection}-${bundle.executionId}`;
   publishGitHubRunMetadata(options.env, bundle.executionId, bundlePath, artifactName);
-  publishAzureRunMetadata(options.env, bundle.executionId, bundlePath, artifactName);
-  await publishBitbucketRunBundle(options.env, bundle, changeNumber, dependencies.upload);
 }
 
 function publishGitHubRunMetadata(
@@ -306,55 +374,6 @@ function publishGitHubRunMetadata(
   core.setOutput("execution-id", executionId);
   core.setOutput("run-bundle-path", bundlePath);
   core.setOutput("run-artifact-name", artifactName);
-}
-
-function publishAzureRunMetadata(
-  env: NodeJS.ProcessEnv,
-  executionId: string,
-  bundlePath: string,
-  artifactName: string,
-): void {
-  if (env.TF_BUILD !== "True" && env.TF_BUILD !== "true") return;
-  console.log(`##vso[task.setvariable variable=PIPR_EXECUTION_ID]${azureValue(executionId)}`);
-  console.log(`##vso[task.setvariable variable=PIPR_RUN_BUNDLE_PATH]${azureValue(bundlePath)}`);
-  console.log(`##vso[task.setvariable variable=PIPR_RUN_ARTIFACT_NAME]${azureValue(artifactName)}`);
-}
-
-async function publishBitbucketRunBundle(
-  env: NodeJS.ProcessEnv,
-  bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0],
-  changeNumber: number | undefined,
-  upload: typeof uploadBitbucketRunBundle,
-): Promise<void> {
-  if (!env.BITBUCKET_BUILD_NUMBER) return;
-  const repository = bundle.repository?.repository;
-  const result = await upload({
-    directory: bundle.directory,
-    repository:
-      repository?.includes("/") || !repository || !env.BITBUCKET_WORKSPACE
-        ? repository
-        : `${env.BITBUCKET_WORKSPACE}/${repository}`,
-    changeNumber,
-    executionId: bundle.executionId,
-    email: env.BITBUCKET_ARTIFACT_EMAIL,
-    token: env.BITBUCKET_ARTIFACT_API_TOKEN,
-    readEmail: env.BITBUCKET_EMAIL,
-    readToken: env.BITBUCKET_API_TOKEN,
-  });
-  if (result.status === "failed") {
-    console.error(`pipr warning Bitbucket run upload failed: ${result.error}`);
-  } else if (result.warning) {
-    console.error(`pipr warning Bitbucket expired run cleanup failed: ${result.warning}`);
-  }
-}
-
-function azureValue(value: string): string {
-  return value
-    .replaceAll("%", "%AZP25")
-    .replaceAll("\r", "%0D")
-    .replaceAll("\n", "%0A")
-    .replaceAll(";", "%3B")
-    .replaceAll("]", "%5D");
 }
 
 function hostRunRootDir(env: NodeJS.ProcessEnv): string {

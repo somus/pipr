@@ -1,3 +1,4 @@
+import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -11,11 +12,16 @@ import { CodeHostHttpError } from "../hosts/http.js";
 import { createLocalChangeRequestEvent } from "../hosts/local/adapter.js";
 import type { CodeHostAdapter, CodeHostEvent } from "../hosts/types.js";
 import {
+  parseRunBundleRecipients,
+  validateRunBundleRecipients,
+} from "../observability/protected-package.js";
+import {
   combineRuntimeLogSinks,
   type RunFailureCategory,
   type RunRecorder,
   startFileRunRecorder,
 } from "../observability/recorder.js";
+import { maximumRunBundleBytes } from "../observability/types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { PublicationError } from "../review/publication-result.js";
 import { runTaskRuntime } from "../review/task/task-runtime.js";
@@ -505,15 +511,7 @@ async function startHostedRecorder(
 ): Promise<RunRecorder | undefined> {
   if (options.dryRun) return undefined;
   try {
-    const env = options.env ?? process.env;
-    const mode = requestedCaptureMode(env);
-    if (!mode) return undefined;
-    return await startFileRunRecorder({
-      rootDirectory: env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"),
-      env,
-      mode,
-      externalUpload: isNativeCi(env) ? "pending" : "not-configured",
-    });
+    return await createHostedRecorder(options);
   } catch (error) {
     options.logSink?.log({
       level: "warning",
@@ -521,6 +519,70 @@ async function startHostedRecorder(
       fields: { error: error instanceof Error ? error.message : "unknown capture error" },
     });
     return undefined;
+  }
+}
+
+async function createHostedRecorder(
+  options: HostRunCommandDependencyOptions,
+): Promise<RunRecorder | undefined> {
+  const env = options.env ?? process.env;
+  const nativeCi = isNativeCi(env);
+  const githubActions = env.GITHUB_ACTIONS === "true";
+  const capture = await requestedHostedCaptureMode(env, nativeCi);
+  if (!capture.mode) return undefined;
+  publishCaptureProtectionWarning(options, capture.warning);
+  const rootDirectory = nativeCi
+    ? await mkdtemp(path.join(os.tmpdir(), "pipr-run-capture-"))
+    : (env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"));
+  return await startFileRunRecorder({
+    rootDirectory,
+    env,
+    mode: capture.mode,
+    externalUpload: githubActions ? "pending" : "not-configured",
+    ...(nativeCi && capture.mode === "diagnostic"
+      ? { maxBytes: maximumRunBundleBytes - 4 * 1024 * 1024 }
+      : {}),
+  });
+}
+
+function publishCaptureProtectionWarning(
+  options: HostRunCommandDependencyOptions,
+  warning: "recipients-missing" | "recipients-invalid" | undefined,
+): void {
+  if (!warning) return;
+  options.logSink?.log({
+    level: "warning",
+    event: "run capture protection unavailable",
+    fields: { status: warning },
+  });
+}
+
+async function requestedHostedCaptureMode(
+  env: NodeJS.ProcessEnv,
+  nativeCi: boolean,
+): Promise<{
+  mode: "metadata" | "diagnostic" | undefined;
+  warning?: "recipients-missing" | "recipients-invalid";
+}> {
+  const value = env.PIPR_RUN_CAPTURE;
+  if (value === "off") return { mode: undefined };
+  if (value === "metadata") return { mode: "metadata" };
+  if (value !== undefined && value !== "diagnostic") {
+    throw new Error("PIPR_RUN_CAPTURE must be off, metadata, or diagnostic");
+  }
+  if (!nativeCi) return { mode: "diagnostic" };
+  const recipients = parseRunBundleRecipients(env.PIPR_RUN_AGE_RECIPIENTS);
+  if (recipients.length === 0) {
+    return {
+      mode: "metadata",
+      ...(value === "diagnostic" ? { warning: "recipients-missing" as const } : {}),
+    };
+  }
+  try {
+    await validateRunBundleRecipients(recipients);
+    return { mode: "diagnostic" };
+  } catch {
+    return { mode: "metadata", warning: "recipients-invalid" };
   }
 }
 
