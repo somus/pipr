@@ -27,6 +27,7 @@ const pullRequestSchema = z.looseObject({
 });
 const inlineSchema = z.looseObject({
   path: z.string().optional(),
+  src_path: z.string().optional(),
   from: z.number().int().nullable().optional(),
   to: z.number().int().nullable().optional(),
   start_from: z.number().int().nullable().optional(),

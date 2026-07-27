@@ -46,6 +46,7 @@ const pathSchema = z.union([
 const anchorSchema = z
   .looseObject({
     path: pathSchema,
+    srcPath: pathSchema.optional(),
     line: z.number().int().positive(),
     fileType: z.enum(["FROM", "TO"]),
     multilineMarker: z
@@ -289,7 +290,12 @@ function normalizeCommentInline(anchor: DataCenterComment["anchor"]): BitbucketC
   if (anchor.fileType === "TO") {
     return { path, to: anchor.line, start_to: anchor.multilineMarker?.startLine };
   }
-  return { path, from: anchor.line, start_from: anchor.multilineMarker?.startLine };
+  return {
+    path,
+    src_path: anchor.srcPath ? dataCenterPath(anchor.srcPath) : undefined,
+    from: anchor.line,
+    start_from: anchor.multilineMarker?.startLine,
+  };
 }
 
 function flattenDataCenterComments(value: unknown): DataCenterComment[] {

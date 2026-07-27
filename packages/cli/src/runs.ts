@@ -676,13 +676,12 @@ function bitbucketUrlSelector(
   if (url.hostname === "bitbucket.org") {
     return selector("bitbucket", parts.slice(0, bitbucketPull).join("/"), parts[bitbucketPull + 1]);
   }
-  const projects = parts.lastIndexOf("projects", bitbucketPull);
-  const repositories = parts.lastIndexOf("repos", bitbucketPull);
+  const projects = bitbucketPull - 4;
+  const repositories = bitbucketPull - 2;
   if (
     explicitHost !== "bitbucket" ||
-    projects < 0 ||
-    repositories !== projects + 2 ||
-    repositories + 2 !== bitbucketPull
+    parts[projects] !== "projects" ||
+    parts[repositories] !== "repos"
   ) {
     return undefined;
   }

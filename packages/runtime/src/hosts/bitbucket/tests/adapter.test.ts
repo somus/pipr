@@ -233,6 +233,38 @@ describe("Bitbucket Cloud adapter", () => {
     });
   });
 
+  it("dedupes renamed Data Center LEFT comments when finding IDs change", async () => {
+    const client = new FakeBitbucketClient();
+    client.deployment = "data-center";
+    const adapter = createBitbucketHostAdapter({ client });
+    const plan = publicationPlan();
+    const item = plan.inlineItems[0];
+    if (!item) throw new Error("Expected inline fixture");
+    plan.inlineItems = [
+      {
+        ...item,
+        path: "src/new.ts",
+        previousPath: "src/old.ts",
+        side: "LEFT",
+      },
+    ];
+
+    await adapter.publication?.publish({ change, plan });
+    const renamed = plan.inlineItems[0];
+    if (!renamed) throw new Error("Expected renamed inline fixture");
+    renamed.findingId = "renamed-finding";
+    renamed.marker = "pipr:finding:renamed-finding:head";
+    renamed.body = `${renderInlineFindingMarker("renamed-finding", "head")}\nFix`;
+
+    await expect(adapter.publication?.publish({ change, plan })).resolves.toMatchObject({
+      inlineComments: { posted: 0, skipped: 1 },
+    });
+    expect(client.createdBodies.filter((body) => body.inline)).toHaveLength(1);
+    expect(client.createdBodies[0]).toMatchObject({
+      inline: { path: "src/new.ts", src_path: "src/old.ts", from: 4 },
+    });
+  });
+
   it("loads prior review state with one user and comment request", async () => {
     const client = new FakeBitbucketClient();
     const adapter = createBitbucketHostAdapter({ client });
@@ -390,7 +422,7 @@ function publicationPlan() {
 }
 
 class FakeBitbucketClient implements BitbucketClient {
-  deployment = "cloud" as const;
+  deployment: BitbucketClient["deployment"] = "cloud";
   workspace = "workspace";
   repository = "repository";
   comments: BitbucketComment[] = [];

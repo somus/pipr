@@ -282,6 +282,17 @@ describe("Bitbucket Data Center events", () => {
           repository: { slug: "PRJ/pipr" },
         },
       });
+      for (const [eventKey, action] of [
+        ["pr:opened", "opened"],
+        ["pr:modified", "updated"],
+      ] as const) {
+        await expect(
+          parseBitbucketEvent({
+            ...options,
+            env: { ...options.env, BITBUCKET_EVENT_KEY: eventKey },
+          }),
+        ).resolves.toMatchObject({ kind: "change-request", change: { action } });
+      }
 
       await Bun.write(
         eventPath,
@@ -306,6 +317,41 @@ describe("Bitbucket Data Center events", () => {
             url: "https://bitbucket.example.com/projects/PRJ/repos/pipr/browse",
           },
         },
+      });
+
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          ...dataCenterPayload,
+          comment: { id: 12, text: "@pipr review" },
+        }),
+      );
+      await expect(
+        parseBitbucketEvent({
+          ...options,
+          env: { ...options.env, BITBUCKET_EVENT_KEY: "pr:comment:added" },
+        }),
+      ).resolves.toMatchObject({
+        kind: "command-comment",
+        comment: { commentId: "12", isChangeRequest: true },
+      });
+
+      await Bun.write(
+        eventPath,
+        JSON.stringify({
+          ...dataCenterPayload,
+          comment: { id: 13, text: "reply" },
+          commentParentId: 12,
+        }),
+      );
+      await expect(
+        parseBitbucketEvent({
+          ...options,
+          env: { ...options.env, BITBUCKET_EVENT_KEY: "pr:comment:added" },
+        }),
+      ).resolves.toMatchObject({
+        kind: "review-comment-reply",
+        reply: { commentId: "13", parentCommentId: "12" },
       });
     } finally {
       await rm(directory, { recursive: true, force: true });

@@ -52,7 +52,12 @@ describe("Bitbucket Data Center client", () => {
         id: "11",
         content: { raw: "existing" },
         user: { uuid: "pipr-bot", nickname: "pipr-bot" },
-        inline: { path: "src/a.ts", to: 4, start_to: 2 },
+        inline: {
+          path: "src/a.ts",
+          src_path: "src/old.ts",
+          from: 4,
+          start_from: 2,
+        },
         resolution: {},
       },
       {
@@ -166,6 +171,38 @@ describe("Bitbucket Data Center client", () => {
     expect(urls[1]).toContain("permission.0=REPO_WRITE");
   });
 
+  it("paginates Data Center activities with nextPageStart", async () => {
+    const urls: string[] = [];
+    const client = createBitbucketClient(env, async (input) => {
+      const url = String(input);
+      urls.push(url);
+      const start = new URL(url).searchParams.get("start");
+      return Response.json({
+        values: [
+          {
+            action: "COMMENTED",
+            comment: {
+              id: start ? 22 : 21,
+              version: 0,
+              text: start ? "second" : "first",
+            },
+          },
+        ],
+        isLastPage: Boolean(start),
+        ...(start ? {} : { nextPageStart: 25 }),
+      });
+    });
+
+    await expect(client.listComments(7)).resolves.toMatchObject([
+      { id: "21", content: { raw: "first" } },
+      { id: "22", content: { raw: "second" } },
+    ]);
+    expect(urls).toEqual([
+      "https://bitbucket.example.com/rest/api/latest/projects/PRJ/repos/pipr/pull-requests/7/activities?limit=100",
+      "https://bitbucket.example.com/rest/api/latest/projects/PRJ/repos/pipr/pull-requests/7/activities?limit=100&start=25",
+    ]);
+  });
+
   it("rejects unsafe Data Center base URLs before sending credentials", () => {
     for (const baseUrl of [
       "http://bitbucket.example.com",
@@ -204,9 +241,10 @@ const dataCenterResponses = new Map<string, () => Response>([
               author: { name: "pipr-bot", slug: "pipr-bot" },
               anchor: {
                 path: "src/a.ts",
+                srcPath: "src/old.ts",
                 line: 4,
-                fileType: "TO",
-                multilineMarker: { startLine: 2, startLineType: "ADDED" },
+                fileType: "FROM",
+                multilineMarker: { startLine: 2, startLineType: "REMOVED" },
               },
               threadResolved: true,
               comments: [

@@ -227,7 +227,7 @@ function bitbucketInlineLocationFromComment(
   return nativeInlineLocation({
     commitId: marker.head,
     rightPath: inline.path,
-    leftPath: inline.path,
+    leftPath: inline.src_path ?? inline.path,
     rightStart: inline.start_to ?? undefined,
     rightEnd: inline.to ?? undefined,
     leftStart: inline.start_from ?? undefined,
