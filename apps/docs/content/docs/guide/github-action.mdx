@@ -75,19 +75,22 @@ If GitHub runners can't reach public registries, mirror the Pipr image and check
 
 ```bash
 pipr init \
-  --runtime-image registry.internal.example/pipr:v0.6.3 \
-  --checkout-action git.internal.example/actions/checkout@v6
+  --checkout-action internal-actions/checkout@v6 \
+  --runtime-image registry.internal.example/pipr:v0.6.3 # x-release-please-version
 ```
 
-The generated Pipr step uses the mirrored image directly and preserves the same `host-run --host github` command. Keep the mirrored image on the same Pipr release as the CLI that generated the workflow.
+The generated Pipr step uses the mirrored image directly and preserves the same `host-run --host github` command. The checkout value is an `OWNER/REPOSITORY@REF` on the GitHub instance running the workflow; it isn't a URL for another Git host. Keep the mirrored image on the same Pipr release as the CLI that generated the workflow.
 
-If GitHub or the model endpoint uses a private certificate authority, install that authority on the runner and pass its PEM path to the Pipr step:
+If GitHub uses a private certificate authority, install it on the runner so the checkout action can reach GitHub. The Pipr step runs inside the mirrored image, so a PEM installed only on the runner isn't visible there. Extend the image with the PEM and certificate environment variables:
 
-```yaml
-env:
-  NODE_EXTRA_CA_CERTS: /etc/pki/internal-ca.pem
-  GIT_SSL_CAINFO: /etc/pki/internal-ca.pem
+```dockerfile
+FROM ghcr.io/somus/pipr:v0.6.3 # x-release-please-version
+COPY internal-ca.pem /opt/pipr/certs/internal-ca.pem
+ENV NODE_EXTRA_CA_CERTS=/opt/pipr/certs/internal-ca.pem
+ENV GIT_SSL_CAINFO=/opt/pipr/certs/internal-ca.pem
 ```
+
+Build and push that image to the internal registry, then pass its reference to `--runtime-image`. This makes the certificate available to Pipr's Node and Git processes inside the container.
 
 ## Trusted options
 

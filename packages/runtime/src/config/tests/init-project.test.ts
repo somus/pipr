@@ -215,11 +215,11 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     await initOfficialMinimalProject({
       rootDir,
       runtimeImage: "registry.internal.example/pipr:v1",
-      checkoutAction: "git.internal.example/actions/checkout@v6",
+      checkoutAction: "internal-actions/checkout@v6",
     });
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
 
-    expect(workflow).toContain("uses: git.internal.example/actions/checkout@v6");
+    expect(workflow).toContain("uses: internal-actions/checkout@v6");
     expect(workflow).toContain("uses: docker://registry.internal.example/pipr:v1");
     expect(workflow).toContain("args: host-run --host github --config-dir .pipr");
     expect(workflow).not.toContain("uses: somus/pipr@");
@@ -319,6 +319,90 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
         runtimeImage: "registry.internal/pipr:v1;run-command",
       }),
     ).rejects.toThrow("runtime image");
+  });
+
+  it("rejects malformed setup references before writing adapter files", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        checkoutAction: "actions/checkout",
+      }),
+    ).rejects.toThrow("checkout action");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        checkoutAction: "actions//checkout@v6",
+      }),
+    ).rejects.toThrow("checkout action");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        checkoutAction: "owner/repository/../checkout@v6",
+      }),
+    ).rejects.toThrow("checkout action");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        checkoutAction: "./checkout@v6",
+      }),
+    ).rejects.toThrow("checkout action");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        runtimeImage: "https://registry.internal/pipr:v1",
+      }),
+    ).rejects.toThrow("runtime image");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        runtimeImage: "registry.internal//pipr:v1",
+      }),
+    ).rejects.toThrow("runtime image");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        runtimeImage: `registry.internal/pipr@sha256:${"a".repeat(32)}`,
+      }),
+    ).rejects.toThrow("runtime image");
+    expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
+  });
+
+  it("accepts an OCI image hosted on a bracketed IPv6 registry", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+    const runtimeImage = "[2001:db8::1]:5000/pipr:v1";
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: ["gitlab", "azure-devops", "bitbucket"],
+      minimal: true,
+      runtimeImage,
+    });
+
+    const gitlab = await Bun.file(path.join(rootDir, ".gitlab-ci.yml")).text();
+    const azure = await Bun.file(path.join(rootDir, "azure-pipelines.pipr.yml")).text();
+    const bitbucket = await Bun.file(path.join(rootDir, "bitbucket-pipelines.yml")).text();
+    expect(() => Bun.YAML.parse(gitlab)).not.toThrow();
+    expect(() => Bun.YAML.parse(azure)).not.toThrow();
+    expect(() => Bun.YAML.parse(bitbucket)).not.toThrow();
+    expect(gitlab).toContain(`name: '${runtimeImage}'`);
+    expect(azure).toContain(`        '${runtimeImage}' \\`);
+    expect(bitbucket).toContain(`image: '${runtimeImage}'`);
+  });
+
+  it("accepts a runtime image pinned to a valid SHA-256 digest", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+    const runtimeImage = `registry.internal/pipr@sha256:${"a".repeat(64)}`;
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: ["gitlab"],
+      minimal: true,
+      runtimeImage,
+    });
+
+    expect(await Bun.file(path.join(rootDir, ".gitlab-ci.yml")).text()).toContain(runtimeImage);
   });
 
   it("creates Azure trusted-runner settings and an explicit immutable PR pipeline", async () => {

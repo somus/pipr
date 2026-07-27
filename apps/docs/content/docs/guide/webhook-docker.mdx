@@ -47,7 +47,7 @@ The Compose file pins `ghcr.io/somus/pipr:v0.6.3`. Keep the file and image on th
 If the host pulls from an internal registry, mirror the same Pipr release and set its reference in `.env`:
 
 ```dotenv
-PIPR_IMAGE=registry.internal.example/pipr:v0.6.3
+PIPR_IMAGE=registry.internal.example/pipr:v0.6.3 # x-release-please-version
 ```
 
 Authenticate the Docker daemon to that registry before you start the worker.
