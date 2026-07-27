@@ -110,6 +110,13 @@ describe("Bitbucket Data Center client", () => {
       refname: "feature",
       url: "https://bitbucket.example.com/projects/PRJ/repos/pipr/pull-requests/7",
     });
+    await client.setStatus("head", "pipr-review", {
+      state: "STOPPED",
+      name: "Pipr: review",
+      description: "Neutral",
+      refname: "feature",
+      url: "https://bitbucket.example.com/projects/PRJ/repos/pipr/pull-requests/7",
+    });
 
     expect(requests).toContainEqual({
       url: "https://bitbucket.example.com/rest/api/latest/projects/PRJ/repos/pipr/pull-requests/7/comments",
@@ -164,6 +171,18 @@ describe("Bitbucket Data Center client", () => {
         key: "pipr-review",
         name: "Pipr: review",
         description: "Passed",
+        ref: "feature",
+        url: "https://bitbucket.example.com/projects/PRJ/repos/pipr/pull-requests/7",
+      },
+    });
+    expect(requests).toContainEqual({
+      url: "https://bitbucket.example.com/rest/build-status/latest/commits/head",
+      method: "POST",
+      body: {
+        state: "CANCELLED",
+        key: "pipr-review",
+        name: "Pipr: review",
+        description: "Neutral",
         ref: "feature",
         url: "https://bitbucket.example.com/projects/PRJ/repos/pipr/pull-requests/7",
       },
