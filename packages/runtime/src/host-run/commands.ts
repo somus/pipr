@@ -655,8 +655,16 @@ function partialBundleRepository(
 
 function bundleHost(
   host: string | undefined,
-): "github" | "gitlab" | "azure-devops" | "bitbucket" | "local" {
-  if (host === "gitlab" || host === "azure-devops" || host === "bitbucket" || host === "local") {
+): "github" | "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg" | "local" {
+  if (
+    host === "gitlab" ||
+    host === "azure-devops" ||
+    host === "bitbucket" ||
+    host === "gitea" ||
+    host === "forgejo" ||
+    host === "codeberg" ||
+    host === "local"
+  ) {
     return host;
   }
   return "github";
@@ -676,9 +684,32 @@ function providerRun(
       return azureProviderRun(env);
     case "bitbucket":
       return bitbucketProviderRun(env);
+    case "gitea":
+      return giteaProviderRun(env, "GITEA", repository);
+    case "forgejo":
+    case "codeberg":
+      return giteaProviderRun(env, "FORGEJO", repository);
     default:
       return undefined;
   }
+}
+
+function giteaProviderRun(
+  env: NodeJS.ProcessEnv,
+  prefix: "GITEA" | "FORGEJO",
+  repository: string | undefined,
+) {
+  const runId = env[`${prefix}_RUN_ID`];
+  const serverUrl = env[`${prefix}_SERVER_URL`];
+  const runUrl =
+    runId && repository && serverUrl
+      ? `${serverUrl.replace(/\/+$/, "")}/${repository}/actions/runs/${runId}`
+      : undefined;
+  return compactProviderRun({
+    runId,
+    jobId: env[`${prefix}_JOB`],
+    runUrl,
+  });
 }
 
 function githubProviderRun(env: NodeJS.ProcessEnv, repository: string | undefined) {
@@ -735,7 +766,9 @@ function isNativeCi(env: NodeJS.ProcessEnv): boolean {
     env.GITLAB_CI === "true" ||
     env.TF_BUILD === "True" ||
     env.TF_BUILD === "true" ||
-    env.BITBUCKET_BUILD_NUMBER !== undefined
+    env.BITBUCKET_BUILD_NUMBER !== undefined ||
+    env.GITEA_ACTIONS === "true" ||
+    env.FORGEJO_ACTIONS === "true"
   );
 }
 

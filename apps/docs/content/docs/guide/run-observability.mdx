@@ -7,7 +7,7 @@ Pipr captures structured evidence for every hosted review, command, and verifier
 
 GitHub Actions uploads a content-free metadata bundle by default. When age recipients are configured, it also uploads an encrypted diagnostic bundle containing redacted prompts, visible model output, diffs, and validation data. GitHub access discovers the package; only an age identity can decrypt diagnostic content.
 
-Automatic remote discovery and download are GitHub-only. GitLab, Azure DevOps, and Bitbucket reviews still use the same provider-neutral recorder, and trusted webhook or local stores remain available on every host. If custom CI persists a protected package, diagnose it with `pipr runs inspect`.
+Automatic remote discovery and download are GitHub-only. Other hosts still use the same provider-neutral recorder, and trusted webhook or local stores remain available on every host. If custom CI persists a protected package, diagnose it with `pipr runs inspect`.
 
 ## List runs for a change request
 
@@ -175,7 +175,7 @@ Run `pipr init --force --adapters github` only when you intend to regenerate all
 
 Existing GitHub workflows without `PIPR_RUN_AGE_RECIPIENTS` automatically publish metadata-only packages. Add the public recipient variable to enable encrypted diagnostics.
 
-The generated GitHub workflow keeps protected packages for 14 days. Pipr does not generate observability artifact wiring or remote retrieval for GitLab, Azure DevOps, or Bitbucket. Teams can add custom protected-package storage and use `pipr runs inspect`, but Pipr does not promise provider-specific discovery or retention behavior for those hosts.
+The generated GitHub workflow keeps protected packages for 14 days. Pipr does not generate observability artifact wiring or remote retrieval for non-GitHub hosts. Teams can add custom protected-package storage and use `pipr runs inspect`, but Pipr does not promise provider-specific discovery or retention behavior for those hosts.
 
 Recipient rotation affects future runs only. Keep old identities for at least the provider retention window if you still need to decrypt existing packages. Share a diagnostic by sharing the validated decrypted directory through an already authorized channel, not by publishing the identity alongside the provider artifact.
 

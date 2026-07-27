@@ -914,7 +914,7 @@ describe("pipr CLI", () => {
 
       expect(unsupported.exitCode).toBe(1);
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).toContain(
-        "Unsupported pipr init adapter 'unknown'. Supported adapters: github, gitlab, azure-devops, bitbucket",
+        "Unsupported pipr init adapter 'unknown'. Supported adapters: github, gitlab, azure-devops, bitbucket, gitea, forgejo, codeberg",
       );
       expect(`${unsupported.stdout}\n${unsupported.stderr}`).not.toContain("::error::");
       expect(mixedNone.exitCode).toBe(1);

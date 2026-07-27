@@ -219,20 +219,49 @@ function checkRecipeCoverage(recipe: string): void {
 }
 
 function checkAdapterCoverage(adapter: string): void {
-  const route = adapterGuideRoute(adapter);
-  const page = pages.get(route);
+  const coverage = adapterGuideCoverage(adapter);
+  const page = pages.get(coverage.route);
   if (!page) {
-    errors.push(`adapters: missing provider guide ${route}`);
+    errors.push(`adapters: missing provider guide ${coverage.route}`);
     return;
   }
-  for (const view of ["review", "inline"]) {
+  checkAdapterText(page, coverage.requiredText);
+  for (const view of coverage.imageViews) {
     checkProviderImage(page, adapter, view);
   }
 }
 
-function adapterGuideRoute(adapter: string): string {
-  if (adapter === "github") return "/docs/guide/github-action";
-  return `/docs/guide/${adapter}`;
+function adapterGuideCoverage(adapter: string): {
+  route: string;
+  requiredText: string[];
+  imageViews: string[];
+} {
+  const familyRoute = "/docs/guide/gitea-forgejo-codeberg";
+  const special: Record<string, { route: string; requiredText: string[]; imageViews: string[] }> = {
+    github: {
+      route: "/docs/guide/github-action",
+      requiredText: [],
+      imageViews: ["review", "inline"],
+    },
+    gitea: { route: familyRoute, requiredText: ["`gitea`"], imageViews: [] },
+    forgejo: { route: familyRoute, requiredText: ["`forgejo`"], imageViews: [] },
+    codeberg: { route: familyRoute, requiredText: ["`codeberg`"], imageViews: [] },
+  };
+  return (
+    special[adapter] ?? {
+      route: `/docs/guide/${adapter}`,
+      requiredText: [],
+      imageViews: ["review", "inline"],
+    }
+  );
+}
+
+function checkAdapterText(page: { file: string; source: string }, requiredText: string[]): void {
+  for (const text of requiredText) {
+    if (!page.source.includes(text)) {
+      errors.push(`${relative(page.file)}: missing official adapter id ${text.slice(1, -1)}`);
+    }
+  }
 }
 
 function checkProviderImage(

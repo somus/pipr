@@ -182,7 +182,18 @@ export const runLogRecordSchema = z.strictObject({
 export type RunLogRecord = z.infer<typeof runLogRecordSchema>;
 
 const metricAttributes = z.strictObject({
-  host: z.enum(["github", "gitlab", "azure-devops", "bitbucket", "local"]).optional(),
+  host: z
+    .enum([
+      "github",
+      "gitlab",
+      "azure-devops",
+      "bitbucket",
+      "gitea",
+      "forgejo",
+      "codeberg",
+      "local",
+    ])
+    .optional(),
   runKind: z.enum(["review", "command", "verifier", "startup"]).optional(),
   outcome: z.enum(["in-progress", "succeeded", "failed", "partial"]).optional(),
   failureCategory: z
@@ -232,7 +243,16 @@ export const runMetricsSnapshotSchema = z.strictObject({
 export type RunMetricsSnapshot = z.infer<typeof runMetricsSnapshotSchema>;
 
 const repositorySchema = z.strictObject({
-  host: z.enum(["github", "gitlab", "azure-devops", "bitbucket", "local"]),
+  host: z.enum([
+    "github",
+    "gitlab",
+    "azure-devops",
+    "bitbucket",
+    "gitea",
+    "forgejo",
+    "codeberg",
+    "local",
+  ]),
   repository: text.max(500),
   changeNumber: z.number().int().positive().optional(),
   changeUrl: z.string().url().max(2000).optional(),

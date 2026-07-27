@@ -18,6 +18,15 @@ describe("workflowUrlFromEnvironment", () => {
       "https://gitlab.com/acme/repo/-/pipelines/123",
     ],
     [
+      "forgejo",
+      {
+        FORGEJO_SERVER_URL: "https://forge.example.com",
+        FORGEJO_REPOSITORY: "acme/repo",
+        FORGEJO_RUN_ID: "123",
+      },
+      "https://forge.example.com/acme/repo/actions/runs/123",
+    ],
+    [
       "azure-devops",
       {
         SYSTEM_TEAMFOUNDATIONCOLLECTIONURI: "https://dev.azure.com/acme/",

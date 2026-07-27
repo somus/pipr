@@ -22,11 +22,11 @@ _Avoid_: PR-authored runtime settings
 
 **Code Host Adapter**:
 The internal provider boundary for native events, permissions, checkout, comment publication, and inline location mapping.
-GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud are supported.
+GitHub, GitLab.com, Azure DevOps Services, Bitbucket Cloud, Gitea, Forgejo, and Codeberg are supported.
 _Avoid_: GitHub runtime, provider-specific user config
 
 **Change Request**:
-The provider-neutral review target. GitHub, Bitbucket Cloud, and Azure DevOps Services map this to a pull request; GitLab.com maps it to a merge request.
+The provider-neutral review target. GitHub, Bitbucket Cloud, Azure DevOps Services, Gitea, Forgejo, and Codeberg map this to a pull request; GitLab.com maps it to a merge request.
 _Avoid_: GitHub-only pull request when describing core runtime
 
 **TypeScript Config**:

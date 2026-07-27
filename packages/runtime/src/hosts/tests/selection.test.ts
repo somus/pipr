@@ -24,6 +24,17 @@ describe("code host selection", () => {
     expect(resolveCodeHostId({ env: { GITLAB_CI: "true" } })).toBe("gitlab");
     expect(resolveCodeHostId({ env: { TF_BUILD: "True" } })).toBe("azure-devops");
     expect(resolveCodeHostId({ env: { BITBUCKET_BUILD_NUMBER: "12" } })).toBe("bitbucket");
+    expect(resolveCodeHostId({ env: { GITEA_ACTIONS: "true" } })).toBe("gitea");
+    expect(
+      resolveCodeHostId({
+        env: { FORGEJO_ACTIONS: "true", FORGEJO_SERVER_URL: "https://forge.example.com" },
+      }),
+    ).toBe("forgejo");
+    expect(
+      resolveCodeHostId({
+        env: { FORGEJO_ACTIONS: "true", FORGEJO_SERVER_URL: "https://codeberg.org" },
+      }),
+    ).toBe("codeberg");
   });
 
   it("rejects ambiguous native CI environments", () => {

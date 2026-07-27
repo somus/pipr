@@ -298,6 +298,42 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     }
   });
 
+  it("creates Gitea, Forgejo, and Codeberg Actions scaffolding", async () => {
+    for (const adapter of ["gitea", "forgejo", "codeberg"] as const) {
+      const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${adapter}-`));
+      const result = await initOfficialMinimalProject({
+        rootDir,
+        adapters: [adapter],
+        minimal: true,
+      });
+      const workflowPath =
+        adapter === "gitea"
+          ? path.join(".gitea", "workflows", "pipr.yml")
+          : path.join(".forgejo", "workflows", "pipr.yml");
+      const workflow = await Bun.file(path.join(rootDir, workflowPath)).text();
+
+      expect(result.created).toContain(workflowPath);
+      expect(() => Bun.YAML.parse(workflow)).not.toThrow();
+      expect(workflow).toContain(`host-run --host ${adapter} --config-dir .pipr`);
+      expect(workflow).toContain("pull_request_target:");
+      expect(workflow).not.toContain("\n  pull_request:\n");
+      expect(workflow).toContain("ghcr.io/somus/pipr:v0.6.3");
+      expect(workflow).toContain(adapter === "gitea" ? "GITEA_TOKEN:" : "FORGEJO_TOKEN:");
+      expect(result.created).toContain(`${adapter}.pipr.env.example`);
+    }
+  });
+
+  it("rejects Forgejo and Codeberg init together because they share a workflow path", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        adapters: ["forgejo", "codeberg"],
+        minimal: true,
+      }),
+    ).rejects.toThrow("target the same workflow path");
+  });
+
   it("rejects setup references that could inject workflow lines", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
 
@@ -450,13 +486,13 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
 
     await expect(initOfficialMinimalProject({ rootDir, adapters: ["unknown"] })).rejects.toThrow(
-      "Unsupported pipr init adapter 'unknown'. Supported adapters: github, gitlab, azure-devops, bitbucket",
+      "Unsupported pipr init adapter 'unknown'. Supported adapters: github, gitlab, azure-devops, bitbucket, gitea, forgejo, codeberg",
     );
     await expect(
       initOfficialMinimalProject({ rootDir, adapters: ["none", "github"] }),
     ).rejects.toThrow("Adapter 'none' cannot be mixed with other init adapters");
     await expect(initOfficialMinimalProject({ rootDir, adapters: [""] })).rejects.toThrow(
-      "Unsupported pipr init adapter ''. Supported adapters: github, gitlab, azure-devops",
+      "Unsupported pipr init adapter ''. Supported adapters: github, gitlab, azure-devops, bitbucket, gitea, forgejo, codeberg",
     );
   });
 

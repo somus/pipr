@@ -18,7 +18,7 @@ import {
 } from "@usepipr/runtime";
 
 export type RunSelector = {
-  host: "github" | "gitlab" | "azure-devops" | "bitbucket";
+  host: "github" | "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg";
   repository: string;
   changeNumber: number;
 };
@@ -449,14 +449,15 @@ export async function resolveRunSelector(options: {
   cwd: string;
 }): Promise<RunSelector> {
   const changeNumber = parseChangeNumber(options.pr);
-  let discovered: Omit<RunSelector, "changeNumber"> | undefined;
-  if (changeNumber === undefined) discovered = selectorFromUrl(options.pr);
+  const urlSelector =
+    changeNumber === undefined ? selectorFromUrl(options.pr, options.host) : undefined;
+  let discovered: Omit<RunSelector, "changeNumber"> | undefined = urlSelector;
   if (!discovered && (!options.host || !options.repository)) {
     discovered = await selectorFromGitRemote(options.cwd);
   }
   const host = options.host ? parseHost(options.host) : discovered?.host;
   const repository = options.repository ?? discovered?.repository;
-  const resolvedChangeNumber = changeNumber ?? selectorFromUrl(options.pr)?.changeNumber;
+  const resolvedChangeNumber = changeNumber ?? urlSelector?.changeNumber;
   if (!host || !repository || !resolvedChangeNumber) {
     throw new Error(
       "Could not derive the PR host and repository; pass a PR URL or --host and --repository",
@@ -626,12 +627,15 @@ function withLookupErrors(
     : `${message}; ${errors.map((error) => `${error.source}: ${error.message}`).join("; ")}`;
 }
 
-function selectorFromUrl(value: string): RunSelector | undefined {
+function selectorFromUrl(value: string, explicitHost?: string): RunSelector | undefined {
   const url = parseUrl(value);
   if (!url) return undefined;
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
   const parsers = [githubUrlSelector, gitlabUrlSelector, azureUrlSelector, bitbucketUrlSelector];
-  return parsers.map((parse) => parse(url, parts)).find((result) => result !== undefined);
+  return (
+    parsers.map((parse) => parse(url, parts)).find((result) => result !== undefined) ??
+    giteaUrlSelector(url, parts, explicitHost)
+  );
 }
 
 type UrlSelectorParser = (url: URL, parts: string[]) => RunSelector | undefined;
@@ -666,6 +670,26 @@ const bitbucketUrlSelector: UrlSelectorParser = (url, parts) => {
   if (url.hostname !== "bitbucket.org" || bitbucketPull < 2) return undefined;
   return selector("bitbucket", parts.slice(0, bitbucketPull).join("/"), parts[bitbucketPull + 1]);
 };
+
+function giteaUrlSelector(
+  url: URL,
+  parts: string[],
+  explicitHost?: string,
+): RunSelector | undefined {
+  const pull = parts.indexOf("pulls");
+  if (pull < 2) return undefined;
+  const host = url.hostname === "codeberg.org" ? "codeberg" : explicitGiteaFamilyHost(explicitHost);
+  if (!host) return undefined;
+  return selector(host, parts.slice(0, pull).join("/"), parts[pull + 1]);
+}
+
+function explicitGiteaFamilyHost(
+  explicitHost: string | undefined,
+): "gitea" | "forgejo" | "codeberg" | undefined {
+  return explicitHost === "gitea" || explicitHost === "forgejo" || explicitHost === "codeberg"
+    ? explicitHost
+    : undefined;
+}
 
 async function selectorFromGitRemote(
   cwd: string,
@@ -751,7 +775,10 @@ function parseHost(value: string): RunSelector["host"] {
     value === "github" ||
     value === "gitlab" ||
     value === "azure-devops" ||
-    value === "bitbucket"
+    value === "bitbucket" ||
+    value === "gitea" ||
+    value === "forgejo" ||
+    value === "codeberg"
   ) {
     return value;
   }

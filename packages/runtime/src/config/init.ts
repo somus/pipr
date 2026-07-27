@@ -35,6 +35,9 @@ export const supportedOfficialInitAdapters = [
   "gitlab",
   "azure-devops",
   "bitbucket",
+  "gitea",
+  "forgejo",
+  "codeberg",
 ] as const;
 
 export type OfficialInitAdapter = (typeof supportedOfficialInitAdapters)[number];
@@ -91,6 +94,7 @@ export async function initOfficialMinimalProject(
   assertCheckoutActionReference(options.checkoutAction);
   const { configDir, relativeConfigDir, projectDir } = resolveContainedConfigDir(options);
   const adapters = resolveOfficialInitAdapters(options.adapters);
+  assertDistinctAdapterTargets(adapters);
   const rootDir = path.resolve(options.rootDir);
   const minimal = options.minimal === true;
   const files = await starterFiles(relativeConfigDir, adapters, options.recipe, minimal, {
@@ -112,34 +116,54 @@ export async function initOfficialMinimalProject(
 
   const result = await writeTargets(targets, existing, { skipExisting: false });
 
-  if (!minimal) {
-    await assertBunAvailable();
-    const install = Bun.spawn(initInstallCommand(), {
-      cwd: projectDir,
-      env: process.env,
-      stdout: "pipe",
-      stderr: "pipe",
+  if (!minimal)
+    await installStarterDependencies({
+      configDir,
+      projectDir,
+      relativeConfigDir,
+      existing,
+      created: result.created,
     });
-    const [exitCode, stderr] = await Promise.all([
-      install.exited,
-      new Response(install.stderr).text(),
-    ]);
-    if (exitCode !== 0) {
-      throw new Error(
-        `${configDir}: bun install failed (exit ${exitCode}).` +
-          (stderr.trim().length > 0 ? `\n${stderr.trim()}` : ""),
-      );
-    }
-    if (await Bun.file(path.join(projectDir, "bun.lock")).exists()) {
-      const lockRelative = path.join(relativeConfigDir, "bun.lock");
-      if (!existing.includes(lockRelative) && !result.created.includes(lockRelative)) {
-        result.created.push(lockRelative);
-      }
-    }
-  }
 
   await loadRuntimeProject({ rootDir: options.rootDir, configDir });
   return { configDir, ...result };
+}
+
+function assertDistinctAdapterTargets(adapters: readonly OfficialInitAdapter[]): void {
+  if (adapters.includes("forgejo") && adapters.includes("codeberg")) {
+    throw new Error("Adapters 'forgejo' and 'codeberg' target the same workflow path.");
+  }
+}
+
+async function installStarterDependencies(options: {
+  configDir: string;
+  projectDir: string;
+  relativeConfigDir: string;
+  existing: string[];
+  created: string[];
+}): Promise<void> {
+  await assertBunAvailable();
+  const install = Bun.spawn(initInstallCommand(), {
+    cwd: options.projectDir,
+    env: process.env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stderr] = await Promise.all([
+    install.exited,
+    new Response(install.stderr).text(),
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(
+      `${options.configDir}: bun install failed (exit ${exitCode}).` +
+        (stderr.trim().length > 0 ? `\n${stderr.trim()}` : ""),
+    );
+  }
+  if (!(await Bun.file(path.join(options.projectDir, "bun.lock")).exists())) return;
+  const lockRelative = path.join(options.relativeConfigDir, "bun.lock");
+  if (!options.existing.includes(lockRelative) && !options.created.includes(lockRelative)) {
+    options.created.push(lockRelative);
+  }
 }
 
 function assertRuntimeImageReference(value: string | undefined): void {
@@ -262,61 +286,153 @@ async function starterFiles(
       },
     );
   }
-  if (adapters.includes("github")) {
-    files.push({
-      relativePath: path.join(".github", "workflows", "pipr.yml"),
-      contents: renderOfficialGithubWorkflow({
-        relativeConfigDir: relativeConfigDir.split(path.sep).join("/"),
-        recipe,
-        minimal,
-        runtimeImage: setup.runtimeImage,
-        checkoutAction: setup.checkoutAction,
-      }),
-    });
-  }
-  if (adapters.includes("gitlab")) {
-    files.push({
-      relativePath: ".gitlab-ci.yml",
-      contents: starterGitLabPipeline(
-        relativeConfigDir.split(path.sep).join("/"),
-        recipe,
-        setup.runtimeImage,
-      ),
-    });
-  }
-  if (adapters.includes("azure-devops")) {
-    files.push(
-      {
-        relativePath: "azure-devops.pipr.env.example",
-        contents: starterAzureDevOpsWebhookEnvironment(recipe),
-      },
-      {
-        relativePath: "azure-pipelines.pipr.yml",
-        contents: starterAzureDevOpsPipeline(
-          relativeConfigDir.split(path.sep).join("/"),
-          recipe,
-          setup.runtimeImage,
-        ),
-      },
-    );
-  }
-  if (adapters.includes("bitbucket")) {
-    files.push(
-      {
-        relativePath: "bitbucket.pipr.env.example",
-        contents: starterBitbucketWebhookEnvironment(recipe),
-      },
-      {
-        relativePath: "bitbucket-pipelines.yml",
-        contents: starterBitbucketPipeline(
-          relativeConfigDir.split(path.sep).join("/"),
-          recipe,
-          setup.runtimeImage,
-        ),
-      },
-    );
+  const workflowConfigDir = relativeConfigDir.split(path.sep).join("/");
+  for (const adapter of adapters) {
+    files.push(...starterAdapterFiles(adapter, workflowConfigDir, recipe, minimal, setup));
   }
   return files;
+}
+
+function starterAdapterFiles(
+  adapter: OfficialInitAdapter,
+  relativeConfigDir: string,
+  recipe: string | undefined,
+  minimal: boolean,
+  setup: { runtimeImage?: string; checkoutAction?: string },
+): StarterFile[] {
+  switch (adapter) {
+    case "github":
+      return [
+        {
+          relativePath: path.join(".github", "workflows", "pipr.yml"),
+          contents: renderOfficialGithubWorkflow({
+            relativeConfigDir,
+            recipe,
+            minimal,
+            runtimeImage: setup.runtimeImage,
+            checkoutAction: setup.checkoutAction,
+          }),
+        },
+      ];
+    case "gitlab":
+      return [
+        {
+          relativePath: ".gitlab-ci.yml",
+          contents: starterGitLabPipeline(relativeConfigDir, recipe, setup.runtimeImage),
+        },
+      ];
+    case "azure-devops":
+      return [
+        {
+          relativePath: "azure-devops.pipr.env.example",
+          contents: starterAzureDevOpsWebhookEnvironment(recipe),
+        },
+        {
+          relativePath: "azure-pipelines.pipr.yml",
+          contents: starterAzureDevOpsPipeline(relativeConfigDir, recipe, setup.runtimeImage),
+        },
+      ];
+    case "bitbucket":
+      return [
+        {
+          relativePath: "bitbucket.pipr.env.example",
+          contents: starterBitbucketWebhookEnvironment(recipe),
+        },
+        {
+          relativePath: "bitbucket-pipelines.yml",
+          contents: starterBitbucketPipeline(relativeConfigDir, recipe, setup.runtimeImage),
+        },
+      ];
+    case "gitea":
+      return [
+        {
+          relativePath: "gitea.pipr.env.example",
+          contents: starterGiteaWebhookEnvironment("gitea", recipe),
+        },
+        {
+          relativePath: path.join(".gitea", "workflows", "pipr.yml"),
+          contents: starterGiteaActionsWorkflow("gitea", relativeConfigDir, recipe, setup),
+        },
+      ];
+    case "forgejo":
+    case "codeberg":
+      return [
+        {
+          relativePath: `${adapter}.pipr.env.example`,
+          contents: starterGiteaWebhookEnvironment(adapter, recipe),
+        },
+        {
+          relativePath: path.join(".forgejo", "workflows", "pipr.yml"),
+          contents: starterGiteaActionsWorkflow(adapter, relativeConfigDir, recipe, setup),
+        },
+      ];
+  }
+}
+
+function starterGiteaActionsWorkflow(
+  adapter: "gitea" | "forgejo" | "codeberg",
+  relativeConfigDir: string,
+  recipe: string | undefined,
+  setup: { runtimeImage?: string; checkoutAction?: string },
+): string {
+  const tokenEnv = adapter === "gitea" ? "GITEA_TOKEN" : "FORGEJO_TOKEN";
+  const lines = [
+    "name: pipr",
+    "",
+    "on:",
+    "  pull_request_target:",
+    "    types: [opened, synchronize, reopened, ready_for_review]",
+    "  issue_comment:",
+    "    types: [created]",
+    "  pull_request_review_comment:",
+    "    types: [created]",
+    "",
+    "jobs:",
+    "  review:",
+    "    runs-on: docker",
+    "    steps:",
+    `      - uses: ${setup.checkoutAction ?? "actions/checkout@v6"}`,
+    "        with:",
+    "          fetch-depth: 0",
+    `      - uses: docker://${setup.runtimeImage ?? defaultGitLabImageRef}`,
+    "        with:",
+    `          args: host-run --host ${adapter} --config-dir ${relativeConfigDir}`,
+    "        env:",
+    `          ${tokenEnv}: ${workflowExpression(`secrets.${tokenEnv}`)}`,
+    `          PIPR_RUN_AGE_RECIPIENTS: ${workflowExpression("vars.PIPR_RUN_AGE_RECIPIENTS")}`,
+  ];
+  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
+    lines.push(`          ${secret.env}: ${workflowExpression(`secrets.${secret.secret}`)}`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
+function starterGiteaWebhookEnvironment(
+  adapter: "gitea" | "forgejo" | "codeberg",
+  recipe?: string,
+): string {
+  const lines =
+    adapter === "gitea"
+      ? [
+          "# Copy these names into the trusted webhook runner's secret store.",
+          "GITEA_SERVER_URL=",
+          "GITEA_TOKEN=",
+          "PIPR_WEBHOOK_SECRET=",
+        ]
+      : [
+          "# Copy these names into the trusted webhook runner's secret store.",
+          `FORGEJO_SERVER_URL=${adapter === "codeberg" ? "https://codeberg.org" : ""}`,
+          `${adapter === "codeberg" ? "CODEBERG_TOKEN" : "FORGEJO_TOKEN"}=`,
+          "PIPR_WEBHOOK_SECRET=",
+        ];
+  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);
+  lines.push("");
+  return lines.join("\n");
+}
+
+function workflowExpression(value: string): string {
+  return `$${["{{ ", value, " }}"].join("")}`;
 }
 
 function starterGitLabPipeline(

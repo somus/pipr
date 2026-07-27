@@ -45,4 +45,40 @@ describe("host-run adapter selection", () => {
       "bitbucket",
     );
   });
+
+  it("registers the Gitea-compatible adapter family", () => {
+    expect(
+      createHostRunAdapter({
+        host: "gitea",
+        env: { GITEA_TOKEN: "token", GITEA_SERVER_URL: "https://gitea.example.com" },
+      }).id,
+    ).toBe("gitea");
+    expect(
+      createHostRunAdapter({
+        env: {
+          FORGEJO_ACTIONS: "true",
+          FORGEJO_TOKEN: "token",
+          FORGEJO_SERVER_URL: "https://forge.example.com",
+        },
+      }).id,
+    ).toBe("forgejo");
+    expect(
+      createHostRunAdapter({
+        env: {
+          FORGEJO_ACTIONS: "true",
+          FORGEJO_TOKEN: "token",
+          FORGEJO_SERVER_URL: "https://codeberg.org",
+        },
+      }).id,
+    ).toBe("codeberg");
+  });
+
+  it("fails Gitea-compatible selection before execution when credentials are missing", () => {
+    expect(() =>
+      createHostRunAdapter({
+        host: "forgejo",
+        env: { FORGEJO_SERVER_URL: "https://forge.example.com" },
+      }),
+    ).toThrow("FORGEJO_TOKEN is required");
+  });
 });

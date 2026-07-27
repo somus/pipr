@@ -338,7 +338,7 @@ pipr.config({
 });
 ```
 
-Statuses publish for supported change-request events when the selected adapter exposes status publication. GitHub uses Check Runs, GitLab uses external commit statuses, Azure DevOps uses pull request statuses, and Bitbucket uses source-commit statuses. They do not publish for command responses, local runs, or dry runs. `ctx.check.pass/fail/neutral(...)` can be called at most once per task. A failed task status does not fail the delivery process by itself.
+Statuses publish for supported change-request events when the selected adapter exposes status publication. GitHub uses Check Runs, GitLab uses external commit statuses, Azure DevOps uses pull request statuses, and Bitbucket plus Gitea-compatible hosts use source-commit statuses. They do not publish for command responses, local runs, or dry runs. `ctx.check.pass/fail/neutral(...)` can be called at most once per task. A failed task status does not fail the delivery process by itself.
 
 ## Global config
 
@@ -508,7 +508,7 @@ export default definePipr((pipr) => {
 });
 ```
 
-Use `pipr.schemas.review` when an agent directly returns publishable Inline Review Comments. `suggestedFix` is optional exact replacement code for the selected range. GitHub and GitLab render it as a native suggestion; Azure DevOps and Bitbucket render fenced replacement code.
+Use `pipr.schemas.review` when an agent directly returns publishable Inline Review Comments. `suggestedFix` is optional exact replacement code for the selected range. GitHub and GitLab render it as a native suggestion; Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg render fenced replacement code.
 
 Custom output receives Pipr's review policy automatically when its schema contains an object with the standard Review Finding fields. A schema rooted exactly at `{ inlineFindings: [...] }` is also automatically sharded and merged; each item may carry extra metadata. Nested, summary-only, and arbitrary schemas run once.
 

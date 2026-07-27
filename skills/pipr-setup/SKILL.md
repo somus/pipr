@@ -63,6 +63,7 @@ Before I initialize Pipr, choose the setup policy:
 2. Model: use Pipr default DeepSeek, or specify provider/model/secret env var names.
 3. Triggers and publishing: automatic PR review plus @pipr review with capped inline comments, command-only, or merge-gate checks.
 4. Code host and existing files: choose github, gitlab, azure-devops, bitbucket,
+   gitea, forgejo, codeberg,
    or no adapter files; then choose whether to edit existing Pipr files, create new files only, or approve replacement.
 ```
 
@@ -75,7 +76,7 @@ Read [recipes.md](references/recipes.md) before selecting a starter recipe. Read
 For new setups:
 
 - Choose the smallest matching recipe and run `pipr init --recipe <id> --adapters <adapter-list>` when the user selected an adapter. Omit `--adapters` only for the default GitHub setup.
-- Use `github` for `.github/workflows/pipr.yml`, `gitlab` for `.gitlab-ci.yml`, and `azure-devops` or `bitbucket` for trusted-webhook environment templates. Use `--adapters none` only when the user does not want generated adapter files.
+- Use `github` for `.github/workflows/pipr.yml`, `gitlab` for `.gitlab-ci.yml`, `gitea` for `.gitea/workflows/pipr.yml`, and `forgejo` or `codeberg` for `.forgejo/workflows/pipr.yml`. Azure DevOps, Bitbucket, and every Gitea-compatible adapter also generate trusted-webhook environment templates. Use `--adapters none` only when the user does not want generated adapter files.
 - Use `--minimal` only when the user chose a single-file config or Bun cannot be installed.
 
 For existing setups:

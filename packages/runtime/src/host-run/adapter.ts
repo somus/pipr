@@ -1,5 +1,6 @@
 import { createAzureDevOpsHostAdapter } from "../hosts/azure-devops/adapter.js";
 import { createBitbucketHostAdapter } from "../hosts/bitbucket/adapter.js";
+import { createGiteaHostAdapter } from "../hosts/gitea/adapter.js";
 import { createGitHubHostAdapter } from "../hosts/github/adapter.js";
 import { createGitLabHostAdapter } from "../hosts/gitlab/adapter.js";
 import { resolveCodeHostId } from "../hosts/selection.js";
@@ -44,6 +45,9 @@ export function createHostRunAdapter(options: {
     }
     if (host === "bitbucket") {
       return createBitbucketHostAdapter({ env: options.env });
+    }
+    if (host === "gitea" || host === "forgejo" || host === "codeberg") {
+      return createGiteaHostAdapter({ host, env: options.env });
     }
     throw new Error(`Code host adapter '${host}' is not available in this build`);
   }

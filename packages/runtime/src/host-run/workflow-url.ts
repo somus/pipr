@@ -31,6 +31,23 @@ function workflowUrlCandidate(host: string, env: NodeJS.ProcessEnv): string | un
       );
     case "gitlab":
       return env.CI_PIPELINE_URL;
+    case "gitea":
+      return joinedUrl(
+        env.GITEA_SERVER_URL,
+        env.GITEA_REPOSITORY,
+        "actions",
+        "runs",
+        env.GITEA_RUN_ID,
+      );
+    case "forgejo":
+    case "codeberg":
+      return joinedUrl(
+        env.FORGEJO_SERVER_URL,
+        env.FORGEJO_REPOSITORY,
+        "actions",
+        "runs",
+        env.FORGEJO_RUN_ID,
+      );
     case "azure-devops":
       return joinedUrl(
         env.SYSTEM_TEAMFOUNDATIONCOLLECTIONURI,

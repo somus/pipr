@@ -410,6 +410,43 @@ describe("webhook runner", () => {
     expect((await ingress(request(wrongRepository))).status).toBe(403);
   });
 
+  it("validates Forgejo HMAC signatures, repository binding, and event metadata", async () => {
+    const store = new MemoryDeliveryStore();
+    const ingress = createWebhookIngress({
+      host: "forgejo",
+      secret: "webhook-secret",
+      expectedRepository: { id: 42, fullName: "acme/repository" },
+      store,
+    });
+    const payload = JSON.stringify({
+      repository: { id: 42, full_name: "acme/repository" },
+      pull_request: { number: 7 },
+    });
+    const request = (body: string, secret = "webhook-secret") =>
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "X-Forgejo-Signature": createHmac("sha256", secret).update(body).digest("hex"),
+          "X-Forgejo-Delivery": "delivery-1",
+          "X-Forgejo-Event-Type": "pull_request",
+        },
+        body,
+      });
+
+    expect((await ingress(request(payload))).status).toBe(202);
+    expect((await ingress(request(payload))).status).toBe(200);
+    expect(store.deliveries).toEqual([
+      {
+        id: "forgejo:delivery-1",
+        host: "forgejo",
+        payload,
+        eventName: "pull_request",
+      },
+    ]);
+    expect((await ingress(request(payload, "wrong"))).status).toBe(401);
+    expect((await ingress(request(payload.replace('"id":42', '"id":43')))).status).toBe(403);
+  });
+
   it("rejects a Bitbucket webhook repository argument that disagrees with the environment", async () => {
     const protocol = createCodeHostWebhookProtocol("bitbucket");
     await expect(

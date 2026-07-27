@@ -5,7 +5,7 @@ description: "Provider-neutral adapter boundary for code host integrations."
 
 Code host adapters are an internal runtime seam. They are not part of `.pipr/config.ts`.
 
-GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud are supported.
+GitHub, GitLab.com, Azure DevOps Services, Bitbucket Cloud, Gitea, Forgejo, and Codeberg are supported.
 
 The public config stays provider-neutral:
 
@@ -50,7 +50,8 @@ type ChangeRequestEventContext = {
     | { provider: "github"; owner: string; repository: string }
     | { provider: "gitlab"; projectId: string; projectPath: string }
     | { provider: "bitbucket"; workspace: string; repository: string; repositoryUuid?: string }
-    | { provider: "azure-devops"; organization: string; project: string; projectId?: string; repositoryId: string };
+    | { provider: "azure-devops"; organization: string; project: string; projectId?: string; repositoryId: string }
+    | { provider: "gitea"; owner: string; repository: string };
   change: {
     number: number;
     title: string;
@@ -125,6 +126,12 @@ The Bitbucket Cloud adapter maps repository webhooks, pull request comments, eff
 
 See [Bitbucket Cloud](/docs/guide/bitbucket) for trusted webhook setup and permission-token requirements.
 
+### Gitea, Forgejo, and Codeberg
+
+The three host ids share one Gitea-compatible API family while retaining provider-specific environment variables, workflow paths, URLs, and diagnostics. The adapter maps pull requests, issue comments, review comments, collaborator permissions, and commit statuses into the common contract. It publishes single-line inline comments and verifier replies, but it does not claim native thread resolution, multiline anchors, or native suggestion blocks.
+
+See [Gitea, Forgejo, and Codeberg](/docs/guide/gitea-forgejo-codeberg) for Actions and trusted webhook setup.
+
 ### Local
 
 The local adapter handles local CLI runs:
@@ -139,7 +146,7 @@ Use it through:
 pipr review --base origin/main
 ```
 
-GitHub, GitLab.com, Azure DevOps Services, and Bitbucket Cloud share provider-neutral Pipr SDK task code.
+All supported code hosts share provider-neutral Pipr SDK task code.
 
 ## Internal adapter shape
 
@@ -180,4 +187,4 @@ A future adapter should land with contract fixtures before becoming public. The 
 - stale-head prevention fixture
 - local dry-run parity fixture
 
-The public config should not grow `pipr.github.*`, `pipr.gitlab.*`, `pipr.bitbucket.*`, or `pipr.azureDevOps.*` namespaces until a provider-specific user setting is proven necessary.
+The public config should not grow provider-specific namespaces until a provider-specific user setting is proven necessary.

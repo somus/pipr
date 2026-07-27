@@ -12,6 +12,7 @@
     "gitlab",
     "azure-devops",
     "bitbucket",
+    "gitea-forgejo-codeberg",
     "---[Settings]Configure---",
     "configuration",
     "entrypoints",

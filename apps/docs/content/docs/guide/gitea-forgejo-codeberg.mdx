@@ -1,0 +1,125 @@
+---
+title: "Gitea, Forgejo, and Codeberg"
+description: "Run Pipr reviews, commands, and reply verification on Gitea-compatible hosts."
+---
+
+Pipr supports Gitea, Forgejo, and Codeberg through one Gitea-compatible API adapter. You can run automatic reviews with Gitea or Forgejo Actions, or use the trusted webhook runner for a dedicated worker and durable delivery queue.
+
+## Choose a host id
+
+Use the host id that matches the service. The three ids share API behavior but select different environment variables, workflow paths, and defaults.
+
+| Service | Host id | Generated workflow | API token |
+| --- | --- | --- | --- |
+| Gitea | `gitea` | `.gitea/workflows/pipr.yml` | `GITEA_TOKEN` |
+| Forgejo | `forgejo` | `.forgejo/workflows/pipr.yml` | `FORGEJO_TOKEN` |
+| Codeberg | `codeberg` | `.forgejo/workflows/pipr.yml` | `CODEBERG_TOKEN` for webhooks; Actions exposes `FORGEJO_TOKEN` |
+
+## Run with Actions
+
+Use this path when the repository has an isolated runner with the `docker` label. Codeberg Actions requires a self-hosted Forgejo runner unless your repository has access to Codeberg's limited hosted Actions service.
+
+### 1. Generate the workflow
+
+From the repository root, select one adapter:
+
+```bash
+pipr init --adapters gitea
+pipr init --adapters forgejo
+pipr init --adapters codeberg
+```
+
+The generated workflow uses `pull_request_target` so the runner starts from the trusted base workflow and receives the host's write-capable automatic token. Pipr loads Trusted Base Config before it checks out the exact proposed head for diff construction and read-only model inspection.
+
+### 2. Configure the runner
+
+Enable Actions for the repository and register a container-isolated runner with the `docker` label. If your runner uses another label, change `runs-on` in the generated workflow.
+
+Gitea reads workflows from `.gitea/workflows`. Forgejo and Codeberg read them from `.forgejo/workflows`. The workflow checks out full history, then runs the pinned Pipr image as a Docker action.
+
+### 3. Add the model secret
+
+Add the model-provider key named by `.pipr/config.ts` to the repository's Actions secrets. The default config expects `DEEPSEEK_API_KEY`.
+
+The workflow uses the automatic `GITEA_TOKEN` or `FORGEJO_TOKEN` for repository API calls. You don't need to create a separate host token for Actions. Fork behavior and secret availability remain controlled by the host, so verify your instance policy before enabling reviews from untrusted forks.
+
+### 4. Commit and verify
+
+Commit `.pipr` and the generated workflow, then open a pull request. Confirm that the workflow publishes one Main Review Comment, any valid single-line Inline Review Comments, and task statuses.
+
+## Run with trusted webhooks
+
+Use a dedicated webhook worker when you don't want write-capable host and model credentials in Actions, or when your Actions environment can't cover commands and reply events.
+
+### 1. Prepare the worker environment
+
+`pipr init` creates a matching environment template. Set the server URL, API token, webhook secret, and model-provider key.
+
+For Gitea:
+
+```dotenv
+GITEA_SERVER_URL=https://gitea.example.com
+GITEA_TOKEN=replace-with-bot-token
+PIPR_WEBHOOK_SECRET=replace-with-webhook-secret
+DEEPSEEK_API_KEY=replace-with-model-key
+```
+
+For Forgejo:
+
+```dotenv
+FORGEJO_SERVER_URL=https://forgejo.example.com
+FORGEJO_TOKEN=replace-with-bot-token
+PIPR_WEBHOOK_SECRET=replace-with-webhook-secret
+DEEPSEEK_API_KEY=replace-with-model-key
+```
+
+For Codeberg, set `CODEBERG_TOKEN`. The generated template pre-fills `FORGEJO_SERVER_URL=https://codeberg.org`, and Pipr defaults the API endpoint to `https://codeberg.org/api/v1`.
+
+The bot token must read repository and pull request metadata, inspect collaborator permissions, create and update issue comments, create review comments and replies, and create commit statuses. Limit the token to the target repository where the host supports repository-scoped tokens.
+
+### 2. Start the worker
+
+Run one worker against one dedicated checkout:
+
+```bash
+pipr webhook serve \
+  --host forgejo \
+  --repository owner/repository \
+  --workspace /srv/pipr/repository \
+  --database /var/lib/pipr/webhooks.sqlite \
+  --hostname 127.0.0.1 \
+  --port 8787
+```
+
+Replace `forgejo` with `gitea` or `codeberg` as needed. The worker resolves `owner/repository` through the API, then requires both the numeric repository id and full name in every payload to match.
+
+### 3. Create the webhook
+
+Point the repository webhook at the HTTPS reverse proxy in front of the worker. Configure the same secret as `PIPR_WEBHOOK_SECRET`, then enable these events:
+
+- Pull request
+- Issue comment
+- Pull request review comment
+
+Pipr verifies the hexadecimal HMAC-SHA256 signature over the raw request body, deduplicates the native delivery id in SQLite, and preserves the native event name for event parsing.
+
+## Supported behavior
+
+The Gitea-compatible adapter supports the same provider-neutral review contract across all three host ids:
+
+- pull request, command comment, and review reply events;
+- exact-head checkout through `refs/pull/<number>/head`;
+- repository permission checks for commands;
+- Main Review Comment and command response upserts;
+- single-line Inline Review Comments on added or deleted lines;
+- idempotent verifier replies;
+- individual and aggregate commit statuses;
+- progress ownership, partial retry, marker deduplication, and stale-head rejection.
+
+Gitea-compatible APIs don't expose native review-thread resolution through the contracts Pipr uses, so verifier replies don't close the native thread. Multi-line inline ranges and native suggested-change blocks are also unavailable; Pipr anchors the finding to its final selected line and renders replacement code as fenced Markdown.
+
+## Next steps
+
+- Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for persistent queue state and health checks.
+- Read [Trust and security](/docs/concepts/trust-security) before enabling pull requests from untrusted contributors.
+- Use [Configuration](/docs/guide/configuration) to change models, entrypoints, and publication limits.

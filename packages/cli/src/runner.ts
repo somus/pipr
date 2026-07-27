@@ -302,7 +302,12 @@ async function runHostRun(options: CliOptions): Promise<void> {
     rootDir,
     configDir: options.configDir,
     host: options.host,
-    eventPath: options.event ?? env.PIPR_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
+    eventPath:
+      options.event ??
+      env.PIPR_EVENT_PATH ??
+      env.GITEA_EVENT_PATH ??
+      env.FORGEJO_EVENT_PATH ??
+      env.GITHUB_EVENT_PATH,
     env,
     dryRun: env.PIPR_DRY_RUN === "1",
     logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
@@ -382,6 +387,8 @@ function publishGitHubRunMetadata(
 
 function hostRunRootDir(env: NodeJS.ProcessEnv): string {
   return (
+    env.GITEA_WORKSPACE ??
+    env.FORGEJO_WORKSPACE ??
     env.GITHUB_WORKSPACE ??
     env.CI_PROJECT_DIR ??
     env.BITBUCKET_CLONE_DIR ??
@@ -453,9 +460,22 @@ function shorten(value: string, length: number): string {
   return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
 }
 
-function webhookHost(value: string | undefined): "gitlab" | "azure-devops" | "bitbucket" {
-  if (value === "gitlab" || value === "azure-devops" || value === "bitbucket") return value;
-  throw new Error("webhook serve supports --host gitlab, azure-devops, or bitbucket");
+function webhookHost(
+  value: string | undefined,
+): "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg" {
+  if (
+    value === "gitlab" ||
+    value === "azure-devops" ||
+    value === "bitbucket" ||
+    value === "gitea" ||
+    value === "forgejo" ||
+    value === "codeberg"
+  ) {
+    return value;
+  }
+  throw new Error(
+    "webhook serve supports --host gitlab, azure-devops, bitbucket, gitea, forgejo, or codeberg",
+  );
 }
 
 function webhookPort(value: string | undefined): number {

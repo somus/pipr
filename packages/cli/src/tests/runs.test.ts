@@ -590,6 +590,30 @@ describe("run PR selector", () => {
         cwd: "/does/not/exist",
       }),
     ).toEqual({ host: "bitbucket", repository: "workspace/pipr", changeNumber: 9 });
+    expect(
+      await resolveRunSelector({
+        pr: "https://codeberg.org/somus/pipr/pulls/10",
+        cwd: "/does/not/exist",
+      }),
+    ).toEqual({ host: "codeberg", repository: "somus/pipr", changeNumber: 10 });
+    expect(
+      await resolveRunSelector({
+        pr: "https://git.example.test/somus/pipr/pulls/11",
+        host: "gitea",
+        cwd: "/does/not/exist",
+      }),
+    ).toEqual({ host: "gitea", repository: "somus/pipr", changeNumber: 11 });
+  });
+
+  it("requires an explicit host for ambiguous Gitea-compatible URLs", async () => {
+    await expect(
+      resolveRunSelector({
+        pr: "https://git.example.test/somus/pipr/pulls/11",
+        cwd: os.tmpdir(),
+      }),
+    ).rejects.toThrow(
+      "Could not derive the PR host and repository; pass a PR URL or --host and --repository",
+    );
   });
 
   it("lets explicit host and repository override remote discovery", async () => {
@@ -610,7 +634,7 @@ async function writeBundle(
   options: {
     kind?: "review" | "command" | "verifier" | "startup";
     startedAt?: string;
-    host?: "github" | "gitlab" | "azure-devops" | "bitbucket";
+    host?: "github" | "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg";
     repository?: string;
   } = {},
 ): Promise<void> {

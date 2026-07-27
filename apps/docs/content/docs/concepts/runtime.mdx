@@ -72,7 +72,7 @@ type TaskContext = {
 
 `verifier` is reserved for Pipr's internal verifier agent and tool context; task handlers receive `change-request`, `command`, or `local`.
 
-`change.number` is provider-relative: a GitHub, Azure DevOps, or Bitbucket Cloud pull request number, or a GitLab merge request IID.
+`change.number` is provider-relative: a pull request number on GitHub, Azure DevOps, Bitbucket Cloud, Gitea, Forgejo, or Codeberg, or a GitLab merge request IID.
 
 ## Trust model
 
@@ -153,7 +153,7 @@ const finding: ReviewFinding = {
 };
 ```
 
-`suggestedFix` is optional exact replacement code for that range. GitHub and GitLab render native suggestions; Azure DevOps and Bitbucket render fenced replacement code. Do not include Markdown fences, prose, or labels in the value.
+`suggestedFix` is optional exact replacement code for that range. GitHub and GitLab render native suggestions; Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg render fenced replacement code. Do not include Markdown fences, prose, or labels in the value.
 
 ### Prompt injection
 

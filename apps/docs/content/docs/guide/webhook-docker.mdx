@@ -12,7 +12,7 @@ You need:
 - Docker Engine with Docker Compose v2;
 - a Linux host that can reach your code host and model provider;
 - one dedicated repository checkout containing `.pipr/config.ts`;
-- the provider credentials listed in the [GitLab](/docs/guide/gitlab), [Azure DevOps](/docs/guide/azure-devops), or [Bitbucket Cloud](/docs/guide/bitbucket) guide;
+- the provider credentials listed in the matching [code host guide](/docs/guide#start-with-your-code-host);
 - an HTTPS reverse proxy that forwards the provider webhook path to `127.0.0.1:8787`.
 
 Run one service per repository. The worker mutates its checkout while it processes deliveries, and its SQLite queue serializes work for that checkout, so don't share a workspace between containers or scale one repository across replicas.
@@ -83,6 +83,9 @@ If your config uses another model provider, replace `DEEPSEEK_API_KEY` with the 
 | GitLab.com | `gitlab` | `GITLAB_TOKEN` |
 | Azure DevOps Services | `azure-devops` | `AZURE_DEVOPS_ORGANIZATION`, `AZURE_DEVOPS_PROJECT`, `PIPR_AZURE_SUBSCRIPTION_ID`, and either `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` |
 | Bitbucket Cloud | `bitbucket` | `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, `BITBUCKET_PERMISSION_EMAIL`, and `BITBUCKET_PERMISSION_API_TOKEN` |
+| Gitea | `gitea` | `GITEA_SERVER_URL`, `GITEA_TOKEN` |
+| Forgejo | `forgejo` | `FORGEJO_SERVER_URL`, `FORGEJO_TOKEN` |
+| Codeberg | `codeberg` | `CODEBERG_TOKEN` |
 
 Keep `PIPR_BIND_ADDRESS=127.0.0.1` unless another private network provides the TLS and access boundary. Don't commit `.env` or copy its values into Compose command arguments.
 
@@ -153,4 +156,5 @@ Finish setup in the matching provider guide, then review the worker's trust boun
 - [Configure the GitLab webhook](/docs/guide/gitlab#commands-and-reply-verification) to select events and authenticate deliveries.
 - [Configure Azure DevOps service hooks](/docs/guide/azure-devops#commands-and-reply-verification) to bind one worker to one subscription.
 - [Configure Bitbucket Cloud webhooks](/docs/guide/bitbucket#configure-the-runner) to set event and API-token requirements.
+- [Configure Gitea-compatible webhooks](/docs/guide/gitea-forgejo-codeberg#run-with-trusted-webhooks) for Gitea, Forgejo, or Codeberg.
 - [Review the trust model](/docs/concepts/trust-security) before accepting events from untrusted contributors.

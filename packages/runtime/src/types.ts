@@ -122,6 +122,11 @@ const codeHostCoordinatesSchema = z.discriminatedUnion("provider", [
     projectId: nonEmptyStringSchema.optional(),
     repositoryId: nonEmptyStringSchema,
   }),
+  z.strictObject({
+    provider: z.literal("gitea"),
+    owner: nonEmptyStringSchema,
+    repository: nonEmptyStringSchema,
+  }),
 ]);
 
 const changeEndpointSchema = z.strictObject({
