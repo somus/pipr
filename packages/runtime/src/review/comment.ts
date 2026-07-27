@@ -13,6 +13,8 @@ import {
   mainCommentHeaderHiddenMarker,
   mainCommentTitle,
   piprRepositoryUrl,
+  reviewResultEndMarker,
+  reviewResultStartMarker,
   reviewStatsEndMarker,
   reviewStatsHiddenMarker,
   reviewStatsStartMarker,
@@ -369,9 +371,10 @@ function renderMainComment(options: {
     "",
     ...(!options.showHeader ? [mainCommentHeaderHiddenMarker, ""] : []),
     ...(options.showHeader ? [mainCommentTitle, ""] : []),
-    ...(options.metadata.validFindings > 0
-      ? [`**Findings:** ${options.metadata.validFindings}`, ""]
-      : []),
+    reviewResultStartMarker,
+    renderReviewResult(options.metadata.validFindings),
+    reviewResultEndMarker,
+    "",
     options.main,
     "",
     ...(!options.showStats || !options.metadata.stats ? [reviewStatsHiddenMarker, ""] : []),
@@ -382,6 +385,14 @@ function renderMainComment(options: {
       ? [renderMainCommentAttribution(options.metadata), ""]
       : [mainCommentFooterHiddenMarker, ""]),
   ].join("\n");
+}
+
+function renderReviewResult(validFindings: number): string {
+  if (validFindings === 0) {
+    return "> ✅ **No actionable findings:** The review completed without actionable findings.";
+  }
+  const findingLabel = validFindings === 1 ? "finding was" : "findings were";
+  return `> ⚠️ **Needs attention:** ${validFindings} actionable ${findingLabel} identified.`;
 }
 
 function renderReviewStats(stats: ReviewStats, workflowUrl?: string): string {

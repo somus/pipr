@@ -147,8 +147,8 @@ describe("runHostRunCommand pull_request dispatch", () => {
       expect(
         bodies.some(
           (body) =>
-            body.includes("Task: <code>review</code>") &&
-            body.includes("Reviewer: <code>reviewer</code>"),
+            body.includes("<strong>Task:</strong> <code>review</code>") &&
+            body.includes("<strong>Reviewer:</strong> <code>reviewer</code>"),
         ),
       ).toBe(true);
       expect(bodies.at(-1)).toContain("Review completed in ");
@@ -170,7 +170,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
     const updateIssueComment = publication.client.updateIssueComment.bind(publication.client);
     let delayed = false;
     publication.client.updateIssueComment = async (options) => {
-      if (!delayed && options.body.includes("Task: <code>review</code>")) {
+      if (!delayed && options.body.includes("<strong>Task:</strong> <code>review</code>")) {
         delayed = true;
         workUpdateStarted.resolve();
         await releaseWorkUpdate.promise;
@@ -192,6 +192,89 @@ describe("runHostRunCommand pull_request dispatch", () => {
       expect(publication.writes.updated.at(-1)).toBe(issueComments[0]?.body);
     } finally {
       releaseWorkUpdate.resolve();
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("ignores a superseded stage transition and neutralizes started checks", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const checks: FakeCheckRuns = { created: [], updated: [] };
+    const client = fakeGitHubPublicationClient(workspace, issueComments, checks);
+    const createIssueComment = client.createIssueComment.bind(client);
+    client.createIssueComment = async (options) => {
+      const result = await createIssueComment(options);
+      supersedeProgressComment(issueComments);
+      return result;
+    };
+    try {
+      await expect(
+        runPullRequestAction(workspace, { githubPublicationClient: client }),
+      ).resolves.toMatchObject({
+        kind: "ignored",
+        reason: "Review progress was superseded by a newer run",
+      });
+
+      expect(checks.updated).toEqual([
+        {
+          checkRunId: 4,
+          name: "review",
+          conclusion: "neutral",
+          summary: "Pipr run was superseded.",
+        },
+        {
+          checkRunId: 5,
+          name: "all",
+          conclusion: "neutral",
+          summary: "Pipr run was superseded.",
+        },
+      ]);
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("prioritizes an asynchronous work supersession over a task failure", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const checks: FakeCheckRuns = { created: [], updated: [] };
+    const client = fakeGitHubPublicationClient(workspace, issueComments, checks);
+    const updateIssueComment = client.updateIssueComment.bind(client);
+    let superseded = false;
+    client.updateIssueComment = async (options) => {
+      const result = await updateIssueComment(options);
+      if (
+        !superseded &&
+        options.body.includes("stage=running-review-tasks") &&
+        !options.body.includes("Task:")
+      ) {
+        superseded = true;
+        supersedeProgressComment(issueComments);
+      }
+      return result;
+    };
+    try {
+      await writeFailingPiExecutable(workspace.piExecutable);
+      await expect(
+        runPullRequestAction(workspace, { githubPublicationClient: client }),
+      ).resolves.toMatchObject({
+        kind: "ignored",
+        reason: "Review progress was superseded by a newer run",
+      });
+
+      expect(checks.updated.map((check) => check.conclusion)).toEqual(["neutral", "neutral"]);
+      expect(checks.updated.map((check) => check.summary)).toEqual([
+        "Pipr run was superseded.",
+        "Pipr run was superseded.",
+      ]);
+    } finally {
       await removeWorkspace(workspace.rootDir);
     }
   });
@@ -360,6 +443,69 @@ describe("runHostRunCommand pull_request dispatch", () => {
       await expect(
         runPullRequestAction(workspace, { githubPublicationClient: client }),
       ).rejects.toThrow("Check the adapter credential scopes");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("ignores a superseded lease when check startup fails before review execution", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const client = fakeGitHubPublicationClient(workspace, issueComments);
+    client.createCheckRun = async () => {
+      supersedeProgressComment(issueComments);
+      throw new Error("Resource not accessible by integration");
+    };
+    try {
+      await expect(
+        runPullRequestAction(workspace, { githubPublicationClient: client }),
+      ).resolves.toMatchObject({
+        kind: "ignored",
+        reason: "Review progress was superseded by a newer run",
+      });
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("neutralizes partially started checks when later check startup is superseded", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const checks: FakeCheckRuns = { created: [], updated: [] };
+    const client = fakeGitHubPublicationClient(workspace, issueComments, checks);
+    const createCheckRun = client.createCheckRun.bind(client);
+    client.createCheckRun = async (options) => {
+      if (options.name === "all") {
+        supersedeProgressComment(issueComments);
+        throw new Error("Resource not accessible by integration");
+      }
+      return await createCheckRun(options);
+    };
+    try {
+      await expect(
+        runPullRequestAction(workspace, { githubPublicationClient: client }),
+      ).resolves.toMatchObject({
+        kind: "ignored",
+        reason: "Review progress was superseded by a newer run",
+      });
+
+      expect(checks.created.map((check) => check.name)).toEqual(["review"]);
+      expect(checks.updated).toEqual([
+        {
+          checkRunId: 4,
+          name: "review",
+          conclusion: "neutral",
+          summary: "Pipr run was superseded.",
+        },
+      ]);
       await expectPiNotCalled(workspace);
     } finally {
       await removeWorkspace(workspace.rootDir);
@@ -626,3 +772,14 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 });
+
+function supersedeProgressComment(
+  issueComments: Array<{ id: number; body: string; authorLogin: string }>,
+): void {
+  const comment = issueComments[0];
+  if (!comment) throw new Error("expected progress comment");
+  comment.body = comment.body.replace(
+    /token=[A-Za-z0-9-]+/,
+    "token=00000000-0000-4000-8000-000000000000",
+  );
+}

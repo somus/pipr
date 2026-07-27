@@ -265,7 +265,9 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     });
 
     assertReviewResult(result);
-    expect(result.mainComment).toContain("**Findings:** 1");
+    expect(result.mainComment).toContain(
+      "> ⚠️ **Needs attention:** 1 actionable finding was identified.",
+    );
     expect(result.mainComment).toContain("| Medium | The changed path affects runtime behavior");
     expect(result.mainComment).not.toContain(
       "| Medium | correctness | Fallback value is skipped |",

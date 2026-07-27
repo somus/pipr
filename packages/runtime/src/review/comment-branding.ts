@@ -10,6 +10,8 @@ export const mainCommentFooterHiddenMarker = "<!-- pipr:footer:hidden -->";
 export const reviewStatsStartMarker = "<!-- pipr:stats:start -->";
 export const reviewStatsEndMarker = "<!-- pipr:stats:end -->";
 export const reviewStatsHiddenMarker = "<!-- pipr:stats:hidden -->";
+export const reviewResultStartMarker = "<!-- pipr:result:start -->";
+export const reviewResultEndMarker = "<!-- pipr:result:end -->";
 export const reviewProgressEndMarker = "<!-- pipr:progress:end -->";
 
 const escapedRepositoryUrl = piprRepositoryUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

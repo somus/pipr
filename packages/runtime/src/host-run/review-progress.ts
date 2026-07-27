@@ -18,7 +18,7 @@ export type ReviewProgressReporter = ReviewProgressSink & {
   readonly lease: ReviewProgressLease;
   readonly activeStage: ReviewProgressStage;
   recordStats(stats: ReviewStats | undefined): void;
-  fail(error: unknown): Promise<void>;
+  fail(error: unknown): Promise<"failed" | "superseded">;
 };
 
 export async function startReviewProgress(options: {
@@ -47,6 +47,7 @@ export async function startReviewProgress(options: {
   let superseded = false;
   let workDirty = false;
   let workPublication: Promise<void> | undefined;
+  let failurePublication: Promise<"failed" | "superseded"> | undefined;
   const workTracker = createReviewWorkTracker();
   let lastPublishedWork = JSON.stringify(workTracker.snapshot());
   const initial = await publishProgress({
@@ -128,6 +129,48 @@ export async function startReviewProgress(options: {
     }
   }
 
+  async function publishFailure(error: unknown): Promise<"failed" | "superseded"> {
+    if (error instanceof ReviewProgressSupersededError) return "superseded";
+    await drainWorkPublication();
+    if (superseded) return "superseded";
+    workDirty = false;
+    const reason = error instanceof Error ? error.message : String(error);
+    const redactedReason = options.secretRedactor?.redact(reason).value ?? reason;
+    try {
+      const result = await publishProgress({
+        change: options.event,
+        reviewedHeadSha,
+        expectedToken: token,
+        renderBody: (body) =>
+          renderFailedReviewProgress({
+            body,
+            changeNumber: options.event.change.number,
+            token,
+            reviewedHeadSha,
+            stage: activeStage,
+            showHeader: options.config.publication.showHeader,
+            showFooter: options.config.publication.showFooter,
+            firstRun,
+            showStats: options.config.publication.showStats,
+            durationMs: Date.now() - startedAt,
+            reason: redactedReason,
+            workflowUrl: options.workflowUrl,
+            stats,
+            work: workTracker.snapshot(),
+          }),
+      });
+      return result.status === "superseded" ? "superseded" : "failed";
+    } catch (progressError) {
+      const progressReason =
+        progressError instanceof Error ? progressError.message : String(progressError);
+      options.log.warning("review progress failure publication failed", {
+        error: options.secretRedactor?.redact(progressReason).value ?? progressReason,
+        originalError: redactedReason,
+      });
+      return "failed";
+    }
+  }
+
   return {
     lease,
     get activeStage() {
@@ -166,45 +209,9 @@ export async function startReviewProgress(options: {
       if (result.status === "superseded") throw new ReviewProgressSupersededError();
       activeStage = stage;
     },
-    async fail(error) {
-      if (error instanceof ReviewProgressSupersededError) return;
-      await drainWorkPublication();
-      if (superseded) return;
-      workDirty = false;
-      const reason = error instanceof Error ? error.message : String(error);
-      const redactedReason = options.secretRedactor?.redact(reason).value ?? reason;
-      try {
-        const result = await publishProgress({
-          change: options.event,
-          reviewedHeadSha,
-          expectedToken: token,
-          renderBody: (body) =>
-            renderFailedReviewProgress({
-              body,
-              changeNumber: options.event.change.number,
-              token,
-              reviewedHeadSha,
-              stage: activeStage,
-              showHeader: options.config.publication.showHeader,
-              showFooter: options.config.publication.showFooter,
-              firstRun,
-              showStats: options.config.publication.showStats,
-              durationMs: Date.now() - startedAt,
-              reason: redactedReason,
-              workflowUrl: options.workflowUrl,
-              stats,
-              work: workTracker.snapshot(),
-            }),
-        });
-        if (result.status === "superseded") return;
-      } catch (progressError) {
-        const progressReason =
-          progressError instanceof Error ? progressError.message : String(progressError);
-        options.log.warning("review progress failure publication failed", {
-          error: options.secretRedactor?.redact(progressReason).value ?? progressReason,
-          originalError: redactedReason,
-        });
-      }
+    fail(error) {
+      failurePublication ??= publishFailure(error);
+      return failurePublication;
     },
   };
 }

@@ -1,6 +1,7 @@
 import type { RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import { publicationPlanForHostCapabilities } from "../review/comment.js";
+import { ReviewProgressSupersededError } from "../review/progress.js";
 import { type RuntimeCommandInvocation, runTaskRuntime } from "../review/task/task-runtime.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
@@ -38,6 +39,7 @@ export async function runTrustedReviewAndPublish(options: {
     log: options.log,
   });
   try {
+    if (checks?.startupError) throw checks.startupError;
     const review = await runTaskRuntime({
       workspace: options.options.rootDir,
       config: options.trustedRuntime.settings.config,
@@ -115,16 +117,26 @@ export async function runTrustedReviewAndPublish(options: {
     });
     return { kind: "completed", review, publication };
   } catch (error) {
+    let finalError = error;
+    if ((await options.progress?.fail(error)) === "superseded") {
+      finalError = new ReviewProgressSupersededError();
+    }
+    const superseded = finalError instanceof ReviewProgressSupersededError;
     await finalizeRuntimeChecks(checks, {
-      forceFailureSummary: genericCheckFailureSummary,
-      preserveTaskOutcomes: Array.from(checks?.outcomes.values() ?? []).some(
-        (result) => result.conclusion === "failure",
-      ),
+      superseded,
+      ...(superseded
+        ? {}
+        : {
+            forceFailureSummary: genericCheckFailureSummary,
+            preserveTaskOutcomes: Array.from(checks?.outcomes.values() ?? []).some(
+              (result) => result.conclusion === "failure",
+            ),
+          }),
     }).catch((finalizeError: unknown) => {
       options.log.warning("check finalization after failure failed", {
         error: finalizeError instanceof Error ? finalizeError.message : String(finalizeError),
       });
     });
-    throw error;
+    throw finalError;
   }
 }

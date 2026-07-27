@@ -2,6 +2,8 @@ import {
   mainCommentAttributionPattern,
   mainCommentFooterHiddenMarker,
   mainCommentHeaderHiddenMarker,
+  reviewResultEndMarker,
+  reviewResultStartMarker,
   reviewStatsEndMarker,
   reviewStatsHiddenMarker,
   reviewStatsStartMarker,
@@ -29,6 +31,7 @@ export type GeneratedMainCommentEnvelope = {
   statsMarkerIndex: number;
   statsRange: { start: number; end: number } | undefined;
   progressRange: { start: number; end: number } | undefined;
+  resultRange: { start: number; end: number } | undefined;
   footerIndex: number;
 };
 
@@ -60,8 +63,23 @@ export function parseGeneratedMainCommentEnvelope(lines: string[]): GeneratedMai
     statsMarkerIndex,
     statsRange: generatedReviewStatsRange(lines, footerIndex),
     progressRange: reviewProgressRange(lines),
+    resultRange: generatedReviewResultRange(lines),
     footerIndex,
   };
+}
+
+function generatedReviewResultRange(lines: string[]): { start: number; end: number } | undefined {
+  const start = lines.indexOf(reviewResultStartMarker);
+  if (
+    start < 0 ||
+    lines[start + 2] !== reviewResultEndMarker ||
+    !/^> (?:✅ \*\*No actionable findings:\*\*|⚠️ \*\*Needs attention:\*\*) .+$/.test(
+      lines[start + 1] ?? "",
+    )
+  ) {
+    return undefined;
+  }
+  return { start, end: start + 2 };
 }
 
 function generatedReviewStatsRange(

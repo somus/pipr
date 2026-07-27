@@ -340,7 +340,7 @@ function generatedEnvelopeOwnsLine(envelope: GeneratedMainCommentEnvelope, index
   ) {
     return true;
   }
-  return [envelope.statsRange, envelope.progressRange].some(
+  return [envelope.statsRange, envelope.progressRange, envelope.resultRange].some(
     (range) => range !== undefined && index >= range.start && index <= range.end,
   );
 }

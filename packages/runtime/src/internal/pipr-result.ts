@@ -143,6 +143,8 @@ export function stripPiprMainCommentMarkers(mainComment: string): string {
     envelope.statsMarkerIndex,
     envelope.statsRange?.start ?? -1,
     envelope.statsRange?.end ?? -1,
+    envelope.resultRange?.start ?? -1,
+    envelope.resultRange?.end ?? -1,
     lines[envelope.footerIndex] === mainCommentFooterHiddenMarker ? envelope.footerIndex : -1,
   ]);
   const visibleLines = lines.filter((_line, index) => !generatedMarkerIndexes.has(index));

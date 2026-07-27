@@ -133,22 +133,23 @@ export function renderRunningReviewProgress(options: RenderReviewProgressOptions
   const stageIndex = reviewProgressStages.indexOf(options.stage);
   const rows = reviewProgressStages.flatMap((stage, index) => {
     const label = escapeHtml(progressLabels[stage]);
-    if (index < stageIndex) return [`✓ ${label}`];
+    if (index < stageIndex) return [`✅ ${label}`];
     if (index !== stageIndex) return [`○ ${label}`];
     return [
-      `<strong>Running: ${label}</strong>`,
+      `⏳ <strong>Running: ${label}</strong>`,
       ...(stage === "running-review-tasks" && options.work ? renderReviewWork(options.work) : []),
     ];
   });
   const block = [
     progressStartMarker(options, "running"),
-    "## Progress",
+    "## ⏳ Progress",
     "",
     "<table><tr>",
     `<td><img src="${piprProgressImageUrl}" width="48" height="48" alt=""></td>`,
     `<td>${rows.join("<br>")}</td>`,
     "</tr></table>",
     ...progressFooter(options, "running"),
+    ...progressSeparator(options),
     reviewProgressEndMarker,
   ];
   return insertProgressBlock(body, block);
@@ -167,7 +168,9 @@ export function renderFailedReviewProgress(
   const failedWork = failedWorkLine(options.work);
   const details = [
     progressStartMarker(options, "failed"),
-    "<details>",
+    "## ❌ Review failed",
+    "",
+    "<details open>",
     `<summary>Review failed after ${formatReviewDuration(options.durationMs)}</summary>`,
     "",
     `**Failed stage:** ${progressLabels[options.stage]}  `,
@@ -186,6 +189,7 @@ export function renderFailedReviewProgress(
     "",
     "</details>",
     ...progressFooter(options, "failed"),
+    ...progressSeparator(options),
     reviewProgressEndMarker,
   ];
   return insertProgressBlock(body, details);
@@ -282,6 +286,10 @@ function progressFooter(
   return ["", `<sub>Pipr ${verb} commit \`${options.reviewedHeadSha.slice(0, 7)}\`.</sub>`];
 }
 
+function progressSeparator(options: Pick<RenderReviewProgressOptions, "firstRun">): string[] {
+  return options.firstRun ? [] : ["", "---"];
+}
+
 function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
@@ -299,7 +307,7 @@ function renderReviewWork(work: ReviewWorkSnapshot): string[] {
   }
   if (work.completedRuns > 0 || work.activeReviewers > 0) {
     rows.push(
-      `<small>${work.completedRuns} ${plural(work.completedRuns, "review run")} completed · ${work.activeReviewers} ${plural(work.activeReviewers, "reviewer")} active</small>`,
+      `<small><strong>Completed:</strong> ${work.completedRuns} ${plural(work.completedRuns, "review run")} · ${work.activeReviewers} ${plural(work.activeReviewers, "reviewer")} active</small>`,
     );
   }
   return rows;
@@ -325,7 +333,7 @@ function renderReviewWorkTask(options: {
   reviewers: ReviewWorkReviewer[];
 }): string[] {
   return [
-    `<small>Task: <code>${escapeHtml(options.task.name)}</code></small>`,
+    `<small><strong>Task:</strong> <code>${escapeHtml(options.task.name)}</code></small>`,
     ...options.reviewers.map(renderReviewWorkReviewer),
   ];
 }
@@ -334,7 +342,7 @@ function renderReviewWorkReviewer(reviewer: ReviewWorkReviewer): string {
   const shard = reviewer.shard
     ? ` · shard ${reviewer.shard.current} of ${reviewer.shard.total}`
     : "";
-  return `<small>&nbsp;&nbsp;Reviewer: <code>${escapeHtml(reviewer.name)}</code>${shard}</small>`;
+  return `<small>&nbsp;&nbsp;↳ <strong>Reviewer:</strong> <code>${escapeHtml(reviewer.name)}</code>${shard}</small>`;
 }
 
 function plural(count: number, singular: string): string {

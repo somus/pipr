@@ -14,12 +14,14 @@ export type StartedRuntimeChecks = {
   outcomes: Map<string, RuntimeTaskCheckResult>;
   taskRuns: Map<string, CodeHostStatus>;
   aggregate?: CodeHostStatus;
+  startupError?: unknown;
   sink: RuntimeCheckSink;
   log?: RuntimeLog;
 };
 
 export type FinalizeRuntimeCheckOptions = {
   skipped?: boolean;
+  superseded?: boolean;
   forceFailureSummary?: string;
   preserveTaskOutcomes?: boolean;
 };
@@ -67,10 +69,7 @@ export async function startRuntimeChecks(options: {
       started.log?.info("status created", { name: aggregateName, kind: "aggregate" });
     }
   } catch (error) {
-    await finalizeRuntimeChecks(started, {
-      forceFailureSummary: genericCheckFailureSummary,
-    }).catch(() => undefined);
-    throw error;
+    started.startupError = error;
   }
   return started;
 }
@@ -211,6 +210,9 @@ function taskCheckResultForFinalization(
   result: RuntimeTaskCheckResult | undefined,
   options: FinalizeRuntimeCheckOptions,
 ): RuntimeTaskCheckResult {
+  if (options.superseded) {
+    return { taskName: task.name, conclusion: "neutral", summary: "Pipr run was superseded." };
+  }
   if (options.skipped) {
     return { taskName: task.name, conclusion: "neutral", summary: "No task matched this run." };
   }
@@ -226,8 +228,11 @@ function taskCheckResultForFinalization(
 function aggregateCheckConclusion(
   tasks: RuntimeTask[],
   results: RuntimeTaskCheckResult[],
-  options: { skipped?: boolean; forceFailureSummary?: string },
+  options: { skipped?: boolean; superseded?: boolean; forceFailureSummary?: string },
 ): { conclusion: Exclude<CodeHostStatusState, "pending">; summary: string } {
+  if (options.superseded) {
+    return { conclusion: "neutral", summary: "Pipr run was superseded." };
+  }
   if (options.skipped || tasks.length === 0) {
     return { conclusion: "neutral", summary: "No pipr tasks matched this run." };
   }

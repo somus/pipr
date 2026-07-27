@@ -68,6 +68,8 @@ The Main Review Comment carries the task's review-level result and stable Pipr s
 
 The Main Review Comment is the single visible summary for a review task. Pipr upserts it by hidden marker, then replaces the visible body on rerun.
 
+Pipr places a text-labeled result banner above the task-authored body. A completed review uses **No actionable findings** or **Needs attention** with a matching status icon, so the result remains understandable without relying on color or icon recognition.
+
 <img
   alt="GitHub pull request comment from github-actions bot titled Pipr Review with a summary of security and error-handling findings"
   src="/images/pipr/providers/github-review.png"
@@ -79,7 +81,7 @@ Hosted change-request runs update the Main Review Comment when Pipr moves betwee
 
 While Pipr runs Review Tasks, the active stage expands into task, reviewer, and shard rows. Custom multi-agent tasks and the Built-in Review use the same progress model. Pipr shows at most three concurrent reviewers, summarizes additional reviewers, and reports completed review runs without claiming a total before conditional task code has scheduled every agent. Retries, repairs, and model fallbacks remain part of the final **Agent runs** metric instead of changing the live reviewer identity.
 
-On the first run, the temporary comment contains only the Pipr title, progress, and a running footer. On reruns, Pipr keeps the existing review visible and inserts **Progress** near the top. Pipr does not update the comment for animation frames. A completed run replaces progress with the final review; a failed run keeps the failed stage and concise reason in a collapsed section.
+On the first run, the temporary comment contains only the Pipr title, progress, and a running footer. On reruns, Pipr keeps the existing review visible and inserts **Progress** near the top, separated from the prior result. Completed stages, the active stage, tasks, reviewers, and shard positions use distinct text labels and restrained status icons. Pipr does not update the comment for animation frames. A completed run replaces progress with the final review; a failed run keeps the failed stage and concise reason in an expanded, collapsible section.
 
 Pipr updates the comment only when the displayed stage or task lifecycle changes. Concurrent updates are serialized, and every subsequent write checks the active run lease so an older or superseded run cannot overwrite newer progress or final output.
 
