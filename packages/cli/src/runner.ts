@@ -55,6 +55,8 @@ type CliOptions = {
   adapters?: string;
   recipe?: string;
   minimal?: boolean;
+  runtimeImage?: string;
+  checkoutAction?: string;
   requireEnv?: boolean;
   base?: string;
   head?: string;
@@ -115,6 +117,8 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     )
     .option("--recipe <recipe>", `Starter recipe (${supportedOfficialInitRecipes.join(", ")})`)
     .option("--minimal", "Scaffold a single-file .pipr/config.ts without package.json")
+    .option("--runtime-image <image>", "Container image used by generated adapter setup")
+    .option("--checkout-action <ref>", "Checkout action reference used by GitHub setup")
     .option("--force", "Overwrite existing pipr files")
     .action(runInit);
 
@@ -494,6 +498,8 @@ async function runInit(options: CliOptions): Promise<void> {
     adapters: options.adapters?.split(",").map((adapter) => adapter.trim()),
     recipe: options.recipe,
     minimal: options.minimal === true,
+    runtimeImage: options.runtimeImage,
+    checkoutAction: options.checkoutAction,
   });
   console.log(
     `created ${result.created.length} file(s)` +

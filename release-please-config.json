@@ -48,6 +48,10 @@
         },
         {
           "type": "generic",
+          "path": "deploy/webhook/.env.example"
+        },
+        {
+          "type": "generic",
           "path": "README.md"
         },
         {

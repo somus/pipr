@@ -455,6 +455,14 @@ describe("Azure DevOps host adapter", () => {
 
 defineCodeHostAdapterConformanceSuite({
   name: "Azure DevOps",
+  capabilities: {
+    commandComments: true,
+    reviewCommentReplies: true,
+    threadResolution: true,
+    multilineInlineComments: true,
+    suggestedChanges: false,
+    statuses: true,
+  },
   createHarness: createAzureDevOpsConformanceHarness,
 });
 

@@ -20,6 +20,8 @@ export type InitCommandOptions = RuntimeCommandOptions & {
   adapters?: readonly string[];
   recipe?: string;
   minimal?: boolean;
+  runtimeImage?: string;
+  checkoutAction?: string;
 };
 
 export type DryRunCommandOptions = RuntimeCommandOptions & {

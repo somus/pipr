@@ -59,6 +59,8 @@ Options:
 | `--adapters <adapters>` | `github` | Adapter files to initialize. Use `none` to skip workflow files. |
 | `--recipe <recipe>` | none | Starter recipe id. |
 | `--minimal` | false | Scaffold only `.pipr/config.ts` without `package.json` or `tsconfig.json`. |
+| `--runtime-image <image>` | Pipr release image | Container image used by generated adapter setup. |
+| `--checkout-action <ref>` | `actions/checkout@v6` | Checkout action reference used by generated GitHub setup. |
 | `--force` | false | Overwrite existing Pipr files. |
 
 Examples:
@@ -69,9 +71,12 @@ pipr init --adapters gitlab
 pipr init --recipe security-sast
 pipr init --minimal
 pipr init --config-dir .config/pipr
+pipr init \
+  --runtime-image registry.internal.example/pipr:v0.6.3 \
+  --checkout-action git.internal.example/actions/checkout@v6
 ```
 
-See [Init Recipes](/docs/recipes) for recipe ids.
+See [Init Recipes](/docs/recipes) for recipe ids. For disconnected networks, mirror the Pipr image and checkout action before passing their internal references.
 
 ## `pipr host-run`
 

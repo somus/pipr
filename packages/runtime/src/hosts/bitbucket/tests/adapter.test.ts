@@ -298,6 +298,14 @@ describe("Bitbucket Cloud adapter", () => {
 
 defineCodeHostAdapterConformanceSuite({
   name: "Bitbucket Cloud",
+  capabilities: {
+    commandComments: true,
+    reviewCommentReplies: true,
+    threadResolution: true,
+    multilineInlineComments: true,
+    suggestedChanges: false,
+    statuses: true,
+  },
   createHarness: createBitbucketConformanceHarness,
 });
 

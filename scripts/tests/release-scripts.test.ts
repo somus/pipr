@@ -433,7 +433,10 @@ describe("sync-release-lockfile", () => {
       "docker://ghcr.io/somus/pipr:v0.1.1",
     );
     expect(readFileSync(path.join(repository, "deploy/webhook/compose.yml"), "utf8")).toContain(
-      "image: ghcr.io/somus/pipr:v0.1.1",
+      "image: ${PIPR_IMAGE:-ghcr.io/somus/pipr:v0.1.1}",
+    );
+    expect(readFileSync(path.join(repository, "deploy/webhook/.env.example"), "utf8")).toContain(
+      "PIPR_IMAGE=ghcr.io/somus/pipr:v0.1.1",
     );
     expect(readFileSync(path.join(repository, ".github/workflows/pipr.yml"), "utf8")).toContain(
       `uses: somus/pipr@v${dogfoodSdkVersion}`,
@@ -697,6 +700,23 @@ describe("check-release-metadata", () => {
     write(
       composePath,
       readFileSync(composePath, "utf8").replace(
+        `ghcr.io/somus/pipr:v${rootPackage.version}`,
+        "ghcr.io/somus/pipr:v0.0.0",
+      ),
+    );
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
+  it("rejects a stale webhook environment image pin", () => {
+    const repository = copyRepositoryFixture();
+    const environmentPath = path.join(repository, "deploy/webhook/.env.example");
+    const rootPackage = JSON.parse(readFileSync(path.join(repository, "package.json"), "utf8")) as {
+      version: string;
+    };
+    write(
+      environmentPath,
+      readFileSync(environmentPath, "utf8").replace(
         `ghcr.io/somus/pipr:v${rootPackage.version}`,
         "ghcr.io/somus/pipr:v0.0.0",
       ),

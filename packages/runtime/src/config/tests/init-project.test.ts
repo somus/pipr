@@ -209,6 +209,22 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     );
   });
 
+  it("renders internal runtime and checkout references for disconnected GitHub setup", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      runtimeImage: "registry.internal.example/pipr:v1",
+      checkoutAction: "git.internal.example/actions/checkout@v6",
+    });
+    const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
+
+    expect(workflow).toContain("uses: git.internal.example/actions/checkout@v6");
+    expect(workflow).toContain("uses: docker://registry.internal.example/pipr:v1");
+    expect(workflow).toContain("args: host-run --host github --config-dir .pipr");
+    expect(workflow).not.toContain("uses: somus/pipr@");
+  });
+
   it("refuses and force-overwrites an existing GitHub workflow", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
     await mkdir(path.join(rootDir, ".github", "workflows"), { recursive: true });
@@ -260,6 +276,49 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(pipeline).not.toContain("artifacts:");
     expect(pipeline).not.toContain(".pipr-runs/");
     expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
+  });
+
+  it("uses the selected runtime image in generated container-based adapters", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+
+    await initOfficialMinimalProject({
+      rootDir,
+      adapters: ["gitlab", "azure-devops", "bitbucket"],
+      runtimeImage: "registry.internal.example/pipr:v1",
+    });
+
+    for (const relativePath of [
+      ".gitlab-ci.yml",
+      "azure-pipelines.pipr.yml",
+      "bitbucket-pipelines.yml",
+    ]) {
+      expect(await Bun.file(path.join(rootDir, relativePath)).text()).toContain(
+        "registry.internal.example/pipr:v1",
+      );
+    }
+  });
+
+  it("rejects setup references that could inject workflow lines", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-"));
+
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        runtimeImage: "registry.internal/pipr:v1\n    malicious: true",
+      }),
+    ).rejects.toThrow("runtime image");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        checkoutAction: "actions/checkout@v6\n    malicious: true",
+      }),
+    ).rejects.toThrow("checkout action");
+    await expect(
+      initOfficialMinimalProject({
+        rootDir,
+        runtimeImage: "registry.internal/pipr:v1;run-command",
+      }),
+    ).rejects.toThrow("runtime image");
   });
 
   it("creates Azure trusted-runner settings and an explicit immutable PR pipeline", async () => {

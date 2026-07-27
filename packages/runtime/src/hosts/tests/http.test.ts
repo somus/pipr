@@ -202,4 +202,46 @@ describe("code host HTTP client", () => {
 
     expect(error).toMatchObject({ status: 404 });
   });
+
+  it("rejects redirects instead of forwarding code host credentials", async () => {
+    let redirect: RequestInit["redirect"];
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://code.example.test/api/",
+      headers: { Authorization: "Bearer top-secret-token" },
+      fetch: async (_input, init) => {
+        redirect = init?.redirect;
+        return Response.json({ value: "ok" });
+      },
+    });
+
+    await client.json("items", z.object({ value: z.string() }));
+
+    expect(redirect).toBe("error");
+  });
+
+  it("supports successful responses without JSON bodies", async () => {
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://code.example.test/api/",
+      fetch: async () => new Response(null, { status: 204 }),
+    });
+
+    await expect(client.empty("items/1", { method: "DELETE" })).resolves.toBeUndefined();
+  });
+
+  it("rejects absolute request URLs on another origin before sending credentials", async () => {
+    let calls = 0;
+    const client = createCodeHostHttpClient({
+      baseUrl: "https://code.example.test/api/",
+      headers: { Authorization: "Bearer top-secret-token" },
+      fetch: async () => {
+        calls += 1;
+        return Response.json({ value: "unexpected" });
+      },
+    });
+
+    await expect(client.json("https://evil.example.test/items", z.unknown())).rejects.toThrow(
+      "outside configured code host",
+    );
+    expect(calls).toBe(0);
+  });
 });

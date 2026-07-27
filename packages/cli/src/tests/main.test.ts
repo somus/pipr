@@ -845,6 +845,27 @@ describe("pipr CLI", () => {
     }
   });
 
+  it("passes internal image and checkout references through init", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
+    try {
+      await runInit(workspace, [
+        "init",
+        "--runtime-image",
+        "registry.internal.example/pipr:v1",
+        "--checkout-action",
+        "git.internal.example/actions/checkout@v6",
+      ]);
+
+      const workflow = await Bun.file(
+        path.join(workspace, ".github", "workflows", "pipr.yml"),
+      ).text();
+      expect(workflow).toContain("uses: docker://registry.internal.example/pipr:v1");
+      expect(workflow).toContain("uses: git.internal.example/actions/checkout@v6");
+    } finally {
+      await removeWorkspace(workspace);
+    }
+  });
+
   it("initializes a minimal single-file config without package.json", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-"));
     try {

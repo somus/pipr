@@ -19,6 +19,8 @@ export type InitOfficialMinimalProjectOptions = {
   adapters?: readonly string[];
   recipe?: string;
   minimal?: boolean;
+  runtimeImage?: string;
+  checkoutAction?: string;
 };
 
 export type InitOfficialMinimalProjectResult = {
@@ -80,11 +82,16 @@ function unsupportedAdapterError(adapter: string): Error {
 export async function initOfficialMinimalProject(
   options: InitOfficialMinimalProjectOptions,
 ): Promise<InitOfficialMinimalProjectResult> {
+  assertSetupReference("runtime image", options.runtimeImage);
+  assertSetupReference("checkout action", options.checkoutAction);
   const { configDir, relativeConfigDir, projectDir } = resolveContainedConfigDir(options);
   const adapters = resolveOfficialInitAdapters(options.adapters);
   const rootDir = path.resolve(options.rootDir);
   const minimal = options.minimal === true;
-  const files = await starterFiles(relativeConfigDir, adapters, options.recipe, minimal);
+  const files = await starterFiles(relativeConfigDir, adapters, options.recipe, minimal, {
+    runtimeImage: options.runtimeImage,
+    checkoutAction: options.checkoutAction,
+  });
   const targets = files.map((file) => ({
     ...file,
     absolutePath: path.join(rootDir, file.relativePath),
@@ -130,6 +137,12 @@ export async function initOfficialMinimalProject(
   return { configDir, ...result };
 }
 
+function assertSetupReference(label: string, value: string | undefined): void {
+  if (value !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._/@:+-]*$/.test(value)) {
+    throw new Error(`The ${label} reference contains unsupported characters.`);
+  }
+}
+
 function initInstallCommand(env: NodeJS.ProcessEnv = process.env): string[] {
   const command = ["bun", "install", "--ignore-scripts"];
   if (env.PIPR_INTERNAL_INIT_OFFLINE === "1") command.push("--offline");
@@ -141,6 +154,7 @@ async function starterFiles(
   adapters: readonly OfficialInitAdapter[],
   recipe?: string,
   minimal = false,
+  setup: { runtimeImage?: string; checkoutAction?: string } = {},
 ): Promise<StarterFile[]> {
   const files: StarterFile[] = [
     {
@@ -175,13 +189,19 @@ async function starterFiles(
         relativeConfigDir: relativeConfigDir.split(path.sep).join("/"),
         recipe,
         minimal,
+        runtimeImage: setup.runtimeImage,
+        checkoutAction: setup.checkoutAction,
       }),
     });
   }
   if (adapters.includes("gitlab")) {
     files.push({
       relativePath: ".gitlab-ci.yml",
-      contents: starterGitLabPipeline(relativeConfigDir.split(path.sep).join("/"), recipe),
+      contents: starterGitLabPipeline(
+        relativeConfigDir.split(path.sep).join("/"),
+        recipe,
+        setup.runtimeImage,
+      ),
     });
   }
   if (adapters.includes("azure-devops")) {
@@ -192,7 +212,11 @@ async function starterFiles(
       },
       {
         relativePath: "azure-pipelines.pipr.yml",
-        contents: starterAzureDevOpsPipeline(relativeConfigDir.split(path.sep).join("/"), recipe),
+        contents: starterAzureDevOpsPipeline(
+          relativeConfigDir.split(path.sep).join("/"),
+          recipe,
+          setup.runtimeImage,
+        ),
       },
     );
   }
@@ -204,18 +228,26 @@ async function starterFiles(
       },
       {
         relativePath: "bitbucket-pipelines.yml",
-        contents: starterBitbucketPipeline(relativeConfigDir.split(path.sep).join("/"), recipe),
+        contents: starterBitbucketPipeline(
+          relativeConfigDir.split(path.sep).join("/"),
+          recipe,
+          setup.runtimeImage,
+        ),
       },
     );
   }
   return files;
 }
 
-function starterGitLabPipeline(relativeConfigDir: string, recipe?: string): string {
+function starterGitLabPipeline(
+  relativeConfigDir: string,
+  recipe?: string,
+  runtimeImage = defaultGitLabImageRef,
+): string {
   const lines = [
     "pipr:",
     "  image:",
-    `    name: ${defaultGitLabImageRef}`,
+    `    name: ${runtimeImage}`,
     '    entrypoint: [""]',
     "  rules:",
     "    - if: '$CI_PIPELINE_SOURCE == \"merge_request_event\"'",
@@ -248,7 +280,11 @@ function starterAzureDevOpsWebhookEnvironment(recipe?: string): string {
   return lines.join("\n");
 }
 
-function starterAzureDevOpsPipeline(relativeConfigDir: string, recipe?: string): string {
+function starterAzureDevOpsPipeline(
+  relativeConfigDir: string,
+  recipe?: string,
+  runtimeImage = defaultGitLabImageRef,
+): string {
   const secrets = officialInitRecipeWorkflowEnvSecrets(recipe);
   const lines = [
     "# Use only when this pipeline definition is immutable to pull request authors.",
@@ -279,7 +315,7 @@ function starterAzureDevOpsPipeline(relativeConfigDir: string, recipe?: string):
     lines.push(`        --env ${secret.env} \\`);
   }
   lines.push(
-    `        ${defaultGitLabImageRef} \\`,
+    `        ${runtimeImage} \\`,
     `        host-run --host azure-devops --config-dir ${relativeConfigDir}`,
     "    displayName: Run Pipr",
     "    env:",
@@ -308,7 +344,11 @@ function starterBitbucketWebhookEnvironment(recipe?: string): string {
   return lines.join("\n");
 }
 
-function starterBitbucketPipeline(relativeConfigDir: string, recipe?: string): string {
+function starterBitbucketPipeline(
+  relativeConfigDir: string,
+  recipe?: string,
+  runtimeImage = defaultGitLabImageRef,
+): string {
   const lines = [
     "# Use only when repository variables are not exposed to untrusted pipeline changes.",
     "clone:",
@@ -318,7 +358,7 @@ function starterBitbucketPipeline(relativeConfigDir: string, recipe?: string): s
     "    '**':",
     "      - step:",
     "          name: Pipr review",
-    `          image: ${defaultGitLabImageRef}`,
+    `          image: ${runtimeImage}`,
     "          script:",
     `            - pipr host-run --host bitbucket --config-dir ${relativeConfigDir}`,
   ];

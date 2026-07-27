@@ -69,6 +69,26 @@ The workflow listens only for events that can start configured tasks or verifier
 
 The config still decides which tasks run. The workflow delivers events to `pipr host-run --host github`.
 
+## Use internal mirrors
+
+If GitHub runners can't reach public registries, mirror the Pipr image and checkout action, then generate a workflow with their internal references:
+
+```bash
+pipr init \
+  --runtime-image registry.internal.example/pipr:v0.6.3 \
+  --checkout-action git.internal.example/actions/checkout@v6
+```
+
+The generated Pipr step uses the mirrored image directly and preserves the same `host-run --host github` command. Keep the mirrored image on the same Pipr release as the CLI that generated the workflow.
+
+If GitHub or the model endpoint uses a private certificate authority, install that authority on the runner and pass its PEM path to the Pipr step:
+
+```yaml
+env:
+  NODE_EXTRA_CA_CERTS: /etc/pki/internal-ca.pem
+  GIT_SSL_CAINFO: /etc/pki/internal-ca.pem
+```
+
 ## Trusted options
 
 The Action reads its trusted settings from workflow inputs and the base-commit config.

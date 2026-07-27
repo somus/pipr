@@ -9,6 +9,8 @@ export type RenderOfficialGithubWorkflowOptions = {
   relativeConfigDir?: string;
   recipe?: string;
   minimal?: boolean;
+  runtimeImage?: string;
+  checkoutAction?: string;
   includeReleasePleaseVersionMarker?: boolean;
 };
 
@@ -42,7 +44,7 @@ export function renderOfficialGithubWorkflow(
     "  review:",
     "    runs-on: ubuntu-latest",
     "    steps:",
-    "      - uses: actions/checkout@v6",
+    `      - uses: ${options.checkoutAction ?? "actions/checkout@v6"}`,
     "        with:",
     "          fetch-depth: 0",
   );
@@ -54,11 +56,21 @@ export function renderOfficialGithubWorkflow(
       `          key: pipr-bun-${githubExpression(`hashFiles('${relativeConfigDir}/bun.lock')`)}`,
     );
   }
+  const piprStep = options.runtimeImage
+    ? [
+        `      - uses: docker://${options.runtimeImage}`,
+        "        id: pipr",
+        "        with:",
+        `          args: host-run --host github --config-dir ${relativeConfigDir}`,
+      ]
+    : [
+        `      - uses: ${defaultWorkflowActionRef}${
+          options.includeReleasePleaseVersionMarker ? " # x-release-please-version" : ""
+        }`,
+        "        id: pipr",
+      ];
   lines.push(
-    `      - uses: ${defaultWorkflowActionRef}${
-      options.includeReleasePleaseVersionMarker ? " # x-release-please-version" : ""
-    }`,
-    "        id: pipr",
+    ...piprStep,
     "        env:",
     `          DEEPSEEK_API_KEY: ${githubExpression("secrets.DEEPSEEK_API_KEY")}`,
     `          GITHUB_TOKEN: ${githubExpression("github.token")}`,
@@ -67,7 +79,7 @@ export function renderOfficialGithubWorkflow(
   for (const secret of officialInitRecipeWorkflowEnvSecrets(options.recipe)) {
     lines.push(`          ${secret.env}: ${githubExpression(`secrets.${secret.secret}`)}`);
   }
-  if (relativeConfigDir !== ".pipr") {
+  if (!options.runtimeImage && relativeConfigDir !== ".pipr") {
     lines.push("        with:", `          config-dir: ${relativeConfigDir}`);
   }
   lines.push(

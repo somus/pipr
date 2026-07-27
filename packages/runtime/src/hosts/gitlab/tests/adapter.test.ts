@@ -221,6 +221,14 @@ describe("GitLab host adapter", () => {
 
 defineCodeHostAdapterConformanceSuite({
   name: "GitLab",
+  capabilities: {
+    commandComments: true,
+    reviewCommentReplies: true,
+    threadResolution: true,
+    multilineInlineComments: true,
+    suggestedChanges: true,
+    statuses: true,
+  },
   createHarness: createGitLabConformanceHarness,
 });
 

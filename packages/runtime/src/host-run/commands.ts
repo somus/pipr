@@ -72,6 +72,8 @@ export async function runInitCommand(
     adapters: options.adapters,
     recipe: options.recipe,
     minimal: options.minimal,
+    runtimeImage: options.runtimeImage,
+    checkoutAction: options.checkoutAction,
   });
 }
 

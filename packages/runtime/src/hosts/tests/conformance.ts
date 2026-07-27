@@ -13,6 +13,7 @@ import type { ReviewProgressLease } from "../../review/progress.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type {
   CodeHostAdapter,
+  CodeHostCapabilities,
   CodeHostEvent,
   CodeHostStatusState,
   RepositoryPermission,
@@ -76,9 +77,16 @@ export type CodeHostAdapterConformanceHarness = {
 
 export function defineCodeHostAdapterConformanceSuite(options: {
   name: string;
+  capabilities: CodeHostCapabilities;
   createHarness(): Promise<CodeHostAdapterConformanceHarness> | CodeHostAdapterConformanceHarness;
 }): void {
   describe(`${options.name} code host adapter conformance`, () => {
+    it("declares the capabilities covered by this conformance suite", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        expect(harness.adapter.capabilities).toEqual(options.capabilities);
+      });
+    });
+
     it("normalizes change, command, and reply events", async () => {
       await withHarness(options.createHarness, async (harness) => {
         const events = await harness.events();
@@ -423,11 +431,12 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
-    it("maps right and renamed left multiline anchors", async () => {
+    const multilineIt = options.capabilities.multilineInlineComments ? it : it.skip;
+    multilineIt("maps right and renamed left multiline anchors", async () => {
       await withHarness(options.createHarness, async (harness) => {
         await requiredPublication(harness.adapter).publish({
           change: harness.change,
-          plan: publicationPlan(harness.change),
+          plan: multilinePublicationPlan(harness.change),
         });
         expect(harness.anchors()).toEqual([
           {
@@ -449,7 +458,7 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
-    it("publishes replies and resolutions once", async () => {
+    it("publishes supported thread actions once", async () => {
       await withHarness(options.createHarness, async (harness) => {
         const { publication, context } = await publishAndLoadFirstInlineContext(harness);
         const publishThreadActions = requiredMethod(
@@ -460,19 +469,24 @@ export function defineCodeHostAdapterConformanceSuite(options: {
         await expectThreadActionTwice(publishThreadActions, harness.change, reply);
         expect(harness.writes()).toMatchObject({ replies: 1, resolutions: 0 });
 
-        const resolve = threadAction("resolve", context);
-        await expectThreadActionTwice(publishThreadActions, harness.change, resolve);
-        expect(harness.writes()).toMatchObject({ replies: 2, resolutions: 1 });
-        const resolvedContexts = await requiredComments(harness.adapter).loadInlineThreadContexts?.(
-          { change: harness.change },
-        );
-        expect(
-          resolvedContexts?.find((item) => item.findingId === context.findingId),
-        ).toMatchObject({ threadResolved: true });
+        if (options.capabilities.threadResolution) {
+          const resolve = threadAction("resolve", context);
+          await expectThreadActionTwice(publishThreadActions, harness.change, resolve);
+          expect(harness.writes()).toMatchObject({ replies: 2, resolutions: 1 });
+          const resolvedContexts = await requiredComments(
+            harness.adapter,
+          ).loadInlineThreadContexts?.({
+            change: harness.change,
+          });
+          expect(
+            resolvedContexts?.find((item) => item.findingId === context.findingId),
+          ).toMatchObject({ threadResolved: true });
+        }
       });
     });
 
-    it("loads native inline resolution into prior review state", async () => {
+    const resolutionIt = options.capabilities.threadResolution ? it : it.skip;
+    resolutionIt("loads native inline resolution into prior review state", async () => {
       await withHarness(options.createHarness, async (harness) => {
         await requiredPublication(harness.adapter).publish({
           change: harness.change,
@@ -532,7 +546,9 @@ export function defineCodeHostAdapterConformanceSuite(options: {
         await expect(
           publishThreadActions({
             change: harness.change,
-            actions: [threadAction("resolve", context)],
+            actions: [
+              threadAction(options.capabilities.threadResolution ? "resolve" : "reply", context),
+            ],
             reviewedHeadSha: "head",
           }),
         ).rejects.toThrow(/head changed|endpoints changed/i);
@@ -540,8 +556,9 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
+    const statusIt = options.capabilities.statuses ? it : it.skip;
     for (const conclusion of ["success", "failure", "neutral"] as const) {
-      it(`transitions a status from pending to ${conclusion}`, async () => {
+      statusIt(`transitions a status from pending to ${conclusion}`, async () => {
         await withHarness(options.createHarness, async (harness) => {
           const statuses = requiredStatuses(harness.adapter);
           expect(statuses.isAvailable(harness.change)).toBe(true);
@@ -652,14 +669,14 @@ async function expectThreadActionTwice(
   await expect(publish(options)).resolves.toEqual({ errors: [] });
 }
 
-function publicationPlan(change: ChangeRequestEventContext, findingSuffix = "") {
+function publicationPlan(change: ChangeRequestEventContext, findingSuffix = "", multiline = false) {
   const items = [
     inlineItem({
       id: `finding-right${findingSuffix}`,
       path: "src/new.ts",
       side: "RIGHT",
       startLine: 2,
-      endLine: 4,
+      endLine: multiline ? 4 : 2,
     }),
     inlineItem({
       id: `finding-left${findingSuffix}`,
@@ -667,7 +684,7 @@ function publicationPlan(change: ChangeRequestEventContext, findingSuffix = "") 
       previousPath: "src/old.ts",
       side: "LEFT",
       startLine: 6,
-      endLine: 7,
+      endLine: multiline ? 7 : 6,
     }),
   ];
   return buildPublicationPlan({
@@ -699,6 +716,10 @@ function publicationPlan(change: ChangeRequestEventContext, findingSuffix = "") 
       droppedFindings: 0,
     },
   });
+}
+
+function multilinePublicationPlan(change: ChangeRequestEventContext) {
+  return publicationPlan(change, "", true);
 }
 
 function inlineItem(options: {

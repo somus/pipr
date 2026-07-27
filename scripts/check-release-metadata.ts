@@ -33,6 +33,7 @@ const docsSources = await readGlob("apps/docs/content/docs/**/*.mdx");
 const selfReviewWorkflow = await readText(".github/workflows/pipr.yml");
 const actionMetadata = await readText("action.yml");
 const webhookCompose = await readText("deploy/webhook/compose.yml");
+const webhookEnvironment = await readText("deploy/webhook/.env.example");
 const bunLock = await readText("bun.lock");
 const releaseVersionExpression = githubExpression("steps.version.outputs.version");
 const releasePushTokenExpression = githubExpression("secrets.PIPR_RELEASE_PLEASE_TOKEN");
@@ -182,12 +183,20 @@ assert(
   "action.yml must pin the release image tag",
 );
 assert(
-  webhookCompose.includes(`image: ghcr.io/somus/pipr:v${rootPackage.version}`),
+  webhookCompose.includes(`image: \${PIPR_IMAGE:-ghcr.io/somus/pipr:v${rootPackage.version}}`),
   "webhook Compose deployment must pin the release image tag",
+);
+assert(
+  webhookEnvironment.includes(`PIPR_IMAGE=ghcr.io/somus/pipr:v${rootPackage.version}`),
+  "webhook environment template must pin the release image tag",
 );
 assert(
   releasePleaseConfig.includes('"path": "deploy/webhook/compose.yml"'),
   "Release Please must update the webhook Compose image tag",
+);
+assert(
+  releasePleaseConfig.includes('"path": "deploy/webhook/.env.example"'),
+  "Release Please must update the webhook environment image tag",
 );
 assert(
   selfReviewWorkflow.includes(`uses: somus/pipr@v${selfReviewSdkVersion}`),

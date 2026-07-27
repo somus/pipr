@@ -198,6 +198,14 @@ describe("GitHub host adapter contract", () => {
 
 defineCodeHostAdapterConformanceSuite({
   name: "GitHub",
+  capabilities: {
+    commandComments: true,
+    reviewCommentReplies: true,
+    threadResolution: true,
+    multilineInlineComments: true,
+    suggestedChanges: true,
+    statuses: true,
+  },
   createHarness: createGitHubConformanceHarness,
 });
 

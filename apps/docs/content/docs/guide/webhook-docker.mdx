@@ -44,6 +44,14 @@ chmod 600 .env
 
 The Compose file pins `ghcr.io/somus/pipr:v0.6.3`. Keep the file and image on the same release so the documented CLI contract matches the container. {/* x-release-please-version */}
 
+If the host pulls from an internal registry, mirror the same Pipr release and set its reference in `.env`:
+
+```dotenv
+PIPR_IMAGE=registry.internal.example/pipr:v0.6.3
+```
+
+Authenticate the Docker daemon to that registry before you start the worker.
+
 ## 3. Prepare the trusted checkout
 
 Clone the repository into the mounted workspace, then make the checkout writable by the container identity:
@@ -77,6 +85,25 @@ If your config uses another model provider, replace `DEEPSEEK_API_KEY` with the 
 | Bitbucket Cloud | `bitbucket` | `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, `BITBUCKET_PERMISSION_EMAIL`, and `BITBUCKET_PERMISSION_API_TOKEN` |
 
 Keep `PIPR_BIND_ADDRESS=127.0.0.1` unless another private network provides the TLS and access boundary. Don't commit `.env` or copy its values into Compose command arguments.
+
+### Trust a private certificate authority
+
+If your code host or model endpoint uses an internal certificate authority, mount its PEM bundle and configure both Pipr HTTP requests and Git:
+
+```yaml title="compose.override.yml"
+services:
+  webhook:
+    environment:
+      NODE_EXTRA_CA_CERTS: /etc/pipr/ca.pem
+      GIT_SSL_CAINFO: /etc/pipr/ca.pem
+    volumes:
+      - type: bind
+        source: /srv/pipr/deployment/internal-ca.pem
+        target: /etc/pipr/ca.pem
+        read_only: true
+```
+
+Place the certificate bundle at `/srv/pipr/deployment/internal-ca.pem`, then restart the worker. Keep TLS verification enabled; don't replace these settings with insecure Git or HTTP flags.
 
 ## 5. Start and verify the worker
 

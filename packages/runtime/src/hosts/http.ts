@@ -29,6 +29,7 @@ export class CodeHostHttpError extends Error {
 }
 
 export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
+  const baseUrl = new URL(options.baseUrl);
   const fetchRequest = options.fetch ?? fetch;
   const sleep = options.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds));
   const successThrottle = options.successThrottle ?? createCodeHostSuccessThrottle(sleep);
@@ -40,46 +41,62 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
     ),
   );
 
+  async function request<T>(
+    path: string,
+    init: RequestInit,
+    parse: (response: Response) => Promise<T>,
+  ): Promise<T> {
+    const method = init.method?.toUpperCase() ?? "GET";
+    for (let attempt = 0; ; attempt += 1) {
+      await successThrottle.wait();
+      const timeoutSignal = AbortSignal.timeout(requestTimeoutMilliseconds);
+      const requestUrl = new URL(path, baseUrl);
+      if (requestUrl.origin !== baseUrl.origin) {
+        throw new Error(`Refusing code host request outside configured code host: ${requestUrl}`);
+      }
+      const response = await fetchRequest(requestUrl, {
+        ...init,
+        headers: {
+          ...Object.fromEntries(new Headers(options.headers)),
+          ...Object.fromEntries(new Headers(init.headers)),
+        },
+        redirect: "error",
+        signal: init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal,
+      });
+      const retryAfter = retryAfterMilliseconds(response.headers.get("Retry-After"));
+      if (response.ok) {
+        successThrottle.update(response.headers.get("Retry-After"));
+        return await parse(response);
+      }
+      if (
+        shouldRetryCodeHostRequest({
+          method,
+          attempt,
+          maxRetries,
+          response,
+          retryStatuses: options.retryNonIdempotentStatuses,
+        })
+      ) {
+        await sleep(retryAfter || 250 * 2 ** attempt);
+        continue;
+      }
+      const body = (await response.text()).slice(0, 1_024);
+      throw new CodeHostHttpError(
+        redact(
+          `Code host request failed (${response.status} ${response.statusText}): ${body}`,
+          secrets,
+        ),
+        response.status,
+      );
+    }
+  }
+
   return {
     async json<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
-      const method = init.method?.toUpperCase() ?? "GET";
-      for (let attempt = 0; ; attempt += 1) {
-        await successThrottle.wait();
-        const timeoutSignal = AbortSignal.timeout(requestTimeoutMilliseconds);
-        const response = await fetchRequest(new URL(path, options.baseUrl), {
-          ...init,
-          headers: {
-            ...Object.fromEntries(new Headers(options.headers)),
-            ...Object.fromEntries(new Headers(init.headers)),
-          },
-          signal: init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal,
-        });
-        const retryAfter = retryAfterMilliseconds(response.headers.get("Retry-After"));
-        if (response.ok) {
-          successThrottle.update(response.headers.get("Retry-After"));
-          return schema.parse(await response.json());
-        }
-        if (
-          shouldRetryCodeHostRequest({
-            method,
-            attempt,
-            maxRetries,
-            response,
-            retryStatuses: options.retryNonIdempotentStatuses,
-          })
-        ) {
-          await sleep(retryAfter || 250 * 2 ** attempt);
-          continue;
-        }
-        const body = (await response.text()).slice(0, 1_024);
-        throw new CodeHostHttpError(
-          redact(
-            `Code host request failed (${response.status} ${response.statusText}): ${body}`,
-            secrets,
-          ),
-          response.status,
-        );
-      }
+      return await request(path, init, async (response) => schema.parse(await response.json()));
+    },
+    async empty(path: string, init: RequestInit = {}): Promise<void> {
+      await request(path, init, async () => undefined);
     },
   };
 }
