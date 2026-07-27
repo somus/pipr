@@ -30,7 +30,7 @@ describe("Gitea-compatible events", () => {
       parseGiteaEvent({
         host: "forgejo",
         eventPath,
-        env: {},
+        env: { FORGEJO_EVENT_NAME: "pull_request_sync" },
         workspace: "/workspace",
         loadChangeRequest: async (ref) => {
           expect(ref).toEqual({ owner: "acme", repository: "pipr", changeNumber: 7 });
@@ -79,6 +79,22 @@ describe("Gitea-compatible events", () => {
       kind: "ignored",
       reason: "Gitea-compatible review replies are not supported",
     });
+  });
+
+  it("rejects unsupported native event types before parsing their payload", async () => {
+    const eventPath = await writeEvent({ ref: "refs/heads/main" });
+
+    await expect(
+      parseGiteaEvent({
+        host: "forgejo",
+        eventPath,
+        env: { FORGEJO_EVENT_NAME: "push" },
+        workspace: "/workspace",
+        loadChangeRequest: async () => {
+          throw new Error("unsupported events must not load a change request");
+        },
+      }),
+    ).rejects.toThrow("Unsupported Forgejo event 'push'");
   });
 });
 

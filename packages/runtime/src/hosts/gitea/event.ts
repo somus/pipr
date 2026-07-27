@@ -48,6 +48,14 @@ export async function parseGiteaEvent(options: GiteaEventParseOptions): Promise<
   if (eventName === "pull_request_review_comment") {
     return { kind: "ignored", reason: "Gitea-compatible review replies are not supported" };
   }
+  if (
+    eventName &&
+    eventName !== "pull_request" &&
+    eventName !== "pull_request_sync" &&
+    eventName !== "pull_request_target"
+  ) {
+    throw new Error(`Unsupported ${displayName(options.host)} event '${eventName}'`);
+  }
   const hook = pullRequestHookSchema.parse(payload);
   if (hook.pull_request.draft === true) {
     return { kind: "ignored", reason: "pull request is a draft" };
@@ -61,7 +69,7 @@ export async function parseGiteaEvent(options: GiteaEventParseOptions): Promise<
   return {
     kind: "change-request",
     change: parseChangeRequestEventContext({
-      eventName: eventName ?? "pull_request",
+      eventName: eventName === "pull_request_sync" ? "pull_request" : (eventName ?? "pull_request"),
       action: normalizeAction(hook.action),
       rawAction: hook.action,
       platform: { id: options.host, host: new URL(hook.repository.html_url).origin },
