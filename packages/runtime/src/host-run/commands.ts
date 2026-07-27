@@ -332,90 +332,145 @@ export async function runHostRunCommandWithDependencies(
     env: options.env,
     writesToSink: options.logSink !== undefined,
   });
-  let adapter: CodeHostAdapter | undefined;
-  let event: CodeHostEvent | undefined;
-  let failureCategory: RunFailureCategory = "startup";
+  const state: HostRunState = { failureCategory: "startup" };
   try {
-    const result = await log.group("pipr host run", async () => {
-      log.notice("host run start", {
-        dryRun: options.dryRun,
-        root: options.rootDir,
-        configDir: options.configDir,
-      });
-      adapter = createHostRunAdapter(runOptions);
-      failureCategory = "workspace";
-      await logPhase(log, "workspace", async () => {
-        adapter?.workspace.ensureWorkspaceSafeDirectory?.({
-          rootDir: options.rootDir,
-          env: runOptions.env,
-        });
-      });
-      failureCategory = "event";
-      event = await logPhase(log, "parse event", async () =>
-        adapter?.events.parseEvent({
-          eventPath: runOptions.eventPath,
-          env: runOptions.env ?? process.env,
-          workspace: runOptions.rootDir,
-        }),
-      );
-      if (!event) throw new Error("Code host adapter did not return an event");
-      log.notice("event dispatch", { kind: event.kind });
-      failureCategory = "dispatch";
-      switch (event.kind) {
-        case "ignored":
-          return event;
-        case "command-comment":
-          return await runIssueCommentHostRunCommand(runOptions, adapter, log, event.comment);
-        case "review-comment-reply":
-          return await runReviewCommentReplyHostRunCommand(runOptions, adapter, log, event.reply);
-        case "change-request":
-          return await runChangeRequestHostRunCommand(runOptions, adapter, log, event.change);
-      }
-    });
+    const result = await log.group("pipr host run", async () =>
+      executeHostRun(options, runOptions, log, state),
+    );
     if (!isObservableHostResult(result)) {
       await recorder?.discard();
       return result;
     }
-    if (!adapter) throw new Error("Code host adapter was not initialized");
+    if (!state.adapter) throw new Error("Code host adapter was not initialized");
     await captureHostedArtifacts(recorder, result);
-    await finishRecorderSafely(
-      recorder,
-      log,
-      {
-        kind: hostResultKind(result),
-        outcome: "succeeded",
-        workId: result.kind === "review" ? result.review.run.id : result.run.id,
-        ...(result.kind === "review"
-          ? {
-              configVersion: result.review.publicationPlan.metadata.configVersion,
-              configHash: result.review.publicationPlan.metadata.trustedConfigHash,
-            }
-          : {}),
-        repository: bundleRepository(result.event, adapter.id),
-        provider: providerRun(options.env ?? process.env, adapter.id, result.event.repository.slug),
-      },
-      options.onRunBundleFinalized,
-    );
+    await finishSuccessfulHostedRecorder(recorder, log, options, result, state.adapter);
     return result;
   } catch (error) {
-    const superseded = error instanceof ReviewProgressSupersededError;
-    await finishRecorderSafely(
-      recorder,
-      log,
-      {
-        kind: hostEventKind(event),
-        outcome: superseded ? "partial" : "failed",
-        failureCategory: superseded ? "stale-head" : classifyRunFailure(error, failureCategory),
-        ...(event && event.kind !== "ignored"
-          ? { repository: partialBundleRepository(event, adapter?.id) }
-          : {}),
-        ...(adapter ? { provider: providerRun(options.env ?? process.env, adapter.id) } : {}),
-      },
-      options.onRunBundleFinalized,
-    );
-    if (superseded) return { kind: "ignored", reason: error.message };
+    const superseded = await finishFailedHostedRecorder(recorder, log, options, state, error);
+    if (superseded) return { kind: "ignored", reason: superseded.message };
     throw error;
   }
+}
+
+type HostRunState = {
+  adapter?: CodeHostAdapter;
+  event?: CodeHostEvent;
+  failureCategory: RunFailureCategory;
+};
+
+type ObservableHostResult = Extract<
+  HostRunCommandResult,
+  { kind: "review" | "command-response" | "verifier" }
+>;
+
+async function executeHostRun(
+  options: HostRunCommandDependencyOptions,
+  runOptions: HostRunCommandDependencyOptions,
+  log: ReturnType<typeof createRuntimeLog>,
+  state: HostRunState,
+): Promise<HostRunCommandResult> {
+  log.notice("host run start", {
+    dryRun: options.dryRun,
+    root: options.rootDir,
+    configDir: options.configDir,
+  });
+  const adapter = createHostRunAdapter(runOptions);
+  state.adapter = adapter;
+  state.failureCategory = "workspace";
+  await logPhase(log, "workspace", async () => {
+    adapter.workspace.ensureWorkspaceSafeDirectory?.({
+      rootDir: options.rootDir,
+      env: runOptions.env,
+    });
+  });
+  state.failureCategory = "event";
+  const event = await logPhase(log, "parse event", async () =>
+    adapter.events.parseEvent({
+      eventPath: runOptions.eventPath,
+      env: runOptions.env ?? process.env,
+      workspace: runOptions.rootDir,
+    }),
+  );
+  state.event = event;
+  log.notice("event dispatch", { kind: event.kind });
+  state.failureCategory = "dispatch";
+  switch (event.kind) {
+    case "ignored":
+      return event;
+    case "command-comment":
+      return await runIssueCommentHostRunCommand(runOptions, adapter, log, event.comment);
+    case "review-comment-reply":
+      return await runReviewCommentReplyHostRunCommand(runOptions, adapter, log, event.reply);
+    case "change-request":
+      return await runChangeRequestHostRunCommand(runOptions, adapter, log, event.change);
+  }
+}
+
+async function finishSuccessfulHostedRecorder(
+  recorder: RunRecorder | undefined,
+  log: ReturnType<typeof createRuntimeLog>,
+  options: HostRunCommandDependencyOptions,
+  result: ObservableHostResult,
+  adapter: CodeHostAdapter,
+): Promise<void> {
+  await finishRecorderSafely(
+    recorder,
+    log,
+    {
+      kind: hostResultKind(result),
+      outcome: "succeeded",
+      workId: result.kind === "review" ? result.review.run.id : result.run.id,
+      ...(result.kind === "review"
+        ? {
+            configVersion: result.review.publicationPlan.metadata.configVersion,
+            configHash: result.review.publicationPlan.metadata.trustedConfigHash,
+          }
+        : {}),
+      repository: bundleRepository(result.event, adapter.id),
+      provider: providerRun(options.env ?? process.env, adapter.id, result.event.repository.slug),
+    },
+    options.onRunBundleFinalized,
+  );
+}
+
+async function finishFailedHostedRecorder(
+  recorder: RunRecorder | undefined,
+  log: ReturnType<typeof createRuntimeLog>,
+  options: HostRunCommandDependencyOptions,
+  state: HostRunState,
+  error: unknown,
+): Promise<ReviewProgressSupersededError | undefined> {
+  const superseded = error instanceof ReviewProgressSupersededError ? error : undefined;
+  const result: Parameters<RunRecorder["finish"]>[0] = {
+    kind: hostEventKind(state.event),
+    outcome: "failed",
+    failureCategory: classifyRunFailure(error, state.failureCategory),
+  };
+  if (superseded) {
+    result.outcome = "partial";
+    result.failureCategory = "stale-head";
+  }
+  const repository = failedBundleRepository(state);
+  if (repository) result.repository = repository;
+  const provider = failedBundleProvider(options, state);
+  if (provider) result.provider = provider;
+  await finishRecorderSafely(recorder, log, result, options.onRunBundleFinalized);
+  return superseded;
+}
+
+function failedBundleRepository(
+  state: HostRunState,
+): import("@usepipr/sdk").RunBundleManifest["repository"] | undefined {
+  if (!state.event || state.event.kind === "ignored") return undefined;
+  return partialBundleRepository(state.event, state.adapter?.id);
+}
+
+function failedBundleProvider(
+  options: HostRunCommandDependencyOptions,
+  state: HostRunState,
+): import("@usepipr/sdk").RunBundleManifest["provider"] | undefined {
+  if (!state.adapter) return undefined;
+  return providerRun(options.env ?? process.env, state.adapter.id);
 }
 
 function classifyRunFailure(error: unknown, fallback: RunFailureCategory): RunFailureCategory {
