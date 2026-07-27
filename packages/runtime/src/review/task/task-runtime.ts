@@ -417,7 +417,14 @@ async function executeSelectedTasks(options: {
     options.tasks.map(async (task, taskOrder): Promise<TaskExecutionResult> => {
       const output = createOutputState();
       const started = Date.now();
+      const taskId = String(taskOrder);
       options.runtimeOptions.log?.info("task start", { task: task.name, order: taskOrder });
+      options.runtimeOptions.progress?.work({
+        type: "task-started",
+        taskId,
+        taskName: task.name,
+        taskOrder,
+      });
       try {
         await task.handler(
           createTaskContext({
@@ -437,6 +444,12 @@ async function executeSelectedTasks(options: {
           providerModels: output.providerModels,
           repairAttempted: output.repairAttempted,
         });
+        options.runtimeOptions.progress?.work({
+          type: "task-finished",
+          taskId,
+          taskName: task.name,
+          outcome: "completed",
+        });
         return { taskName: task.name, output };
       } catch (error) {
         const check = {
@@ -451,6 +464,12 @@ async function executeSelectedTasks(options: {
         if (options.runtimeOptions.log?.debugEnabled && error instanceof Error && error.stack) {
           options.runtimeOptions.log.text("debug", "error stack", error.stack);
         }
+        options.runtimeOptions.progress?.work({
+          type: "task-finished",
+          taskId,
+          taskName: task.name,
+          outcome: "failed",
+        });
         return { taskName: task.name, output: { ...output, check }, error };
       }
     }),
@@ -597,6 +616,7 @@ function createTaskContext(
   },
 ): TaskContext {
   const repositorySlugParts = options.event.repository.slug.split("/");
+  let reviewerOrder = 0;
   let taskContext: TaskContext;
   taskContext = {
     run: options.run,
@@ -648,8 +668,11 @@ function createTaskContext(
     },
     pi: {
       async run(agent, input, runOptions) {
+        const resolvedAgent = options.plan.resolveAgent(agent);
+        const currentReviewerOrder = reviewerOrder++;
+        const reviewerName = resolvedAgent.name?.trim() || `Reviewer ${currentReviewerOrder + 1}`;
         const result = await runReviewAgent({
-          agent: options.plan.resolveAgent(agent),
+          agent: resolvedAgent,
           input,
           runOptions,
           runtime: {
@@ -657,6 +680,15 @@ function createTaskContext(
             taskContext,
             run: options.run,
             piRunSink: options.piRunSink,
+            reviewWork: options.progress
+              ? {
+                  taskId: String(options.taskOrder),
+                  reviewerId: `${options.taskOrder}:${currentReviewerOrder}`,
+                  reviewerName,
+                  reviewerOrder: currentReviewerOrder,
+                  emit: (event) => options.progress?.work(event),
+                }
+              : undefined,
           },
         });
         options.output.providerModels.push(...result.providerModels);

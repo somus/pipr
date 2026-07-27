@@ -4,10 +4,12 @@ import {
   type ReviewProgressSink,
   type ReviewProgressStage,
   ReviewProgressSupersededError,
+  type ReviewWorkEvent,
   renderFailedReviewProgress,
   renderRunningReviewProgress,
 } from "../review/progress.js";
 import type { ReviewStats } from "../review/review-stats.js";
+import { createReviewWorkTracker } from "../review/work-progress.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { SecretRedactor } from "../shared/secret-redaction.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
@@ -35,13 +37,19 @@ export async function startReviewProgress(options: {
     });
     return undefined;
   }
+  const publishProgress = publish;
   const token = crypto.randomUUID();
   const reviewedHeadSha = options.event.change.head.sha;
   const startedAt = Date.now();
   let activeStage: ReviewProgressStage = "preparing-workspace";
   let stats: ReviewStats | undefined;
   let firstRun = false;
-  const initial = await publish({
+  let superseded = false;
+  let workDirty = false;
+  let workPublication: Promise<void> | undefined;
+  const workTracker = createReviewWorkTracker();
+  let lastPublishedWork = JSON.stringify(workTracker.snapshot());
+  const initial = await publishProgress({
     change: options.event,
     reviewedHeadSha,
     renderBody(currentBody) {
@@ -66,6 +74,60 @@ export async function startReviewProgress(options: {
     reviewedHeadSha,
   };
 
+  function scheduleWorkPublication(): void {
+    if (workPublication || !workDirty || activeStage !== "running-review-tasks" || superseded) {
+      return;
+    }
+    workPublication = publishWorkUpdates().finally(() => {
+      workPublication = undefined;
+      scheduleWorkPublication();
+    });
+  }
+
+  async function publishWorkUpdates(): Promise<void> {
+    while (workDirty && activeStage === "running-review-tasks" && !superseded) {
+      workDirty = false;
+      const work = workTracker.snapshot();
+      const workKey = JSON.stringify(work);
+      if (workKey === lastPublishedWork) continue;
+      try {
+        const result = await publishProgress({
+          change: options.event,
+          reviewedHeadSha,
+          expectedToken: token,
+          renderBody: (body) =>
+            renderRunningReviewProgress({
+              body,
+              changeNumber: options.event.change.number,
+              token,
+              reviewedHeadSha,
+              stage: activeStage,
+              showHeader: options.config.publication.showHeader,
+              showFooter: options.config.publication.showFooter,
+              firstRun,
+              work,
+            }),
+        });
+        if (result.status === "superseded") {
+          superseded = true;
+          return;
+        }
+        lastPublishedWork = workKey;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        options.log.warning("review work progress publication failed", {
+          error: options.secretRedactor?.redact(reason).value ?? reason,
+        });
+      }
+    }
+  }
+
+  async function drainWorkPublication(): Promise<void> {
+    while (workPublication) {
+      await workPublication;
+    }
+  }
+
   return {
     lease,
     get activeStage() {
@@ -74,9 +136,17 @@ export async function startReviewProgress(options: {
     recordStats(next) {
       stats = next;
     },
+    work(event: ReviewWorkEvent) {
+      workTracker.record(event);
+      workDirty = true;
+      scheduleWorkPublication();
+    },
     async transition(stage) {
       if (stage === activeStage) return;
-      const result = await publish({
+      await drainWorkPublication();
+      if (superseded) throw new ReviewProgressSupersededError();
+      workDirty = false;
+      const result = await publishProgress({
         change: options.event,
         reviewedHeadSha,
         expectedToken: token,
@@ -90,6 +160,7 @@ export async function startReviewProgress(options: {
             showHeader: options.config.publication.showHeader,
             showFooter: options.config.publication.showFooter,
             firstRun,
+            work: workTracker.snapshot(),
           }),
       });
       if (result.status === "superseded") throw new ReviewProgressSupersededError();
@@ -97,10 +168,13 @@ export async function startReviewProgress(options: {
     },
     async fail(error) {
       if (error instanceof ReviewProgressSupersededError) return;
+      await drainWorkPublication();
+      if (superseded) return;
+      workDirty = false;
       const reason = error instanceof Error ? error.message : String(error);
       const redactedReason = options.secretRedactor?.redact(reason).value ?? reason;
       try {
-        const result = await publish({
+        const result = await publishProgress({
           change: options.event,
           reviewedHeadSha,
           expectedToken: token,
@@ -119,6 +193,7 @@ export async function startReviewProgress(options: {
               reason: redactedReason,
               workflowUrl: options.workflowUrl,
               stats,
+              work: workTracker.snapshot(),
             }),
         });
         if (result.status === "superseded") return;

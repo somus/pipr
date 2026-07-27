@@ -32,6 +32,73 @@ describe("review progress", () => {
     expect(extractReviewProgressToken(body)).toBe(options.token);
   });
 
+  it("distinguishes active tasks, reviewers, and shards beneath the stable stage", () => {
+    const body = renderRunningReviewProgress({
+      ...options,
+      work: {
+        tasks: [
+          {
+            id: "0",
+            name: "review <core>",
+            state: "running",
+            reviewers: [
+              {
+                id: "0:0",
+                name: "security & trust",
+                state: "running",
+                shard: { current: 2, total: 4 },
+              },
+              {
+                id: "0:1",
+                name: "maintainability",
+                state: "running",
+                shard: { current: 1, total: 4 },
+              },
+            ],
+          },
+        ],
+        completedRuns: 6,
+        activeReviewers: 2,
+      },
+    });
+
+    expect(body).toContain("<strong>Running: Running review tasks</strong>");
+    expect(body).toContain("Task: <code>review &lt;core&gt;</code>");
+    expect(body).toContain("Reviewer: <code>security &amp; trust</code> · shard 2 of 4");
+    expect(body).toContain("Reviewer: <code>maintainability</code> · shard 1 of 4");
+    expect(body).toContain("6 review runs completed · 2 reviewers active");
+    expect(body).not.toContain("review <core>");
+    expect(body.indexOf("Task:")).toBeGreaterThan(body.indexOf("Running: Running review tasks"));
+    expect(body.indexOf("○ Validating review")).toBeGreaterThan(body.indexOf("2 reviewers active"));
+  });
+
+  it("bounds concurrent reviewer rows and summarizes overflow", () => {
+    const body = renderRunningReviewProgress({
+      ...options,
+      work: {
+        tasks: [
+          {
+            id: "0",
+            name: "review",
+            state: "running",
+            reviewers: Array.from({ length: 5 }, (_, index) => ({
+              id: `0:${index}`,
+              name: `reviewer-${index + 1}`,
+              state: "running" as const,
+              shard: { current: 1, total: 4 },
+            })),
+          },
+        ],
+        completedRuns: 0,
+        activeReviewers: 5,
+      },
+    });
+
+    expect(body.match(/Reviewer: /g)).toHaveLength(3);
+    expect(body).toContain("+2 more reviewers active");
+    expect(body).not.toContain("reviewer-4");
+  });
+
   it("preserves an existing review while replacing its progress block", () => {
     const prior = [
       "<!-- pipr:main-comment change=42 version=1 -->",
@@ -109,6 +176,38 @@ describe("review progress", () => {
     expect(failed).toContain("[View workflow](<https://github.com/acme/repo/actions/runs/123>)");
     expect(failed).toContain("Pipr stopped while reviewing commit `abcdef1`.");
     expect(failed).not.toContain("| Metric | Total |");
+  });
+
+  it("retains the failed task, reviewer, and shard", () => {
+    const failed = renderFailedReviewProgress({
+      ...options,
+      durationMs: 12_000,
+      reason: "provider failed",
+      showStats: false,
+      work: {
+        tasks: [
+          {
+            id: "0",
+            name: "review <core>",
+            state: "failed",
+            reviewers: [
+              {
+                id: "0:0",
+                name: "security & trust",
+                state: "failed",
+                shard: { current: 2, total: 4 },
+              },
+            ],
+          },
+        ],
+        completedRuns: 1,
+        activeReviewers: 0,
+      },
+    });
+
+    expect(failed).toContain(
+      "**Failed work:** Task <code>review &lt;core&gt;</code> · Reviewer <code>security &amp; trust</code> · shard 2 of 4",
+    );
   });
 
   it("preserves backslash-prefixed markdown punctuation", () => {

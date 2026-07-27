@@ -77,9 +77,13 @@ The Main Review Comment is the single visible summary for a review task. Pipr up
 
 Hosted change-request runs update the Main Review Comment when Pipr moves between preparing the workspace, building the diff, running tasks, validating results, and publishing. The active stage is always written in text. The adjacent Pipr animation is decorative (`alt=""`), so screen readers ignore it and clients that disable animation retain a meaningful static first frame.
 
+While Pipr runs Review Tasks, the active stage expands into task, reviewer, and shard rows. Custom multi-agent tasks and the Built-in Review use the same progress model. Pipr shows at most three concurrent reviewers, summarizes additional reviewers, and reports completed review runs without claiming a total before conditional task code has scheduled every agent. Retries, repairs, and model fallbacks remain part of the final **Agent runs** metric instead of changing the live reviewer identity.
+
 On the first run, the temporary comment contains only the Pipr title, progress, and a running footer. On reruns, Pipr keeps the existing review visible and inserts **Progress** near the top. Pipr does not update the comment for animation frames. A completed run replaces progress with the final review; a failed run keeps the failed stage and concise reason in a collapsed section.
 
-Set `publication.showProgress` to `false` to omit live progress entirely. This option only affects automatic hosted change-request runs, not local runs, command responses, or dry runs.
+Pipr updates the comment only when the displayed stage or task lifecycle changes. Concurrent updates are serialized, and every subsequent write checks the active run lease so an older or superseded run cannot overwrite newer progress or final output.
+
+Set `publication.showProgress` to `false` to omit live progress entirely. This option affects automatic hosted change-request runs, not local runs, command responses, or dry runs.
 
 ### Review completion
 

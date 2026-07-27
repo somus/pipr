@@ -123,7 +123,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
-  it("publishes progress only when the runtime stage changes, then replaces it with the review", async () => {
+  it("publishes stage and review-work changes, then replaces progress with the review", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const publication = recordingCommandPublicationClient(workspace);
     try {
@@ -137,19 +137,61 @@ describe("runHostRunCommand pull_request dispatch", () => {
       const stages = bodies
         .map((body) => body.match(/stage=([a-z-]+) state=running/)?.[1])
         .filter((stage): stage is string => stage !== undefined);
-      expect(stages).toEqual([
+      expect(stages.filter((stage, index) => stage !== stages[index - 1])).toEqual([
         "preparing-workspace",
         "building-diff",
         "running-review-tasks",
         "validating-review",
         "publishing-review",
       ]);
+      expect(
+        bodies.some(
+          (body) =>
+            body.includes("Task: <code>review</code>") &&
+            body.includes("Reviewer: <code>reviewer</code>"),
+        ),
+      ).toBe(true);
       expect(bodies.at(-1)).toContain("Review completed in ");
       expect(bodies.at(-1)).toContain(
         "[View workflow](<https://github.com/local/pipr/actions/runs/123>)",
       );
       expect(bodies.at(-1)).not.toContain("pipr:progress:start");
     } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("does not let a delayed work update overwrite a later stage or completed review", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const publication = recordingCommandPublicationClient(workspace, issueComments);
+    const workUpdateStarted = Promise.withResolvers<void>();
+    const releaseWorkUpdate = Promise.withResolvers<void>();
+    const updateIssueComment = publication.client.updateIssueComment.bind(publication.client);
+    let delayed = false;
+    publication.client.updateIssueComment = async (options) => {
+      if (!delayed && options.body.includes("Task: <code>review</code>")) {
+        delayed = true;
+        workUpdateStarted.resolve();
+        await releaseWorkUpdate.promise;
+      }
+      return await updateIssueComment(options);
+    };
+    try {
+      const run = runPullRequestAction(workspace, {
+        githubPublicationClient: publication.client,
+      });
+      await workUpdateStarted.promise;
+      await Bun.sleep(10);
+      releaseWorkUpdate.resolve();
+      await expect(run).resolves.toMatchObject({ kind: "review" });
+
+      expect(issueComments).toHaveLength(1);
+      expect(issueComments[0]?.body).toContain("Review completed in ");
+      expect(issueComments[0]?.body).not.toContain("pipr:progress:start");
+      expect(publication.writes.updated.at(-1)).toBe(issueComments[0]?.body);
+    } finally {
+      releaseWorkUpdate.resolve();
       await removeWorkspace(workspace.rootDir);
     }
   });
@@ -168,6 +210,9 @@ describe("runHostRunCommand pull_request dispatch", () => {
       const failed = publication.writes.updated.at(-1) ?? publication.writes.created.at(-1) ?? "";
       expect(failed).toContain("state=failed");
       expect(failed).toContain("**Failed stage:** Running review tasks");
+      expect(failed).toContain(
+        "**Failed work:** Task <code>review</code> · Reviewer <code>reviewer</code>",
+      );
       expect(failed).toContain("Pi agent failed with exit 42");
       expect(failed).not.toContain("provider-key");
       expect(failed).toContain("[View workflow](<https://github.com/local/pipr/actions/runs/123>)");
