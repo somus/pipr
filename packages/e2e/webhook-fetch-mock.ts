@@ -17,6 +17,9 @@ const responses: Record<string, unknown> = {
 
 const mockFetch = async (input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
   const url = new URL(input instanceof Request ? input.url : input);
+  if (url.hostname === "dev.azure.com" && url.pathname.endsWith("/_apis/connectionData")) {
+    return Response.json({ authenticatedUser: {}, instanceId: "collection-id" });
+  }
   const response = responses[url.hostname];
   if (!response) throw new Error(`unexpected webhook fixture request: ${url}`);
   return Response.json(response);
