@@ -79,7 +79,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     );
     expect(await Bun.file(path.join(rootDir, ".pipr", ".gitignore")).text()).toBe("node_modules\n");
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
-    expect(workflow).toContain("uses: somus/pipr@v0.6.2"); // x-release-please-version
+    expect(workflow).toContain("uses: somus/pipr@v0.6.3"); // x-release-please-version
     expect(workflow).toContain("actions/cache@v4");
     expect(workflow).toContain("actions/upload-artifact@v6");
     expect(workflow).toContain("vars.PIPR_RUN_AGE_RECIPIENTS");
@@ -225,7 +225,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
 
     expect(result.overwritten).toEqual([path.join(".github", "workflows", "pipr.yml")]);
     expect(await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text()).toContain(
-      "uses: somus/pipr@v0.6.2", // x-release-please-version
+      "uses: somus/pipr@v0.6.3", // x-release-please-version
     );
   });
 
@@ -253,7 +253,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     const pipeline = await Bun.file(path.join(rootDir, ".gitlab-ci.yml")).text();
 
     expect(result.created).toContain(".gitlab-ci.yml");
-    expect(pipeline).toContain("ghcr.io/somus/pipr:v0.6.2"); // x-release-please-version
+    expect(pipeline).toContain("ghcr.io/somus/pipr:v0.6.3"); // x-release-please-version
     expect(pipeline).toContain("pipr host-run --host gitlab --config-dir config/pipr");
     expect(pipeline).toContain('PIPR_CODE_HOST: "gitlab"');
     expect(pipeline).toContain('GIT_DEPTH: "0"');

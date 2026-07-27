@@ -1,14 +1,6 @@
 import type { DefaultReviewSummaryManifest, DiffManifest, ReviewFinding } from "@usepipr/sdk";
 import { definePipr, z } from "@usepipr/sdk";
 
-type ReviewSummary = {
-  headline: string;
-  changeSummary: string[];
-  riskLevel: "low" | "medium" | "high";
-  riskSummary: string;
-  reviewerFocus: string[];
-};
-
 const categorizedFindingSchema = z.strictObject({
   title: z.string().min(1).max(160),
   severity: z.enum(["critical", "high", "medium", "low"]),
@@ -256,23 +248,22 @@ export default definePipr((pipr) => {
           ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
         };
       });
+      const sections = [
+        "## 🧭 Summary",
+        "",
+        `**${lineText(summary.headline)}**`,
+        "",
+        `**Review risk:** ${labelValue(summary.riskLevel)}. ${lineText(summary.riskSummary)}`,
+        "",
+        "## 🗺️ What Changed",
+        "",
+        bulletList(summary.changeSummary),
+      ];
+      if (summary.reviewerFocus.length > 0) {
+        sections.push("", "## 🎯 Reviewer Focus", "", bulletList(summary.reviewerFocus));
+      }
       await ctx.comment({
-        main: [
-          "## Summary",
-          "",
-          `**${lineText(summary.headline)}**`,
-          "",
-          summaryTable(summary),
-          "",
-          "## What Changed",
-          "",
-          bulletList(summary.changeSummary, "No changed behavior summarized."),
-          "",
-          "## Reviewer Focus",
-          "",
-          bulletList(summary.reviewerFocus, "No special reviewer focus."),
-          "",
-        ].join("\n"),
+        main: sections.join("\n"),
         inlineFindings,
       });
     },
@@ -285,18 +276,7 @@ export default definePipr((pipr) => {
   pipr.command({ pattern: "@pipr review", permission: "write", task });
 });
 
-function summaryTable(summary: ReviewSummary): string {
-  return [
-    "| Risk | Risk summary |",
-    "| --- | --- |",
-    `| ${labelValue(summary.riskLevel)} | ${tableCell(summary.riskSummary)} |`,
-  ].join("\n");
-}
-
-function bulletList(items: string[], emptyText: string): string {
-  if (items.length === 0) {
-    return emptyText;
-  }
+function bulletList(items: string[]): string {
   return items.map((item) => `- ${lineText(item)}`).join("\n");
 }
 
@@ -306,8 +286,4 @@ function labelValue(value: string): string {
 
 function lineText(value: string): string {
   return value.replace(/\r\n?|\n/g, " ").trim();
-}
-
-function tableCell(value: string): string {
-  return lineText(value).replaceAll("|", "\\|");
 }
