@@ -136,7 +136,8 @@ describe("Azure DevOps event parser", () => {
           repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
         },
         resourceContainers: {
-          account: { baseUrl: "https://dev.azure.com/org/" },
+          account: { id: "account-id", baseUrl: "https://dev.azure.com/org/" },
+          collection: { id: "collection-id", baseUrl: "https://dev.azure.com/org/" },
           project: { id: "project-id", baseUrl: "https://dev.azure.com/org/project/" },
         },
       });
@@ -158,7 +159,7 @@ describe("Azure DevOps event parser", () => {
     }
   });
 
-  it("uses the collection container for Azure DevOps Server service hooks", async () => {
+  it("uses the configured collection for Server service hooks without container URLs", async () => {
     const loadedRefs: unknown[] = [];
     const fixture = await eventFixture({
       id: "event-server",
@@ -168,21 +169,18 @@ describe("Azure DevOps event parser", () => {
         repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
       },
       resourceContainers: {
-        account: { baseUrl: "https://azure.example.test/" },
-        collection: {
-          baseUrl: "https://azure.example.test/tfs/DefaultCollection/",
-        },
-        project: {
-          id: "project-id",
-          baseUrl: "https://azure.example.test/tfs/DefaultCollection/project/",
-        },
+        account: { id: "account-id" },
+        collection: { id: "collection-id" },
+        project: { id: "project-id" },
       },
     });
     try {
       await expect(
         parseAzureDevOpsEvent({
           eventPath: fixture.path,
-          env: {},
+          env: {
+            AZURE_DEVOPS_COLLECTION_URL: "https://azure.example.test/tfs/DefaultCollection",
+          },
           workspace: fixture.root,
           loadChangeRequest: async (ref) => {
             loadedRefs.push(ref);
@@ -220,7 +218,10 @@ describe("Azure DevOps event parser", () => {
         isDraft: true,
         repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
       },
-      resourceContainers: { account: { baseUrl: "https://dev.azure.com/org/" } },
+      resourceContainers: {
+        account: { id: "account-id", baseUrl: "https://dev.azure.com/org/" },
+        collection: { id: "collection-id", baseUrl: "https://dev.azure.com/org/" },
+      },
     });
     let loadedChange = false;
     try {
@@ -265,7 +266,10 @@ describe("Azure DevOps event parser", () => {
             },
           },
         },
-        resourceContainers: { account: { baseUrl: "https://dev.azure.com/org/" } },
+        resourceContainers: {
+          account: { id: "account-id", baseUrl: "https://dev.azure.com/org/" },
+          collection: { id: "collection-id", baseUrl: "https://dev.azure.com/org/" },
+        },
       });
       try {
         await expect(

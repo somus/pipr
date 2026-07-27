@@ -52,6 +52,7 @@ steps:
         --env TF_BUILD=true \
         --env BUILD_SOURCESDIRECTORY=/workspace \
         --env BUILD_BUILDID \
+        --env AZURE_DEVOPS_API_VERSION \
         --env SYSTEM_COLLECTIONURI \
         --env SYSTEM_TEAMPROJECT \
         --env SYSTEM_JOBID \
@@ -70,7 +71,9 @@ steps:
 
 Azure supplies the remaining `SYSTEM_*` and `BUILD_*` values during branch-policy validation. The full checkout lets Pipr load Trusted Base Config and build the Diff Manifest.
 
-`SYSTEM_COLLECTIONURI` supplies the trusted Services organization or Server collection URL and takes precedence over `AZURE_DEVOPS_COLLECTION_URL` inside a pipeline. For Azure DevOps Server 2022, set the non-secret pipeline variable `AZURE_DEVOPS_API_VERSION=7.0`; Server 2022.1 and Azure DevOps Services use the default `7.1`. The generated pipeline passes this variable into the Pipr container.
+The `ubuntu-latest` hosted image is available on Azure DevOps Services. Azure DevOps Server users must replace that `pool` block with a self-hosted agent pool that has Docker and trusts the Server certificate.
+
+`SYSTEM_COLLECTIONURI` supplies the trusted Services organization or Server collection URL and takes precedence over `AZURE_DEVOPS_COLLECTION_URL` inside a pipeline. For Azure DevOps Server 2022, set the non-secret pipeline variable `AZURE_DEVOPS_API_VERSION=7.0`; Server 2022.1 and Azure DevOps Services use the default `7.1`. Both the generated pipeline and the example above pass this variable into the Pipr container.
 
 ## Commands and reply verification
 
@@ -102,7 +105,7 @@ export AZURE_DEVOPS_PROJECT="your-project"
 export AZURE_DEVOPS_TOKEN="..."
 ```
 
-Use a Microsoft Entra service principal or managed identity for Azure DevOps Services when possible, and pass its access token through `AZURE_DEVOPS_BEARER_TOKEN`. `AZURE_DEVOPS_TOKEN` accepts a PAT for Azure DevOps Server and for local Services testing; scope it to one organization or collection and revoke it after use. Install any private certificate authority in the runner and Pipr container trust stores before connecting to an internal Server URL.
+Use a Microsoft Entra service principal or managed identity for Azure DevOps Services when possible, and pass its access token through `AZURE_DEVOPS_BEARER_TOKEN`. `AZURE_DEVOPS_TOKEN` accepts a PAT for Azure DevOps Server and for local Services testing; scope it to one organization or collection and revoke it after use. Collection URLs must use HTTPS because Pipr sends the Azure credential to that origin. Install any private certificate authority in the runner and Pipr container trust stores before connecting to an internal Server URL.
 
 For full local adapter parity, create an organization-scoped PAT with `Code (Read & write)`, `Code (Status)`, `Identity (Read)`, and `Security (Manage)`. Pipr only reads the Security ACL API, but Azure DevOps exposes no read-only PAT scope for that API; its documented security scope is `vso.security_manage`. If commands are disabled, omit `Identity (Read)` and `Security (Manage)` because repository permission evaluation is not needed.
 

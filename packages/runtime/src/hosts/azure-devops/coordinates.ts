@@ -8,14 +8,8 @@ export function azureOrganizationFromUrl(value: string): string | undefined {
 
 export function normalizeAzureCollectionUrl(value: string): string {
   const url = new URL(value);
-  if (
-    (url.protocol !== "https:" && url.protocol !== "http:") ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
-    throw new Error("Azure DevOps collection URL must be an HTTP(S) URL without credentials");
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+    throw new Error("Azure DevOps collection URL must be an HTTPS URL without credentials");
   }
   if (!azureOrganizationFromUrl(value)) {
     throw new Error("Azure DevOps collection URL must include an organization or collection");

@@ -512,6 +512,7 @@ function starterAzureDevOpsWebhookEnvironment(recipe?: string): string {
     "AZURE_DEVOPS_API_VERSION=7.1",
     "AZURE_DEVOPS_PROJECT=",
     "AZURE_DEVOPS_BEARER_TOKEN=",
+    "AZURE_DEVOPS_TOKEN=",
     "PIPR_AZURE_SUBSCRIPTION_ID=",
     "PIPR_WEBHOOK_SECRET=",
   ];
@@ -535,6 +536,7 @@ function starterAzureDevOpsPipeline(
     "  branches:",
     "    include:",
     "      - '*'",
+    "# Azure DevOps Server: replace this hosted image with your self-hosted pool.",
     "pool:",
     "  vmImage: ubuntu-latest",
     "steps:",

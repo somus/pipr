@@ -302,6 +302,7 @@ describe("webhook runner", () => {
       expectedRepository: {
         organization: "org",
         collectionUrl: "https://dev.azure.com/org",
+        collectionId: "collection-id",
         projectId: "project-id",
         repositoryId: "repo-id",
         subscriptionId: "subscription-1",
@@ -319,7 +320,8 @@ describe("webhook runner", () => {
           repository: { id: "repo-id", project: { id: "project-id" } },
         },
         resourceContainers: {
-          account: { baseUrl: "https://dev.azure.com/org/" },
+          account: { id: "account-id", baseUrl: "https://dev.azure.com/org/" },
+          collection: { id: "collection-id", baseUrl: "https://dev.azure.com/org/" },
           project: { id: "project-id" },
         },
         ...overrides,
@@ -382,8 +384,11 @@ describe("webhook runner", () => {
             payload({
               id: "event-4",
               resourceContainers: {
-                account: { baseUrl: "https://dev.azure.com/org/" },
-                collection: { baseUrl: "https://azure.example.test/tfs/org/" },
+                account: { id: "account-id", baseUrl: "https://dev.azure.com/org/" },
+                collection: {
+                  id: "collection-id",
+                  baseUrl: "https://azure.example.test/tfs/org/",
+                },
                 project: { id: "project-id" },
               },
             }),
@@ -391,6 +396,48 @@ describe("webhook runner", () => {
         )
       ).status,
     ).toBe(403);
+  });
+
+  it("accepts Azure DevOps Server deliveries from the exact collection", async () => {
+    const ingress = createWebhookIngress({
+      host: "azure-devops",
+      secret: "webhook-secret",
+      expectedRepository: {
+        organization: "DefaultCollection",
+        collectionUrl: "https://azure.example.test/tfs/DefaultCollection",
+        collectionId: "collection-id",
+        projectId: "project-id",
+        repositoryId: "repo-id",
+        subscriptionId: "subscription-1",
+      },
+      store: new MemoryDeliveryStore(),
+    });
+    const payload = (collectionId = "collection-id") =>
+      JSON.stringify({
+        id: `server-event-${collectionId}`,
+        eventType: "git.pullrequest.updated",
+        subscriptionId: "subscription-1",
+        notificationId: 4,
+        resource: {
+          pullRequestId: 7,
+          repository: { id: "repo-id", project: { id: "project-id" } },
+        },
+        resourceContainers: {
+          account: { id: "account-id" },
+          collection: { id: collectionId },
+          project: { id: "project-id" },
+        },
+      });
+    const request = (collectionId?: string) =>
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "X-Pipr-Webhook-Secret": "webhook-secret" },
+        body: payload(collectionId),
+      });
+
+    expect((await ingress(request())).status).toBe(202);
+    expect((await ingress(request())).status).toBe(200);
+    expect((await ingress(request("other-collection"))).status).toBe(403);
   });
 
   it("validates Bitbucket HMAC signatures and repository binding", async () => {

@@ -29,6 +29,11 @@ const identitySchema = z
     };
   });
 
+const connectionDataSchema = z.looseObject({
+  authenticatedUser: identitySchema,
+  instanceId: z.string().min(1),
+});
+
 const commitSchema = z.looseObject({ commitId: z.string().min(1) });
 const forkRepositorySchema = z.looseObject({ remoteUrl: z.string().min(1) });
 
@@ -144,6 +149,7 @@ export type AzureDevOpsClient = {
   organization: string;
   project: string;
   collectionUrl: string;
+  collectionId(): Promise<string>;
   currentUser(): Promise<{ id?: string; uniqueName?: string; displayName?: string }>;
   getRepository(repository: string): Promise<{
     id: string;
@@ -246,17 +252,21 @@ export function createAzureDevOpsClient(
 
   const pullRequestPath = (repositoryId: string, changeNumber: number) =>
     `git/repositories/${encodeURIComponent(repositoryId)}/pullRequests/${changeNumber}`;
+  const connectionData = () =>
+    organizationApi.json(
+      "connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",
+      connectionDataSchema,
+    );
 
   return {
     organization,
     project,
     collectionUrl,
+    async collectionId() {
+      return (await connectionData()).instanceId;
+    },
     async currentUser() {
-      const result = await organizationApi.json(
-        "connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",
-        z.looseObject({ authenticatedUser: identitySchema }),
-      );
-      return result.authenticatedUser;
+      return (await connectionData()).authenticatedUser;
     },
     async getRepository(repository) {
       const value = await api.json(

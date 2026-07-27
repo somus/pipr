@@ -551,6 +551,7 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
   organization = "org";
   project = "project";
   collectionUrl = "https://dev.azure.com/org";
+  collectionId = async () => "collection-id";
   threads: AzureDevOpsThread[] = [];
   createdThreadBodies: Array<Record<string, unknown>> = [];
   statusBodies: Array<Record<string, unknown>> = [];
@@ -761,7 +762,8 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
         eventType: "git.pullrequest.updated",
         resource,
         resourceContainers: {
-          account: { baseUrl: "https://dev.azure.com/org/" },
+          account: { id: "account-id", baseUrl: "https://dev.azure.com/org/" },
+          collection: { id: "collection-id", baseUrl: "https://dev.azure.com/org/" },
           project: { id: "project-id", baseUrl: "https://dev.azure.com/org/project/" },
         },
       });

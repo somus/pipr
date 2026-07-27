@@ -15,7 +15,7 @@ describe("Azure DevOps API client", () => {
       },
       async (_input, init) => {
         authorizations.push(new Headers(init?.headers).get("Authorization"));
-        return Response.json({ authenticatedUser: {} });
+        return Response.json({ authenticatedUser: {}, instanceId: "collection-id" });
       },
     );
 
@@ -27,7 +27,7 @@ describe("Azure DevOps API client", () => {
     const authorizations: Array<string | null> = [];
     const client = createAzureDevOpsClient(azureEnv, async (_input, init) => {
       authorizations.push(new Headers(init?.headers).get("Authorization"));
-      return Response.json({ authenticatedUser: {} });
+      return Response.json({ authenticatedUser: {}, instanceId: "collection-id" });
     });
 
     await client.currentUser();
@@ -36,6 +36,34 @@ describe("Azure DevOps API client", () => {
 
   it("uses an Azure DevOps Server collection URL and API version", async () => {
     const requests: string[] = [];
+    const responses: Array<[string, unknown]> = [
+      ["/identities?", { count: 0, value: [] }],
+      ["/iterations/2/changes?", { changeEntries: [], nextSkip: 0, nextTop: 0 }],
+      [
+        "/iterations?",
+        {
+          count: 1,
+          value: [{ id: 2, sourceRefCommit: { commitId: "head" } }],
+        },
+      ],
+      ["/pullRequests/7/threads/10/comments/1", { id: 1, content: "updated" }],
+      ["/pullRequests/7/threads/10/comments", { id: 2, content: "reply" }],
+      ["/pullRequests/7/threads/10", { id: 10, comments: [], status: "fixed" }],
+      [
+        "/pullRequests/7/threads",
+        { id: 10, comments: [{ id: 1, content: "root" }], status: "active" },
+      ],
+      ["/pullRequests/7/statuses", { id: 99 }],
+      ["/pullRequests/7", pullRequest],
+      [
+        "/git/repositories/",
+        {
+          id: "repo-id",
+          name: "repository",
+          project: { id: "project-id", name: "project" },
+        },
+      ],
+    ];
     const client = createAzureDevOpsClient(
       {
         AZURE_DEVOPS_COLLECTION_URL: "https://azure.example.test/tfs/DefaultCollection/",
@@ -46,27 +74,45 @@ describe("Azure DevOps API client", () => {
       async (input) => {
         const url = String(input);
         requests.push(url);
-        if (url.includes("/identities?")) {
-          return Response.json({ count: 0, value: [] });
-        }
-        if (url.includes("/git/repositories/")) {
-          return Response.json({
-            id: "repo-id",
-            name: "repository",
-            project: { id: "project-id", name: "project" },
-          });
-        }
-        return Response.json({ authenticatedUser: {} });
+        const response = responses.find(([pattern]) => url.includes(pattern))?.[1] ?? {
+          authenticatedUser: {},
+          instanceId: "collection-id",
+        };
+        return Response.json(response);
       },
     );
 
     expect(client.organization).toBe("DefaultCollection");
     expect(client.collectionUrl).toBe("https://azure.example.test/tfs/DefaultCollection");
-    await client.currentUser();
+    await expect(client.collectionId()).resolves.toBe("collection-id");
     await client.getRepository("repository");
     await expect(
       client.getRepositoryPermission("developer@example.com", "project-id", "repo-id"),
     ).resolves.toBe("none");
+    await client.loadChange({
+      organization: "DefaultCollection",
+      project: "project",
+      repositoryId: "repo-id",
+      changeNumber: 7,
+    });
+    await client.listIterationChanges("repo-id", 7, 2);
+    await client.createThread("repo-id", 7, {
+      comments: [{ parentCommentId: 0, content: "inline", commentType: 1 }],
+      status: "active",
+    });
+    await client.updateComment("repo-id", 7, "10", "1", "updated");
+    await client.createThreadComment("repo-id", 7, "10", {
+      parentCommentId: 1,
+      content: "reply",
+      commentType: 1,
+    });
+    await client.updateThreadStatus("repo-id", 7, "10", "fixed");
+    await client.createStatus("repo-id", 7, {
+      state: "succeeded",
+      description: "complete",
+      context: { genre: "pipr", name: "pipr/review" },
+      iterationId: 2,
+    });
 
     expect(requests).toContain(
       "https://azure.example.test/tfs/DefaultCollection/_apis/connectionData?connectOptions=1&lastChangeId=-1&lastChangeId64=-1",
@@ -81,7 +127,14 @@ describe("Azure DevOps API client", () => {
           url.includes("api-version=7.0"),
       ),
     ).toBe(true);
-    expect(requests.every((url) => !url.includes("dev.azure.com"))).toBe(true);
+    expect(
+      requests.every((url) => url.startsWith("https://azure.example.test/tfs/DefaultCollection/")),
+    ).toBe(true);
+    expect(
+      requests
+        .filter((url) => !url.includes("/_apis/connectionData?"))
+        .every((url) => new URL(url).searchParams.get("api-version") === "7.0"),
+    ).toBe(true);
   });
 
   it("keeps the native pipeline collection URL ahead of an explicit override", async () => {
@@ -95,7 +148,7 @@ describe("Azure DevOps API client", () => {
       },
       async (input) => {
         requests.push(String(input));
-        return Response.json({ authenticatedUser: {} });
+        return Response.json({ authenticatedUser: {}, instanceId: "collection-id" });
       },
     );
 
@@ -114,19 +167,24 @@ describe("Azure DevOps API client", () => {
         AZURE_DEVOPS_TOKEN: "test-token",
       }),
     ).toThrow("AZURE_DEVOPS_API_VERSION must be 7.0 or 7.1");
-    expect(() =>
-      createAzureDevOpsClient({
-        AZURE_DEVOPS_COLLECTION_URL:
-          "https://user:password@azure.example.test/tfs/DefaultCollection",
-        AZURE_DEVOPS_PROJECT: "project",
-        AZURE_DEVOPS_TOKEN: "test-token",
-      }),
-    ).toThrow("Azure DevOps collection URL must be an HTTP(S) URL without credentials");
+    for (const collectionUrl of [
+      "http://azure.example.test/tfs/DefaultCollection",
+      "https://user:password@azure.example.test/tfs/DefaultCollection",
+    ]) {
+      expect(() =>
+        createAzureDevOpsClient({
+          AZURE_DEVOPS_COLLECTION_URL: collectionUrl,
+          AZURE_DEVOPS_PROJECT: "project",
+          AZURE_DEVOPS_TOKEN: "test-token",
+        }),
+      ).toThrow("Azure DevOps collection URL must be an HTTPS URL without credentials");
+    }
   });
 
   it("normalizes Microsoft account identities from connection data", async () => {
     const client = createAzureDevOpsClient(azureEnv, async () =>
       Response.json({
+        instanceId: "collection-id",
         authenticatedUser: {
           id: "user-id",
           providerDisplayName: "Pipr User",

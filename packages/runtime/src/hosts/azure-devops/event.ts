@@ -15,9 +15,17 @@ const serviceHookSchema = z.looseObject({
   eventType: z.string().min(1),
   resource: z.unknown(),
   resourceContainers: z.looseObject({
-    account: z.looseObject({ baseUrl: z.string().url() }),
-    collection: z.looseObject({ baseUrl: z.string().url() }).optional(),
-    project: z.looseObject({ id: z.string().min(1), baseUrl: z.string().url() }).optional(),
+    account: z.looseObject({
+      id: z.string().min(1),
+      baseUrl: z.string().url().optional(),
+    }),
+    collection: z.looseObject({
+      id: z.string().min(1),
+      baseUrl: z.string().url().optional(),
+    }),
+    project: z
+      .looseObject({ id: z.string().min(1), baseUrl: z.string().url().optional() })
+      .optional(),
   }),
 });
 
@@ -78,7 +86,7 @@ async function pipelineEvent(options: AzureDevOpsEventParseOptions): Promise<Cod
 async function serviceHookEvent(options: AzureDevOpsEventParseOptions): Promise<CodeHostEvent> {
   const payload: unknown = await Bun.file(options.eventPath ?? "").json();
   const hook = serviceHookSchema.parse(payload);
-  const collectionUrl = serviceHookCollectionUrl(hook.resourceContainers);
+  const collectionUrl = serviceHookCollectionUrl(options.env, hook.resourceContainers);
   const organization = organizationFromCollectionUri(collectionUrl);
   if (hook.eventType === "ms.vss-code.git-pullrequest-comment-event") {
     const resource = commentResourceSchema.parse(hook.resource);
@@ -187,9 +195,19 @@ function organizationFromCollectionUri(value: string): string {
 }
 
 function serviceHookCollectionUrl(
+  env: NodeJS.ProcessEnv,
   containers: z.infer<typeof serviceHookSchema>["resourceContainers"],
 ): string {
-  return normalizeAzureCollectionUrl(containers.collection?.baseUrl ?? containers.account.baseUrl);
+  const configured = env.SYSTEM_COLLECTIONURI || env.AZURE_DEVOPS_COLLECTION_URL;
+  if (configured) return normalizeAzureCollectionUrl(configured);
+  if (env.AZURE_DEVOPS_ORGANIZATION) {
+    return normalizeAzureCollectionUrl(
+      `https://dev.azure.com/${encodeURIComponent(env.AZURE_DEVOPS_ORGANIZATION)}`,
+    );
+  }
+  const payloadUrl = containers.collection.baseUrl ?? containers.account.baseUrl;
+  if (payloadUrl) return normalizeAzureCollectionUrl(payloadUrl);
+  throw new Error("Azure DevOps service hook did not include a collection URL");
 }
 
 function azureRepositoryUrl(collectionUrl: string, project: string, repository: string): string {

@@ -504,11 +504,15 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(environment).toContain("AZURE_DEVOPS_COLLECTION_URL=");
     expect(environment).toContain("AZURE_DEVOPS_API_VERSION=");
     expect(environment).toContain("AZURE_DEVOPS_BEARER_TOKEN=");
+    expect(environment).toContain("AZURE_DEVOPS_TOKEN=");
     expect(environment).toContain("PIPR_AZURE_SUBSCRIPTION_ID=");
     expect(environment).toContain("PIPR_WEBHOOK_SECRET=");
     expect(result.created).toContain("azure-pipelines.pipr.yml");
     expect(pipeline).toContain("host-run --host azure-devops --config-dir config/pipr");
     expect(pipeline).toContain("--env AZURE_DEVOPS_API_VERSION");
+    expect(pipeline).toContain(
+      "# Azure DevOps Server: replace this hosted image with your self-hosted pool.",
+    );
     expect(pipeline).not.toContain(".pipr-runs");
   });
 
