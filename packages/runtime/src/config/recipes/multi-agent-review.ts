@@ -98,7 +98,7 @@ export default definePipr((pipr) => {
       });
       ctx.check.pass("Multi-agent review completed.");
       await ctx.comment({
-        main: result.summary.body,
+        main: ["## 🧭 Summary", "", result.summary.body].join("\\n"),
         inlineFindings: result.inlineFindings,
       });
     },

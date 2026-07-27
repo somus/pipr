@@ -10,7 +10,10 @@ import type { ReviewResult } from "../../types.js";
 import type { PiRunStats } from "../agent/review-run.js";
 import { mainCommentTitles } from "../comment-branding.js";
 import { reviewFindingSchema } from "../contract.js";
-import { parseGeneratedMainCommentEnvelope } from "../main-comment-envelope.js";
+import {
+  type GeneratedMainCommentEnvelope,
+  parseGeneratedMainCommentEnvelope,
+} from "../main-comment-envelope.js";
 import type { PriorReviewState } from "../prior-state.js";
 import {
   maxReviewStatsModels,
@@ -293,8 +296,9 @@ export function priorReviewForTask(
   priorMainComment: string | undefined,
   priorReviewState: PriorReviewState | undefined,
 ): PriorReview {
+  const visibleMain = priorMainComment ? visibleMainComment(priorMainComment) : undefined;
   return {
-    ...(priorMainComment ? { main: visibleMainComment(priorMainComment) } : {}),
+    ...(visibleMain ? { main: visibleMain } : {}),
     ...(priorReviewState ? { reviewedHeadSha: priorReviewState.reviewedHeadSha } : {}),
     inlineFindings:
       priorReviewState?.findings.map((finding) => ({
@@ -312,19 +316,7 @@ export function priorReviewForTask(
 function visibleMainComment(body: string): string {
   const sourceLines = body.split("\n");
   const envelope = parseGeneratedMainCommentEnvelope(sourceLines);
-  const lines = sourceLines.filter((_line, index) => {
-    return (
-      !(
-        envelope.statsRange &&
-        index >= envelope.statsRange.start &&
-        index <= envelope.statsRange.end
-      ) &&
-      index !== envelope.mainMarkerIndex &&
-      index !== envelope.headerMarkerIndex &&
-      index !== envelope.statsMarkerIndex &&
-      index !== envelope.footerIndex
-    );
-  });
+  const lines = sourceLines.filter((_line, index) => !generatedEnvelopeOwnsLine(envelope, index));
   while (lines[0] === "") {
     lines.shift();
   }
@@ -335,6 +327,22 @@ function visibleMainComment(body: string): string {
     lines.shift();
   }
   return lines.join("\n").trim();
+}
+
+function generatedEnvelopeOwnsLine(envelope: GeneratedMainCommentEnvelope, index: number): boolean {
+  if (
+    [
+      envelope.mainMarkerIndex,
+      envelope.headerMarkerIndex,
+      envelope.statsMarkerIndex,
+      envelope.footerIndex,
+    ].includes(index)
+  ) {
+    return true;
+  }
+  return [envelope.statsRange, envelope.progressRange, envelope.resultRange].some(
+    (range) => range !== undefined && index >= range.start && index <= range.end,
+  );
 }
 
 function collectInlineFindings(

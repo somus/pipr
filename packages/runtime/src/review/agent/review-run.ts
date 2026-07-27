@@ -34,6 +34,7 @@ import type {
   ReviewResult,
 } from "../../types.js";
 import type { PriorReviewState } from "../prior-state.js";
+import type { ReviewWorkEvent } from "../progress.js";
 import { parseReviewResult, reviewResultSchemaId } from "../review.js";
 import {
   type AgentRunContext,
@@ -84,6 +85,13 @@ export type RunReviewAgentOptions = {
     log?: RuntimeLog;
     piRunSink?: (run: PiRunStats) => void;
     runObserver?: RunObserver;
+    reviewWork?: {
+      taskId: string;
+      reviewerId: string;
+      reviewerName: string;
+      reviewerOrder: number;
+      emit(event: ReviewWorkEvent): void;
+    };
     agentRunBudget?: AgentRunBudget;
     structuralAnalysis?: DiffStructuralAnalysisLoader;
     structuralToolsEnabled?: boolean;
@@ -122,45 +130,120 @@ export async function runReviewAgent(
     throw new Error("Pi run maxShards must be a positive integer");
   }
   const scheduled = await scheduledReviewManifests(options);
-  if (!scheduled) {
-    return await runReviewAgentOnce(options);
-  }
-  const { manifests } = scheduled;
-  if (manifests.length === 1) {
-    return await runReviewAgentOnce({
-      ...options,
-      input: inputWithManifest(options.input, manifests[0]),
-      allowOversizedCondensedManifest: true,
-    });
-  }
-  const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
-    options.runtime.log?.info("diff manifest sharded", {
-      agent: options.agent.name ?? "anonymous-agent",
-      task: options.runtime.taskName,
-      kind: scheduled.kind,
-      shardCount: manifests.length,
-    });
-    const results: RunReviewAgentResult[] = [];
-    for (const [index, manifest] of manifests.entries()) {
-      results.push(
-        await runReviewAgentOnce({
-          ...options,
-          input: inputWithManifest(options.input, manifest),
-          allowOversizedCondensedManifest: true,
-          shard: { index: index + 1, count: manifests.length },
-          runtime: { ...options.runtime, piRunner },
-        }),
-      );
+  const totalRuns = scheduled?.manifests.length ?? 1;
+  emitReviewWork(options, {
+    type: "reviewer-started",
+    reviewerOrder: options.runtime.reviewWork?.reviewerOrder ?? 0,
+    totalRuns,
+  });
+  let outcome: "completed" | "failed" = "failed";
+  try {
+    let result: RunReviewAgentResult;
+    if (!scheduled) {
+      result = await runReviewAgentUnit(options, 1, totalRuns);
+    } else {
+      const { manifests } = scheduled;
+      if (manifests.length === 1) {
+        result = await runReviewAgentUnit(
+          {
+            ...options,
+            input: inputWithManifest(options.input, manifests[0]),
+            allowOversizedCondensedManifest: true,
+          },
+          1,
+          totalRuns,
+        );
+      } else {
+        const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
+          options.runtime.log?.info("diff manifest sharded", {
+            agent: options.agent.name ?? "anonymous-agent",
+            task: options.runtime.taskName,
+            kind: scheduled.kind,
+            shardCount: manifests.length,
+          });
+          const results: RunReviewAgentResult[] = [];
+          for (const [index, manifest] of manifests.entries()) {
+            results.push(
+              await runReviewAgentUnit(
+                {
+                  ...options,
+                  input: inputWithManifest(options.input, manifest),
+                  allowOversizedCondensedManifest: true,
+                  shard: { index: index + 1, count: manifests.length },
+                  runtime: { ...options.runtime, piRunner },
+                },
+                index + 1,
+                totalRuns,
+              ),
+            );
+          }
+          return mergeScheduledReviewAgentResults(results, options, scheduled.kind);
+        };
+        result = options.runtime.piRunner
+          ? await runScheduled(options.runtime.piRunner)
+          : await withPiRunWorkspace(
+              { workspace: options.runtime.workspace, env: options.runtime.env },
+              runScheduled,
+            );
+      }
     }
-    return mergeScheduledReviewAgentResults(results, options, scheduled.kind);
-  };
-  if (options.runtime.piRunner) {
-    return await runScheduled(options.runtime.piRunner);
+    outcome = "completed";
+    return result;
+  } finally {
+    emitReviewWork(options, { type: "reviewer-finished", outcome });
   }
-  return await withPiRunWorkspace(
-    { workspace: options.runtime.workspace, env: options.runtime.env },
-    runScheduled,
-  );
+}
+
+async function runReviewAgentUnit(
+  options: RunReviewAgentOptions,
+  run: number,
+  totalRuns: number,
+): Promise<RunReviewAgentResult> {
+  emitReviewWork(options, { type: "review-run-started", run, totalRuns });
+  let outcome: "completed" | "failed" = "failed";
+  try {
+    const result = await runReviewAgentOnce(options);
+    outcome = "completed";
+    return result;
+  } finally {
+    emitReviewWork(options, { type: "review-run-finished", run, totalRuns, outcome });
+  }
+}
+
+function emitReviewWork(
+  options: RunReviewAgentOptions,
+  event:
+    | { type: "reviewer-started"; reviewerOrder: number; totalRuns: number }
+    | { type: "review-run-started"; run: number; totalRuns: number }
+    | {
+        type: "review-run-finished";
+        run: number;
+        totalRuns: number;
+        outcome: "completed" | "failed";
+      }
+    | { type: "reviewer-finished"; outcome: "completed" | "failed" },
+): void {
+  const work = options.runtime.reviewWork;
+  if (!work) return;
+  const base = {
+    taskId: work.taskId,
+    reviewerId: work.reviewerId,
+    reviewerName: work.reviewerName,
+  };
+  switch (event.type) {
+    case "reviewer-started":
+      work.emit({ ...base, ...event });
+      break;
+    case "review-run-started":
+      work.emit({ ...base, ...event });
+      break;
+    case "review-run-finished":
+      work.emit({ ...base, ...event });
+      break;
+    case "reviewer-finished":
+      work.emit({ ...base, ...event });
+      break;
+  }
 }
 
 async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunReviewAgentResult> {

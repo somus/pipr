@@ -1,10 +1,12 @@
 import type { RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import { publicationPlanForHostCapabilities } from "../review/comment.js";
+import { ReviewProgressSupersededError } from "../review/progress.js";
 import { PublicationError } from "../review/publication-result.js";
 import { type RuntimeCommandInvocation, runTaskRuntime } from "../review/task/task-runtime.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
+import type { ReviewProgressReporter } from "./review-progress.js";
 import {
   finalizeRuntimeChecks,
   genericCheckFailureSummary,
@@ -25,6 +27,8 @@ export async function runTrustedReviewAndPublish(options: {
   taskInput?: unknown;
   selectedTasks: RuntimeTask[];
   commandInvocation?: RuntimeCommandInvocation;
+  workflowUrl?: string;
+  progress?: ReviewProgressReporter;
   log: RuntimeLog;
 }): Promise<TrustedReviewAndPublishResult> {
   const checks = await startRuntimeChecks({
@@ -36,16 +40,21 @@ export async function runTrustedReviewAndPublish(options: {
     log: options.log,
   });
   try {
+    if (checks?.startupError) throw checks.startupError;
     const review = await executeTaskRuntime(options, checks?.sink);
     const earlyResult = await earlyReviewResult(review, checks);
     if (earlyResult) return earlyResult;
     const completedReview = requirePublishableReview(review);
-    const publication = await publishCompletedReview(options, completedReview);
     await finalizeRuntimeChecks(checks, {});
+    const publication = await publishCompletedReview(options, completedReview);
     return { kind: "completed", review: completedReview, publication };
   } catch (error) {
-    await finalizeFailedChecks(options, checks);
-    throw error;
+    let finalError = error;
+    if ((await options.progress?.fail(error)) === "superseded") {
+      finalError = new ReviewProgressSupersededError();
+    }
+    await finalizeFailedChecks(options, checks, finalError);
+    throw finalError;
   }
 }
 
@@ -74,6 +83,8 @@ async function executeTaskRuntime(
     checkSink,
     secretRedactor: options.options.secretRedactor,
     runObserver: options.options.runObserver,
+    workflowUrl: options.workflowUrl,
+    progress: options.progress,
     loadPriorReviewState: () =>
       options.adapter.comments?.loadPriorReviewState?.({ change: options.event }) ??
       Promise.resolve(undefined),
@@ -123,6 +134,7 @@ async function publishCompletedReview(
   if (!publish) throw new Error("review publication is not available for this code host");
   try {
     return await options.log.group("publish review", async () => {
+      await options.progress?.transition("publishing-review");
       const plan = publicationPlanForHostCapabilities(
         review.publicationPlan,
         options.adapter.capabilities,
@@ -131,7 +143,11 @@ async function publishCompletedReview(
         inlineItems: plan.inlineItems.length,
         threadActions: plan.threadActions.length,
       });
-      const result = await publish({ change: options.event, plan });
+      const result = await publish({
+        change: options.event,
+        plan,
+        progressLease: options.progress?.lease,
+      });
       logPublicationResult(options, result);
       await recordPublicationArtifact(options, {
         kind: "publication-plan",
@@ -143,6 +159,7 @@ async function publishCompletedReview(
       return result;
     });
   } catch (error) {
+    if (error instanceof ReviewProgressSupersededError) throw error;
     const publicationError = asPublicationError(error);
     await recordPublicationError(options, publicationError, error);
     throw publicationError;
@@ -197,12 +214,19 @@ async function recordPublicationError(
 async function finalizeFailedChecks(
   options: ReviewPublishingOptions,
   checks: RuntimeChecks,
+  error: unknown,
 ): Promise<void> {
+  const superseded = error instanceof ReviewProgressSupersededError;
   await finalizeRuntimeChecks(checks, {
-    forceFailureSummary: genericCheckFailureSummary,
-    preserveTaskOutcomes: Array.from(checks?.outcomes.values() ?? []).some(
-      (result) => result.conclusion === "failure",
-    ),
+    superseded,
+    ...(superseded
+      ? {}
+      : {
+          forceFailureSummary: genericCheckFailureSummary,
+          preserveTaskOutcomes: Array.from(checks?.outcomes.values() ?? []).some(
+            (result) => result.conclusion === "failure",
+          ),
+        }),
   }).catch((finalizeError: unknown) => {
     options.log.warning("check finalization after failure failed", {
       error: finalizeError instanceof Error ? finalizeError.message : String(finalizeError),

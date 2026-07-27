@@ -34,6 +34,7 @@ export default definePipr((pipr) => {
       showHeader: true,
       showFooter: true,
       showStats: true,
+      showProgress: true,
     },
   });
 
@@ -56,7 +57,7 @@ export default definePipr((pipr) => {
 
 `pipr.review` registers a Review Task and the default Entrypoints unless `entrypoints` disables or replaces them. Its findings agent can shard large manifests; its summary agent runs once with all merged candidate findings.
 
-The three `show*` publication options default to `true`. Set one to `false` to hide only Pipr's generated title, attribution footer, or collapsed review statistics; the task-authored Main Review Comment body is unchanged.
+The four `show*` publication options default to `true`. Set one to `false` to hide only Pipr's generated title, attribution footer, collapsed review statistics, or hosted-run progress; the task-authored Main Review Comment body is unchanged. `showProgress: false` omits the progress section instead of leaving an empty placeholder.
 
 ### Review registration
 

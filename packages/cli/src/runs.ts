@@ -663,26 +663,45 @@ function parseLimit(value: string | undefined): number {
   return limit;
 }
 
-function printRunList(runs: RunRecord[]): void {
+const runListColumnWidths = {
+  executionId: 32,
+  kind: 9,
+  outcome: 12,
+  state: 21,
+  startedAt: 25,
+} as const;
+
+export function printRunList(runs: RunRecord[]): void {
   if (runs.length === 0) {
     console.log("No Pipr runs found.");
     return;
   }
   console.log(
-    "EXECUTION ID                     KIND      OUTCOME      STATE            STARTED                   LOCATION",
+    [
+      formatRunListColumn("EXECUTION ID", runListColumnWidths.executionId),
+      formatRunListColumn("KIND", runListColumnWidths.kind),
+      formatRunListColumn("OUTCOME", runListColumnWidths.outcome),
+      formatRunListColumn("STATE", runListColumnWidths.state),
+      formatRunListColumn("STARTED", runListColumnWidths.startedAt),
+      "LOCATION",
+    ].join("  "),
   );
   for (const run of runs) {
     console.log(
       [
-        run.executionId.padEnd(32),
-        (run.kind ?? "unknown").padEnd(9),
-        (run.outcome ?? "unknown").padEnd(12),
-        run.state.padEnd(16),
-        (run.startedAt ?? "unknown").padEnd(25),
+        formatRunListColumn(run.executionId, runListColumnWidths.executionId),
+        formatRunListColumn(run.kind ?? "unknown", runListColumnWidths.kind),
+        formatRunListColumn(run.outcome ?? "unknown", runListColumnWidths.outcome),
+        formatRunListColumn(run.state, runListColumnWidths.state),
+        formatRunListColumn(run.startedAt ?? "unknown", runListColumnWidths.startedAt),
         run.nativeUrl ?? "-",
       ].join("  "),
     );
   }
+}
+
+function formatRunListColumn(value: string, width: number): string {
+  return value.slice(0, width).padEnd(width);
 }
 
 function printDiagnosis(

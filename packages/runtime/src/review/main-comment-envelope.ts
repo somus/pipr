@@ -2,10 +2,13 @@ import {
   mainCommentAttributionPattern,
   mainCommentFooterHiddenMarker,
   mainCommentHeaderHiddenMarker,
+  reviewResultEndMarker,
+  reviewResultStartMarker,
   reviewStatsEndMarker,
   reviewStatsHiddenMarker,
   reviewStatsStartMarker,
 } from "./comment-branding.js";
+import { reviewProgressRange } from "./progress.js";
 
 const generatedReviewStatsShape = [
   /^$/,
@@ -27,6 +30,8 @@ export type GeneratedMainCommentEnvelope = {
   headerMarkerIndex: number;
   statsMarkerIndex: number;
   statsRange: { start: number; end: number } | undefined;
+  progressRange: { start: number; end: number } | undefined;
+  resultRange: { start: number; end: number } | undefined;
   footerIndex: number;
 };
 
@@ -57,8 +62,24 @@ export function parseGeneratedMainCommentEnvelope(lines: string[]): GeneratedMai
     headerMarkerIndex,
     statsMarkerIndex,
     statsRange: generatedReviewStatsRange(lines, footerIndex),
+    progressRange: reviewProgressRange(lines),
+    resultRange: generatedReviewResultRange(lines),
     footerIndex,
   };
+}
+
+function generatedReviewResultRange(lines: string[]): { start: number; end: number } | undefined {
+  const start = lines.indexOf(reviewResultStartMarker);
+  if (
+    start < 0 ||
+    lines[start + 2] !== reviewResultEndMarker ||
+    !/^> (?:✅ \*\*No actionable findings:\*\*|⚠️ \*\*Needs attention:\*\*) .+$/.test(
+      lines[start + 1] ?? "",
+    )
+  ) {
+    return undefined;
+  }
+  return { start, end: start + 2 };
 }
 
 function generatedReviewStatsRange(
@@ -72,19 +93,33 @@ function generatedReviewStatsRange(
     return undefined;
   }
   const start = lines.lastIndexOf(reviewStatsStartMarker, end - 2);
-  if (
-    start < 0 ||
-    lines[start + 1] !== "<details>" ||
-    lines[start + 2] !== "<summary>Review stats</summary>" ||
-    !matchesGeneratedReviewStatsShape(lines, start, end)
-  ) {
+  if (!isGeneratedReviewStatsEnvelope(lines, start, end)) {
     return undefined;
   }
   return { start, end };
 }
 
+function isGeneratedReviewStatsEnvelope(lines: string[], start: number, end: number): boolean {
+  return (
+    start >= 0 &&
+    lines[start + 1] === "<details>" &&
+    /^<summary>(?:Review stats|(?:📊 )?Review completed in .+)<\/summary>$/.test(
+      lines[start + 2] ?? "",
+    ) &&
+    matchesGeneratedReviewStatsShape(lines, start, end)
+  );
+}
+
 function matchesGeneratedReviewStatsShape(lines: string[], start: number, end: number): boolean {
   const generatedShape = lines.slice(start + 3, end + 1);
+  const workflowIndex = generatedShape.findIndex((line) =>
+    /^(?:\| Workflow \| \[View workflow\]\(<https?:\/\/[^>]+>\) \||\| Workflow runs \| \[Run 1\]\(<https?:\/\/[^>]+>\)(?:, \[Run \d+\]\(<https?:\/\/[^>]+>\))* \|)$/.test(
+      line,
+    ),
+  );
+  if (workflowIndex >= 0) {
+    generatedShape.splice(workflowIndex, 1);
+  }
   return (
     generatedShape.length === generatedReviewStatsShape.length &&
     generatedReviewStatsShape.every((pattern, index) => pattern.test(generatedShape[index] ?? ""))

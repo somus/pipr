@@ -364,6 +364,7 @@ export function reviewConfigTs(
     checks?: boolean;
     autoResolve?: false | "userRepliesDisabled" | "any";
     subscriptionModel?: boolean;
+    showProgress?: boolean;
   } = {},
 ): string {
   const template = "$";
@@ -407,6 +408,9 @@ export function reviewConfigTs(
     "  });",
     options.event === false ? "" : '  pipr.on.changeRequest({ actions: ["opened"], task });',
     options.checks ? "  pipr.config({ checks: { aggregate: { enabled: true } } });" : "",
+    options.showProgress === false
+      ? "  pipr.config({ publication: { showProgress: false } });"
+      : "",
     autoResolveConfig,
     options.command === false
       ? ""
@@ -751,11 +755,20 @@ export function fakeGitHubPublicationClient(
     async listIssueComments() {
       return issueComments;
     },
-    async createIssueComment() {
-      return { id: 1 };
+    async createIssueComment(options) {
+      const comment = {
+        id: issueComments.length + 1,
+        body: options.body,
+        authorLogin: "github-actions[bot]",
+      };
+      issueComments.push(comment);
+      return { id: comment.id };
     },
-    async updateIssueComment() {
-      return { id: 1 };
+    async updateIssueComment(options) {
+      const comment = issueComments.find((item) => item.id === options.commentId);
+      if (!comment) throw new Error("issue comment not found");
+      comment.body = options.body;
+      return { id: comment.id };
     },
     async listReviewComments() {
       return [];
@@ -996,6 +1009,9 @@ export function pullRequestEnv(rootDir: string, eventPath: string): NodeJS.Proce
     FAST_DEEPSEEK_API_KEY: "provider-key",
     GITHUB_EVENT_NAME: "pull_request",
     GITHUB_EVENT_PATH: eventPath,
+    GITHUB_REPOSITORY: "local/pipr",
+    GITHUB_RUN_ID: "123",
+    GITHUB_SERVER_URL: "https://github.com",
     GITHUB_WORKSPACE: rootDir,
   };
 }

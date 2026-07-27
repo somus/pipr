@@ -8,6 +8,7 @@ import {
   loadGitLabPriorReviewState,
   publishGitLabCommandResponse,
   publishGitLabPlan,
+  publishGitLabReviewProgress,
   publishGitLabThreadActions,
 } from "./publication.js";
 import { ensureGitLabHeadCheckout } from "./workspace.js";
@@ -62,7 +63,9 @@ export function createGitLabHostAdapter(
       },
     },
     publication: {
-      publish: ({ plan, change }) => publishGitLabPlan({ client, plan, change }),
+      publish: ({ plan, change, progressLease }) =>
+        publishGitLabPlan({ client, plan, change, progressLease }),
+      publishReviewProgress: (args) => publishGitLabReviewProgress({ client, ...args }),
       publishCommandResponse: (args) => publishGitLabCommandResponse({ client, ...args }),
       publishCommandStatus: (args) =>
         publishGitLabCommandResponse({

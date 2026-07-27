@@ -352,6 +352,7 @@ pipr.config({
     showHeader: true,
     showFooter: true,
     showStats: true,
+    showProgress: true,
     autoResolve: {
       model,
       instructions: "Respect maintainer explanations about deliberate product behavior.",
@@ -374,7 +375,7 @@ pipr.config({
 
 `maxInlineComments` limits Inline Review Comments published by the current run. `maxStoredFindings` limits the current-first finding records serialized for future runs; it defaults to `50` and accepts values from `0` through `100`. Findings from an existing marker remain available during the run that rewrites it. Setting the limit to `0` writes no findings to the next marker, so subsequent runs receive no prior-finding input or automatic stale-finding resolution candidates; current output is unchanged.
 
-`showHeader`, `showFooter`, and `showStats` independently control the generated Pipr title, attribution footer, and collapsed review statistics. All three default to `true`. Hidden publication markers and `PublicationResult.metadata.stats` remain available when their visible sections are disabled.
+`showHeader`, `showFooter`, `showStats`, and `showProgress` independently control the generated Pipr title, attribution footer, collapsed completion details, and hosted-run progress. All four default to `true`. `showProgress: false` omits progress entirely rather than rendering an empty placeholder. Hidden publication markers and `PublicationResult.metadata.stats` remain available when their visible sections are disabled.
 
 `publication.autoResolve` defaults to enabled. Use `autoResolve: false` to disable verifier-driven thread cleanup and user-reply handling. If `model` is omitted, Pipr uses the default provider. Use `instructions` to add project-specific guidance for the internal verifier. Native thread cleanup still depends on the active code-host credential; on GitHub, the credential must have `viewerCanResolve: true`.
 

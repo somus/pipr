@@ -20,6 +20,7 @@ import {
   multiTaskCheckConfigTs,
   priorMainCommentBody,
   pullRequestEnv,
+  recordingCommandPublicationClient,
   removeWorkspace,
   restoreEnv,
   restoreGitConfigEnv,
@@ -157,6 +158,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           "pipr.diff.construct",
           "pipr.task",
           "pipr.review.validate",
+          "pipr.publish.review_progress",
           "pipr.publish.review",
           "gen_ai.chat",
           "pipr.agent.attempt_resources",
@@ -403,6 +405,223 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
+  it("publishes stage and review-work changes, then replaces progress with the review", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = recordingCommandPublicationClient(workspace);
+    try {
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).resolves.toMatchObject({ kind: "review" });
+
+      const bodies = [...publication.writes.created, ...publication.writes.updated];
+      const stages = bodies
+        .map((body) => body.match(/stage=([a-z-]+) state=running/)?.[1])
+        .filter((stage): stage is string => stage !== undefined);
+      expect(stages.filter((stage, index) => stage !== stages[index - 1])).toEqual([
+        "preparing-workspace",
+        "building-diff",
+        "running-review-tasks",
+        "validating-review",
+        "publishing-review",
+      ]);
+      expect(
+        bodies.some(
+          (body) =>
+            body.includes("<strong>Task:</strong> <code>review</code>") &&
+            body.includes("<strong>Reviewer:</strong> <code>reviewer</code>"),
+        ),
+      ).toBe(true);
+      expect(bodies.at(-1)).toContain("Review completed in ");
+      expect(bodies.at(-1)).toContain("[Run 1](<https://github.com/local/pipr/actions/runs/123>)");
+      expect(bodies.at(-1)).not.toContain("pipr:progress:start");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("does not let a delayed work update overwrite a later stage or completed review", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const publication = recordingCommandPublicationClient(workspace, issueComments);
+    const workUpdateStarted = Promise.withResolvers<void>();
+    const releaseWorkUpdate = Promise.withResolvers<void>();
+    const updateIssueComment = publication.client.updateIssueComment.bind(publication.client);
+    let delayed = false;
+    publication.client.updateIssueComment = async (options) => {
+      if (!delayed && options.body.includes("<strong>Task:</strong> <code>review</code>")) {
+        delayed = true;
+        workUpdateStarted.resolve();
+        await releaseWorkUpdate.promise;
+      }
+      return await updateIssueComment(options);
+    };
+    try {
+      const run = runPullRequestAction(workspace, {
+        githubPublicationClient: publication.client,
+      });
+      await workUpdateStarted.promise;
+      await Bun.sleep(10);
+      releaseWorkUpdate.resolve();
+      await expect(run).resolves.toMatchObject({ kind: "review" });
+
+      expect(issueComments).toHaveLength(1);
+      expect(issueComments[0]?.body).toContain("Review completed in ");
+      expect(issueComments[0]?.body).not.toContain("pipr:progress:start");
+      expect(publication.writes.updated.at(-1)).toBe(issueComments[0]?.body);
+    } finally {
+      releaseWorkUpdate.resolve();
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("ignores a superseded stage transition and neutralizes started checks", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const checks: FakeCheckRuns = { created: [], updated: [] };
+    const client = fakeGitHubPublicationClient(workspace, issueComments, checks);
+    const createIssueComment = client.createIssueComment.bind(client);
+    client.createIssueComment = async (options) => {
+      const result = await createIssueComment(options);
+      supersedeProgressComment(issueComments);
+      return result;
+    };
+    try {
+      await expect(
+        runPullRequestAction(workspace, { githubPublicationClient: client }),
+      ).resolves.toMatchObject({
+        kind: "ignored",
+        reason: "Review progress was superseded by a newer run",
+      });
+
+      expect(checks.updated).toEqual([
+        {
+          checkRunId: 4,
+          name: "review",
+          conclusion: "neutral",
+          summary: "Pipr run was superseded.",
+        },
+        {
+          checkRunId: 5,
+          name: "all",
+          conclusion: "neutral",
+          summary: "Pipr run was superseded.",
+        },
+      ]);
+      await expectPiNotCalled(workspace);
+
+      const [executionId] = await readdir(path.join(workspace.rootDir, ".pipr-runs"));
+      const manifest = parseRunBundleManifest(
+        JSON.parse(
+          await readFile(
+            path.join(workspace.rootDir, ".pipr-runs", executionId ?? "", "run.json"),
+            "utf8",
+          ),
+        ),
+      );
+      expect(manifest).toMatchObject({
+        kind: "review",
+        outcome: "partial",
+        failureCategory: "stale-head",
+      });
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("prioritizes an asynchronous work supersession over a task failure", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const checks: FakeCheckRuns = { created: [], updated: [] };
+    const client = fakeGitHubPublicationClient(workspace, issueComments, checks);
+    const updateIssueComment = client.updateIssueComment.bind(client);
+    let superseded = false;
+    client.updateIssueComment = async (options) => {
+      const result = await updateIssueComment(options);
+      if (
+        !superseded &&
+        options.body.includes("stage=running-review-tasks") &&
+        !options.body.includes("Task:")
+      ) {
+        superseded = true;
+        supersedeProgressComment(issueComments);
+      }
+      return result;
+    };
+    try {
+      await writeFailingPiExecutable(workspace.piExecutable);
+      await expect(
+        runPullRequestAction(workspace, { githubPublicationClient: client }),
+      ).resolves.toMatchObject({
+        kind: "ignored",
+        reason: "Review progress was superseded by a newer run",
+      });
+
+      expect(checks.updated.map((check) => check.conclusion)).toEqual(["neutral", "neutral"]);
+      expect(checks.updated.map((check) => check.summary)).toEqual([
+        "Pipr run was superseded.",
+        "Pipr run was superseded.",
+      ]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("retains the failed stage, redacted reason, and workflow URL", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = recordingCommandPublicationClient(workspace);
+    try {
+      await writeFailingPiExecutable(workspace.piExecutable);
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).rejects.toThrow("Pi agent failed with exit 42");
+
+      const failed = publication.writes.updated.at(-1) ?? publication.writes.created.at(-1) ?? "";
+      expect(failed).toContain("state=failed");
+      expect(failed).toContain("**Failed stage:** Running review tasks");
+      expect(failed).toContain(
+        "**Failed work:** Task <code>review</code> · Reviewer <code>reviewer</code>",
+      );
+      expect(failed).toContain("Pi agent failed with exit 42");
+      expect(failed).not.toContain("provider-key");
+      expect(failed).toContain("[View workflow](<https://github.com/local/pipr/actions/runs/123>)");
+      expect(failed).toContain("Pipr stopped while reviewing commit");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("does not create a progress placeholder when showProgress is disabled", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ showProgress: false }),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    try {
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).resolves.toMatchObject({ kind: "review" });
+
+      const bodies = [...publication.writes.created, ...publication.writes.updated];
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]).not.toContain("pipr:progress");
+      expect(bodies[0]).toContain("Review completed in ");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("creates and finalizes pull_request check runs around review publication", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: reviewConfigTs({ checks: true }),
@@ -427,7 +646,10 @@ describe("runHostRunCommand pull_request dispatch", () => {
   });
 
   it("captures generic provider publication failures as publication evidence", async () => {
-    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ showProgress: false }),
+      checkoutBaseBeforeRun: true,
+    });
     const traceDirectory = path.join(workspace.rootDir, "traces");
     try {
       const eventPath = path.join(workspace.rootDir, "event.json");
@@ -509,6 +731,32 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
+  it("renders failed progress when status finalization fails", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const publication = recordingCommandPublicationClient(workspace);
+    publication.client.updateCheckRun = async () => {
+      throw new Error("status finalization failed");
+    };
+    try {
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).rejects.toThrow("status finalization failed");
+
+      const body = publication.writes.updated.at(-1) ?? publication.writes.created.at(-1) ?? "";
+      expect(body).toContain("state=failed");
+      expect(body).toContain("**Failed stage:** Validating review");
+      expect(body).toContain("**Reason:** status finalization failed");
+      expect(body).not.toContain("Review completed in ");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("uses the trusted base config model id for pull_request runs", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: explicitModelIdConfigTs(),
@@ -576,6 +824,69 @@ describe("runHostRunCommand pull_request dispatch", () => {
       await expect(
         runPullRequestAction(workspace, { githubPublicationClient: client }),
       ).rejects.toThrow("Check the adapter credential scopes");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("ignores a superseded lease when check startup fails before review execution", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const client = fakeGitHubPublicationClient(workspace, issueComments);
+    client.createCheckRun = async () => {
+      supersedeProgressComment(issueComments);
+      throw new Error("Resource not accessible by integration");
+    };
+    try {
+      await expect(
+        runPullRequestAction(workspace, { githubPublicationClient: client }),
+      ).resolves.toMatchObject({
+        kind: "ignored",
+        reason: "Review progress was superseded by a newer run",
+      });
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("neutralizes partially started checks when later check startup is superseded", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs({ checks: true }),
+      checkoutBaseBeforeRun: true,
+    });
+    const issueComments: Array<{ id: number; body: string; authorLogin: string }> = [];
+    const checks: FakeCheckRuns = { created: [], updated: [] };
+    const client = fakeGitHubPublicationClient(workspace, issueComments, checks);
+    const createCheckRun = client.createCheckRun.bind(client);
+    client.createCheckRun = async (options) => {
+      if (options.name === "all") {
+        supersedeProgressComment(issueComments);
+        throw new Error("Resource not accessible by integration");
+      }
+      return await createCheckRun(options);
+    };
+    try {
+      await expect(
+        runPullRequestAction(workspace, { githubPublicationClient: client }),
+      ).resolves.toMatchObject({
+        kind: "ignored",
+        reason: "Review progress was superseded by a newer run",
+      });
+
+      expect(checks.created.map((check) => check.name)).toEqual(["review"]);
+      expect(checks.updated).toEqual([
+        {
+          checkRunId: 4,
+          name: "review",
+          conclusion: "neutral",
+          summary: "Pipr run was superseded.",
+        },
+      ]);
       await expectPiNotCalled(workspace);
     } finally {
       await removeWorkspace(workspace.rootDir);
@@ -867,3 +1178,14 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 });
+
+function supersedeProgressComment(
+  issueComments: Array<{ id: number; body: string; authorLogin: string }>,
+): void {
+  const comment = issueComments[0];
+  if (!comment) throw new Error("expected progress comment");
+  comment.body = comment.body.replace(
+    /token=[A-Za-z0-9-]+/,
+    "token=00000000-0000-4000-8000-000000000000",
+  );
+}

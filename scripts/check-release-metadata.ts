@@ -35,9 +35,7 @@ const actionMetadata = await readText("action.yml");
 const webhookCompose = await readText("deploy/webhook/compose.yml");
 const bunLock = await readText("bun.lock");
 const releaseVersionExpression = githubExpression("steps.version.outputs.version");
-const releasePushTokenExpression = githubExpression(
-  "secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token",
-);
+const releasePushTokenExpression = githubExpression("secrets.PIPR_RELEASE_PLEASE_TOKEN");
 const releaseVersionShellVariable = ["${", "PIPR_RELEASE_VERSION", "}"].join("");
 const releaseVersionBranchVariable = ["${", "PIPR_RELEASE_VERSION//./-", "}"].join("");
 const releaseDogfoodBranchPushRef = ['"HEAD:', "${", "branch", '}"'].join("");
@@ -316,8 +314,25 @@ assert(
   "release workflow dogfood update must use the release token for PR creation",
 );
 assert(
-  releaseWorkflow.includes(`PIPR_PUSH_TOKEN: ${releasePushTokenExpression}`),
-  "release workflow dogfood update must use the release token for branch pushes",
+  releaseWorkflow.includes(`token: ${releasePushTokenExpression}`),
+  "release workflow dogfood checkout must use the release token for branch pushes",
+);
+assert(
+  releaseWorkflow.includes("dogfood:\n    needs: publish"),
+  "release workflow must isolate the dogfood update in a post-publish job",
+);
+assert(
+  releaseWorkflow.includes("version: ${{ steps.version.outputs.version }}") &&
+    releaseWorkflow.includes("PIPR_RELEASE_VERSION: ${{ needs.publish.outputs.version }}"),
+  "release workflow must pass the published version to the dogfood job",
+);
+assert(
+  !releaseWorkflow.includes("PIPR_PUSH_TOKEN:"),
+  "release workflow must let checkout configure Git authentication",
+);
+assert(
+  !releaseWorkflow.includes("PIPR_RELEASE_PLEASE_TOKEN || github.token"),
+  "release workflow dogfood update must not fall back to a token that cannot update workflows",
 );
 assert(
   releaseWorkflow.includes(`npm view "@usepipr/sdk@${releaseVersionShellVariable}" version`),

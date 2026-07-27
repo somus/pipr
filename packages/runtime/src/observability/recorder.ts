@@ -30,8 +30,8 @@ import type {
 import type { RuntimeLogRecord, RuntimeLogSink } from "../shared/logging.js";
 import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
 import { runtimeVersion } from "../shared/version.js";
+import { activeCaptureHeartbeatMilliseconds, currentProcessIdentity } from "./active-capture.js";
 import { exportRunTelemetry } from "./otlp.js";
-import { activeCaptureHeartbeatMilliseconds, currentProcessIdentity } from "./retention-store.js";
 import { maximumRunBundleBytes, type RunAgentEvent, type RunObserver } from "./types.js";
 
 const emptySha256 = createHash("sha256").update("").digest("hex");
@@ -1015,6 +1015,7 @@ const phaseSpanNames: Readonly<Record<string, string>> = {
   "load prior main comment": "pipr.prior_state.load_main_comment",
   "load inline thread contexts": "pipr.prior_state.load_threads",
   "check command permission": "pipr.command.check_permission",
+  "publish review progress": "pipr.publish.review_progress",
   "publish verifier thread actions": "pipr.publish.verifier_thread_actions",
 };
 

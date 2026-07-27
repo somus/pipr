@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
 import { loadValidatedRunBundle } from "../archive.js";
+import { parseOtlpHeaders } from "../otlp.js";
 import {
   createInMemoryRunRecorder,
   createNoopRunRecorder,
@@ -19,6 +20,12 @@ afterEach(async () => {
 });
 
 describe("file run recorder", () => {
+  it("trims OTLP header values before URI decoding", () => {
+    expect(parseOtlpHeaders(" authorization = Bearer%20token ")).toEqual({
+      authorization: "Bearer token",
+    });
+  });
+
   it("bounds log records so finalized bundles remain loadable", async () => {
     const rootDirectory = await temporaryDirectory();
     const recorder = await startFileRunRecorder({ rootDirectory, env: {} });

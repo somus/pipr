@@ -117,6 +117,10 @@ export default definePipr((pipr) => {
       }
       await ctx.comment({
         main: [
+          hygieneCallout(attentionCount),
+          "",
+          "## 🧭 Summary",
+          "",
           result.summary,
           "",
           "## Policy Checks",
@@ -132,14 +136,15 @@ export default definePipr((pipr) => {
   pipr.command({ pattern: "@pipr hygiene", permission: "write", task });
 });
 
-function policyTable(checks: PolicyCheck[]): string {
-  if (checks.length === 0) {
-    return [
-      "| Policy | Status | Evidence |",
-      "| --- | --- | --- |",
-      "| - | Not applicable | No policy checks were relevant. |",
-    ].join("\\n");
+function hygieneCallout(attentionCount: number): string {
+  if (attentionCount === 0) {
+    return "> ✅ **PR hygiene passed:** All applicable policy checks passed.";
   }
+  const noun = attentionCount === 1 ? "check requires" : "checks require";
+  return \`> ⚠️ **PR hygiene needs attention:** \${attentionCount} policy \${noun} review.\`;
+}
+
+function policyTable(checks: PolicyCheck[]): string {
   return [
     "| Policy | Status | Evidence |",
     "| --- | --- | --- |",

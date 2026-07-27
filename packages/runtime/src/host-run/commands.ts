@@ -16,6 +16,7 @@ import {
   type RunRecorder,
   startFileRunRecorder,
 } from "../observability/recorder.js";
+import { ReviewProgressSupersededError } from "../review/progress.js";
 import { PublicationError } from "../review/publication-result.js";
 import { runTaskRuntime } from "../review/task/task-runtime.js";
 import { createRuntimeLog } from "../shared/logging.js";
@@ -397,13 +398,14 @@ export async function runHostRunCommandWithDependencies(
     );
     return result;
   } catch (error) {
+    const superseded = error instanceof ReviewProgressSupersededError;
     await finishRecorderSafely(
       recorder,
       log,
       {
         kind: hostEventKind(event),
-        outcome: "failed",
-        failureCategory: classifyRunFailure(error, failureCategory),
+        outcome: superseded ? "partial" : "failed",
+        failureCategory: superseded ? "stale-head" : classifyRunFailure(error, failureCategory),
         ...(event && event.kind !== "ignored"
           ? { repository: partialBundleRepository(event, adapter?.id) }
           : {}),
@@ -411,11 +413,13 @@ export async function runHostRunCommandWithDependencies(
       },
       options.onRunBundleFinalized,
     );
+    if (superseded) return { kind: "ignored", reason: error.message };
     throw error;
   }
 }
 
 function classifyRunFailure(error: unknown, fallback: RunFailureCategory): RunFailureCategory {
+  if (error instanceof ReviewProgressSupersededError) return "stale-head";
   if (isAuthenticationFailure(error)) return "auth";
   const message = error instanceof Error ? error.message : String(error);
   if (/head changed|stale head/i.test(message)) return "stale-head";

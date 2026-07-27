@@ -1,11 +1,18 @@
 import type { CodeHostAdapter } from "../hosts/types.js";
+import { ReviewProgressSupersededError } from "../review/progress.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import { dispatchRuntimeEntry } from "./entry-dispatch.js";
 import { logEventContext } from "./logging.js";
+import { startReviewProgress } from "./review-progress.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
-import type { HostRunCommandDependencyOptions, HostRunCommandResult } from "./types.js";
+import type {
+  HostRunCommandDependencyOptions,
+  HostRunCommandResult,
+  TrustedReviewAndPublishResult,
+} from "./types.js";
+import { workflowUrlFromEnvironment } from "./workflow-url.js";
 
 export async function runChangeRequestHostRunCommand(
   options: HostRunCommandDependencyOptions,
@@ -23,7 +30,6 @@ export async function runChangeRequestHostRunCommand(
       configSource: trustedRuntime.settings.source,
     };
   }
-  await prepareTrustedHeadCheckout(options, adapter, trustedRuntime.settings.config, event, log);
   const dispatch = dispatchRuntimeEntry({
     kind: "change-request",
     plan: trustedRuntime.plan,
@@ -33,14 +39,38 @@ export async function runChangeRequestHostRunCommand(
   log.notice("dispatch", {
     selectedTasks: selectedTasks.map((task) => task.name),
   });
-  const completed = await runTrustedReviewAndPublish({
-    options,
+  if (selectedTasks.length === 0) {
+    log.notice("event ignored", { reason: "No tasks matched the change request event" });
+    return { kind: "ignored", reason: "No tasks matched the change request event" };
+  }
+  const workflowUrl = workflowUrlFromEnvironment(adapter.id, options.env ?? process.env);
+  const progress = await startReviewProgress({
     adapter,
-    trustedRuntime,
     event,
-    selectedTasks,
+    config: trustedRuntime.settings.config,
+    workflowUrl,
     log,
+    secretRedactor: options.secretRedactor,
   });
+  let completed: TrustedReviewAndPublishResult;
+  try {
+    await prepareTrustedHeadCheckout(options, adapter, trustedRuntime.settings.config, event, log);
+    completed = await runTrustedReviewAndPublish({
+      options,
+      adapter,
+      trustedRuntime,
+      event,
+      selectedTasks,
+      workflowUrl,
+      progress,
+      log,
+    });
+  } catch (error) {
+    const progressFailure = await progress?.fail(error);
+    if (error instanceof ReviewProgressSupersededError) throw error;
+    if (progressFailure === "superseded") throw new ReviewProgressSupersededError();
+    throw error;
+  }
   if (completed.kind === "skipped") {
     log.notice("event ignored", { reason: completed.reason });
     return { kind: "ignored", reason: completed.reason };

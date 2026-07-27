@@ -17,6 +17,16 @@ export const findingIdSchema = z
   .regex(/^[A-Za-z0-9_.-]+$/);
 
 const priorFindingStatusSchema = z.enum(["open", "resolved"]);
+const workflowUrlSchema = z
+  .string()
+  .url()
+  .max(2_048)
+  .refine((candidate) => {
+    const url = new URL(candidate);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password
+    );
+  });
 
 const priorFindingRecordSchema = z.strictObject({
   id: findingIdSchema,
@@ -45,6 +55,7 @@ export const priorReviewStateSchema = z.strictObject({
   selectedTasks: z.array(z.string().min(1)),
   findings: z.array(priorFindingRecordSchema),
   stats: reviewStatsSchema.optional(),
+  workflowUrls: z.array(workflowUrlSchema).optional(),
 });
 
 export type PriorFindingRecord = z.infer<typeof priorFindingRecordSchema>;
@@ -80,6 +91,7 @@ export function buildPriorReviewState(options: {
   reviewedHeadSha: string;
   selectedTasks: string[];
   stats?: ReviewStats;
+  workflowUrl?: string;
 }): PriorReviewState {
   const scopedPriorState = priorReviewStateForSelectedTasks(
     options.priorState,
@@ -91,6 +103,12 @@ export function buildPriorReviewState(options: {
   const nextFindings = new Map<string, PriorFindingRecord>();
   const usedPriorIds = new Set<string>();
   const stats = accumulateReviewStats(scopedPriorState?.stats, options.stats);
+  const workflowUrls = [
+    ...new Set([
+      ...(scopedPriorState?.workflowUrls ?? []),
+      ...(options.workflowUrl ? [options.workflowUrl] : []),
+    ]),
+  ];
   const findings = options.findings.map((item) => item.finding);
   const fingerprintCounts = countFindingFingerprints(options.findings);
 
@@ -116,6 +134,7 @@ export function buildPriorReviewState(options: {
     selectedTasks: options.selectedTasks,
     findings: [...nextFindings.values()],
     ...(stats ? { stats } : {}),
+    ...(workflowUrls.length > 0 ? { workflowUrls } : {}),
   };
 }
 

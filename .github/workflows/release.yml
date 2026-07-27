@@ -108,6 +108,8 @@ jobs:
     if: needs.resolve.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     env:
       PIPR_RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
     steps:
@@ -190,11 +192,32 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  dogfood:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
       - name: Open dogfood SDK update PR
         env:
-          GH_TOKEN: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token }}
-          PIPR_PUSH_TOKEN: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN || github.token }}
-          PIPR_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN }}
+          PIPR_RELEASE_VERSION: ${{ needs.publish.outputs.version }}
         run: |
           set -euo pipefail
 
@@ -250,7 +273,7 @@ jobs:
           git commit -m "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}"
           git fetch origin main
           git rebase origin/main
-          git -c core.hooksPath=/dev/null push --force-with-lease "https://x-access-token:${PIPR_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${branch}"
+          git -c core.hooksPath=/dev/null push --force-with-lease origin "HEAD:${branch}"
 
           body_file="$(mktemp)"
           cat > "$body_file" <<BODY

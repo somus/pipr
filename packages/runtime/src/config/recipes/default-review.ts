@@ -7,6 +7,12 @@ export const defaultReviewRecipe = {
   sourceTools: ["pipr"],
   configTs: `import { definePipr } from "@usepipr/sdk";
 
+function nestedSummary(body: string): string {
+  return body
+    .replace(/^\\s*#{1,6}[ \\t]+Summary[ \\t]*\\r?\\n+/i, "")
+    .replace(/^#{1,2}[ \\t]+/gm, "### ");
+}
+
 export default definePipr((pipr) => {
   const model = pipr.model({
     provider: "deepseek",
@@ -34,32 +40,20 @@ export default definePipr((pipr) => {
     },
     timeout: "10m",
     comment: (result, context) => {
-      const inlineFindingSummary =
-        result.inlineFindings.length === 0
-          ? "No inline findings."
-          : "See inline comments in the diff.";
-      const localInlineFindingSummary = [
-        "## Inline Findings",
-        "",
-        result.inlineFindings.length === 0
-          ? "No inline findings."
-          : result.inlineFindings.map((finding) => \`- \${finding.body}\`).join("\\n"),
-      ].join("\\n");
+      const sections = ["## 🧭 Summary", "", nestedSummary(result.summary.body)];
+      if (result.inlineFindings.length > 0) {
+        sections.push(
+          "",
+          "## ⚠️ Findings",
+          "",
+          context.run.trigger === "local"
+            ? result.inlineFindings.map((finding) => \`- \${finding.body}\`).join("\\n")
+            : "See inline comments in the diff.",
+        );
+      }
 
       return {
-        main: [
-          "## Summary",
-          "",
-          result.summary.body,
-          "",
-          "## Review Result",
-          "",
-          "| Signal | Result |",
-          "| --- | ---: |",
-          \`| Inline findings | \${result.inlineFindings.length} |\`,
-          "",
-          context.run.trigger === "local" ? localInlineFindingSummary : inlineFindingSummary,
-        ].join("\\n"),
+        main: sections.join("\\n"),
         inlineFindings: result.inlineFindings,
       };
     },

@@ -58,6 +58,7 @@ export function buildCommentPublishingPlan(
     reviewedHeadSha: options.event.change.head.sha,
     selectedTasks: options.metadata.selectedTasks,
     stats: options.metadata.stats,
+    workflowUrl: options.metadata.workflowUrl,
   });
   const inlineCommentDrafts = prepareInlinePublicationItemsForPublishableFindings({
     publishableFindings: publishableInlineFindings,

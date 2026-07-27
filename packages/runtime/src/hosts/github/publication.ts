@@ -6,5 +6,8 @@ export {
   loadGitHubPriorMainComment,
   loadGitHubPriorReviewState,
 } from "./publication-prior-state.js";
-export { publishGitHubPublicationPlan } from "./publication-review.js";
+export {
+  publishGitHubPublicationPlan,
+  publishGitHubReviewProgress,
+} from "./publication-review.js";
 export { publishGitHubThreadActions } from "./publication-thread-actions.js";

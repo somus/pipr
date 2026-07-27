@@ -13,6 +13,8 @@ import {
   mainCommentHeaderHiddenMarker,
   mainCommentTitle,
   piprRepositoryUrl,
+  reviewResultEndMarker,
+  reviewResultStartMarker,
   reviewStatsEndMarker,
   reviewStatsHiddenMarker,
   reviewStatsStartMarker,
@@ -113,6 +115,7 @@ const publicationMetadataSchema = z.strictObject({
   droppedFindings: z.number().int().min(0),
   cappedInlineFindings: z.number().int().min(0),
   stats: reviewStatsSchema.optional(),
+  workflowUrl: z.string().url().max(2_048).optional(),
 });
 
 export type PublicationMetadata = z.infer<typeof publicationMetadataSchema>;
@@ -368,14 +371,21 @@ function renderMainComment(options: {
     "",
     ...(!options.showHeader ? [mainCommentHeaderHiddenMarker, ""] : []),
     ...(options.showHeader ? [mainCommentTitle, ""] : []),
-    ...(options.metadata.validFindings > 0
-      ? [`**Findings:** ${options.metadata.validFindings}`, ""]
-      : []),
+    reviewResultStartMarker,
+    renderReviewResult(options.metadata.validFindings),
+    reviewResultEndMarker,
+    "",
     options.main,
     "",
     ...(!options.showStats || !options.metadata.stats ? [reviewStatsHiddenMarker, ""] : []),
     ...(options.showStats && options.metadata.stats
-      ? [renderReviewStats(options.metadata.stats), ""]
+      ? [
+          renderReviewStats(
+            options.metadata.stats,
+            reviewWorkflowUrls(options.reviewState, options.metadata.workflowUrl),
+          ),
+          "",
+        ]
       : []),
     ...(options.showFooter
       ? [renderMainCommentAttribution(options.metadata), ""]
@@ -383,26 +393,57 @@ function renderMainComment(options: {
   ].join("\n");
 }
 
-function renderReviewStats(stats: ReviewStats): string {
-  const usageSuffix = stats.usageStatus === "partial" ? " (reported)" : "";
-  const usageUnavailable = stats.usageStatus === "unavailable";
+function reviewWorkflowUrls(
+  reviewState: PriorReviewState,
+  currentWorkflowUrl: string | undefined,
+): string[] | undefined {
+  if (reviewState.workflowUrls) {
+    return reviewState.workflowUrls;
+  }
+  return currentWorkflowUrl ? [currentWorkflowUrl] : undefined;
+}
+
+function renderReviewResult(validFindings: number): string {
+  if (validFindings === 0) {
+    return "> ✅ **No actionable findings:** The review completed without actionable findings.";
+  }
+  const findingLabel = validFindings === 1 ? "finding was" : "findings were";
+  return `> ⚠️ **Needs attention:** ${validFindings} actionable ${findingLabel} identified.`;
+}
+
+function renderReviewStats(stats: ReviewStats, workflowUrls?: string[]): string {
   return [
     reviewStatsStartMarker,
     "<details>",
-    "<summary>Review stats</summary>",
+    `<summary>📊 Review completed in ${formatReviewDuration(stats.durationMs)}</summary>`,
     "",
-    "| Metric | Total |",
-    "| --- | ---: |",
-    `| Models | ${stats.models.map(formatModel).join(", ")} |`,
-    `| Agent runs | ${stats.agentRuns} |`,
-    `| Elapsed | ${formatDuration(stats.durationMs)} |`,
-    `| Input tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.inputTokens)}${usageSuffix}`} |`,
-    `| Output tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.outputTokens)}${usageSuffix}`} |`,
-    `| Cost (USD) | ${usageUnavailable ? "Unavailable" : `${formatCost(stats.costUsd)}${usageSuffix}`} |`,
+    ...renderReviewStatsTable(stats, workflowUrls),
     "",
     "</details>",
     reviewStatsEndMarker,
   ].join("\n");
+}
+
+export function renderReviewStatsTable(stats: ReviewStats, workflowUrls?: string[]): string[] {
+  const usageSuffix = stats.usageStatus === "partial" ? " (reported)" : "";
+  const usageUnavailable = stats.usageStatus === "unavailable";
+  return [
+    "| Metric | Total |",
+    "| --- | ---: |",
+    `| Models | ${stats.models.map(formatModel).join(", ")} |`,
+    `| Agent runs | ${stats.agentRuns} |`,
+    `| Elapsed | ${formatReviewDuration(stats.durationMs)} |`,
+    `| Input tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.inputTokens)}${usageSuffix}`} |`,
+    `| Output tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.outputTokens)}${usageSuffix}`} |`,
+    `| Cost (USD) | ${usageUnavailable ? "Unavailable" : `${formatCost(stats.costUsd)}${usageSuffix}`} |`,
+    ...(workflowUrls && workflowUrls.length > 0
+      ? [
+          `| Workflow runs | ${workflowUrls
+            .map((workflowUrl, index) => `[Run ${index + 1}](<${workflowUrl}>)`)
+            .join(", ")} |`,
+        ]
+      : []),
+  ];
 }
 
 function formatModel(model: string): string {
@@ -418,7 +459,7 @@ function formatInteger(value: number): string {
   return value.toLocaleString("en-US");
 }
 
-function formatDuration(durationMs: number): string {
+export function formatReviewDuration(durationMs: number): string {
   if (durationMs < 1_000) {
     return `${durationMs}ms`;
   }

@@ -4,10 +4,19 @@ import {
   inlinePublicationDecision,
 } from "../../review/inline-publication-policy.js";
 import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
+import {
+  extractReviewProgressToken,
+  type ReviewProgressLease,
+  ReviewProgressSupersededError,
+} from "../../review/progress.js";
 import { PublicationError, type PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { mapFindingToGithubReviewCommentLocation } from "./inline.js";
-import type { GitHubPublicationClient, GitHubReviewComment } from "./publication-client.js";
+import type {
+  GitHubIssueComment,
+  GitHubPublicationClient,
+  GitHubReviewComment,
+} from "./publication-client.js";
 import {
   assertCurrentHeadSha,
   findMainComment,
@@ -19,19 +28,37 @@ export async function publishGitHubPublicationPlan(options: {
   client: GitHubPublicationClient;
   change: ChangeRequestEventContext;
   plan: PublicationPlan;
+  progressLease?: ReviewProgressLease;
 }): Promise<PublicationResult> {
   await assertCurrentHeadSha(options.client, options.change, options.plan.metadata.reviewedHeadSha);
 
   const ownerLogin = await options.client.getAuthenticatedUserLogin();
-  const mainComment = await upsertMainComment({ ...options, ownerLogin });
+  const initialComments = await options.client.listIssueComments({
+    repo: options.change.repository.slug,
+    issueNumber: options.change.change.number,
+  });
+  const initialMain = findMainComment(
+    initialComments,
+    options.plan.mainMarker,
+    options.change.change.number,
+    ownerLogin,
+  );
+  assertProgressLease(initialMain, options.progressLease);
+  await assertCurrentHeadSha(options.client, options.change, options.plan.metadata.reviewedHeadSha);
   const existingReviewComments = await listOwnedReviewComments({ ...options, ownerLogin });
-  const inline = await publishInlineComments({ ...options, ownerLogin, existingReviewComments });
+  const assertLease = () => assertCurrentProgressLease({ ...options, ownerLogin });
+  const inline = await publishInlineComments({
+    ...options,
+    ownerLogin,
+    existingReviewComments,
+    beforeWrite: assertLease,
+  });
   const threadActions = await publishGitHubPublicationThreadActions({
     ...options,
     existingReviewComments,
+    beforeWrite: assertLease,
   });
-  const result: PublicationResult = {
-    mainComment,
+  const partial = {
     inlineComments: {
       posted: inline.posted,
       skipped: inline.skipped,
@@ -43,13 +70,23 @@ export async function publishGitHubPublicationPlan(options: {
       inlineResolutionErrors: threadActions.errors,
     },
   };
-  if (inline.errors.length > 0) {
+  if (inline.errors.length > 0 && options.progressLease) {
     throw new PublicationError("GitHub inline comment publication failed", {
-      inlineComments: result.inlineComments,
-      metadata: result.metadata,
+      inlineComments: partial.inlineComments,
+      metadata: partial.metadata,
     });
   }
-  return result;
+  await assertCurrentHeadSha(options.client, options.change, options.plan.metadata.reviewedHeadSha);
+  const currentMain = await loadMainComment({ ...options, ownerLogin });
+  assertProgressLease(currentMain, options.progressLease);
+  const mainComment = await upsertMainComment({ ...options, ownerLogin, existing: currentMain });
+  if (inline.errors.length > 0) {
+    throw new PublicationError("GitHub inline comment publication failed", {
+      inlineComments: partial.inlineComments,
+      metadata: partial.metadata,
+    });
+  }
+  return { mainComment, ...partial };
 }
 
 async function upsertMainComment(options: {
@@ -57,25 +94,20 @@ async function upsertMainComment(options: {
   change: ChangeRequestEventContext;
   plan: PublicationPlan;
   ownerLogin: string;
+  existing?: GitHubIssueComment;
+  progressLease?: ReviewProgressLease;
 }): Promise<PublicationResult["mainComment"]> {
-  const comments = await options.client.listIssueComments({
-    repo: options.change.repository.slug,
-    issueNumber: options.change.change.number,
-  });
-  await assertCurrentHeadSha(options.client, options.change, options.plan.metadata.reviewedHeadSha);
-  const existing = findMainComment(
-    comments,
-    options.plan.mainMarker,
-    options.change.change.number,
-    options.ownerLogin,
-  );
+  const existing = options.existing;
   if (existing) {
     const updated = await options.client.updateIssueComment({
       repo: options.change.repository.slug,
       commentId: existing.id,
       body: options.plan.mainComment,
     });
-    return { action: "updated", id: String(updated.id) };
+    return {
+      action: options.progressLease?.mainCommentAction ?? "updated",
+      id: String(updated.id),
+    };
   }
   const created = await options.client.createIssueComment({
     repo: options.change.repository.slug,
@@ -85,12 +117,85 @@ async function upsertMainComment(options: {
   return { action: "created", id: String(created.id) };
 }
 
+export async function publishGitHubReviewProgress(options: {
+  client: GitHubPublicationClient;
+  change: ChangeRequestEventContext;
+  renderBody(currentBody: string | undefined): string;
+  reviewedHeadSha: string;
+  expectedToken?: string;
+}) {
+  const ownerLogin = await options.client.getAuthenticatedUserLogin();
+  await assertCurrentHeadSha(options.client, options.change, options.reviewedHeadSha);
+  let existing = await loadProgressMainComment(options, ownerLogin);
+  if (
+    options.expectedToken &&
+    extractReviewProgressToken(existing?.body ?? undefined) !== options.expectedToken
+  ) {
+    return { status: "superseded" as const };
+  }
+  await assertCurrentHeadSha(options.client, options.change, options.reviewedHeadSha);
+  existing = await loadProgressMainComment(options, ownerLogin);
+  if (
+    options.expectedToken &&
+    extractReviewProgressToken(existing?.body ?? undefined) !== options.expectedToken
+  ) {
+    return { status: "superseded" as const };
+  }
+  if (existing) {
+    const updated = await options.client.updateIssueComment({
+      repo: options.change.repository.slug,
+      commentId: existing.id,
+      body: options.renderBody(existing.body ?? undefined),
+    });
+    return { status: "published" as const, action: "updated" as const, id: String(updated.id) };
+  }
+  if (options.expectedToken) return { status: "superseded" as const };
+  const created = await options.client.createIssueComment({
+    repo: options.change.repository.slug,
+    issueNumber: options.change.change.number,
+    body: options.renderBody(undefined),
+  });
+  return { status: "published" as const, action: "created" as const, id: String(created.id) };
+}
+
+async function loadProgressMainComment(
+  options: {
+    client: GitHubPublicationClient;
+    change: ChangeRequestEventContext;
+  },
+  ownerLogin: string,
+): Promise<GitHubIssueComment | undefined> {
+  return findMainComment(
+    await options.client.listIssueComments({
+      repo: options.change.repository.slug,
+      issueNumber: options.change.change.number,
+    }),
+    "pipr:main-comment",
+    options.change.change.number,
+    ownerLogin,
+  );
+}
+
+function assertProgressLease(
+  comment: GitHubIssueComment | undefined,
+  lease: ReviewProgressLease | undefined,
+): void {
+  if (!lease) return;
+  if (
+    String(comment?.id ?? "") !== lease.mainCommentId ||
+    extractReviewProgressToken(comment?.body ?? undefined) !== lease.token
+  ) {
+    throw new ReviewProgressSupersededError();
+  }
+}
+
 async function publishInlineComments(options: {
   client: GitHubPublicationClient;
   change: ChangeRequestEventContext;
   plan: PublicationPlan;
   ownerLogin: string;
   existingReviewComments: GitHubReviewComment[];
+  beforeWrite?(): Promise<void>;
 }): Promise<{ posted: number; skipped: number; errors: string[] }> {
   const existing = existingInlineCommentState(options.existingReviewComments);
   let posted = 0;
@@ -143,6 +248,7 @@ async function publishInlineCommentItem(options: {
   change: ChangeRequestEventContext;
   existing: ExistingInlineCommentState;
   item: PublicationPlan["inlineItems"][number];
+  beforeWrite?(): Promise<void>;
 }): Promise<{ status: "posted" | "skipped" } | { status: "failed"; error: string }> {
   let location: GitHubReviewCommentLocation;
   try {
@@ -164,6 +270,7 @@ async function publishInlineCommentItem(options: {
   ) {
     return { status: "skipped" };
   }
+  await options.beforeWrite?.();
   try {
     await options.client.createReviewComment({
       repo: options.change.repository.slug,
@@ -177,6 +284,36 @@ async function publishInlineCommentItem(options: {
   } catch (error) {
     return { status: "failed", error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+async function assertCurrentProgressLease(options: {
+  client: GitHubPublicationClient;
+  change: ChangeRequestEventContext;
+  plan: PublicationPlan;
+  ownerLogin: string;
+  progressLease?: ReviewProgressLease;
+}): Promise<void> {
+  if (!options.progressLease) return;
+  await assertCurrentHeadSha(options.client, options.change, options.plan.metadata.reviewedHeadSha);
+  const currentMain = await loadMainComment(options);
+  assertProgressLease(currentMain, options.progressLease);
+}
+
+async function loadMainComment(options: {
+  client: GitHubPublicationClient;
+  change: ChangeRequestEventContext;
+  plan: PublicationPlan;
+  ownerLogin: string;
+}): Promise<GitHubIssueComment | undefined> {
+  return findMainComment(
+    await options.client.listIssueComments({
+      repo: options.change.repository.slug,
+      issueNumber: options.change.change.number,
+    }),
+    options.plan.mainMarker,
+    options.change.change.number,
+    options.ownerLogin,
+  );
 }
 
 type GitHubReviewCommentLocation = {

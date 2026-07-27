@@ -522,6 +522,81 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     }
   });
 
+  it("reports custom multi-agent and automatic shard lifecycles", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const stages: string[] = [];
+
+    await runRuntime({
+      plan: multiAgentShardingPlan(),
+      config: manifestShardConfig(),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      progress: {
+        async transition(stage) {
+          stages.push(stage);
+        },
+        recordStats() {},
+        work(event) {
+          events.push(event);
+        },
+      },
+      piRunner: async () => noFindingsPiResult(),
+    });
+
+    expect(stages).toEqual(["building-diff", "running-review-tasks", "validating-review"]);
+    expect(events.filter((event) => event.type === "task-started")).toEqual([
+      {
+        type: "task-started",
+        taskId: "0",
+        taskName: "multi-agent-sharding",
+        taskOrder: 0,
+      },
+    ]);
+    const securityEvents = events.filter((event) => event.reviewerName === "security-multi-agent");
+    expect(securityEvents).toEqual([
+      {
+        type: "reviewer-started",
+        taskId: "0",
+        reviewerId: "0:0",
+        reviewerName: "security-multi-agent",
+        reviewerOrder: 0,
+        totalRuns: 4,
+      },
+      ...Array.from({ length: 4 }, (_, index) => [
+        {
+          type: "review-run-started",
+          taskId: "0",
+          reviewerId: "0:0",
+          reviewerName: "security-multi-agent",
+          run: index + 1,
+          totalRuns: 4,
+        },
+        {
+          type: "review-run-finished",
+          taskId: "0",
+          reviewerId: "0:0",
+          reviewerName: "security-multi-agent",
+          run: index + 1,
+          totalRuns: 4,
+          outcome: "completed",
+        },
+      ]).flat(),
+      {
+        type: "reviewer-finished",
+        taskId: "0",
+        reviewerId: "0:0",
+        reviewerName: "security-multi-agent",
+        outcome: "completed",
+      },
+    ]);
+    expect(events.at(-1)).toEqual({
+      type: "task-finished",
+      taskId: "0",
+      taskName: "multi-agent-sharding",
+      outcome: "completed",
+    });
+  });
+
   it("defaults automatic Diff Manifest fan-out to four shards", async () => {
     const prompts: string[] = [];
 
@@ -1245,7 +1320,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       usageStatus: "complete",
     });
     expect(result.publicationPlan.metadata.stats?.durationMs).toBeLessThan(60_000);
-    expect(result.mainComment).toContain("<summary>Review stats</summary>");
+    expect(result.mainComment).toContain("<summary>📊 Review completed in ");
   });
 
   it("keeps aggregate usage safe when reported run totals overflow", async () => {
@@ -1477,7 +1552,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       usageStatus: "complete",
     });
     expect(second.publicationPlan.reviewState.stats).toEqual(second.publicationPlan.metadata.stats);
-    expect(second.mainComment).not.toContain("<summary>Review stats</summary>");
+    expect(second.mainComment).not.toContain("<summary>📊 Review completed in ");
 
     const third = await runRuntime({
       plan: defaultReviewPlan(),
@@ -1502,7 +1577,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       costUsd: 0.006,
       usageStatus: "complete",
     });
-    expect(third.mainComment).toContain("<summary>Review stats</summary>");
+    expect(third.mainComment).toContain("<summary>📊 Review completed in ");
   });
 
   it("marks cumulative usage partial when an earlier rerun did not report usage", async () => {

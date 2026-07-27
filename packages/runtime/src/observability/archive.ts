@@ -11,8 +11,8 @@ import {
   runMetricsSnapshotSchema,
   runSpanRecordSchema,
 } from "@usepipr/sdk";
+import { readActiveCaptureMarker } from "./active-capture.js";
 import { bundleFilePaths } from "./bundle-files.js";
-import { readActiveCaptureMarker } from "./retention-store.js";
 
 export type RunRecordState =
   | "available"

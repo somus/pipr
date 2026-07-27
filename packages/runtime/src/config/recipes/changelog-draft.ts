@@ -45,12 +45,13 @@ export default definePipr((pipr) => {
       const result = await ctx.pi.run(changelog, { manifest });
       await ctx.comment(
         [
-          \`**Category:** \${result.category}\`,
+          "> ℹ️ **Changelog draft ready:** Category \`" + result.category + "\`.",
+          "",
+          "## 🧭 Summary",
           "",
           result.entry,
           "",
-          "## Rationale",
-          result.rationale,
+          rationaleBlock(result.rationale),
         ].join("\\n"),
       );
     },
@@ -59,5 +60,20 @@ export default definePipr((pipr) => {
   pipr.on.changeRequest({ actions: ["opened", "updated"], task });
   pipr.command({ pattern: "@pipr changelog", permission: "write", task });
 });
+
+function rationaleBlock(rationale: string): string {
+  return [
+    "<details>",
+    "<summary>Rationale</summary>",
+    "",
+    escapeDetailsHtml(rationale),
+    "",
+    "</details>",
+  ].join("\\n");
+}
+
+function escapeDetailsHtml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
 `,
 } as const satisfies OfficialInitRecipe;

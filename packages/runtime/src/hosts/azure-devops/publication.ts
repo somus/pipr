@@ -9,11 +9,19 @@ import {
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
+import {
+  extractReviewProgressToken,
+  type ReviewProgressLease,
+  ReviewProgressSupersededError,
+} from "../../review/progress.js";
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
+  assertHostInlinePublicationSucceeded,
+  assertHostPublicationWriteAllowed,
   commandResponseBody,
   completeHostPublication,
+  hostPublicationActionError,
   nativeInlineLocation,
   publishUnseenInlineItems,
   threadActionReply,
@@ -25,6 +33,7 @@ export async function publishAzureDevOpsPlan(options: {
   client: AzureDevOpsClient;
   change: ChangeRequestEventContext;
   plan: PublicationPlan;
+  progressLease?: ReviewProgressLease;
 }): Promise<PublicationResult> {
   const coordinates = azureCoordinates(options.change);
   const native = await currentNativeChange(options.client, options.change);
@@ -38,22 +47,16 @@ export async function publishAzureDevOpsPlan(options: {
     owner.uniqueName,
     mainMarker(options.change.change.number),
   );
-  const main = existingMain
-    ? await options.client.updateComment(
-        coordinates.repositoryId,
-        options.change.change.number,
-        existingMain.id,
-        existingMain.comments[0]?.id ?? "",
-        options.plan.mainComment,
-      )
-    : (
-        await options.client.createThread(
-          coordinates.repositoryId,
-          options.change.change.number,
-          unpositionedThread(options.plan.mainComment),
-        )
-      ).comments[0];
-  if (!main) throw new Error("Azure DevOps did not return the Main Review Comment");
+  assertAzureProgressLease(existingMain, options.progressLease);
+  const assertLease = async () => {
+    if (!options.progressLease) return;
+    const currentMain = await loadAzureMainThread(
+      options.client,
+      options.change,
+      options.plan.metadata.reviewedHeadSha,
+    );
+    assertAzureProgressLease(currentMain, options.progressLease);
+  };
   const markerBodies = ownedThreadComments(threads, owner.uniqueName).map(
     (comment) => comment.content,
   );
@@ -67,6 +70,7 @@ export async function publishAzureDevOpsPlan(options: {
     existingBodies: markerBodies,
     existingLocations: azureInlineLocations(threads, owner.uniqueName),
     location: azureInlineLocation,
+    beforePublish: assertLease,
     publish: async (item) => {
       await options.client.createThread(
         coordinates.repositoryId,
@@ -82,15 +86,124 @@ export async function publishAzureDevOpsPlan(options: {
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     threads,
     ownerUniqueName: owner.uniqueName,
+    beforeWrite: assertLease,
   });
+  if (options.progressLease) {
+    assertHostInlinePublicationSucceeded({
+      provider: "Azure DevOps",
+      inline,
+      resolutionErrors: resolution.errors,
+      metadata: options.plan.metadata,
+    });
+  }
+  const currentMain = await loadAzureMainThread(
+    options.client,
+    options.change,
+    options.plan.metadata.reviewedHeadSha,
+  );
+  assertAzureProgressLease(currentMain, options.progressLease);
+  const main = currentMain
+    ? await options.client.updateComment(
+        coordinates.repositoryId,
+        options.change.change.number,
+        currentMain.id,
+        currentMain.comments[0]?.id ?? "",
+        options.plan.mainComment,
+      )
+    : (
+        await options.client.createThread(
+          coordinates.repositoryId,
+          options.change.change.number,
+          unpositionedThread(options.plan.mainComment),
+        )
+      ).comments[0];
+  if (!main) throw new Error("Azure DevOps did not return the Main Review Comment");
   return completeHostPublication({
     provider: "Azure DevOps",
-    mainAction: existingMain ? "updated" : "created",
+    mainAction: options.progressLease?.mainCommentAction ?? (existingMain ? "updated" : "created"),
     mainId: main.id,
     inline,
     resolutionErrors: resolution.errors,
     metadata: options.plan.metadata,
   });
+}
+
+export async function publishAzureDevOpsReviewProgress(options: {
+  client: AzureDevOpsClient;
+  change: ChangeRequestEventContext;
+  renderBody(currentBody: string | undefined): string;
+  reviewedHeadSha: string;
+  expectedToken?: string;
+}) {
+  const coordinates = azureCoordinates(options.change);
+  const { owner, threads: loadedThreads } = await loadAzureWriteState(
+    options.client,
+    options.change,
+    options.reviewedHeadSha,
+  );
+  const threads = options.expectedToken
+    ? await options.client.listThreads(coordinates.repositoryId, options.change.change.number)
+    : loadedThreads;
+  let existing = ownedRootThread(
+    threads,
+    owner.uniqueName,
+    mainMarker(options.change.change.number),
+  );
+  if (azureProgressUpdateWasSuperseded(existing, options.expectedToken)) {
+    return { status: "superseded" as const };
+  }
+  await currentPullRequest(options.client, options.change, options.reviewedHeadSha);
+  existing = ownedRootThread(
+    await options.client.listThreads(coordinates.repositoryId, options.change.change.number),
+    owner.uniqueName,
+    mainMarker(options.change.change.number),
+  );
+  if (azureProgressUpdateWasSuperseded(existing, options.expectedToken)) {
+    return { status: "superseded" as const };
+  }
+  if (existing) {
+    const comment = await options.client.updateComment(
+      coordinates.repositoryId,
+      options.change.change.number,
+      existing.id,
+      existing.comments[0]?.id ?? "",
+      options.renderBody(existing.comments[0]?.content),
+    );
+    return { status: "published" as const, action: "updated" as const, id: comment.id };
+  }
+  if (options.expectedToken) return { status: "superseded" as const };
+  const comment = (
+    await options.client.createThread(
+      coordinates.repositoryId,
+      options.change.change.number,
+      unpositionedThread(options.renderBody(undefined)),
+    )
+  ).comments[0];
+  if (!comment) throw new Error("Azure DevOps did not return the progress comment");
+  return { status: "published" as const, action: "created" as const, id: comment.id };
+}
+
+function azureProgressUpdateWasSuperseded(
+  thread: AzureDevOpsThread | undefined,
+  expectedToken: string | undefined,
+): boolean {
+  return Boolean(
+    expectedToken && extractReviewProgressToken(thread?.comments[0]?.content) !== expectedToken,
+  );
+}
+
+function assertAzureProgressLease(
+  thread: AzureDevOpsThread | undefined,
+  lease: ReviewProgressLease | undefined,
+): void {
+  if (!lease) return;
+  const comment = thread?.comments[0];
+  if (
+    String(comment?.id ?? "") !== lease.mainCommentId ||
+    extractReviewProgressToken(comment?.content) !== lease.token
+  ) {
+    throw new ReviewProgressSupersededError();
+  }
 }
 
 function azureInlineLocations(
@@ -274,6 +387,7 @@ export async function publishAzureDevOpsThreadActions(options: {
   reviewedHeadSha: string;
   threads?: AzureDevOpsThread[];
   ownerUniqueName?: string;
+  beforeWrite?(): Promise<void>;
 }): Promise<{ errors: string[] }> {
   if (options.actions.length === 0) return { errors: [] };
   const coordinates = azureCoordinates(options.change);
@@ -300,6 +414,7 @@ export async function publishAzureDevOpsThreadActions(options: {
       action,
       thread,
       ownerUniqueName,
+      beforeWrite: options.beforeWrite,
     });
     if (error) errors.push(error);
   }
@@ -313,6 +428,7 @@ async function publishAzureDevOpsThreadAction(options: {
   action: ThreadAction;
   thread?: AzureDevOpsThread;
   ownerUniqueName: string;
+  beforeWrite?(): Promise<void>;
 }): Promise<string | undefined> {
   if (!options.thread)
     return `Azure DevOps thread not found for comment ${options.action.commentId}`;
@@ -325,6 +441,7 @@ async function publishAzureDevOpsThreadAction(options: {
           comment.content.includes(reply.marker),
       )
     ) {
+      await assertHostPublicationWriteAllowed(options.beforeWrite);
       await options.client.createThreadComment(
         options.repositoryId,
         options.changeNumber,
@@ -337,6 +454,7 @@ async function publishAzureDevOpsThreadAction(options: {
       );
     }
     if (options.action.kind === "resolve" && !isResolved(options.thread)) {
+      await assertHostPublicationWriteAllowed(options.beforeWrite);
       await options.client.updateThreadStatus(
         options.repositoryId,
         options.changeNumber,
@@ -345,7 +463,7 @@ async function publishAzureDevOpsThreadAction(options: {
       );
     }
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return hostPublicationActionError(error);
   }
   return undefined;
 }
@@ -500,4 +618,17 @@ function isResolved(thread: AzureDevOpsThread): boolean {
 
 function mainMarker(changeNumber: number): string {
   return `<!-- pipr:main-comment change=${changeNumber} `;
+}
+
+async function loadAzureMainThread(
+  client: AzureDevOpsClient,
+  change: ChangeRequestEventContext,
+  reviewedHeadSha: string,
+): Promise<AzureDevOpsThread | undefined> {
+  const current = await loadAzureWriteState(client, change, reviewedHeadSha);
+  return ownedRootThread(
+    current.threads,
+    current.owner.uniqueName,
+    mainMarker(change.change.number),
+  );
 }

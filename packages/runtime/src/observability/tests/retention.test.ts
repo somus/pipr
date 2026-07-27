@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { enforceRunStoreRetention } from "../../index.js";
-import { currentProcessIdentity, readActiveCaptureMarker } from "../retention-store.js";
+import { currentProcessIdentity, readActiveCaptureMarker } from "../active-capture.js";
 
 const temporaryDirectories: string[] = [];
 

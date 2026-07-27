@@ -276,8 +276,8 @@ function exporterOptions(
   const genericEndpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT;
   const url = specificEndpoint ?? appendSignalPath(genericEndpoint, signal);
   const headers = {
-    ...parseHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
-    ...parseHeaders(env[`${prefix}_HEADERS`]),
+    ...parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
+    ...parseOtlpHeaders(env[`${prefix}_HEADERS`]),
   };
   const configuredTimeout = positiveInteger(
     env[`${prefix}_TIMEOUT`] ?? env.OTEL_EXPORTER_OTLP_TIMEOUT,
@@ -294,7 +294,7 @@ function appendSignalPath(endpoint: string | undefined, signal: OtlpSignal): str
   return `${endpoint.replace(/\/+$/, "")}/v1/${signal}`;
 }
 
-function parseHeaders(value: string | undefined): Record<string, string> {
+export function parseOtlpHeaders(value: string | undefined): Record<string, string> {
   if (!value) return {};
   return Object.fromEntries(
     value
@@ -303,7 +303,7 @@ function parseHeaders(value: string | undefined): Record<string, string> {
       .filter((entry): entry is [string, string] => entry.length === 2 && entry[0].trim() !== "")
       .map(([key, headerValue]) => [
         decodeURIComponent(key.trim()),
-        decodeURIComponent(headerValue),
+        decodeURIComponent(headerValue.trim()),
       ]),
   );
 }

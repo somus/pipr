@@ -49,4 +49,28 @@ describe("parseGeneratedMainCommentEnvelope", () => {
 
     expect(parseGeneratedMainCommentEnvelope(lines).statsRange).toEqual({ start: 1, end: 15 });
   });
+
+  it("recognizes completion details with workflow run links", () => {
+    const lines = [
+      "body",
+      reviewStatsStartMarker,
+      "<details>",
+      "<summary>📊 Review completed in 5m</summary>",
+      "",
+      "| Metric | Total |",
+      "| --- | ---: |",
+      "| Models | <code>model</code> |",
+      "| Agent runs | 1 |",
+      "| Elapsed | 5m |",
+      "| Input tokens | 10 |",
+      "| Output tokens | 5 |",
+      "| Cost (USD) | $0.01 |",
+      "| Workflow runs | [Run 1](<https://github.com/acme/repo/actions/runs/123>), [Run 2](<https://github.com/acme/repo/actions/runs/124>) |",
+      "",
+      "</details>",
+      reviewStatsEndMarker,
+    ];
+
+    expect(parseGeneratedMainCommentEnvelope(lines).statsRange).toEqual({ start: 1, end: 16 });
+  });
 });

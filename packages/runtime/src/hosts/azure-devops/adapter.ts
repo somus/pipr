@@ -12,6 +12,7 @@ import {
   loadAzureDevOpsPriorReviewState,
   publishAzureDevOpsCommandResponse,
   publishAzureDevOpsPlan,
+  publishAzureDevOpsReviewProgress,
   publishAzureDevOpsThreadActions,
 } from "./publication.js";
 import { ensureAzureDevOpsHeadCheckout } from "./workspace.js";
@@ -64,7 +65,9 @@ export function createAzureDevOpsHostAdapter(
       },
     },
     publication: {
-      publish: ({ plan, change }) => publishAzureDevOpsPlan({ client, plan, change }),
+      publish: ({ plan, change, progressLease }) =>
+        publishAzureDevOpsPlan({ client, plan, change, progressLease }),
+      publishReviewProgress: (args) => publishAzureDevOpsReviewProgress({ client, ...args }),
       publishCommandResponse: (args) => publishAzureDevOpsCommandResponse({ client, ...args }),
       publishCommandStatus: (args) =>
         publishAzureDevOpsCommandResponse({

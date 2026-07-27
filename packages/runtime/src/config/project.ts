@@ -43,6 +43,7 @@ export type InspectRuntimePlan = {
     showHeader: boolean;
     showFooter: boolean;
     showStats: boolean;
+    showProgress: boolean;
     autoResolve: {
       enabled: boolean;
       model?: string;
@@ -116,6 +117,7 @@ export function inspectRuntimePlan(plan: RuntimePlan, source: string): InspectRu
       showHeader: plan.publication.showHeader ?? true,
       showFooter: plan.publication.showFooter ?? true,
       showStats: plan.publication.showStats ?? true,
+      showProgress: plan.publication.showProgress ?? true,
       autoResolve: {
         enabled: autoResolve.enabled,
         ...(autoResolve.model === undefined ? {} : { model: autoResolve.model }),
@@ -165,6 +167,7 @@ function planToRuntimeSettings(
         showHeader: plan.publication.showHeader ?? true,
         showFooter: plan.publication.showFooter ?? true,
         showStats: plan.publication.showStats ?? true,
+        showProgress: plan.publication.showProgress ?? true,
       },
       limits: plan.limits,
     },

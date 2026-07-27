@@ -879,10 +879,20 @@ describe("definePipr", () => {
     const plan = buildPiprPlan(
       definePipr((pipr) => {
         pipr.config({
-          publication: { showHeader: false, showFooter: false, showStats: false },
+          publication: {
+            showHeader: false,
+            showFooter: false,
+            showStats: false,
+            showProgress: false,
+          },
         });
         pipr.config({
-          publication: { showHeader: false, showFooter: false, showStats: false },
+          publication: {
+            showHeader: false,
+            showFooter: false,
+            showStats: false,
+            showProgress: false,
+          },
         });
       }),
     );
@@ -891,6 +901,7 @@ describe("definePipr", () => {
       showHeader: false,
       showFooter: false,
       showStats: false,
+      showProgress: false,
     });
   });
 

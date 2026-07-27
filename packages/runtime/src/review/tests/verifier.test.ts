@@ -27,6 +27,7 @@ const config: PiprConfig = {
     showHeader: true,
     showFooter: true,
     showStats: true,
+    showProgress: true,
     autoResolve: {
       enabled: true,
       model: "default",

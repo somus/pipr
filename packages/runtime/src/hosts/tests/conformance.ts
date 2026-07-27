@@ -9,6 +9,7 @@ import {
   renderInlineFindingMarker,
   renderVerifierResponseMarker,
 } from "../../review/prior-state.js";
+import type { ReviewProgressLease } from "../../review/progress.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type {
   CodeHostAdapter,
@@ -50,6 +51,9 @@ export type ObservedStatus = {
   headSha: string;
 };
 
+const progressToken = "11111111-1111-4111-8111-111111111111";
+const newerProgressToken = "22222222-2222-4222-8222-222222222222";
+
 export type CodeHostAdapterConformanceHarness = {
   adapter: CodeHostAdapter;
   change: ChangeRequestEventContext;
@@ -58,6 +62,7 @@ export type CodeHostAdapterConformanceHarness = {
   permissionRequests(): Array<{ actor: string }>;
   setCurrentHead(headSha: string): void;
   advanceHeadDuringPreflight(): void;
+  supersedeProgressDuringPreflight(body: string): void;
   failNextInline(): void;
   seedForeignInline(): void;
   seedForeignReply(body: string): void;
@@ -157,6 +162,120 @@ export function defineCodeHostAdapterConformanceSuite(options: {
             plan: publicationPlan(harness.change),
           }),
         );
+      });
+    });
+
+    it("guards progress and final publication with one ownership lease", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        const progress = await publishedProgress(harness, progressToken);
+        expect(progress).toMatchObject({ status: "published", action: "created" });
+
+        const newerProgress = await publishedProgress(harness, newerProgressToken);
+        expect(newerProgress).toMatchObject({ status: "published", action: "updated" });
+        const writesAfterTakeover = harness.writes();
+        await expect(publishReviewWithProgress(harness, progress, progressToken)).rejects.toThrow(
+          "superseded",
+        );
+        expect(harness.writes()).toEqual(writesAfterTakeover);
+
+        await expect(
+          publishReviewWithProgress(harness, newerProgress, newerProgressToken),
+        ).resolves.toMatchObject({
+          mainComment: { action: "updated", id: newerProgress.id },
+        });
+        expect(harness.writes()).toMatchObject({
+          mainCreates: 1,
+          mainUpdates: 2,
+          inlineCreates: 2,
+        });
+      });
+    });
+
+    it("rechecks progress ownership before inline publication writes", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        const progress = await publishedProgress(harness, progressToken);
+        harness.supersedeProgressDuringPreflight(progressBody(harness.change, newerProgressToken));
+        const writesBeforePublish = harness.writes();
+
+        await expect(publishReviewWithProgress(harness, progress, progressToken)).rejects.toThrow(
+          "superseded",
+        );
+        expect(harness.writes()).toEqual(writesBeforePublish);
+      });
+    });
+
+    it("does not reclaim progress ownership during a stage update", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        await publishedProgress(harness, progressToken);
+        harness.supersedeProgressDuringPreflight(progressBody(harness.change, newerProgressToken));
+        const writesBeforeUpdate = harness.writes();
+        const publishProgress = requiredMethod(
+          requiredPublication(harness.adapter).publishReviewProgress,
+          "review progress publication",
+        );
+
+        await expect(
+          publishProgress({
+            change: harness.change,
+            reviewedHeadSha: harness.change.change.head.sha,
+            renderBody: () => progressBody(harness.change, progressToken),
+            expectedToken: progressToken,
+          }),
+        ).resolves.toEqual({ status: "superseded" });
+        expect(harness.writes()).toEqual(writesBeforeUpdate);
+      });
+    });
+
+    it("renders initial progress from the current main comment body", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        await publishedProgress(harness, newerProgressToken);
+        let observedBody: string | undefined;
+        const publishProgress = requiredMethod(
+          requiredPublication(harness.adapter).publishReviewProgress,
+          "review progress publication",
+        );
+
+        await expect(
+          publishProgress({
+            change: harness.change,
+            reviewedHeadSha: harness.change.change.head.sha,
+            renderBody(currentBody) {
+              observedBody = currentBody;
+              return `${currentBody}\n\nCaller-rendered progress.`;
+            },
+          }),
+        ).resolves.toMatchObject({ status: "published", action: "updated" });
+        expect(observedBody).toContain(newerProgressToken);
+      });
+    });
+
+    it("keeps owned progress intact when inline publication fails", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        const progress = await publishedProgress(harness, progressToken);
+        harness.failNextInline();
+        const writesBeforePublish = harness.writes();
+
+        await expect(publishReviewWithProgress(harness, progress, progressToken)).rejects.toThrow(
+          "inline comment publication failed",
+        );
+        expect(harness.writes()).toMatchObject({
+          mainCreates: writesBeforePublish.mainCreates,
+          mainUpdates: writesBeforePublish.mainUpdates,
+        });
+      });
+    });
+
+    it("publishes the final main comment before reporting inline failure without progress", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        harness.failNextInline();
+
+        await expect(
+          requiredPublication(harness.adapter).publish({
+            change: harness.change,
+            plan: publicationPlan(harness.change),
+          }),
+        ).rejects.toThrow("inline comment publication failed");
+        expect(harness.writes()).toMatchObject({ mainCreates: 1 });
       });
     });
 
@@ -448,6 +567,56 @@ export function defineCodeHostAdapterConformanceSuite(options: {
         });
       });
     }
+  });
+}
+
+function progressBody(change: ChangeRequestEventContext, token: string): string {
+  return [
+    `<!-- pipr:main-comment change=${change.change.number} version=1 -->`,
+    `<!-- pipr:progress:start token=${token} head=${change.change.head.sha} stage=preparing-workspace state=running -->`,
+    "## Progress",
+    "<!-- pipr:progress:end -->",
+  ].join("\n");
+}
+
+async function publishedProgress(harness: CodeHostAdapterConformanceHarness, token: string) {
+  const publishProgress = requiredMethod(
+    requiredPublication(harness.adapter).publishReviewProgress,
+    "review progress publication",
+  );
+  const progress = await publishProgress({
+    change: harness.change,
+    reviewedHeadSha: harness.change.change.head.sha,
+    renderBody: () => progressBody(harness.change, token),
+  });
+  if (progress.status !== "published") {
+    throw new Error("expected progress publication");
+  }
+  return progress;
+}
+
+function progressLease(
+  change: ChangeRequestEventContext,
+  progress: Awaited<ReturnType<typeof publishedProgress>>,
+  token: string,
+): ReviewProgressLease {
+  return {
+    token,
+    mainCommentId: progress.id,
+    mainCommentAction: progress.action,
+    reviewedHeadSha: change.change.head.sha,
+  };
+}
+
+function publishReviewWithProgress(
+  harness: CodeHostAdapterConformanceHarness,
+  progress: Awaited<ReturnType<typeof publishedProgress>>,
+  token: string,
+) {
+  return requiredPublication(harness.adapter).publish({
+    change: harness.change,
+    plan: publicationPlan(harness.change),
+    progressLease: progressLease(harness.change, progress, token),
   });
 }
 

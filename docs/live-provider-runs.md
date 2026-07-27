@@ -1,6 +1,6 @@
 # Live provider run record
 
-This record ties the documentation screenshots to public, disposable change requests. The runs used Pipr `0.4.0` source on 2026-07-14. Secrets stayed in provider or local secret stores and are not recorded here.
+This record ties the documentation screenshots to public, disposable change requests. Provider adapter runs used Pipr `0.4.0` source on 2026-07-14. GitHub recipe runs and 850px-wide comment captures were refreshed with Pipr `0.6.2` on 2026-07-27. Secrets stayed in provider or local secret stores and are not recorded here.
 
 ## Provider adapter runs
 

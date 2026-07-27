@@ -538,6 +538,14 @@ async function createGitLabConformanceHarness(): Promise<CodeHostAdapterConforma
         };
       };
     },
+    supersedeProgressDuringPreflight(body) {
+      client.afterListNotes = () => {
+        client.afterListNotes = undefined;
+        client.notes = client.notes.map((note) =>
+          note.body.includes("pipr:main-comment") ? { ...note, body } : note,
+        );
+      };
+    },
     failNextInline() {
       client.createDiscussionError = new Error("GitLab rejected the position");
     },

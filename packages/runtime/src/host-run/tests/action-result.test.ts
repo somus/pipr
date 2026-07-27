@@ -74,7 +74,7 @@ const inlineDraft = {
 };
 const visibleStats = [
   "<details>",
-  "<summary>Review stats</summary>",
+  "<summary>Review completed in 1.3s</summary>",
   "",
   "| Metric | Total |",
   "| --- | ---: |",
@@ -179,6 +179,10 @@ describe("presentGitHubActionResult", () => {
       "",
       "<!-- pipr:header:hidden -->",
       "",
+      "<!-- pipr:result:start -->",
+      "> ✅ **No actionable findings:** The review completed without actionable findings.",
+      "<!-- pipr:result:end -->",
+      "",
       "    const reviewed = true;",
       "<!-- pipr:header:hidden -->",
       "Task-authored marker example.",
@@ -193,6 +197,8 @@ describe("presentGitHubActionResult", () => {
     await presentGitHubActionResult(result, calls.sink);
 
     const expectedMainComment = [
+      "> ✅ **No actionable findings:** The review completed without actionable findings.",
+      "",
       "    const reviewed = true;",
       "<!-- pipr:header:hidden -->",
       "Task-authored marker example.",

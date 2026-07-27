@@ -6,6 +6,7 @@ import path from "node:path";
 import { runMain } from "../runner.js";
 import {
   defaultLocalTraceStore,
+  printRunList,
   resolveRunSelector,
   runRunsDownload,
   runRunsList,
@@ -23,6 +24,27 @@ afterEach(async () => {
 });
 
 describe("pipr runs", () => {
+  it("keeps long run states inside the STATE column", async () => {
+    const startedAt = "2026-07-20T10:00:00.000Z";
+    const output = await captureStdout(async () => {
+      printRunList([
+        {
+          executionId: "0".repeat(32),
+          kind: "review",
+          outcome: "succeeded",
+          startedAt,
+          state: "indeterminate-missing",
+          source: "github",
+          ref: { executionId: "0".repeat(32) },
+        },
+      ]);
+    });
+    const [header, row] = output.split("\n");
+
+    expect(row).toContain("indeterminate-missing");
+    expect(row.indexOf(startedAt)).toBe(header.indexOf("STARTED"));
+  });
+
   it("lists and shows local bundles without returning prompt bodies", async () => {
     const store = await temporaryDirectory();
     const executionId = "0123456789abcdef0123456789abcdef";

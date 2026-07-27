@@ -120,6 +120,49 @@ describe("buildCommentPublishingPlan", () => {
     expect(publishing.publicationPlan.mainComment).toContain("Review completed.");
   });
 
+  it("lists every workflow run contributing to accumulated review stats", () => {
+    const stats = {
+      models: ["deepseek-v4-pro"],
+      agentRuns: 1,
+      durationMs: 1_000,
+      inputTokens: 100,
+      outputTokens: 10,
+      costUsd: 0.001,
+      usageStatus: "complete" as const,
+    };
+    const first = buildCommentPublishingPlan({
+      event,
+      main: "First review.",
+      validated: { ...validated, validFindings: [] },
+      manifest,
+      metadata: {
+        ...metadata({ validFindings: 0 }),
+        stats,
+        workflowUrl: "https://github.com/acme/repo/actions/runs/101",
+      },
+    });
+    const second = buildCommentPublishingPlan({
+      event,
+      main: "Second review.",
+      validated: { ...validated, validFindings: [] },
+      manifest,
+      priorReviewState: first.publicationPlan.reviewState,
+      metadata: {
+        ...metadata({ validFindings: 0 }),
+        stats,
+        workflowUrl: "https://github.com/acme/repo/actions/runs/102",
+      },
+    });
+
+    expect(second.publicationPlan.mainComment).toContain(
+      "| Workflow runs | [Run 1](<https://github.com/acme/repo/actions/runs/101>), [Run 2](<https://github.com/acme/repo/actions/runs/102>) |",
+    );
+    expect(second.publicationPlan.reviewState.workflowUrls).toEqual([
+      "https://github.com/acme/repo/actions/runs/101",
+      "https://github.com/acme/repo/actions/runs/102",
+    ]);
+  });
+
   it("supports the maximum stored finding limit", () => {
     const currentFindings = manyFindings(101);
     const publishing = buildCommentPublishingPlan({

@@ -8,11 +8,19 @@ import {
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
+import {
+  extractReviewProgressToken,
+  type ReviewProgressLease,
+  ReviewProgressSupersededError,
+} from "../../review/progress.js";
 import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import {
+  assertHostInlinePublicationSucceeded,
+  assertHostPublicationWriteAllowed,
   commandResponseBody,
   completeHostPublication,
+  hostPublicationActionError,
   nativeInlineLocation,
   publishUnseenInlineItems,
   threadActionReply,
@@ -25,6 +33,7 @@ export async function publishBitbucketPlan(options: {
   client: BitbucketClient;
   change: ChangeRequestEventContext;
   plan: PublicationPlan;
+  progressLease?: ReviewProgressLease;
 }): Promise<PublicationResult> {
   await assertCurrentEndpoints(options.client, options.change);
   const { owner, comments } = await loadBitbucketWriteState(
@@ -38,17 +47,29 @@ export async function publishBitbucketPlan(options: {
       mainMarker(options.change.change.number),
     ),
   );
-  const mainComment = renderBitbucketMarkdown(options.plan.mainComment);
-  const main = existingMain
-    ? await options.client.updateComment(options.change.change.number, existingMain.id, mainComment)
-    : await options.client.createComment(options.change.change.number, {
-        content: { raw: mainComment },
-      });
+  assertBitbucketProgressLease(existingMain, options.progressLease);
+  const assertLease = async () => {
+    if (!options.progressLease) return;
+    const current = await loadBitbucketWriteState(
+      options.client,
+      options.change,
+      options.plan.metadata.reviewedHeadSha,
+    );
+    const currentMain = current.comments
+      .filter((comment) => comment.user?.uuid === current.owner.uuid)
+      .find((comment) =>
+        normalizeBitbucketMarkdown(comment.content.raw).includes(
+          mainMarker(options.change.change.number),
+        ),
+      );
+    assertBitbucketProgressLease(currentMain, options.progressLease);
+  };
   const inline = await publishUnseenInlineItems({
     items: options.plan.inlineItems,
     existingBodies: owned.map((comment) => normalizeBitbucketMarkdown(comment.content.raw)),
     existingLocations: bitbucketInlineLocations(owned),
     location: bitbucketInlineLocation,
+    beforePublish: assertLease,
     publish: (item) =>
       options.client.createComment(options.change.change.number, {
         content: { raw: renderBitbucketMarkdown(item.body) },
@@ -62,15 +83,128 @@ export async function publishBitbucketPlan(options: {
     reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
     comments,
     ownerUuid: owner.uuid,
+    beforeWrite: assertLease,
   });
+  if (options.progressLease) {
+    assertHostInlinePublicationSucceeded({
+      provider: "Bitbucket",
+      inline,
+      resolutionErrors: resolution.errors,
+      metadata: options.plan.metadata,
+    });
+  }
+  const current = await loadBitbucketWriteState(
+    options.client,
+    options.change,
+    options.plan.metadata.reviewedHeadSha,
+  );
+  const currentOwned = current.comments.filter(
+    (comment) => comment.user?.uuid === current.owner.uuid,
+  );
+  const currentMain = currentOwned.find((comment) =>
+    normalizeBitbucketMarkdown(comment.content.raw).includes(
+      mainMarker(options.change.change.number),
+    ),
+  );
+  assertBitbucketProgressLease(currentMain, options.progressLease);
+  const mainComment = renderBitbucketMarkdown(options.plan.mainComment);
+  const main = currentMain
+    ? await options.client.updateComment(options.change.change.number, currentMain.id, mainComment)
+    : await options.client.createComment(options.change.change.number, {
+        content: { raw: mainComment },
+      });
   return completeHostPublication({
     provider: "Bitbucket",
-    mainAction: existingMain ? "updated" : "created",
+    mainAction: options.progressLease?.mainCommentAction ?? (existingMain ? "updated" : "created"),
     mainId: main.id,
     inline,
     resolutionErrors: resolution.errors,
     metadata: options.plan.metadata,
   });
+}
+
+export async function publishBitbucketReviewProgress(options: {
+  client: BitbucketClient;
+  change: ChangeRequestEventContext;
+  renderBody(currentBody: string | undefined): string;
+  reviewedHeadSha: string;
+  expectedToken?: string;
+}) {
+  const { owner, comments: loadedComments } = await loadBitbucketWriteState(
+    options.client,
+    options.change,
+    options.reviewedHeadSha,
+  );
+  const comments = options.expectedToken
+    ? await options.client.listComments(options.change.change.number)
+    : loadedComments;
+  let existing = ownedBitbucketMainComment(comments, owner.uuid, options.change.change.number);
+  if (bitbucketProgressUpdateWasSuperseded(existing, options.expectedToken)) {
+    return { status: "superseded" as const };
+  }
+  await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
+  existing = ownedBitbucketMainComment(
+    await options.client.listComments(options.change.change.number),
+    owner.uuid,
+    options.change.change.number,
+  );
+  if (bitbucketProgressUpdateWasSuperseded(existing, options.expectedToken)) {
+    return { status: "superseded" as const };
+  }
+  const currentBody = existing ? normalizeBitbucketMarkdown(existing.content.raw) : undefined;
+  const body = renderBitbucketMarkdown(options.renderBody(currentBody));
+  if (existing) {
+    const comment = await options.client.updateComment(
+      options.change.change.number,
+      existing.id,
+      body,
+    );
+    return { status: "published" as const, action: "updated" as const, id: comment.id };
+  }
+  if (options.expectedToken) return { status: "superseded" as const };
+  const comment = await options.client.createComment(options.change.change.number, {
+    content: { raw: body },
+  });
+  return { status: "published" as const, action: "created" as const, id: comment.id };
+}
+
+function ownedBitbucketMainComment(
+  comments: BitbucketComment[],
+  ownerUuid: string,
+  changeNumber: number,
+): BitbucketComment | undefined {
+  return comments.find(
+    (comment) =>
+      comment.user?.uuid === ownerUuid &&
+      normalizeBitbucketMarkdown(comment.content.raw).includes(mainMarker(changeNumber)),
+  );
+}
+
+function bitbucketProgressUpdateWasSuperseded(
+  comment: BitbucketComment | undefined,
+  expectedToken: string | undefined,
+): boolean {
+  return Boolean(
+    expectedToken &&
+      extractReviewProgressToken(
+        comment ? normalizeBitbucketMarkdown(comment.content.raw) : undefined,
+      ) !== expectedToken,
+  );
+}
+
+function assertBitbucketProgressLease(
+  comment: BitbucketComment | undefined,
+  lease: ReviewProgressLease | undefined,
+): void {
+  if (!lease) return;
+  if (
+    String(comment?.id ?? "") !== lease.mainCommentId ||
+    extractReviewProgressToken(
+      comment ? normalizeBitbucketMarkdown(comment.content.raw) : undefined,
+    ) !== lease.token
+  ) {
+    throw new ReviewProgressSupersededError();
+  }
 }
 
 function bitbucketInlineLocations(comments: BitbucketComment[]): InlinePublicationLocation[] {
@@ -252,6 +386,7 @@ export async function publishBitbucketThreadActions(options: {
   reviewedHeadSha: string;
   comments?: BitbucketComment[];
   ownerUuid?: string;
+  beforeWrite?(): Promise<void>;
 }) {
   if (options.actions.length === 0) return { errors: [] };
   await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
@@ -268,6 +403,7 @@ export async function publishBitbucketThreadActions(options: {
       comments,
       action,
       ownerUuid,
+      options.beforeWrite,
     );
     if (error) errors.push(error);
   }
@@ -280,6 +416,7 @@ async function publishBitbucketThreadAction(
   comments: BitbucketComment[],
   action: ThreadAction,
   ownerUuid: string,
+  beforeWrite?: () => Promise<void>,
 ): Promise<string | undefined> {
   const root = comments.find(
     (comment) => comment.id === (action.threadId ?? action.commentId) && !comment.parent,
@@ -295,14 +432,16 @@ async function publishBitbucketThreadAction(
           normalizeBitbucketMarkdown(comment.content.raw).includes(reply.marker),
       )
     ) {
+      await assertHostPublicationWriteAllowed(beforeWrite);
       await client.replyToComment(changeNumber, root.id, renderBitbucketMarkdown(reply.body));
     }
     if (action.kind === "resolve" && root.resolution === undefined) {
+      await assertHostPublicationWriteAllowed(beforeWrite);
       await client.resolveComment(changeNumber, root.id);
     }
     return undefined;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return hostPublicationActionError(error);
   }
 }
 
