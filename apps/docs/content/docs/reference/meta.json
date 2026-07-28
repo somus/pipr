@@ -1,15 +1,7 @@
 {
   "title": "Reference",
-  "description": "CLI, SDK, adapter, and architecture reference.",
+  "description": "CLI and SDK reference.",
   "icon": "Library",
   "root": true,
-  "pages": [
-    "---[Braces]API---",
-    "index",
-    "cli",
-    "sdk-reference",
-    "code-host-adapters",
-    "---[Network]Internals---",
-    "architecture"
-  ]
+  "pages": ["index", "cli", "sdk-reference"]
 }

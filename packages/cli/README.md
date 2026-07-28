@@ -1,72 +1,36 @@
 # @usepipr/cli
 
-`@usepipr/cli` provides the `pipr` binary. The CLI parses command flags and
-delegates runtime behavior to `@usepipr/runtime`.
+`@usepipr/cli` provides the `pipr` command. Install this package when you manage Pipr through npm or Bun.
 
-Use this package when installing Pipr through npm. The release installer and
-GitHub Releases publish compiled CLI binaries for supported platforms.
+## Quick start
 
-The npm package executes with Bun and requires Bun 1.3.14 or newer. Compiled
-GitHub Release binaries are self-contained and do not require a system Bun
-installation.
+1. Install the CLI with Bun 1.3.14 or newer:
 
-## Commands
+   ```bash
+   bun install -g @usepipr/cli
+   ```
 
-The binary exposes these command groups:
+2. Initialize and validate a repository:
 
-- `pipr init`
-- `pipr host-run`
-- `pipr webhook serve`
-- `pipr check`
-- `pipr dry-run`
-- `pipr inspect`
-- `pipr review`
-- `pipr skill`
-- `pipr update`
-- `pipr version`
+   ```bash
+   pipr init
+   pipr check
+   ```
 
-Use the CLI reference for option details.
+Compiled binaries are also available from [GitHub Releases](https://github.com/somus/pipr/releases) and don't require Bun.
 
-AI agents should start with:
+## Common commands
 
-```bash
-pipr skill
-```
+- `pipr init` creates a config and code-host integration.
+- `pipr check` validates the config and environment.
+- `pipr review` runs a local review.
+- `pipr dry-run` previews a hosted event without publishing.
+- `pipr webhook serve` runs the webhook service.
+- `pipr skill` prints version-matched setup guidance for coding agents.
+- `pipr update` updates a compiled release binary.
 
-## Updating
+Use `pipr --help` or the [CLI reference](https://pipr.run/docs/reference/cli) for every command and option.
 
-For compiled GitHub Release binaries, update the local executable:
+For package-manager installs, update the package with `bun install -g @usepipr/cli@latest`. Updating the CLI doesn't change integration files already committed to a repository.
 
-```bash
-pipr update
-```
-
-For package-manager installs, update the package:
-
-```bash
-npm install -g @usepipr/cli@latest
-bun install -g @usepipr/cli@latest
-```
-
-`pipr update` updates only the local CLI executable. It does not update a
-repository's generated integration files.
-
-## Technical notes
-
-- Package build emits `dist/main.mjs`.
-- Release binary builds run through `packages/cli/build-release.ts`.
-- The package publishes the `pipr` bin through npm and release artifacts through
-  GitHub Releases.
-
-## Local checks
-
-```bash
-bun run --cwd packages/cli check
-bun run build:release:cli
-```
-
-## Docs
-
-- [CLI reference](https://pipr.run/docs/reference/cli)
-- [Quickstart](https://pipr.run/docs/guide/quickstart)
-- [Local runs](https://pipr.run/docs/guide/local-runs)
+See the [quickstart](https://pipr.run/docs/guide/quickstart) or [local runs guide](https://pipr.run/docs/guide/local-runs) for complete workflows.

@@ -154,8 +154,8 @@ List local records for one pull or merge request and merge GitHub Actions record
 
 ```bash
 pipr runs list --pr 42
-pipr runs list --pr https://github.com/owner/repository/pull/42 --json
-pipr runs list --host forgejo --pr https://forge.example.com/owner/repository/pulls/42
+pipr runs list --pr "$GITHUB_CHANGE_REQUEST_URL" --json
+pipr runs list --host forgejo --pr "$FORGEJO_CHANGE_REQUEST_URL"
 ```
 
 | Option | Default | Purpose |
@@ -174,7 +174,7 @@ A numeric selector derives the host and repository from `remote.origin.url`. A p
 ```bash
 pipr runs list \
   --host bitbucket \
-  --pr https://bitbucket.example.com/projects/PRJ/repos/pipr/pull-requests/42
+  --pr "$BITBUCKET_CHANGE_REQUEST_URL"
 ```
 
 Explicit `--host` and `--repository` values override discovery. Non-GitHub selectors filter local stores only; Pipr does not call their remote APIs.

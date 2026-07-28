@@ -145,7 +145,7 @@ function checkInternalLink(
     .filter(hasText);
   const legacy = getLegacyDocRedirect(slugs);
   if (legacy) {
-    errors.push(`${relative(page.file)}: stale docs link ${link}; use ${legacy}`);
+    errors.push(`${relative(page.file)}: stale docs link ${link}; use ${legacy.page}`);
     return;
   }
   const target = pages.get(route);

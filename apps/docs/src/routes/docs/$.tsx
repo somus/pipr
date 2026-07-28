@@ -25,7 +25,7 @@ export const Route = createFileRoute("/docs/$")({
   loader: async ({ params }) => {
     const slugs = params._splat?.split("/") ?? [];
     const redirectTo = getLegacyDocRedirect(slugs);
-    if (redirectTo) throw redirect({ href: redirectTo, statusCode: 308 });
+    if (redirectTo) throw redirect({ href: redirectTo.page, statusCode: 308 });
 
     const data = await loader({ data: slugs });
     await clientLoader.preload(data.path);

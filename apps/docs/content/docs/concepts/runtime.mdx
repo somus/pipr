@@ -1,282 +1,89 @@
 ---
 title: "Runtime flow"
-description: "Run modes, trust model, Diff Manifest, Pi execution, validation, and publication behavior."
+description: "How Pipr selects tasks, builds changed-code context, runs Pi, and publishes validated output."
 ---
 
-Pipr runtime has one job: turn a code host change request into a deterministic review run.
-
-Use this page for the end-to-end flow. Use [Comments and Findings](/docs/concepts/comments) for publication details and [Trust and Security](/docs/concepts/trust-security) for base config, secret, and workspace boundaries.
+Pipr uses the same review pipeline for hosted events, commands, and local runs. The run mode changes where config and diff data come from and whether publication is enabled.
 
 ## Run modes
 
-Choose the mode based on whether the run starts from a hosted event or local git state and whether it may publish.
+Choose a hosted mode when output must reach the code host. Use local or dry runs to validate behavior without publishing.
 
-### Mode matrix
-
-The publication column distinguishes hosted review from local validation.
-
-| Mode | Command or trigger | Publishes comments |
+| Mode | Starts from | Publishes |
 | --- | --- | --- |
-| Change request event | Code host event through `pipr host-run` | Yes |
-| Command comment | Native comment event such as `@pipr review` | Yes |
-| Local review | `pipr review --base <sha> [--head <sha>]` | No |
-| Dry run | `pipr dry-run --host <host> --event <path>` or `PIPR_DRY_RUN=1` in a hosted run | No |
+| Change request | A supported code-host event | Reviews, inline comments, and checks |
+| Command | A matching `@pipr` comment | Review output or a command response |
+| Local review | `pipr review --base <ref>` | No |
+| Dry run | `pipr dry-run` or `PIPR_DRY_RUN=1` | No |
 
-Local review uses the local code host adapter. It builds the same Diff Manifest and executes every unique change-request task that is not marked `local: false`, but publication is disabled.
+See [Local runs](/docs/guide/local-runs) for working-tree and ref-to-ref examples.
 
-See [Local runs](/docs/guide/local-runs) for local command examples.
+## Hosted review sequence
 
-## Change request context
+A hosted review follows this order:
 
-Runtime tasks receive the same repository and change metadata regardless of code host.
+1. Load `.pipr/config.ts` from the change request's base commit.
+2. Validate the selected models, tasks, entrypoints, and required environment variables.
+3. Check out the exact proposed head.
+4. Build a Diff Manifest from the base and head.
+5. Run the selected tasks and agents.
+6. Validate the final output against the current diff.
+7. Confirm the change request still points to the reviewed head.
+8. Publish comments and statuses through the active code host.
 
-### Task context shape
-
-Runtime tasks receive provider-neutral context:
-
-```ts
-import type { DiffManifest } from "@usepipr/sdk";
-
-type TaskContext = {
-  run: {
-    readonly id: string;
-    readonly trigger: "change-request" | "command" | "local";
-  };
-  platform: { id: string };
-  repository: {
-    root: string;
-    owner?: string;
-    name: string;
-    defaultBranch?: string;
-    remoteUrl?: string;
-  };
-  change: {
-    number?: number;
-    title: string;
-    description: string;
-    url?: string;
-    author?: { login: string };
-    base: { ref?: string; sha: string };
-    head: { ref?: string; sha: string };
-    isFork?: boolean;
-    diffManifest(options?: {
-      compressed?: boolean;
-      paths?: {
-        include?: string[];
-        exclude?: string[];
-      };
-    }): Promise<DiffManifest>;
-  };
-};
-```
-
-`verifier` is reserved for Pipr's internal verifier agent and tool context; task handlers receive `change-request`, `command`, or `local`.
-
-`change.number` is provider-relative: a pull request number on GitHub, Azure DevOps, Bitbucket, Gitea, Forgejo, or Codeberg, or a GitLab merge request IID.
-
-## Trust model
-
-Hosted change-request runs follow this order:
-
-1. Pipr loads `.pipr/config.ts` and local imports from the base commit.
-2. Pipr checks that configured provider env vars are available.
-3. Pipr checks out the exact proposed head for review.
-4. Proposed changes to `.pipr/config.ts` are reviewed as code, but do not affect the current run.
-5. Pi receives a read-only workspace copy and Pipr-owned diff tools. The official Docker Action enforces the copy across separate supervisor and Pi identities.
-
-This keeps model choice, API-key env names, task registration, command permissions, and publication policy out of untrusted proposed code.
-
-### Trusted policy
-
-See [Trust and Security](/docs/concepts/trust-security) for a focused breakdown.
-
-## Runtime flow
-
-The adapter handles native event and API details around a provider-neutral review pipeline.
-
-### Execution pipeline
-
-Every provider follows this sequence after its adapter accepts an event.
-
-```text
-code host event
-  -> adapter parses provider event
-  -> trusted config loads
-  -> adapter ensures checkout
-  -> Diff Manifest builds
-  -> selected tasks run
-  -> Pi returns structured JSON
-  -> pipr validates findings
-  -> publication plan reduces task output
-  -> adapter publishes native comments
-```
-
-### Adapter boundary
-
-Core runtime never calls provider APIs directly. It receives a `ChangeRequestEventContext` and delegates provider-specific reads and writes to the active adapter.
+Proposed config changes remain visible to review, but they do not alter the policy running against that same change request.
 
 ## Diff Manifest
 
-The Diff Manifest is the authoritative changed-code model for prompts, path scope, and inline validation.
-
-### Build manifest
-
-The Diff Manifest is the source of truth for changed files and commentable ranges:
+The Diff Manifest is Pipr's changed-code model. It contains changed files, hunks, and ranges that can receive inline comments.
 
 ```ts twoslash
 // @include: task-context
 const manifest = await ctx.change.diffManifest({
-  compressed: true,
-  includePreviews: true,
-  paths: {
-    include: ["packages/runtime/**"],
-    exclude: ["**/*.test.ts"],
-  },
+  paths: { include: ["src/**"], exclude: ["**/*.generated.ts"] },
 });
 ```
 
-### Finding anchors
-
-Each file carries changed-line ranges that can receive inline comments. Review Findings must point at a valid range:
-
-```ts twoslash
-import type { ReviewFinding } from "@usepipr/sdk";
-
-const finding: ReviewFinding = {
-  body: "Specific issue and why it matters.",
-  path: "src/example.ts",
-  rangeId: "rng_...",
-  side: "RIGHT",
-  startLine: 12,
-  endLine: 12,
-  suggestedFix: "return safeValue;",
-};
-```
-
-`suggestedFix` is optional exact replacement code for that range. GitHub and GitLab render native suggestions; Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg render fenced replacement code. Do not include Markdown fences, prose, or labels in the value.
-
-### Prompt injection
-
-Diff Manifest prompt injection is reserved opt-in. When `ctx.pi.run(...)` receives a parseable Diff Manifest in the `manifest` input field, Pipr injects the authoritative Diff Manifest section exactly once. If `manifest` is omitted, no Diff Manifest section is injected. If `manifest` is present but not a parseable Diff Manifest, it stays ordinary user input.
-
-### Condensed reads
-
-Pipr uses ast-grep outlines as best-effort structural context. Supported files can include `changedSymbols` on the file and an `Enclosing declaration: <kind> <name>` summary on each range. Pipr preserves caller-provided metadata, bounds derived metadata, and keeps structural symbols and summaries in full, compressed, and condensed manifests. The Docker Action includes ast-grep `0.45.0`; local runs continue without structural metadata when the executable or language support is unavailable.
-
-If the full manifest is too large but its condensed form fits, Pipr sends one condensed manifest and attaches bounded Diff Read Tools. When structural context is available and the reviewed head is the current workspace, condensed reviews also receive:
-
-- `pipr_read_declaration` reads the enclosing head or merge-base declaration for one manifest range.
-- `pipr_ast_grep` searches a syntax pattern across up to 16 explicit safe head-workspace paths.
-
-Pipr tells the agent to start from the manifest, keep queries narrow, treat tool output as evidence, and omit findings when the evidence remains insufficient. The structural search tool rejects absolute paths, parent traversal, `.git`, globs, and symlink traversal. It doesn't expose rewrite or update options.
-
-Hosted reviews and local working-tree reviews satisfy the workspace requirement. Local ref-to-ref reviews that pass `pipr review --head <ref>` keep the standard condensed read tools because the checked-out workspace may not match that ref.
-
-If the condensed form is also too large for a Review-schema agent, Pipr keeps changed import relationships, test/source pairs, and same-declaration hunks together where prompt limits allow. It runs the bounded units sequentially and merges their Review results. `limits.diffManifest.maxShards` limits this automatic fan-out for one review invocation and defaults to `4`; set it to `1` to disable splitting. A task can override the global value for one invocation with `ctx.pi.run(agent, input, { maxShards })`. When the cap requires a larger unit, Pipr preserves its complete mapping data and sends the condensed form with Diff Read Tools.
-
-`limits.maxAgentRuns` limits total provider invocations across all tasks and agents in one Review Run. Shards, repairs, transient retries, and model fallbacks each consume one invocation. Pipr reserves an agent run immediately before starting Pi. The reservation remains consumed if the invocation fails or is aborted. After the budget is exhausted, Pipr fails before starting another provider process. The limit is optional and provider invocations are unlimited when it is omitted.
-
-The model can ask for more range-scoped context without receiving shell or write access. Its normal read-only tools can inspect the head workspace, while `pipr_read_at_ref` and `pipr_read_declaration` provide bounded merge-base content. If an agent runs with `toolMode: "none"`, Pipr still injects manifest prompt context when `manifest` is passed, but it doesn't attach Diff Read Tools.
-
-### Path scope
-
-`paths` filters Diff Manifest files by include and exclude globs. For renamed files, current and previous paths are considered. When `result.inlineFindings` from a scoped Pi run is passed directly to `ctx.comment(...)`, Pipr drops findings outside the filter. Findings that a task maps, spreads, or clones first are treated as task-authored output and receive normal Diff Manifest range validation. Path scope does not restrict Pi read-only access to the rest of the repository.
-
-## Pi execution
-
-Tasks invoke Pi through the runtime so model selection, retries, tools, and output validation stay controlled.
-
-### Run agents
-
-Tasks call Pi through `ctx.pi.run(...)`:
+Pass the manifest to `ctx.pi.run(...)` when an agent needs changed-code context:
 
 ```ts twoslash
 // @include: task-pi-review
-const result = await ctx.pi.run(
-  reviewer,
-  { manifest },
-  {
-    timeout: "5m",
-    fallbacks: [backupModel],
-  },
-);
+const result = await ctx.pi.run(reviewer, { manifest });
+await ctx.comment({
+  main: result.summary.body,
+  inlineFindings: result.inlineFindings,
+});
 ```
 
-Core adds the change request number and title, plus up to 4,000 characters of its description when nonblank, to every agent prompt as untrusted intent context. Pass only task-specific input here; do not repeat change metadata in the prompt.
+Each inline finding must use a path, side, line span, and `rangeId` from the manifest. `paths` limits the manifest and publishable findings, but it does not prevent read-only inspection of related repository files.
 
-### Model selection
+For large changes, Pipr can reduce the manifest and attach bounded read tools. Configure provider-call and manifest limits through `pipr.config(...)`; see [Runtime limits](/docs/reference/sdk-reference#runtime-limits) for the exact options.
 
-Model selection order:
+## Agent execution
 
-1. `ctx.pi.run(...)` call override
-2. `agent.model`
-3. `agent.fallbacks`
-4. the trusted base config default provider
+Tasks run typed agents through `ctx.pi.run(...)`. Pipr selects the call override first, then the agent model and fallbacks, then the configured default provider.
 
-### Output repair
+Agent output must match its declared schema. Invalid output can use the configured repair policy, while transient retries and fallbacks follow the agent settings. Every provider call counts toward `limits.maxAgentRuns` when that limit is set.
 
-Invalid structured output receives one repair attempt when configured. Transient retries are opt-in through agent retry settings.
+## Final output
 
-## Publication
+Each selected task emits one final value:
 
-Tasks emit one final value, then Pipr validates and maps it to native provider output.
+- `ctx.comment(markdown)` for a main comment
+- `ctx.comment({ main, inlineFindings })` for review output
+- `ctx.command.reply(markdown)` for a command response
 
-### Final outputs
-
-Review Tasks do not write code host comments. A selected run emits one final output:
-
-- `ctx.comment(markdown)`
-- `ctx.comment({ main, inlineFindings })`
-- `ctx.command.reply(markdown)` for command-triggered response tasks
-
-### Publication plan
-
-For review output, Pipr turns that output into a provider-neutral `PublicationPlan`:
-
-- one Main Review Comment
-- zero or more Inline Review Comment drafts
-- dropped finding metadata
-- run metadata
-
-Command response output publishes a normal change-request comment keyed by the source command comment. Rerunning the same source command updates the previous bot response.
-
-### Comment updates and state
-
-Before publishing, Pipr checks the current head SHA, upserts one Main Review Comment, and stores Pipr-owned state for reruns. It deduplicates inline findings and can recheck or resolve prior threads when the adapter supports those operations.
-
-[Comments and Findings](/docs/concepts/comments) is the authoritative publication-state reference.
+Pipr validates findings, applies inline caps, prevents stale publication, and updates Pipr-owned output on reruns. [Comments and findings](/docs/concepts/comments) covers those behaviors.
 
 ## Failure behavior
 
-Failures stop at the narrowest safe boundary and preserve internal publication metadata when available.
+Pipr stops or narrows output according to what remains safe to publish.
 
-### Failure matrix
-
-The runtime records or stops each failure according to whether safe publication can continue.
-
-| Failure | Behavior |
+| Failure | Result |
 | --- | --- |
-| No matching event or command | Delivery is ignored. |
-| Config load or validation failure | Run fails before Pi execution. |
-| Missing provider env when required | Run fails before Pi execution. |
-| Pi returns invalid JSON after repair | Task fails and metadata records failure. |
-| Finding targets invalid range | Finding is dropped, run continues. |
-| Stale head before publication | Publication stops before writes. |
-| Comment API failure | Publication metadata is emitted and the hosted run fails. |
-| Stale review-thread cleanup failure | Publication metadata records the cleanup error and the Action continues. |
-
-## Local checks
-
-Run these commands before testing hosted delivery.
-
-### Preflight commands
-
-Run config validation before invoking a model locally.
-
-```bash
-pipr check
-pipr inspect
-pipr review --base origin/main
-```
-
-`pipr inspect` prints models, agents, tasks, change request triggers, commands, tools, schemas, publication settings, limits, aggregate-check policy, and normalized per-task check behavior.
+| Config or required environment is invalid | The run stops before model execution. |
+| Agent output remains invalid | The task fails. |
+| One finding has an invalid anchor | Pipr drops that finding and continues. |
+| The change request head changed | Pipr stops before publication. |
+| A comment or status API fails | The hosted run reports a publication failure. |
+| Optional stale-thread cleanup fails | The review remains published and reports the cleanup error. |

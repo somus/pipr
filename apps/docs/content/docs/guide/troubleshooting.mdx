@@ -1,226 +1,132 @@
 ---
 title: "Troubleshooting"
-description: "Diagnose Pipr setup, config, delivery, model, and publication failures."
+description: "Diagnose Pipr config, model, delivery, and publication failures."
 ---
 
-Start with the narrowest command that can reproduce the failure. Fix local config errors before debugging code-host delivery.
+Start with the narrowest command that reproduces the failure. Fix config locally before debugging provider delivery.
 
-```bash
-pipr check
-pipr inspect
-pipr review --base origin/main
-```
-
-For GitHub Action behavior, set `PIPR_DRY_RUN=1` or use `pipr dry-run --event <path>`.
-
-When a hosted run reached Pipr, inspect its captured evidence before rerunning it:
-
-```bash
-pipr runs show --pr 42
-```
-
-## First-run failure ladder
-
-Follow this order for a new setup. It separates config failures from provider delivery and publication failures.
-
-| Step | Check | Fix |
-| --- | --- | --- |
-| 1. Config load | Run `pipr check`. | Fix `.pipr/config.ts`, local imports, duplicate ids, or invalid command patterns. |
-| 2. Runtime plan | Run `pipr inspect`. | Confirm the selected model, task, entrypoints, commands, and publication limits. |
-| 3. Provider secret | Compare `pipr.secret({ name })` with the delivery environment. | Add the matching secret to the CI job or trusted worker. |
-| 4. Delivery config | Inspect the generated workflow or webhook worker arguments. | Confirm the host, repository, workspace, and event configuration. |
-| 5. Provider permissions | Inspect the bot token, workflow, or runner identity. | Grant only the comment, status, and verifier permissions for the features you enabled. |
-| 6. Untrusted changes | Check whether the change comes from a fork or can edit CI configuration. | Use a trusted webhook runner when the proposed change can access or alter the delivery job. |
-| 7. Stale head | Compare the reviewed head with the current change request head. | Rerun the workflow on the latest commit. |
-| 8. Dropped findings | Read `droppedFindings` from the Action `result` output. | Fix the prompt or mapper so findings use exact Diff Manifest paths, range ids, sides, and lines. |
-
-For webhook workers, run `pipr webhook status --database <path>` to inspect recent queue attempts and safe result kinds. Add `--json` when you need full delivery IDs or omission reasons; `invalid` identifies one corrupted stored result without preventing the remaining rows from loading.
-
-## Choose the diagnostic
-
-Use the symptom to pick the first diagnostic command.
+## Choose the first diagnostic
 
 | Symptom | Start with |
 | --- | --- |
 | Config does not load | `pipr check` |
-| Runtime plan looks wrong | `pipr inspect` |
+| The resolved plan is wrong | `pipr inspect` |
 | Local review cannot find a base | `pipr review --base <ref>` |
-| Hosted run does not publish | `pipr runs show --pr <number>` |
-| Command comment is ignored | Event type, command pattern, and commenter permission |
-| Findings are dropped | `droppedFindings` in the Action `result` output |
-| Pi output is invalid | `pipr runs show --pr <number>` and its repair count |
-| A small change runs slowly | `pipr runs show --pr <number> --timeline` |
-| Publication stopped after a new commit | Current change request head SHA |
+| A hosted run does not publish | `pipr runs show --pr <number>` |
+| A command is ignored | Check event, pattern, arguments, and permission |
+| Inline findings are missing | Inspect `droppedFindings` |
+| Model output is invalid | Inspect the run's repair count |
+| A small change runs slowly | Inspect the run timeline |
+| Publication stopped after a push | Compare the reviewed and current head |
+
+For a first setup, check config, resolved plan, model secret, delivery configuration, provider permissions, untrusted-change boundaries, stale head, and dropped findings in that order.
 
 ## Config does not load
 
-Run `pipr check` from the repository root:
+Run:
 
 ```bash
 pipr check
 ```
 
-Common causes:
+Common causes include:
 
-- `.pipr/config.ts` does not export `definePipr(...)`.
-- The config callback is async. `definePipr(...)` must be synchronous.
-- A local import from `.pipr/config.ts` cannot be resolved.
-- A task, command, or model id is duplicated.
-- A command pattern does not start with `@pipr`.
-- A secret name is not an environment variable name such as `DEEPSEEK_API_KEY`.
+- `.pipr/config.ts` does not default-export `definePipr(...)`
+- the config callback is asynchronous
+- a local import cannot resolve
+- a task, command, or model ID is duplicated
+- a command pattern does not start with `@pipr`
+- a secret name is not a valid environment-variable name
 
-Run `pipr inspect` after `pipr check` passes to confirm the runtime plan matches the config you expected.
-For tier-2 configs, run `bun install` in `.pipr/` if editor types are stale. For tier-1 (`pipr init --minimal`) configs, install `@usepipr/sdk` at the repo root.
+After the check passes, run `pipr inspect` to confirm the selected models, tasks, commands, tools, publication settings, and limits.
 
-### Expected result
+## A provider secret is missing
 
-Expected result: `pipr check` exits successfully before you try a model run.
+Match the name passed to `pipr.secret(...)` with the variable exposed by local execution, CI, or the webhook worker.
 
-## Provider env var is missing
-
-Match the secret name in trusted config to the variable exposed by the delivery environment.
-
-### GitHub secret example
-
-Every hosted run requires its configured model-provider env vars before Pi execution. For GitHub, add the matching Actions secret and pass it through the workflow:
+For GitHub:
 
 ```yaml
 env:
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
-Locally, export the same env var or run `pipr check` without `--require-env` when you only need config validation.
+Use `pipr check --require-env` when local validation must fail on missing model variables.
 
 ## Local review cannot find a base
 
-`pipr review` requires an explicit base because Pipr needs a comparison point for the Diff Manifest.
-
-```bash
-pipr review --base origin/main
-```
-
-Fetch the remote branch when the ref is missing:
+Fetch the comparison branch and pass it explicitly:
 
 ```bash
 git fetch origin main
+pipr review --base origin/main
 ```
 
-Use `--head` only when reviewing something other than `HEAD`.
+Use `--head` only for a committed ref other than the working tree.
 
 ## GitHub Action does not publish
 
-Check the workflow before changing task code.
+Run `pipr runs show --pr <number>` first. Then confirm:
 
-Run `pipr runs show --pr <number>` first. A publication failure, stale-head category, or missing publication artifact distinguishes a provider write failure from a capture or model failure.
+- `actions/checkout` uses `fetch-depth: 0`
+- `GITHUB_TOKEN` reaches the Action
+- workflow permissions cover enabled comment and check features
+- the pull request action matches a configured entrypoint
+- a command comment targets a pull request rather than a plain issue
+- `PIPR_DRY_RUN` is not enabled
 
-- `actions/checkout` uses `fetch-depth: 0`.
-- `GITHUB_TOKEN` is present in the Action environment.
-- Workflow permissions include `pull-requests: write`, `issues: write`, and `checks: write` when checks are enabled.
-- Workflow permissions include `contents: read`.
-- The pull request event action matches a configured change request entrypoint.
-- A command comment is on a pull request, not a plain issue.
-
-### Dry run mode
-
-If `PIPR_DRY_RUN=1` is set, Pipr stops before model execution and publication by design.
-
-### Expected result
-
-Expected result: the Action reaches the publication step and records a review result. Inspect `result.publication` for publication counts and errors.
+See [GitHub Action permissions](/docs/guide/github-action#permissions) for the required permission map.
 
 ## Command comment is ignored
 
-Confirm the native event, command pattern, arguments, and actor permission before changing task code.
+Confirm that the comment:
 
-### Event requirements
+- was newly created on a change request
+- starts with the configured `@pipr` pattern
+- supplies every required argument
+- comes from an actor with the configured permission
+- maps to a registered command
 
-Command comments are parsed only from `issue_comment.created` events on pull requests. Edited comments do not trigger command parsing.
-
-### Common causes
-
-Common causes:
-
-- The comment did not start with the configured pattern, such as `@pipr review`.
-- The commenter does not meet the configured permission.
-- The command has required arguments that were not supplied.
-- The config does not register the command.
-- The comment was edited instead of created.
-
-Use [Entrypoints](/docs/guide/entrypoints) for command grammar and permission details.
+Edited comments do not trigger command parsing. See [Entrypoints](/docs/guide/entrypoints#commands).
 
 ## Findings are dropped
 
-Inspect dropped-finding metadata to identify which authoritative range constraint failed.
+Pipr drops invalid findings and continues with valid ones. Read `droppedFindings` from the structured result.
 
-### Dropped output
+Common causes include:
 
-Pipr drops invalid findings and continues the review. Read `droppedFindings` from the Action `result` output first.
+- the path is not in the Diff Manifest
+- the `rangeId`, side, or lines do not match a valid range
+- the finding falls outside configured path scope
+- the file is binary, removed, generated, locked, or too large for inline review
+- another current finding duplicates the same issue and range
 
-### Common reasons
+Pass the manifest to the agent and map custom output to exact manifest anchors. See [Comments and findings](/docs/concepts/comments#dropped-findings).
 
-Common reasons:
+## Model output is invalid
 
-- `path` does not match a changed file in the Diff Manifest.
-- `rangeId` does not exist, and the path, side, and line span do not identify exactly one range.
-- `side`, `startLine`, or `endLine` does not match the selected range.
-- The finding is outside direct scoped Pi result paths.
-- The file was excluded as generated, binary, removed, lockfile, or too large for inline review.
-- The finding duplicates another current finding.
-
-Dropped findings are exposed in `droppedFindings` within the Action `result` output.
-
-### Fix range mapping
-
-Fix the agent prompt or output mapping so findings use the exact Diff Manifest path, range id, side, and line numbers. For scoped Pi runs, pass `result.inlineFindings` directly when Pipr should enforce the same `paths` filter on publication. See [Comments and findings](/docs/concepts/comments#dropped-findings).
-
-## Pi output is invalid
-
-Structured output must match the declared schema after the bounded repair attempt.
-
-### Repair attempt
-
-Review agents must return structured JSON matching their declared output schema. For review comments, use `pipr.schemas.review`.
-
-Invalid output can receive one repair attempt when retry settings allow it.
-
-### Simplify output
+Agent output must match the declared schema after the configured repair policy.
 
 If invalid output persists:
 
-- Make instructions shorter and more explicit.
-- Include the exact output schema in the prompt only through SDK schema helpers.
-- Avoid asking for prose before or after JSON.
-- Reduce custom schema complexity.
-- Run locally with the smallest changed diff that reproduces the issue.
+- shorten and clarify the instructions
+- use SDK schema helpers instead of restating JSON syntax
+- remove prose requested outside the structured result
+- simplify custom schema nesting
+- reproduce with the smallest local diff
 
-## Stale head before publication
+## Publication reports a stale head
 
-Rerun against the latest proposed commit when the reviewed head no longer matches the change request.
+Pipr stops before writing when the change request head no longer matches the reviewed commit. Rerun on the latest commit.
 
-### Rerun latest commit
+## A verifier cannot resolve a thread
 
-Pipr checks the current change request head before writing comments. If the head changed after review execution, publication stops before writes.
+Verifier replies and native resolution require provider support and sufficient credentials. On GitHub, `${{ github.token }}` may publish the reply while GitHub reports `viewerCanResolve: false`.
 
-Rerun the workflow on the latest commit. This prevents Pipr from publishing comments for an older diff.
-
-## Verifier cannot resolve a thread
-
-Thread replies and resolution require adapter support and sufficient native permissions.
-
-### Permission failures
-
-The verifier can reply to Pipr-owned Inline Review Comments and resolve GitHub review threads when permissions allow.
-
-If the API call fails, Pipr increments `result.publication.inlineResolutionErrorCount` and keeps the review run successful. Check that the workflow grants `pull-requests: write`.
-
-If Pipr reports that the GitHub credential cannot resolve the review thread, GitHub returned `viewerCanResolve: false` for that credential. `${{ github.token }}` can still publish the verifier's fixed-finding reply, but native resolution requires a user credential with pull request write access. Store that credential as a repository secret and pass it as `GITHUB_TOKEN`; see [GitHub Action](/docs/guide/github-action#permissions) for the workflow example.
+If native resolution is required, pass a user credential with pull request write access as `GITHUB_TOKEN`. See [GitHub Action permissions](/docs/guide/github-action#permissions).
 
 ## Next steps
 
-Use these pages when the first diagnostic identifies the failing area.
-
-- [GitHub Action](/docs/guide/github-action) covers workflow events, permissions, outputs, dry runs, and forks.
-- [GitLab](/docs/guide/gitlab), [Azure DevOps](/docs/guide/azure-devops), [Bitbucket](/docs/guide/bitbucket), and [Gitea, Forgejo, and Codeberg](/docs/guide/gitea-forgejo-codeberg) cover trusted workers, credentials, and native publication.
-- [Comments and findings](/docs/concepts/comments) covers dropped findings, inline caps, dedupe, and verifier replies.
-- [Local runs](/docs/guide/local-runs) covers `--base`, `--head`, local secrets, and local output.
-- [Debug captured runs](/docs/guide/run-observability) covers deterministic diagnosis, downloads, retention, and OTLP export.
+- Use [Debug captured runs](/docs/guide/run-observability) for timing, retry, and publication evidence.
+- Use the matching [provider guide](/docs/guide#start-with-your-code-host) for credentials and supported behavior.
+- Use [Local runs](/docs/guide/local-runs) to isolate config and model behavior from publication.

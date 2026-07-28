@@ -1,23 +1,19 @@
 ---
 title: "GitLab"
-description: "Run Pipr reviews, commands, and reply verification on GitLab.com or GitLab Self-Managed."
+description: "Run Pipr reviews and commands on GitLab.com or GitLab Self-Managed."
 ---
 
-Pipr supports GitLab.com and GitLab Self-Managed merge requests through GitLab CI for automatic reviews and a trusted webhook runner for commands and reply verification. Both use the `gitlab` adapter. Use the webhook runner when merge requests can change pipeline code or come from forks.
+Use GitLab CI for trusted automatic merge-request reviews. Use a dedicated webhook worker for commands, reply verification, forks, or repositories where proposed changes can alter the pipeline.
 
-## Automatic merge request reviews
+## Configure GitLab CI
 
-Generate a GitLab pipeline alongside `.pipr/config.ts`:
+Generate `.gitlab-ci.yml` with the repository config:
 
 ```bash
 pipr init --adapters gitlab
 ```
 
-The command creates `.gitlab-ci.yml` with a merge-request job that runs the Pipr container through `pipr host-run --host gitlab`.
-
-### Generated GitLab CI pipeline
-
-The generated `.gitlab-ci.yml` runs only for merge request pipelines and fetches full Git history:
+The generated job runs only for merge-request pipelines and fetches full history:
 
 ```yaml
 pipr:
@@ -33,34 +29,26 @@ pipr:
     - pipr host-run --host gitlab --config-dir .pipr
 ```
 
-GitLab provides the project and merge request coordinates as predefined CI variables. Store `GITLAB_TOKEN` and the configured model-provider key as masked CI/CD variables; don't write their values in `.gitlab-ci.yml`.
-
-On GitLab Self-Managed, CI also supplies `CI_API_V4_URL` and `CI_SERVER_URL`; Pipr uses them automatically. If runners can't pull from GHCR, pass an internal image when generating the pipeline:
-
-```bash
-pipr init \
-  --adapters gitlab \
-  --runtime-image registry.internal.example/pipr:v0.6.3 # x-release-please-version
-```
-
-Configure these masked CI/CD variables in GitLab:
+Configure masked CI/CD variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `GITLAB_TOKEN` | Project access token used to read the merge request and publish notes, discussions, and commit statuses. |
-| Your model provider key | The `apiKeyEnv` configured in `.pipr/config.ts`, such as `DEEPSEEK_API_KEY`. |
+| `GITLAB_TOKEN` | Read the merge request and publish notes, discussions, and statuses |
+| Model-provider key | Match the secret name in `.pipr/config.ts` |
 
-Give the project access token API scope and a project role that can read code, comment on merge requests, resolve discussions, and create commit statuses. Pipr maps GitLab access levels into its provider-neutral command permissions.
+Give the GitLab project token API scope and a role that can read code, comment on merge requests, resolve discussions, and create commit statuses.
 
-GitLab CI configuration comes from source control. A contributor who can change the pipeline can attempt to expose variables available to that job, so don't provide write or model credentials to pipelines that run untrusted merge-request code. Use the trusted webhook runner for fork reviews or repositories where contributors can edit `.gitlab-ci.yml`.
+For GitLab Self-Managed, Pipr uses the predefined `CI_API_V4_URL` and `CI_SERVER_URL`. Pass `--runtime-image <internal-image>` to `pipr init` when runners cannot pull from GHCR.
 
-## Commands and reply verification
+GitLab CI comes from source control. Do not expose write-capable or model credentials when untrusted merge-request code can replace the executed job.
 
-Run one trusted checkout behind an HTTPS reverse proxy:
+## Configure a trusted webhook worker
+
+Run one worker for one dedicated checkout:
 
 ```bash
 export GITLAB_TOKEN="..."
-export GITLAB_API_URL="https://gitlab.example.com/api/v4"
+export GITLAB_API_URL="$GITLAB_INSTANCE_API_URL"
 export PIPR_WEBHOOK_SECRET="..."
 export DEEPSEEK_API_KEY="..."
 
@@ -73,52 +61,42 @@ pipr webhook serve \
   --port 8787
 ```
 
-The runner resolves `--repository` to one GitLab project, validates `X-Gitlab-Token`, requires every payload's project ID and path to match that project, deduplicates GitLab delivery UUIDs in SQLite, acknowledges accepted deliveries before model work, and drains the durable queue serially. Mount the SQLite directory on persistent storage and keep the repository workspace dedicated to this runner because each review checks out the exact merge-request head.
+Omit `GITLAB_API_URL` for GitLab.com. For Self-Managed, set the complete REST v4 root, including any installation path prefix.
 
-Create a project webhook in GitLab with:
+Create a project webhook with the same secret, then enable:
 
-- your reverse proxy's HTTPS URL;
-- the same secret stored in `PIPR_WEBHOOK_SECRET`;
-- Merge request events;
-- Comments.
+- Merge request events
+- Comments
 
-The reverse proxy should restrict request size and access before forwarding to the loopback listener. Pipr also rejects payloads larger than 2 MiB, bounds pending queue data to 1,000 deliveries and 32 MiB, retains only the newest 10,000 terminal delivery records for deduplication, and retries failed queued work up to three times. Completion and redacted failure records are written to the server log.
-
-Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run this command from the versioned Pipr image with persistent state and a container health check.
+Place the loopback listener behind an HTTPS reverse proxy and persist the SQLite directory. Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for a complete deployment.
 
 ## Supported behavior
 
-For GitLab.com, omit `GITLAB_API_URL`; Pipr defaults to `https://gitlab.com/api/v4`. A trusted runner for GitLab Self-Managed must set the complete REST v4 root, including any relative URL prefix used by the installation.
+GitLab supports:
 
-The GitLab adapter supports:
+- merge-request open, update, reopen, merge, and close events
+- trusted base config and exact-head checkout
+- main comments and single-line or multiline inline discussions
+- native suggestion blocks
+- `@pipr` commands with member permission checks
+- verifier replies and discussion resolution
+- task and aggregate commit statuses
+- stale-head rejection before publication
 
-- merge-request open, update, reopen, merge, and close normalization;
-- trusted base config and exact-head checkout;
-- Main Review Comment upsert through merge-request notes;
-- single-line and multi-line Inline Review Comments through discussions;
-- GitLab suggestion blocks;
-- prior-state loading and marker deduplication;
-- `@pipr` commands with GitLab member permission checks;
-- reply-driven verification and discussion resolution;
-- individual and aggregate external commit statuses;
-- stale-head rejection before writes.
-
-## GitLab review output
-
-GitLab displays the task summary as a merge-request note, publishes validated findings as discussions, and records external commit statuses.
+## Review output
 
 <img
-  alt="GitLab merge request showing a Pipr review summary and successful external status for the event-relay retry change"
+  alt="GitLab merge request showing a Pipr review summary and successful status"
   src="/images/pipr/providers/gitlab-review.png"
 />
 
 <img
-  alt="GitLab merge request diff showing a Pipr discussion with a native suggestion for duplicate webhook delivery"
+  alt="GitLab merge request diff showing a Pipr discussion with a native suggestion"
   src="/images/pipr/providers/gitlab-inline.png"
 />
 
 ## Next steps
 
-- Use [Configuration](/docs/guide/configuration) to tune models, entrypoints, and review behavior.
-- Read [Trust and security](/docs/concepts/trust-security) before exposing credentials to change-request pipelines.
-- Run [Local reviews](/docs/guide/local-runs) to validate the config before enabling GitLab CI or the webhook runner.
+- Use [Configuration](/docs/guide/configuration) to tune review behavior.
+- Read [Trust and security](/docs/concepts/trust-security) before handling untrusted merge requests.
+- Run [Local reviews](/docs/guide/local-runs) before enabling delivery.

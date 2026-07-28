@@ -1,28 +1,38 @@
 # @usepipr/sdk
 
-`@usepipr/sdk` is the public TypeScript authoring SDK for `.pipr/config.ts`.
-Use it to define Pipr models, reviewers, tasks, commands, tools, schemas, and
-publication settings.
+`@usepipr/sdk` is the public TypeScript API for `.pipr/config.ts`. Use it to configure models, reviewers, tasks, commands, tools, schemas, and comment publication.
 
-This is the package user configs import directly.
+## Quick start
 
-## Technical notes
-
-- The package root exports `definePipr`, `definePlugin`, `z`, schemas, prompt
-  helpers, review parsers, and public config, task, diff, schema, and agent
-  types.
-- The `./internal` export is for Pipr runtime integration. User configs should
-  import from the package root.
-- The build emits ESM and declaration files to `dist`.
-
-## Local checks
+Initialize a repository to install the SDK and create a starter config:
 
 ```bash
-bun run --cwd packages/sdk check
-bun run --cwd packages/sdk build
+pipr init
 ```
 
-## Docs
+Define review behavior from the package root:
 
-- [Pipr SDK reference](https://pipr.run/docs/reference/sdk-reference)
-- [Configuration](https://pipr.run/docs/guide/configuration)
+```ts
+import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  const model = pipr.model({
+    provider: "deepseek",
+    model: "deepseek-v4-pro",
+    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  });
+
+  pipr.review({
+    id: "review",
+    model,
+    instructions: {
+      findings: "Report actionable correctness, security, and testing issues.",
+      summary: "Summarize the change and its main risks.",
+    },
+  });
+});
+```
+
+Run `pipr check` after editing the config.
+
+See [Configuration](https://pipr.run/docs/guide/configuration) for common options and the [SDK reference](https://pipr.run/docs/reference/sdk-reference) for the complete API.

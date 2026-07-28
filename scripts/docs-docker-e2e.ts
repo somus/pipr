@@ -32,16 +32,11 @@ try {
     throw new Error("docs image did not serve the install script at /install.sh");
   }
 
-  for (const [legacy, targetParts] of Object.entries(legacyDocSlugs)) {
-    const canonical = targetParts.join("/");
-    await assertRedirect(origin, `/docs/${legacy}`, `/docs/${canonical}`);
-    await assertRedirect(origin, `/docs/${legacy}/`, `/docs/${canonical}`);
-    await assertRedirect(origin, `/docs/${legacy}.md`, `/docs/${canonical}.md`);
-    await assertRedirect(
-      origin,
-      `/og/docs/${legacy}/image.webp`,
-      `/og/docs/${canonical}/image.webp`,
-    );
+  for (const [legacy, target] of Object.entries(legacyDocSlugs)) {
+    await assertRedirect(origin, `/docs/${legacy}`, target.page);
+    await assertRedirect(origin, `/docs/${legacy}/`, target.page);
+    await assertRedirect(origin, `/docs/${legacy}.md`, target.markdown);
+    await assertRedirect(origin, `/og/docs/${legacy}/image.webp`, target.og);
   }
 
   console.log(`docs image smoke passed: ${image}`);

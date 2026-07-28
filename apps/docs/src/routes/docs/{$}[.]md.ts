@@ -11,7 +11,7 @@ export const Route = createFileRoute("/docs/{$}.md")({
         if (redirectTo) {
           return new Response(null, {
             status: 308,
-            headers: { Location: `${redirectTo}.md` },
+            headers: { Location: redirectTo.markdown },
           });
         }
 

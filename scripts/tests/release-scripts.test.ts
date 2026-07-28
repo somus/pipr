@@ -670,10 +670,10 @@ describe("check-release-metadata", () => {
 
   it("rejects documentation that claims publishing runs from release.published", () => {
     const repository = copyRepositoryFixture();
-    const developmentPath = path.join(repository, "apps/docs/content/docs/project/development.mdx");
+    const documentationPath = path.join(repository, "apps/docs/content/docs/guide/quickstart.mdx");
     write(
-      developmentPath,
-      `${readFileSync(developmentPath, "utf8")}\nPublishing runs directly from release.published.\n`,
+      documentationPath,
+      `${readFileSync(documentationPath, "utf8")}\nPublishing runs directly from release.published.\n`,
     );
 
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);

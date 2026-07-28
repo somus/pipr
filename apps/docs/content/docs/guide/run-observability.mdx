@@ -1,41 +1,17 @@
 ---
 title: "Debug captured runs"
-description: "List, diagnose, and download Pipr run bundles from local storage and GitHub Actions."
+description: "Find, diagnose, inspect, and download Pipr run evidence."
 ---
 
-Pipr captures structured evidence for every hosted review, command, and verifier run. Use `pipr runs` to find slow phases, failed publication calls, invalid-output repairs, dropped findings, and missing evidence without rerunning the model.
+Pipr captures structured evidence for hosted reviews, commands, and verifier runs. Use `pipr runs` to diagnose slow phases, retries, invalid output, dropped findings, and publication failures without rerunning the model.
 
-GitHub Actions uploads a content-free metadata bundle by default. When age recipients are configured, it also uploads an encrypted diagnostic bundle containing redacted prompts, visible model output, diffs, and validation data. GitHub access discovers the package; only an age identity can decrypt diagnostic content.
+## Understand capture protection
 
-Automatic remote discovery and download are GitHub-only. Other hosts still use the same provider-neutral recorder, and trusted webhook or local stores remain available on every host. If custom CI persists a protected package, diagnose it with `pipr runs inspect`.
+GitHub Actions uploads content-free metadata by default. When you configure age recipients, it also uploads encrypted diagnostics containing redacted prompts, visible model output, diffs, and validation evidence.
 
-## List runs for a change request
+GitHub access permits artifact discovery and download. A matching local age identity is required to decrypt diagnostic content. Other code hosts can use local or webhook stores, or pass a protected package to `pipr runs inspect`.
 
-Pass a pull or merge request number from a repository checkout:
-
-```bash
-pipr runs list --pr 42
-```
-
-Pass the full provider URL when you are outside a checkout:
-
-```bash
-pipr runs list --pr https://github.com/owner/repository/pull/42
-```
-
-Pipr merges the selected local store with GitHub Actions records and removes duplicates by execution ID. The `PROTECTION` column reports `plaintext`, `metadata`, `age`, or `unknown` independently from artifact availability. A run can report `available`, `in-progress`, `expired`, `capture-failed`, `upload-failed`, or `indeterminate-missing`.
-
-Pipr attempts anonymous GitHub artifact reads. Set `PIPR_GITHUB_TOKEN` or `GITHUB_TOKEN` with Actions read access when the artifact is not anonymously readable. The token discovers the package but does not decrypt diagnostics.
-
-Use `--host` and `--repository` to override Git remote discovery:
-
-```bash
-pipr runs list --pr 42 --host github --repository owner/repository --json
-```
-
-Non-GitHub selectors filter local stores only; they never call the provider API.
-
-## Diagnose a run
+## Create a diagnostic identity
 
 Generate an X25519 age identity once:
 
@@ -43,144 +19,100 @@ Generate an X25519 age identity once:
 pipr runs keygen
 ```
 
-The command prints the public recipient and the identity path, but never prints the secret identity. Configure the recipient in GitHub Actions as `PIPR_RUN_AGE_RECIPIENTS`. Separate multiple recipients with commas or newlines:
+The command prints the public recipient and the private identity path. Store the recipient in the GitHub repository variable `PIPR_RUN_AGE_RECIPIENTS`.
 
-```text
-PIPR_RUN_AGE_RECIPIENTS=age1team...,age1automation...
-```
+Keep the identity private. The command writes it with restrictive permissions and refuses to overwrite an existing or symlinked path.
 
-Keep the identity file private. `pipr runs keygen` writes it with mode `0600` and refuses to overwrite an existing or symlinked path.
+## List runs
 
-Select the latest completed review for a change request:
+From a repository checkout:
 
 ```bash
-pipr runs show --pr 42
+pipr runs list --pr 123
 ```
 
-Select a specific process by its 32-character execution ID:
+Outside a checkout, pass the full change-request URL:
 
 ```bash
-pipr runs show 0123456789abcdef0123456789abcdef --timeline
+pipr runs list --url "$GITHUB_CHANGE_REQUEST_URL"
 ```
 
-The diagnosis is deterministic and does not call an LLM. It reports the critical path, phase durations, retries, repair attempts, time to first token, tool durations, token and cost usage, CPU and memory data, validation drops, publication failures, and missing evidence.
+Set `PIPR_GITHUB_TOKEN` or `GITHUB_TOKEN` with Actions read access when the artifact is not anonymously readable.
 
-Without a matching identity, an age-protected run still shows its public metadata diagnosis and reports `Diagnostics: locked`. Pass an identity to include the full diagnostic evidence:
+## Diagnose a run
+
+Show the latest completed review:
 
 ```bash
-pipr runs show 0123456789abcdef0123456789abcdef \
+pipr runs show --pr 123
+```
+
+Include decrypted evidence:
+
+```bash
+pipr runs show \
+  --pr 123 \
   --identity ~/.local/state/pipr/keys/run-observability.agekey
 ```
 
-You can repeat `--identity`. `PIPR_RUN_AGE_IDENTITY` selects a default identity path. An explicitly supplied invalid or non-matching identity is an error.
+The diagnosis is deterministic and does not call a model. It reports phase timing, retries, repairs, tool duration, token and cost usage, resource data, validation drops, publication failures, and missing evidence.
 
-Use `--json` when another tool or coding agent will consume the diagnosis:
+Use `--json` for automation. The JSON output remains content-free; download the validated bundle when an authorized process needs prompt, output, or diff files.
+
+## Inspect an existing package
+
+Validate and diagnose a manually downloaded archive or directory:
 
 ```bash
-pipr runs show --pr 42 --json > pipr-diagnosis.json
+pipr runs inspect path/to/package.zip
 ```
 
-The JSON response includes the manifest, spans, deterministic diagnosis, and artifact descriptors. It never includes prompt or model-output bodies; download the validated bundle when an authorized debugging process needs those files.
+Pass `--identity <path>` for encrypted diagnostics. Pipr rejects invalid package structure, unsafe archive entries, schema errors, and hash mismatches.
 
-## Inspect a manually downloaded artifact
+## Download a validated bundle
 
-For custom non-GitHub CI, download the protected package from its storage location, then validate and diagnose it locally:
-
-```bash
-pipr runs inspect ~/Downloads/pipr-run-artifact.tar.gz
-```
-
-Pass the same age identity used by `runs show` to unlock diagnostic evidence:
+Download and unpack a GitHub Actions package:
 
 ```bash
-pipr runs inspect ~/Downloads/pipr-run-artifact.tar.gz \
+pipr runs download \
+  --pr 123 \
   --identity ~/.local/state/pipr/keys/run-observability.agekey \
-  --timeline
+  --output .pipr-runs/downloaded
 ```
 
-`inspect` accepts ZIP and tar.gz archives or extracted directories. Each input must contain exactly one protected package or plaintext Run Bundle. The command applies the same validation and deterministic diagnosis as provider retrieval. Its `--json` output remains content-free.
-
-## Download a bundle
-
-Download and validate an unpacked bundle:
-
-```bash
-pipr runs download 0123456789abcdef0123456789abcdef --output ./pipr-run
-```
-
-Metadata-only packages download directly. An age-protected diagnostic requires a matching identity:
-
-```bash
-pipr runs download 0123456789abcdef0123456789abcdef \
-  --identity ~/.local/state/pipr/keys/run-observability.agekey \
-  --output ./pipr-run
-```
-
-Outside a repository checkout, provide the provider coordinates explicitly:
-
-```bash
-pipr runs download 0123456789abcdef0123456789abcdef \
-  --host github \
-  --repository owner/repository
-```
-
-Add `--archive` to preserve the original GitHub Actions archive beside the validated directory:
-
-```bash
-pipr runs download 0123456789abcdef0123456789abcdef \
-  --output ./pipr-run \
-  --archive
-```
-
-Pipr rejects unexpected files, path traversal, symlinks, invalid schemas, artifact hash mismatches, and archives that expand beyond 64 MiB.
+Add `--archive` to preserve the provider archive beside the validated directory.
 
 ## Capture a local review
 
-Local reviews do not capture bundles unless you opt in. Pass a path to control the store:
-
-```bash
-pipr review --base origin/main --trace ./.pipr-runs
-```
-
-Pass `--trace` without a path to use the platform Pipr state directory, partitioned by repository:
+Local capture is opt-in:
 
 ```bash
 pipr review --base origin/main --trace
 ```
 
-The `pipr runs` commands search both `.pipr-runs` and this repository-partitioned platform state directory when neither `--store` nor `PIPR_RUN_STORE_DIR` is set.
+Pass a path to `--trace` to choose the store. Without an explicit `--store`, `pipr runs` searches `.pipr-runs` and the repository-specific platform state directory.
 
-Trusted webhook and local captures keep their private plaintext behavior. GitHub Actions chooses encrypted diagnostics only when recipients are configured. Operational flags and environment variables control capture independently from `.pipr/config.ts`:
+## Configure capture
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `PIPR_RUN_CAPTURE` | GitHub Actions: `diagnostic` with recipients, otherwise `metadata`; webhooks: `diagnostic` | Set `off`, `metadata`, or `diagnostic`. Diagnostic GitHub capture without recipients publishes metadata only. |
-| `PIPR_RUN_AGE_RECIPIENTS` | none | Comma- or newline-separated public X25519 age recipients for GitHub Actions diagnostics. |
-| `PIPR_RUN_AGE_IDENTITY` | platform state identity path | Select the local identity used by `runs show`, `runs inspect`, and `runs download`. |
-| `PIPR_RUN_STORE_DIR` | `.pipr-runs` in CI; `/var/lib/pipr/runs` for webhooks | Select the filesystem store. |
-| `PIPR_RUN_RETENTION_DAYS` | `14` | Set webhook completed-run retention. |
-| `PIPR_RUN_MAX_BYTES` | `5368709120` | Set the webhook store quota in bytes. |
+Operational settings stay outside `.pipr/config.ts`:
 
-Webhook cleanup removes expired runs first, then the oldest completed runs. A capture is protected only while its recorded process is still active, so a hard-killed process cannot leave a permanent quota exemption.
+| Setting | Purpose |
+| --- | --- |
+| `PIPR_RUN_CAPTURE` | Select `off`, `metadata`, or `diagnostic` |
+| `PIPR_RUN_AGE_RECIPIENTS` | Encrypt GitHub diagnostics for one or more recipients |
+| `PIPR_RUN_AGE_IDENTITY` | Select the default local identity |
+| `PIPR_RUN_STORE_DIR` | Select the local or webhook store |
+| `PIPR_RUN_RETENTION_DAYS` | Set webhook retention |
+| `PIPR_RUN_MAX_BYTES` | Set the webhook store quota |
 
-## Export content-free telemetry
+Recipient rotation affects future runs only. Keep old identities through the provider retention period when older diagnostics remain useful.
 
-Set standard `OTEL_EXPORTER_OTLP_*` and sampling variables to export traces, metrics, and logs over OTLP HTTP/protobuf. Pipr keeps local capture independent from `OTEL_TRACES_SAMPLER`, so disabling trace export does not discard bundle evidence.
+## Export telemetry
 
-OTLP data contains timings, statuses, sizes, hashes, usage, and provider-neutral run metadata. It excludes prompts, model output, source text, stderr snippets, environment values, raw reasoning, and tool payload bodies.
-
-## Update existing CI configuration
-
-Run `pipr init --force --adapters github` only when you intend to regenerate all Pipr-owned starter files. Otherwise, copy the run-artifact step from the current generated GitHub example into the existing workflow.
-
-Existing GitHub workflows without `PIPR_RUN_AGE_RECIPIENTS` automatically publish metadata-only packages. Add the public recipient variable to enable encrypted diagnostics.
-
-The generated GitHub workflow keeps protected packages for 14 days. Pipr does not generate observability artifact wiring or remote retrieval for non-GitHub hosts. Teams can add custom protected-package storage and use `pipr runs inspect`, but Pipr does not promise provider-specific discovery or retention behavior for those hosts.
-
-Recipient rotation affects future runs only. Keep old identities for at least the provider retention window if you still need to decrypt existing packages. Share a diagnostic by sharing the validated decrypted directory through an already authorized channel, not by publishing the identity alongside the provider artifact.
+Set standard `OTEL_EXPORTER_OTLP_*` variables to export content-free traces, metrics, and logs. Exported telemetry contains timings, statuses, sizes, hashes, usage, and provider-neutral identifiers; it excludes prompts, model output, source text, environment values, and tool payload bodies.
 
 ## Next steps
 
-- Read the [CLI reference](../reference/cli) for every `pipr runs` filter and output option.
-- Use [Troubleshooting](/docs/guide/troubleshooting) to map common failures to the first diagnostic command.
-- Review [Trust and security](../concepts/trust-security) before sharing a downloaded diagnostic bundle.
+- Use the [CLI reference](/docs/reference/cli#pipr-runs-list) for every filter and output option.
+- Map a diagnosed failure to its fix in [Troubleshooting](/docs/guide/troubleshooting).
+- Review [Trust and security](/docs/concepts/trust-security#diagnostic-data) before sharing a bundle.

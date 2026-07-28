@@ -14,11 +14,26 @@ describe("docs source config", () => {
   });
 
   it("keeps legacy documentation routes mapped to canonical pages", () => {
-    expect(getLegacyDocRedirect(["guide", "concepts"])).toBe("/docs/concepts");
-    expect(getLegacyDocRedirect(["guide", "runtime"])).toBe("/docs/concepts/runtime");
-    expect(getLegacyDocRedirect(["guide", "comments"])).toBe("/docs/concepts/comments");
-    expect(getLegacyDocRedirect(["guide", "trust-security"])).toBe("/docs/concepts/trust-security");
-    expect(getLegacyDocRedirect(["reference", "development"])).toBe("/docs/project/development");
+    expect(getLegacyDocRedirect(["guide", "concepts"])).toEqual({
+      page: "/docs/concepts",
+      markdown: "/docs/concepts.md",
+      og: "/og/docs/concepts/image.webp",
+    });
+    expect(getLegacyDocRedirect(["reference", "architecture"])).toEqual({
+      page: "/docs/concepts/runtime",
+      markdown: "/docs/concepts/runtime.md",
+      og: "/og/docs/concepts/runtime/image.webp",
+    });
+    expect(getLegacyDocRedirect(["project", "contributing"])).toEqual({
+      page: "https://github.com/somus/pipr/blob/main/CONTRIBUTING.md",
+      markdown: "https://raw.githubusercontent.com/somus/pipr/main/CONTRIBUTING.md",
+      og: "/og/docs/image.webp",
+    });
+    expect(getLegacyDocRedirect(["project", "security"])).toEqual({
+      page: "https://github.com/somus/pipr/blob/main/SECURITY.md",
+      markdown: "https://raw.githubusercontent.com/somus/pipr/main/SECURITY.md",
+      og: "/og/docs/image.webp",
+    });
   });
 
   it("gives every recipe screenshot descriptive alt text", async () => {

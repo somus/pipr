@@ -1,171 +1,103 @@
 ---
 title: "Azure DevOps"
-description: "Run Pipr reviews, commands, and reply verification on Azure DevOps Services or Server."
+description: "Run Pipr reviews and commands on Azure DevOps Services or Server."
 ---
 
-Run Pipr on Azure DevOps Services or Azure DevOps Server 2022 and 2022.1 through the same adapter. Use a trusted service-hook runner by default; pipeline events are supported when the executed pipeline definition is immutable and cannot be changed by pull requests.
+Pipr supports Azure DevOps Services plus Azure DevOps Server 2022 and 2022.1. Use a trusted service-hook worker by default. Use a branch-policy pipeline only when pull request authors cannot change the executed pipeline definition.
 
-## Initialize the adapter
+## Generate the adapter files
 
-Generate the trusted-runner environment template and optional branch-policy pipeline alongside `.pipr/config.ts`:
+Run:
 
 ```bash
 pipr init --adapters azure-devops
 ```
 
-The command creates `azure-devops.pipr.env.example` and `azure-pipelines.pipr.yml`. Copy the environment template's variable names into the trusted runner's secret store, then delete or leave the example values empty.
+This creates `azure-devops.pipr.env.example` and `azure-pipelines.pipr.yml`. Copy variable names into the trusted secret store and keep checked-in example values empty.
 
-Do not put a write-capable Azure token or model-provider key in pull-request-controlled pipeline YAML. Azure build validation can execute the proposed YAML, so a contributor could replace the review step and read those credentials before Pipr starts.
-
-Configure these runner variables:
+Configure:
 
 | Variable | Purpose |
 | --- | --- |
-| `AZURE_DEVOPS_ORGANIZATION` | Azure DevOps Services organization. Omit this when `AZURE_DEVOPS_COLLECTION_URL` is set. |
-| `AZURE_DEVOPS_COLLECTION_URL` | Azure DevOps Server collection root, such as `https://azure.example.com/tfs/DefaultCollection`. |
-| `AZURE_DEVOPS_API_VERSION` | REST API version. Keep `7.1` for Services and Server 2022.1; use `7.0` for Server 2022. |
-| `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` | Entra bearer token for Services, or a narrowly scoped PAT for Services or Server. |
-| Your model provider key | The `apiKeyEnv` configured in `.pipr/config.ts`, such as `DEEPSEEK_API_KEY`. Mark it secret. |
+| `AZURE_DEVOPS_ORGANIZATION` | Azure DevOps Services organization |
+| `AZURE_DEVOPS_COLLECTION_URL` | Server collection root; omit the organization when set |
+| `AZURE_DEVOPS_API_VERSION` | `7.1` for Services and Server 2022.1; `7.0` for Server 2022 |
+| `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` | Services bearer token or narrowly scoped personal access token |
+| Model-provider key | Match the secret name in `.pipr/config.ts` |
 
-Grant the runner identity only the repository permissions it needs: read code, contribute to pull requests, manage PR threads, and create PR statuses.
+Grant read code, contribute to pull requests, manage pull request threads, and create pull request statuses.
 
-## Optional branch-policy pipeline
+## Use a branch-policy pipeline
 
-Use pipeline delivery only when pull request authors cannot change the executed pipeline definition. Azure Repos evaluates pull request validation against merged source and target content, so a repository-owned YAML file can expose the job token and model credential before Pipr starts. Use the trusted service-hook runner for repositories where contributors can propose pipeline changes.
+Use the generated pipeline only when the executed YAML is immutable to pull requests. Azure build validation can execute proposed pipeline content, so an untrusted contributor could replace the review step and read credentials before Pipr starts.
 
-For an immutable Azure Pipeline, add `DEEPSEEK_API_KEY` as a secret pipeline variable and use this pipeline as the branch-policy build validation definition:
+Add the model key as a secret variable and use the generated pipeline as branch-policy build validation. Azure DevOps Services can use `ubuntu-latest`; Server requires a self-hosted agent with Docker and trust for the Server certificate.
 
-```yaml
-trigger: none
+The pipeline receives Azure's `SYSTEM_*` and `BUILD_*` variables automatically. It still requires full git history so Pipr can load base-branch config and construct the diff.
 
-pool:
-  vmImage: ubuntu-latest
+## Configure a trusted service-hook worker
 
-steps:
-  - checkout: self
-    fetchDepth: 0
-    persistCredentials: true
-
-  - bash: |
-      docker run --rm \
-        --volume "$BUILD_SOURCESDIRECTORY:/workspace" \
-        --env TF_BUILD=true \
-        --env BUILD_SOURCESDIRECTORY=/workspace \
-        --env BUILD_BUILDID \
-        --env AZURE_DEVOPS_API_VERSION \
-        --env SYSTEM_COLLECTIONURI \
-        --env SYSTEM_TEAMPROJECT \
-        --env SYSTEM_JOBID \
-        --env BUILD_REPOSITORY_ID \
-        --env SYSTEM_PULLREQUEST_PULLREQUESTID \
-        --env SYSTEM_ACCESSTOKEN \
-        --env DEEPSEEK_API_KEY \
-        "$PIPR_IMAGE" \
-        host-run --host azure-devops
-    displayName: Run Pipr
-    env:
-      PIPR_IMAGE: ghcr.io/somus/pipr:v0.6.3 # x-release-please-version
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-      DEEPSEEK_API_KEY: $(DEEPSEEK_API_KEY)
-```
-
-Azure supplies the remaining `SYSTEM_*` and `BUILD_*` values during branch-policy validation. The full checkout lets Pipr load Trusted Base Config and build the Diff Manifest.
-
-The `ubuntu-latest` hosted image is available on Azure DevOps Services. Azure DevOps Server users must replace that `pool` block with a self-hosted agent pool that has Docker and trusts the Server certificate.
-
-`SYSTEM_COLLECTIONURI` supplies the trusted Services organization or Server collection URL and takes precedence over `AZURE_DEVOPS_COLLECTION_URL` inside a pipeline. For Azure DevOps Server 2022, set the non-secret pipeline variable `AZURE_DEVOPS_API_VERSION=7.0`; Server 2022.1 and Azure DevOps Services use the default `7.1`. Both the generated pipeline and the example above pass this variable into the Pipr container.
-
-## Commands and reply verification
-
-Run one trusted checkout behind an HTTPS reverse proxy:
+Run one worker for one checkout:
 
 ```bash
-export AZURE_DEVOPS_ORGANIZATION="your-organization"
-export AZURE_DEVOPS_PROJECT="your-project"
-export AZURE_DEVOPS_TOKEN="..."
+export AZURE_DEVOPS_ORGANIZATION="example"
+export AZURE_DEVOPS_PROJECT="project"
+export AZURE_DEVOPS_BEARER_TOKEN="..."
 export PIPR_AZURE_SUBSCRIPTION_ID="..."
 export PIPR_WEBHOOK_SECRET="..."
 export DEEPSEEK_API_KEY="..."
 
 pipr webhook serve \
   --host azure-devops \
-  --repository repository-id \
+  --repository repository \
   --workspace /srv/pipr/repository \
   --database /var/lib/pipr/webhooks.sqlite \
   --hostname 127.0.0.1 \
   --port 8787
 ```
 
-For Azure DevOps Server, replace the organization variable with the collection root and select the matching REST API:
+For Azure DevOps Server, use `AZURE_DEVOPS_COLLECTION_URL`, `AZURE_DEVOPS_API_VERSION`, and `AZURE_DEVOPS_TOKEN`.
 
-```bash
-export AZURE_DEVOPS_COLLECTION_URL="https://azure.example.com/tfs/DefaultCollection"
-export AZURE_DEVOPS_API_VERSION="7.0" # Server 2022; use 7.1 for Server 2022.1
-export AZURE_DEVOPS_PROJECT="your-project"
-export AZURE_DEVOPS_TOKEN="..."
-```
+Prefer an Entra service principal or managed identity for Services. A personal access token used for full command support needs `Code (Read & write)`, `Code (Status)`, `Identity (Read)`, and `Security (Manage)`. If commands are disabled, omit the identity and security scopes.
 
-Use a Microsoft Entra service principal or managed identity for Azure DevOps Services when possible, and pass its access token through `AZURE_DEVOPS_BEARER_TOKEN`. `AZURE_DEVOPS_TOKEN` accepts a PAT for Azure DevOps Server and for local Services testing; scope it to one organization or collection and revoke it after use. Collection URLs must use HTTPS because Pipr sends the Azure credential to that origin. Install any private certificate authority in the runner and Pipr container trust stores before connecting to an internal Server URL.
+Create service-hook subscriptions for:
 
-For full local adapter parity, create an organization-scoped PAT with `Code (Read & write)`, `Code (Status)`, `Identity (Read)`, and `Security (Manage)`. Pipr only reads the Security ACL API, but Azure DevOps exposes no read-only PAT scope for that API; its documented security scope is `vso.security_manage`. If commands are disabled, omit `Identity (Read)` and `Security (Manage)` because repository permission evaluation is not needed.
+- `git.pullrequest.created`
+- `git.pullrequest.updated` with resource version `1.0`
+- `ms.vss-code.git-pullrequest-comment-event`
 
-Create Azure DevOps service-hook subscriptions for:
+Authenticate each hook with HTTP Basic auth whose password is `PIPR_WEBHOOK_SECRET`, or use an HTTPS proxy that adds `X-Pipr-Webhook-Secret`. Set `PIPR_AZURE_SUBSCRIPTION_ID` to the subscription ID and run a separate worker for each subscription.
 
-- `git.pullrequest.created`;
-- `git.pullrequest.updated`;
-- `ms.vss-code.git-pullrequest-comment-event`.
-
-For `git.pullrequest.updated`, select resource version `1.0`. Azure DevOps currently advertises `1.0` and the preview contract for this event; using an unrelated API version causes Pipr to reject the payload shape.
-
-Configure each webhook with either HTTP Basic authentication whose password equals `PIPR_WEBHOOK_SECRET`, or an HTTPS proxy that adds `X-Pipr-Webhook-Secret`. Set `PIPR_AZURE_SUBSCRIPTION_ID` to the subscription ID and run a separate worker for each subscription.
-
-The worker resolves `--repository` through Azure DevOps, then requires the event's host instance ID (`account.id` on Services or `server.id` on Server), project ID, repository ID, and subscription ID to match. When the payload includes an organization or collection URL, the worker verifies that too. It deduplicates the event and notification IDs, acknowledges accepted deliveries before model work, and drains the durable SQLite queue serially.
-
-Pipr rejects payloads larger than 2 MiB, bounds pending queue data to 1,000 deliveries and 32 MiB, retains the newest 10,000 terminal records, and retries failed work up to three times. Keep the listener on loopback behind your reverse proxy, persist the SQLite directory, and dedicate the workspace to this worker.
-
-Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) to run this command from the versioned Pipr image with persistent state and a container health check.
-
-## Command permissions
-
-Pipr resolves the comment actor through Azure DevOps Identities, expands inherited group membership, and queries the Git Repositories security namespace with extended effective permissions. Services uses the hosted identity endpoint; Server uses the collection-local identity endpoint. Explicit and inherited denies override allows. Pipr maps read, pull-request contribution, repository contribution, policy editing, and permission management into its provider-neutral `read`, `triage`, `write`, `maintain`, and `admin` levels.
-
-The runner token needs identity-read and security-manage scope for command authorization. If Azure DevOps returns no unique active identity or the ACL cannot be evaluated, Pipr fails closed.
+Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for persistent state, certificates, and health checks.
 
 ## Supported behavior
 
-The Azure DevOps adapter supports the same review and publication behavior on Services, Server 2022, and Server 2022.1:
+Services and supported Server releases provide:
 
-- branch-policy and service-hook PR creation and update events;
-- Trusted Base Config and exact source-head checkout;
-- Main Review Comment upsert through unpositioned PR threads;
-- right-side, left-side, multiline, delete, and rename Inline Review Comments;
-- iteration-aware `changeTrackingId` anchors with one-based UTF-16 offsets;
-- prior-state loading and marker deduplication;
-- `@pipr` commands with inherited effective repository permissions;
-- reply-driven verification and thread resolution;
-- per-task and aggregate pull request statuses;
-- stale-head rejection before writes.
+- pull request creation and update reviews
+- trusted config and exact-head checkout
+- main comments and left-side or right-side multiline findings
+- `@pipr` commands with effective repository permission checks
+- verifier replies and thread resolution
+- task and aggregate pull request statuses
+- stale-head rejection before publication
 
-Azure DevOps doesn't document a REST payload for directly applicable suggested changes. Pipr renders suggested fixes as ordinary fenced code until Azure publishes or a stable live contract proves a native format. Older Azure DevOps Server and TFS releases are outside this support boundary because they require REST API versions older than `7.0`.
+Azure DevOps does not expose a stable native suggested-change format, so Pipr renders replacement code in fenced blocks.
 
-## Azure DevOps review output
-
-Azure DevOps displays the task summary in an unpositioned pull request thread, anchors findings through iteration-aware change tracking, and publishes pull request statuses.
+## Review output
 
 <img
-  alt="Azure DevOps pull request showing a Pipr review summary and successful status for the event-relay retry change"
+  alt="Azure DevOps pull request showing a Pipr review summary and successful status"
   src="/images/pipr/providers/azure-devops-review.png"
 />
 
 <img
-  alt="Azure DevOps pull request diff showing a Pipr inline thread with fenced replacement code for duplicate webhook delivery"
+  alt="Azure DevOps pull request diff showing a Pipr inline finding with replacement code"
   src="/images/pipr/providers/azure-devops-inline.png"
 />
 
 ## Next steps
 
-Use these pages to tune review policy and validate the trust boundary.
-
-- [Configure Pipr](/docs/guide/configuration) to select Review Tasks and command permission levels.
-- [Review the trust model](/docs/concepts/trust-security) before enabling fork or untrusted-contributor reviews.
-- [Use local runs](/docs/guide/local-runs) to validate `.pipr/config.ts` before enabling the branch policy.
+- Use [Configuration](/docs/guide/configuration) to select tasks and command permissions.
+- Read [Trust and security](/docs/concepts/trust-security) before accepting untrusted contributions.
+- Run [Local reviews](/docs/guide/local-runs) before enabling the pipeline or service hooks.

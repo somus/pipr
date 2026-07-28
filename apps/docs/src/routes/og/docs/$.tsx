@@ -34,7 +34,7 @@ function legacyOgRedirect(segments: string[]): Response | undefined {
   if (!redirectTo) return undefined;
   return new Response(null, {
     status: 308,
-    headers: { Location: `/og${redirectTo}/image.webp` },
+    headers: { Location: redirectTo.og },
   });
 }
 
