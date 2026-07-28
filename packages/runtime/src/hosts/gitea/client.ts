@@ -13,6 +13,9 @@ export type GiteaReviewComment = {
   line?: number;
   side?: "RIGHT" | "LEFT";
 };
+export type GiteaReviewCommentReplyResult =
+  | { kind: "published"; id: string }
+  | { kind: "unsupported" };
 
 const repositorySchema = z.looseObject({
   id: z.number().int().positive(),
@@ -148,7 +151,7 @@ export type GiteaClient = {
     changeNumber: number,
     commentId: string,
     body: string,
-  ): Promise<string>;
+  ): Promise<GiteaReviewCommentReplyResult>;
   setStatus(
     owner: string,
     repository: string,
@@ -249,12 +252,19 @@ export function createGiteaClient(
       return review.id;
     },
     async replyToReviewComment(owner, repository, changeNumber, commentId, body) {
-      const reply = await api.json(
-        `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/pulls/${changeNumber}/comments/${encodeURIComponent(commentId)}/replies`,
-        reviewCommentSchema,
-        jsonRequest("POST", { body }),
-      );
-      return reply.id;
+      try {
+        const reply = await api.json(
+          `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/pulls/${changeNumber}/comments/${encodeURIComponent(commentId)}/replies`,
+          reviewCommentSchema,
+          jsonRequest("POST", { body }),
+        );
+        return { kind: "published", id: reply.id };
+      } catch (error) {
+        if (error instanceof CodeHostHttpError && (error.status === 404 || error.status === 405)) {
+          return { kind: "unsupported" };
+        }
+        throw error;
+      }
     },
     async setStatus(owner, repository, sha, name, state, description) {
       const status = await api.json(

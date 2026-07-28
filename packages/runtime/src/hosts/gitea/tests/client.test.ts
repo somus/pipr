@@ -203,7 +203,10 @@ describe("Gitea-compatible API client", () => {
       line: 5,
       side: "RIGHT",
     });
-    await expect(client.replyToReviewComment("acme", "pipr", 7, "11", "reply")).resolves.toBe("12");
+    await expect(client.replyToReviewComment("acme", "pipr", 7, "11", "reply")).resolves.toEqual({
+      kind: "published",
+      id: "12",
+    });
     await expect(
       client.setStatus("acme", "pipr", "head", "review", "success", "Done."),
     ).resolves.toBe("99");
@@ -231,6 +234,38 @@ describe("Gitea-compatible API client", () => {
         body: { context: "pipr/review", state: "success", description: "Done." },
       },
     ]);
+  });
+
+  it("treats unavailable review-comment reply endpoints as unsupported", async () => {
+    const statuses = [404, 405];
+    const client = createGiteaClient(
+      {
+        host: "gitea",
+        env: { GITEA_TOKEN: "test-token", GITEA_API_URL: "https://gitea.test/api/v1" },
+      },
+      async () => new Response("Unavailable", { status: statuses.shift() }),
+    );
+
+    await expect(client.replyToReviewComment("acme", "pipr", 7, "11", "reply")).resolves.toEqual({
+      kind: "unsupported",
+    });
+    await expect(client.replyToReviewComment("acme", "pipr", 7, "11", "reply")).resolves.toEqual({
+      kind: "unsupported",
+    });
+  });
+
+  it("surfaces other review-comment reply failures", async () => {
+    const client = createGiteaClient(
+      {
+        host: "gitea",
+        env: { GITEA_TOKEN: "test-token", GITEA_API_URL: "https://gitea.test/api/v1" },
+      },
+      async () => new Response("Forbidden", { status: 403 }),
+    );
+
+    await expect(
+      client.replyToReviewComment("acme", "pipr", 7, "11", "reply"),
+    ).rejects.toMatchObject({ status: 403 });
   });
 });
 

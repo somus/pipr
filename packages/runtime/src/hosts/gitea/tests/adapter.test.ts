@@ -333,7 +333,7 @@ class FakeGiteaClient implements GiteaClient {
       authorLogin: "pipr-bot",
     };
     this.reviewComments.push(comment);
-    return comment.id;
+    return { kind: "published" as const, id: comment.id };
   };
   setStatus = async () => "status-1";
 }
