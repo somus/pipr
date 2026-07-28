@@ -79,7 +79,7 @@ GHES requires a self-hosted runner and does not support `actions/upload-artifact
 pipr init --github-enterprise-server
 ```
 
-This selects the `self-hosted` runner label and the GHES-supported `actions/upload-artifact@v3.2.2-node20` release. If your runners use a more specific label, add `--github-runner <label>`. The generated `runs-on` value accepts one label; edit the workflow after generation when your runner selection requires a label array or group.
+This selects runners with both the `self-hosted` and `linux` labels because Pipr is a Docker action, and it uses the GHES-supported `actions/upload-artifact@v3.2.2-node20` release. If your Linux runners use a more specific label, add `--github-runner <label>`. The override accepts one label; edit the workflow after generation when your runner selection requires a label array or group.
 
 ### Use internal mirrors
 

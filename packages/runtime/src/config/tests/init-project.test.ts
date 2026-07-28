@@ -307,7 +307,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     });
 
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
-    expect(workflow).toContain('runs-on: "self-hosted"');
+    expect(workflow).toContain("runs-on: [self-hosted, linux]");
     expect(workflow).toContain("uses: actions/upload-artifact@v3.2.2-node20");
     expect(workflow).toContain("include-hidden-files: true");
   });

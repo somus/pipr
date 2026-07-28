@@ -61,8 +61,8 @@ Options:
 | `--minimal` | false | Scaffold only `.pipr/config.ts` without `package.json` or `tsconfig.json`. |
 | `--runtime-image <image>` | Pipr release image | Container image used by generated adapter setup. |
 | `--checkout-action <ref>` | `actions/checkout@v6` | Checkout action reference used by generated GitHub setup. |
-| `--github-runner <label>` | `ubuntu-latest` | Runner label used by generated GitHub setup. Use `self-hosted` or an instance-specific label for GHES. |
-| `--github-enterprise-server` | false | Generate a GHES-compatible workflow with a self-hosted runner and supported artifact action. |
+| `--github-runner <label>` | `ubuntu-latest` | Runner label used by generated GitHub setup. Use an instance-specific Linux runner label to override the GHES default. |
+| `--github-enterprise-server` | false | Generate a GHES-compatible workflow targeting `[self-hosted, linux]` with a supported artifact action. |
 | `--force` | false | Overwrite existing Pipr files. |
 
 Examples:

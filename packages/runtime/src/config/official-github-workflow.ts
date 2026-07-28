@@ -22,8 +22,11 @@ export function renderOfficialGithubWorkflow(
   options: RenderOfficialGithubWorkflowOptions = {},
 ): string {
   const relativeConfigDir = options.relativeConfigDir ?? ".pipr";
-  const githubRunner =
-    options.githubRunner ?? (options.githubEnterpriseServer ? "self-hosted" : "ubuntu-latest");
+  const githubRunner = options.githubRunner
+    ? JSON.stringify(options.githubRunner)
+    : options.githubEnterpriseServer
+      ? "[self-hosted, linux]"
+      : JSON.stringify("ubuntu-latest");
   const lines = [
     "name: pipr",
     "",
@@ -47,7 +50,7 @@ export function renderOfficialGithubWorkflow(
     "",
     "jobs:",
     "  review:",
-    `    runs-on: ${JSON.stringify(githubRunner)}`,
+    `    runs-on: ${githubRunner}`,
     "    steps:",
     `      - uses: ${options.checkoutAction ?? "actions/checkout@v6"}`,
     "        with:",
