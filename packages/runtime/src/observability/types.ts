@@ -12,6 +12,9 @@ export type RunAgentAttemptResult = {
     inputTokens: number;
     outputTokens: number;
     costUsd: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    cacheUsageStatus?: "complete" | "partial" | "unavailable";
   };
   error?: string;
 };

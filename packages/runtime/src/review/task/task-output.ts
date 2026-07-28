@@ -2,10 +2,12 @@ import type {
   CheckHandle,
   CommentValue,
   PathFilter,
+  PiprRunSummary,
   PriorReview,
   ReviewFinding,
 } from "@usepipr/sdk";
 import { z } from "zod";
+import { summarizeDiffContextCoverage } from "../../pi/diff-context-coverage.js";
 import type { ReviewResult } from "../../types.js";
 import type { PiRunStats } from "../agent/review-run.js";
 import { mainCommentTitles } from "../comment-branding.js";
@@ -108,6 +110,7 @@ export function reviewStatsForRuns(
     return undefined;
   }
   const usage = aggregateReviewUsage(runs);
+  const coverage = runs.map((run) => run.diffContextCoverage).filter((item) => item !== undefined);
   return {
     models: collectReviewModels(runs),
     agentRuns: runs.length,
@@ -116,6 +119,37 @@ export function reviewStatsForRuns(
     outputTokens: usage.outputTokens,
     costUsd: usage.costUsd,
     usageStatus: usage.status,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    cacheUsageStatus: usage.cacheStatus,
+    ...(coverage.length > 0 ? { diffContextCoverage: summarizeDiffContextCoverage(coverage) } : {}),
+  };
+}
+
+export function runSummaryStatsFields(
+  stats: ReviewStats | undefined,
+): Pick<
+  PiprRunSummary,
+  | "agentRuns"
+  | "inputTokens"
+  | "outputTokens"
+  | "costUsd"
+  | "usageStatus"
+  | "cacheReadTokens"
+  | "cacheWriteTokens"
+  | "cacheUsageStatus"
+  | "diffContextCoverage"
+> {
+  return {
+    agentRuns: stats?.agentRuns ?? 0,
+    inputTokens: stats?.inputTokens ?? 0,
+    outputTokens: stats?.outputTokens ?? 0,
+    costUsd: stats?.costUsd ?? 0,
+    usageStatus: stats?.usageStatus ?? "unavailable",
+    cacheReadTokens: stats?.cacheReadTokens ?? 0,
+    cacheWriteTokens: stats?.cacheWriteTokens ?? 0,
+    cacheUsageStatus: stats?.cacheUsageStatus ?? "unavailable",
+    ...(stats?.diffContextCoverage ? { diffContextCoverage: stats.diffContextCoverage } : {}),
   };
 }
 
@@ -135,6 +169,18 @@ function aggregateReviewUsage(runs: PiRunStats[]): {
   outputTokens: number;
   costUsd: number;
   status: ReviewStats["usageStatus"];
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cacheStatus: NonNullable<ReviewStats["cacheUsageStatus"]>;
+} {
+  return { ...aggregateCoreUsage(runs), ...aggregateCacheUsage(runs) };
+}
+
+function aggregateCoreUsage(runs: PiRunStats[]): {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  status: ReviewStats["usageStatus"];
 } {
   let inputTokens = 0;
   let outputTokens = 0;
@@ -142,9 +188,7 @@ function aggregateReviewUsage(runs: PiRunStats[]): {
   let reportedRuns = 0;
   let partialUsage = false;
   for (const run of runs) {
-    if (!run.usage) {
-      continue;
-    }
+    if (!run.usage) continue;
     reportedRuns += 1;
     const input = addReportedUsage(inputTokens, run.usage.inputTokens, Number.isSafeInteger);
     const output = addReportedUsage(outputTokens, run.usage.outputTokens, Number.isSafeInteger);
@@ -159,13 +203,67 @@ function aggregateReviewUsage(runs: PiRunStats[]): {
     inputTokens,
     outputTokens,
     costUsd,
-    status:
-      reportedRuns === 0
-        ? "unavailable"
-        : reportedRuns < runs.length || partialUsage
-          ? "partial"
-          : "complete",
+    status: aggregateUsageStatus(reportedRuns, runs.length, partialUsage),
   };
+}
+
+function aggregateCacheUsage(runs: PiRunStats[]): {
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cacheStatus: NonNullable<ReviewStats["cacheUsageStatus"]>;
+} {
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
+  let reportedRuns = 0;
+  let partialUsage = false;
+  for (const run of runs) {
+    if (!hasReportedCacheUsage(run)) continue;
+    const usage = run.usage;
+    reportedRuns += 1;
+    const cacheRead = addReportedUsage(
+      cacheReadTokens,
+      usage.cacheReadTokens,
+      Number.isSafeInteger,
+    );
+    const cacheWrite = addReportedUsage(
+      cacheWriteTokens,
+      usage.cacheWriteTokens,
+      Number.isSafeInteger,
+    );
+    cacheReadTokens = cacheRead.total;
+    cacheWriteTokens = cacheWrite.total;
+    partialUsage ||=
+      usage.cacheUsageStatus === "partial" || !cacheRead.complete || !cacheWrite.complete;
+  }
+  return {
+    cacheReadTokens,
+    cacheWriteTokens,
+    cacheStatus: aggregateUsageStatus(reportedRuns, runs.length, partialUsage),
+  };
+}
+
+function hasReportedCacheUsage(run: PiRunStats): run is PiRunStats & {
+  usage: PiRunStats["usage"] & {
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    cacheUsageStatus: "complete" | "partial";
+  };
+} {
+  return (
+    run.usage?.cacheReadTokens !== undefined &&
+    run.usage.cacheWriteTokens !== undefined &&
+    run.usage.cacheUsageStatus !== undefined &&
+    run.usage.cacheUsageStatus !== "unavailable"
+  );
+}
+
+function aggregateUsageStatus(
+  reported: number,
+  total: number,
+  partial: boolean,
+): "complete" | "partial" | "unavailable" {
+  if (reported === 0) return "unavailable";
+  return reported < total || partial ? "partial" : "complete";
 }
 
 function addReportedUsage(

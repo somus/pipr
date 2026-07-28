@@ -175,6 +175,16 @@ describe("file run recorder", () => {
     });
     recorder.logSink.log({
       level: "info",
+      event: "review validated",
+      fields: {
+        contextFilesTotal: 4,
+        contextFilesCovered: 3,
+        contextRangesTotal: 10,
+        contextRangesCovered: 8,
+      },
+    });
+    recorder.logSink.log({
+      level: "info",
       event: "pi start",
       fields: {
         attemptId: "attributed",
@@ -192,7 +202,14 @@ describe("file run recorder", () => {
     recorder.logSink.log({
       level: "info",
       event: "pi run",
-      fields: { attemptId: "attributed", exitCode: 0, durationMs: 10 },
+      fields: {
+        attemptId: "attributed",
+        exitCode: 0,
+        durationMs: 10,
+        cacheReadTokens: 90,
+        cacheWriteTokens: 9,
+        cacheUsageStatus: "complete",
+      },
     });
     const attempt = await recorder.observer.beginAgentAttempt({
       attemptType: "initial",
@@ -229,6 +246,21 @@ describe("file run recorder", () => {
     });
     expect(spans.find((span) => span.name === "pipr.agent.run_budget")).toMatchObject({
       attributes: { "pipr.used": 2, "pipr.limit": 4 },
+    });
+    expect(spans.find((span) => span.name === "pipr.review.validate")).toMatchObject({
+      attributes: {
+        "pipr.contextFilesTotal": 4,
+        "pipr.contextFilesCovered": 3,
+        "pipr.contextRangesTotal": 10,
+        "pipr.contextRangesCovered": 8,
+      },
+    });
+    expect(spans.find((span) => span.name === "gen_ai.chat")).toMatchObject({
+      attributes: {
+        "pipr.usage.cache_read_tokens": 90,
+        "pipr.usage.cache_write_tokens": 9,
+        "pipr.usage.cache_status": "complete",
+      },
     });
     for (const spanName of ["gen_ai.chat", "pipr.agent.attempt_resources"]) {
       expect(spans.find((span) => span.name === spanName)).toMatchObject({

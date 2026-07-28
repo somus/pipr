@@ -18,6 +18,7 @@ import {
 } from "../../diff/structural-analysis.js";
 import { selectRuntimeTasks } from "../../host-run/entry-dispatch.js";
 import type { RunObserver } from "../../observability/types.js";
+import { diffContextCoverageArtifact } from "../../pi/diff-context-coverage.js";
 import { type RuntimeLog, runLoggedPhase } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
 import type {
@@ -58,6 +59,7 @@ import {
   type RuntimeCheckSink,
   type RuntimeTaskCheckResult,
   reviewStatsForRuns,
+  runSummaryStatsFields,
   runtimeTaskCheckResult,
   trackResultFindingScope,
 } from "./task-output.js";
@@ -281,6 +283,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   const failedTask = taskResults.find((result) => result.error !== undefined);
   if (failedTask) {
     publishFailedRunTaskChecks(options, taskChecks);
+    await recordDiffContextCoverageArtifact(options, piRuns);
     throw failedTask.error instanceof Error
       ? failedTask.error
       : new Error(String(failedTask.error));
@@ -310,6 +313,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   });
   if (commandResponse) {
     publishTaskChecks(options.checkSink, commandResponse.taskChecks);
+    await recordDiffContextCoverageArtifact(options, piRuns);
     return commandResponse;
   }
   assertReviewCommentOutput(output, options.commandInvocation !== undefined);
@@ -375,7 +379,16 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     droppedFindings: validated.droppedFindings.length,
     inlineDrafts: publishing.inlineCommentDrafts.length,
     threadActions: verifier.threadActions.length,
+    ...(stats?.diffContextCoverage
+      ? {
+          contextFilesTotal: stats.diffContextCoverage.files.total,
+          contextFilesCovered: stats.diffContextCoverage.files.covered,
+          contextRangesTotal: stats.diffContextCoverage.ranges.total,
+          contextRangesCovered: stats.diffContextCoverage.ranges.covered,
+        }
+      : {}),
   });
+  await recordDiffContextCoverageArtifact(options, piRuns);
   await Promise.all([
     recordRuntimeArtifact(options, {
       kind: "output",
@@ -443,6 +456,23 @@ async function recordRuntimeArtifact(
       error: error instanceof Error ? error.message : "unknown capture error",
     });
   }
+}
+
+async function recordDiffContextCoverageArtifact(
+  options: Pick<RunTaskRuntimeOptions, "runObserver" | "log">,
+  piRuns: readonly PiRunStats[],
+): Promise<void> {
+  const content = diffContextCoverageArtifact(
+    piRuns.map((piRun) => piRun.diffContextCoverage).filter((coverage) => coverage !== undefined),
+  );
+  if (!content) return;
+  await recordRuntimeArtifact(options, {
+    kind: "diff-context-coverage",
+    name: "diff-context-coverage.json",
+    mediaType: "application/json",
+    content,
+    sensitive: true,
+  });
 }
 
 function taskRuntimeProvider(options: RunTaskRuntimeOptions, config: PiprConfig): ProviderConfig {
@@ -570,14 +600,6 @@ function runSummary(options: {
   models: string[];
   stats: ReturnType<typeof reviewStatsForRuns>;
 }): PiprRunSummary {
-  const stats: Partial<NonNullable<ReturnType<typeof reviewStatsForRuns>>> = options.stats ?? {};
-  const {
-    agentRuns = 0,
-    inputTokens = 0,
-    outputTokens = 0,
-    costUsd = 0,
-    usageStatus = "unavailable",
-  } = stats;
   return {
     ...options.run,
     baseSha: options.options.event.change.base.sha,
@@ -585,11 +607,7 @@ function runSummary(options: {
     tasks: options.selectedTasks,
     durationMs: options.durationMs,
     models: options.models,
-    agentRuns,
-    inputTokens,
-    outputTokens,
-    costUsd,
-    usageStatus,
+    ...runSummaryStatsFields(options.stats),
   };
 }
 

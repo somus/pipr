@@ -263,6 +263,20 @@ describe("Run Bundle signals", () => {
 });
 
 describe("Run Bundle artifact truncation", () => {
+  it("accepts protected Diff Manifest context coverage artifacts", () => {
+    expect(
+      runBundleArtifactSchema.parse({
+        kind: "diff-context-coverage",
+        path: "artifacts/diff-context-coverage.json",
+        mediaType: "application/json",
+        sizeBytes: 100,
+        sha256: "a".repeat(64),
+        sensitive: true,
+        truncated: false,
+      }),
+    ).toMatchObject({ kind: "diff-context-coverage", sensitive: true });
+  });
+
   it("records the original size and hash when an artifact is truncated or omitted", () => {
     const truncated = {
       kind: "output" as const,

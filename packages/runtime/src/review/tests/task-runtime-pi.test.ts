@@ -617,6 +617,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
   it("runs one complete condensed manifest when maxShards is one", async () => {
     const prompts: string[] = [];
+    const contextModes: Array<string | undefined> = [];
 
     await runRuntime({
       plan: defaultReviewPlan(),
@@ -625,12 +626,14 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       env: { ...process.env, PATH: "" },
       piRunner: async (options) => {
         prompts.push(options.prompt);
+        contextModes.push(options.diffContext?.mode);
         return noFindingsPiResult();
       },
     });
 
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain('"mode": "condensed"');
+    expect(contextModes).toEqual(["condensed"]);
     expectPromptCoverage(prompts, 8);
   });
 
@@ -1291,6 +1294,19 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
             inputTokens: call * 100,
             outputTokens: call * 10,
             costUsd: call * 0.001,
+            cacheReadTokens: call * 20,
+            cacheWriteTokens: call * 2,
+            cacheUsageStatus: "complete" as const,
+          },
+          diffContextCoverage: {
+            files: [
+              {
+                path: "src/example.ts",
+                rangeIds: ["range-1", "range-2"],
+                coveredRangeIds: [call === 3 ? "range-2" : "range-1"],
+                fullFile: false,
+              },
+            ],
           },
         };
         return call < 3
@@ -1310,6 +1326,13 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       outputTokens: 60,
       costUsd: 0.006,
       usageStatus: "complete",
+      cacheReadTokens: 120,
+      cacheWriteTokens: 12,
+      cacheUsageStatus: "complete",
+      diffContextCoverage: {
+        files: { total: 1, covered: 1 },
+        ranges: { total: 2, covered: 2 },
+      },
     });
     expect(result.run).toMatchObject({
       models: ["deepseek-v4-pro", "fallback-model"],
@@ -1318,9 +1341,97 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       outputTokens: 60,
       costUsd: 0.006,
       usageStatus: "complete",
+      cacheReadTokens: 120,
+      cacheWriteTokens: 12,
+      cacheUsageStatus: "complete",
+      diffContextCoverage: {
+        files: { total: 1, covered: 1 },
+        ranges: { total: 2, covered: 2 },
+      },
     });
     expect(result.publicationPlan.metadata.stats?.durationMs).toBeLessThan(60_000);
     expect(result.mainComment).toContain("<summary>📊 Review completed in ");
+  });
+
+  it("keeps exact diff context coverage in a sensitive diagnostic artifact", async () => {
+    const artifacts: Array<{
+      kind: string;
+      content: string;
+      sensitive: boolean;
+    }> = [];
+    const result = await runRuntime({
+      plan: defaultReviewPlan(),
+      runObserver: {
+        async recordArtifact(artifact) {
+          artifacts.push(artifact);
+        },
+        async beginAgentAttempt() {
+          return { event() {}, async finish() {} };
+        },
+      },
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        diffContextCoverage: {
+          files: [
+            {
+              path: "src/private-file.ts",
+              rangeIds: ["private-range"],
+              coveredRangeIds: [],
+              fullFile: false,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(artifacts).toContainEqual(
+      expect.objectContaining({
+        kind: "diff-context-coverage",
+        sensitive: true,
+        content: expect.stringContaining("src/private-file.ts"),
+      }),
+    );
+    expect(result.mainComment).not.toContain("src/private-file.ts");
+  });
+
+  it("keeps exact diff context coverage when a review task fails", async () => {
+    const artifacts: Array<{ kind: string; content: string; sensitive: boolean }> = [];
+
+    await expect(
+      runRuntime({
+        plan: defaultReviewPlan(),
+        runObserver: {
+          async recordArtifact(artifact) {
+            artifacts.push(artifact);
+          },
+          async beginAgentAttempt() {
+            return { event() {}, async finish() {} };
+          },
+        },
+        piRunner: async () => ({
+          ...noFindingsPiResult(),
+          exitCode: 42,
+          diffContextCoverage: {
+            files: [
+              {
+                path: "src/private-failure.ts",
+                rangeIds: ["private-failure-range"],
+                coveredRangeIds: [],
+                fullFile: false,
+              },
+            ],
+          },
+        }),
+      }),
+    ).rejects.toThrow("Pi agent failed");
+
+    expect(artifacts).toContainEqual(
+      expect.objectContaining({
+        kind: "diff-context-coverage",
+        sensitive: true,
+        content: expect.stringContaining("src/private-failure.ts"),
+      }),
+    );
   });
 
   it("keeps aggregate usage safe when reported run totals overflow", async () => {
@@ -1522,6 +1633,16 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           outputTokens: 10,
           costUsd: 0.001,
         },
+        diffContextCoverage: {
+          files: [
+            {
+              path: "src/a.ts",
+              rangeIds: ["range-1", "range-2"],
+              coveredRangeIds: ["range-1", "range-2"],
+              fullFile: false,
+            },
+          ],
+        },
       }),
     });
     const second = await runRuntime({
@@ -1540,6 +1661,16 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           outputTokens: 20,
           costUsd: 0.002,
         },
+        diffContextCoverage: {
+          files: [
+            {
+              path: "src/a.ts",
+              rangeIds: ["range-1", "range-2"],
+              coveredRangeIds: ["range-1"],
+              fullFile: false,
+            },
+          ],
+        },
       }),
     });
 
@@ -1550,6 +1681,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       outputTokens: 30,
       costUsd: 0.003,
       usageStatus: "complete",
+      diffContextCoverage: {
+        files: { total: 1, covered: 0 },
+        ranges: { total: 2, covered: 1 },
+      },
     });
     expect(second.publicationPlan.reviewState.stats).toEqual(second.publicationPlan.metadata.stats);
     expect(second.mainComment).not.toContain("<summary>📊 Review completed in ");

@@ -1070,6 +1070,13 @@ function modelResultAttributes(record: RuntimeLogRecord): RunSpanRecord["attribu
   };
   setDefined(attributes, ATTR_GEN_AI_USAGE_INPUT_TOKENS, numberField(record, "inputTokens"));
   setDefined(attributes, ATTR_GEN_AI_USAGE_OUTPUT_TOKENS, numberField(record, "outputTokens"));
+  setDefined(attributes, "pipr.usage.cache_read_tokens", numberField(record, "cacheReadTokens"));
+  setDefined(attributes, "pipr.usage.cache_write_tokens", numberField(record, "cacheWriteTokens"));
+  setDefined(
+    attributes,
+    "pipr.usage.cache_status",
+    optionalStringField(record, "cacheUsageStatus"),
+  );
   setDefined(attributes, "pipr.usage.cost_usd", numberField(record, "costUsd"));
   return attributes;
 }

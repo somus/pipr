@@ -7,6 +7,18 @@ const reviewStatsModelSchema = z
   .min(1)
   .max(maxReviewStatsModelLength)
   .transform((model) => sanitizeReviewStatsModel(model) ?? "[invalid model]");
+const coverageCountsSchema = z
+  .strictObject({
+    total: z.number().int().nonnegative(),
+    covered: z.number().int().nonnegative(),
+  })
+  .refine((coverage) => coverage.covered <= coverage.total, {
+    message: "covered context cannot exceed total context",
+  });
+const diffContextCoverageSchema = z.strictObject({
+  files: coverageCountsSchema,
+  ranges: coverageCountsSchema,
+});
 
 export const reviewStatsSchema = z.strictObject({
   models: z.array(reviewStatsModelSchema).min(1).max(maxReviewStatsModels),
@@ -16,6 +28,10 @@ export const reviewStatsSchema = z.strictObject({
   outputTokens: z.number().int().nonnegative(),
   costUsd: z.number().nonnegative(),
   usageStatus: z.enum(["complete", "partial", "unavailable"]),
+  cacheReadTokens: z.number().int().nonnegative().optional(),
+  cacheWriteTokens: z.number().int().nonnegative().optional(),
+  cacheUsageStatus: z.enum(["complete", "partial", "unavailable"]).optional(),
+  diffContextCoverage: diffContextCoverageSchema.optional(),
 });
 
 export type ReviewStats = z.infer<typeof reviewStatsSchema>;
@@ -28,7 +44,9 @@ export function accumulateReviewStats(
     return current;
   }
   if (!current) {
-    return prior;
+    const retained = { ...prior };
+    delete retained.diffContextCoverage;
+    return retained;
   }
   const inputTokens = addUsageTotal(prior.inputTokens, current.inputTokens, Number.isSafeInteger);
   const outputTokens = addUsageTotal(
@@ -40,6 +58,21 @@ export function accumulateReviewStats(
   const usageComplete = inputTokens.complete && outputTokens.complete && costUsd.complete;
   const usageStatus =
     usageComplete && prior.usageStatus === current.usageStatus ? prior.usageStatus : "partial";
+  const cacheReadTokens = addUsageTotal(
+    prior.cacheReadTokens ?? 0,
+    current.cacheReadTokens ?? 0,
+    Number.isSafeInteger,
+  );
+  const cacheWriteTokens = addUsageTotal(
+    prior.cacheWriteTokens ?? 0,
+    current.cacheWriteTokens ?? 0,
+    Number.isSafeInteger,
+  );
+  const cacheUsageComplete = cacheReadTokens.complete && cacheWriteTokens.complete;
+  const priorCacheStatus = prior.cacheUsageStatus ?? "unavailable";
+  const currentCacheStatus = current.cacheUsageStatus ?? "unavailable";
+  const cacheUsageStatus =
+    cacheUsageComplete && priorCacheStatus === currentCacheStatus ? priorCacheStatus : "partial";
 
   return {
     models: [...new Set([...prior.models, ...current.models])].slice(0, maxReviewStatsModels),
@@ -49,6 +82,10 @@ export function accumulateReviewStats(
     outputTokens: outputTokens.total,
     costUsd: costUsd.total,
     usageStatus,
+    cacheReadTokens: cacheReadTokens.total,
+    cacheWriteTokens: cacheWriteTokens.total,
+    cacheUsageStatus,
+    ...(current.diffContextCoverage ? { diffContextCoverage: current.diffContextCoverage } : {}),
   };
 }
 

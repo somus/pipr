@@ -129,7 +129,9 @@ describe("pipr runs", () => {
     expect(diagnosisOutput).toContain("Phase durations:");
     expect(diagnosisOutput).toContain("Tool durations:");
     expect(diagnosisOutput).toContain("read 100ms ok");
-    expect(diagnosisOutput).toContain("Usage: 12 input, 5 output, $0.01");
+    expect(diagnosisOutput).toContain(
+      "Usage: 12 input, 5 output, 0 cache read, 0 cache write (unavailable), $0.01",
+    );
     expect(diagnosisOutput).toContain("Resources: CPU 30ms, peak RSS 2048 bytes");
     expect(diagnosisOutput).toContain("Agent runs: 2/4");
     expect(diagnosisOutput).toContain(

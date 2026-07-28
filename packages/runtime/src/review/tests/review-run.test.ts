@@ -268,6 +268,53 @@ describe("runReviewAgent", () => {
     expect(result.repairAttempted).toBe(false);
   });
 
+  it("does not classify assistant output as provider failure evidence", async () => {
+    const factory = definePipr((pipr) => {
+      pipr.agent({
+        name: "reviewer",
+        instructions: "Review.",
+        output: outputSchema,
+        prompt: () => "Review.",
+      });
+    });
+    const plan = buildPiprPlan(factory);
+    const agent = plan.agents[0];
+    if (!agent) {
+      throw new Error("test fixture missing agent");
+    }
+
+    let failure: unknown;
+    try {
+      await runReviewAgent({
+        agent,
+        input: {},
+        runOptions: undefined,
+        toolMode: "none",
+        runtime: {
+          workspace: process.cwd(),
+          config,
+          event: eventContext(),
+          provider,
+          plan,
+          run: { id: "test-run", trigger: "change-request" },
+          piRunner: async () => ({
+            exitCode: 1,
+            stdout: '{"summary":"The reviewed handler returns HTTP status 503."}',
+            stderr: "unexpected process exit",
+            durationMs: 1,
+          }),
+        },
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toMatchObject({
+      name: "ProviderExecutionError",
+      remediation: undefined,
+    });
+  });
+
   it("does not choose among multiple fenced JSON values", async () => {
     const factory = definePipr((pipr) => {
       pipr.agent({

@@ -16,7 +16,9 @@ A review can create these surfaces:
 | Command response | Change request conversation | Result for one source `@pipr` command |
 | Check or status | Commit or change request | Task or aggregate pass, fail, or neutral result |
 
-Pipr updates its main comment on reruns instead of adding another summary. Hosted change-request reviews can show progress while tasks run and completion details such as models, agent runs, elapsed time, tokens, and reported cost. Use `publication.showHeader`, `showFooter`, `showProgress`, and `showStats` to control those generated sections.
+Pipr updates its main comment on reruns instead of adding another summary. Hosted change-request reviews can show progress while tasks run and completion details such as models, agent runs, elapsed time, input, output, and cache tokens, current-run diff context coverage, and reported cost. Cache totals accumulate across reruns; context coverage describes only the current workflow. Use `publication.showHeader`, `showFooter`, `showProgress`, and `showStats` to control those generated sections.
+
+When a supported provider failure is safe to classify, the failed progress block includes a public `Reason` and `Next step` without provider output. GitHub failures link to the workflow run where an authorized user can rerun failed jobs. Other hosts retain their workflow link.
 
 ## Emit review output
 

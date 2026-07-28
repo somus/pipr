@@ -653,6 +653,13 @@ describe("pipr CLI", () => {
           outputTokens: 0,
           costUsd: 0,
           usageStatus: "unavailable",
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cacheUsageStatus: "unavailable",
+          diffContextCoverage: {
+            files: { total: 1, covered: 1 },
+            ranges: { total: 2, covered: 2 },
+          },
         },
         mainComment: expect.stringContaining(
           "One finding.\n<!-- pipr:header:hidden -->\nTask marker example.",
@@ -685,8 +692,9 @@ describe("pipr CLI", () => {
         publication: { state: "disabled" },
       });
       expect(json.mainComment).not.toContain("<!-- pipr:main-comment ");
-      expect(json.mainComment).not.toContain("<!-- pipr:stats:start -->");
-      expect(json.mainComment).not.toContain("<!-- pipr:stats:end -->");
+      expect(json.mainComment).toContain("<!-- pipr:stats:start -->");
+      expect(json.mainComment).toContain("| Current-run files with full context | 1 / 1 |");
+      expect(json.mainComment).toContain("<!-- pipr:stats:end -->");
       expect(json.mainComment).toContain("<!-- pipr:header:hidden -->");
       expect(JSON.stringify(json)).not.toMatch(
         /apiKeyEnv|diffManifest|findingId|"marker":|publicationPlan|reviewedHeadSha|"range"/,

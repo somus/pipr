@@ -55,9 +55,11 @@ pipr runs show \
   --identity ~/.local/state/pipr/keys/run-observability.agekey
 ```
 
-The diagnosis is deterministic and does not call a model. It reports phase timing, retries, repairs, tool duration, token and cost usage, resource data, validation drops, publication failures, and missing evidence.
+The diagnosis is deterministic and does not call a model. It reports phase timing, retries, repairs, tool duration, input, output, and cache token usage, resource data, validation drops, publication failures, and missing evidence.
 
 Use `--json` for automation. The JSON output remains content-free; download the validated bundle when an authorized process needs prompt, output, or diff files.
+
+Public telemetry exposes only aggregate diff-context file and range counts. Encrypted diagnostics can also contain the bounded `diff-context-coverage` artifact with exact covered and uncovered paths and range IDs.
 
 ## Inspect an existing package
 

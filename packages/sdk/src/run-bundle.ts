@@ -68,6 +68,7 @@ export const runBundleArtifactSchema = z
       "output",
       "stderr",
       "diff-manifest",
+      "diff-context-coverage",
       "validation",
       "publication-plan",
       "other",

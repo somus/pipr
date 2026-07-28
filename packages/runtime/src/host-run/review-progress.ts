@@ -1,4 +1,5 @@
 import type { CodeHostAdapter } from "../hosts/types.js";
+import { providerFailureRemediation } from "../pi/provider-failure.js";
 import {
   type ReviewProgressLease,
   type ReviewProgressSink,
@@ -13,6 +14,7 @@ import { createReviewWorkTracker } from "../review/work-progress.js";
 import { type RuntimeLog, runLoggedPhase } from "../shared/logging.js";
 import type { SecretRedactor } from "../shared/secret-redaction.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
+import type { FailureAction } from "./workflow-url.js";
 
 export type ReviewProgressReporter = ReviewProgressSink & {
   readonly lease: ReviewProgressLease;
@@ -26,6 +28,7 @@ export async function startReviewProgress(options: {
   event: ChangeRequestEventContext;
   config: PiprConfig;
   workflowUrl?: string;
+  failureAction?: FailureAction;
   log: RuntimeLog;
   secretRedactor?: SecretRedactor;
 }): Promise<ReviewProgressReporter | undefined> {
@@ -138,8 +141,7 @@ export async function startReviewProgress(options: {
     await drainWorkPublication();
     if (superseded) return "superseded";
     workDirty = false;
-    const reason = error instanceof Error ? error.message : String(error);
-    const redactedReason = options.secretRedactor?.redact(reason).value ?? reason;
+    const failure = publicFailurePresentation(error, options.secretRedactor);
     try {
       const result = await publishProgressWithTrace({
         change: options.event,
@@ -157,8 +159,10 @@ export async function startReviewProgress(options: {
             firstRun,
             showStats: options.config.publication.showStats,
             durationMs: Date.now() - startedAt,
-            reason: redactedReason,
+            reason: failure.reason,
+            nextStep: failure.nextStep,
             workflowUrl: options.workflowUrl,
+            failureAction: options.failureAction,
             stats,
             work: workTracker.snapshot(),
           }),
@@ -169,7 +173,7 @@ export async function startReviewProgress(options: {
         progressError instanceof Error ? progressError.message : String(progressError);
       options.log.warning("review progress failure publication failed", {
         error: options.secretRedactor?.redact(progressReason).value ?? progressReason,
-        originalError: redactedReason,
+        originalError: failure.reason,
       });
       return "failed";
     }
@@ -218,4 +222,23 @@ export async function startReviewProgress(options: {
       return failurePublication;
     },
   };
+}
+
+function publicFailurePresentation(
+  error: unknown,
+  redactor: SecretRedactor | undefined,
+): { reason: string; nextStep?: string } {
+  const remediation = providerFailureRemediation(error);
+  if (remediation) {
+    return {
+      reason: redactPublicFailureText(remediation.reason, redactor),
+      nextStep: redactPublicFailureText(remediation.nextStep, redactor),
+    };
+  }
+  const fallback = error instanceof Error ? error.message : String(error);
+  return { reason: redactPublicFailureText(fallback, redactor) };
+}
+
+function redactPublicFailureText(value: string, redactor: SecretRedactor | undefined): string {
+  return redactor ? redactor.redact(value).value : value;
 }

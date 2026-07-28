@@ -18,6 +18,14 @@ import type {
 } from "../../observability/types.js";
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
+import type { DiffContextCoverageObservation } from "../../pi/diff-context-coverage.js";
+import {
+  classifyProviderFailure,
+  ProviderExecutionError,
+  type ProviderFailureRemediation,
+  preferredProviderFailureRemediation,
+  providerFailureRemediation,
+} from "../../pi/provider-failure.js";
 import {
   type PiRunOptions,
   type PiRunResult,
@@ -58,6 +66,7 @@ export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
 export type PiRunStats = {
   models: string[];
   usage?: PiRunUsage;
+  diffContextCoverage?: DiffContextCoverageObservation;
 };
 
 export type RunReviewAgentOptions = {
@@ -120,7 +129,12 @@ const retrySettingsSchema = z.strictObject({
 
 type AgentAttemptResult =
   | { ok: true; value: unknown; repairAttempted: boolean }
-  | { ok: false; error: string; repairAttempted: boolean };
+  | {
+      ok: false;
+      error: string;
+      repairAttempted: boolean;
+      remediation?: ProviderFailureRemediation;
+    };
 
 export async function runReviewAgent(
   options: RunReviewAgentOptions,
@@ -278,6 +292,7 @@ async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunRe
       ...prepared,
     };
     const errors: string[] = [];
+    let remediation: ProviderFailureRemediation | undefined;
     const providerModels: string[] = [];
     let repairAttempted = false;
 
@@ -295,9 +310,13 @@ async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunRe
         return { value: attempt.value, repairAttempted, providerModels };
       }
       errors.push(`${provider.id}: ${attempt.error}`);
+      remediation = preferredProviderFailureRemediation(remediation, attempt.remediation);
     }
 
-    throw new Error(`Pi agent failed for all configured models: ${errors.join("; ")}`);
+    throw new ProviderExecutionError(
+      `Pi agent failed for all configured models: ${errors.join("; ")}`,
+      remediation,
+    );
   };
 
   if (options.runtime.piRunner) {
@@ -489,6 +508,7 @@ async function runAgentWithProvider(
       ok: false,
       error: error instanceof Error ? error.message : String(error),
       repairAttempted: false,
+      remediation: providerFailureRemediation(error),
     };
   }
 
@@ -515,6 +535,7 @@ async function runAgentWithProvider(
         ok: false,
         error: error instanceof Error ? error.message : String(error),
         repairAttempted: true,
+        remediation: providerFailureRemediation(error),
       };
     }
     parsed = parseAgentOutput(lastOutput, options.agent);
@@ -694,7 +715,7 @@ async function runPiForPrompt(
     attemptNumber,
     attemptId,
   );
-  assertSuccessfulPiResult(result, options.runtime.log);
+  assertSuccessfulPiResult(result, options.runtime.log, provider);
   return result;
 }
 
@@ -721,6 +742,14 @@ async function executeObservedPi(
     piAgentDir: options.runtime.piAgentDir,
     builtinTools: tools.builtinTools,
     runtimeTools: tools.runtimeTools,
+    ...(options.diffManifest
+      ? {
+          diffContext: {
+            manifest: options.diffManifest.manifest,
+            mode: options.diffManifest.mode,
+          },
+        }
+      : {}),
     customTools: tools.customTools,
     timeoutSeconds,
     eventObserver: tools.observedAttempt
@@ -768,6 +797,7 @@ async function reportObservedPiResult(
   options.runtime.piRunSink?.({
     models: reportedModels?.length ? reportedModels : [provider.model],
     ...(result.usage ? { usage: result.usage } : {}),
+    ...(result.diffContextCoverage ? { diffContextCoverage: result.diffContextCoverage } : {}),
   });
   logPiResult(options, provider, result, timeoutSeconds, attemptType, attemptNumber, attemptId);
   await finishObservedAttempt(options, observedAttempt, {
@@ -883,6 +913,9 @@ function logPiResult(
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
           costUsd: result.usage.costUsd,
+          cacheReadTokens: result.usage.cacheReadTokens,
+          cacheWriteTokens: result.usage.cacheWriteTokens,
+          cacheUsageStatus: result.usage.cacheUsageStatus,
         }
       : {}),
   });
@@ -996,7 +1029,11 @@ function parseDurationSeconds(value: DurationInput): number {
   return amount;
 }
 
-function assertSuccessfulPiResult(result: PiRunResult, log: RuntimeLog | undefined): void {
+function assertSuccessfulPiResult(
+  result: PiRunResult,
+  log: RuntimeLog | undefined,
+  provider: ProviderConfig,
+): void {
   if (result.exitCode === 0) {
     return;
   }
@@ -1006,12 +1043,31 @@ function assertSuccessfulPiResult(result: PiRunResult, log: RuntimeLog | undefin
   if (result.stdout.trim()) {
     log?.textSnippet("error", "pi stdout", result.stdout);
   }
+  const remediation = classifyProviderFailure({
+    provider,
+    output: boundedProviderFailureEvidence(result.stderr),
+  });
   if (!log?.writesToSink) {
     const output = result.stderr.trim() || result.stdout.trim() || "no output";
     const detail = log ? log.formatTextSnippet(output) : boundedLogSnippet(output);
-    throw new Error(`Pi agent failed with exit ${result.exitCode}:\n${detail}`);
+    throw new ProviderExecutionError(
+      `Pi agent failed with exit ${result.exitCode}:\n${detail}`,
+      remediation,
+    );
   }
-  throw new Error(`Pi agent failed with exit ${result.exitCode}`);
+  throw new ProviderExecutionError(`Pi agent failed with exit ${result.exitCode}`, remediation);
+}
+
+function boundedProviderFailureEvidence(stderr: string): string {
+  const maximumBytes = 64 * 1024;
+  if (Buffer.byteLength(stderr, "utf8") <= maximumBytes) {
+    return stderr;
+  }
+  const bytes = Buffer.from(stderr, "utf8");
+  const half = maximumBytes / 2;
+  return `${bytes.subarray(0, half).toString("utf8")}\n${bytes
+    .subarray(bytes.byteLength - half)
+    .toString("utf8")}`;
 }
 
 function parseAgentOutput(output: string, agent: RuntimeAgent): ParseAgentResult {

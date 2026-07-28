@@ -430,8 +430,6 @@ function renderReviewStats(stats: ReviewStats, workflowUrls?: string[]): string 
 }
 
 export function renderReviewStatsTable(stats: ReviewStats, workflowUrls?: string[]): string[] {
-  const usageSuffix = stats.usageStatus === "partial" ? " (reported)" : "";
-  const usageUnavailable = stats.usageStatus === "unavailable";
   const durationLabel = workflowUrls && workflowUrls.length > 1 ? "Combined runtime" : "Elapsed";
   return [
     "| Metric | Total |",
@@ -439,17 +437,59 @@ export function renderReviewStatsTable(stats: ReviewStats, workflowUrls?: string
     `| Models | ${stats.models.map(formatModel).join(", ")} |`,
     `| Agent runs | ${stats.agentRuns} |`,
     `| ${durationLabel} | ${formatReviewDuration(stats.durationMs)} |`,
-    `| Input tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.inputTokens)}${usageSuffix}`} |`,
-    `| Output tokens | ${usageUnavailable ? "Unavailable" : `${formatInteger(stats.outputTokens)}${usageSuffix}`} |`,
-    `| Cost (USD) | ${usageUnavailable ? "Unavailable" : `${formatCost(stats.costUsd)}${usageSuffix}`} |`,
-    ...(workflowUrls && workflowUrls.length > 0
-      ? [
-          `| Workflow runs | ${workflowUrls
-            .map((workflowUrl, index) => `[Run ${index + 1}](<${workflowUrl}>)`)
-            .join(", ")} |`,
-        ]
-      : []),
+    ...renderTokenUsageRows(stats),
+    ...renderCacheUsageRows(stats),
+    ...renderDiffContextCoverageRows(stats),
+    renderCostUsageRow(stats),
+    ...renderWorkflowRows(workflowUrls),
   ];
+}
+
+function renderTokenUsageRows(stats: ReviewStats): string[] {
+  const suffix = stats.usageStatus === "partial" ? " (reported)" : "";
+  const input = formattedUsageValue(stats.inputTokens, stats.usageStatus, suffix);
+  const output = formattedUsageValue(stats.outputTokens, stats.usageStatus, suffix);
+  return [`| Input tokens | ${input} |`, `| Output tokens | ${output} |`];
+}
+
+function renderCacheUsageRows(stats: ReviewStats): string[] {
+  if (!stats.cacheUsageStatus) return [];
+  const suffix = stats.cacheUsageStatus === "partial" ? " (reported)" : "";
+  return [
+    `| Cache read tokens | ${formattedUsageValue(stats.cacheReadTokens ?? 0, stats.cacheUsageStatus, suffix)} |`,
+    `| Cache write tokens | ${formattedUsageValue(stats.cacheWriteTokens ?? 0, stats.cacheUsageStatus, suffix)} |`,
+  ];
+}
+
+function formattedUsageValue(
+  value: number,
+  status: "complete" | "partial" | "unavailable",
+  suffix: string,
+): string {
+  return status === "unavailable" ? "Unavailable" : `${formatInteger(value)}${suffix}`;
+}
+
+function renderDiffContextCoverageRows(stats: ReviewStats): string[] {
+  const coverage = stats.diffContextCoverage;
+  if (!coverage) return [];
+  return [
+    `| Current-run files with full context | ${formatInteger(coverage.files.covered)} / ${formatInteger(coverage.files.total)} |`,
+    `| Current-run ranges with full context | ${formatInteger(coverage.ranges.covered)} / ${formatInteger(coverage.ranges.total)} |`,
+  ];
+}
+
+function renderCostUsageRow(stats: ReviewStats): string {
+  if (stats.usageStatus === "unavailable") return "| Cost (USD) | Unavailable |";
+  const suffix = stats.usageStatus === "partial" ? " (reported)" : "";
+  return `| Cost (USD) | ${formatCost(stats.costUsd)}${suffix} |`;
+}
+
+function renderWorkflowRows(workflowUrls: string[] | undefined): string[] {
+  if (!workflowUrls?.length) return [];
+  const links = workflowUrls
+    .map((workflowUrl, index) => `[Run ${index + 1}](<${workflowUrl}>)`)
+    .join(", ");
+  return [`| Workflow runs | ${links} |`];
 }
 
 function formatModel(model: string): string {

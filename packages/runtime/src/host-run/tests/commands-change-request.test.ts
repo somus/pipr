@@ -31,6 +31,7 @@ import {
   snapshotGitConfigEnv,
   writeFailingPiExecutable,
   writePiExecutable,
+  writeProviderAuthenticationFailurePiExecutable,
   writePullRequestEvent,
 } from "./commands-fixtures.js";
 
@@ -687,8 +688,35 @@ describe("runHostRunCommand pull_request dispatch", () => {
       );
       expect(failed).toContain("Pi agent failed with exit 42");
       expect(failed).not.toContain("provider-key");
-      expect(failed).toContain("[View workflow](<https://github.com/local/pipr/actions/runs/123>)");
+      expect(failed).toContain(
+        "[Open workflow to rerun failed jobs](<https://github.com/local/pipr/actions/runs/123>)",
+      );
       expect(failed).toContain("Pipr stopped while reviewing commit");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("publishes safe remediation for classified provider failures", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = recordingCommandPublicationClient(workspace);
+    try {
+      await writeProviderAuthenticationFailurePiExecutable(workspace.piExecutable);
+      await expect(
+        runPullRequestAction(workspace, {
+          githubPublicationClient: publication.client,
+        }),
+      ).rejects.toThrow("Pi agent failed with exit 42");
+
+      const failed = publication.writes.updated.at(-1) ?? publication.writes.created.at(-1) ?? "";
+      expect(failed).toContain("**Reason:** deepseek authentication failed.");
+      expect(failed).toContain(
+        String.raw`**Next step:** Verify the configured DEEPSEEK\_API\_KEY secret or environment variable and deepseek account access, then rerun.`,
+      );
+      expect(failed).not.toContain("private-provider-detail");
+      expect(failed).toContain(
+        "[Open workflow to rerun failed jobs](<https://github.com/local/pipr/actions/runs/123>)",
+      );
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

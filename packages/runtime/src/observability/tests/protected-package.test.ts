@@ -12,6 +12,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import {
+  diagnoseRunBundle,
   generateRunBundleIdentity,
   openRunBundlePackage,
   prepareRunBundlePackage,
@@ -60,6 +61,16 @@ describe("protected Run Bundle packages", () => {
     expect(metadataView.diagnostic).toBe("locked");
     expect(metadataView.bundle.manifest.capture.mode).toBe("metadata");
     expect(metadataView.bundle.manifest.artifacts[0]?.path).toBe("artifacts/prompt-1.omitted");
+    expect(
+      metadataView.bundle.manifest.artifacts.some(
+        (artifact) => artifact.kind === "diff-context-coverage",
+      ),
+    ).toBe(false);
+    expect(diagnoseRunBundle(metadataView.bundle).usage).toMatchObject({
+      cacheReadTokens: 90,
+      cacheWriteTokens: 9,
+      cacheUsageStatus: "complete",
+    });
     const publicView = JSON.stringify(metadataView.bundle);
     for (const value of privateValues) expect(publicView).not.toContain(value);
     const providerBytes = Buffer.concat(
@@ -207,6 +218,39 @@ async function diagnosticBundle(root: string, artifactName = "prompt-001-initial
     mediaType: "text/markdown",
     content: "private source body",
     sensitive: true,
+  });
+  await recorder.addArtifact({
+    kind: "diff-context-coverage",
+    name: "diff-context-coverage.json",
+    mediaType: "application/json",
+    content: JSON.stringify({
+      files: [{ path: "src/private-coverage.ts", ranges: ["private-range"] }],
+    }),
+    sensitive: true,
+  });
+  recorder.logSink.log({
+    level: "info",
+    event: "pi start",
+    fields: {
+      attemptId: "cache-attempt",
+      attemptType: "initial",
+      attemptNumber: 1,
+      agent: "reviewer",
+      provider: "openai",
+      model: "gpt-test",
+    },
+  });
+  recorder.logSink.log({
+    level: "info",
+    event: "pi run",
+    fields: {
+      attemptId: "cache-attempt",
+      exitCode: 0,
+      durationMs: 10,
+      cacheReadTokens: 90,
+      cacheWriteTokens: 9,
+      cacheUsageStatus: "complete",
+    },
   });
   await recorder.finish({
     kind: "review",

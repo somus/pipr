@@ -903,7 +903,7 @@ function printDiagnosis(
   printDurations("Phase durations", diagnosis.phaseDurations);
   printDurations("Tool durations", diagnosis.toolDurations);
   console.log(
-    `Usage: ${diagnosis.usage.inputTokens} input, ${diagnosis.usage.outputTokens} output, $${diagnosis.usage.costUsd}`,
+    `Usage: ${diagnosis.usage.inputTokens} input, ${diagnosis.usage.outputTokens} output, ${diagnosis.usage.cacheReadTokens} cache read, ${diagnosis.usage.cacheWriteTokens} cache write (${diagnosis.usage.cacheUsageStatus}), $${diagnosis.usage.costUsd}`,
   );
   const cpuMs = (diagnosis.resources.cpuUserMs ?? 0) + (diagnosis.resources.cpuSystemMs ?? 0);
   console.log(

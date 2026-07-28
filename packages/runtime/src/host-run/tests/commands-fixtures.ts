@@ -66,6 +66,20 @@ export async function writeFailingPiExecutable(piExecutable: string): Promise<vo
   await chmod(piExecutable, 0o755);
 }
 
+export async function writeProviderAuthenticationFailurePiExecutable(
+  piExecutable: string,
+): Promise<void> {
+  await Bun.write(
+    piExecutable,
+    [
+      "#!/bin/sh",
+      'printf "%s\\n" "API Error 401: invalid API key private-provider-detail" >&2',
+      "exit 42",
+    ].join("\n"),
+  );
+  await chmod(piExecutable, 0o755);
+}
+
 export async function createCommandWorkspace(
   options: {
     aggregatePatchOver16MiB?: boolean;

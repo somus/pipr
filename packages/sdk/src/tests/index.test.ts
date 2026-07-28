@@ -71,6 +71,13 @@ describe("Pipr Result", () => {
       outputTokens: 20,
       costUsd: 0.01,
       usageStatus: "complete",
+      cacheReadTokens: 40,
+      cacheWriteTokens: 4,
+      cacheUsageStatus: "complete",
+      diffContextCoverage: {
+        files: { total: 3, covered: 2 },
+        ranges: { total: 8, covered: 7 },
+      },
     } satisfies PiprRunSummary;
     const result = {
       formatVersion: 2,
@@ -86,6 +93,18 @@ describe("Pipr Result", () => {
 
     expect(parsePiprResult(result)).toEqual(result);
     expect(piprResultSchema.safeParse({ ...result, internalMarker: "secret" }).success).toBe(false);
+    expect(
+      piprResultSchema.safeParse({
+        ...result,
+        run: {
+          ...run,
+          diffContextCoverage: {
+            files: { total: 2, covered: 3 },
+            ranges: { total: 8, covered: 7 },
+          },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("validates every V2 result discriminator and run-summary limits", () => {

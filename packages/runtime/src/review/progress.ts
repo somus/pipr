@@ -159,7 +159,9 @@ export function renderFailedReviewProgress(
   options: RenderReviewProgressOptions & {
     durationMs: number;
     reason: string;
+    nextStep?: string;
     workflowUrl?: string;
+    failureAction?: { label: string; url: string };
     stats?: ReviewStats;
     showStats: boolean;
   },
@@ -176,19 +178,9 @@ export function renderFailedReviewProgress(
     `**Failed stage:** ${progressLabels[options.stage]}  `,
     ...(failedWork ? [`${failedWork}  `] : []),
     `**Reason:** ${sanitizeProgressFailureReason(options.reason)}`,
-    ...(options.workflowUrl ? ["", `**Workflow:** [View workflow](<${options.workflowUrl}>)`] : []),
-    ...(options.showStats && options.stats
-      ? [
-          "",
-          ...renderReviewStatsTable(
-            {
-              ...options.stats,
-              usageStatus: options.stats.usageStatus === "unavailable" ? "unavailable" : "partial",
-            },
-            options.workflowUrl ? [options.workflowUrl] : undefined,
-          ),
-        ]
-      : []),
+    ...failedReviewGuidance(options.nextStep),
+    ...failedReviewAction(options.failureAction, options.workflowUrl),
+    ...failedReviewStats(options.stats, options.showStats, options.workflowUrl),
     "",
     "</details>",
     ...progressFooter(options, "failed"),
@@ -196,6 +188,36 @@ export function renderFailedReviewProgress(
     reviewProgressEndMarker,
   ];
   return insertProgressBlock(body, details);
+}
+
+function failedReviewGuidance(nextStep: string | undefined): string[] {
+  return nextStep ? [`**Next step:** ${sanitizeProgressFailureReason(nextStep)}`] : [];
+}
+
+function failedReviewAction(
+  action: { label: string; url: string } | undefined,
+  workflowUrl: string | undefined,
+): string[] {
+  if (action) return ["", `**Retry:** [${escapeHtml(action.label)}](<${action.url}>)`];
+  return workflowUrl ? ["", `**Workflow:** [View workflow](<${workflowUrl}>)`] : [];
+}
+
+function failedReviewStats(
+  stats: ReviewStats | undefined,
+  showStats: boolean,
+  workflowUrl: string | undefined,
+): string[] {
+  if (!showStats || !stats) return [];
+  const failedStats: ReviewStats = {
+    ...stats,
+    usageStatus: stats.usageStatus === "unavailable" ? "unavailable" : "partial",
+    ...(stats.cacheUsageStatus
+      ? {
+          cacheUsageStatus: stats.cacheUsageStatus === "unavailable" ? "unavailable" : "partial",
+        }
+      : {}),
+  };
+  return ["", ...renderReviewStatsTable(failedStats, workflowUrl ? [workflowUrl] : undefined)];
 }
 
 export function reviewProgressRange(lines: string[]): { start: number; end: number } | undefined {

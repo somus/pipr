@@ -1,5 +1,21 @@
 const maxWorkflowUrlLength = 2_048;
 
+export type FailureAction = {
+  label: string;
+  url: string;
+};
+
+export function failureActionFromEnvironment(
+  host: string,
+  env: NodeJS.ProcessEnv,
+): FailureAction | undefined {
+  if (host !== "github") {
+    return undefined;
+  }
+  const url = workflowUrlFromEnvironment(host, env);
+  return url ? { label: "Open workflow to rerun failed jobs", url } : undefined;
+}
+
 export function workflowUrlFromEnvironment(
   host: string,
   env: NodeJS.ProcessEnv,

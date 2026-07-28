@@ -591,6 +591,8 @@ const result = parsePiprResult(JSON.parse(serializedResult));
 
 CLI and Action results include `formatVersion`; reject unsupported versions before consuming kind-specific fields. Run bundles can contain sensitive repository evidence, so follow [run-bundle security guidance](/docs/concepts/trust-security#diagnostic-data).
 
+`PiprRunSummary` version 2 can report `cacheReadTokens`, `cacheWriteTokens`, and a separate `cacheUsageStatus`. `diffContextCoverage` reports covered and total file and range counts for the current workflow only. These fields are optional when parsing stored version 2 results; Pipr emits cache status for current agent runs and omits coverage when no Diff Manifest was supplied.
+
 ## Plugins
 
 Plugins install config-time handles through the builder:

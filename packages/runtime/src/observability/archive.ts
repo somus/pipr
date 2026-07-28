@@ -86,7 +86,14 @@ export type RunDiagnosis = {
     durationMs: number;
     status: RunSpanRecord["status"];
   }>;
-  usage: { inputTokens: number; outputTokens: number; costUsd: number };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    cacheUsageStatus: "complete" | "partial" | "unavailable";
+    costUsd: number;
+  };
   resources: RunBundleManifest["resources"];
   validationDrops: number;
   publicationFailures: number;
@@ -164,13 +171,44 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
       status: span.status,
     }));
   const usage = bundle.spans.reduce(
-    (total, span) => ({
-      inputTokens: total.inputTokens + numberAttribute(span, "gen_ai.usage.input_tokens"),
-      outputTokens: total.outputTokens + numberAttribute(span, "gen_ai.usage.output_tokens"),
-      costUsd: total.costUsd + numberAttribute(span, "pipr.usage.cost_usd"),
-    }),
-    { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+    (total, span) => {
+      const cacheRead = addSafeTokenTotal(
+        total.cacheReadTokens,
+        numberAttribute(span, "pipr.usage.cache_read_tokens"),
+      );
+      const cacheWrite = addSafeTokenTotal(
+        total.cacheWriteTokens,
+        numberAttribute(span, "pipr.usage.cache_write_tokens"),
+      );
+      return {
+        inputTokens: total.inputTokens + numberAttribute(span, "gen_ai.usage.input_tokens"),
+        outputTokens: total.outputTokens + numberAttribute(span, "gen_ai.usage.output_tokens"),
+        cacheReadTokens: cacheRead.total,
+        cacheWriteTokens: cacheWrite.total,
+        costUsd: total.costUsd + numberAttribute(span, "pipr.usage.cost_usd"),
+        cacheArithmeticComplete:
+          total.cacheArithmeticComplete && cacheRead.complete && cacheWrite.complete,
+      };
+    },
+    {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      costUsd: 0,
+      cacheArithmeticComplete: true,
+    },
   );
+  const cacheUsageStatus = usage.cacheArithmeticComplete
+    ? diagnoseCacheUsageStatus(bundle.spans)
+    : "partial";
+  const usageTotals = {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    costUsd: usage.costUsd,
+  };
   const evidenceKinds = new Set(bundle.manifest.artifacts.map((artifact) => artifact.kind));
   const requiredEvidence =
     bundle.manifest.kind === "review"
@@ -217,7 +255,7 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
       ? {}
       : { timeToFirstTokenMs: minimumDuration(bundle.spans, "gen_ai.time_to_first_token") }),
     toolDurations,
-    usage,
+    usage: { ...usageTotals, cacheUsageStatus },
     resources: bundle.manifest.resources,
     validationDrops: sumLogField(bundle.logs, "droppedFindings"),
     publicationFailures:
@@ -374,9 +412,42 @@ function numberAttribute(span: RunSpanRecord, key: string): number {
   return typeof value === "number" ? value : 0;
 }
 
+function diagnoseCacheUsageStatus(spans: RunSpanRecord[]): "complete" | "partial" | "unavailable" {
+  const usageKeys = [
+    "gen_ai.usage.input_tokens",
+    "gen_ai.usage.output_tokens",
+    "pipr.usage.cache_read_tokens",
+    "pipr.usage.cache_write_tokens",
+    "pipr.usage.cost_usd",
+  ];
+  const usageSpans = spans.filter((span) =>
+    usageKeys.some((key) => Object.hasOwn(span.attributes, key)),
+  );
+  const modelAttempts = spans.filter((span) => span.name === "gen_ai.chat");
+  const statusSpans = modelAttempts.length > 0 ? modelAttempts : usageSpans;
+  const statuses = statusSpans
+    .map((span) => stringAttribute(span, "pipr.usage.cache_status"))
+    .filter(
+      (status): status is "complete" | "partial" | "unavailable" =>
+        status === "complete" || status === "partial" || status === "unavailable",
+    );
+  if (statuses.length === 0) return "unavailable";
+  if (statuses.length !== statusSpans.length) return "partial";
+  if (statuses.every((status) => status === "complete")) return "complete";
+  if (statuses.every((status) => status === "unavailable")) return "unavailable";
+  return "partial";
+}
+
 function optionalNumberAttribute(span: RunSpanRecord, key: string): number | undefined {
   const value = span.attributes[key];
   return typeof value === "number" ? value : undefined;
+}
+
+function addSafeTokenTotal(current: number, value: number): { total: number; complete: boolean } {
+  const total = current + value;
+  return Number.isSafeInteger(value) && value >= 0 && Number.isSafeInteger(total)
+    ? { total, complete: true }
+    : { total: current, complete: false };
 }
 
 function minimumDuration(spans: RunSpanRecord[], name: string): number | undefined {

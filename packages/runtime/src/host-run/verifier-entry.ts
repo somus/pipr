@@ -5,7 +5,7 @@ import { type PiRunStats, resolveProvider } from "../review/agent/review-run.js"
 import { isPiprThreadActionReplyBody } from "../review/prior-state.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { stableReviewRunId } from "../review/run-identity.js";
-import { reviewStatsForRuns } from "../review/task/task-output.js";
+import { reviewStatsForRuns, runSummaryStatsFields } from "../review/task/task-output.js";
 import { runInternalVerifier } from "../review/verifier.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
@@ -274,14 +274,6 @@ function verifierRunSummary(options: {
   fallbackModel: string;
   stats: ReturnType<typeof reviewStatsForRuns>;
 }): PiprRunSummary {
-  const stats: Partial<NonNullable<ReturnType<typeof reviewStatsForRuns>>> = options.stats ?? {};
-  const {
-    agentRuns = 0,
-    inputTokens = 0,
-    outputTokens = 0,
-    costUsd = 0,
-    usageStatus = "unavailable",
-  } = stats;
   const models = options.providerModels.length ? options.providerModels : [options.fallbackModel];
   return {
     ...options.run,
@@ -290,11 +282,7 @@ function verifierRunSummary(options: {
     tasks: ["pipr-internal-verifier"],
     durationMs: options.durationMs,
     models,
-    agentRuns,
-    inputTokens,
-    outputTokens,
-    costUsd,
-    usageStatus,
+    ...runSummaryStatsFields(options.stats),
   };
 }
 

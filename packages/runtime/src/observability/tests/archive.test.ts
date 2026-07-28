@@ -175,6 +175,9 @@ describe("deterministic run diagnosis", () => {
         inputTokens: 100,
         outputTokens: 20,
         costUsd: 0.01,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cacheUsageStatus: "complete",
       },
     });
     recorder.logSink.log({
@@ -196,7 +199,17 @@ describe("deterministic run diagnosis", () => {
     recorder.logSink.log({
       level: "info",
       event: "pi run",
-      fields: { attemptId: "model-retry", exitCode: 0, durationMs: 10 },
+      fields: {
+        attemptId: "model-retry",
+        exitCode: 0,
+        durationMs: 10,
+        inputTokens: 7,
+        outputTokens: 3,
+        cacheReadTokens: 5,
+        cacheWriteTokens: 2,
+        cacheUsageStatus: "complete",
+        costUsd: 0.002,
+      },
     });
     await recorder.finish({
       kind: "review",
@@ -205,20 +218,6 @@ describe("deterministic run diagnosis", () => {
     });
 
     const bundle = await loadValidatedRunBundle(recorder.directory);
-    bundle.spans.push({
-      formatVersion: 1,
-      traceId: recorder.executionId,
-      spanId: "f".repeat(16),
-      name: "gen_ai.usage.snapshot",
-      category: "model",
-      startedAt: "2026-07-20T00:00:00.000Z",
-      status: "ok",
-      attributes: {
-        "gen_ai.usage.input_tokens": 7,
-        "gen_ai.usage.output_tokens": 3,
-        "pipr.usage.cost_usd": 0.002,
-      },
-    });
     const diagnosis = diagnoseRunBundle(bundle);
     expect(diagnosis.phaseDurations).toContainEqual(
       expect.objectContaining({ name: "pipr.workspace.prepare", durationMs: 20 }),
@@ -229,7 +228,14 @@ describe("deterministic run diagnosis", () => {
     expect(diagnosis.repairAttempts).toBe(1);
     expect(diagnosis.toolDurations[0]).toMatchObject({ name: "read", status: "ok" });
     expect(diagnosis.timeToFirstTokenMs).toBeNumber();
-    expect(diagnosis.usage).toEqual({ inputTokens: 7, outputTokens: 3, costUsd: 0.002 });
+    expect(diagnosis.usage).toEqual({
+      inputTokens: 7,
+      outputTokens: 3,
+      cacheReadTokens: 5,
+      cacheWriteTokens: 2,
+      cacheUsageStatus: "complete",
+      costUsd: 0.002,
+    });
     expect(diagnosis.validationDrops).toBe(2);
     expect(diagnosis.publicationFailures).toBe(1);
     expect(diagnosis.missingEvidence).toContain("diff manifest");
@@ -256,6 +262,92 @@ describe("deterministic run diagnosis", () => {
         message: "Review Run agent-call budget exhausted",
       },
     ]);
+  });
+
+  it("classifies cache status across every model attempt", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await completedReview(root, 46);
+    const bundle = await loadValidatedRunBundle(recorder.directory);
+    const modelSpan = {
+      formatVersion: 1 as const,
+      traceId: recorder.executionId,
+      category: "model" as const,
+      startedAt: "2026-07-20T00:00:00.000Z",
+      status: "ok" as const,
+    };
+    bundle.spans = [
+      {
+        ...modelSpan,
+        spanId: "a".repeat(16),
+        name: "gen_ai.chat",
+        attributes: {
+          "pipr.usage.cache_read_tokens": 5,
+          "pipr.usage.cache_write_tokens": 2,
+          "pipr.usage.cache_status": "complete",
+        },
+      },
+      {
+        ...modelSpan,
+        spanId: "b".repeat(16),
+        name: "gen_ai.chat",
+        attributes: {},
+      },
+    ];
+    expect(diagnoseRunBundle(bundle).usage.cacheUsageStatus).toBe("partial");
+
+    const secondSpan = bundle.spans[1];
+    if (!secondSpan) throw new Error("expected second model span");
+    bundle.spans[1] = {
+      ...secondSpan,
+      attributes: {
+        "pipr.usage.cache_read_tokens": 0,
+        "pipr.usage.cache_write_tokens": 0,
+        "pipr.usage.cache_status": "unavailable",
+      },
+    };
+    expect(diagnoseRunBundle(bundle).usage.cacheUsageStatus).toBe("partial");
+
+    bundle.spans = [
+      {
+        ...modelSpan,
+        spanId: "c".repeat(16),
+        name: "gen_ai.chat",
+        attributes: {
+          "pipr.usage.cache_read_tokens": 0,
+          "pipr.usage.cache_write_tokens": 0,
+          "pipr.usage.cache_status": "unavailable",
+        },
+      },
+    ];
+    expect(diagnoseRunBundle(bundle).usage.cacheUsageStatus).toBe("unavailable");
+
+    bundle.spans = [
+      {
+        ...modelSpan,
+        spanId: "d".repeat(16),
+        name: "gen_ai.chat",
+        attributes: {
+          "pipr.usage.cache_read_tokens": Number.MAX_SAFE_INTEGER,
+          "pipr.usage.cache_write_tokens": 1,
+          "pipr.usage.cache_status": "complete",
+        },
+      },
+      {
+        ...modelSpan,
+        spanId: "e".repeat(16),
+        name: "gen_ai.chat",
+        attributes: {
+          "pipr.usage.cache_read_tokens": 1,
+          "pipr.usage.cache_write_tokens": 2,
+          "pipr.usage.cache_status": "complete",
+        },
+      },
+    ];
+    expect(diagnoseRunBundle(bundle).usage).toMatchObject({
+      cacheReadTokens: Number.MAX_SAFE_INTEGER,
+      cacheWriteTokens: 3,
+      cacheUsageStatus: "partial",
+    });
   });
 });
 

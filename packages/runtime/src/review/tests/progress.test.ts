@@ -174,6 +174,10 @@ describe("review progress", () => {
       durationMs: 301_000,
       reason: "provider <failed> & unstable | secret\nverbose stack",
       workflowUrl: "https://github.com/acme/repo/actions/runs/123",
+      failureAction: {
+        label: "Open workflow to rerun failed jobs",
+        url: "https://github.com/acme/repo/actions/runs/123",
+      },
       showStats: false,
     });
 
@@ -183,9 +187,28 @@ describe("review progress", () => {
     expect(failed).toContain("**Failed stage:** Running review tasks");
     expect(failed).toContain("provider &lt;failed&gt; &amp; unstable &#124; secret");
     expect(failed).not.toContain("verbose stack");
-    expect(failed).toContain("[View workflow](<https://github.com/acme/repo/actions/runs/123>)");
+    expect(failed).toContain(
+      "[Open workflow to rerun failed jobs](<https://github.com/acme/repo/actions/runs/123>)",
+    );
+    expect(failed).not.toContain("[View workflow]");
     expect(failed).toContain("Pipr stopped while reviewing commit `abcdef1`.");
     expect(failed).not.toContain("| Metric | Total |");
+  });
+
+  it("renders a bounded actionable next step for classified provider failures", () => {
+    const failed = renderFailedReviewProgress({
+      ...options,
+      durationMs: 1_000,
+      reason: "anthropic authentication failed.",
+      nextStep:
+        "Verify the ANTHROPIC_API_KEY GitHub secret and anthropic account access, then rerun.",
+      showStats: false,
+    });
+
+    expect(failed).toContain("**Reason:** anthropic authentication failed.");
+    expect(failed).toContain(
+      String.raw`**Next step:** Verify the ANTHROPIC\_API\_KEY GitHub secret and anthropic account access, then rerun.`,
+    );
   });
 
   it("retains the failed task, reviewer, and shard", () => {
@@ -250,5 +273,29 @@ describe("review progress", () => {
 
     expect(failed.match(/\| Unavailable \|/g)).toHaveLength(3);
     expect(failed).not.toContain("(reported)");
+  });
+
+  it("marks reported cache usage partial when the review fails", () => {
+    const failed = renderFailedReviewProgress({
+      ...options,
+      durationMs: 1_000,
+      reason: "provider failed",
+      showStats: true,
+      stats: {
+        models: ["test/model"],
+        agentRuns: 1,
+        durationMs: 1_000,
+        inputTokens: 10,
+        outputTokens: 5,
+        costUsd: 0.01,
+        usageStatus: "complete",
+        cacheReadTokens: 4,
+        cacheWriteTokens: 2,
+        cacheUsageStatus: "complete",
+      },
+    });
+
+    expect(failed).toContain("| Cache read tokens | 4 (reported) |");
+    expect(failed).toContain("| Cache write tokens | 2 (reported) |");
   });
 });

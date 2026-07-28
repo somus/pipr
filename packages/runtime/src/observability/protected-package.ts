@@ -258,6 +258,7 @@ async function writeMetadataProjection(
   destination: string,
 ): Promise<void> {
   const artifacts = bundle.manifest.artifacts
+    .filter((artifact) => artifact.kind !== "diff-context-coverage")
     .map(publicArtifactDescriptor)
     .filter((artifact): artifact is RunBundleArtifact => artifact !== undefined);
   let truncated = bundle.manifest.capture.truncated;
@@ -389,6 +390,9 @@ const publicSpanAttributes = new Set([
   "pipr.tool.input_hash",
   "pipr.tool.output_bytes",
   "pipr.tool.output_hash",
+  "pipr.usage.cache_read_tokens",
+  "pipr.usage.cache_status",
+  "pipr.usage.cache_write_tokens",
   "pipr.usage.cost_usd",
   "pipr.used",
 ]);
@@ -499,7 +503,13 @@ const publicNumericLogFields = new Set([
   "agentRunCount",
   "attemptNumber",
   "backoffMs",
+  "cacheReadTokens",
+  "cacheWriteTokens",
   "costUsd",
+  "contextFilesCovered",
+  "contextFilesTotal",
+  "contextRangesCovered",
+  "contextRangesTotal",
   "declarationCount",
   "droppedFindings",
   "durationMs",

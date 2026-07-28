@@ -14,6 +14,11 @@ import {
   type PreparedPiCustomTools,
   preparePiCustomTools,
 } from "./custom-tools.js";
+import {
+  createDiffContextCoverageTracker,
+  type DiffContextCoverageObservation,
+  type DiffContextCoverageTracker,
+} from "./diff-context-coverage.js";
 import { toPiProviderInvocation } from "./provider.js";
 import type { PiRuntimeReadToolRequest } from "./runtime-tools.js";
 import { type PreparedPiRuntimeReadTools, preparePiRuntimeReadTools } from "./runtime-tools.js";
@@ -28,6 +33,10 @@ export type PiRunOptions = {
   timeoutSeconds?: number;
   builtinTools?: readonly PiReadOnlyToolName[];
   runtimeTools?: PiRuntimeReadToolRequest;
+  diffContext?: {
+    manifest: PiRuntimeReadToolRequest["manifest"];
+    mode: "full" | "condensed";
+  };
   customTools?: PiCustomToolRequest;
   streamLimits?: PiStreamLimits;
   eventObserver?: (event: RunAgentEvent) => void;
@@ -41,6 +50,7 @@ export type PiRunResult = {
   models?: string[];
   usage?: PiRunUsage;
   stream?: PiRunStreamStats;
+  diffContextCoverage?: DiffContextCoverageObservation;
 };
 
 export type PiRunStreamStats = {
@@ -61,6 +71,9 @@ export type PiRunUsage = {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  cacheUsageStatus?: "complete" | "partial" | "unavailable";
 };
 
 type PiRunSandbox = {
@@ -153,6 +166,8 @@ const assistantUsageMessageSchema = z.looseObject({
   usage: z.looseObject({
     input: tokenCountSchema,
     output: tokenCountSchema,
+    cacheRead: tokenCountSchema.optional(),
+    cacheWrite: tokenCountSchema.optional(),
     cost: z.looseObject({ total: z.number().nonnegative() }),
   }),
 });
@@ -246,6 +261,7 @@ async function runPiAttempt(
       timeoutSeconds: options.timeoutSeconds,
       streamLimits: options.streamLimits ?? defaultPiStreamLimits,
       eventObserver: options.eventObserver,
+      diffContext: options.diffContext,
     });
   } finally {
     await preparedCustomTools?.close();
@@ -571,8 +587,12 @@ class PiOutputCollector {
   private usageMessageCount = 0;
   private inputTokens = 0;
   private outputTokens = 0;
+  private cacheReadTokens = 0;
+  private cacheWriteTokens = 0;
+  private cacheUsageMessageCount = 0;
   private costUsd = 0;
   private usagePartial = false;
+  private cacheUsagePartial = false;
   private readonly stream: PiRunStreamStats = {
     rawStdoutBytes: 0,
     jsonEventCount: 0,
@@ -585,6 +605,7 @@ class PiOutputCollector {
   constructor(
     private readonly limits: PiStreamLimits,
     private readonly eventObserver?: (event: RunAgentEvent) => void,
+    private readonly diffContextCoverage?: DiffContextCoverageTracker,
   ) {}
 
   push(chunk: string): string | undefined {
@@ -610,20 +631,22 @@ class PiOutputCollector {
     return this.failureReason;
   }
 
-  finish(): Pick<PiRunResult, "stdout" | "models" | "usage" | "stream"> {
+  finish(): Pick<PiRunResult, "stdout" | "models" | "usage" | "stream" | "diffContextCoverage"> {
     if (!this.failureReason && this.pending.length > 0) {
       this.consumePending(false);
     }
+    const coverage = this.coverageResult();
     if (this.failureReason) {
-      return { stdout: "", stream: this.stream };
+      return { stdout: "", stream: this.stream, ...coverage };
     }
     if (this.mode !== "json") {
-      return { stdout: this.rawOutput, stream: this.stream };
+      return { stdout: this.rawOutput, stream: this.stream, ...coverage };
     }
     return {
       stdout: this.assistantText ?? "",
       ...(this.models.length > 0 ? { models: this.models } : {}),
       ...(this.usageMessageCount > 0 ? { usage: this.usage() } : {}),
+      ...coverage,
       stream: this.stream,
     };
   }
@@ -713,6 +736,7 @@ class PiOutputCollector {
   }
 
   private consumeEvent(event: Record<string, unknown>): void {
+    this.diffContextCoverage?.observe(event);
     this.observeEvent(event);
     this.assistantText = assistantTextFromEvent(event) ?? this.assistantText;
     const parsed = assistantMessageEventSchema.safeParse(event);
@@ -772,23 +796,34 @@ class PiOutputCollector {
   }
 
   private addUsage(message: z.infer<typeof assistantUsageMessageSchema>): void {
-    const nextInputTokens = this.inputTokens + message.usage.input;
-    if (Number.isSafeInteger(nextInputTokens)) {
-      this.inputTokens = nextInputTokens;
-    } else {
-      this.usagePartial = true;
+    const input = addSafeInteger(this.inputTokens, message.usage.input);
+    const output = addSafeInteger(this.outputTokens, message.usage.output);
+    const cost = addFiniteNumber(this.costUsd, message.usage.cost.total);
+    this.inputTokens = input.total;
+    this.outputTokens = output.total;
+    this.costUsd = cost.total;
+    this.usagePartial ||= !input.complete || !output.complete || !cost.complete;
+    this.addCacheUsage(message.usage);
+  }
+
+  private addCacheUsage(usage: z.infer<typeof assistantUsageMessageSchema>["usage"]): void {
+    const hasCacheRead = usage.cacheRead !== undefined;
+    const hasCacheWrite = usage.cacheWrite !== undefined;
+    if (!hasCacheRead && !hasCacheWrite) return;
+    if (usage.cacheRead !== undefined) {
+      const read = addSafeInteger(this.cacheReadTokens, usage.cacheRead);
+      this.cacheReadTokens = read.total;
+      this.cacheUsagePartial ||= !read.complete;
     }
-    const nextOutputTokens = this.outputTokens + message.usage.output;
-    if (Number.isSafeInteger(nextOutputTokens)) {
-      this.outputTokens = nextOutputTokens;
-    } else {
-      this.usagePartial = true;
+    if (usage.cacheWrite !== undefined) {
+      const write = addSafeInteger(this.cacheWriteTokens, usage.cacheWrite);
+      this.cacheWriteTokens = write.total;
+      this.cacheUsagePartial ||= !write.complete;
     }
-    const nextCostUsd = this.costUsd + message.usage.cost.total;
-    if (Number.isFinite(nextCostUsd)) {
-      this.costUsd = nextCostUsd;
+    if (hasCacheRead && hasCacheWrite) {
+      this.cacheUsageMessageCount += 1;
     } else {
-      this.usagePartial = true;
+      this.cacheUsagePartial = true;
     }
   }
 
@@ -801,12 +836,40 @@ class PiOutputCollector {
       inputTokens: this.inputTokens,
       outputTokens: this.outputTokens,
       costUsd: this.costUsd,
+      cacheReadTokens: this.cacheReadTokens,
+      cacheWriteTokens: this.cacheWriteTokens,
+      cacheUsageStatus:
+        this.cacheUsageMessageCount === 0
+          ? this.cacheUsagePartial
+            ? "partial"
+            : "unavailable"
+          : this.cacheUsagePartial || this.cacheUsageMessageCount !== this.assistantMessageCount
+            ? "partial"
+            : "complete",
     };
   }
 
   private recordPeak(bytes: number): void {
     this.stream.peakBufferedBytes = Math.max(this.stream.peakBufferedBytes, bytes);
   }
+
+  private coverageResult(): Pick<PiRunResult, "diffContextCoverage"> {
+    return this.diffContextCoverage
+      ? { diffContextCoverage: this.diffContextCoverage.result() }
+      : {};
+  }
+}
+
+function addSafeInteger(current: number, reported: number): { total: number; complete: boolean } {
+  const total = current + reported;
+  return Number.isSafeInteger(total)
+    ? { total, complete: true }
+    : { total: current, complete: false };
+}
+
+function addFiniteNumber(current: number, reported: number): { total: number; complete: boolean } {
+  const total = current + reported;
+  return Number.isFinite(total) ? { total, complete: true } : { total: current, complete: false };
 }
 
 function parsePiEvent(line: string): (Record<string, unknown> & { type: string }) | undefined {
@@ -953,6 +1016,7 @@ function runProcess(
     timeoutSeconds?: number;
     streamLimits: PiStreamLimits;
     eventObserver?: (event: RunAgentEvent) => void;
+    diffContext?: PiRunOptions["diffContext"];
   },
 ): Promise<PiRunResult> {
   return new Promise((resolve, reject) => {
@@ -977,7 +1041,11 @@ function runProcess(
       env: options.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    const stdout = new PiOutputCollector(options.streamLimits, options.eventObserver);
+    const stdout = new PiOutputCollector(
+      options.streamLimits,
+      options.eventObserver,
+      options.diffContext ? createDiffContextCoverageTracker(options.diffContext) : undefined,
+    );
     let stderr = "";
     let stderrBytes = 0;
     child.stdout.setEncoding("utf8");
@@ -1073,6 +1141,9 @@ function finalizeProcessResult(options: {
       exitCode: 1,
       durationMs: options.durationMs,
       ...(collected.stream ? { stream: collected.stream } : {}),
+      ...(collected.diffContextCoverage
+        ? { diffContextCoverage: collected.diffContextCoverage }
+        : {}),
     };
   }
   return {

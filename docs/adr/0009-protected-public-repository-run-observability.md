@@ -65,9 +65,13 @@ metadata without exposing repository or model content. Possession of a provider 
 grant diagnostic access; teams can give a coding agent an identity independently from its provider
 credential.
 
+`PiprResult` may expose bounded, content-free aggregates that are also safe for the public metadata
+plane, including cache token totals and current-run diff context coverage counts. Exact paths and
+range IDs remain diagnostic content and require the protected plane.
+
 Key rotation is prospective. Adding a new recipient protects future bundles but does not re-encrypt
 existing artifacts, so old identities must be retained for the artifact retention window when old
 runs still need to be opened.
 
 Pipr does not detect repository visibility, host an authorization service, add private object
-storage, support passphrase or SSH recipients, or change `PiprResult`.
+storage, or support passphrase or SSH recipients.

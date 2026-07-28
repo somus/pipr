@@ -3,6 +3,7 @@ import { z } from "zod";
 export { definePipr, definePlugin } from "./builder.js";
 export { md } from "./prompt.js";
 export type {
+  PiprDiffContextCoverage,
   PiprResult,
   PiprRunContext,
   PiprRunSummary,

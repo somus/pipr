@@ -10,6 +10,11 @@ export type PiprRunContext = {
   readonly trigger: PiprRunTrigger;
 };
 
+export type PiprDiffContextCoverage = {
+  files: { total: number; covered: number };
+  ranges: { total: number; covered: number };
+};
+
 export type PiprRunSummary = PiprRunContext & {
   baseSha: string;
   headSha: string;
@@ -21,6 +26,10 @@ export type PiprRunSummary = PiprRunContext & {
   outputTokens: number;
   costUsd: number;
   usageStatus: "complete" | "partial" | "unavailable";
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  cacheUsageStatus?: "complete" | "partial" | "unavailable";
+  diffContextCoverage?: PiprDiffContextCoverage;
 };
 
 type InlineCommentCounts = { posted: number; skipped: number; failed: number };
@@ -82,6 +91,11 @@ export type PiprResult =
 const text = z.string().min(1);
 const count = z.number().int().nonnegative();
 const header = { formatVersion: z.literal(2) };
+const coverageCountsSchema = z
+  .strictObject({ total: count, covered: count })
+  .refine((coverage) => coverage.covered <= coverage.total, {
+    message: "covered context cannot exceed total context",
+  });
 const runSummarySchema = z.strictObject({
   id: text.max(200),
   trigger: z.enum(piprRunTriggers),
@@ -95,6 +109,15 @@ const runSummarySchema = z.strictObject({
   outputTokens: count,
   costUsd: z.number().nonnegative().finite(),
   usageStatus: z.enum(["complete", "partial", "unavailable"]),
+  cacheReadTokens: count.optional(),
+  cacheWriteTokens: count.optional(),
+  cacheUsageStatus: z.enum(["complete", "partial", "unavailable"]).optional(),
+  diffContextCoverage: z
+    .strictObject({
+      files: coverageCountsSchema,
+      ranges: coverageCountsSchema,
+    })
+    .optional(),
 });
 const inlineCountsSchema = z.strictObject({ posted: count, skipped: count, failed: count });
 const publicationCountsSchema = z.strictObject({

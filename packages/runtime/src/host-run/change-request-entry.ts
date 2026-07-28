@@ -12,7 +12,7 @@ import type {
   HostRunCommandResult,
   TrustedReviewAndPublishResult,
 } from "./types.js";
-import { workflowUrlFromEnvironment } from "./workflow-url.js";
+import { failureActionFromEnvironment, workflowUrlFromEnvironment } from "./workflow-url.js";
 
 export async function runChangeRequestHostRunCommand(
   options: HostRunCommandDependencyOptions,
@@ -43,12 +43,14 @@ export async function runChangeRequestHostRunCommand(
     log.notice("event ignored", { reason: "No tasks matched the change request event" });
     return { kind: "ignored", reason: "No tasks matched the change request event" };
   }
-  const workflowUrl = workflowUrlFromEnvironment(adapter.id, options.env ?? process.env);
+  const env = options.env ?? process.env;
+  const workflowUrl = workflowUrlFromEnvironment(adapter.id, env);
   const progress = await startReviewProgress({
     adapter,
     event,
     config: trustedRuntime.settings.config,
     workflowUrl,
+    failureAction: failureActionFromEnvironment(adapter.id, env),
     log,
     secretRedactor: options.secretRedactor,
   });
