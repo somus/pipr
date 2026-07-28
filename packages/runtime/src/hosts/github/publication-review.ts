@@ -16,11 +16,13 @@ import type {
   GitHubIssueComment,
   GitHubPublicationClient,
   GitHubReviewComment,
+  GitHubReviewThread,
 } from "./publication-client.js";
 import {
   assertCurrentHeadSha,
   findMainComment,
   listOwnedReviewComments,
+  reviewThreadByCommentId,
 } from "./publication-shared.js";
 import { publishGitHubPublicationThreadActions } from "./publication-thread-actions.js";
 
@@ -46,16 +48,25 @@ export async function publishGitHubPublicationPlan(options: {
   assertProgressLease(initialMain, options.progressLease);
   await assertCurrentHeadSha(options.client, options.change, options.plan.metadata.reviewedHeadSha);
   const existingReviewComments = await listOwnedReviewComments({ ...options, ownerLogin });
+  const existingReviewThreads =
+    options.plan.inlineItems.length > 0 && existingReviewComments.length > 0
+      ? await options.client.listReviewThreads({
+          repo: options.change.repository.slug,
+          pullRequestNumber: options.change.change.number,
+        })
+      : undefined;
   const assertLease = () => assertCurrentProgressLease({ ...options, ownerLogin });
   const inline = await publishInlineComments({
     ...options,
     ownerLogin,
     existingReviewComments,
+    existingReviewThreads: existingReviewThreads ?? [],
     beforeWrite: assertLease,
   });
   const threadActions = await publishGitHubPublicationThreadActions({
     ...options,
     existingReviewComments,
+    existingReviewThreads,
     beforeWrite: assertLease,
   });
   const partial = {
@@ -195,9 +206,13 @@ async function publishInlineComments(options: {
   plan: PublicationPlan;
   ownerLogin: string;
   existingReviewComments: GitHubReviewComment[];
+  existingReviewThreads: GitHubReviewThread[];
   beforeWrite?(): Promise<void>;
 }): Promise<{ posted: number; skipped: number; errors: string[] }> {
-  const existing = existingInlineCommentState(options.existingReviewComments);
+  const existing = existingInlineCommentState(
+    options.existingReviewComments,
+    options.existingReviewThreads,
+  );
   let posted = 0;
   let skipped = 0;
   const errors: string[] = [];
@@ -225,15 +240,19 @@ type ExistingInlineCommentState = {
   locations: InlinePublicationLocation[];
 };
 
-function existingInlineCommentState(comments: GitHubReviewComment[]): ExistingInlineCommentState {
+function existingInlineCommentState(
+  comments: GitHubReviewComment[],
+  threads: GitHubReviewThread[],
+): ExistingInlineCommentState {
   const state: ExistingInlineCommentState = { markers: new Set(), locations: [] };
+  const threadByCommentId = reviewThreadByCommentId(threads);
   for (const comment of comments) {
     const markers = extractInlineFindingMarkerRecords([comment.body ?? ""]);
     if (markers.length === 0) {
       continue;
     }
     const location = inlinePublicationLocationFromComment(comment);
-    if (location) {
+    if (location && threadByCommentId.get(comment.id)?.isResolved !== true) {
       state.locations.push(location);
     }
     for (const marker of markers) {

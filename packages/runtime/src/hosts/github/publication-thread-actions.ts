@@ -39,6 +39,7 @@ export async function publishGitHubPublicationThreadActions(options: {
   plan?: PublicationPlan;
   reviewedHeadSha?: string;
   existingReviewComments: GitHubReviewComment[];
+  existingReviewThreads?: GitHubReviewThread[];
   beforeWrite?(): Promise<void>;
 }): Promise<{ errors: string[] }> {
   const actions = options.actions ?? options.plan?.threadActions ?? [];
@@ -62,7 +63,7 @@ export async function publishGitHubPublicationThreadActions(options: {
     beforeWrite: options.beforeWrite,
   };
   const errors: string[] = [];
-  const threadLoad = await loadThreadActionThreads(context, actions);
+  const threadLoad = await loadThreadActionThreads(context, actions, options.existingReviewThreads);
   context.threadById = threadLoad.threads;
   context.threadByCommentId = threadLoad.threadsByCommentId;
   if (threadLoad.error) {
@@ -154,6 +155,7 @@ async function postThreadActionReplyIfNeeded(
 async function loadThreadActionThreads(
   context: ThreadActionContext,
   actions: PublicationPlan["threadActions"],
+  existingReviewThreads?: GitHubReviewThread[],
 ): Promise<{
   threads: Map<string, GitHubReviewThread>;
   threadsByCommentId: Map<number, GitHubReviewThread>;
@@ -163,10 +165,12 @@ async function loadThreadActionThreads(
     return { threads: new Map(), threadsByCommentId: new Map() };
   }
   try {
-    const threads = await context.client.listReviewThreads({
-      repo: context.change.repository.slug,
-      pullRequestNumber: context.change.change.number,
-    });
+    const threads =
+      existingReviewThreads ??
+      (await context.client.listReviewThreads({
+        repo: context.change.repository.slug,
+        pullRequestNumber: context.change.change.number,
+      }));
     return {
       threads: new Map(threads.map((thread) => [thread.id, thread])),
       threadsByCommentId: reviewThreadByCommentId(threads),

@@ -10,6 +10,7 @@ import {
 } from "../../hosts/github/publication.js";
 import type { ChangeRequestEventContext, DiffManifest, ValidatedReview } from "../../types.js";
 import { buildPublicationPlan, prepareInlinePublicationItems, runtimeVersion } from "../comment.js";
+import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import {
   type PriorReviewState,
   renderInlineFindingMarker,
@@ -337,6 +338,16 @@ describe("publishGitHubPublicationPlan", () => {
       change: event,
       plan: plan({ maxInlineComments: 1 }),
     });
+    const existingComment = client.reviewComments[0];
+    if (!existingComment) {
+      throw new Error("test fixture missing existing Inline Review Comment");
+    }
+    client.reviewThreads.push({
+      id: "thread-1",
+      isResolved: false,
+      viewerCanResolve: true,
+      commentIds: [existingComment.id],
+    });
 
     const changedFinding = {
       ...validated.validFindings[0],
@@ -353,6 +364,52 @@ describe("publishGitHubPublicationPlan", () => {
 
     expect(result.inlineComments).toEqual({ posted: 0, skipped: 1, failed: 0 });
     expect(client.reviewCommentPayloads).toHaveLength(1);
+  });
+
+  it("publishes a different finding at a resolved same-head location", async () => {
+    const client = new FakePublicationClient("head");
+    const firstFinding = validated.validFindings[0];
+    if (!firstFinding) {
+      throw new Error("test fixture missing validated finding");
+    }
+    const initialPlan = publishingPlanForFindings([firstFinding]);
+    await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: initialPlan,
+    });
+    const initialComment = client.reviewComments[0];
+    if (!initialComment) {
+      throw new Error("test fixture missing initial Inline Review Comment");
+    }
+    client.reviewThreads.push({
+      id: "thread-1",
+      isResolved: true,
+      viewerCanResolve: true,
+      commentIds: [initialComment.id],
+    });
+    const priorReviewState = await loadGitHubPriorReviewState({ client, change: event });
+    if (!priorReviewState) {
+      throw new Error("test fixture missing prior review state");
+    }
+
+    const nextPlan = publishingPlanForFindings(
+      [{ ...firstFinding, body: "A different concern affects the same code." }],
+      priorReviewState,
+    );
+    const result = await publishGitHubPublicationPlan({
+      client,
+      change: event,
+      plan: nextPlan,
+    });
+
+    expect(result.inlineComments).toEqual({ posted: 1, skipped: 0, failed: 0 });
+    expect(client.reviewCommentPayloads).toHaveLength(2);
+    expect(nextPlan.inlineItems[0]?.findingId).not.toBe(initialPlan.inlineItems[0]?.findingId);
+    expect(client.reviewCommentPayloads[1]).toMatchObject({
+      body: expect.stringContaining("A different concern affects the same code."),
+    });
+    expect(client.issueComments[0]?.body).toContain("1 actionable finding was identified.");
   });
 
   it("dedupes same-run inline comments by overlapping same-head location", async () => {
@@ -1286,6 +1343,29 @@ function plan(options: { maxInlineComments?: number; validated?: ValidatedReview
       droppedFindings: 0,
     },
   });
+}
+
+function publishingPlanForFindings(
+  findings: ValidatedReview["validFindings"],
+  priorReviewState?: PriorReviewState,
+) {
+  return buildCommentPublishingPlan({
+    event,
+    main: "Found issues.",
+    validated: { ...validated, validFindings: findings },
+    manifest,
+    priorReviewState,
+    metadata: {
+      runtimeVersion,
+      trustedConfigSha: "base",
+      trustedConfigHash: "hash",
+      reviewedHeadSha: "head",
+      selectedTasks: ["review"],
+      failedTasks: [],
+      validFindings: findings.length,
+      droppedFindings: 0,
+    },
+  }).publicationPlan;
 }
 
 function resolvedPriorPlan() {
