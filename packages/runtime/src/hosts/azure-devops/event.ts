@@ -10,22 +10,20 @@ const repositorySchema = z.looseObject({
   project: z.looseObject({ id: z.string().min(1), name: z.string().min(1) }),
 });
 
+const resourceContainerSchema = z.looseObject({
+  id: z.string().min(1),
+  baseUrl: z.string().url().optional(),
+});
+
 const serviceHookSchema = z.looseObject({
   id: z.string().min(1),
   eventType: z.string().min(1),
   resource: z.unknown(),
   resourceContainers: z.looseObject({
-    account: z.looseObject({
-      id: z.string().min(1),
-      baseUrl: z.string().url().optional(),
-    }),
-    collection: z.looseObject({
-      id: z.string().min(1),
-      baseUrl: z.string().url().optional(),
-    }),
-    project: z
-      .looseObject({ id: z.string().min(1), baseUrl: z.string().url().optional() })
-      .optional(),
+    account: resourceContainerSchema.optional(),
+    server: resourceContainerSchema.optional(),
+    collection: resourceContainerSchema,
+    project: resourceContainerSchema.optional(),
   }),
 });
 
@@ -205,7 +203,8 @@ function serviceHookCollectionUrl(
       `https://dev.azure.com/${encodeURIComponent(env.AZURE_DEVOPS_ORGANIZATION)}`,
     );
   }
-  const payloadUrl = containers.collection.baseUrl ?? containers.account.baseUrl;
+  const payloadUrl =
+    containers.collection.baseUrl ?? containers.account?.baseUrl ?? containers.server?.baseUrl;
   if (payloadUrl) return normalizeAzureCollectionUrl(payloadUrl);
   throw new Error("Azure DevOps service hook did not include a collection URL");
 }

@@ -159,7 +159,7 @@ describe("Azure DevOps event parser", () => {
     }
   });
 
-  it("uses the configured collection for Server service hooks without container URLs", async () => {
+  it("uses the Server container URL for Server service hooks", async () => {
     const loadedRefs: unknown[] = [];
     const fixture = await eventFixture({
       id: "event-server",
@@ -169,7 +169,10 @@ describe("Azure DevOps event parser", () => {
         repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
       },
       resourceContainers: {
-        account: { id: "account-id" },
+        server: {
+          id: "server-id",
+          baseUrl: "https://azure.example.test/tfs/DefaultCollection/",
+        },
         collection: { id: "collection-id" },
         project: { id: "project-id" },
       },
@@ -178,9 +181,7 @@ describe("Azure DevOps event parser", () => {
       await expect(
         parseAzureDevOpsEvent({
           eventPath: fixture.path,
-          env: {
-            AZURE_DEVOPS_COLLECTION_URL: "https://azure.example.test/tfs/DefaultCollection",
-          },
+          env: {},
           workspace: fixture.root,
           loadChangeRequest: async (ref) => {
             loadedRefs.push(ref);
