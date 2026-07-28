@@ -39,6 +39,7 @@ curl -fsSL \
 curl -fsSL \
   "https://raw.githubusercontent.com/somus/pipr/${PIPR_VERSION}/deploy/webhook/.env.example" \
   -o /srv/pipr/deployment/.env
+chmod 600 /srv/pipr/deployment/.env
 ```
 
 The Compose file pins the matching image. If you use an internal registry, mirror the same release and set `PIPR_IMAGE` in `.env`.
