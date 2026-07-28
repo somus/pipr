@@ -15,7 +15,7 @@ describe("Azure DevOps API client", () => {
       },
       async (_input, init) => {
         authorizations.push(new Headers(init?.headers).get("Authorization"));
-        return Response.json({ authenticatedUser: {}, instanceId: "collection-id" });
+        return Response.json({ authenticatedUser: {}, instanceId: "host-instance-id" });
       },
     );
 
@@ -27,7 +27,7 @@ describe("Azure DevOps API client", () => {
     const authorizations: Array<string | null> = [];
     const client = createAzureDevOpsClient(azureEnv, async (_input, init) => {
       authorizations.push(new Headers(init?.headers).get("Authorization"));
-      return Response.json({ authenticatedUser: {}, instanceId: "collection-id" });
+      return Response.json({ authenticatedUser: {}, instanceId: "host-instance-id" });
     });
 
     await client.currentUser();
@@ -76,7 +76,7 @@ describe("Azure DevOps API client", () => {
         requests.push(url);
         const response = responses.find(([pattern]) => url.includes(pattern))?.[1] ?? {
           authenticatedUser: {},
-          instanceId: "collection-id",
+          instanceId: "host-instance-id",
         };
         return Response.json(response);
       },
@@ -84,7 +84,7 @@ describe("Azure DevOps API client", () => {
 
     expect(client.organization).toBe("DefaultCollection");
     expect(client.collectionUrl).toBe("https://azure.example.test/tfs/DefaultCollection");
-    await expect(client.collectionId()).resolves.toBe("collection-id");
+    await expect(client.instanceId()).resolves.toBe("host-instance-id");
     await client.getRepository("repository");
     await expect(
       client.getRepositoryPermission("developer@example.com", "project-id", "repo-id"),
@@ -148,7 +148,7 @@ describe("Azure DevOps API client", () => {
       },
       async (input) => {
         requests.push(String(input));
-        return Response.json({ authenticatedUser: {}, instanceId: "collection-id" });
+        return Response.json({ authenticatedUser: {}, instanceId: "host-instance-id" });
       },
     );
 
@@ -184,7 +184,7 @@ describe("Azure DevOps API client", () => {
   it("normalizes Microsoft account identities from connection data", async () => {
     const client = createAzureDevOpsClient(azureEnv, async () =>
       Response.json({
-        instanceId: "collection-id",
+        instanceId: "host-instance-id",
         authenticatedUser: {
           id: "user-id",
           providerDisplayName: "Pipr User",

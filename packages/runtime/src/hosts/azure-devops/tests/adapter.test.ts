@@ -551,7 +551,7 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
   organization = "org";
   project = "project";
   collectionUrl = "https://dev.azure.com/org";
-  collectionId = async () => "collection-id";
+  instanceId = async () => "host-instance-id";
   threads: AzureDevOpsThread[] = [];
   createdThreadBodies: Array<Record<string, unknown>> = [];
   statusBodies: Array<Record<string, unknown>> = [];

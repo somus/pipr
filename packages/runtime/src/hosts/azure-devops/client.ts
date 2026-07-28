@@ -149,7 +149,7 @@ export type AzureDevOpsClient = {
   organization: string;
   project: string;
   collectionUrl: string;
-  collectionId(): Promise<string>;
+  instanceId(): Promise<string>;
   currentUser(): Promise<{ id?: string; uniqueName?: string; displayName?: string }>;
   getRepository(repository: string): Promise<{
     id: string;
@@ -262,7 +262,7 @@ export function createAzureDevOpsClient(
     organization,
     project,
     collectionUrl,
-    async collectionId() {
+    async instanceId() {
       return (await connectionData()).instanceId;
     },
     async currentUser() {

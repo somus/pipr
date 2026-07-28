@@ -2,7 +2,11 @@ import { z } from "zod";
 import type { CodeHostWebhookProtocol } from "../webhook.js";
 import { parseWebhookJson, webhookSecretsEqual } from "../webhook-shared.js";
 import { createAzureDevOpsClient } from "./client.js";
-import { azureOrganizationFromUrl, normalizeAzureCollectionUrl } from "./coordinates.js";
+import {
+  azureOrganizationFromUrl,
+  isAzureDevOpsServicesUrl,
+  normalizeAzureCollectionUrl,
+} from "./coordinates.js";
 
 const resourceContainerSchema = z.looseObject({
   id: z.string().min(1),
@@ -32,7 +36,8 @@ const eventSchema = z.looseObject({
       .optional(),
   }),
   resourceContainers: z.looseObject({
-    account: resourceContainerSchema,
+    account: resourceContainerSchema.optional(),
+    server: resourceContainerSchema.optional(),
     collection: resourceContainerSchema,
     project: resourceContainerSchema,
   }),
@@ -41,17 +46,22 @@ const eventSchema = z.looseObject({
 type ExpectedRepository = {
   organization: string;
   collectionUrl: string;
-  collectionId: string;
+  instanceId: string;
   projectId: string;
   repositoryId: string;
   subscriptionId: string;
 };
 
-export function createAzureDevOpsWebhookProtocol(): CodeHostWebhookProtocol {
+export function createAzureDevOpsWebhookProtocol(
+  fetch: (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => Promise<Response> = globalThis.fetch,
+): CodeHostWebhookProtocol {
   return {
     host: "azure-devops",
     async resolveExpectedRepository(env, repository) {
-      const client = createAzureDevOpsClient(env);
+      const client = createAzureDevOpsClient(env, fetch);
       const resolved = await client.getRepository(repository);
       const subscriptionId = env.PIPR_AZURE_SUBSCRIPTION_ID;
       if (!subscriptionId)
@@ -59,7 +69,7 @@ export function createAzureDevOpsWebhookProtocol(): CodeHostWebhookProtocol {
       return {
         organization: client.organization,
         collectionUrl: client.collectionUrl,
-        collectionId: await client.collectionId(),
+        instanceId: await client.instanceId(),
         projectId: resolved.projectId,
         repositoryId: resolved.id,
         subscriptionId,
@@ -92,7 +102,7 @@ function isExpectedRepository(value: unknown): value is ExpectedRepository {
     value !== null &&
     "organization" in value &&
     "collectionUrl" in value &&
-    "collectionId" in value &&
+    "instanceId" in value &&
     "projectId" in value &&
     "repositoryId" in value &&
     "subscriptionId" in value
@@ -103,30 +113,48 @@ function expectedRepositoryMatches(
   expected: ExpectedRepository,
   actual: Partial<ExpectedRepository>,
 ): boolean {
-  const requiredKeys = ["collectionId", "projectId", "repositoryId", "subscriptionId"] as const;
+  const requiredKeys = ["instanceId", "projectId", "repositoryId", "subscriptionId"] as const;
   return (
     requiredKeys.every((key) => actual[key] === expected[key]) &&
     (actual.organization === undefined || actual.organization === expected.organization) &&
-    (actual.collectionUrl === undefined || actual.collectionUrl === expected.collectionUrl)
+    collectionUrlsMatch(expected.collectionUrl, actual.collectionUrl)
   );
+}
+
+function collectionUrlsMatch(expected: string, actual: string | undefined): boolean {
+  if (actual === undefined) return true;
+  if (isAzureDevOpsServicesUrl(expected) && isAzureDevOpsServicesUrl(actual)) {
+    return azureOrganizationFromUrl(expected) === azureOrganizationFromUrl(actual);
+  }
+  return actual === expected;
 }
 
 function eventRepository(event: z.infer<typeof eventSchema>): Partial<ExpectedRepository> {
   const repository = event.resource.repository ?? event.resource.pullRequest?.repository;
-  const collectionUrl = safeCollectionUrl(
-    event.resourceContainers.collection.baseUrl ?? event.resourceContainers.account.baseUrl,
-  );
+  const collectionUrl = eventCollectionUrl(event.resourceContainers);
   const repositoryProjectId = repository?.project.id;
   const projectId =
     event.resourceContainers.project.id === repositoryProjectId ? repositoryProjectId : undefined;
   return {
     organization: collectionUrl ? azureOrganizationFromUrl(collectionUrl) : undefined,
     collectionUrl,
-    collectionId: event.resourceContainers.collection.id,
+    instanceId: eventInstanceId(event.resourceContainers),
     projectId,
     repositoryId: repository?.id,
     subscriptionId: event.subscriptionId,
   };
+}
+
+type ResourceContainers = z.infer<typeof eventSchema>["resourceContainers"];
+
+function eventCollectionUrl(containers: ResourceContainers): string | undefined {
+  return safeCollectionUrl(
+    containers.collection.baseUrl ?? containers.account?.baseUrl ?? containers.server?.baseUrl,
+  );
+}
+
+function eventInstanceId(containers: ResourceContainers): string | undefined {
+  return containers.account?.id ?? containers.server?.id;
 }
 
 function safeCollectionUrl(value: string | undefined): string | undefined {
