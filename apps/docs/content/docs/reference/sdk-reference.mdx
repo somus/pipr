@@ -191,7 +191,7 @@ const strictSecurity = security.extend({
 
 Use one task when multiple agents should produce one published review:
 
-Pass `{ manifest }` to specialists and aggregators that need changed-code context. Pipr injects the authoritative Diff Manifest section from that reserved key. An aggregator that independently revalidates causality, impact, and anchors needs the manifest and read-only tools.
+Pass `{ manifest }` to specialists and aggregators that need changed-code context. An aggregator that revalidates findings also needs the manifest and read-only tools.
 
 ```ts
 const base = pipr.agent({
@@ -289,8 +289,8 @@ Task handlers use this context to read change data, run Pi, publish results, and
 
 | Property | Purpose |
 | --- | --- |
-| `ctx.run.id` | Stable id for the selected Review Run, not the process attempt. |
-| `ctx.run.trigger` | Provider-neutral task trigger: `change-request`, `command`, or `local`. `verifier` is reserved for Pipr's internal verifier context. |
+| `ctx.run.id` | Stable id for the selected review run. |
+| `ctx.run.trigger` | Task trigger: `change-request`, `command`, or `local`. |
 | `ctx.platform.id` | Active code host adapter id. Don't use it to infer the Review Run trigger. |
 | `ctx.repository` | Provider-neutral repository metadata. |
 | `ctx.change` | Provider-neutral change request metadata plus diff helpers. |
@@ -303,13 +303,11 @@ Task handlers use this context to read change data, run Pi, publish results, and
 
 `ctx.change.diffManifest(...)` returns commentable file ranges. Findings must reference those ranges by `rangeId`.
 
-For languages supported by the installed ast-grep executable, Pipr can add `DiffManifestFile.changedSymbols` and `CommentableRange.summary` values derived from enclosing declarations. Caller-provided values take precedence. Derived values are best effort and bounded to 32 symbols per file, 120 characters per symbol, 200 characters per summary, and 32 KiB across one manifest. Compressed and automatically condensed projections retain symbols and summaries but continue to remove `signals` and range previews as applicable.
-
-The Docker Action provides ast-grep `0.45.0`. Local runtimes use the same structural behavior when ast-grep is on `PATH`; otherwise, they return the ordinary Diff Manifest without failing the Review Run.
+When structural analysis is available, manifest files and ranges can include best-effort `changedSymbols` and declaration summaries. Review logic must not require those optional fields.
 
 `ctx.command.reply(...)` emits a normal change-request comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
 
-When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. The manifest is filtered to matching files, the prompt carries the path scope, and Pipr drops findings from that scoped Pi result when `result.inlineFindings` is passed directly to `ctx.comment(...)`. If a task maps, spreads, or clones the returned finding array, Pipr treats the transformed findings as task-authored output and applies normal Diff Manifest range validation.
+When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. Pipr applies that scope to direct agent findings and still validates transformed task output against the manifest.
 
 <auto-type-table path="packages/sdk/src/index.ts" name="TaskContext" />
 
@@ -373,11 +371,11 @@ pipr.config({
 });
 ```
 
-`maxInlineComments` limits Inline Review Comments published by the current run. `maxStoredFindings` limits the current-first finding records serialized for future runs; it defaults to `50` and accepts values from `0` through `100`. Findings from an existing marker remain available during the run that rewrites it. Setting the limit to `0` writes no findings to the next marker, so subsequent runs receive no prior-finding input or automatic stale-finding resolution candidates; current output is unchanged.
+`maxInlineComments` caps inline publication. `maxStoredFindings` defaults to `50`, accepts `0` through `100`, and limits prior findings available to later runs. Setting it to `0` disables finding-based cross-run behavior after the current run.
 
-`showHeader`, `showFooter`, `showStats`, and `showProgress` independently control the generated Pipr title, attribution footer, collapsed completion details, and hosted-run progress. All four default to `true`. `showProgress: false` omits progress entirely rather than rendering an empty placeholder. Hidden publication markers and `PublicationResult.metadata.stats` remain available when their visible sections are disabled.
+`showHeader`, `showFooter`, `showStats`, and `showProgress` independently control the generated title, attribution, completion details, and hosted-run progress. All four default to `true`.
 
-`publication.autoResolve` defaults to enabled. Use `autoResolve: false` to disable verifier-driven thread cleanup and user-reply handling. If `model` is omitted, Pipr uses the default provider. Use `instructions` to add project-specific guidance for the internal verifier. Native thread cleanup still depends on the active code-host credential; on GitHub, the credential must have `viewerCanResolve: true`.
+`publication.autoResolve` defaults to enabled. Use `autoResolve: false` to disable thread cleanup and user-reply handling. If `model` is omitted, Pipr uses the default provider. Native thread cleanup still depends on code-host support and credentials.
 
 `userReplies.allowedActors` controls who can trigger verifier replies:
 
@@ -463,7 +461,7 @@ Tool `run(...)` receives:
 Use `run({ input, ctx, signal })` for custom tools. Pipr rejects legacy
 `execute(context, input)` tool definitions with `Tool '<name>' must define run`.
 
-`toModelOutput(...)` can project a rich internal result into a smaller model-facing value.
+`toModelOutput(...)` can project a rich tool result into a smaller model-facing value.
 
 <auto-type-table path="packages/sdk/src/index.ts" name="PluginToolDefinition" />
 
@@ -510,7 +508,7 @@ export default definePipr((pipr) => {
 
 Use `pipr.schemas.review` when an agent directly returns publishable Inline Review Comments. `suggestedFix` is optional exact replacement code for the selected range. GitHub and GitLab render it as a native suggestion; Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg render fenced replacement code.
 
-Custom output receives Pipr's review policy automatically when its schema contains an object with the standard Review Finding fields. A schema rooted exactly at `{ inlineFindings: [...] }` is also automatically sharded and merged; each item may carry extra metadata. Nested, summary-only, and arbitrary schemas run once.
+Custom output receives review-finding guidance when its schema contains the standard finding fields. A root `{ inlineFindings: [...] }` schema can also use automatic large-diff splitting; other custom shapes run once.
 
 The `z` export is the recommended typed path for JSON-Schema-representable schemas. Generated `.pipr/types` include a standalone Zod authoring subset so `pipr init` projects type-check without installing `zod`; use `pipr.jsonSchema<T>()` for advanced JSON Schema shapes or when a Zod helper is outside that generated subset.
 
@@ -569,13 +567,29 @@ These limits control runtime timeout, provider-call count, and Diff Manifest pro
 | `limits.diffManifest.maxShards` | Positive integer; defaults to `4` | Caps automatic fan-out from one review invocation. Set it to `1` to disable splitting. |
 | `limits.maxAgentRuns` | Positive integer; unlimited when omitted | Caps total provider invocations across all tasks and agents in one Review Run. |
 
-`limits.diffManifest.toolResponseMaxBytes` also bounds condensed helper responses. Condensed runs with structural capability register `pipr_read_declaration(path, ref, rangeId)` and `pipr_ast_grep(pattern, language, paths)` in addition to the manifest read tools when the reviewed head is the current workspace. Local ref-to-ref reviews with `pipr review --head <ref>` keep the standard read tools because the workspace may not match that ref. `pipr_ast_grep` searches only the head workspace, accepts 1 to 16 explicit safe paths, returns at most 100 matches, and truncates each matched text to 2 KiB.
-
 `ctx.pi.run(agent, input, { maxShards })` overrides `limits.diffManifest.maxShards` for that invocation. Omit it to inherit the global value; set it to `1` to disable splitting for only that call.
 
-Each shard, invalid-output repair, transient retry, and model fallback consumes one agent run. Pipr reserves an agent run immediately before starting Pi. The reservation remains consumed if the invocation fails or is aborted. After the budget is exhausted, Pipr fails before starting another provider process.
+Each shard, output repair, retry, and fallback consumes one agent run. Increase `maxShards` only when a reduced unit still exceeds the provider context limit.
 
-Increase `maxShards` if a capped condensed shard exceeds your provider's context limit. Higher values can make more provider calls, which also count against `maxAgentRuns` when configured.
+## Results and run bundles
+
+The SDK exports parsers and schemas for stable machine-readable results:
+
+| Surface | Types | Parsers and schemas |
+| --- | --- | --- |
+| CLI and Action result | `PiprResult`, `PiprRunSummary` | `parsePiprResult`, `piprResultSchema` |
+| Review output | `ReviewResult`, `ReviewFinding`, `ReviewSummary` | `parseReviewResult`, `parseReviewFinding`, review schemas |
+| Captured run data | `RunBundle`, `RunBundleManifest`, `RunBundleEnvelope` | `parseRunBundle`, `parseRunBundleManifest`, `parseRunBundleEnvelope` |
+
+Use the parser before reading an external JSON value:
+
+```ts
+import { parsePiprResult } from "@usepipr/sdk";
+
+const result = parsePiprResult(JSON.parse(serializedResult));
+```
+
+CLI and Action results include `formatVersion`; reject unsupported versions before consuming kind-specific fields. Run bundles can contain sensitive repository evidence, so follow [run-bundle security guidance](/docs/concepts/trust-security#diagnostic-data).
 
 ## Plugins
 

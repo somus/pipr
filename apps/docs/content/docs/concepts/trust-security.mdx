@@ -1,38 +1,39 @@
 ---
 title: "Trust and security"
-description: "Trusted base config, secret handling, read-only Pi execution, and publication safety."
+description: "How Pipr protects config, secrets, model access, publication, and diagnostic data."
 ---
 
-Pipr assumes that proposed change-request code can be untrusted. Runtime policy comes from trusted config, not from the proposed head.
+Pipr assumes proposed change-request code can be untrusted. Hosted runs take executable policy from the base branch and keep model output behind validation.
 
-## Run mode boundaries
+## Run-mode boundaries
 
-Each run mode uses a different source for config, diff data, secrets, and writes.
+The source of config, secrets, and publication authority depends on how you run Pipr.
 
 | Boundary | Local review | Provider CI | Trusted webhook worker |
 | --- | --- | --- | --- |
-| Config source | Current local workspace | Change-request base commit | Change-request base commit |
-| Diff source | Local git refs or working tree | Exact proposed head and base | Exact proposed head and base |
-| Secret source | Local Pi agent authentication, exported env vars, or Bun-loaded env files | Provider CI secret store | Trusted worker environment |
-| Model-visible code context | Diff Manifest plus read-only local workspace access through Pi | Diff Manifest plus read-only CI workspace access through Pi | Diff Manifest plus read-only worker workspace access through Pi |
-| Code-host writes | Disabled | Native comments and statuses when configured | Native comments, command responses, and statuses when configured |
-| Best use | Prompt and config iteration | Trusted same-repository CI | Forks, commands, replies, and providers without a trusted CI path |
+| Config | Current workspace | Base commit | Base commit |
+| Diff | Local refs or working tree | Exact proposed head and base | Exact proposed head and base |
+| Secrets | Local environment or Pi authentication | CI secret store | Worker environment |
+| Code-host writes | Disabled | Configured comments and statuses | Configured comments, responses, and statuses |
+| Best use | Config and prompt iteration | Trusted CI changes | Forks, commands, replies, and self-hosted delivery |
 
-## Trusted base config
+Use a trusted webhook worker when proposed code can alter the CI job that receives write-capable tokens or model credentials.
 
-Hosted change-request runs follow this order:
+## Trusted config
 
-1. Pipr loads `.pipr/config.ts` and local imports from the base commit.
-2. Pipr validates the runtime plan and required provider env vars.
-3. Pipr checks out the exact proposed head for review.
-4. Pi reviews the proposed code.
-5. Publication uses policy from the base config.
+Hosted change-request runs:
 
-Proposed changes to `.pipr/config.ts` are reviewed as code. They do not change the active model, provider, command permissions, task selection, or publication policy for the current run.
+1. Load `.pipr/config.ts` and its local imports from the base commit.
+2. Validate the plan and required environment variables.
+3. Check out the exact proposed head for review.
+4. Run the selected tasks.
+5. Publish with the base-branch policy.
+
+Changes to `.pipr/config.ts` are reviewed as code, but they do not change the active model, tasks, command permissions, or publication settings for that run.
 
 ## Secrets
 
-Use `pipr.secret(...)` for provider keys:
+Reference provider credentials by environment-variable name:
 
 ```ts twoslash
 // @include: pipr-builder
@@ -43,148 +44,50 @@ const model = pipr.model({
 });
 ```
 
-The config stores the env var name, not the secret value. Pass the value from the selected CI or worker secret store. A GitHub workflow uses an Actions secret:
+Pass the value from the CI or worker secret store. Do not place credentials or private operational notes in config values, prompts, schema metadata, examples, or generated documentation.
 
-```yaml
-env:
-  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-```
+## Model workspace
 
-Do not put raw provider keys, tokens, or private data in `.pipr/config.ts`, schema descriptions, prompt examples, or generated docs.
+Pi receives read-only tools and a read-only copy of the reviewed workspace. Bounded diff tools can read manifest ranges and base or head snapshots when a reduced manifest needs more context. They do not expose shell or write operations.
 
-## Pi workspace
+Path filters limit changed-code context and publishable findings. They are not a repository-access sandbox, so the model can still inspect related files through allowed read tools.
 
-Pi runs with a read-only workspace copy. The runtime passes only read-only built-in tools plus Pipr-owned Diff Read Tools for condensed manifest runs.
+## Publication controls
 
-The official Docker Action adds a process-level permission boundary. Its root Pipr supervisor owns and seals the copy, then starts Pi as UID and GID `1000`, so the Pi process cannot restore write permission to that copy. Local runs and the non-root webhook container run Pipr and Pi under the same identity; in those modes, the copy's mode bits and tool allowlist provide defense in depth rather than process-level immutability.
+Agents do not receive code-host write APIs. Tasks emit output, then Pipr:
 
-### Bounded diff reads
+- validates inline anchors against the Diff Manifest
+- drops invalid or duplicate findings
+- applies the configured inline cap
+- checks that the change request still points to the reviewed head
+- updates Pipr-owned comments and statuses
 
-Diff Read Tools expose bounded reads over:
+These controls prevent model output from becoming an unchecked provider-side effect. They cannot guarantee that model judgment is correct, so human review still owns the merge decision.
 
-- Diff Manifest files
-- base snapshots
-- head snapshots
-- known range ids
+## Forks and commands
 
-They do not expose arbitrary shell access or write access.
+Fork support depends on the provider's secret and CI rules. If a required secret is unavailable, Pipr stops before model execution. The base-config rule still applies to fork-authored changes.
 
-## Publication safety
-
-Review Tasks do not receive broad code host write tools. They emit one final output, then Pipr validates and publishes through the active adapter.
-
-| Output surface | When Pipr writes it | Safety control |
-| --- | --- | --- |
-| Main Review Comment | A task calls `ctx.comment(...)` with main output | Upserted by Pipr marker and replaced on rerun. |
-| Inline Review Comment | A task passes valid `ReviewFinding[]` | Anchored to Diff Manifest ranges, capped by config, and deduped. |
-| Command response | A command task calls `ctx.command.reply(...)` | Keyed to the source command comment and updated on rerun. |
-| Code-host status | Checks are enabled in config | Upserted through the adapter after task execution. |
-| Verifier reply or thread resolution | The internal verifier marks a prior finding fixed or still valid | Limited to Pipr-owned Inline Review Comments. |
-
-Agents with broad code-host tools can let model output become a direct side effect. Pipr instead treats model output as proposed review data, then lets the runtime decide what can be published.
-
-### Stale head check
-
-Before publishing, Pipr checks the current change-request head SHA. If the head changed after review execution, publication stops before writes.
-
-### Publication plan
-
-Review Tasks do not call code host APIs directly. They emit final output, then Pipr:
-
-- validates structured findings
-- drops invalid findings
-- caps inline comments
-- upserts the Main Review Comment by marker
-- dedupes same-head inline comments
-- records publication metadata
-
-## Run bundle security
-
-Diagnostic bundles preserve enough evidence to debug a model-backed review, so handle them as sensitive repository data.
-
-### Filesystem and archive controls
-
-Pipr creates bundle directories with mode `0700` and files with mode `0600` where the platform supports Unix permissions. It rejects symlinked stores, traversal paths, unexpected files, invalid schemas, artifact hash mismatches, and archives that expand beyond 64 MiB.
-
-Known runtime secrets are redacted before prompts, visible output, stderr, diffs, validation records, or publication evidence reach disk. Redaction matches values Pipr receives through its environment and secret APIs; it is not a general repository secret scanner.
-
-### Provider access and diagnostic identities
-
-GitHub Actions never places plaintext diagnostic bundles in its artifact upload path. It publishes a fixed content-free metadata archive and, when `PIPR_RUN_AGE_RECIPIENTS` is configured, an age-encrypted diagnostic archive. Encryption happens before the package reaches the upload step.
-
-GitHub credentials authorize discovery and download of the protected package. They do not authorize diagnostic content. A matching local X25519 age identity is required to decrypt diagnostics, so a public-repository artifact or a leaked read token does not expose prompts, model output, source, diffs, stderr, or tool payloads.
-
-Use `pipr runs show --json` without an identity for content-free automation. Give an identity only to a person or coding agent already authorized to read the repository and change request. Never store an identity beside its provider artifact. Recipient rotation protects future runs only, so retain old identities through the artifact retention window when old diagnostics remain useful.
-
-Trusted webhook stores and opt-in local captures remain plaintext under filesystem authorization on every supported code host. Pipr does not copy provider credentials into bundles or add a hosted authorization service.
-
-### OTLP boundary
-
-OTLP traces, metrics, and logs contain event names, timings, statuses, sizes, hashes, usage, and low-cardinality dimensions. They exclude prompts, model output, source text, stderr snippets, environment values, raw reasoning, and tool payload bodies.
-
-## Guarantees and limits
-
-The runtime provides deterministic publication guards around probabilistic model output, but it cannot guarantee the model's judgment.
-
-### Runtime guarantees
-
-Pipr makes deterministic checks around model output and publication:
-
-- Hosted change-request runs load `.pipr/config.ts` from the base commit.
-- In the official Docker Action, Pi cannot write to its root-owned workspace copy through normal filesystem operations.
-- Review Findings must match a changed Diff Manifest file and range before inline publication.
-- Pipr checks the current head SHA before publishing review output.
-- Reruns use Pipr-owned markers to update the Main Review Comment and skip duplicate Inline Review Comments.
-- Invalid findings are dropped with metadata instead of being published on invented locations.
-
-### Runtime limits
-
-Pipr does not turn model judgment into a guarantee of correctness:
-
-- AI review can miss bugs or report false positives. Human review still owns the merge decision.
-- Pipr does not resume an interrupted Pi model call in the MVP. A rerun reconstructs the same inputs and runs the agent again.
-- The stale-head check happens before publication writes. Marker dedupe keeps retries safe, but it is not an atomic lock across every later provider API call.
-- Local review does not publish comments. It proves config, diff, and model behavior before CI publication.
-- Path scope limits the Diff Manifest and publishable findings for scoped runs. It does not prevent Pi from reading the rest of the read-only workspace.
-
-## Forks
-
-Fork reviews preserve trusted base config but inherit the selected provider's secret and CI trust rules.
-
-### Secret availability
-
-Provider CI systems differ in how they expose secrets to forked change requests. If a required provider secret is unavailable, Pipr fails before Pi execution. Use a trusted webhook worker when proposed CI configuration can access or replace the delivery job.
-
-### Base config on forks
-
-The base config rule still applies for forks. Fork-authored config changes are visible in the diff but do not change the running task policy.
-
-## Command permissions
-
-Each adapter maps native repository roles into the shared Pipr permission ladder.
-
-### Permission ladder
-
-Commands have provider-neutral permissions:
+Commands use provider-neutral permission levels:
 
 ```text
 read < triage < write < maintain < admin
 ```
 
-The selected code-host adapter maps native repository permissions to these levels before a command task runs. Keep commands that inspect sensitive context at `write` or higher.
+Keep commands that expose sensitive context or spend significant provider quota at `write` or higher.
 
-## Sensitive prompt content
+## Diagnostic data
 
-Treat schema metadata and reviewer instructions as model-visible content.
+Run bundles can contain repository and model evidence. Treat them as sensitive repository data.
 
-### Model-visible fields
+GitHub Actions publishes content-free metadata by default. When `PIPR_RUN_AGE_RECIPIENTS` is configured, it can also publish an encrypted diagnostic package. GitHub access permits discovery and download; a matching local age identity is required to read the diagnostic content.
 
-Schema metadata and prompt text can be shown to the model. Do not place secrets or private operational notes in:
+Trusted webhook stores and opt-in local captures use filesystem access controls. Never store a decryption identity beside its provider artifact or share decrypted diagnostics outside an authorized repository channel.
 
-- JSON Schema `description`
-- JSON Schema `examples`
-- JSON Schema `default`
-- JSON Schema `$comment`
-- reviewer instructions
-- command response templates
-- generated documentation
+See [Debug captured runs](/docs/guide/run-observability) for setup and retention behavior.
+
+## Security limits
+
+Pipr cannot prevent false positives, missed defects, or a configured model provider from processing the context you send. Do not run Pipr on code you are not permitted to send to that provider.
+
+Local runs trust the current workspace config and its task code. Run them only on branches whose `.pipr` files you trust.

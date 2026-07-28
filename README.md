@@ -18,178 +18,61 @@
   </p>
 </div>
 
-Pipr runs AI review from your repository. It loads `.pipr/config.ts`, builds a deterministic Diff Manifest, runs Pi for structured review output, validates findings against commentable ranges, and publishes one Main Review Comment plus capped Inline Review Comments.
+Pipr runs AI code review from a TypeScript config in your repository. It supports GitHub, GitLab, Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg without tying your review policy to one host.
 
-GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Azure DevOps Server, Bitbucket Cloud, Bitbucket Data Center, Gitea, Forgejo, and Codeberg are supported delivery targets. They use Code Host Adapters, so `.pipr/config.ts` stays provider-neutral.
+Use the built-in reviewer, start from a recipe, or compose custom tasks and agents with the typed SDK. Pipr validates findings against the changed code before it publishes review comments.
 
-## Why Pipr
+## Quick start
 
-Pipr keeps the review runtime and policy in your repository. Compose the workflow in TypeScript:
+1. Install Pipr and initialize your repository:
 
-- `pipr.review(...)` for a tuned default review
-- `pipr init --recipe <id>` starters for security SAST, PR briefings, quality gates, dependency risk, and more
-- `pipr.task(...)` and `pipr.agent(...)` for custom workflows with typed schemas
-- `pipr.command(...)` for `@pipr` commands
-- `definePlugin(...)` for typed tools agents can call during review
+   ```bash
+   curl -fsSL https://pipr.run/install.sh | sh
+   pipr init
+   pipr check
+   ```
 
-The runtime owns diff modeling, Pi execution, structured output validation, stale-head checks, and comment publishing. Review policy stays in code you own.
+2. Add the model-provider secret named by the generated config. For the default GitHub setup:
 
-## Quickstart
+   ```bash
+   gh secret set DEEPSEEK_API_KEY
+   ```
 
-Install the CLI, create the TypeScript config and default GitHub Action workflow, then validate the setup:
+3. Open or update a change request. Pipr runs from the generated code-host integration.
 
-```bash
-curl -fsSL https://pipr.run/install.sh | sh
-pipr init
-pipr check
-```
+See the [quickstart](https://pipr.run/docs/guide/quickstart) for model selection, permissions, and a first review.
 
-Check the installed CLI version with `pipr --version`. Update a release binary with `pipr update`; for package-manager installs, update `@usepipr/cli` through npm or Bun. Updating the local CLI does not change the GitHub Action pin in `.github/workflows/pipr.yml`.
+## What you can configure
 
-GitHub Release binaries are self-contained. The npm `@usepipr/cli` package requires Bun 1.3.14 or newer to execute `pipr`.
+- Select models, fallbacks, reasoning levels, timeouts, and retries.
+- Limit reviews by path or change-request event.
+- Add `@pipr` commands and custom TypeScript tasks.
+- Control inline-comment limits and summary publication.
+- Run reviews locally before enabling CI.
 
-AI agents should load the version-matched setup skill before configuring a repository:
+Start with the [configuration guide](https://pipr.run/docs/guide/configuration), browse the [recipes](https://pipr.run/docs/recipes), or use the [SDK reference](https://pipr.run/docs/reference/sdk-reference).
 
-```bash
-pipr skill
-```
-
-Set the provider secret referenced by the generated config:
-
-```bash
-gh secret set DEEPSEEK_API_KEY
-```
-
-`pipr init` creates `.github/workflows/pipr.yml` with the default GitHub Action:
-
-```yaml
-name: pipr
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
-
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: actions/cache@v4
-        with:
-          path: /home/runner/work/_temp/_github_home/.bun/install/cache
-          key: pipr-bun-${{ hashFiles('.pipr/bun.lock') }}
-      - uses: somus/pipr@v0.6.3 # x-release-please-version
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          GITHUB_TOKEN: ${{ github.token }}
-```
-
-Use `pipr init --adapters none` to create only `.pipr` config files. Run `pipr init --help` for the full option list.
-
-See [Quickstart](https://pipr.run/docs/guide/quickstart) for the full first-run path.
-
-## Configuration
-
-`pipr init` creates `.pipr/config.ts`. The default config registers one review task that runs on change request events, on `@pipr review`, and from local `pipr review --base <ref>` commands:
-
-```ts
-import { definePipr } from "@usepipr/sdk";
-
-export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
-
-  pipr.config({ publication: { maxInlineComments: 5 } });
-
-  pipr.review({
-    id: "review",
-    model,
-    instructions: {
-      findings: `
-        Review the change request diff for correctness, security,
-        maintainability, and test coverage. Return only actionable findings
-        that target valid diff ranges.
-      `,
-      summary: "Summarize the changed behavior, risk, and reviewer focus.",
-    },
-    entrypoints: {
-      changeRequest: ["opened", "updated", "reopened", "ready"],
-      command: { pattern: "@pipr review", permission: "write" },
-    },
-    timeout: "10m",
-  });
-});
-```
-
-The SDK also supports custom agents, tasks, `@pipr` commands, model fallback, local-disabled tasks, and retry settings. See [Configuration](https://pipr.run/docs/guide/configuration).
-
-The built-in review runs separate findings and summary agents with the same model, fallbacks, tools, path scope, and timeout. Pipr adds bounded change request metadata, the tool contract, and the output schema to every agent prompt. Review-schema prompts also include Core's finding and `suggestedFix` rules. Keep repository-specific policy in the two instruction fields; use `pipr.agent()` and `pipr.task()` when you need custom prompts or orchestration.
-
-## Docs
+## Documentation
 
 | Goal | Page |
 | --- | --- |
-| Understand Pipr's core model | [How Pipr works](https://pipr.run/docs/concepts) |
-| Add Pipr to a GitHub repository | [Quickstart](https://pipr.run/docs/guide/quickstart) |
-| Configure models, scopes, commands, and publication | [Configuration](https://pipr.run/docs/guide/configuration) |
-| Start from a generated review workflow | [Recipes](https://pipr.run/docs/recipes) |
-| Build custom tasks and agents | [Custom tasks](https://pipr.run/docs/guide/custom-tasks) |
-| Look up CLI flags | [CLI reference](https://pipr.run/docs/reference/cli) |
-| Look up SDK types and options | [Pipr SDK reference](https://pipr.run/docs/reference/sdk-reference) |
-| Understand runtime and publication behavior | [Runtime flow](https://pipr.run/docs/concepts/runtime) |
-| Contribute to Pipr | [Contributing](https://pipr.run/docs/project/contributing) |
-| Report vulnerabilities | [Security policy](https://pipr.run/docs/project/security) |
-| Read release history | [Changelog](https://pipr.run/docs/project/changelog) |
-
-Project language lives in [docs/CONTEXT.md](docs/CONTEXT.md). Architecture decisions live in [docs/adr](docs/adr).
-
-## Packages
-
-| Package | Role |
-| --- | --- |
-| [`@usepipr/sdk`](packages/sdk) | Public TypeScript authoring SDK for `.pipr/config.ts`. |
-| [`@usepipr/runtime`](packages/runtime) | Internal runtime used by Pipr tooling; direct user imports are unsupported. |
-| [`@usepipr/cli`](packages/cli) | `pipr` binary and command-line entrypoint. |
-| [`@pipr/e2e`](packages/e2e) | Private local Action and container test harness. |
-| [`@pipr/evals`](packages/evals) | Private prompt-evaluation suite for review behavior. |
-| [`@pipr/docs`](apps/docs) | Fumadocs site source for `https://pipr.run/docs`. |
-
-## Status
-
-Pipr is early. CLI binaries ship through [GitHub Releases](https://github.com/somus/pipr/releases), `@usepipr/sdk`, `@usepipr/runtime`, and `@usepipr/cli` ship through npm, and the Docker Action image ships through GHCR.
+| Understand the review model | [How Pipr works](https://pipr.run/docs/concepts) |
+| Configure a repository | [Configuration](https://pipr.run/docs/guide/configuration) |
+| Build custom workflows | [Custom tasks](https://pipr.run/docs/guide/custom-tasks) |
+| Run Pipr outside CI | [Local runs](https://pipr.run/docs/guide/local-runs) |
+| Integrate another code host | [Code-host guides](https://pipr.run/docs/guide) |
+| Look up commands and options | [CLI reference](https://pipr.run/docs/reference/cli) |
 
 ## Privacy
 
-Pipr runs in your local environment or CI runner. This repo does not use a hosted Pipr control plane.
+Pipr runs in your environment or CI runner. It has no hosted control plane.
 
-When a review runs, Pipr may send the configured model provider:
+Pipr sends the configured model provider the repository and change-request context needed for the review, including task instructions and relevant changed code. Provider keys stay in environment variables. Published comments become part of the code host's normal change-request record.
 
-- repository and change request metadata needed for the review
-- task instructions from the trusted `.pipr/config.ts`
-- the Diff Manifest, including changed file paths, hunks, commentable ranges, and bounded code previews
-- bounded Diff Read Tool responses when the manifest is condensed
+Don't run Pipr on code you aren't permitted to send to the configured model provider. See [Trust and security](https://pipr.run/docs/concepts/trust-security) for the full data and execution model.
 
-Provider API keys are read from environment variables such as `DEEPSEEK_API_KEY`. `pipr.secret({ name })` stores the variable name in the runtime plan, not the secret value.
+## Project
 
-On GitHub, Pipr uses `GITHUB_TOKEN` to read pull request metadata and publish the Main Review Comment, Inline Review Comments, and verifier replies. Pipr also resolves review threads for fixed findings when that credential has GitHub's native thread-resolution capability. The default `${{ github.token }}` can publish replies but may not receive that capability; see [GitHub Action](https://pipr.run/docs/guide/github-action#permissions) to configure a user credential when native thread cleanup is required. Published comments become part of the repository's normal GitHub pull request record. Local runs do not publish comments.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before contributing, [SECURITY.md](SECURITY.md) to report a vulnerability, and [CHANGELOG.md](CHANGELOG.md) for release history.
 
-Do not run Pipr on code you are not permitted to send to the configured model provider.
-
-## License
-
-MIT
+Pipr is available under the [MIT License](LICENSE).

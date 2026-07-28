@@ -64,5 +64,5 @@ For suite layout and scoring rationale, see
 
 ## Docs
 
-- [Development](https://pipr.run/docs/project/development)
+- [Contributing](../../CONTRIBUTING.md)
 - [GitHub Action](https://pipr.run/docs/guide/github-action)

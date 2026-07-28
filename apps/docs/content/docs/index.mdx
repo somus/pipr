@@ -1,69 +1,34 @@
 ---
 title: "Pipr"
-description: "Code-owned AI review across GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services and Server, Bitbucket, Gitea, Forgejo, and Codeberg."
+description: "Repository-owned AI review for GitHub, GitLab, Azure DevOps, Bitbucket, Gitea, Forgejo, and Codeberg."
 ---
 
-Pipr runs repository-owned AI review policy across GitHub.com, GitHub Enterprise Server, GitLab.com, GitLab Self-Managed, Azure DevOps Services, Azure DevOps Server, Bitbucket Cloud, Bitbucket Data Center, Gitea, Forgejo, and Codeberg. You define models, review tasks, commands, and publication limits in `.pipr/config.ts`; Pipr builds the diff, runs Pi, validates findings, and publishes through the selected code host.
+Pipr runs repository-owned AI review policy from `.pipr/config.ts`. It builds the changed-code context, runs Pi, validates findings, and publishes through your code host.
 
 ## Choose a setup path
 
-Start with the delivery path for your code host. The review configuration stays provider-neutral.
+Start with the guide for your code host. The same TypeScript review config works across providers.
 
-| Code host | Change request | Setup |
-| --- | --- | --- |
-| GitHub | Pull request | [Run the GitHub quickstart](/docs/guide/quickstart) |
-| GitLab.com or Self-Managed | Merge request | [Configure GitLab CI and webhooks](/docs/guide/gitlab) |
-| Azure DevOps Services or Server | Pull request | [Configure an Azure service-hook runner](/docs/guide/azure-devops) |
-| Bitbucket Cloud or Data Center | Pull request | [Configure a Bitbucket webhook runner](/docs/guide/bitbucket) |
-
-Use [local review](/docs/guide/local-runs) when you want to validate a config and inspect review output without publishing to a code host.
-
-## How Pipr works
-
-Every run follows the same provider-neutral path.
-
-```text
-Entrypoint
-  -> Review task
-  -> Diff Manifest
-  -> Pi agent
-  -> Validated review output
-  -> Code host publication
-```
-
-| Primitive | Responsibility |
+| Code host | Setup |
 | --- | --- |
-| Entrypoint | Starts a task from a change request event, `@pipr` command, or local review. |
-| Review task | Gathers context, calls agents, and returns one task result. |
-| Diff Manifest | Represents changed files, hunks, and valid inline ranges. |
-| Pi agent | Runs model instructions and tools inside the bounded review environment. |
-| Review output | Contains a main comment, inline findings, a command response, or a check result. |
-| Publication | Applies validation, caps, deduplication, stale-head checks, and native host writes. |
+| GitHub.com or GitHub Enterprise Server | [GitHub quickstart](/docs/guide/quickstart) |
+| GitLab.com or GitLab Self-Managed | [GitLab](/docs/guide/gitlab) |
+| Azure DevOps Services or Server | [Azure DevOps](/docs/guide/azure-devops) |
+| Bitbucket Cloud or Data Center | [Bitbucket](/docs/guide/bitbucket) |
+| Gitea, Forgejo, or Codeberg | [Gitea-compatible hosts](/docs/guide/gitea-forgejo-codeberg) |
 
-Read [How Pipr works](/docs/concepts) for the domain model, [Runtime flow](/docs/concepts/runtime) for execution details, and [Trust and security](/docs/concepts/trust-security) for config and workspace boundaries.
+Use [local review](/docs/guide/local-runs) to test a config without publishing comments.
 
 ## Build your review policy
 
-Start with the smallest authoring surface that matches your goal.
+Choose the smallest authoring surface that fits the job.
 
-| Goal | Use |
+| Goal | Start with |
 | --- | --- |
-| Add one general review | [`pipr.review(...)`](/docs/guide/quickstart) |
-| Tune models, paths, limits, and checks | [Configuration](/docs/guide/configuration) |
-| Generate a focused workflow | [Recipes](/docs/recipes) |
-| Compose tasks, agents, and comments | [Custom tasks](/docs/guide/custom-tasks) |
-| Look up exact types and flags | [Reference](/docs/reference) |
+| General pull request review | [`pipr.review(...)`](/docs/guide/quickstart) |
+| Focused security, quality, or briefing workflow | [Recipes](/docs/recipes) |
+| Models, paths, limits, and checks | [Configuration](/docs/guide/configuration) |
+| Custom agents and task orchestration | [Custom tasks](/docs/guide/custom-tasks) |
+| Exact commands, flags, and types | [Reference](/docs/reference) |
 
-Pipr owns diff construction, Pi invocation policy, structured-output validation, and code-host writes. Review tasks cannot publish arbitrary comments, parse raw host payloads, or mutate the Pi workspace.
-
-## Documentation map
-
-Each section serves one reading mode.
-
-| Section | Use it for |
-| --- | --- |
-| [Guide](/docs/guide) | Install Pipr, configure a provider, and complete operational tasks. |
-| [Recipes](/docs/recipes) | Generate complete starting configurations for common review workflows. |
-| [Concepts](/docs/concepts) | Understand the runtime, publication model, and trust boundaries. |
-| [Reference](/docs/reference) | Look up CLI commands, SDK APIs, adapters, and architecture. |
-| [Project](/docs/project) | Read contributing, development, security, and release information. |
+Pipr keeps config and model output away from direct code-host writes. Read [How Pipr works](/docs/concepts) for the execution model and [Trust and security](/docs/concepts/trust-security) before reviewing untrusted contributions.

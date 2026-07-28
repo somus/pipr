@@ -1,6 +1,6 @@
 import { GithubIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { staticFunctionMiddleware } from "@tanstack/start-static-server-functions";
 import browserCollections from "collections/browser";
@@ -16,7 +16,6 @@ import {
 } from "fumadocs-ui/layouts/docs/page";
 import { Suspense } from "react";
 import { getMDXComponents } from "@/components/mdx";
-import { getLegacyDocRedirect } from "@/lib/docs-routes";
 import { baseOptions } from "@/lib/layout.shared";
 import { appName, gitConfig, siteUrl } from "@/lib/shared";
 import { getPageImage, slugsToMarkdownPath, source } from "@/lib/source";
@@ -24,9 +23,6 @@ import { getPageImage, slugsToMarkdownPath, source } from "@/lib/source";
 export const Route = createFileRoute("/docs/$")({
   loader: async ({ params }) => {
     const slugs = params._splat?.split("/") ?? [];
-    const redirectTo = getLegacyDocRedirect(slugs);
-    if (redirectTo) throw redirect({ href: redirectTo, statusCode: 308 });
-
     const data = await loader({ data: slugs });
     await clientLoader.preload(data.path);
     return data;

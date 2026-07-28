@@ -1,7 +1,0 @@
-{
-  "title": "Project",
-  "description": "Contributing, development, security, and release information.",
-  "icon": "Info",
-  "root": true,
-  "pages": ["index", "contributing", "development", "security", "changelog"]
-}

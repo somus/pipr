@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { supportedOfficialInitRecipes } from "../../../../packages/runtime/src/config/recipes";
-import { getLegacyDocRedirect } from "../../src/lib/docs-routes";
 import { twoslashCompilerOptions } from "../../twoslash-config";
 
 describe("docs source config", () => {
@@ -11,14 +10,6 @@ describe("docs source config", () => {
       "@usepipr/sdk/internal": ["packages/sdk/src/internal.ts"],
     });
     expect(Object.keys(twoslashCompilerOptions.paths)).not.toContain("@usepipr/sdk/*");
-  });
-
-  it("keeps legacy documentation routes mapped to canonical pages", () => {
-    expect(getLegacyDocRedirect(["guide", "concepts"])).toBe("/docs/concepts");
-    expect(getLegacyDocRedirect(["guide", "runtime"])).toBe("/docs/concepts/runtime");
-    expect(getLegacyDocRedirect(["guide", "comments"])).toBe("/docs/concepts/comments");
-    expect(getLegacyDocRedirect(["guide", "trust-security"])).toBe("/docs/concepts/trust-security");
-    expect(getLegacyDocRedirect(["reference", "development"])).toBe("/docs/project/development");
   });
 
   it("gives every recipe screenshot descriptive alt text", async () => {

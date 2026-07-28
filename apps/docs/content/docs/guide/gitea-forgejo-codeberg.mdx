@@ -1,27 +1,25 @@
 ---
 title: "Gitea, Forgejo, and Codeberg"
-description: "Run Pipr reviews and commands on Gitea-compatible hosts."
+description: "Run Pipr reviews and commands on Gitea-compatible code hosts."
 ---
 
-Pipr supports Gitea, Forgejo, and Codeberg through one Gitea-compatible API adapter. You can run automatic reviews with Gitea or Forgejo Actions, or use the trusted webhook runner for a dedicated worker and durable delivery queue.
+Gitea, Forgejo, and Codeberg share one API family. Run automatic reviews with Actions, or use a trusted webhook worker for dedicated credentials and command events.
 
-## Choose a host id
+## Choose the host
 
-Use the host id that matches the service. The three ids share API behavior but select different environment variables, workflow paths, and defaults.
+Use the identifier and credentials for your service:
 
-| Service | Host id | Generated workflow | API token |
+| Service | Host | Workflow | Webhook token |
 | --- | --- | --- | --- |
 | Gitea | `gitea` | `.gitea/workflows/pipr.yml` | `GITEA_TOKEN` |
 | Forgejo | `forgejo` | `.forgejo/workflows/pipr.yml` | `FORGEJO_TOKEN` |
-| Codeberg | `codeberg` | `.forgejo/workflows/pipr.yml` | `CODEBERG_TOKEN` for webhooks; Actions exposes `FORGEJO_TOKEN` |
+| Codeberg | `codeberg` | `.forgejo/workflows/pipr.yml` | `CODEBERG_TOKEN` |
+
+Codeberg Actions exposes `FORGEJO_TOKEN` to workflows.
 
 ## Run with Actions
 
-Use this path when the repository has an isolated runner with the `docker` label. Codeberg Actions requires a self-hosted Forgejo runner unless your repository has access to Codeberg's limited hosted Actions service.
-
-### 1. Generate the workflow
-
-From the repository root, select one adapter:
+Generate the matching workflow:
 
 ```bash
 pipr init --adapters gitea
@@ -29,59 +27,22 @@ pipr init --adapters forgejo
 pipr init --adapters codeberg
 ```
 
-The generated workflow uses `pull_request_target` so the runner starts from the trusted base workflow and receives the host's write-capable automatic token. Pipr loads Trusted Base Config before it checks out the exact proposed head for diff construction and read-only model inspection.
+The workflow requires a container-isolated runner with the `docker` label and a full checkout. Add the model-provider secret named by `.pipr/config.ts`; the default config expects `DEEPSEEK_API_KEY`.
 
-### 2. Configure the runner
+The workflow uses the host's automatic token for repository API calls. Confirm the instance's fork and secret policy before reviewing untrusted contributions.
 
-Enable Actions for the repository and register a container-isolated runner with the `docker` label. If your runner uses another label, change `runs-on` in the generated workflow.
-
-Gitea reads workflows from `.gitea/workflows`. Forgejo and Codeberg read them from `.forgejo/workflows`. The workflow checks out full history, then runs the pinned Pipr image as a Docker action.
-
-### 3. Add the model secret
-
-Add the model-provider key named by `.pipr/config.ts` to the repository's Actions secrets. The default config expects `DEEPSEEK_API_KEY`.
-
-The workflow uses the automatic `GITEA_TOKEN` or `FORGEJO_TOKEN` for repository API calls. You don't need to create a separate host token for Actions. Fork behavior and secret availability remain controlled by the host, so verify your instance policy before enabling reviews from untrusted forks.
-
-### 4. Commit and verify
-
-Commit `.pipr` and the generated workflow, then open a pull request. Confirm that the workflow publishes one Main Review Comment, any valid single-line Inline Review Comments, and task statuses.
+Commit `.pipr` and the generated workflow, then open a pull request to verify the main comment, inline findings, and task statuses.
 
 ## Run with trusted webhooks
 
-Use a dedicated webhook worker when you don't want write-capable host and model credentials in Actions, or when your Actions environment can't cover command events.
-
-### 1. Prepare the worker environment
-
-`pipr init` creates a matching environment template, but Pipr does not load that file automatically. Export the server URL, API token, webhook secret, and model-provider key in the worker process. Keep populated values in your secret store or a private environment file, not in the checked-in example.
-
-For Gitea:
+Export the server URL, repository-scoped bot token, webhook secret, and model key. For example:
 
 ```bash
-export GITEA_SERVER_URL="https://gitea.example.com"
-export GITEA_TOKEN="replace-with-bot-token"
-export PIPR_WEBHOOK_SECRET="replace-with-webhook-secret"
-export DEEPSEEK_API_KEY="replace-with-model-key"
-```
+export FORGEJO_SERVER_URL="$FORGEJO_INSTANCE_URL"
+export FORGEJO_TOKEN="..."
+export PIPR_WEBHOOK_SECRET="..."
+export DEEPSEEK_API_KEY="..."
 
-For Forgejo:
-
-```bash
-export FORGEJO_SERVER_URL="https://forgejo.example.com"
-export FORGEJO_TOKEN="replace-with-bot-token"
-export PIPR_WEBHOOK_SECRET="replace-with-webhook-secret"
-export DEEPSEEK_API_KEY="replace-with-model-key"
-```
-
-For Codeberg, export `CODEBERG_TOKEN`, `PIPR_WEBHOOK_SECRET`, and the model-provider key. Pipr defaults `CODEBERG_API_URL` to `https://codeberg.org/api/v1`.
-
-The bot token must read repository and pull request metadata, inspect collaborator permissions, create and update issue comments, create review comments and replies when the server supports them, and create commit statuses. Limit the token to the target repository where the host supports repository-scoped tokens.
-
-### 2. Start the worker
-
-Run one worker against one dedicated checkout:
-
-```bash
 pipr webhook serve \
   --host forgejo \
   --repository owner/repository \
@@ -91,36 +52,31 @@ pipr webhook serve \
   --port 8787
 ```
 
-Replace `forgejo` with `gitea` or `codeberg` as needed. The worker resolves `owner/repository` through the API, then requires both the numeric repository id and full name in every payload to match.
+Replace the host and environment names for Gitea or Codeberg. Codeberg defaults to `codeberg.org/api/v1`.
 
-### 3. Create the webhook
+The bot token must read repository and pull-request metadata, inspect collaborator permissions, create comments and statuses, and create review replies when the server supports them.
 
-Point the repository webhook at the HTTPS reverse proxy in front of the worker. Configure the same secret as `PIPR_WEBHOOK_SECRET`, then enable these events:
+Create a repository webhook with the same secret and enable:
 
 - Pull request
 - Issue comment
 
-Pipr verifies the hexadecimal HMAC-SHA256 signature over the raw request body, deduplicates the native delivery id in SQLite, and preserves the native event name for event parsing.
+Place the listener behind an HTTPS reverse proxy and persist the SQLite directory. Run one worker per dedicated checkout.
 
 ## Supported behavior
 
-The Gitea-compatible adapter supports the same provider-neutral review contract across all three host ids:
+All three hosts support:
 
-- pull request and command comment events;
-- exact-head checkout through `refs/pull/<number>/head`;
-- repository permission checks for commands;
-- Main Review Comment and command response upserts;
-- single-line Inline Review Comments on added or deleted lines;
-- idempotent synchronization-verifier replies when the server exposes the review-comment reply API;
-- individual and aggregate commit statuses;
-- progress ownership, partial retry, marker deduplication, and stale-head rejection.
+- pull request and command-comment events
+- trusted config and exact-head checkout
+- main comments, command responses, and task statuses
+- single-line inline comments on added or deleted lines
+- stale-head checks and safe reruns
 
-Gitea added the REST review-comment reply endpoint in 1.27. On Gitea 1.26 and earlier, or any compatible server that returns `404` or `405` for that endpoint, Pipr skips the synchronization reply and completes the review. Other reply failures still surface as publication errors.
-
-Gitea-compatible webhook payloads don't expose a stable inline-reply identity through the contracts Pipr uses, so user-reply verification and native review-thread resolution are unavailable. Multi-line inline ranges and native suggested-change blocks are also unavailable; Pipr anchors the finding to its final selected line and renders replacement code as fenced Markdown.
+Verifier synchronization replies require a compatible review-comment reply API. User-reply verification and native thread resolution are unavailable. Multiline anchors and native suggestion blocks are also unavailable; Pipr anchors to the final selected line and renders replacement code as fenced Markdown.
 
 ## Next steps
 
-- Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for persistent queue state and health checks.
-- Read [Trust and security](/docs/concepts/trust-security) before enabling pull requests from untrusted contributors.
-- Use [Configuration](/docs/guide/configuration) to change models, entrypoints, and publication limits.
+- Use [Deploy the webhook runner with Docker](/docs/guide/webhook-docker) for persistent state and health checks.
+- Read [Trust and security](/docs/concepts/trust-security) before enabling untrusted pull requests.
+- Use [Configuration](/docs/guide/configuration) to change models and publication limits.

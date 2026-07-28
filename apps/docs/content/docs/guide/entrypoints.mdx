@@ -1,37 +1,13 @@
 ---
 title: "Entrypoints"
-description: "Configure change request triggers, Pipr commands, local review, and permissions."
+description: "Start Pipr tasks from change requests, commands, or local review."
 ---
 
-Entrypoints decide how a Review Task starts. A task can be selected by a change request event or an `@pipr` command comment. Local review runs the configured change-request tasks without publishing.
+Entrypoints select when a task runs. The task still decides which agents to call and which final output to emit.
 
-An Entrypoint only selects work. The selected Review Task still decides which Agents to run and which final output to emit.
+## Configure the default review
 
-## `pipr.review` entrypoints
-
-The review helper registers hosted change-request, command, and local entrypoints around one task.
-
-### Default review entrypoints
-
-The quickest setup sets a publication cap and uses `pipr.review(...)`:
-
-```ts twoslash
-// @include: pipr-review
-import { defaultReviewEntrypoints } from "@usepipr/sdk";
-
-pipr.config({ publication: { maxInlineComments: 5 } });
-
-pipr.review({
-  id: "review",
-  model,
-  instructions: reviewInstructions,
-  entrypoints: defaultReviewEntrypoints,
-});
-```
-
-### Disable an entrypoint
-
-Set an entrypoint to `false` to disable it:
+`pipr.review(...)` can register automatic, command, and local execution around one task:
 
 ```ts twoslash
 // @include: pipr-review
@@ -40,29 +16,23 @@ pipr.review({
   model,
   instructions: reviewInstructions,
   entrypoints: {
-    changeRequest: ["opened", "updated"],
-    command: false,
+    changeRequest: ["opened", "updated", "reopened", "ready"],
+    command: { pattern: "@pipr review", permission: "write" },
   },
 });
 ```
 
-## Change request actions
+Set either entrypoint to `false` to disable it.
 
-Select only the native lifecycle actions that should start automatic review.
+## Change-request events
 
-### Supported actions
-
-Supported public action names are:
+Pipr exposes provider-neutral actions:
 
 ```text
 opened | updated | reopened | ready | closed
 ```
 
-GitHub native actions are normalized into those provider-neutral names. For example, a pull request synchronize event maps to `updated`.
-
-### Automatic review
-
-Use change request triggers for automatic review:
+Register a custom task for selected actions:
 
 ```ts twoslash
 // @include: pipr-task
@@ -72,133 +42,46 @@ pipr.on.changeRequest({
 });
 ```
 
+Use automatic review for work that should run on every relevant update. Use commands for costly or optional workflows.
+
 ## Commands
 
-Register explicit comment patterns for maintainer-triggered work.
-
-### Command registration
-
-Commands run from native change-request comments and must start with `@pipr`:
+Command patterns must start with `@pipr`:
 
 ```ts twoslash
 // @include: pipr-security-task
 pipr.command({
   pattern: "@pipr security",
   permission: "write",
-  description: "Run the security review task.",
+  description: "Run the security review.",
   task: securityTask,
 });
 ```
 
-### Command response
+Named captures parse one argument, while a final rest capture accepts free-form text:
 
-Command tasks can publish a command response:
-
-```ts twoslash
-// @include: pipr-ask-agent
-const ask = pipr.task<{ question: string }>({
-  name: "ask",
-  async run(ctx, input) {
-    const manifest = await ctx.change.diffManifest({ compressed: true });
-    const answer = await ctx.pi.run(askAgent, {
-      question: input.question,
-      manifest,
-    });
-
-    await ctx.command?.reply(answer.body);
-  },
-});
-
-pipr.command({
-  pattern: "@pipr ask <question...>",
-  permission: "read",
-  parse: ({ question }) => ({ question }),
-  task: ask,
-});
+```text
+@pipr release-note <version>
+@pipr ask <question...>
 ```
 
-Command responses are normal change-request comments keyed to the source command comment. They do not update the Main Review Comment and do not publish Inline Review Comments.
+Use `ctx.command.reply(...)` for a response tied to the source command. Use `ctx.comment(...)` when the task should publish normal review output.
 
-Use `ctx.command?.reply(...)` only for command response workflows. Use `ctx.comment(...)` when the task should contribute review output to the Main Review Comment or Inline Review Comments.
+## Command permissions
 
-## Command grammar
-
-Named and rest captures convert command text into typed task input.
-
-### Named captures
-
-Use static words and named captures:
-
-```ts twoslash
-const pattern = "@pipr release-note <version>";
-```
-
-### Rest capture
-
-Use a final rest capture for free-form text:
-
-```ts twoslash
-const pattern = "@pipr ask <question...>";
-```
-
-The rest capture must be the final required position. This keeps command parsing deterministic.
-
-## Permissions
-
-Set the minimum repository permission that may trigger each command.
-
-### Permission ladder
-
-Permission levels are provider-neutral:
+Permissions use one shared order across code hosts:
 
 ```text
 read < triage < write < maintain < admin
 ```
 
-GitHub repository permissions are normalized into these levels by the GitHub adapter. Command permission defaults to `write`.
+Commands default to `write`. Lower the requirement only when the command cannot expose sensitive context, spend unacceptable provider quota, or publish review findings.
 
-### Lower-permission commands
+## Local task selection
 
-Use lower permission only for commands that cannot publish review findings or expose sensitive context:
+`pipr review --base <ref>` runs each unique task registered through `pipr.on.changeRequest(...)`, without code-host publication. It ignores hosted action filters because local git state has no native event action.
 
-```ts twoslash
-// @include: pipr-ask-task
-pipr.command({
-  pattern: "@pipr ask <question...>",
-  permission: "read",
-  task: ask,
-});
-```
-
-## Local review
-
-Local review calls change-request tasks from git state without dispatching native code-host events.
-
-### Register local tasks
-
-Local review runs without GitHub publication:
-
-```ts twoslash
-// @include: pipr-security-task
-pipr.on.changeRequest({
-  actions: ["opened", "updated"],
-  task: securityTask,
-});
-```
-
-### Run locally
-
-Run it with:
-
-```bash
-pipr review --base origin/main
-```
-
-`pipr review` runs every unique task registered through `pipr.on.changeRequest(...)`. It ignores configured action filters because there is no local change request event action.
-
-### CI-only tasks
-
-Set `local: false` on tasks that should not run locally:
+Set `local: false` on tasks that must run only in hosted delivery:
 
 ```ts twoslash
 // @include: pipr-security-agent
@@ -208,25 +91,12 @@ const securityTask = pipr.task({
   async run(ctx) {
     const manifest = await ctx.change.diffManifest({ compressed: true });
     const result = await ctx.pi.run(securityAgent, { manifest });
-    await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
+    await ctx.comment({
+      main: result.summary.body,
+      inlineFindings: result.inlineFindings,
+    });
   },
 });
 ```
 
-See [Local Runs](/docs/guide/local-runs) for base/head behavior.
-
-## Event selection checklist
-
-Match entrypoints to the workflow's cost, trust boundary, and intended operator.
-
-### Choose an entrypoint
-
-Use this table to match the trigger to the intended operator and publication behavior.
-
-| Need | Entrypoint |
-| --- | --- |
-| Automatic review on change request updates | `changeRequest: ["opened", "updated"]` |
-| Manual reviewer rerun | `command: { pattern: "@pipr review" }` |
-| Free-form maintainer question | `pipr.command({ pattern: "@pipr ask <question...>" })` |
-| Local preflight before pushing | Register change-request tasks and run `pipr review` |
-| No automatic comments | Disable change request entrypoints and use commands only |
+See [Local runs](/docs/guide/local-runs) for base, head, output, and authentication behavior.

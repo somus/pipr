@@ -11,7 +11,7 @@ test("serves hydrated home and documentation routes", async ({ page }) => {
 
   await page.goto("/docs");
   await expect(page.getByRole("heading", { name: "Pipr", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Run the GitHub quickstart" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "GitHub quickstart" })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 

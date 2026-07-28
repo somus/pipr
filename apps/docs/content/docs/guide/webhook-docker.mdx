@@ -1,162 +1,106 @@
 ---
 title: "Deploy the webhook runner with Docker"
-description: "Run Pipr's trusted webhook service with Docker Compose, persistent queue state, and health checks."
+description: "Run a persistent Pipr webhook worker with Docker Compose."
 ---
 
-Deploy one Pipr webhook worker for one repository with the versioned GHCR image and the provided Docker Compose file. The deployment keeps the trusted checkout and SQLite delivery queue on the host, listens on loopback for an HTTPS reverse proxy, and waits for active review work during shutdown.
+Deploy one webhook worker per repository. The worker uses a dedicated checkout, persists delivery state, listens behind an HTTPS reverse proxy, and finishes active review work during graceful shutdown.
 
-## Before you begin
+## Prerequisites
 
 You need:
 
-- Docker Engine with Docker Compose v2;
-- a Linux host that can reach your code host and model provider;
-- one dedicated repository checkout containing `.pipr/config.ts`;
-- the provider credentials listed in the matching [code host guide](/docs/guide#start-with-your-code-host);
-- an HTTPS reverse proxy that forwards the provider webhook path to `127.0.0.1:8787`.
+- Docker Engine with Compose v2
+- a Linux host that can reach the code host and model provider
+- one repository checkout containing `.pipr/config.ts`
+- provider credentials from the matching [code-host guide](/docs/guide#start-with-your-code-host)
+- an HTTPS reverse proxy to `127.0.0.1:8787`
 
-Run one service per repository. The worker mutates its checkout while it processes deliveries, and its SQLite queue serializes work for that checkout, so don't share a workspace between containers or scale one repository across replicas.
+Do not share one checkout across workers or scale one repository across replicas.
 
-## 1. Create the deployment directories
+## 1. Create deployment directories
 
-Create separate directories for deployment configuration, the trusted checkout, and durable queue state:
-
-```bash
-sudo install -d -o "$USER" -g "$USER" /srv/pipr/deployment
-sudo install -d -o 1000 -g 1000 /srv/pipr/repository
-sudo install -d -m 700 -o 1000 -g 1000 /srv/pipr/state
-```
-
-The Compose service runs Pipr and Pi as UID and GID `1000`. Keep both mounted directories writable by that identity so Pipr can update the checkout and SQLite queue without running the container as root. Pi still receives only read tools and a mode-bit-protected workspace copy, but this deployment does not provide the Docker Action's separate process identity boundary.
-
-## 2. Download the versioned deployment files
-
-Download the Compose file and environment template from the same Pipr release tag:
+Create separate directories for config, the checkout, and state:
 
 ```bash
-cd /srv/pipr/deployment
-curl --fail --location --output compose.yml \
-  https://raw.githubusercontent.com/somus/pipr/v0.6.3/deploy/webhook/compose.yml # x-release-please-version
-curl --fail --location --output .env \
-  https://raw.githubusercontent.com/somus/pipr/v0.6.3/deploy/webhook/.env.example # x-release-please-version
-chmod 600 .env
+sudo mkdir -p /srv/pipr/deployment /srv/pipr/repository /srv/pipr/state
 ```
 
-The Compose file pins `ghcr.io/somus/pipr:v0.6.3`. Keep the file and image on the same release so the documented CLI contract matches the container. {/* x-release-please-version */}
+Keep the checkout and state writable by the container user.
 
-If the host pulls from an internal registry, mirror the same Pipr release and set its reference in `.env`:
+## 2. Download one release
 
-```dotenv
-PIPR_IMAGE=registry.internal.example/pipr:v0.6.3 # x-release-please-version
-```
-
-Authenticate the Docker daemon to that registry before you start the worker.
-
-## 3. Prepare the trusted checkout
-
-Clone the repository into the mounted workspace, then make the checkout writable by the container identity:
+Download `compose.yml` and the environment template from the same Pipr release tag:
 
 ```bash
-git clone <repository-clone-url> /srv/pipr/repository
-sudo chown -R 1000:1000 /srv/pipr/repository
+PIPR_VERSION=v0.6.3 # x-release-please-version
+curl -fsSL \
+  "https://raw.githubusercontent.com/somus/pipr/${PIPR_VERSION}/deploy/webhook/compose.yml" \
+  -o /srv/pipr/deployment/compose.yml
+curl -fsSL \
+  "https://raw.githubusercontent.com/somus/pipr/${PIPR_VERSION}/deploy/webhook/.env.example" \
+  -o /srv/pipr/deployment/.env
+chmod 600 /srv/pipr/deployment/.env
 ```
 
-Confirm that the default branch contains `.pipr/config.ts` and its package files. The runner loads Trusted Base Config from the change request's base commit, then checks out the exact proposed head while processing the event.
+The Compose file pins the matching image. If you use an internal registry, mirror the same release and set `PIPR_IMAGE` in `.env`.
+
+## 3. Prepare the checkout
+
+Clone the repository into `/srv/pipr/repository` and confirm its default branch contains `.pipr/config.ts`. The worker loads policy from the change request base, then checks out the proposed head for review.
 
 ## 4. Configure the environment
 
-Open `/srv/pipr/deployment/.env` and set the shared deployment values:
+Open `/srv/pipr/deployment/.env` and set:
 
-```dotenv
-PIPR_CODE_HOST=gitlab
-PIPR_REPOSITORY=group/project
-PIPR_WORKSPACE=/srv/pipr/repository
-PIPR_STATE_DIR=/srv/pipr/state
-PIPR_WEBHOOK_SECRET=replace-with-a-long-random-secret
-DEEPSEEK_API_KEY=replace-with-your-model-key
-```
+- `PIPR_CODE_HOST`
+- `PIPR_REPOSITORY`
+- `PIPR_WEBHOOK_SECRET`
+- the model-provider key named by `.pipr/config.ts`
+- the provider values from its guide
 
-If your config uses another model provider, replace `DEEPSEEK_API_KEY` with the `apiKeyEnv` declared in `.pipr/config.ts`. Set only the credential block for your selected code host:
+Keep `PIPR_BIND_ADDRESS=127.0.0.1` unless a private network supplies the TLS and access boundary. Do not commit `.env` or place secrets in Compose command arguments.
 
-| Host | `PIPR_CODE_HOST` | Required provider values |
-| --- | --- | --- |
-| GitLab.com | `gitlab` | `GITLAB_TOKEN` |
-| GitLab Self-Managed | `gitlab` | `GITLAB_API_URL` with the complete REST v4 root, and `GITLAB_TOKEN` |
-| Azure DevOps Services or Server | `azure-devops` | `AZURE_DEVOPS_ORGANIZATION` for Services or `AZURE_DEVOPS_COLLECTION_URL` plus `AZURE_DEVOPS_API_VERSION` for Server, `AZURE_DEVOPS_PROJECT`, `PIPR_AZURE_SUBSCRIPTION_ID`, and either `AZURE_DEVOPS_BEARER_TOKEN` or `AZURE_DEVOPS_TOKEN` |
-| Bitbucket Cloud | `bitbucket` | `BITBUCKET_WORKSPACE`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_EMAIL`, `BITBUCKET_API_TOKEN`, `BITBUCKET_PERMISSION_EMAIL`, and `BITBUCKET_PERMISSION_API_TOKEN` |
-| Bitbucket Data Center | `bitbucket` | `BITBUCKET_BASE_URL`, `BITBUCKET_PROJECT_KEY`, `BITBUCKET_REPO_SLUG`, `BITBUCKET_TOKEN`, `BITBUCKET_USER`, and `BITBUCKET_PERMISSION_TOKEN` |
-| Gitea | `gitea` | `GITEA_SERVER_URL`, `GITEA_TOKEN` |
-| Forgejo | `forgejo` | `FORGEJO_SERVER_URL`, `FORGEJO_TOKEN` |
-| Codeberg | `codeberg` | `CODEBERG_TOKEN` |
+For a private certificate authority, mount its PEM bundle and set `NODE_EXTRA_CA_CERTS` plus `GIT_SSL_CAINFO`. Keep TLS verification enabled.
 
-Keep `PIPR_BIND_ADDRESS=127.0.0.1` unless another private network provides the TLS and access boundary. Don't commit `.env` or copy its values into Compose command arguments.
+## 5. Start and verify
 
-### Trust a private certificate authority
-
-If your code host or model endpoint uses an internal certificate authority, mount its PEM bundle and configure both Pipr HTTP requests and Git:
-
-```yaml title="compose.override.yml"
-services:
-  webhook:
-    environment:
-      NODE_EXTRA_CA_CERTS: /etc/pipr/ca.pem
-      GIT_SSL_CAINFO: /etc/pipr/ca.pem
-    volumes:
-      - type: bind
-        source: /srv/pipr/deployment/internal-ca.pem
-        target: /etc/pipr/ca.pem
-        read_only: true
-```
-
-Place the certificate bundle at `/srv/pipr/deployment/internal-ca.pem`, then restart the worker. Keep TLS verification enabled; don't replace these settings with insecure Git or HTTP flags.
-
-## 5. Start and verify the worker
-
-Pull the pinned image and start the service:
+From the deployment directory:
 
 ```bash
-cd /srv/pipr/deployment
 docker compose pull
-docker compose up --detach
-docker compose ps
-curl --fail http://127.0.0.1:8787/healthz
+docker compose up -d
+docker compose exec pipr wget -qO- http://127.0.0.1:8787/healthz
 ```
 
-The health request returns `OK`. It proves that the HTTP server can accept deliveries; provider authentication and model access are exercised only by a real delivery.
+The health endpoint confirms that the listener accepts deliveries. A real webhook exercises provider and model authentication.
 
-Inspect startup and delivery records without printing the environment:
+Inspect logs without printing the environment:
 
 ```bash
-docker compose logs --follow webhook
+docker compose logs --tail=100 pipr
 ```
 
-Point the provider webhook at your reverse proxy's HTTPS URL and use the event list and authentication method from the matching provider guide. The proxy should preserve provider headers, cap request bodies at 2 MiB, and forward only the webhook route to port `8787`.
+Point the provider webhook at the reverse proxy. Preserve provider headers, restrict the exposed route, and cap request bodies at 2 MiB.
 
 ## Operate the worker
 
-The service stores delivery state in `/srv/pipr/state/webhooks.sqlite`. Back up that directory with the container stopped, and preserve it across upgrades so provider retries remain deduplicated.
-
-To stop the worker gracefully:
+Persist `/srv/pipr/state` across restarts and upgrades. Stop gracefully:
 
 ```bash
-docker compose down --timeout 900
+docker compose down
 ```
 
-The 15-minute stop window lets an active model run and publication finish before Docker terminates the process. Pending deliveries remain in SQLite and resume when the service starts again.
+Pending deliveries resume after restart. Back up the state directory only while the container is stopped.
 
-To upgrade, download `compose.yml` from the new release tag, review its changes, then run:
+To upgrade, download the new release's Compose file, review the changes, then run:
 
 ```bash
 docker compose pull
-docker compose up --detach
+docker compose up -d
 ```
 
 ## Next steps
 
-Finish setup in the matching provider guide, then review the worker's trust boundary.
-
-- [Configure the GitLab webhook](/docs/guide/gitlab#commands-and-reply-verification) to select events and authenticate deliveries.
-- [Configure Azure DevOps service hooks](/docs/guide/azure-devops#commands-and-reply-verification) to bind one worker to one subscription.
-- [Configure Bitbucket webhooks](/docs/guide/bitbucket) to set Cloud or Data Center event and token requirements.
-- [Configure Gitea-compatible webhooks](/docs/guide/gitea-forgejo-codeberg#run-with-trusted-webhooks) for Gitea, Forgejo, or Codeberg.
-- [Review the trust model](/docs/concepts/trust-security) before accepting events from untrusted contributors.
+- Finish event and credential setup in the [GitLab](/docs/guide/gitlab), [Azure DevOps](/docs/guide/azure-devops), [Bitbucket](/docs/guide/bitbucket), or [Gitea-compatible](/docs/guide/gitea-forgejo-codeberg) guide.
+- Read [Trust and security](/docs/concepts/trust-security) before handling untrusted contributions.
+- Use [Debug captured runs](/docs/guide/run-observability) to inspect webhook run evidence and retention.

@@ -16,9 +16,8 @@ The public metadata needed for deterministic lifecycle and timing diagnosis is m
 the evidence needed for deep debugging. Provider credentials can authorize artifact discovery
 without being a safe authorization boundary for diagnostic content.
 
-See
-[Public-repository run observability](../research/public-repository-run-observability.md)
-for the provider and ecosystem research behind this decision.
+This decision treats provider-visible artifacts as public and requires a separate authorization
+boundary for diagnostic content.
 
 ## Decision
 
