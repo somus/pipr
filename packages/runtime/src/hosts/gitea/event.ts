@@ -16,9 +16,10 @@ const pullRequestHookSchema = z.looseObject({
 });
 const issueCommentHookSchema = z.looseObject({
   action: z.string().min(1),
+  is_pull: z.boolean().optional(),
+  pull_request: z.unknown().optional(),
   issue: z.looseObject({
     number: z.number().int().positive(),
-    pull_request: z.unknown().optional(),
   }),
   comment: z.looseObject({
     id: z.union([z.number(), z.string()]).transform(String),
@@ -83,9 +84,6 @@ export async function parseGiteaEvent(options: GiteaEventParseOptions): Promise<
 
 function issueCommentEvent(payload: unknown, options: GiteaEventParseOptions): CodeHostEvent {
   const hook = issueCommentHookSchema.parse(payload);
-  if (!hook.issue.pull_request) {
-    throw new Error(`${displayName(options.host)} issue comment did not target a pull request`);
-  }
   return {
     kind: "command-comment",
     comment: {
@@ -98,7 +96,7 @@ function issueCommentEvent(payload: unknown, options: GiteaEventParseOptions): C
       },
       changeNumber: hook.issue.number,
       commentId: hook.comment.id,
-      isChangeRequest: true,
+      isChangeRequest: hook.is_pull === true || hook.pull_request !== undefined,
       body: hook.comment.body,
       actor: hook.sender.login,
       workspace: options.workspace,
@@ -118,6 +116,7 @@ function giteaEventName(options: GiteaEventParseOptions): string | undefined {
 function normalizeAction(action: string): string {
   if (action === "open") return "opened";
   if (action === "reopen") return "reopened";
+  if (action === "ready_for_review") return "ready";
   if (action === "synchronize" || action === "synchronized") return "updated";
   return action;
 }

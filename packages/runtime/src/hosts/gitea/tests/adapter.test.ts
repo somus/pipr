@@ -83,6 +83,40 @@ describe("Gitea-compatible host adapter", () => {
     });
   });
 
+  it("completes publication when fallback replies are unsupported", async () => {
+    const client = new FakeGiteaClient();
+    client.replyUnsupported = true;
+    client.reviewComments.push({
+      id: "10",
+      body: `${renderInlineFindingMarker("finding-1", "head")}\nFix this.`,
+      authorLogin: "pipr-bot",
+      path: "src/a.ts",
+      commitId: "head",
+      line: 4,
+      side: "RIGHT",
+    });
+    const adapter = createGiteaHostAdapter({ host: "gitea", client });
+    const action: ThreadAction = {
+      kind: "resolve",
+      findingId: "finding-1",
+      findingHeadSha: "head",
+      commentId: "10",
+      body: "This finding was fixed.",
+      responseKey: "fixed",
+    };
+
+    const result = await adapter.publication?.publish({
+      change,
+      plan: publicationPlan(false, [action]),
+    });
+
+    expect(result?.mainComment.action).toBe("created");
+    expect(result?.metadata.inlineResolutionErrors).toEqual([]);
+    expect(client.replyAttempts).toBe(1);
+    expect(client.reviewComments).toHaveLength(1);
+    expect(client.issueComments).toHaveLength(1);
+  });
+
   it("creates and updates one response for a command comment", async () => {
     const client = new FakeGiteaClient();
     const adapter = createGiteaHostAdapter({ host: "forgejo", client });
@@ -243,6 +277,8 @@ class FakeGiteaClient implements GiteaClient {
     line: number;
     side: "RIGHT" | "LEFT";
   }> = [];
+  replyAttempts = 0;
+  replyUnsupported = false;
   pullRequest: GiteaPullRequest = {
     number: 7,
     title: "Test PR",
@@ -326,6 +362,8 @@ class FakeGiteaClient implements GiteaClient {
     commentId: string,
     body: string,
   ) => {
+    this.replyAttempts += 1;
+    if (this.replyUnsupported) return { kind: "unsupported" as const };
     const comment = {
       id: String(this.reviewComments.length + 1),
       parentId: commentId,

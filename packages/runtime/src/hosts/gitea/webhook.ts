@@ -13,7 +13,13 @@ const eventSchema = z.looseObject({
 
 type ExpectedRepository = { id: number; fullName: string };
 
-export function createGiteaWebhookProtocol(host: GiteaFamilyHost): CodeHostWebhookProtocol {
+export function createGiteaWebhookProtocol(
+  host: GiteaFamilyHost,
+  fetch: (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => Promise<Response> = globalThis.fetch,
+): CodeHostWebhookProtocol {
   return {
     host,
     async resolveExpectedRepository(env, repository) {
@@ -21,7 +27,7 @@ export function createGiteaWebhookProtocol(host: GiteaFamilyHost): CodeHostWebho
       if (!owner || !name || repository.split("/").length !== 2) {
         throw new Error(`${displayName(host)} --repository must be OWNER/REPOSITORY`);
       }
-      const resolved = await createGiteaClient({ host, env }).getRepository(owner, name);
+      const resolved = await createGiteaClient({ host, env }, fetch).getRepository(owner, name);
       return { id: resolved.id, fullName: resolved.full_name };
     },
     verifySecret(headers, secret, payload) {

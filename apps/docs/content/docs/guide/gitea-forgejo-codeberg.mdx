@@ -53,29 +53,29 @@ Use a dedicated webhook worker when you don't want write-capable host and model 
 
 ### 1. Prepare the worker environment
 
-`pipr init` creates a matching environment template. Set the server URL, API token, webhook secret, and model-provider key.
+`pipr init` creates a matching environment template, but Pipr does not load that file automatically. Export the server URL, API token, webhook secret, and model-provider key in the worker process. Keep populated values in your secret store or a private environment file, not in the checked-in example.
 
 For Gitea:
 
-```dotenv
-GITEA_SERVER_URL=https://gitea.example.com
-GITEA_TOKEN=replace-with-bot-token
-PIPR_WEBHOOK_SECRET=replace-with-webhook-secret
-DEEPSEEK_API_KEY=replace-with-model-key
+```bash
+export GITEA_SERVER_URL="https://gitea.example.com"
+export GITEA_TOKEN="replace-with-bot-token"
+export PIPR_WEBHOOK_SECRET="replace-with-webhook-secret"
+export DEEPSEEK_API_KEY="replace-with-model-key"
 ```
 
 For Forgejo:
 
-```dotenv
-FORGEJO_SERVER_URL=https://forgejo.example.com
-FORGEJO_TOKEN=replace-with-bot-token
-PIPR_WEBHOOK_SECRET=replace-with-webhook-secret
-DEEPSEEK_API_KEY=replace-with-model-key
+```bash
+export FORGEJO_SERVER_URL="https://forgejo.example.com"
+export FORGEJO_TOKEN="replace-with-bot-token"
+export PIPR_WEBHOOK_SECRET="replace-with-webhook-secret"
+export DEEPSEEK_API_KEY="replace-with-model-key"
 ```
 
-For Codeberg, set `CODEBERG_TOKEN`. The generated template pre-fills `FORGEJO_SERVER_URL=https://codeberg.org`, and Pipr defaults `CODEBERG_API_URL` to `https://codeberg.org/api/v1`.
+For Codeberg, export `CODEBERG_TOKEN`, `PIPR_WEBHOOK_SECRET`, and the model-provider key. Pipr defaults `CODEBERG_API_URL` to `https://codeberg.org/api/v1`.
 
-The bot token must read repository and pull request metadata, inspect collaborator permissions, create and update issue comments, create review comments and replies, and create commit statuses. Limit the token to the target repository where the host supports repository-scoped tokens.
+The bot token must read repository and pull request metadata, inspect collaborator permissions, create and update issue comments, create review comments and replies when the server supports them, and create commit statuses. Limit the token to the target repository where the host supports repository-scoped tokens.
 
 ### 2. Start the worker
 
@@ -111,9 +111,11 @@ The Gitea-compatible adapter supports the same provider-neutral review contract 
 - repository permission checks for commands;
 - Main Review Comment and command response upserts;
 - single-line Inline Review Comments on added or deleted lines;
-- idempotent synchronization-verifier replies;
+- idempotent synchronization-verifier replies when the server exposes the review-comment reply API;
 - individual and aggregate commit statuses;
 - progress ownership, partial retry, marker deduplication, and stale-head rejection.
+
+Gitea added the REST review-comment reply endpoint in 1.27. On Gitea 1.26 and earlier, or any compatible server that returns `404` or `405` for that endpoint, Pipr skips the synchronization reply and completes the review. Other reply failures still surface as publication errors.
 
 Gitea-compatible webhook payloads don't expose a stable inline-reply identity through the contracts Pipr uses, so user-reply verification and native review-thread resolution are unavailable. Multi-line inline ranges and native suggested-change blocks are also unavailable; Pipr anchors the finding to its final selected line and renders replacement code as fenced Markdown.
 

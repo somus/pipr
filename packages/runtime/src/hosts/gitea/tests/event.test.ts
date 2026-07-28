@@ -52,6 +52,100 @@ describe("Gitea-compatible events", () => {
     });
   });
 
+  it("normalizes a ready-for-review pull request action", async () => {
+    const eventPath = await writeEvent({
+      action: "ready_for_review",
+      number: 7,
+      pull_request: { draft: false },
+      repository: {
+        full_name: "acme/pipr",
+        html_url: "https://gitea.example.com/acme/pipr",
+      },
+      sender: { login: "contributor" },
+    });
+
+    await expect(
+      parseGiteaEvent({
+        host: "gitea",
+        eventPath,
+        env: { GITEA_EVENT_NAME: "pull_request" },
+        workspace: "/workspace",
+        loadChangeRequest: async () => loadedChange,
+      }),
+    ).resolves.toMatchObject({
+      kind: "change-request",
+      change: {
+        action: "ready",
+        rawAction: "ready_for_review",
+      },
+    });
+  });
+
+  it("marks ordinary issue comments as non-pull-request commands", async () => {
+    const eventPath = await writeEvent({
+      action: "created",
+      is_pull: false,
+      issue: { number: 7 },
+      comment: { id: 12, body: "@pipr review" },
+      repository: {
+        full_name: "acme/pipr",
+        html_url: "https://codeberg.org/acme/pipr",
+      },
+      sender: { login: "contributor" },
+    });
+
+    await expect(
+      parseGiteaEvent({
+        host: "codeberg",
+        eventPath,
+        env: { GITEA_EVENT_NAME: "issue_comment" },
+        workspace: "/workspace",
+        loadChangeRequest: async () => {
+          throw new Error("ordinary issue comments must not load a change request");
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: "command-comment",
+      comment: {
+        changeNumber: 7,
+        commentId: "12",
+        isChangeRequest: false,
+      },
+    });
+  });
+
+  it("marks native pull request timeline comments as pull request commands", async () => {
+    const eventPath = await writeEvent({
+      action: "created",
+      is_pull: true,
+      issue: { number: 7 },
+      pull_request: { number: 7 },
+      comment: { id: 13, body: "@pipr review" },
+      repository: {
+        full_name: "acme/pipr",
+        html_url: "https://gitea.example.com/acme/pipr",
+      },
+      sender: { login: "contributor" },
+    });
+
+    await expect(
+      parseGiteaEvent({
+        host: "gitea",
+        eventPath,
+        env: { GITEA_EVENT_NAME: "issue_comment" },
+        workspace: "/workspace",
+        loadChangeRequest: async () => loadedChange,
+      }),
+    ).resolves.toMatchObject({
+      kind: "command-comment",
+      comment: {
+        changeNumber: 7,
+        commentId: "13",
+        isChangeRequest: true,
+      },
+    });
+  });
+
   it("ignores native review payloads because they do not identify inline replies", async () => {
     const eventPath = await writeEvent({
       action: "reviewed",
