@@ -21,7 +21,7 @@ outputs:
     description: GitHub Actions artifact name for the protected Run Bundle package
 runs:
   using: docker
-  image: docker://ghcr.io/somus/pipr:v0.6.3 # x-release-please-version
+  image: docker://ghcr.io/somus/pipr:v0.7.0 # x-release-please-version
   args:
     - host-run
     - --host

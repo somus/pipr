@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: somus/pipr@v0.6.3 # x-release-please-version
+      - uses: somus/pipr@v0.7.0 # x-release-please-version
         id: pipr
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -79,7 +79,7 @@ Native review-thread resolution also requires a credential for which GitHub repo
 To require native resolution, store a suitable user credential as a repository secret:
 
 ```yaml
-- uses: somus/pipr@v0.6.3 # x-release-please-version
+- uses: somus/pipr@v0.7.0 # x-release-please-version
   env:
     DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
     GITHUB_TOKEN: ${{ secrets.PIPR_GITHUB_TOKEN }}
@@ -107,7 +107,7 @@ If runners cannot reach public registries, provide internal mirrors:
 pipr init \
   --github-enterprise-server \
   --checkout-action internal-actions/checkout@v6 \
-  --runtime-image registry.internal.example/pipr:v0.6.3 # x-release-please-version
+  --runtime-image registry.internal.example/pipr:v0.7.0 # x-release-please-version
 ```
 
 Keep the mirrored image on the same Pipr release. If the instance uses a private certificate authority, make the certificate available inside the Pipr image as well as on the runner.

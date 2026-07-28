@@ -826,7 +826,7 @@ describe("pipr CLI", () => {
       );
       expect(
         await Bun.file(path.join(workspace, ".github", "workflows", "pipr.yml")).text(),
-      ).toContain("uses: somus/pipr@v0.6.3"); // x-release-please-version
+      ).toContain("uses: somus/pipr@v0.7.0"); // x-release-please-version
     } finally {
       await removeWorkspace(workspace);
     }
