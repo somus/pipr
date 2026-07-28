@@ -47,8 +47,8 @@ const anchorSchema = z
   .looseObject({
     path: pathSchema,
     srcPath: pathSchema.optional(),
-    line: z.number().int().positive(),
-    fileType: z.enum(["FROM", "TO"]),
+    line: z.number().int().positive().optional(),
+    fileType: z.enum(["FROM", "TO"]).optional(),
     multilineMarker: z
       .looseObject({
         startLine: z.number().int().positive(),
@@ -286,7 +286,7 @@ function normalizeCommentUser(author: DataCenterComment["author"]): BitbucketCom
 }
 
 function normalizeCommentInline(anchor: DataCenterComment["anchor"]): BitbucketComment["inline"] {
-  if (!anchor) return undefined;
+  if (!anchor || anchor.line === undefined || anchor.fileType === undefined) return undefined;
   const path = dataCenterPath(anchor.path);
   if (anchor.fileType === "TO") {
     return { path, to: anchor.line, start_to: anchor.multilineMarker?.startLine };

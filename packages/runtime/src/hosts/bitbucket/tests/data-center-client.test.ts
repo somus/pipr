@@ -86,6 +86,11 @@ describe("Bitbucket Data Center client", () => {
         content: { raw: "reply" },
         parent: { id: "11" },
       },
+      {
+        id: "14",
+        content: { raw: "file-level" },
+        inline: undefined,
+      },
     ]);
     await client.createComment(7, {
       content: { raw: "inline" },
@@ -296,6 +301,20 @@ const dataCenterResponses = new Map<string, () => Response>([
                   author: { name: "developer", slug: "developer" },
                 },
               ],
+            },
+          },
+          {
+            action: "COMMENTED",
+            commentAnchor: {
+              path: "src/file.ts",
+              fromHash: "base",
+              toHash: "head",
+            },
+            comment: {
+              id: 14,
+              version: 0,
+              text: "file-level",
+              author: { name: "developer", slug: "developer" },
             },
           },
         ],
