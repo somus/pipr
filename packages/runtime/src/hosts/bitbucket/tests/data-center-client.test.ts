@@ -47,6 +47,7 @@ describe("Bitbucket Data Center client", () => {
       change: {
         number: 7,
         title: "Data Center change",
+        url: "https://bitbucket.example.com/projects/PRJ/repos/pipr/pull-requests/7/overview",
         author: { login: "developer" },
         base: { sha: "base", ref: "main" },
         head: { sha: "head", ref: "feature" },
@@ -364,7 +365,7 @@ const pullRequest = {
   links: {
     self: [
       {
-        href: "https://bitbucket.example.com/projects/PRJ/repos/pipr/pull-requests/7/overview",
+        href: "https://bitbucket.example.com/rest/api/latest/projects/PRJ/repos/pipr/pull-requests/7",
       },
     ],
   },

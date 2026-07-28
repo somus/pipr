@@ -232,8 +232,6 @@ function normalizePullRequest(
   value: z.infer<typeof pullRequestSchema>,
   baseUrl: string,
 ): BitbucketPullRequest {
-  const self = value.links.self[0];
-  if (!self) throw new Error("Bitbucket Data Center pull request is missing its self link");
   const repository = (native: z.infer<typeof repositorySchema>) => ({
     uuid: native.id,
     name: native.name,
@@ -265,7 +263,16 @@ function normalizePullRequest(
       commit: { hash: value.toRef.latestCommit },
       repository: repository(value.toRef.repository),
     },
-    links: { html: { href: self.href } },
+    links: {
+      html: {
+        href: pullRequestWebUrl(
+          baseUrl,
+          value.toRef.repository.project.key,
+          value.toRef.repository.slug,
+          value.id,
+        ),
+      },
+    },
   };
 }
 
@@ -403,6 +410,15 @@ function dataCenterBaseUrl(value: string | undefined): string {
 
 function repositoryWebUrl(baseUrl: string, projectKey: string, repository: string): string {
   return `${baseUrl}/projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repository)}/browse`;
+}
+
+function pullRequestWebUrl(
+  baseUrl: string,
+  projectKey: string,
+  repository: string,
+  pullRequestId: number,
+): string {
+  return `${baseUrl}/projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repository)}/pull-requests/${pullRequestId}/overview`;
 }
 
 function dataCenterPath(

@@ -398,7 +398,7 @@ describe("Bitbucket Data Center events", () => {
         workspace: "/workspace",
         loadChangeRequest: async () => loaded,
       };
-      for (const eventKey of ["pr:merged", "pr:declined", "pr:deleted"]) {
+      for (const eventKey of ["pr:merged", "pr:declined"]) {
         await expect(
           parseBitbucketEvent({
             ...options,
@@ -409,6 +409,18 @@ describe("Bitbucket Data Center events", () => {
           }),
         ).resolves.toMatchObject({ kind: "change-request", change: { action: "closed" } });
       }
+      await expect(
+        parseBitbucketEvent({
+          ...options,
+          env: {
+            BITBUCKET_BASE_URL: "https://bitbucket.example.com",
+            BITBUCKET_EVENT_KEY: "pr:deleted",
+          },
+          loadChangeRequest: () => {
+            throw new Error("deleted pull requests must not be loaded");
+          },
+        }),
+      ).resolves.toEqual({ kind: "ignored", reason: "pull request was deleted" });
       await expect(
         parseBitbucketEvent({
           ...options,

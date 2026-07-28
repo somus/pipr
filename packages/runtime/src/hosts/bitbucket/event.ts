@@ -77,6 +77,9 @@ async function dataCenterEvent(options: BitbucketEventParseOptions): Promise<Cod
   if (eventKey === "pr:comment:added") {
     return dataCenterCommentEvent(hook, repository, options.workspace, eventKey);
   }
+  if (eventKey === "pr:deleted") {
+    return { kind: "ignored", reason: "pull request was deleted" };
+  }
   const action = dataCenterPullRequestAction(eventKey);
   if (hook.pullRequest.draft) return draftEvent();
   const loaded = await options.loadChangeRequest({
@@ -224,7 +227,7 @@ function pullRequestAction(eventKey: string): "opened" | "updated" | "closed" {
 function dataCenterPullRequestAction(eventKey: string): "opened" | "updated" | "closed" {
   if (eventKey === "pr:opened") return "opened";
   if (eventKey === "pr:from_ref_updated" || eventKey === "pr:modified") return "updated";
-  if (eventKey === "pr:merged" || eventKey === "pr:declined" || eventKey === "pr:deleted") {
+  if (eventKey === "pr:merged" || eventKey === "pr:declined") {
     return "closed";
   }
   throw new Error(`Unsupported Bitbucket Data Center event: ${eventKey}`);
