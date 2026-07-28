@@ -422,6 +422,26 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
+    const resolutionIt = options.capabilities.threadResolution ? it : it.skip;
+    resolutionIt("does not let resolved native threads reserve inline anchors", async () => {
+      await withHarness(options.createHarness, async (harness) => {
+        const publication = requiredPublication(harness.adapter);
+        await publication.publish({
+          change: harness.change,
+          plan: publicationPlan(harness.change),
+        });
+        harness.setFirstInlineResolved(true);
+
+        await expect(
+          publication.publish({
+            change: harness.change,
+            plan: publicationPlan(harness.change, "-replacement"),
+          }),
+        ).resolves.toMatchObject({ inlineComments: { posted: 1, skipped: 1, failed: 0 } });
+        expect(harness.writes().inlineCreates).toBe(3);
+      });
+    });
+
     it("does not dedupe an inline anchor owned by another actor", async () => {
       await withHarness(options.createHarness, async (harness) => {
         harness.seedForeignInline();
@@ -489,7 +509,6 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
-    const resolutionIt = options.capabilities.threadResolution ? it : it.skip;
     resolutionIt("loads native inline resolution into prior review state", async () => {
       await withHarness(options.createHarness, async (harness) => {
         await requiredPublication(harness.adapter).publish({

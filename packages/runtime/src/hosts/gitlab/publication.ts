@@ -195,6 +195,7 @@ function gitLabInlineLocations(
   const locations: InlinePublicationLocation[] = [];
   for (const discussion of discussions) {
     if (discussion.notes[0]?.author?.username !== ownerUsername) continue;
+    if (discussion.notes[0]?.resolved === true) continue;
     const location = gitLabInlineLocationFromDiscussion(discussion);
     if (location) locations.push(location);
   }

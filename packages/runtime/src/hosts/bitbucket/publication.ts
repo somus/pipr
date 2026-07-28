@@ -210,6 +210,7 @@ function assertBitbucketProgressLease(
 function bitbucketInlineLocations(comments: BitbucketComment[]): InlinePublicationLocation[] {
   const locations: InlinePublicationLocation[] = [];
   for (const comment of comments) {
+    if (comment.resolution !== undefined) continue;
     const location = bitbucketInlineLocationFromComment(comment);
     if (location) locations.push(location);
   }
