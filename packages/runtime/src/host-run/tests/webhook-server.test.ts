@@ -413,6 +413,7 @@ describe("webhook runner", () => {
   it.each([
     { host: "gitea" as const, headerPrefix: "Gitea" },
     { host: "forgejo" as const, headerPrefix: "Forgejo" },
+    { host: "codeberg" as const, headerPrefix: "Forgejo" },
   ])(
     "validates $host HMAC signatures, repository binding, and event metadata",
     async ({ host, headerPrefix }) => {
