@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-import { legacyDocSlugs } from "../apps/docs/src/lib/docs-routes.ts";
 
 const image = process.env.PIPR_TEST_DOCS_IMAGE ?? "pipr-docs:e2e";
 const container = `pipr-docs-e2e-${process.pid}`;
@@ -32,13 +31,6 @@ try {
     throw new Error("docs image did not serve the install script at /install.sh");
   }
 
-  for (const [legacy, target] of Object.entries(legacyDocSlugs)) {
-    await assertRedirect(origin, `/docs/${legacy}`, target.page);
-    await assertRedirect(origin, `/docs/${legacy}/`, target.page);
-    await assertRedirect(origin, `/docs/${legacy}.md`, target.markdown);
-    await assertRedirect(origin, `/og/docs/${legacy}/image.webp`, target.og);
-  }
-
   console.log(`docs image smoke passed: ${image}`);
 } finally {
   Bun.spawnSync(["docker", "rm", "--force", container], {
@@ -67,16 +59,6 @@ async function assertContent(origin: string, pathname: string): Promise<void> {
   const body = await response.text();
   if (!response.ok || body.trim().length === 0) {
     throw new Error(`${pathname} returned HTTP ${response.status} without usable content`);
-  }
-}
-
-async function assertRedirect(origin: string, pathname: string, expectedLocation: string) {
-  const response = await fetch(`${origin}${pathname}`, { redirect: "manual" });
-  const location = response.headers.get("location");
-  if (response.status !== 308 || location !== expectedLocation) {
-    throw new Error(
-      `${pathname} expected 308 ${expectedLocation}, received ${response.status} ${location ?? ""}`,
-    );
   }
 }
 

@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { frontmatter } from "fumadocs-core/content/md/frontmatter";
 import { supportedOfficialInitAdapters } from "../../../packages/runtime/src/config/init.js";
 import { supportedOfficialInitRecipes } from "../../../packages/runtime/src/config/recipes.js";
-import { getLegacyDocRedirect } from "../src/lib/docs-routes.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../..");
@@ -139,15 +138,6 @@ function checkInternalLink(
 ): void {
   const [rawPath, anchor] = link.split("#", 2);
   const route = normalizeDocsRoute(rawPath);
-  const slugs = route
-    .replace(/^\/docs\/?/, "")
-    .split("/")
-    .filter(hasText);
-  const legacy = getLegacyDocRedirect(slugs);
-  if (legacy) {
-    errors.push(`${relative(page.file)}: stale docs link ${link}; use ${legacy.page}`);
-    return;
-  }
   const target = pages.get(route);
   if (!target) {
     errors.push(`${relative(page.file)}: broken docs route ${link} from ${sourceRoute}`);
@@ -159,10 +149,6 @@ function checkInternalLink(
 function normalizeDocsRoute(rawPath: string): string {
   const route = rawPath.replace(/\.md$/, "").replace(/\/$/, "");
   return route.length === 0 ? "/docs" : route;
-}
-
-function hasText(value: string): boolean {
-  return value.length > 0;
 }
 
 function checkAnchor(anchors: Set<string>, anchor: string | undefined, file: string, link: string) {

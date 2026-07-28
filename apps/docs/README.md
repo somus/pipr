@@ -12,7 +12,7 @@ This app builds the Pipr documentation at `https://pipr.run/docs`.
 | Contribution, security, and release policy | Root `CONTRIBUTING.md`, `SECURITY.md`, and `CHANGELOG.md` |
 | Generated recipe pages | `packages/runtime/src/recipes` through `apps/docs/scripts/sync-recipes.ts` |
 
-Keep maintainer procedures, implementation maps, and design rationale out of the public docs. Link to one canonical page instead of repeating instructions across guides. Preserve redirects when moving or removing a published route.
+Keep maintainer procedures, implementation maps, and design rationale out of the public docs. Link to one canonical page instead of repeating instructions across guides.
 
 Don't edit generated recipe pages directly. Update the recipe source or generator, then run:
 
