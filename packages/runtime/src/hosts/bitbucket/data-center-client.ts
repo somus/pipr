@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createCodeHostHttpClient } from "../http.js";
 import type { RepositoryPermission } from "../types.js";
+import { trustedBitbucketDataCenterBaseUrl } from "./base-url.js";
 import { loadedBitbucketChange } from "./change.js";
 import type { BitbucketClient, BitbucketComment, BitbucketPullRequest } from "./client.js";
 
@@ -84,19 +85,19 @@ export function createBitbucketDataCenterClient(
   env: NodeJS.ProcessEnv,
   fetch: Fetch,
 ): BitbucketClient {
-  const baseUrl = dataCenterBaseUrl(env.BITBUCKET_BASE_URL);
+  const baseUrl = trustedBitbucketDataCenterBaseUrl(env.BITBUCKET_BASE_URL);
   const workspace = required(env.BITBUCKET_PROJECT_KEY, "BITBUCKET_PROJECT_KEY");
   const repository = required(env.BITBUCKET_REPO_SLUG, "BITBUCKET_REPO_SLUG");
   const token = required(env.BITBUCKET_TOKEN, "BITBUCKET_TOKEN");
   const user = required(env.BITBUCKET_USER, "BITBUCKET_USER");
   const headers = { Authorization: `Bearer ${token}` };
   const api = createCodeHostHttpClient({
-    baseUrl: `${baseUrl}/rest/api/latest/`,
+    baseUrl: `${baseUrl}rest/api/latest/`,
     headers,
     fetch,
   });
   const statusApi = createCodeHostHttpClient({
-    baseUrl: `${baseUrl}/rest/build-status/latest/`,
+    baseUrl: `${baseUrl}rest/build-status/latest/`,
     headers,
     fetch,
   });
@@ -128,7 +129,7 @@ export function createBitbucketDataCenterClient(
         "BITBUCKET_PERMISSION_TOKEN",
       );
       const permissionApi = createCodeHostHttpClient({
-        baseUrl: `${baseUrl}/rest/api/latest/`,
+        baseUrl: `${baseUrl}rest/api/latest/`,
         headers: { Authorization: `Bearer ${permissionToken}` },
         fetch,
       });
@@ -400,16 +401,8 @@ async function listDataCenterPage<T>(
   throw new Error("Bitbucket Data Center pagination exceeded 100 pages");
 }
 
-function dataCenterBaseUrl(value: string | undefined): string {
-  const url = new URL(required(value, "BITBUCKET_BASE_URL"));
-  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
-    throw new Error("Bitbucket Data Center base URL must be an HTTPS URL without credentials");
-  }
-  return url.href.replace(/\/$/, "");
-}
-
 function repositoryWebUrl(baseUrl: string, projectKey: string, repository: string): string {
-  return `${baseUrl}/projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repository)}/browse`;
+  return `${baseUrl}projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repository)}/browse`;
 }
 
 function pullRequestWebUrl(
@@ -418,7 +411,7 @@ function pullRequestWebUrl(
   repository: string,
   pullRequestId: number,
 ): string {
-  return `${baseUrl}/projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repository)}/pull-requests/${pullRequestId}/overview`;
+  return `${baseUrl}projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repository)}/pull-requests/${pullRequestId}/overview`;
 }
 
 function dataCenterPath(

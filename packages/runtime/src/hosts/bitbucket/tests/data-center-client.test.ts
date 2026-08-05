@@ -254,6 +254,8 @@ describe("Bitbucket Data Center client", () => {
       "http://bitbucket.example.com",
       "https://user:secret@bitbucket.example.com",
       "https://bitbucket.example.com?token=secret",
+      "https://bitbucket.example.com#fragment",
+      "not a URL",
     ]) {
       expect(() => createBitbucketClient({ ...env, BITBUCKET_BASE_URL: baseUrl })).toThrow(
         "Bitbucket Data Center base URL must be an HTTPS URL without credentials",

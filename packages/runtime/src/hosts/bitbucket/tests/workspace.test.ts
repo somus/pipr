@@ -6,20 +6,74 @@ import type { ChangeRequestEventContext } from "../../../types.js";
 import { ensureBitbucketHeadCheckout } from "../workspace.js";
 
 describe("Bitbucket Cloud workspace", () => {
-  it("fetches an exact private-fork head with an API-token header", async () => {
+  it("fetches an exact private-fork head with an origin-scoped API-token header", async () => {
     const fixture = await createFixture();
     try {
+      const remote = "https://bitbucket.org/workspace/repository";
       await ensureBitbucketHeadCheckout({
         rootDir: fixture.checkout,
-        change: change(fixture.remote, fixture.head, true),
+        change: change(remote, fixture.head, true),
         env: fixture.env,
       });
       expect(git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.head);
       const log = await Bun.file(fixture.log).text();
-      expect(log).toContain(fixture.remote);
-      expect(log).toContain(
-        `Authorization: Basic ${Buffer.from("x-bitbucket-api-token-auth:token").toString("base64")}`,
-      );
+      expect(log).toContain(remote);
+      expect(log).toContain("1|http.https://bitbucket.org/.extraHeader|basic|");
+      expect(log).not.toContain("|http.extraHeader|");
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    "",
+    "not a URL",
+    "http://bitbucket.org/workspace/repository",
+    "https://user:password@bitbucket.org/workspace/repository",
+    "https://bitbucket.org.attacker.example/workspace/repository",
+    "https://example.com/workspace/repository",
+    "https://bitbucket.org/workspace/repository?token=value",
+    "https://bitbucket.org/workspace/repository#fragment",
+    "https://bitbucket.org/",
+    "https://bitbucket.org//",
+  ])("rejects the untrusted Cloud fork URL %s before Git runs", async (remote) => {
+    const fixture = await createFixture();
+    try {
+      let error: unknown;
+      try {
+        await ensureBitbucketHeadCheckout({
+          rootDir: fixture.checkout,
+          change: change(remote, fixture.head, true),
+          env: fixture.env,
+        });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(String(error)).toContain("Bitbucket Cloud fork URL");
+      expect(String(error)).not.toContain("token");
+      expect(String(error)).not.toContain("Authorization");
+      expect(await Bun.file(fixture.log).exists()).toBe(false);
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("validates public fork remotes without attaching an authorization header", async () => {
+    const fixture = await createFixture();
+    try {
+      const remote = "https://bitbucket.org/workspace/repository";
+      const env: NodeJS.ProcessEnv = { ...fixture.env };
+      delete env.BITBUCKET_API_TOKEN;
+      await ensureBitbucketHeadCheckout({
+        rootDir: fixture.checkout,
+        change: change(remote, fixture.head, true),
+        env,
+      });
+      expect(git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.head);
+      const log = await Bun.file(fixture.log).text();
+      expect(log).toContain(remote);
+      expect(log).not.toContain("extraHeader");
+      expect(log).not.toMatch(/\|(basic|bearer)\|/);
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
     }
@@ -37,28 +91,61 @@ describe("Bitbucket Cloud workspace", () => {
       expect(git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.head);
       const log = await Bun.file(fixture.log).text();
       expect(log).toContain(`fetch --no-tags origin ${fixture.head}`);
-      expect(log).not.toContain("Authorization: Basic");
+      expect(log).not.toContain("extraHeader");
+      expect(log).not.toMatch(/\|(basic|bearer)\|/);
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
     }
   });
 
-  it("fetches Data Center private forks with bearer authentication", async () => {
+  it("fetches Data Center private forks with context-scoped bearer authentication", async () => {
     const fixture = await createFixture();
     try {
+      const remote = "https://bitbucket.example.com/context/scm/DEV/repository.git";
       await ensureBitbucketHeadCheckout({
         rootDir: fixture.checkout,
-        change: change(fixture.remote, fixture.head, true),
+        change: change(remote, fixture.head, true),
         env: {
           ...fixture.env,
-          BITBUCKET_BASE_URL: "https://bitbucket.example.com",
+          BITBUCKET_BASE_URL: "https://bitbucket.example.com/context/",
           BITBUCKET_TOKEN: "data-center-token",
         },
       });
       expect(git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.head);
       const log = await Bun.file(fixture.log).text();
-      expect(log).toContain("Authorization: Bearer data-center-token");
-      expect(log).not.toContain("x-bitbucket-api-token-auth");
+      expect(log).toContain(remote);
+      expect(log).toContain("1|http.https://bitbucket.example.com/context/.extraHeader|bearer|");
+      expect(log).not.toContain("|http.extraHeader|");
+      expect(log).not.toContain("basic");
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    "https://bitbucket.example.com/scm/DEV/repository.git",
+    "https://other.example.com/context/scm/DEV/repository.git",
+  ])("rejects the untrusted Data Center fork URL %s before Git runs", async (remote) => {
+    const fixture = await createFixture();
+    try {
+      let error: unknown;
+      try {
+        await ensureBitbucketHeadCheckout({
+          rootDir: fixture.checkout,
+          change: change(remote, fixture.head, true),
+          env: {
+            ...fixture.env,
+            BITBUCKET_BASE_URL: "https://bitbucket.example.com/context",
+            BITBUCKET_TOKEN: "data-center-token",
+          },
+        });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(String(error)).toContain("Bitbucket Data Center fork URL");
+      expect(String(error)).not.toContain("data-center-token");
+      expect(String(error)).not.toContain("Authorization");
+      expect(await Bun.file(fixture.log).exists()).toBe(false);
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
     }
@@ -87,6 +174,18 @@ async function createFixture() {
   git(checkout, ["init"]);
   git(checkout, ["config", "user.email", "pipr@example.com"]);
   git(checkout, ["config", "user.name", "Pipr"]);
+  git(checkout, [
+    "config",
+    "--add",
+    `url.${remote}.insteadOf`,
+    "https://bitbucket.org/workspace/repository",
+  ]);
+  git(checkout, [
+    "config",
+    "--add",
+    `url.${remote}.insteadOf`,
+    "https://bitbucket.example.com/context/scm/DEV/repository.git",
+  ]);
   await Bun.write(path.join(checkout, "base.txt"), "base\n");
   git(checkout, ["add", "base.txt"]);
   git(checkout, ["commit", "-m", "base"]);
@@ -94,7 +193,7 @@ async function createFixture() {
   const wrapper = path.join(bin, "git");
   await Bun.write(
     wrapper,
-    '#!/bin/sh\nprintf "%s|%s|%s|" "$GIT_CONFIG_COUNT" "$GIT_CONFIG_KEY_0" "$GIT_CONFIG_VALUE_0" >> "$PIPR_GIT_LOG"\nprintf "%s\\n" "$*" >> "$PIPR_GIT_LOG"\nexec "$PIPR_REAL_GIT" "$@"\n',
+    '#!/bin/sh\nauth=none\ncase "$GIT_CONFIG_VALUE_0" in\n  "Authorization: Basic "*) auth=basic ;;\n  "Authorization: Bearer "*) auth=bearer ;;\nesac\nprintf "%s|%s|%s|" "$GIT_CONFIG_COUNT" "$GIT_CONFIG_KEY_0" "$auth" >> "$PIPR_GIT_LOG"\nprintf "%s\\n" "$*" >> "$PIPR_GIT_LOG"\nexec "$PIPR_REAL_GIT" "$@"\n',
   );
   await chmod(wrapper, 0o700);
   return {
