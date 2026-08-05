@@ -55,7 +55,7 @@ export function validateReviewFindings<T extends ReviewFinding>(
   }
   const ranges = createDiffRangeIndex(manifest);
   const seenFingerprints = new Set<string>();
-  const validFindings: T[] = [];
+  const validFindings: ValidatedReviewFindings<T>["validFindings"][number][] = [];
   const droppedFindings: ValidatedReviewFindings<T>["droppedFindings"][number][] = [];
 
   for (const [index, finding] of findings.entries()) {
@@ -90,7 +90,7 @@ export function validateReviewFindings<T extends ReviewFinding>(
 function canonicalizeFindingRangeId<T extends ReviewFinding>(
   finding: T,
   manifest: DiffManifest,
-): T {
+): ValidatedReviewFindings<T>["validFindings"][number] {
   if (finding.startLine > finding.endLine) {
     return finding;
   }

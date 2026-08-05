@@ -62,15 +62,18 @@ export type ValidateFindingsOptions = {
   paths?: PathFilter;
 };
 
+type ValidatedReviewFinding<T extends ReviewFinding> = Omit<T, "rangeId"> &
+  Pick<ReviewFinding, "rangeId">;
+
 /** One review finding rejected by runtime validation. */
 export type DroppedReviewFinding<T extends ReviewFinding = ReviewFinding> = {
-  finding: T;
+  finding: ValidatedReviewFinding<T>;
   reason: string;
 };
 
 /** Findings accepted and rejected by runtime validation. */
 export type ValidatedReviewFindings<T extends ReviewFinding = ReviewFinding> = {
-  validFindings: readonly T[];
+  validFindings: readonly ValidatedReviewFinding<T>[];
   droppedFindings: readonly DroppedReviewFinding<T>[];
 };
 

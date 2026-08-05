@@ -203,7 +203,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(configTs).toContain("changeSummary: z.array(z.string().min(1).max(500)).min(1).max(4)");
     expect(configTs).toContain("reviewerFocus: z.array(z.string().min(1).max(500)).max(4)");
     expect(configTs).toContain("**Review risk:**");
-    expect(configTs).toContain("hasCommentableAnchor");
+    expect(configTs).toContain("ctx.review.validateFindings(result.inlineFindings)");
     expect(configTs).toContain("severity");
     expect(configTs).toContain("category");
     expect(configTs).not.toContain('"nit"');

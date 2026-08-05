@@ -184,6 +184,22 @@ describe("TaskContext", () => {
             validated.droppedFindings[0]?.finding.severity;
           void validSeverity;
           void droppedSeverity;
+
+          const literalFinding = {
+            body: "This can fail.",
+            path: "src/example.ts",
+            rangeId: "stale-range",
+            side: "RIGHT",
+            startLine: 1,
+            endLine: 1,
+            severity: "high",
+          } as const;
+          const canonicalized = context.review.validateFindings([literalFinding]);
+          const canonicalRangeId: string | undefined = canonicalized.validFindings[0]?.rangeId;
+          // @ts-expect-error validation can replace a literal rangeId with its canonical string.
+          const staleRangeId: "stale-range" | undefined = canonicalized.validFindings[0]?.rangeId;
+          void canonicalRangeId;
+          void staleRangeId;
         },
       });
     });
