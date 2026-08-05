@@ -45,63 +45,16 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
       - name: Resolve release tag
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          PIPR_COMMIT_SUBJECT: ${{ github.event.workflow_run.head_commit.message }}
+          PIPR_EVENT_NAME: ${{ github.event_name }}
           PIPR_INPUT_TAG: ${{ inputs.tag }}
           PIPR_WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag="$PIPR_INPUT_TAG"
-          else
-            subject="$(git log -1 --format=%s "$PIPR_WORKFLOW_RUN_SHA")"
-            case "$subject" in
-              "chore(main): release "*) ;;
-              "chore: release "*) ;;
-              *)
-                echo "Commit is not a Release Please merge commit; skipping publish."
-                echo "publish=false" >> "$GITHUB_OUTPUT"
-                exit 0
-                ;;
-            esac
-
-            git fetch --force --tags origin
-            tag=""
-            for attempt in {1..60}; do
-              while IFS= read -r candidate; do
-                if [[ "$(git rev-list -n 1 "$candidate" 2>/dev/null)" == "$PIPR_WORKFLOW_RUN_SHA" ]]; then
-                  tag="$candidate"
-                  break
-                fi
-              done < <(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName,isDraft --jq '.[] | select(.isDraft == false) | .tagName')
-
-              if [[ -n "$tag" ]]; then
-                break
-              fi
-
-              echo "No published release for CI head $PIPR_WORKFLOW_RUN_SHA yet; waiting."
-              sleep 10
-            done
-
-            if [[ -z "$tag" ]]; then
-              echo "No published release for release commit $PIPR_WORKFLOW_RUN_SHA after waiting; failing so publish is not silently lost." >&2
-              exit 1
-            fi
-          fi
-
-          case "$tag" in
-            v*) ;;
-            *)
-              echo "release tag must start with v: $tag" >&2
-              exit 1
-              ;;
-          esac
-
-          echo "publish=true" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        run: bun scripts/release.ts resolve
 
   publish:
     needs: resolve
@@ -130,26 +83,9 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: bun run check
-      - id: version
-        run: |
-          case "$PIPR_RELEASE_TAG" in
-            v*) ;;
-            *)
-              echo "release tag must start with v: $PIPR_RELEASE_TAG" >&2
-              exit 1
-              ;;
-          esac
-          version="${PIPR_RELEASE_TAG#v}"
-          root_version="$(bun -e "console.log((await import('./package.json')).default.version)")"
-          sdk_version="$(bun -e "console.log((await import('./packages/sdk/package.json')).default.version)")"
-          runtime_version="$(bun -e "console.log((await import('./packages/runtime/package.json')).default.version)")"
-          cli_version="$(bun -e "console.log((await import('./packages/cli/package.json')).default.version)")"
-          test "$root_version" = "$version"
-          test "$sdk_version" = "$version"
-          test "$runtime_version" = "$version"
-          test "$cli_version" = "$version"
-          grep -q "image: docker://ghcr.io/somus/pipr:v${version}" action.yml
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Verify release tag metadata
+        id: version
+        run: bun scripts/release.ts verify-tag
       - run: bun run build:release:cli
       - run: bun run check:release-artifacts
       - run: bun run check:npm-tarballs
@@ -218,96 +154,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN }}
           PIPR_RELEASE_VERSION: ${{ needs.publish.outputs.version }}
-        run: |
-          set -euo pipefail
-
-          git fetch origin main
-          branch="dogfood-sdk-${PIPR_RELEASE_VERSION//./-}"
-          git switch -C "$branch" origin/main
-          main_version="$(bun -e "console.log((await import('./package.json')).default.version)")"
-          if [[ "$main_version" != "$PIPR_RELEASE_VERSION" ]]; then
-            echo "Skipping dogfood SDK update because main is ${main_version}, not ${PIPR_RELEASE_VERSION}."
-            exit 0
-          fi
-
-          for attempt in {1..30}; do
-            if npm view "@usepipr/sdk@${PIPR_RELEASE_VERSION}" version >/dev/null 2>&1; then
-              break
-            fi
-            if [[ "$attempt" == "30" ]]; then
-              echo "@usepipr/sdk@${PIPR_RELEASE_VERSION} was not visible on npm after waiting." >&2
-              exit 1
-            fi
-            sleep 2
-          done
-
-          bun -e '
-          const packagePath = ".pipr/package.json";
-          const version = Bun.env.PIPR_RELEASE_VERSION;
-          if (!version) {
-            throw new Error("PIPR_RELEASE_VERSION is required");
-          }
-          const pkg = await Bun.file(packagePath).json();
-          pkg.dependencies ??= {};
-          pkg.dependencies["@usepipr/sdk"] = version;
-          await Bun.write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
-          '
-          bun install --cwd .pipr
-          bun run sync:release-lockfile
-          bun run check:release-metadata
-
-          if git diff --quiet -- .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml; then
-            echo "Dogfood SDK already matches ${PIPR_RELEASE_VERSION}."
-            exit 0
-          fi
-
-          pr_state="$(gh pr list --head "$branch" --state all --limit 1 --json state --jq '.[0].state // ""')"
-          if [[ "$pr_state" == "MERGED" ]]; then
-            echo "Dogfood SDK update PR for ${branch} is already merged."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml
-          git commit -m "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}"
-          git fetch origin main
-          git rebase origin/main
-          git -c core.hooksPath=/dev/null push --force-with-lease origin "HEAD:${branch}"
-
-          body_file="$(mktemp)"
-          cat > "$body_file" <<BODY
-          ## Summary
-
-          - Updates dogfood \`.pipr\` to the just-published \`@usepipr/sdk@${PIPR_RELEASE_VERSION}\`.
-          - Refreshes \`.pipr/bun.lock\` after npm publish.
-          - Pins the self-review workflow to the just-published Pipr Action.
-
-          ## Verification
-
-          - \`bun run check:release-metadata\`
-          BODY
-
-          pr_state="$(gh pr list --head "$branch" --state all --limit 1 --json state --jq '.[0].state // ""')"
-          if [[ "$pr_state" == "OPEN" ]]; then
-            gh pr edit "$branch" \
-              --title "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}" \
-              --body-file "$body_file"
-          elif [[ "$pr_state" == "MERGED" ]]; then
-            echo "Dogfood SDK update PR for ${branch} is already merged."
-            exit 0
-          elif [[ "$pr_state" == "CLOSED" ]]; then
-            gh pr reopen "$branch"
-            gh pr edit "$branch" \
-              --title "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}" \
-              --body-file "$body_file"
-          elif [[ -z "$pr_state" ]]; then
-            gh pr create \
-              --base main \
-              --head "$branch" \
-              --title "chore: update dogfood SDK to ${PIPR_RELEASE_VERSION}" \
-              --body-file "$body_file"
-          else
-            echo "Dogfood SDK update PR for ${branch} is ${pr_state}; not updating it." >&2
-            exit 1
-          fi
+        run: bun scripts/release.ts dogfood

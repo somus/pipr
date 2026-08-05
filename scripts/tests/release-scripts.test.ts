@@ -18,11 +18,6 @@ import typeScriptPackage from "typescript/package.json" with { type: "json" };
 import { releaseAssetForPlatform, releaseTargets } from "../../packages/cli/src/release/targets.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
-const dogfoodPrStateLookup = [
-  'pr_state="$(gh pr list --head "$branch" --state all --limit 1 --json state --jq ',
-  "'.[0].state // \"\"'",
-  ')"',
-].join("");
 const excludedFixturePaths = new Set([
   ".cache",
   ".git",
@@ -40,10 +35,12 @@ type Workflow = {
   jobs: Record<
     string,
     {
-      needs?: string[];
+      needs?: string | string[];
       steps?: Array<{
         "continue-on-error"?: boolean;
         env?: Record<string, string>;
+        id?: string;
+        name?: string;
         run?: string;
         uses?: string;
         with?: Record<string, unknown>;
@@ -859,107 +856,41 @@ describe("check-release-metadata", () => {
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
 
-  it("adds the self-review workflow to the post-publish dogfood update PR", () => {
-    const releaseWorkflow = readFileSync(
-      path.join(repoRoot, ".github/workflows/release.yml"),
-      "utf8",
+  it("keeps the security-sensitive publish pipeline declarative and ordered", () => {
+    const workflow = parseWorkflow(".github/workflows/release.yml");
+    const publishRuns =
+      workflow.jobs.publish?.steps?.flatMap((step) => (step.run ? [step.run] : [])) ?? [];
+    const dogfoodStep = workflow.jobs.dogfood?.steps?.find(
+      (step) => step.name === "Open dogfood SDK update PR",
     );
 
-    expect(releaseWorkflow).toContain("bun run sync:release-lockfile");
-    expect(releaseWorkflow).toContain(
-      "git add .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml",
-    );
+    const artifactCheck = publishRuns.indexOf("bun run check:release-artifacts");
+    const tarballCheck = publishRuns.indexOf("bun run check:npm-tarballs");
+    const packagePublishes = publishRuns.filter((run) => run.startsWith("npm publish "));
+    expect(artifactCheck).toBeGreaterThan(-1);
+    expect(tarballCheck).toBeGreaterThan(artifactCheck);
+    expect(publishRuns.indexOf(packagePublishes[0] ?? "")).toBeGreaterThan(tarballCheck);
+    expect(packagePublishes).toHaveLength(3);
+    expect(publishRuns.some((run) => run.includes("gh release upload"))).toBe(true);
+    expect(
+      workflow.jobs.publish?.steps?.some(
+        (step) => step.name === "Publish GHCR image" && step.with?.push === true,
+      ),
+    ).toBe(true);
+    expect(workflow.jobs.dogfood?.needs).toBe("publish");
+    expect(dogfoodStep?.run).toBe("bun scripts/release.ts dogfood");
+    expect(dogfoodStep?.env?.GH_TOKEN).toContain("PIPR_RELEASE_PLEASE_TOKEN");
   });
 
-  it("rejects a post-publish dogfood PR that omits the self-review workflow", () => {
+  it("rejects protected-main commands in the dogfood workflow step", () => {
     const repository = copyRepositoryFixture();
     const workflowPath = path.join(repository, ".github/workflows/release.yml");
     write(
       workflowPath,
       readFileSync(workflowPath, "utf8").replace(
-        "git add .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml",
-        "git add .pipr/package.json .pipr/bun.lock",
+        "run: bun scripts/release.ts dogfood",
+        'run: git push origin "HEAD:main"',
       ),
-    );
-
-    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
-  });
-
-  it("rejects protected main dogfood SDK pushes", () => {
-    const repository = copyRepositoryFixture();
-    const workflowPath = path.join(repository, ".github/workflows/release.yml");
-    const updateBranchPushRef = ['"HEAD:', "${", "branch", '}"'].join("");
-    write(
-      workflowPath,
-      readFileSync(workflowPath, "utf8").replace(updateBranchPushRef, '"HEAD:main"'),
-    );
-
-    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
-  });
-
-  it("rejects dogfood PR automation that leaves closed PRs closed", () => {
-    const repository = copyRepositoryFixture();
-    const workflowPath = path.join(repository, ".github/workflows/release.yml");
-    write(
-      workflowPath,
-      readFileSync(workflowPath, "utf8").replace('            gh pr reopen "$branch"\n', ""),
-    );
-
-    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
-  });
-
-  it("rejects dogfood PR automation that fails already merged PRs", () => {
-    const repository = copyRepositoryFixture();
-    const workflowPath = path.join(repository, ".github/workflows/release.yml");
-    const mergedPrMessage = [
-      '            echo "Dogfood SDK update PR for ',
-      "${",
-      "branch",
-      '} is already merged."',
-    ].join("");
-    write(
-      workflowPath,
-      readFileSync(workflowPath, "utf8").replace(
-        [
-          '          if [[ "$pr_state" == "MERGED" ]]; then',
-          mergedPrMessage,
-          "            exit 0",
-          "          fi",
-          "",
-        ].join("\n"),
-        "",
-      ),
-    );
-
-    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
-  });
-
-  it("rejects dogfood PR automation that swallows PR lookup failures", () => {
-    const repository = copyRepositoryFixture();
-    const workflowPath = path.join(repository, ".github/workflows/release.yml");
-    write(
-      workflowPath,
-      readFileSync(workflowPath, "utf8").replaceAll(
-        dogfoodPrStateLookup,
-        'pr_state="$(gh pr view "$branch" --json state --jq .state 2>/dev/null || true)"',
-      ),
-    );
-
-    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
-  });
-
-  it("rejects dogfood PR automation that reuses stale PR state after pushing", () => {
-    const repository = copyRepositoryFixture();
-    const workflowPath = path.join(repository, ".github/workflows/release.yml");
-    const stateLookupLine = `          ${dogfoodPrStateLookup}\n`;
-    const workflow = readFileSync(workflowPath, "utf8");
-    const lastLookup = workflow.lastIndexOf(stateLookupLine);
-    if (lastLookup < 0) {
-      throw new Error("dogfood PR state lookup is required");
-    }
-    write(
-      workflowPath,
-      `${workflow.slice(0, lastLookup)}${workflow.slice(lastLookup + stateLookupLine.length)}`,
     );
 
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);

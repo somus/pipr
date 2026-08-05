@@ -20,6 +20,19 @@ type ReleasePleaseConfig = {
   packages: Record<string, { "extra-files"?: Array<{ path: string; glob?: boolean }> }>;
 };
 
+type WorkflowStep = {
+  id?: string;
+  name?: string;
+  env?: Record<string, string>;
+  run?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
+};
+
+type ReleaseWorkflow = {
+  jobs: Record<string, { needs?: string | string[]; steps?: WorkflowStep[] }>;
+};
+
 const rootDir = path.resolve(import.meta.dirname, "..");
 const rootPackage = await readJson<PackageJson>("package.json");
 const releasePleaseConfig = await readText("release-please-config.json");
@@ -28,6 +41,7 @@ const ciWorkflow = await readText(".github/workflows/ci.yml");
 const dockerImageWorkflow = await readText(".github/workflows/docker-image.yml");
 const evalsWorkflow = await readText(".github/workflows/evals.yml");
 const releaseWorkflow = await readText(".github/workflows/release.yml");
+const parsedReleaseWorkflow = Bun.YAML.parse(releaseWorkflow) as ReleaseWorkflow;
 const releasePleaseWorkflow = await readText(".github/workflows/release-please.yml");
 const docsSources = await readGlob("apps/docs/content/docs/**/*.mdx");
 const selfReviewWorkflow = await readText(".github/workflows/pipr.yml");
@@ -37,16 +51,10 @@ const webhookEnvironment = await readText("deploy/webhook/.env.example");
 const bunLock = await readText("bun.lock");
 const releaseVersionExpression = githubExpression("steps.version.outputs.version");
 const releasePushTokenExpression = githubExpression("secrets.PIPR_RELEASE_PLEASE_TOKEN");
-const releaseVersionShellVariable = ["${", "PIPR_RELEASE_VERSION", "}"].join("");
-const releaseVersionBranchVariable = ["${", "PIPR_RELEASE_VERSION//./-", "}"].join("");
-const releaseDogfoodBranchPushRef = ['"HEAD:', "${", "branch", '}"'].join("");
-const releaseDogfoodPrStateLookup = [
-  'pr_state="$(gh pr list --head "$branch" --state all --limit 1 --json state --jq ',
-  "'.[0].state // \"\"'",
-  ')"',
-].join("");
-const releaseDogfoodMergedPrGuard = '[[ "$pr_state" == "MERGED" ]]';
 const shaExpression = githubExpression("github.sha");
+const resolveSteps = parsedReleaseWorkflow.jobs.resolve?.steps ?? [];
+const publishSteps = parsedReleaseWorkflow.jobs.publish?.steps ?? [];
+const dogfoodSteps = parsedReleaseWorkflow.jobs.dogfood?.steps ?? [];
 const workflowSources = {
   ".github/workflows/ci.yml": ciWorkflow,
   ".github/workflows/docker-image.yml": dockerImageWorkflow,
@@ -231,21 +239,30 @@ assert(
   releaseWorkflow.includes("github.event.workflow_run.head_branch == 'main'"),
   "release workflow must publish only for main branch CI",
 );
-assert(
-  releaseWorkflow.includes("gh release list"),
-  "release workflow must resolve the published release tag after CI succeeds",
+const resolveStep = resolveSteps.find((step) => step.id === "release");
+assert.equal(
+  resolveStep?.run,
+  "bun scripts/release.ts resolve",
+  "release workflow must resolve release state through the typed release script",
 );
-assert(
-  releaseWorkflow.includes('"chore: release "*)'),
-  "release workflow must accept Release Please release subjects without a branch scope",
+assert.equal(
+  resolveStep?.env?.GH_TOKEN,
+  githubExpression("github.token"),
+  "release tag resolution must use github.token through the environment",
 );
-assert(
-  releaseWorkflow.includes("for attempt in {1..60}"),
-  "release workflow must wait long enough for Release Please to publish the release",
-);
-assert(
-  releaseWorkflow.includes("failing so publish is not silently lost"),
-  "release workflow must fail release commits when no release is found after waiting",
+for (const environmentName of [
+  "PIPR_COMMIT_SUBJECT",
+  "PIPR_EVENT_NAME",
+  "PIPR_INPUT_TAG",
+  "PIPR_WORKFLOW_RUN_SHA",
+]) {
+  assert(resolveStep?.env?.[environmentName], `release tag resolution requires ${environmentName}`);
+}
+const verifyTagStep = publishSteps.find((step) => step.id === "version");
+assert.equal(
+  verifyTagStep?.run,
+  "bun scripts/release.ts verify-tag",
+  "release workflow must verify tag metadata through the typed release script",
 );
 assert(
   releaseWorkflow.includes(`type=raw,value=v${releaseVersionExpression}`),
@@ -267,8 +284,12 @@ assert(
   !releaseWorkflow.includes(`sha-${shaExpression}`),
   "release workflow must not publish sha tag",
 );
-const npmTarballCheckIndex = releaseWorkflow.indexOf("bun run check:npm-tarballs");
-const firstPackagePublishIndex = releaseWorkflow.indexOf('npm publish "dist/npm/');
+const npmTarballCheckIndex = publishSteps.findIndex(
+  (step) => step.run === "bun run check:npm-tarballs",
+);
+const firstPackagePublishIndex = publishSteps.findIndex((step) =>
+  step.run?.startsWith('npm publish "dist/npm/'),
+);
 assert(
   npmTarballCheckIndex !== -1 && npmTarballCheckIndex < firstPackagePublishIndex,
   "release workflow must verify actual npm tarballs before publishing packages",
@@ -279,8 +300,10 @@ assert(
 );
 for (const packageName of ["sdk", "runtime", "cli"]) {
   assert(
-    releaseWorkflow.includes(
-      `npm publish "dist/npm/usepipr-${packageName}-${releaseVersionExpression}.tgz" --access public`,
+    publishSteps.some(
+      (step) =>
+        step.run ===
+        `npm publish "dist/npm/usepipr-${packageName}-${releaseVersionExpression}.tgz" --access public`,
     ),
     `release workflow must publish the verified @usepipr/${packageName} tarball`,
   );
@@ -304,36 +327,39 @@ assert(
   !releaseWorkflow.includes("dist/release/pipr-*"),
   "release workflow must not upload release assets through a glob",
 );
-const releaseArtifactCheckIndex = releaseWorkflow.indexOf("bun run check:release-artifacts");
+const releaseArtifactCheckIndex = publishSteps.findIndex(
+  (step) => step.run === "bun run check:release-artifacts",
+);
 assert(
   releaseArtifactCheckIndex !== -1 && releaseArtifactCheckIndex < firstPackagePublishIndex,
   "release workflow must verify exact CLI assets before publishing packages",
 );
-const dogfoodUpdateStep = "name: Open dogfood SDK update PR";
-assert(
-  releaseWorkflow.includes(dogfoodUpdateStep),
-  "release workflow must open a dogfood SDK update PR after publish",
-);
-assert(
-  releaseWorkflow.indexOf(dogfoodUpdateStep) > releaseWorkflow.indexOf("name: Publish GHCR image"),
-  "release workflow must open the dogfood SDK update PR only after all release artifacts publish",
-);
-assert(
-  releaseWorkflow.includes(`GH_TOKEN: ${releasePushTokenExpression}`),
-  "release workflow dogfood update must use the release token for PR creation",
-);
-assert(
-  releaseWorkflow.includes(`token: ${releasePushTokenExpression}`),
-  "release workflow dogfood checkout must use the release token for branch pushes",
-);
-assert(
-  releaseWorkflow.includes("dogfood:\n    needs: publish"),
+const dogfoodUpdateStep = dogfoodSteps.find((step) => step.name === "Open dogfood SDK update PR");
+assert.equal(
+  parsedReleaseWorkflow.jobs.dogfood?.needs,
+  "publish",
   "release workflow must isolate the dogfood update in a post-publish job",
 );
-assert(
-  releaseWorkflow.includes("version: ${{ steps.version.outputs.version }}") &&
-    releaseWorkflow.includes("PIPR_RELEASE_VERSION: ${{ needs.publish.outputs.version }}"),
+assert.equal(
+  dogfoodUpdateStep?.run,
+  "bun scripts/release.ts dogfood",
+  "release workflow must invoke typed dogfood reconciliation after publish",
+);
+assert.equal(
+  dogfoodUpdateStep?.env?.GH_TOKEN,
+  releasePushTokenExpression,
+  "release workflow dogfood update must use the release token for PR creation",
+);
+assert.equal(
+  dogfoodUpdateStep?.env?.PIPR_RELEASE_VERSION,
+  githubExpression("needs.publish.outputs.version"),
   "release workflow must pass the published version to the dogfood job",
+);
+const dogfoodCheckout = dogfoodSteps.find((step) => step.uses?.startsWith("actions/checkout@"));
+assert.equal(
+  dogfoodCheckout?.with?.token,
+  releasePushTokenExpression,
+  "release workflow dogfood checkout must use the release token for branch pushes",
 );
 assert(
   !releaseWorkflow.includes("PIPR_PUSH_TOKEN:"),
@@ -344,93 +370,8 @@ assert(
   "release workflow dogfood update must not fall back to a token that cannot update workflows",
 );
 assert(
-  releaseWorkflow.includes(`npm view "@usepipr/sdk@${releaseVersionShellVariable}" version`),
-  "release workflow must wait for the published SDK before bumping dogfood",
-);
-assert(
-  releaseWorkflow.includes(
-    'main_version="$(bun -e "console.log((await import(\'./package.json\')).default.version)")"',
-  ),
-  "release workflow dogfood update must read the current main root version",
-);
-assert(
-  releaseWorkflow.includes('[[ "$main_version" != "$PIPR_RELEASE_VERSION" ]]'),
-  "release workflow dogfood update must skip stale release tags",
-);
-assert(
-  releaseWorkflow.includes("bun install --cwd .pipr"),
-  "release workflow must refresh the dogfood lockfile after bumping the SDK",
-);
-assert(
-  releaseWorkflow.includes("bun run sync:release-lockfile"),
-  "release workflow must synchronize dogfood release metadata after publish",
-);
-assert(
-  releaseWorkflow.includes("git add .pipr/package.json .pipr/bun.lock .github/workflows/pipr.yml"),
-  "release workflow dogfood PR must include the self-review workflow",
-);
-assert(
-  releaseWorkflow.includes("bun run check:release-metadata"),
-  "release workflow must validate release metadata before pushing the dogfood bump",
-);
-assert(
-  releaseWorkflow.includes(`chore: update dogfood SDK to ${releaseVersionShellVariable}`),
-  "release workflow must commit a non-release dogfood SDK bump",
-);
-assert(
-  releaseWorkflow.includes(`branch="dogfood-sdk-${releaseVersionBranchVariable}"`),
-  "release workflow must use a deterministic dogfood update branch",
-);
-assert(
-  releaseWorkflow.includes(releaseDogfoodBranchPushRef),
-  "release workflow must push the dogfood SDK bump to the update branch",
-);
-assert(
-  releaseWorkflow.includes(releaseDogfoodPrStateLookup),
-  "release workflow must inspect the existing dogfood SDK update PR state on rerun",
-);
-assert(
-  releaseWorkflow.indexOf(releaseDogfoodPrStateLookup) !==
-    releaseWorkflow.lastIndexOf(releaseDogfoodPrStateLookup),
-  "release workflow must refresh dogfood SDK update PR state after pushing",
-);
-assert(
-  !releaseWorkflow.includes('gh pr view "$branch" --json state --jq .state 2>/dev/null || true'),
-  "release workflow must not swallow unexpected dogfood SDK update PR lookup failures",
-);
-assert(
-  releaseWorkflow.includes(releaseDogfoodMergedPrGuard),
-  "release workflow must skip already merged dogfood SDK update PRs on rerun",
-);
-assert(
-  releaseWorkflow.indexOf(releaseDogfoodMergedPrGuard) <
-    releaseWorkflow.indexOf(releaseDogfoodBranchPushRef),
-  "release workflow must skip already merged dogfood SDK update PRs before pushing",
-);
-assert(
-  releaseWorkflow.lastIndexOf(releaseDogfoodPrStateLookup) >
-    releaseWorkflow.indexOf(releaseDogfoodBranchPushRef),
-  "release workflow must refresh dogfood SDK update PR state after pushing",
-);
-assert(
-  releaseWorkflow.includes("gh pr create"),
-  "release workflow must create a dogfood SDK update PR",
-);
-assert(
-  releaseWorkflow.includes("gh pr edit"),
-  "release workflow must update an existing dogfood SDK update PR on rerun",
-);
-assert(
-  releaseWorkflow.includes('gh pr reopen "$branch"'),
-  "release workflow must reopen a closed dogfood SDK update PR on rerun",
-);
-assert(
-  releaseWorkflow.includes("--base main"),
-  "release workflow dogfood update PR must target main",
-);
-assert(
-  !releaseWorkflow.includes('"HEAD:main"'),
-  "release workflow must not push the dogfood SDK bump directly to protected main",
+  !releaseWorkflow.includes("x-access-token:") && !releaseWorkflow.includes('"HEAD:main"'),
+  "release workflow must not contain authenticated URL pushes or protected-main writes",
 );
 assert(
   !releasePleaseConfig.includes('"path": "bun.lock"'),
