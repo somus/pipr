@@ -236,8 +236,47 @@ describe("changed-scope", () => {
     }
   }, 30000);
 
-  it("keeps fixture tests in the Docker Action lane", () => {
-    expect(scopeChanged("docker", "packages/e2e/assertions.test.ts")).toBe(true);
+  it("keeps fixture tests and Pi CLI owners in the Docker Action lane", () => {
+    for (const file of [
+      "packages/e2e/assertions.test.ts",
+      "packages/runtime/src/pi/contract.ts",
+      "packages/runtime/src/pi/provider.ts",
+      "packages/runtime/src/pi/runner.ts",
+    ]) {
+      expect(scopeChanged("docker", file), file).toBe(true);
+    }
+  });
+
+  it("runs every expensive scope when the scope router changes", () => {
+    const scopes: ChangedScope[] = ["docs", "docs-browser", "docs-container", "docker", "prompt"];
+    for (const scope of scopes) {
+      expect(scopeChanged(scope, "scripts/changed-scope.ts"), scope).toBe(true);
+    }
+  });
+
+  it("routes canonical prompt and browser build owners to their lanes", () => {
+    expect(scopeChanged("prompt", "packages/runtime/src/pi/runner.ts")).toBe(true);
+    expect(scopeChanged("docs-browser", "apps/docs/scripts/og-images.ts")).toBe(true);
+  });
+
+  it("keeps the source owner visible when an exact-match path is renamed", () => {
+    const repository = changedScopeRepository("packages/runtime/src/pi/runner.ts");
+    const base = git(repository, "rev-parse", "HEAD");
+    run("git", ["mv", "packages/runtime/src/pi/runner.ts", "renamed-runner.ts"], {
+      cwd: repository,
+    });
+    run("git", ["commit", "-m", "refactor: move runner"], { cwd: repository });
+    const head = git(repository, "rev-parse", "HEAD");
+
+    for (const scope of ["docker", "prompt"] satisfies ChangedScope[]) {
+      const result = changedScopeResult(scope, repository, {
+        EVENT_NAME: "pull_request",
+        PR_BASE_SHA: base,
+        PR_HEAD_SHA: head,
+      });
+      expect(result.exitCode, result.stderr || result.stdout).toBe(0);
+      expect(result.stdout.trim(), scope).toBe("changed=true");
+    }
   });
 
   it("fails open for every scope when PR history is unavailable", () => {
@@ -379,8 +418,10 @@ describe("developer checks", () => {
     const workflow = parseWorkflow(".github/workflows/ci.yml");
     const packages = workflow.jobs.packages;
     const commands = packages?.steps?.filter((step) => step.run?.includes("turbo run")) ?? [];
+    const checkout = packages?.steps?.find((step) => step.uses?.startsWith("actions/checkout@"));
 
     expect(packages?.strategy).toBeUndefined();
+    expect(checkout?.with?.ref).toBeUndefined();
     expect(commands).toHaveLength(2);
     expect(commands.find((step) => step.if?.includes("pull_request"))?.run).toContain("--affected");
     const mainCommand = commands.find((step) => step.if?.includes("push"))?.run;
@@ -428,6 +469,7 @@ describe("developer checks", () => {
 
     expect(rootPackage.scripts?.["check:packages"]).toStartWith("turbo run build lint typecheck");
     expect(rootPackage.scripts?.["check:packages"]).not.toContain("build:packages &&");
+    expect(rootPackage.scripts?.["check:packages"]).not.toContain("check:runtime-test-split");
     expect(evalPackage.scripts?.["eval:deterministic:run"]).toBe(
       "bun ./src/deterministic-smoke.ts",
     );
@@ -440,6 +482,7 @@ describe("developer checks", () => {
     const turbo = JSON.parse(readFileSync(path.join(repoRoot, "turbo.json"), "utf8")) as {
       globalDependencies?: string[];
     };
+    expect(turbo.globalDependencies).toContain("mise.toml");
     expect(turbo.globalDependencies).toContain("tsconfig.base.json");
     expect(turbo.globalDependencies).toContain("tsconfig.json");
   });

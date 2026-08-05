@@ -3,7 +3,7 @@
   "remoteCache": {
     "signature": true
   },
-  "globalDependencies": ["biome.json", "tsconfig.base.json", "tsconfig.json"],
+  "globalDependencies": ["biome.json", "mise.toml", "tsconfig.base.json", "tsconfig.json"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

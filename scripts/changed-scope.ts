@@ -10,14 +10,19 @@ type ScopeRules = {
 };
 
 const scopes = ["docs", "docs-browser", "docs-container", "docker", "prompt"] as const;
-const scope = process.argv[2] as Scope | undefined;
-assert(scopes.includes(scope as Scope), `usage: scripts/changed-scope.ts <${scopes.join("|")}>`);
+const scopeArgument = process.argv[2];
+assert(
+  scopes.includes(scopeArgument as Scope),
+  `usage: scripts/changed-scope.ts <${scopes.join("|")}>`,
+);
+const scope = scopeArgument as Scope;
 
 const sharedBuildMetadata = [
   ".github/workflows/ci.yml",
   "bun.lock",
   "mise.toml",
   "package.json",
+  "scripts/changed-scope.ts",
   "tsconfig.base.json",
   "tsconfig.json",
   "turbo.json",
@@ -44,6 +49,7 @@ const rules: Record<Scope, ScopeRules> = {
       "apps/docs/package.json",
       "apps/docs/playwright.config.ts",
       "apps/docs/scripts/build.ts",
+      "apps/docs/scripts/og-images.ts",
       "apps/docs/source.config.ts",
       "apps/docs/tsconfig.json",
       "apps/docs/turbo.json",
@@ -76,6 +82,9 @@ const rules: Record<Scope, ScopeRules> = {
       "packages/runtime/src/host-run/commands.ts",
       "packages/runtime/src/host-run/entry-dispatch.ts",
       "packages/runtime/src/host-run/git-project.ts",
+      "packages/runtime/src/pi/contract.ts",
+      "packages/runtime/src/pi/provider.ts",
+      "packages/runtime/src/pi/runner.ts",
       "scripts/docker-e2e.ts",
     ],
     prefixes: [
@@ -98,6 +107,7 @@ const rules: Record<Scope, ScopeRules> = {
       "packages/runtime/src/review/inline-finding-limits.ts",
       "packages/runtime/src/review/range-validation.ts",
       "packages/runtime/src/review/review.ts",
+      "packages/runtime/src/pi/runner.ts",
       "packages/sdk/src/builder.ts",
       "packages/sdk/src/prompt-json.ts",
       "packages/sdk/src/prompt-render.ts",
@@ -138,7 +148,7 @@ function gitChangedFiles(base: string, head: string): string[] | undefined {
   if (!gitCommitExists(base) || !gitCommitExists(head)) {
     return undefined;
   }
-  const result = Bun.spawnSync(["git", "diff", "--name-only", base, head], {
+  const result = Bun.spawnSync(["git", "diff", "--no-renames", "--name-only", base, head], {
     stderr: "pipe",
     stdout: "pipe",
   });
