@@ -43,6 +43,7 @@
       "outputs": []
     },
     "//#check:scripts:root": {
+      "dependsOn": ["@usepipr/cli#build"],
       "outputs": []
     },
     "//#typecheck:root": {

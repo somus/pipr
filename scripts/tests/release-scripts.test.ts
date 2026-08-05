@@ -42,6 +42,7 @@ type Workflow = {
     {
       if?: string;
       needs?: string | string[];
+      outputs?: Record<string, string>;
       steps?: Array<{
         "continue-on-error"?: boolean;
         env?: Record<string, string>;
@@ -200,7 +201,7 @@ describe("changed-scope", () => {
       {
         scope: "docs",
         positive: "apps/docs/content/docs/guide/quickstart.mdx",
-        dependency: "packages/runtime/src/config/recipes/default-review.ts",
+        dependency: "skills/pipr-setup/references/recipes.md",
         negative: "packages/runtime/src/review/comment.ts",
       },
       {
@@ -239,6 +240,11 @@ describe("changed-scope", () => {
   it("keeps fixture tests and Pi CLI owners in the Docker Action lane", () => {
     for (const file of [
       "packages/e2e/assertions.test.ts",
+      "packages/runtime/src/host-run/adapter.ts",
+      "packages/runtime/src/host-run/trusted-runtime.ts",
+      "packages/runtime/src/hosts/git.ts",
+      "packages/runtime/src/hosts/github/adapter.ts",
+      "packages/runtime/src/hosts/selection.ts",
       "packages/runtime/src/pi/contract.ts",
       "packages/runtime/src/pi/provider.ts",
       "packages/runtime/src/pi/runner.ts",
@@ -255,7 +261,13 @@ describe("changed-scope", () => {
   });
 
   it("routes canonical prompt and browser build owners to their lanes", () => {
-    expect(scopeChanged("prompt", "packages/runtime/src/pi/runner.ts")).toBe(true);
+    for (const file of [
+      "packages/runtime/src/pi/runner.ts",
+      "packages/runtime/src/diff/manifest-projection.ts",
+      "packages/runtime/src/diff/manifest-sharding.ts",
+    ]) {
+      expect(scopeChanged("prompt", file), file).toBe(true);
+    }
     expect(scopeChanged("docs-browser", "apps/docs/scripts/og-images.ts")).toBe(true);
   });
 
@@ -304,6 +316,21 @@ describe("changed-scope", () => {
       expect(result.exitCode, result.stderr || result.stdout).toBe(0);
       expect(result.stdout.trim()).toBe("changed=true");
     }
+  });
+
+  it("writes the changed value to the GitHub output file", () => {
+    const repository = changedScopeRepository("apps/docs/src/router.tsx");
+    const outputPath = path.join(tempDir, "github-output");
+    const result = changedScopeResult("docs-browser", repository, {
+      EVENT_NAME: "pull_request",
+      GITHUB_OUTPUT: outputPath,
+      PR_BASE_SHA: git(repository, "rev-parse", "HEAD~1"),
+      PR_HEAD_SHA: git(repository, "rev-parse", "HEAD"),
+    });
+
+    expect(result.exitCode, result.stderr || result.stdout).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(readFileSync(outputPath, "utf8")).toBe("changed=true\n");
   });
 });
 
@@ -403,12 +430,33 @@ describe("developer checks", () => {
     expect(turbo.tasks?.["test:generated"]?.dependsOn).toContain("typegen");
   });
 
-  it("installs the docs browser with the pinned workspace Playwright", () => {
-    const workflow = parseWorkflow(".github/workflows/ci.yml");
-    const installStep = workflow.jobs["docs-browser"]?.steps?.find((step) =>
-      step.run?.includes("playwright install"),
-    );
+  it("keeps the full check explicit while removing automatic pre-push checks", () => {
+    const hooks = readFileSync(path.join(repoRoot, "hk.pkl"), "utf8");
+    expect(hooks).not.toContain('["pre-push"]');
+    expect(hooks).toContain('["check"]');
+    expect(hooks).toContain('check = "bun run check"');
+  });
 
+  it("maps every changed scope output to its owning workflow step", () => {
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    expect(workflow.jobs.changes?.outputs).toEqual({
+      docs: "${{ steps.docs.outputs.changed }}",
+      docs_browser: "${{ steps.docs_browser.outputs.changed }}",
+      docs_container: "${{ steps.docs_container.outputs.changed }}",
+      docker: "${{ steps.docker.outputs.changed }}",
+      prompt: "${{ steps.prompt.outputs.changed }}",
+    });
+  });
+
+  it("installs the docs browser after its owning docs check", () => {
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const browser = workflow.jobs["docs-browser"];
+    const installStep = browser?.steps?.find((step) => step.run?.includes("playwright install"));
+
+    expect(browser?.needs).toEqual(["changes", "docs"]);
+    expect(browser?.if).toContain("needs.docs.result == 'success'");
+    expect(scopeChanged("docs", "apps/docs/src/router.tsx")).toBe(true);
+    expect(scopeChanged("docs-browser", "apps/docs/src/router.tsx")).toBe(true);
     expect(installStep?.run).toBe(
       "bun run --cwd apps/docs playwright install --with-deps chromium",
     );
@@ -481,10 +529,12 @@ describe("developer checks", () => {
   it("marks root package configuration as a global Turbo dependency", () => {
     const turbo = JSON.parse(readFileSync(path.join(repoRoot, "turbo.json"), "utf8")) as {
       globalDependencies?: string[];
+      tasks?: Record<string, { dependsOn?: string[] }>;
     };
     expect(turbo.globalDependencies).toContain("mise.toml");
     expect(turbo.globalDependencies).toContain("tsconfig.base.json");
     expect(turbo.globalDependencies).toContain("tsconfig.json");
+    expect(turbo.tasks?.["//#check:scripts:root"]?.dependsOn).toContain("@usepipr/cli#build");
   });
 
   it("runs the full release check only for manual dispatch", () => {
