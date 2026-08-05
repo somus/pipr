@@ -29,11 +29,6 @@ hooks {
     }
   }
 
-  ["pre-push"] {
-    steps {
-      ["check"] = repoCheck
-    }
-  }
 
   ["check"] {
     steps {

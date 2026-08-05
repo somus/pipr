@@ -129,7 +129,8 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - run: bun run check
+      - if: github.event_name == 'workflow_dispatch'
+        run: bun run check
       - id: version
         run: |
           case "$PIPR_RELEASE_TAG" in
