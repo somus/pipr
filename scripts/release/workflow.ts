@@ -300,9 +300,10 @@ async function logReleaseLookupFailure(
   },
 ): Promise<void> {
   const failure = redact(commandOutput(result), options.secretValues);
-  const outcome = attempt < options.attempts ? "retrying" : "no attempts remain";
+  const hasAttemptsRemaining = attempt < options.attempts;
+  const outcome = hasAttemptsRemaining ? "retrying" : "no attempts remain";
   await operations.log(`gh release list failed (${failure}); ${outcome}.`);
-  await operations.sleep(options.delayMilliseconds);
+  if (hasAttemptsRemaining) await operations.sleep(options.delayMilliseconds);
 }
 
 async function matchingReleaseTag(

@@ -329,7 +329,7 @@ describe("resolveRelease", () => {
       }),
     ).rejects.toThrow("No published release for release commit");
 
-    expect(operations.sleeps).toEqual([7, 7]);
+    expect(operations.sleeps).toEqual([7]);
     expect(operations.logs).toEqual([
       "gh release list failed (stderr: first [REDACTED]); retrying.",
       "gh release list failed (stderr: second warning\nstdout: second [REDACTED]); no attempts remain.",
