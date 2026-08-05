@@ -10,6 +10,7 @@ export type ReleaseOperations = {
   write(path: string, contents: string): Promise<void>;
   sleep(milliseconds: number): Promise<void>;
   output(name: string, value: string): Promise<void>;
+  log(message: string): Promise<void>;
 };
 
 type SecretOptions = {
@@ -47,8 +48,8 @@ type ActionManifest = {
 };
 
 type GithubRelease = {
-  tagName?: unknown;
-  isDraft?: unknown;
+  tagName: string;
+  isDraft: boolean;
 };
 
 const releaseSubjectPrefixes = ["chore(main): release ", "chore: release "] as const;
@@ -73,6 +74,7 @@ export async function resolveRelease(
     const workflowRunSha = required(options.workflowRunSha, "workflow-run SHA");
     const commitSubject = required(options.commitSubject, "workflow-run commit subject");
     if (!releaseSubjectPrefixes.some((prefix) => commitSubject.startsWith(prefix))) {
+      await operations.log("Commit is not a Release Please merge commit; skipping publish.");
       await operations.output("publish", "false");
       return;
     }
@@ -137,7 +139,12 @@ export async function dogfoodRelease(
     await operations.read("package.json"),
     "package.json",
   );
-  if (rootPackage.version !== options.version) return;
+  if (rootPackage.version !== options.version) {
+    await operations.log(
+      `Skipping dogfood SDK update because main is ${String(rootPackage.version)}, not ${options.version}.`,
+    );
+    return;
+  }
 
   await waitForNpmPackage(operations, options);
   const dogfoodPackagePath = ".pipr/package.json";
@@ -154,11 +161,17 @@ export async function dogfoodRelease(
   await runChecked(operations, "bun", ["run", "check:release-metadata"], options);
 
   const diff = await operations.run("git", ["diff", "--quiet", "--", ...dogfoodPaths]);
-  if (diff.exitCode === 0) return;
+  if (diff.exitCode === 0) {
+    await operations.log(`Dogfood SDK already matches ${options.version}.`);
+    return;
+  }
   if (diff.exitCode !== 1) throw commandError("git", ["diff", "--quiet"], diff, options);
 
   const initialState = await loadPrState(operations, branch, options);
-  if (initialState === "MERGED") return;
+  if (initialState === "MERGED") {
+    await operations.log(`Dogfood SDK update PR for ${branch} is already merged.`);
+    return;
+  }
 
   await runChecked(operations, "git", ["config", "user.name", "github-actions[bot]"], options);
   await runChecked(
@@ -195,6 +208,7 @@ export async function dogfoodRelease(
       options,
     );
   } else if (state === "MERGED") {
+    await operations.log(`Dogfood SDK update PR for ${branch} is already merged.`);
     return;
   } else if (state === "CLOSED") {
     await runChecked(operations, "gh", ["pr", "reopen", branch], options);
@@ -205,7 +219,7 @@ export async function dogfoodRelease(
       options,
     );
   } else if (state === "") {
-    await runChecked(
+    const created = await runChecked(
       operations,
       "gh",
       [
@@ -222,6 +236,8 @@ export async function dogfoodRelease(
       ],
       options,
     );
+    const createdPr = redact(created.stdout.trim(), options.secretValues);
+    await operations.log(createdPr || `Created dogfood SDK update PR for ${branch}.`);
   } else {
     throw releaseError(
       `Dogfood SDK update PR for ${branch} is ${state}; not updating it`,
@@ -241,35 +257,92 @@ async function pollForReleaseTag(
   },
 ): Promise<string> {
   for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
-    const result = await runChecked(
-      operations,
-      "gh",
-      [
-        "release",
-        "list",
-        "--repo",
-        options.repository,
-        "--limit",
-        "20",
-        "--json",
-        "tagName,isDraft",
-      ],
-      options,
-    );
-    const releases = parseJson<GithubRelease[]>(result.stdout, "gh release list output");
-    for (const release of releases) {
-      if (release.isDraft !== false || typeof release.tagName !== "string") continue;
-      const commit = await operations.run("git", ["rev-list", "-n", "1", release.tagName]);
-      if (commit.exitCode === 0 && commit.stdout.trim() === options.workflowRunSha) {
-        return release.tagName;
-      }
+    const result = await operations.run("gh", [
+      "release",
+      "list",
+      "--repo",
+      options.repository,
+      "--limit",
+      "20",
+      "--json",
+      "tagName,isDraft",
+    ]);
+    if (result.exitCode !== 0) {
+      await logReleaseLookupFailure(operations, result, attempt, options);
+      continue;
     }
-    if (attempt < options.attempts) await operations.sleep(options.delayMilliseconds);
+    const tag = await matchingReleaseTag(operations, result.stdout, options.workflowRunSha);
+    if (tag) return tag;
+    await operations.log(
+      `No published release for CI head ${options.workflowRunSha} yet; waiting.`,
+    );
+    await operations.sleep(options.delayMilliseconds);
   }
   throw releaseError(
     `No published release for release commit ${options.workflowRunSha} after waiting; failing so publish is not silently lost.`,
     options.secretValues,
   );
+}
+
+async function logReleaseLookupFailure(
+  operations: ReleaseOperations,
+  result: CommandResult,
+  attempt: number,
+  options: {
+    attempts: number;
+    delayMilliseconds: number;
+    secretValues?: readonly string[];
+  },
+): Promise<void> {
+  const failure = redact(commandOutput(result), options.secretValues);
+  const outcome = attempt < options.attempts ? "retrying" : "no attempts remain";
+  await operations.log(`gh release list failed (${failure}); ${outcome}.`);
+  await operations.sleep(options.delayMilliseconds);
+}
+
+async function matchingReleaseTag(
+  operations: ReleaseOperations,
+  contents: string,
+  workflowRunSha: string,
+): Promise<string | undefined> {
+  for (const release of parseGithubReleases(contents)) {
+    if (release.isDraft) continue;
+    const commit = await operations.run("git", ["rev-list", "-n", "1", release.tagName]);
+    if (commit.exitCode === 0 && commit.stdout.trim() === workflowRunSha) return release.tagName;
+  }
+  return undefined;
+}
+
+function parseGithubReleases(contents: string): GithubRelease[] {
+  const releases = parseJson<unknown>(contents, "gh release list output");
+  if (!Array.isArray(releases)) {
+    throw new Error("gh release list output must be an array");
+  }
+  return releases.map((release) => {
+    if (
+      !isRecord(release) ||
+      typeof release.tagName !== "string" ||
+      typeof release.isDraft !== "boolean"
+    ) {
+      throw new Error("gh release list output contains an invalid release");
+    }
+    return { isDraft: release.isDraft, tagName: release.tagName };
+  });
+}
+
+function parsePrList(contents: string): Array<{ state: string }> {
+  const prs = parseJson<unknown>(contents, "gh pr list output");
+  if (!Array.isArray(prs)) throw new Error("gh pr list output must be an array");
+  return prs.map((pr) => {
+    if (!isRecord(pr) || typeof pr.state !== "string") {
+      throw new Error("gh pr list output contains an invalid PR");
+    }
+    return { state: pr.state };
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 async function waitForNpmPackage(
@@ -304,7 +377,7 @@ async function loadPrState(
     ["pr", "list", "--head", branch, "--state", "all", "--limit", "1", "--json", "state"],
     options,
   );
-  const prs = parseJson<Array<{ state?: unknown }>>(result.stdout, "gh pr list output");
+  const prs = parsePrList(result.stdout);
   const state = prs[0]?.state;
   if (state === undefined) return "";
   if (typeof state !== "string") {
@@ -330,16 +403,32 @@ function commandError(
   result: CommandResult,
   options: SecretOptions,
 ): Error {
-  const detail = result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`;
+  const detail = commandOutput(result);
   return releaseError(`${command} ${args.join(" ")} failed: ${detail}`, options.secretValues);
 }
 
+function commandOutput(result: CommandResult): string {
+  const streams = [
+    ["stderr", result.stderr.trim()],
+    ["stdout", result.stdout.trim()],
+  ] as const;
+  const output = streams
+    .filter(([, contents]) => contents.length > 0)
+    .map(([name, contents]) => `${name}: ${contents}`)
+    .join("\n");
+  return output || `exit ${result.exitCode}`;
+}
+
 function releaseError(message: string, secretValues: readonly string[] = []): Error {
+  return new Error(redact(message, secretValues));
+}
+
+function redact(message: string, secretValues: readonly string[] = []): string {
   let redacted = message;
   for (const secret of secretValues) {
     if (secret) redacted = redacted.replaceAll(secret, "[REDACTED]");
   }
-  return new Error(redacted);
+  return redacted;
 }
 
 function required(value: string | undefined, name: string): string {

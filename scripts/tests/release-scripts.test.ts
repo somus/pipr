@@ -28,6 +28,7 @@ const excludedFixturePaths = new Set([
 ]);
 
 type Workflow = {
+  env?: Record<string, string>;
   on: {
     schedule?: Array<{ cron: string }>;
     workflow_dispatch?: unknown;
@@ -35,7 +36,9 @@ type Workflow = {
   jobs: Record<
     string,
     {
+      env?: Record<string, string>;
       needs?: string | string[];
+      permissions?: Record<string, string>;
       steps?: Array<{
         "continue-on-error"?: boolean;
         env?: Record<string, string>;
@@ -270,25 +273,25 @@ describe("developer checks", () => {
     const rootPackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "package.json"), "utf8"),
     ) as {
-      catalog?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-      scripts?: Record<string, string>;
+      catalog: Record<string, string>;
+      devDependencies: Record<string, string>;
+      scripts: Record<string, string>;
     };
     const runtimePackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "packages/runtime/package.json"), "utf8"),
-    ) as { dependencies?: Record<string, string>; scripts?: Record<string, string> };
+    ) as { dependencies: Record<string, string>; scripts: Record<string, string> };
     const docsPackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "apps/docs/package.json"), "utf8"),
-    ) as { devDependencies?: Record<string, string>; scripts?: Record<string, string> };
+    ) as { devDependencies: Record<string, string>; scripts: Record<string, string> };
     const runtimeBuildTsconfig = JSON.parse(
       readFileSync(path.join(repoRoot, "packages/runtime/tsconfig.build.json"), "utf8"),
-    ) as { compilerOptions?: { paths?: Record<string, string[]> } };
+    ) as { compilerOptions: { paths: Record<string, string[]> } };
     const cliPackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "packages/cli/package.json"), "utf8"),
-    ) as { scripts?: Record<string, string> };
+    ) as { scripts: Record<string, string> };
     const cliBuildTsconfig = JSON.parse(
       readFileSync(path.join(repoRoot, "packages/cli/tsconfig.build.json"), "utf8"),
-    ) as { compilerOptions?: { paths?: Record<string, string[]> } };
+    ) as { compilerOptions: { paths: Record<string, string[]> } };
     const typecheckCommand = "tsc --noEmit";
     const typecheckScripts = [
       ["package.json", "typecheck:root"],
@@ -298,28 +301,28 @@ describe("developer checks", () => {
       ["packages/sdk/package.json", "typecheck"],
     ] as const;
 
-    expect(rootPackageJson.catalog?.typescript).toBe("7.0.2");
-    expect(rootPackageJson.devDependencies?.["@typescript/native"]).toBeUndefined();
-    expect(rootPackageJson.devDependencies?.typescript6).toBe("npm:typescript@6.0.3");
+    expect(rootPackageJson.catalog.typescript).toBe("7.0.2");
+    expect(rootPackageJson.devDependencies["@typescript/native"]).toBeUndefined();
+    expect(rootPackageJson.devDependencies.typescript6).toBe("npm:typescript@6.0.3");
     expect(typeScriptPackage.version).toBe("7.0.2");
-    expect(runtimePackageJson.dependencies?.typescript6).toBe("npm:typescript@6.0.3");
-    expect(runtimePackageJson.dependencies?.typescript).toBeUndefined();
-    expect(docsPackageJson.devDependencies?.typescript).toBe("6.0.3");
-    expect(docsPackageJson.scripts?.["typecheck:generated"]).toBe(
+    expect(runtimePackageJson.dependencies.typescript6).toBe("npm:typescript@6.0.3");
+    expect(runtimePackageJson.dependencies.typescript).toBeUndefined();
+    expect(docsPackageJson.devDependencies.typescript).toBe("6.0.3");
+    expect(docsPackageJson.scripts["typecheck:generated"]).toBe(
       "bun ../../node_modules/typescript/bin/tsc --noEmit",
     );
-    expect(runtimePackageJson.scripts?.typecheck).toBe(
+    expect(runtimePackageJson.scripts.typecheck).toBe(
       "bun ../../node_modules/typescript/bin/tsc --noEmit",
     );
-    expect(runtimePackageJson.scripts?.build).toContain("--tsconfig tsconfig.build.json");
-    expect(runtimeBuildTsconfig.compilerOptions?.paths).toEqual({});
-    expect(cliPackageJson.scripts?.build).toContain("--tsconfig tsconfig.build.json");
-    expect(cliBuildTsconfig.compilerOptions?.paths).toEqual({});
+    expect(runtimePackageJson.scripts.build).toContain("--tsconfig tsconfig.build.json");
+    expect(runtimeBuildTsconfig.compilerOptions.paths).toEqual({});
+    expect(cliPackageJson.scripts.build).toContain("--tsconfig tsconfig.build.json");
+    expect(cliBuildTsconfig.compilerOptions.paths).toEqual({});
     for (const [packagePath, script] of typecheckScripts) {
       const packageJson = JSON.parse(readFileSync(path.join(repoRoot, packagePath), "utf8")) as {
-        scripts?: Record<string, string>;
+        scripts: Record<string, string>;
       };
-      expect(packageJson.scripts?.[script]).toBe(typecheckCommand);
+      expect(packageJson.scripts[script]).toBe(typecheckCommand);
     }
 
     const version = Bun.spawnSync(["bun", "run", "tsc", "--version"], { cwd: repoRoot });
@@ -330,25 +333,23 @@ describe("developer checks", () => {
   it("serializes docs type generation through the Turbo graph", () => {
     const rootPackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "package.json"), "utf8"),
-    ) as {
-      scripts?: Record<string, string>;
-    };
+    ) as { scripts: Record<string, string> };
     const packageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "apps/docs/package.json"), "utf8"),
-    ) as { scripts?: Record<string, string> };
+    ) as { scripts: Record<string, string> };
     const turbo = JSON.parse(readFileSync(path.join(repoRoot, "apps/docs/turbo.json"), "utf8")) as {
-      tasks?: Record<string, { dependsOn?: string[] }>;
+      tasks: Record<string, { dependsOn: string[] }>;
     };
 
-    expect(packageJson.scripts?.build).toContain("typegen");
-    expect(packageJson.scripts?.typecheck).toContain("typegen");
-    expect(packageJson.scripts?.test).toContain("typegen");
-    expect(rootPackageJson.scripts?.["check:docs"]).toContain("build:generated");
-    expect(rootPackageJson.scripts?.["check:docs"]).toContain("typecheck:generated");
-    expect(rootPackageJson.scripts?.["check:docs"]).toContain("test:generated");
-    expect(turbo.tasks?.["build:generated"]?.dependsOn).toContain("typegen");
-    expect(turbo.tasks?.["typecheck:generated"]?.dependsOn).toContain("typegen");
-    expect(turbo.tasks?.["test:generated"]?.dependsOn).toContain("typegen");
+    expect(packageJson.scripts.build).toContain("typegen");
+    expect(packageJson.scripts.typecheck).toContain("typegen");
+    expect(packageJson.scripts.test).toContain("typegen");
+    expect(rootPackageJson.scripts["check:docs"]).toContain("build:generated");
+    expect(rootPackageJson.scripts["check:docs"]).toContain("typecheck:generated");
+    expect(rootPackageJson.scripts["check:docs"]).toContain("test:generated");
+    expect(turbo.tasks["build:generated"].dependsOn).toContain("typegen");
+    expect(turbo.tasks["typecheck:generated"].dependsOn).toContain("typegen");
+    expect(turbo.tasks["test:generated"].dependsOn).toContain("typegen");
   });
 
   it("installs the docs browser with the pinned workspace Playwright", () => {
@@ -771,6 +772,25 @@ describe("check-release-metadata", () => {
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
 
+  it("rejects release tag verification after package publication", () => {
+    const repository = copyRepositoryFixture();
+    const workflowPath = path.join(repository, ".github/workflows/release.yml");
+    const verificationStep = [
+      "      - name: Verify release tag metadata",
+      "        id: version",
+      "        run: bun scripts/release.ts verify-tag",
+      "",
+    ].join("\n");
+    const firstPublish =
+      '      - run: npm publish "dist/npm/usepipr-sdk-${{ steps.version.outputs.version }}.tgz" --access public\n';
+    const workflow = readFileSync(workflowPath, "utf8")
+      .replace(verificationStep, "")
+      .replace(firstPublish, `${firstPublish}${verificationStep}`);
+    write(workflowPath, workflow);
+
+    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+  });
+
   it("rejects a missing release artifact verification step", () => {
     const repository = copyRepositoryFixture();
     const workflowPath = path.join(repository, ".github/workflows/release.yml");
@@ -858,25 +878,37 @@ describe("check-release-metadata", () => {
 
   it("keeps the security-sensitive publish pipeline declarative and ordered", () => {
     const workflow = parseWorkflow(".github/workflows/release.yml");
-    const publishRuns =
-      workflow.jobs.publish?.steps?.flatMap((step) => (step.run ? [step.run] : [])) ?? [];
+    const publishSteps = workflow.jobs.publish?.steps ?? [];
+    const publishRuns = publishSteps.map((step) => step.run);
     const dogfoodStep = workflow.jobs.dogfood?.steps?.find(
       (step) => step.name === "Open dogfood SDK update PR",
     );
-
-    const artifactCheck = publishRuns.indexOf("bun run check:release-artifacts");
-    const tarballCheck = publishRuns.indexOf("bun run check:npm-tarballs");
-    const packagePublishes = publishRuns.filter((run) => run.startsWith("npm publish "));
-    expect(artifactCheck).toBeGreaterThan(-1);
-    expect(tarballCheck).toBeGreaterThan(artifactCheck);
-    expect(publishRuns.indexOf(packagePublishes[0] ?? "")).toBeGreaterThan(tarballCheck);
-    expect(packagePublishes).toHaveLength(3);
-    expect(publishRuns.some((run) => run.includes("gh release upload"))).toBe(true);
-    expect(
-      workflow.jobs.publish?.steps?.some(
+    const publicationOrder = [
+      publishSteps.findIndex((step) => step.id === "version"),
+      publishRuns.indexOf("bun run build:release:cli"),
+      publishRuns.indexOf("bun run check:release-artifacts"),
+      publishRuns.indexOf("bun run check:npm-tarballs"),
+      publishRuns.indexOf("bun run docker:e2e"),
+      publishRuns.indexOf(
+        'npm publish "dist/npm/usepipr-sdk-${{ steps.version.outputs.version }}.tgz" --access public',
+      ),
+      publishRuns.indexOf(
+        'npm publish "dist/npm/usepipr-runtime-${{ steps.version.outputs.version }}.tgz" --access public',
+      ),
+      publishRuns.indexOf(
+        'npm publish "dist/npm/usepipr-cli-${{ steps.version.outputs.version }}.tgz" --access public',
+      ),
+      publishSteps.findIndex((step) => step.run?.includes("gh release upload")),
+      publishSteps.findIndex(
         (step) => step.name === "Publish GHCR image" && step.with?.push === true,
       ),
-    ).toBe(true);
+    ];
+
+    expect(publicationOrder).toEqual([...publicationOrder].sort((left, right) => left - right));
+    expect(publicationOrder[0]).toBeGreaterThan(-1);
+    expect(workflow.env?.TURBO_TOKEN).toBeUndefined();
+    expect(workflow.jobs.resolve?.permissions).toEqual({ contents: "read" });
+    expect(workflow.jobs.publish?.env?.TURBO_TOKEN).toContain("secrets.TURBO_TOKEN");
     expect(workflow.jobs.dogfood?.needs).toBe("publish");
     expect(dogfoodStep?.run).toBe("bun scripts/release.ts dogfood");
     expect(dogfoodStep?.env?.GH_TOKEN).toContain("PIPR_RELEASE_PLEASE_TOKEN");

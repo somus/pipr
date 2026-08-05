@@ -20,13 +20,11 @@ permissions:
 env:
   PIPR_GHCR_ACTION_IMAGE: ghcr.io/somus/pipr
   PIPR_TEST_ACTION_IMAGE: pipr-action:e2e
-  TURBO_API: ${{ secrets.TURBO_API }}
-  TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
-  TURBO_TEAM: ${{ vars.TURBO_TEAM || 'pipr' }}
-  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
 
 jobs:
   resolve:
+    permissions:
+      contents: read
     if: |
       github.event_name == 'workflow_dispatch' ||
       (
@@ -65,6 +63,10 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     env:
       PIPR_RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+      TURBO_API: ${{ secrets.TURBO_API }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM || 'pipr' }}
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

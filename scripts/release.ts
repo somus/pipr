@@ -7,6 +7,8 @@ import {
   verifyReleaseTag,
 } from "./release/workflow.js";
 
+export const releaseSubcommands = ["resolve", "verify-tag", "dogfood"] as const;
+
 class ProductionReleaseOperations implements ReleaseOperations {
   async run(
     command: string,
@@ -44,47 +46,76 @@ class ProductionReleaseOperations implements ReleaseOperations {
     const output = Bun.file(outputPath);
     await Bun.write(output, `${await output.text()}${name}=${value}\n`);
   }
+
+  async log(message: string): Promise<void> {
+    console.log(message);
+  }
 }
 
-export async function main(args = process.argv.slice(2)): Promise<void> {
+type ReleaseSubcommand = (typeof releaseSubcommands)[number];
+type ReleaseCommand = (
+  operations: ReleaseOperations,
+  secretValues: readonly string[],
+) => Promise<void>;
+
+const releaseCommands: Record<ReleaseSubcommand, ReleaseCommand> = {
+  dogfood: runDogfood,
+  resolve: runResolve,
+  "verify-tag": runVerifyTag,
+};
+
+async function main(args = process.argv.slice(2)): Promise<void> {
   const command = args[0];
+  if (!isReleaseSubcommand(command)) {
+    throw new Error(`usage: bun scripts/release.ts <resolve|verify-tag|dogfood>`);
+  }
   const operations = new ProductionReleaseOperations();
   const secretValues = [
     Bun.env.GH_TOKEN,
+    Bun.env.TURBO_API,
     Bun.env.TURBO_REMOTE_CACHE_SIGNATURE_KEY,
     Bun.env.TURBO_TOKEN,
   ].filter((value): value is string => Boolean(value));
+  await releaseCommands[command](operations, secretValues);
+}
 
-  if (command === "resolve") {
-    const eventName = requiredEnv("PIPR_EVENT_NAME");
-    await resolveRelease(operations, {
-      commitSubject: Bun.env.PIPR_COMMIT_SUBJECT?.split(/\r?\n/, 1)[0],
-      eventMode: eventName === "workflow_dispatch" ? "manual" : "workflow-run",
-      manualTag: Bun.env.PIPR_INPUT_TAG,
-      repository: requiredEnv("GITHUB_REPOSITORY"),
-      secretValues,
-      workflowRunSha: Bun.env.PIPR_WORKFLOW_RUN_SHA,
-    });
-    return;
-  }
+async function runResolve(
+  operations: ReleaseOperations,
+  secretValues: readonly string[],
+): Promise<void> {
+  const eventName = requiredEnv("PIPR_EVENT_NAME");
+  await resolveRelease(operations, {
+    commitSubject: Bun.env.PIPR_COMMIT_SUBJECT?.split(/\r?\n/, 1)[0],
+    eventMode: eventName === "workflow_dispatch" ? "manual" : "workflow-run",
+    manualTag: Bun.env.PIPR_INPUT_TAG,
+    repository: requiredEnv("GITHUB_REPOSITORY"),
+    secretValues,
+    workflowRunSha: Bun.env.PIPR_WORKFLOW_RUN_SHA,
+  });
+}
 
-  if (command === "verify-tag") {
-    await verifyReleaseTag(operations, {
-      secretValues,
-      tag: requiredEnv("PIPR_RELEASE_TAG"),
-    });
-    return;
-  }
+async function runVerifyTag(
+  operations: ReleaseOperations,
+  secretValues: readonly string[],
+): Promise<void> {
+  await verifyReleaseTag(operations, {
+    secretValues,
+    tag: requiredEnv("PIPR_RELEASE_TAG"),
+  });
+}
 
-  if (command === "dogfood") {
-    await dogfoodRelease(operations, {
-      secretValues,
-      version: requiredEnv("PIPR_RELEASE_VERSION"),
-    });
-    return;
-  }
+async function runDogfood(
+  operations: ReleaseOperations,
+  secretValues: readonly string[],
+): Promise<void> {
+  await dogfoodRelease(operations, {
+    secretValues,
+    version: requiredEnv("PIPR_RELEASE_VERSION"),
+  });
+}
 
-  throw new Error(`usage: bun scripts/release.ts <resolve|verify-tag|dogfood>`);
+function isReleaseSubcommand(command: string | undefined): command is ReleaseSubcommand {
+  return releaseSubcommands.some((candidate) => candidate === command);
 }
 
 function requiredEnv(name: string): string {

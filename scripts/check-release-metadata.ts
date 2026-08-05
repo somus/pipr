@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import assert from "node:assert/strict";
 import path from "node:path";
+import { releaseSubcommands } from "./release.js";
 
 type PackageJson = {
   name: string;
@@ -30,7 +31,16 @@ type WorkflowStep = {
 };
 
 type ReleaseWorkflow = {
-  jobs: Record<string, { needs?: string | string[]; steps?: WorkflowStep[] }>;
+  env?: Record<string, string>;
+  jobs: Record<
+    string,
+    {
+      env?: Record<string, string>;
+      needs?: string | string[];
+      permissions?: Record<string, string>;
+      steps?: WorkflowStep[];
+    }
+  >;
 };
 
 const rootDir = path.resolve(import.meta.dirname, "..");
@@ -155,6 +165,11 @@ assert.equal(
   "bun scripts/sync-release-lockfile.ts",
   "root package scripts must expose release lockfile sync",
 );
+assert.deepEqual(
+  releaseSubcommands,
+  ["resolve", "verify-tag", "dogfood"],
+  "typed release workflow must expose exactly the supported subcommands",
+);
 
 const cliLock = bunWorkspaceBlock(bunLock, "packages/cli", "packages/e2e");
 assert(
@@ -239,6 +254,25 @@ assert(
   releaseWorkflow.includes("github.event.workflow_run.head_branch == 'main'"),
   "release workflow must publish only for main branch CI",
 );
+const resolveJob = parsedReleaseWorkflow.jobs.resolve;
+assert.deepEqual(
+  resolveJob?.permissions,
+  { contents: "read" },
+  "release tag resolution must run with read-only repository permissions",
+);
+for (const secretName of ["TURBO_API", "TURBO_REMOTE_CACHE_SIGNATURE_KEY", "TURBO_TOKEN"]) {
+  assert.equal(
+    parsedReleaseWorkflow.env?.[secretName] ??
+      resolveJob?.env?.[secretName] ??
+      resolveSteps.find((step) => step.env?.[secretName]),
+    undefined,
+    `release tag resolution must not receive ${secretName}`,
+  );
+  assert(
+    parsedReleaseWorkflow.jobs.publish?.env?.[secretName],
+    `release publish job requires ${secretName}`,
+  );
+}
 const resolveStep = resolveSteps.find((step) => step.id === "release");
 assert.equal(
   resolveStep?.run,
@@ -284,30 +318,52 @@ assert(
   !releaseWorkflow.includes(`sha-${shaExpression}`),
   "release workflow must not publish sha tag",
 );
+const verifyTagIndex = publishSteps.findIndex((step) => step.id === "version");
+const releaseBuildIndex = publishSteps.findIndex(
+  (step) => step.run === "bun run build:release:cli",
+);
+const releaseArtifactCheckIndex = publishSteps.findIndex(
+  (step) => step.run === "bun run check:release-artifacts",
+);
 const npmTarballCheckIndex = publishSteps.findIndex(
   (step) => step.run === "bun run check:npm-tarballs",
 );
-const firstPackagePublishIndex = publishSteps.findIndex((step) =>
-  step.run?.startsWith('npm publish "dist/npm/'),
+const dockerVerificationIndex = publishSteps.findIndex((step) => step.run === "bun run docker:e2e");
+const packagePublishIndices = ["sdk", "runtime", "cli"].map((packageName) =>
+  publishSteps.findIndex(
+    (step) =>
+      step.run ===
+      `npm publish "dist/npm/usepipr-${packageName}-${releaseVersionExpression}.tgz" --access public`,
+  ),
 );
+const releaseUploadIndex = publishSteps.findIndex((step) =>
+  step.run?.includes("gh release upload"),
+);
+const imagePublishIndex = publishSteps.findIndex(
+  (step) => step.name === "Publish GHCR image" && step.with?.push === true,
+);
+const publicationOrder = [
+  verifyTagIndex,
+  releaseBuildIndex,
+  releaseArtifactCheckIndex,
+  npmTarballCheckIndex,
+  dockerVerificationIndex,
+  ...packagePublishIndices,
+  releaseUploadIndex,
+  imagePublishIndex,
+];
 assert(
-  npmTarballCheckIndex !== -1 && npmTarballCheckIndex < firstPackagePublishIndex,
-  "release workflow must verify actual npm tarballs before publishing packages",
+  publicationOrder.every((index) => index >= 0) &&
+    publicationOrder.every(
+      (index, position) =>
+        position === 0 || index > (publicationOrder[position - 1] ?? Number.POSITIVE_INFINITY),
+    ),
+  "release workflow must verify, publish packages, upload assets, and publish GHCR in exact order",
 );
 assert(
   !releaseWorkflow.includes("npm pack --dry-run"),
   "release workflow must not rely on npm pack dry runs",
 );
-for (const packageName of ["sdk", "runtime", "cli"]) {
-  assert(
-    publishSteps.some(
-      (step) =>
-        step.run ===
-        `npm publish "dist/npm/usepipr-${packageName}-${releaseVersionExpression}.tgz" --access public`,
-    ),
-    `release workflow must publish the verified @usepipr/${packageName} tarball`,
-  );
-}
 assert(
   releaseWorkflow.includes("dist/release/SHA256SUMS"),
   "release workflow must upload SHA256SUMS",
@@ -326,13 +382,6 @@ for (const asset of [
 assert(
   !releaseWorkflow.includes("dist/release/pipr-*"),
   "release workflow must not upload release assets through a glob",
-);
-const releaseArtifactCheckIndex = publishSteps.findIndex(
-  (step) => step.run === "bun run check:release-artifacts",
-);
-assert(
-  releaseArtifactCheckIndex !== -1 && releaseArtifactCheckIndex < firstPackagePublishIndex,
-  "release workflow must verify exact CLI assets before publishing packages",
 );
 const dogfoodUpdateStep = dogfoodSteps.find((step) => step.name === "Open dogfood SDK update PR");
 assert.equal(
@@ -459,18 +508,21 @@ function bunWorkspaceBlock(lockfile: string, workspace: string, nextWorkspace: s
 }
 
 function assertThirdPartyActionsPinned(workflowPath: string, workflow: string): void {
-  for (const line of workflow.split(/\r?\n/)) {
-    const match = line.match(/^\s*(?:-\s*)?uses:\s+([^@\s]+)@([^\s#]+)/);
-    if (!match) {
-      continue;
-    }
-    const [, action, ref] = match;
-    if (!action || action.startsWith("./") || action === "somus/pipr") {
-      continue;
-    }
-    assert(
-      /^[0-9a-f]{40}$/.test(ref ?? ""),
-      `${workflowPath} must pin ${action} to a full commit SHA`,
-    );
+  const actionReferences = workflow.matchAll(/^\s*(?:-\s*)?uses:\s+([^@\s]+)@([^\s#]+)/gm);
+  for (const reference of actionReferences) {
+    const action = requiredCapture(reference, 1);
+    if (isLocalAction(action)) continue;
+    const ref = requiredCapture(reference, 2);
+    assert(/^[0-9a-f]{40}$/.test(ref), `${workflowPath} must pin ${action} to a full commit SHA`);
   }
+}
+
+function isLocalAction(action: string): boolean {
+  return action.startsWith("./") || action === "somus/pipr";
+}
+
+function requiredCapture(match: RegExpMatchArray, index: number): string {
+  const value = match[index];
+  assert(value);
+  return value;
 }

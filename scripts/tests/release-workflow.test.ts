@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   type CommandResult,
   dogfoodRelease,
@@ -16,6 +19,7 @@ type CommandCall = {
 class FakeReleaseOperations implements ReleaseOperations {
   readonly calls: CommandCall[] = [];
   readonly outputs: Array<[string, string]> = [];
+  readonly logs: string[] = [];
   readonly sleeps: number[] = [];
   readonly writes = new Map<string, string>();
   readonly responses = new Map<string, CommandResult[]>();
@@ -53,8 +57,13 @@ class FakeReleaseOperations implements ReleaseOperations {
   async output(name: string, value: string): Promise<void> {
     this.outputs.push([name, value]);
   }
+
+  async log(message: string): Promise<void> {
+    this.logs.push(message);
+  }
 }
 
+const repoRoot = path.resolve(import.meta.dirname, "../..");
 const releaseSha = "a".repeat(40);
 const repository = "somus/pipr";
 
@@ -196,8 +205,104 @@ describe("resolveRelease", () => {
         pollDelayMilliseconds: 7,
       }),
     ).rejects.toThrow("No published release for release commit");
-    expect(operations.sleeps).toEqual([7]);
+    expect(operations.sleeps).toEqual([7, 7]);
     expect(operations.outputs).toEqual([]);
+  });
+
+  it("retries a transient GitHub release lookup failure", async () => {
+    const operations = new FakeReleaseOperations();
+    const listArgs = [
+      "release",
+      "list",
+      "--repo",
+      repository,
+      "--limit",
+      "20",
+      "--json",
+      "tagName,isDraft",
+    ];
+    operations.respond(
+      "gh",
+      listArgs,
+      failure("temporary API failure"),
+      success(releaseList({ tagName: "v1.2.3" })),
+    );
+    operations.respond("git", ["rev-list", "-n", "1", "v1.2.3"], success(releaseSha));
+
+    await resolveRelease(operations, {
+      eventMode: "workflow-run",
+      repository,
+      workflowRunSha: releaseSha,
+      commitSubject: "chore(main): release 1.2.3",
+      pollAttempts: 2,
+      pollDelayMilliseconds: 7,
+    });
+
+    expect(operations.sleeps).toEqual([7]);
+    expect(operations.logs).toContain(
+      "gh release list failed (stderr: temporary API failure); retrying.",
+    );
+    expect(operations.outputs).toEqual([
+      ["publish", "true"],
+      ["tag", "v1.2.3"],
+    ]);
+  });
+
+  it("rejects malformed GitHub release payloads", async () => {
+    const operations = new FakeReleaseOperations();
+    operations.respond(
+      "gh",
+      ["release", "list", "--repo", repository, "--limit", "20", "--json", "tagName,isDraft"],
+      success('{"tagName":"v1.2.3","isDraft":false}'),
+    );
+
+    await expect(
+      resolveRelease(operations, {
+        eventMode: "workflow-run",
+        repository,
+        workflowRunSha: releaseSha,
+        commitSubject: "chore(main): release 1.2.3",
+      }),
+    ).rejects.toThrow("gh release list output must be an array");
+  });
+
+  it("redacts diagnostics through exhausted GitHub lookup failures", async () => {
+    const operations = new FakeReleaseOperations();
+    const token = "ghp_release_lookup_secret";
+    const listArgs = [
+      "release",
+      "list",
+      "--repo",
+      repository,
+      "--limit",
+      "20",
+      "--json",
+      "tagName,isDraft",
+    ];
+    operations.respond("gh", listArgs, failure(`first ${token}`), {
+      exitCode: 1,
+      stderr: "second warning",
+      stdout: `second ${token}`,
+    });
+
+    await expect(
+      resolveRelease(operations, {
+        eventMode: "workflow-run",
+        repository,
+        workflowRunSha: releaseSha,
+        commitSubject: "chore(main): release 1.2.3",
+        pollAttempts: 2,
+        pollDelayMilliseconds: 7,
+        secretValues: [token],
+      }),
+    ).rejects.toThrow("No published release for release commit");
+
+    expect(operations.sleeps).toEqual([7, 7]);
+    expect(operations.logs).toEqual([
+      "gh release list failed (stderr: first [REDACTED]); retrying.",
+      "gh release list failed (stderr: second warning\nstdout: second [REDACTED]); no attempts remain.",
+    ]);
+    expect(operations.logs.join("\n")).not.toContain(token);
   });
 
   it("uses a valid manual tag directly and writes every output through the port", async () => {
@@ -375,12 +480,31 @@ describe("dogfoodRelease", () => {
     ).toHaveLength(2);
   });
 
-  it("propagates PR lookup and push failures", async () => {
-    const lookupOperations = dogfoodOperations();
-    lookupOperations.respond("gh", prListArgs, failure("GitHub unavailable"));
-    await expect(dogfoodRelease(lookupOperations, { version: "1.2.3" })).rejects.toThrow(
-      "GitHub unavailable",
+  it("rejects malformed PR lookup payloads before mutation", async () => {
+    const operations = dogfoodOperations();
+    operations.respond("gh", prListArgs, success('{"state":"OPEN"}'));
+
+    await expect(dogfoodRelease(operations, { version: "1.2.3" })).rejects.toThrow(
+      "gh pr list output must be an array",
     );
+    expect(operations.calls.some((call) => call.args[0] === "push")).toBe(false);
+  });
+
+  it("propagates complete PR lookup and push failures", async () => {
+    const lookupOperations = dogfoodOperations();
+    lookupOperations.respond("gh", prListArgs, {
+      exitCode: 1,
+      stderr: "GitHub warning",
+      stdout: "GitHub unavailable",
+    });
+    let lookupError = "";
+    try {
+      await dogfoodRelease(lookupOperations, { version: "1.2.3" });
+    } catch (error) {
+      lookupError = error instanceof Error ? error.message : String(error);
+    }
+    expect(lookupError).toContain("stderr: GitHub warning");
+    expect(lookupError).toContain("stdout: GitHub unavailable");
 
     const pushOperations = dogfoodOperations();
     pushOperations.respond(
@@ -393,19 +517,31 @@ describe("dogfoodRelease", () => {
     );
   });
 
-  it("stages only the release metadata paths and force-with-lease pushes the deterministic branch", async () => {
+  it("updates, validates, stages, pushes, and creates the dogfood PR in order", async () => {
     const operations = dogfoodOperations();
 
     await dogfoodRelease(operations, { version: "1.2.3" });
 
-    expect(operations.calls).toContainEqual({
-      command: "git",
-      args: ["add", ...dogfoodPaths],
-      options: undefined,
+    expect(JSON.parse(operations.writes.get(".pipr/package.json") ?? "")).toMatchObject({
+      dependencies: { "@usepipr/sdk": "1.2.3" },
     });
-    expect(operations.calls).toContainEqual({
-      command: "git",
-      args: [
+    expect(operations.calls.map((call) => [call.command, ...call.args])).toEqual([
+      ["git", "fetch", "origin", "main"],
+      ["git", "switch", "-C", branch, "origin/main"],
+      ["npm", "view", "@usepipr/sdk@1.2.3", "version"],
+      ["bun", "install", "--cwd", ".pipr"],
+      ["bun", "run", "sync:release-lockfile"],
+      ["bun", "run", "check:release-metadata"],
+      ["git", "diff", "--quiet", "--", ...dogfoodPaths],
+      ["gh", ...prListArgs],
+      ["git", "config", "user.name", "github-actions[bot]"],
+      ["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"],
+      ["git", "add", ...dogfoodPaths],
+      ["git", "commit", "-m", "chore: update dogfood SDK to 1.2.3"],
+      ["git", "fetch", "origin", "main"],
+      ["git", "rebase", "origin/main"],
+      [
+        "git",
         "-c",
         "core.hooksPath=/dev/null",
         "push",
@@ -413,8 +549,22 @@ describe("dogfoodRelease", () => {
         "origin",
         `HEAD:${branch}`,
       ],
-      options: undefined,
-    });
+      ["gh", ...prListArgs],
+      [
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        "main",
+        "--head",
+        branch,
+        "--title",
+        "chore: update dogfood SDK to 1.2.3",
+        "--body-file",
+        ".git/pipr-dogfood-pr.md",
+      ],
+    ]);
+    expect(operations.writes.get(".git/pipr-dogfood-pr.md")).toContain("@usepipr/sdk@1.2.3");
   });
 
   it("never exposes token values in commands, writes, or errors", async () => {
@@ -433,5 +583,162 @@ describe("dogfoodRelease", () => {
     expect(message).not.toContain(token);
     expect(JSON.stringify(operations.calls)).not.toContain(token);
     expect([...operations.writes.values()].join("\n")).not.toContain(token);
+    expect(operations.logs.join("\n")).not.toContain(token);
+
+    const loggedOperations = dogfoodOperations();
+    loggedOperations.respond("gh", prListArgs, success("[]"), success("[]"));
+    loggedOperations.respond(
+      "gh",
+      [
+        "pr",
+        "create",
+        "--base",
+        "main",
+        "--head",
+        branch,
+        "--title",
+        "chore: update dogfood SDK to 1.2.3",
+        "--body-file",
+        ".git/pipr-dogfood-pr.md",
+      ],
+      success(`https://example.test/pr/${token}`),
+    );
+    await dogfoodRelease(loggedOperations, { version: "1.2.3", secretValues: [token] });
+    expect(loggedOperations.logs.join("\n")).toContain("[REDACTED]");
+    expect(loggedOperations.logs.join("\n")).not.toContain(token);
   });
 });
+
+describe("release executable", () => {
+  it("maps workflow-run environment and appends GitHub outputs", async () => {
+    const fixture = await mkdtemp(path.join(os.tmpdir(), "pipr-release-resolve-"));
+    try {
+      const outputPath = path.join(fixture, "github-output");
+      await Bun.write(outputPath, "existing=value\n");
+
+      const result = runReleaseScript("resolve", fixture, {
+        GITHUB_OUTPUT: outputPath,
+        GITHUB_REPOSITORY: repository,
+        PIPR_COMMIT_SUBJECT: "fix: ordinary change",
+        PIPR_EVENT_NAME: "workflow_run",
+        PIPR_WORKFLOW_RUN_SHA: releaseSha,
+      });
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(result.stdout).toContain("not a Release Please merge commit");
+      expect(await Bun.file(outputPath).text()).toBe("existing=value\npublish=false\n");
+    } finally {
+      await rm(fixture, { force: true, recursive: true });
+    }
+  });
+
+  it("maps verify-tag files and emits the version output", async () => {
+    const fixture = await mkdtemp(path.join(os.tmpdir(), "pipr-release-verify-"));
+    try {
+      for (const manifestPath of [
+        "package.json",
+        "packages/sdk/package.json",
+        "packages/runtime/package.json",
+        "packages/cli/package.json",
+      ]) {
+        const file = path.join(fixture, manifestPath);
+        await mkdir(path.dirname(file), { recursive: true });
+        await Bun.write(file, packageJson("1.2.3"));
+      }
+      await Bun.write(
+        path.join(fixture, "action.yml"),
+        "name: Pipr Review\nruns:\n  using: docker\n  image: docker://ghcr.io/somus/pipr:v1.2.3\n",
+      );
+      const outputPath = path.join(fixture, "github-output");
+      await Bun.write(outputPath, "");
+
+      const result = runReleaseScript("verify-tag", fixture, {
+        GITHUB_OUTPUT: outputPath,
+        PIPR_RELEASE_TAG: "v1.2.3",
+      });
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(await Bun.file(outputPath).text()).toBe("version=1.2.3\n");
+    } finally {
+      await rm(fixture, { force: true, recursive: true });
+    }
+  });
+
+  it("spawns argument-array commands and maps dogfood environment", async () => {
+    const fixture = await mkdtemp(path.join(os.tmpdir(), "pipr-release-dogfood-"));
+    try {
+      const binDir = path.join(fixture, "bin");
+      const commandLog = path.join(fixture, "commands.log");
+      await mkdir(binDir);
+      const gitPath = path.join(binDir, "git");
+      await Bun.write(
+        gitPath,
+        '#!/bin/sh\nprintf "argc=%s" "$#" >> "$COMMAND_LOG"\nfor argument in "$@"; do printf "|<%s>" "$argument" >> "$COMMAND_LOG"; done\nprintf "\\n" >> "$COMMAND_LOG"\n',
+      );
+      await chmod(gitPath, 0o755);
+      await Bun.write(path.join(fixture, "package.json"), packageJson("1.2.4"));
+
+      const result = runReleaseScript("dogfood", fixture, {
+        COMMAND_LOG: commandLog,
+        PATH: `${binDir}:${Bun.env.PATH ?? ""}`,
+        PIPR_RELEASE_VERSION: "1.2.3",
+      });
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(await Bun.file(commandLog).text()).toBe(
+        "argc=3|<fetch>|<origin>|<main>\nargc=4|<switch>|<-C>|<dogfood-sdk-1-2-3>|<origin/main>\n",
+      );
+      expect(result.stdout).toContain("Skipping dogfood SDK update because main is 1.2.4");
+    } finally {
+      await rm(fixture, { force: true, recursive: true });
+    }
+  });
+
+  it("preserves a failing child process and stops subsequent operations", async () => {
+    const fixture = await mkdtemp(path.join(os.tmpdir(), "pipr-release-failure-"));
+    try {
+      const binDir = path.join(fixture, "bin");
+      const commandLog = path.join(fixture, "commands.log");
+      await mkdir(binDir);
+      const gitPath = path.join(binDir, "git");
+      await Bun.write(
+        gitPath,
+        '#!/bin/sh\nprintf "argc=%s" "$#" >> "$COMMAND_LOG"\nfor argument in "$@"; do printf "|<%s>" "$argument" >> "$COMMAND_LOG"; done\nprintf "\\n" >> "$COMMAND_LOG"\necho "git exploded" >&2\nexit 17\n',
+      );
+      await chmod(gitPath, 0o755);
+
+      const result = runReleaseScript("dogfood", fixture, {
+        COMMAND_LOG: commandLog,
+        PATH: `${binDir}:${Bun.env.PATH ?? ""}`,
+        PIPR_RELEASE_VERSION: "1.2.3",
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("stderr: git exploded");
+      expect(await Bun.file(commandLog).text()).toBe("argc=3|<fetch>|<origin>|<main>\n");
+    } finally {
+      await rm(fixture, { force: true, recursive: true });
+    }
+  });
+});
+
+function runReleaseScript(
+  command: string,
+  cwd: string,
+  env: Record<string, string>,
+): { exitCode: number; stderr: string; stdout: string } {
+  const result = Bun.spawnSync(
+    [process.execPath, path.join(repoRoot, "scripts/release.ts"), command],
+    {
+      cwd,
+      env: { ...Bun.env, ...env },
+      stderr: "pipe",
+      stdout: "pipe",
+    },
+  );
+  return {
+    exitCode: result.exitCode,
+    stderr: result.stderr.toString(),
+    stdout: result.stdout.toString(),
+  };
+}
