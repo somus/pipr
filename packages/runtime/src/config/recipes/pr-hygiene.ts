@@ -93,7 +93,7 @@ export default definePipr((pipr) => {
       ctx.log.info(\`Checking PR hygiene for \${changedFiles.length} changed file(s).\`);
       const manifest = await ctx.change.diffManifest({ compressed: true, maxPreviewLines: 80 });
       const result = await ctx.pi.run(hygiene, { manifest, changedFiles });
-      const inlineFindings: ReviewFinding[] = result.findings.map((finding) => {
+      const mappedFindings: ReviewFinding[] = result.findings.map((finding) => {
         const policy = finding.policy
           .replaceAll("-", " ")
           .replace(/^./, (char) => char.toUpperCase());
@@ -107,6 +107,7 @@ export default definePipr((pipr) => {
           ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
         };
       });
+      const { validFindings: inlineFindings } = ctx.review.validateFindings(mappedFindings);
       const attentionCount = result.checks.filter((check) => check.status === "attention").length;
       if (attentionCount > 0) {
         const noun = attentionCount === 1 ? "check" : "checks";

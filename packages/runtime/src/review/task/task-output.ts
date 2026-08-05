@@ -1,6 +1,7 @@
 import type {
   CheckHandle,
   CommentValue,
+  DroppedReviewFinding,
   PathFilter,
   PiprRunSummary,
   PriorReview,
@@ -39,6 +40,7 @@ export type OutputState = {
   comment?: CommentContribution;
   commandResponse?: CommandResponseContribution;
   findings: FindingContribution[];
+  droppedFindings: DroppedReviewFinding[];
   findingScopes: WeakMap<readonly ReviewFinding[], PathFilter>;
   providerModels: string[];
   repairAttempted: boolean;
@@ -84,6 +86,7 @@ const agentInlineFindingsOutputSchema = z.custom<{
 export function createOutputState(): OutputState {
   return {
     findings: [],
+    droppedFindings: [],
     findingScopes: new WeakMap(),
     providerModels: [],
     repairAttempted: false,
@@ -96,6 +99,7 @@ export function mergeTaskOutputs(results: TaskRunResult[]): OutputState {
     mergeCommentContribution(merged, output.comment);
     mergeCommandResponseContribution(merged, output.commandResponse);
     merged.findings.push(...output.findings);
+    merged.droppedFindings.push(...output.droppedFindings);
     merged.providerModels.push(...output.providerModels);
     merged.repairAttempted ||= output.repairAttempted;
   }
@@ -453,10 +457,34 @@ function collectInlineFindings(
   const arrayScope = state.findingScopes.get(findings);
   state.findings.push(
     ...findings.map((finding) => ({
-      finding,
+      finding: canonicalFindingProjection(finding),
       paths: arrayScope,
     })),
   );
+}
+
+export function recordDroppedFindings(
+  state: OutputState,
+  droppedFindings: readonly DroppedReviewFinding[],
+): void {
+  state.droppedFindings.push(
+    ...droppedFindings.map(({ finding, reason }) => ({
+      finding: canonicalFindingProjection(finding),
+      reason,
+    })),
+  );
+}
+
+function canonicalFindingProjection(finding: ReviewFinding): ReviewFinding {
+  return {
+    body: finding.body,
+    path: finding.path,
+    rangeId: finding.rangeId,
+    side: finding.side,
+    startLine: finding.startLine,
+    endLine: finding.endLine,
+    ...(finding.suggestedFix === undefined ? {} : { suggestedFix: finding.suggestedFix }),
+  };
 }
 
 export function trackResultFindingScope(

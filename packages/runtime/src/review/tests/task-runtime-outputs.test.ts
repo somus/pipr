@@ -125,6 +125,24 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
     expect(result.run.durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  it("still validates findings emitted without the early helper", async () => {
+    const plan = singleTaskPlan({
+      async run(ctx) {
+        await ctx.comment({ inlineFindings: [finding("invalid", "missing-range", 99)] });
+      },
+    });
+
+    const result = await runRuntime({ plan });
+
+    expect(result.validated.validFindings).toEqual([]);
+    expect(result.validated.droppedFindings).toEqual([
+      {
+        finding: finding("invalid", "missing-range", 99),
+        reason: "unknown rangeId 'missing-range'",
+      },
+    ]);
+  });
+
   it("rejects a structured comment without main content or inline findings", async () => {
     const plan = singleTaskPlan({
       async run(ctx) {

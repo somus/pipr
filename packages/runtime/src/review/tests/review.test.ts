@@ -5,6 +5,7 @@ import {
   parseReviewResult,
   reviewResultJsonSchema,
   reviewSchemaExample,
+  validateReviewFindings,
   validateReviewResult,
 } from "../review.js";
 
@@ -27,6 +28,47 @@ const baseFinding = baseReview.inlineFindings[0];
 if (!baseFinding) {
   throw new Error("test fixture missing base finding");
 }
+
+describe("validateReviewFindings", () => {
+  it("preserves custom metadata when canonicalizing and dropping findings", () => {
+    const finding = { ...baseFinding, rangeId: "stale-range", severity: "high" as const };
+    const validated = validateReviewFindings([finding, finding], manifest, {
+      expectedHeadSha: "head",
+    });
+
+    expect(validated.validFindings).toEqual([
+      { ...baseFinding, rangeId: "range-1", severity: "high" },
+    ]);
+    expect(validated.droppedFindings).toEqual([
+      {
+        finding: { ...finding, rangeId: "range-1" },
+        reason: "duplicate finding fingerprint",
+      },
+    ]);
+    expect(validated.validFindings[0]?.severity).toBe("high");
+    expect(validated.droppedFindings[0]?.finding.severity).toBe("high");
+  });
+
+  it("applies path scope to metadata-bearing findings", () => {
+    const finding = { ...baseFinding, severity: "high" as const };
+    const validated = validateReviewFindings([finding], manifest, {
+      pathScopeForFinding: () => ({ include: ["docs/**"] }),
+    });
+
+    expect(validated.validFindings).toHaveLength(0);
+    expect(validated.droppedFindings).toEqual([
+      { finding, reason: "finding path is outside configured paths" },
+    ]);
+  });
+
+  it("rejects a stale manifest before validating generic findings", () => {
+    expect(() =>
+      validateReviewFindings([{ ...baseFinding, severity: "high" as const }], manifest, {
+        expectedHeadSha: "new-head",
+      }),
+    ).toThrow("does not match expected head SHA");
+  });
+});
 
 describe("validateReviewResult", () => {
   it("uses one Review Output for examples and runtime schema", () => {

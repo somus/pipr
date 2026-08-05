@@ -214,6 +214,44 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     expect(result.mainComment).toContain('"paths":["docs/readme.md"]');
   });
 
+  it("validates metadata-bearing findings before task decisions and retains early drops", async () => {
+    let observed: unknown;
+    const plan = testPlan((pipr) => {
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          const validated = ctx.review.validateFindings([
+            { ...finding("valid", "stale-range", 10), severity: "high" as const },
+            { ...finding("invalid", "missing-range", 99), severity: "high" as const },
+          ]);
+          observed = validated;
+          await ctx.comment({ inlineFindings: validated.validFindings });
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+
+    const result = await runRuntime({ plan });
+
+    expect(observed).toMatchObject({
+      validFindings: [{ body: "valid body", rangeId: "range-1", severity: "high" }],
+      droppedFindings: [
+        {
+          finding: { body: "invalid body", severity: "high" },
+          reason: "unknown rangeId 'missing-range'",
+        },
+      ],
+    });
+    expect(result.validated.validFindings.map((item) => item.rangeId)).toEqual(["range-1"]);
+    expect(result.review.inlineFindings[0]).not.toHaveProperty("severity");
+    expect(result.validated.droppedFindings).toEqual([
+      {
+        finding: finding("invalid", "missing-range", 99),
+        reason: "unknown rangeId 'missing-range'",
+      },
+    ]);
+  });
+
   it("drops findings outside configured output paths", async () => {
     const result = await runWithInsideOutsideFindings(scopedPiReviewPlan());
 
@@ -271,6 +309,50 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     });
 
     expect(result.mainComment).toContain("Notes collected.");
+  });
+
+  it("honors tracked and explicit paths when validating Pi findings", async () => {
+    const plan = testPlan((pipr) => {
+      const sourcePaths = { include: ["src/**"] };
+      const docsPaths = { include: ["docs/**"] };
+      const agent = defaultReviewAgent(pipr);
+      const task = pipr.task({
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(
+            agent,
+            { manifest: await ctx.change.diffManifest() },
+            { paths: sourcePaths },
+          );
+          const tracked = ctx.review.validateFindings(result.inlineFindings);
+          const mapped = result.inlineFindings.map((item) => ({ ...item }));
+          const explicit = ctx.review.validateFindings(mapped, { paths: docsPaths });
+          await ctx.comment({
+            inlineFindings: [...tracked.validFindings, ...explicit.validFindings],
+          });
+        },
+      });
+      pipr.on.changeRequest({ actions: ["opened"], task });
+    });
+
+    const result = await runRuntime({
+      plan,
+      diffManifestBuilder: manifestBuilder(reviewTestManifestWithDocs()),
+      piRunner: async () =>
+        reviewPiResult([
+          finding("inside", "range-1", 10),
+          finding("docs", "docs-range-1", 1, "docs/readme.md"),
+        ]),
+    });
+
+    expect(result.validated.validFindings.map((item) => item.body)).toEqual([
+      "inside body",
+      "docs body",
+    ]);
+    expect(result.validated.droppedFindings.map((item) => item.reason)).toEqual([
+      "finding path is outside configured paths",
+      "finding path is outside configured paths",
+    ]);
   });
 
   it("does not carry scoped Pi result paths through mapped finding arrays", async () => {

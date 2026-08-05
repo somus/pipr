@@ -42,7 +42,7 @@ import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { type PriorReviewState, priorReviewStateForSelectedTasks } from "../prior-state.js";
 import type { ReviewProgressSink } from "../progress.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
-import { validateReviewResult } from "../review.js";
+import { validateReviewFindings, validateReviewResult } from "../review.js";
 import { type RuntimeCommandInvocation, stableReviewRunId } from "../run-identity.js";
 import { runInternalVerifier } from "../verifier.js";
 import {
@@ -58,6 +58,7 @@ import {
   priorReviewForTask,
   type RuntimeCheckSink,
   type RuntimeTaskCheckResult,
+  recordDroppedFindings,
   reviewStatsForRuns,
   runSummaryStatsFields,
   runtimeTaskCheckResult,
@@ -321,10 +322,14 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   await options.progress?.transition("validating-review");
   const main = reviewMainComment(output);
   const review = collectedReview(output, main);
-  const validated = validateReviewResult(review, diffManifest, {
+  const finalValidated = validateReviewResult(review, diffManifest, {
     expectedHeadSha: options.event.change.head.sha,
     pathScopeForFinding: (_finding, index) => output.findings[index]?.paths,
   });
+  const validated: ValidatedReview = {
+    ...finalValidated,
+    droppedFindings: [...output.droppedFindings, ...finalValidated.droppedFindings],
+  };
   const verifier = await runSynchronizeVerifier({
     options,
     config,
@@ -801,6 +806,18 @@ function createTaskContext(
     review: {
       async prior() {
         return priorReviewForTask(options.priorMainComment, options.priorReviewState);
+      },
+      validateFindings(findings, validationOptions) {
+        const paths = validationOptions?.paths ?? options.output.findingScopes.get(findings);
+        const validated = validateReviewFindings(findings, options.diffManifest, {
+          expectedHeadSha: options.event.change.head.sha,
+          pathScopeForFinding: () => paths,
+        });
+        recordDroppedFindings(options.output, validated.droppedFindings);
+        if (paths) {
+          options.output.findingScopes.set(validated.validFindings, paths);
+        }
+        return validated;
       },
     },
     check: createCheckHandle(options.output),

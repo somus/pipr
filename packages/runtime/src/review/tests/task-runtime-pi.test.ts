@@ -273,6 +273,31 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     ]);
   });
 
+  it("validates built-in findings before the summary agent", async () => {
+    const prompts: string[] = [];
+    const result = await runRuntime({
+      plan: defaultReviewPlan(),
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return reviewPiResultForPrompt(options.prompt, [
+          finding("valid", "range-1", 10),
+          finding("invalid", "missing-range", 99),
+        ]);
+      },
+    });
+
+    const summaryPrompt = prompts.find((prompt) => prompt.includes("Schema ID: core/summary."));
+    expect(summaryPrompt).toContain("valid body");
+    expect(summaryPrompt).not.toContain("invalid body");
+    expect(result.validated.validFindings.map((item) => item.body)).toEqual(["valid body"]);
+    expect(result.validated.droppedFindings).toEqual([
+      {
+        finding: finding("invalid", "missing-range", 99),
+        reason: "unknown rangeId 'missing-range'",
+      },
+    ]);
+  });
+
   it("fails before the summary provider call when merged findings exceed the handoff limit", async () => {
     let calls = 0;
 

@@ -65,45 +65,6 @@ const reviewSummarySchema = z.strictObject({
 
 const severityRank = { critical: 0, high: 1, medium: 2, low: 3 } as const;
 
-function hasCommentableAnchor(
-  finding: ReviewFinding,
-  manifest: DiffManifest,
-): boolean {
-  const range = manifest.files
-    .find((file) => file.path === finding.path)
-    ?.commentableRanges.find(
-      (candidate) =>
-        candidate.id === finding.rangeId &&
-        candidate.path === finding.path &&
-        candidate.side === finding.side,
-    );
-  return Boolean(
-    range &&
-      finding.startLine <= finding.endLine &&
-      finding.startLine >= range.startLine &&
-      finding.endLine <= range.endLine,
-  );
-}
-
-function deduplicateFindings(findings: CategorizedFinding[]): CategorizedFinding[] {
-  const seen = new Set<string>();
-  return findings.filter((finding) => {
-    const key = JSON.stringify([
-      finding.path,
-      finding.rangeId,
-      finding.side,
-      finding.startLine,
-      finding.endLine,
-      finding.body,
-    ]);
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
 function summaryManifest(manifest: DiffManifest): DefaultReviewSummaryManifest {
   const files: DefaultReviewSummaryManifest["files"][number][] = [];
   let serializedCharacters = 0;
@@ -238,9 +199,8 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(findingsReviewer, { manifest });
-      const selectedFindings = deduplicateFindings(
-        result.inlineFindings.filter((finding) => hasCommentableAnchor(finding, manifest)),
-      )
+      const { validFindings } = ctx.review.validateFindings(result.inlineFindings);
+      const selectedFindings = [...validFindings]
         .sort((left, right) => severityRank[left.severity] - severityRank[right.severity])
         .slice(0, 8);
       const summary = await ctx.pi.run(summaryReviewer, {

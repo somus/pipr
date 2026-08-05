@@ -189,9 +189,7 @@ const strictSecurity = security.extend({
 
 ## Multi-agent orchestration
 
-Use one task when multiple agents should produce one published review:
-
-Pass `{ manifest }` to specialists and aggregators that need changed-code context. An aggregator that revalidates findings also needs the manifest and read-only tools.
+Use one task when multiple agents should produce one published review. Pass `{ manifest }` to agents that need changed-code context, then validate specialist findings before an aggregator consumes them.
 
 ```ts
 const base = pipr.agent({
@@ -216,12 +214,12 @@ const tests = base.extend({
 const aggregator = pipr.agent({
   name: "review-aggregator",
   model,
-  instructions: "Revalidate and deduplicate specialist results into one review.",
-  output: pipr.schemas.review,
+  instructions: "Summarize the validated specialist findings without inventing defects.",
+  output: pipr.schemas.summary,
   tools: pipr.tools.readOnly,
-  prompt: (input: { manifest: unknown; specialistResults: unknown; prior: unknown }) => pipr.prompt`
+  prompt: (input: { validFindings: unknown; prior: unknown }) => pipr.prompt`
     ${pipr.section("Prior review", pipr.json(input.prior, { maxCharacters: 20000 }))}
-    ${pipr.section("Specialist results", pipr.json(input.specialistResults))}
+    ${pipr.section("Validated specialist findings", pipr.json(input.validFindings))}
   `,
 });
 
@@ -234,12 +232,10 @@ const task = pipr.task({
       ctx.pi.run(security, { manifest, focus: "security" }),
       ctx.pi.run(tests, { manifest, focus: "tests" }),
     ]);
-    const result = await ctx.pi.run(aggregator, {
-      manifest,
-      specialistResults: { securityResult, testResult },
-      prior,
-    });
-    await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
+    const candidates = [...securityResult.inlineFindings, ...testResult.inlineFindings];
+    const { validFindings } = ctx.review.validateFindings(candidates);
+    const summary = await ctx.pi.run(aggregator, { validFindings, prior });
+    await ctx.comment({ main: summary.body, inlineFindings: validFindings });
   },
 });
 ```
@@ -297,6 +293,7 @@ Task handlers use this context to read change data, run Pi, publish results, and
 | `ctx.pi.run(agent, input, options?)` | Execute a Pi-backed agent and validate structured output. |
 | `ctx.command` | Present only for command-triggered tasks. Includes `name`, `line`, parsed `arguments`, and `reply(markdown)`. |
 | `ctx.review.prior()` | Read prior review state: `main?`, `reviewedHeadSha?`, and `inlineFindings[]` with `id`, `status`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. |
+| `ctx.review.validateFindings(findings, options?)` | Validate and deduplicate findings before task code uses them. Extra finding metadata is preserved. |
 | `ctx.check.pass/fail/neutral(summary?)` | Set one explicit task check result. Check failure does not fail the Action process by itself. |
 | `ctx.comment(value)` | Emit the selected run's final Main Review Comment markdown and Inline Review Comments. |
 | `ctx.log` | Write runtime logs. |
@@ -307,7 +304,9 @@ When structural analysis is available, manifest files and ranges can include bes
 
 `ctx.command.reply(...)` emits a normal change-request comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
 
-When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. Pipr applies that scope to direct agent findings and still validates transformed task output against the manifest.
+When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. Pipr infers that scope when `ctx.review.validateFindings(...)` receives the exact finding array returned by `ctx.pi.run(...)`. Pass `{ paths }` to the validation operation after mapping, sorting, or combining arrays.
+
+Call `ctx.review.validateFindings(...)` before findings affect a required check, table, or second-stage agent. Tasks that only forward core review output can rely on final validation in `ctx.comment(...)`; final publication validation still runs after an earlier validation call.
 
 <auto-type-table path="packages/sdk/src/index.ts" name="TaskContext" />
 
@@ -425,7 +424,7 @@ await ctx.comment({ inlineFindings });
 
 Structured output must contain `main`, `inlineFindings`, or both. `{ inlineFindings: [] }` is valid; `{}` is rejected.
 
-Pipr validates findings against the Diff Manifest, drops invalid findings, dedupes finding markers, and caps inline publication.
+Pipr validates findings against the Diff Manifest, drops invalid findings, dedupes finding markers, and caps inline publication. Use `ctx.review.validateFindings(...)` earlier when task code consumes findings before this final boundary.
 Subjective labels such as severity, confidence, or category are not part of the built-in finding contract. Define them in a custom schema or render them into your own `ctx.comment(...)` markdown when your workflow needs them.
 
 ## Tools

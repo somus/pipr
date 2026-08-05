@@ -57,6 +57,23 @@ export type PriorReview = {
   inlineFindings: readonly PriorInlineFinding[];
 };
 
+/** Optional path scope applied while validating review findings. */
+export type ValidateFindingsOptions = {
+  paths?: PathFilter;
+};
+
+/** One review finding rejected by runtime validation. */
+export type DroppedReviewFinding<T extends ReviewFinding = ReviewFinding> = {
+  finding: T;
+  reason: string;
+};
+
+/** Findings accepted and rejected by runtime validation. */
+export type ValidatedReviewFindings<T extends ReviewFinding = ReviewFinding> = {
+  validFindings: readonly T[];
+  droppedFindings: readonly DroppedReviewFinding<T>[];
+};
+
 /** Function run by a task entrypoint. */
 export type TaskHandler<Input> = (context: TaskContext, input: Input) => void | Promise<void>;
 
@@ -320,6 +337,10 @@ export type TaskContext = {
   secret(secret: SecretRef): string;
   readonly review: {
     prior(): Promise<PriorReview>;
+    validateFindings<T extends ReviewFinding>(
+      findings: readonly T[],
+      options?: ValidateFindingsOptions,
+    ): ValidatedReviewFindings<T>;
   };
   readonly check: CheckHandle;
   comment(value: CommentValue): Promise<void>;

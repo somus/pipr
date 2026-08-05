@@ -2,7 +2,7 @@
 
 Status: Accepted
 
-The default `pipr.review()` recipe calls the Pipr-owned Review Run through `ctx.change.diffManifest()` and `ctx.pi.run()`. It runs a canonical findings agent, merges any shards, then runs one summary agent with the scoped manifest and every merged candidate finding. The TypeScript config does not expose diff creation or review validation as userland blocks.
+The default `pipr.review()` recipe calls the Pipr-owned Review Run through `ctx.change.diffManifest()`, `ctx.pi.run()`, and `ctx.review.validateFindings()`. It runs a canonical findings agent, merges any shards, validates the merged candidates, then runs one summary agent with the scoped manifest and valid findings. The TypeScript config does not implement diff creation or review validation as userland blocks.
 
 The Review Run owns:
 
@@ -10,10 +10,11 @@ The Review Run owns:
 - run Pi with the selected agent and provider
 - perform the single repair pass for invalid agent JSON
 - validate built-in output against `core/inline-findings`, `core/summary`, or `core/pr-review`
+- validate findings consumed by custom task checks, tables, or later agents through `ctx.review.validateFindings()` against the runtime's full Diff Manifest and current head
 - shard custom schemas rooted at `{ inlineFindings: [...] }` when each item contains the canonical finding fields, preserve extra item metadata, deduplicate by anchor plus body, and reparse the merged result
 - return a validated review for comment rendering
 
-Diff creation and review validation are internal to the runtime in the MVP. This keeps TypeScript tasks from bypassing the deterministic safety checks needed before Main Review Comment and Inline Review Comment publication.
+Diff creation and review validation remain runtime-owned. Custom tasks call `ctx.review.validateFindings()` when they consume findings before `ctx.comment(...)`; the operation preserves custom finding metadata while the runtime records dropped canonical findings. Final publication validation remains in place as defense in depth.
 
 Tasks may compose around the Review Run. Manual full-review agents can use `core/pr-review`; findings-only agents can use `core/inline-findings` or a compatible custom root schema. Summary-only and arbitrary custom schemas are not sharded. Pull request event runs may select multiple tasks; Pipr computes the Diff Manifest once and runs selected tasks in parallel with isolated task state.
 

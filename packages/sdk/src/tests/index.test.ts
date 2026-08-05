@@ -28,6 +28,7 @@ import type {
   PiprResult,
   PiprRunSummary,
   PromptText,
+  ReviewFinding,
   Task,
   TaskContext,
 } from "../index.js";
@@ -157,6 +158,37 @@ describe("Pipr Result", () => {
         publication: { state: "completed", action: "updated" },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("TaskContext", () => {
+  it("retains custom finding metadata through runtime validation", () => {
+    const factory = definePipr((pipr) => {
+      pipr.task({
+        name: "review",
+        run(context) {
+          const findings: (ReviewFinding & { severity: "high" })[] = [
+            {
+              body: "This can fail.",
+              path: "src/example.ts",
+              rangeId: "rng_example",
+              side: "RIGHT",
+              startLine: 1,
+              endLine: 1,
+              severity: "high",
+            },
+          ];
+          const validated = context.review.validateFindings(findings);
+          const validSeverity: "high" | undefined = validated.validFindings[0]?.severity;
+          const droppedSeverity: "high" | undefined =
+            validated.droppedFindings[0]?.finding.severity;
+          void validSeverity;
+          void droppedSeverity;
+        },
+      });
+    });
+
+    expect(buildPiprPlan(factory).tasks).toHaveLength(1);
   });
 });
 
@@ -658,6 +690,9 @@ describe("definePipr", () => {
         review: {
           async prior() {
             return { inlineFindings: [] };
+          },
+          validateFindings(findings) {
+            return { validFindings: findings, droppedFindings: [] };
           },
         },
         secret() {
@@ -1168,6 +1203,9 @@ describe("definePipr", () => {
         review: {
           async prior() {
             return { inlineFindings: [] };
+          },
+          validateFindings(findings) {
+            return { validFindings: findings, droppedFindings: [] };
           },
         },
         secret() {
@@ -1716,6 +1754,9 @@ function fakeTaskContext(): TaskContext {
     review: {
       async prior() {
         return { inlineFindings: [] };
+      },
+      validateFindings(findings) {
+        return { validFindings: findings, droppedFindings: [] };
       },
     },
     secret() {

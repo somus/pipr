@@ -61,7 +61,7 @@ Never commit real local sessions, secrets, credentials, private logs, unredacted
 
 ## Load-bearing review rules
 
-- Diff parsing, Pi execution, and review validation stay in Pipr through `ctx.change.diffManifest()` and `ctx.pi.run()`, not userland blocks.
+- Diff parsing, Pi execution, and review validation stay in Pipr through `ctx.change.diffManifest()`, `ctx.pi.run()`, and `ctx.review.validateFindings()`, not userland blocks.
 - Reviewer output remains schema-first: validate structured JSON, allow one repair attempt, and drop invalid findings with metadata.
 - Inline finding `rangeId`, path, and side must match the selected Diff Manifest range. `startLine` must not exceed `endLine`, and both bounds must stay inside that range; a valid strict subrange is allowed.
 - Range-validation changes must keep direct validator tests, review/task-runtime fixtures, GitHub inline mapping tests, and deterministic prompt-eval expectations aligned.

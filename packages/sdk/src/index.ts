@@ -120,6 +120,7 @@ export type {
   DefaultReviewInput,
   DefaultReviewSummaryInput,
   DefaultReviewSummaryManifest,
+  DroppedReviewFinding,
   PiprBuilder,
   PiprPlugin,
   PiRunner,
@@ -138,6 +139,8 @@ export type {
   TaskDefinition,
   TaskHandler,
   ToolRunOptions,
+  ValidatedReviewFindings,
+  ValidateFindingsOptions,
 } from "./types/task.js";
 export {
   defaultReviewActions,

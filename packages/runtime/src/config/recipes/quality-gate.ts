@@ -7,7 +7,7 @@ export const qualityGateRecipe = {
   description: "Required review check that fails on blocking correctness and test risks.",
   sourceTools: ["SonarQube", "Snyk"],
   configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { CommentableRange, DiffManifest, ReviewFinding } from "@usepipr/sdk";
+import type { ReviewFinding } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model({
@@ -87,8 +87,9 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(reviewer, { manifest });
-      const commentableBlockers = filterCommentableBlockers(result.blockers, manifest);
-      const droppedBlockerCount = result.blockers.length - commentableBlockers.length;
+      const { validFindings: commentableBlockers, droppedFindings } =
+        ctx.review.validateFindings(result.blockers);
+      const droppedBlockerCount = droppedFindings.length;
       const inlineFindings: ReviewFinding[] = commentableBlockers.map((blocker) => {
         const category = blocker.category
           .replaceAll("-", " ")
@@ -141,54 +142,6 @@ export default definePipr((pipr) => {
   pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
   pipr.command({ pattern: "@pipr quality", permission: "write", task });
 });
-
-type FindingAnchor = Pick<ReviewFinding, "path" | "rangeId" | "side" | "startLine" | "endLine">;
-
-function filterCommentableBlockers(
-  blockers: QualityBlocker[],
-  manifest: DiffManifest,
-): QualityBlocker[] {
-  const seen = new Set<string>();
-  return blockers.filter((blocker) => {
-    if (!commentableRangeForFinding(blocker, manifest)) {
-      return false;
-    }
-    const key = [
-      blocker.path,
-      blocker.rangeId,
-      blocker.side,
-      blocker.startLine,
-      blocker.endLine,
-      blocker.body,
-    ].join("\\n");
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-function commentableRangeForFinding(
-  finding: FindingAnchor,
-  manifest: DiffManifest,
-): CommentableRange | undefined {
-  for (const file of manifest.files) {
-    const range = file.commentableRanges.find((candidate) => candidate.id === finding.rangeId);
-    if (!range) {
-      continue;
-    }
-    return finding.rangeId === range.id &&
-      finding.path === range.path &&
-      finding.side === range.side &&
-      finding.startLine <= finding.endLine &&
-      finding.startLine >= range.startLine &&
-      finding.endLine <= range.endLine
-      ? range
-      : undefined;
-  }
-  return undefined;
-}
 
 function qualityGateCallout(blockers: QualityBlocker[]): string {
   if (blockers.length === 0) {

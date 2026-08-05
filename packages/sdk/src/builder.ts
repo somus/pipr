@@ -495,12 +495,15 @@ function createReviewRecipeTask(
           paths: options.paths,
         },
       );
+      const { validFindings } = context.review.validateFindings(findings.inlineFindings, {
+        paths: options.paths,
+      });
       const summary = await context.pi.run(
         summaryAgent,
         {
           manifestSummary: defaultReviewSummaryManifest(manifest),
           change: context.change,
-          inlineFindings: findings.inlineFindings,
+          inlineFindings: validFindings,
         },
         {
           timeout: options.timeout,
@@ -509,7 +512,7 @@ function createReviewRecipeTask(
       );
       const result: ReviewResult = {
         summary,
-        inlineFindings: findings.inlineFindings,
+        inlineFindings: [...validFindings],
       };
       const source =
         typeof options.comment === "function"

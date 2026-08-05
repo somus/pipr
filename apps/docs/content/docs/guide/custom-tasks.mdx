@@ -63,6 +63,7 @@ Task handlers receive provider-neutral context:
 | `ctx.change.diffManifest(options)` | Build changed-code context and valid inline ranges. |
 | `ctx.change.changedFiles()` | Inspect changed file paths without running a model. |
 | `ctx.pi.run(agent, input, options)` | Run a typed agent. |
+| `ctx.review.validateFindings(findings, options?)` | Validate findings before task code consumes them. |
 | `ctx.review.prior()` | Read prior Pipr-owned findings for the task. |
 | `ctx.comment(value)` | Emit final review output. |
 | `ctx.command?.reply(markdown)` | Emit a command response. |
@@ -70,6 +71,33 @@ Task handlers receive provider-neutral context:
 | `ctx.log` | Write runtime diagnostics. |
 
 A task must emit exactly one final result. Agent output remains task-local until the task calls `ctx.comment(...)` or `ctx.command.reply(...)`.
+
+## Validate findings before task decisions
+
+Call `ctx.review.validateFindings(...)` before findings affect a required check, table, or second-stage agent:
+
+```ts twoslash
+// @include: task-result
+const paths = { include: ["src/**"] };
+const { validFindings } = ctx.review.validateFindings(result.inlineFindings, {
+  paths,
+});
+
+if (validFindings.length > 0) {
+  ctx.check.fail(`${validFindings.length} blocking findings.`);
+} else {
+  ctx.check.pass("No blocking findings.");
+}
+
+await ctx.comment({
+  main: "Review complete.",
+  inlineFindings: validFindings,
+});
+```
+
+Pipr validates against the full runtime Diff Manifest and current event head. It preserves extra fields such as severity on returned findings and records dropped findings in validation metadata. If you map or sort an agent's finding array, pass `paths` explicitly; Pipr can infer the scope only from the exact array returned by `ctx.pi.run(...)`.
+
+Tasks that only forward review output to `ctx.comment(...)` can rely on final publication validation. The final boundary still validates findings when a task uses this operation earlier.
 
 ## Define custom output
 

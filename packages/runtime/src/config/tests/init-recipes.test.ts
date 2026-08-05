@@ -480,58 +480,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     }
   });
 
-  it("omits structured review findings with invalid diff anchors from all output", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
-
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "rich-review",
-      minimal: true,
-    });
-    const project = await loadRuntimeProject({ rootDir });
-
-    const result = await runTaskRuntime({
-      workspace: rootDir,
-      config: project.settings.config,
-      event: eventContext(),
-      plan: project.plan,
-      diffManifestBuilder: () => reviewTestManifest(),
-      piRunner: sequentialJsonPiRunner([
-        {
-          inlineFindings: [
-            {
-              title: "Invented location",
-              severity: "medium",
-              category: "correctness",
-              rationale: "This location does not exist.",
-              body: "This should never be rendered.",
-              path: "src/missing.ts",
-              rangeId: "missing-range",
-              side: "RIGHT",
-              startLine: 99,
-              endLine: 99,
-            },
-          ],
-        },
-        {
-          headline: "Review completed",
-          changeSummary: ["Changes request handling."],
-          riskLevel: "medium",
-          riskSummary: "One reported item did not map to the diff.",
-          reviewerFocus: [],
-        },
-      ]),
-    });
-
-    assertReviewResult(result);
-    expect(result.mainComment).not.toContain("Invented location");
-    expect(result.mainComment).not.toContain("**Findings:**");
-    expect(result.mainComment).not.toContain("Omitted 1 finding");
-    expect(result.inlineCommentDrafts).toEqual([]);
-  });
-
-  it("filters invalid and duplicate rich-review findings before selecting eight", async () => {
+  it("severity-sorts and caps validated rich-review findings at eight", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
 
     await initOfficialMinimalProject({
@@ -570,23 +519,11 @@ describe("initOfficialMinimalProject: generated recipes", () => {
           stdout: JSON.stringify({
             inlineFindings: [
               ...Array.from({ length: 8 }, (_, index) => ({
-                title: `Invalid blocker ${index}`,
-                severity: "critical",
-                category: "correctness",
-                rationale: "The reported location is not part of the diff.",
-                body: `Invalid finding ${index}.`,
-                path: `src/missing-${index}.ts`,
-                rangeId: `missing-${index}`,
-                side: "RIGHT",
-                startLine: 99,
-                endLine: 99,
-              })),
-              ...Array.from({ length: 8 }, () => ({
-                title: "Repeated blocker",
+                title: `Critical blocker ${index}`,
                 severity: "critical",
                 category: "correctness",
                 rationale: "The changed branch can return the wrong value.",
-                body: "The changed branch returns the wrong value.",
+                body: `The changed branch returns wrong value ${index}.`,
                 path: "src/a.ts",
                 rangeId: "range-1",
                 side: "RIGHT",
@@ -614,11 +551,10 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     });
 
     assertReviewResult(result);
-    expect(summaryPrompt).toContain("Valid lower-severity finding");
-    expect(summaryPrompt.match(/Repeated blocker/g)).toHaveLength(1);
-    expect(summaryPrompt).not.toContain("Invalid blocker");
-    expect(result.inlineCommentDrafts).toHaveLength(2);
-    expect(result.inlineCommentDrafts[1]?.body).toContain("Valid lower-severity finding");
+    expect(summaryPrompt).toContain("Critical blocker 0");
+    expect(summaryPrompt).toContain("Critical blocker 7");
+    expect(summaryPrompt).not.toContain("Valid lower-severity finding");
+    expect(result.inlineCommentDrafts).toHaveLength(8);
   });
 
   it("renders the security SAST recipe as a clean security summary without a diagram", async () => {
@@ -1372,13 +1308,13 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     });
     const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
 
-    expect(configTs).toContain("commentableBlockers");
-    expect(configTs).toContain("commentableRangeForFinding");
+    expect(configTs).toContain("ctx.review.validateFindings(result.blockers)");
+    expect(configTs).not.toContain("commentableRangeForFinding");
     expect(configTs).toContain("droppedBlockersNote");
     expect(configTs).not.toContain("if (result.blockers.length > 0)");
   });
 
-  it("deduplicates quality gate blockers before rendering and concluding the check", async () => {
+  it("renders and fails the quality gate for a validated blocker", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-quality-gate-"));
 
     await initOfficialMinimalProject({
@@ -1408,7 +1344,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       diffManifestBuilder: () => reviewTestManifest(),
       piRunner: jsonPiRunner({
         summary: "One blocker found.",
-        blockers: [blocker, blocker],
+        blockers: [blocker],
       }),
     });
 
@@ -1420,9 +1356,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(result.mainComment).toContain("## ⚠️ Blocking Findings");
     expect(result.mainComment).toContain("<summary>Category breakdown</summary>");
     expect(result.mainComment).not.toContain("| Status | Blocking findings | Categories |");
-    expect(result.mainComment).toContain(
-      "1 model-reported blocker was ignored because it does not match a commentable diff range or duplicates another blocker.",
-    );
+    expect(result.mainComment).not.toContain("model-reported blocker was ignored");
     expect(result.inlineCommentDrafts).toHaveLength(1);
     expect(result.taskChecks).toContainEqual({
       taskName: "quality-gate",
@@ -1469,7 +1403,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     });
   });
 
-  it("reports PR hygiene attention as neutral and omits invalid inline findings", async () => {
+  it("reports file-level PR hygiene attention as neutral", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-hygiene-"));
 
     await initOfficialMinimalProject({
@@ -1515,18 +1449,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
             evidence: "One source file changed.",
           },
         ],
-        findings: [
-          {
-            title: "Invented hygiene anchor",
-            policy: "tests",
-            body: "This should not be rendered.",
-            path: "src/missing.ts",
-            rangeId: "missing-range",
-            side: "RIGHT",
-            startLine: 99,
-            endLine: 99,
-          },
-        ],
+        findings: [],
       }),
     });
 
@@ -1535,9 +1458,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       "> ⚠️ **PR hygiene needs attention:** 1 policy check requires review.",
     );
     expect(result.mainComment).toContain("## 🧭 Summary\n\nTests need attention.");
-    expect(result.mainComment).not.toContain("Invented hygiene anchor");
     expect(result.mainComment).not.toContain("**Findings:**");
-    expect(result.mainComment).not.toContain("Omitted 1 finding");
     expect(result.inlineCommentDrafts).toEqual([]);
     expect(result.taskChecks).toContainEqual({
       taskName: "pr-hygiene",
@@ -1642,7 +1563,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     ).rejects.toThrow("schema validation");
   });
 
-  it("filters invalid diff diagnostics before publication", async () => {
+  it("uses shared runtime validation for mapped recipe findings", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-diff-diagnostics-"));
 
     await initOfficialMinimalProject({
@@ -1663,6 +1584,22 @@ describe("initOfficialMinimalProject: generated recipes", () => {
         summary: "Diagnostics completed.",
         diagnostics: [
           {
+            body: "This changed branch skips the fallback.",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 10,
+            endLine: 10,
+          },
+          {
+            body: "This changed branch skips the fallback.",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 10,
+            endLine: 10,
+          },
+          {
             body: "This diagnostic has no changed-code anchor.",
             path: "src/missing.ts",
             rangeId: "missing-range",
@@ -1676,9 +1613,12 @@ describe("initOfficialMinimalProject: generated recipes", () => {
 
     assertReviewResult(result);
     expect(result.mainComment).toContain("## 🧭 Summary\n\nDiagnostics completed.");
-    expect(result.mainComment).not.toContain("**Findings:**");
-    expect(result.mainComment).not.toContain("Omitted 1 diagnostic");
-    expect(result.inlineCommentDrafts).toEqual([]);
+    expect(result.inlineCommentDrafts).toHaveLength(1);
+    expect(result.inlineCommentDrafts[0]?.body).toContain("skips the fallback");
+    expect(result.validated.droppedFindings.map((drop) => drop.reason)).toEqual([
+      "duplicate finding fingerprint",
+      "unknown rangeId 'missing-range'",
+    ]);
   });
 
   it("initializes advanced recipes with inspectable agents, tools, and commands", async () => {

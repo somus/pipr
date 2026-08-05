@@ -7,7 +7,7 @@ export const securitySastRecipe = {
   description: "Security review with custom severity and category output.",
   sourceTools: ["Semgrep", "Snyk", "GitHub CodeQL/code scanning"],
   configTs: `import { definePipr } from "@usepipr/sdk";
-import type { DiffManifest, ReviewFinding } from "@usepipr/sdk";
+import type { ReviewFinding } from "@usepipr/sdk";
 
 type SecuritySummary = {
   headline: string;
@@ -122,8 +122,15 @@ export default definePipr((pipr) => {
     async run(ctx) {
       const manifest = await ctx.change.diffManifest({ compressed: true });
       const result = await ctx.pi.run(security, { manifest });
-      const risks = commentableSecurityRisks(result.risks, manifest);
-      const droppedRiskCount = result.risks.length - risks.length;
+      const riskFindings = [...result.risks]
+        .sort(
+          (left, right) =>
+            securitySeverityRank(right.severity) - securitySeverityRank(left.severity),
+        )
+        .map((risk) => ({ ...risk.finding, risk }));
+      const { validFindings, droppedFindings } = ctx.review.validateFindings(riskFindings);
+      const risks = validFindings.map(({ risk, ...finding }) => ({ ...risk, finding }));
+      const droppedRiskCount = droppedFindings.length;
       const inlineFindings: ReviewFinding[] = risks.map((risk) => risk.finding);
       const hasHighOrCriticalRisk = risks.some(isHighOrCriticalRisk);
       if (hasHighOrCriticalRisk) {
@@ -170,43 +177,6 @@ export default definePipr((pipr) => {
   pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
   pipr.command({ pattern: "@pipr security", permission: "write", task });
 });
-
-function commentableSecurityRisks(
-  risks: SecurityRisk[],
-  manifest: DiffManifest,
-): SecurityRisk[] {
-  const risksByLocation = new Map<string, SecurityRisk>();
-  for (const risk of risks) {
-    const finding = risk.finding;
-    const validAnchor = manifest.files.some((file) =>
-      file.commentableRanges.some(
-        (range) =>
-          finding.rangeId === range.id &&
-          finding.path === range.path &&
-          finding.side === range.side &&
-          finding.startLine <= finding.endLine &&
-          finding.startLine >= range.startLine &&
-          finding.endLine <= range.endLine,
-      ),
-    );
-    const key = [
-      finding.path,
-      finding.rangeId,
-      finding.side,
-      finding.startLine,
-      finding.endLine,
-      finding.body,
-    ].join("\\n");
-    if (!validAnchor) {
-      continue;
-    }
-    const existing = risksByLocation.get(key);
-    if (!existing || securitySeverityRank(risk.severity) > securitySeverityRank(existing.severity)) {
-      risksByLocation.set(key, risk);
-    }
-  }
-  return [...risksByLocation.values()];
-}
 
 function omittedRisksNote(count: number): string {
   const noun = count === 1 ? "risk" : "risks";
