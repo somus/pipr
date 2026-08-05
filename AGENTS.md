@@ -35,7 +35,7 @@ Treat this table as the canonical command map for task planning. Do not reopen r
 
 After Docker packaging changes, also verify the image can run `pi --help` and `pipr host-run --help`.
 
-Local tooling is Bun 1.3.14, `act` 0.2.89, and hk 1.50.0 through mise. Action verification requires Docker. GitHub Action dispatch reads `GITHUB_EVENT_PATH` and `GITHUB_EVENT_NAME`; provider credentials remain external secrets and must not be copied into repository instructions or fixtures.
+Local tooling is Bun 1.3.14, `act` 0.2.89, and hk 1.53.0 through mise. Action verification requires Docker. GitHub Action dispatch reads `GITHUB_EVENT_PATH` and `GITHUB_EVENT_NAME`; provider credentials remain external secrets and must not be copied into repository instructions or fixtures.
 
 ## Source and generated paths
 

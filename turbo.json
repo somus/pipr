@@ -44,9 +44,6 @@
     "//#check:scripts:root": {
       "outputs": []
     },
-    "//#check:runtime-test-split:root": {
-      "outputs": []
-    },
     "//#typecheck:root": {
       "outputs": []
     },
