@@ -311,11 +311,33 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     expect(result.mainComment).toContain("Notes collected.");
   });
 
-  it("honors tracked and explicit paths when validating Pi findings", async () => {
+  it("honors tracked and explicit paths for metadata-bearing Pi findings", async () => {
     const plan = testPlan((pipr) => {
       const sourcePaths = { include: ["src/**"] };
       const docsPaths = { include: ["docs/**"] };
-      const agent = defaultReviewAgent(pipr);
+      const output = pipr.schema({
+        id: "review/scoped-metadata-findings",
+        schema: z.strictObject({
+          inlineFindings: z.array(
+            z.strictObject({
+              severity: z.literal("high"),
+              body: z.string(),
+              path: z.string(),
+              rangeId: z.string(),
+              side: z.enum(["RIGHT", "LEFT"]),
+              startLine: z.number().int().positive(),
+              endLine: z.number().int().positive(),
+            }),
+          ),
+        }),
+      });
+      const agent = pipr.agent({
+        name: "scoped-metadata-reviewer",
+        model: deepseekModel(pipr),
+        instructions: "Review.",
+        output,
+        prompt: () => "Review.",
+      });
       const task = pipr.task({
         name: "review",
         async run(ctx) {
@@ -338,11 +360,17 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     const result = await runRuntime({
       plan,
       diffManifestBuilder: manifestBuilder(reviewTestManifestWithDocs()),
-      piRunner: async () =>
-        reviewPiResult([
-          finding("inside", "range-1", 10),
-          finding("docs", "docs-range-1", 1, "docs/readme.md"),
-        ]),
+      piRunner: async () => ({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          inlineFindings: [
+            { ...finding("inside", "range-1", 10), severity: "high" },
+            { ...finding("docs", "docs-range-1", 1, "docs/readme.md"), severity: "high" },
+          ],
+        }),
+        stderr: "",
+        durationMs: 1,
+      }),
     });
 
     expect(result.validated.validFindings.map((item) => item.body)).toEqual([

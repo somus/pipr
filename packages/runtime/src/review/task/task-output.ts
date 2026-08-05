@@ -12,7 +12,6 @@ import { summarizeDiffContextCoverage } from "../../pi/diff-context-coverage.js"
 import type { ReviewResult } from "../../types.js";
 import type { PiRunStats } from "../agent/review-run.js";
 import { mainCommentTitles } from "../comment-branding.js";
-import { reviewFindingSchema } from "../contract.js";
 import {
   type GeneratedMainCommentEnvelope,
   parseGeneratedMainCommentEnvelope,
@@ -72,13 +71,23 @@ export type TaskRunResult = {
   error?: unknown;
 };
 
+const metadataBearingReviewFindingSchema = z.looseObject({
+  body: z.string().min(1),
+  path: z.string().min(1),
+  rangeId: z.string().min(1),
+  side: z.enum(["RIGHT", "LEFT"]),
+  startLine: z.number().int().positive(),
+  endLine: z.number().int().positive(),
+  suggestedFix: z.string().min(1).optional(),
+});
+
 const agentInlineFindingsOutputSchema = z.custom<{
   inlineFindings: readonly ReviewFinding[];
 }>(
   (value) =>
     z
       .looseObject({
-        inlineFindings: z.array(reviewFindingSchema),
+        inlineFindings: z.array(metadataBearingReviewFindingSchema),
       })
       .safeParse(value).success,
 );

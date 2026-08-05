@@ -31,6 +31,7 @@ import type {
   ReviewFinding,
   Task,
   TaskContext,
+  ValidatedReviewFindings,
 } from "../index.js";
 import {
   defaultReviewActions,
@@ -200,6 +201,20 @@ describe("TaskContext", () => {
           const staleRangeId: "stale-range" | undefined = canonicalized.validFindings[0]?.rangeId;
           void canonicalRangeId;
           void staleRangeId;
+
+          type CategorizedFinding = ReviewFinding &
+            ({ kind: "security"; severity: "high" } | { kind: "quality"; category: "correctness" });
+          const unionFindings = [] as CategorizedFinding[];
+          const unionValidated = context.review.validateFindings(unionFindings);
+          for (const finding of unionValidated.validFindings) {
+            if (finding.kind === "security") {
+              const severity: "high" = finding.severity;
+              void severity;
+            } else {
+              const category: "correctness" = finding.category;
+              void category;
+            }
+          }
         },
       });
     });
@@ -708,7 +723,7 @@ describe("definePipr", () => {
             return { inlineFindings: [] };
           },
           validateFindings(findings) {
-            return { validFindings: findings, droppedFindings: [] };
+            return fakeValidatedFindings(findings);
           },
         },
         secret() {
@@ -1221,7 +1236,7 @@ describe("definePipr", () => {
             return { inlineFindings: [] };
           },
           validateFindings(findings) {
-            return { validFindings: findings, droppedFindings: [] };
+            return fakeValidatedFindings(findings);
           },
         },
         secret() {
@@ -1756,6 +1771,12 @@ function fakeCheck() {
   };
 }
 
+function fakeValidatedFindings<T extends ReviewFinding>(
+  findings: readonly T[],
+): ValidatedReviewFindings<T> {
+  return { validFindings: findings, droppedFindings: [] } as unknown as ValidatedReviewFindings<T>;
+}
+
 function fakeTaskContext(): TaskContext {
   return {
     run: { id: "test-run", trigger: "local" },
@@ -1772,7 +1793,7 @@ function fakeTaskContext(): TaskContext {
         return { inlineFindings: [] };
       },
       validateFindings(findings) {
-        return { validFindings: findings, droppedFindings: [] };
+        return fakeValidatedFindings(findings);
       },
     },
     secret() {

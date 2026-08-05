@@ -62,7 +62,7 @@ export function validateReviewFindings<T extends ReviewFinding>(
     const suppliedRange = ranges.findRange(finding.rangeId)?.range;
     const validatedFinding = findingRangeMismatchReason(finding, suppliedRange)
       ? canonicalizeFindingRangeId(finding, manifest)
-      : finding;
+      : findingWithRangeId(finding, finding.rangeId);
     const fingerprint = findingFingerprint(validatedFinding);
     const rangeMatch = ranges.findRange(validatedFinding.rangeId);
     const reason = findingDropReason({
@@ -92,7 +92,7 @@ function canonicalizeFindingRangeId<T extends ReviewFinding>(
   manifest: DiffManifest,
 ): ValidatedReviewFindings<T>["validFindings"][number] {
   if (finding.startLine > finding.endLine) {
-    return finding;
+    return findingWithRangeId(finding, finding.rangeId);
   }
 
   const matchingRanges = manifest.files.flatMap((file) =>
@@ -105,7 +105,14 @@ function canonicalizeFindingRangeId<T extends ReviewFinding>(
     ),
   );
   const matchingRange = matchingRanges.length === 1 ? matchingRanges[0] : undefined;
-  return matchingRange ? { ...finding, rangeId: matchingRange.id } : finding;
+  return findingWithRangeId(finding, matchingRange?.id ?? finding.rangeId);
+}
+
+function findingWithRangeId<T extends ReviewFinding>(
+  finding: T,
+  rangeId: string,
+): ValidatedReviewFindings<T>["validFindings"][number] {
+  return { ...finding, rangeId } as ValidatedReviewFindings<T>["validFindings"][number];
 }
 
 type FindingValidationContext = {

@@ -276,7 +276,13 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
   it("validates built-in findings before the summary agent", async () => {
     const prompts: string[] = [];
     const result = await runRuntime({
-      plan: defaultReviewPlan(),
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: { findings: "Review.", summary: "Summarize." },
+        });
+      }),
       piRunner: async (options) => {
         prompts.push(options.prompt);
         return reviewPiResultForPrompt(options.prompt, [
@@ -286,7 +292,8 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       },
     });
 
-    const summaryPrompt = prompts.find((prompt) => prompt.includes("Schema ID: core/summary."));
+    expect(prompts).toHaveLength(2);
+    const summaryPrompt = prompts.at(-1);
     expect(summaryPrompt).toContain("valid body");
     expect(summaryPrompt).not.toContain("invalid body");
     expect(result.validated.validFindings.map((item) => item.body)).toEqual(["valid body"]);

@@ -233,7 +233,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(configTs).toContain('required: ["headline", "riskSummary", "reviewerFocus"]');
     expect(configTs).toContain("diagramMermaid");
     expect(configTs).toContain("attackPathDiagramBlock");
-    expect(configTs).toContain("commentableSecurityRisks");
+    expect(configTs).toContain("ctx.review.validateFindings(riskFindings)");
     expect(configTs).toContain("$" + "{fence}mermaid");
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("security-sast");
     expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("security-sast");
