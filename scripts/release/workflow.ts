@@ -271,7 +271,12 @@ async function pollForReleaseTag(
       await logReleaseLookupFailure(operations, result, attempt, options);
       continue;
     }
-    const tag = await matchingReleaseTag(operations, result.stdout, options.workflowRunSha);
+    const tag = await matchingReleaseTag(
+      operations,
+      result.stdout,
+      options.workflowRunSha,
+      options,
+    );
     if (tag) return tag;
     await operations.log(
       `No published release for CI head ${options.workflowRunSha} yet; waiting.`,
@@ -304,11 +309,19 @@ async function matchingReleaseTag(
   operations: ReleaseOperations,
   contents: string,
   workflowRunSha: string,
+  options: SecretOptions,
 ): Promise<string | undefined> {
   for (const release of parseGithubReleases(contents)) {
     if (release.isDraft) continue;
     const commit = await operations.run("git", ["rev-list", "-n", "1", release.tagName]);
-    if (commit.exitCode === 0 && commit.stdout.trim() === workflowRunSha) return release.tagName;
+    if (commit.exitCode !== 0) {
+      const failure = redact(commandOutput(commit), options.secretValues);
+      await operations.log(
+        `git rev-list failed for release tag ${release.tagName} (${failure}); skipping.`,
+      );
+      continue;
+    }
+    if (commit.stdout.trim() === workflowRunSha) return release.tagName;
   }
   return undefined;
 }

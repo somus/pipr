@@ -248,6 +248,38 @@ describe("resolveRelease", () => {
     ]);
   });
 
+  it("logs and redacts tag resolution failures before continuing", async () => {
+    const operations = new FakeReleaseOperations();
+    const token = "git_tag_resolution_secret";
+    operations.respond(
+      "gh",
+      ["release", "list", "--repo", repository, "--limit", "20", "--json", "tagName,isDraft"],
+      success(releaseList({ tagName: "v1.2.3" })),
+    );
+    operations.respond(
+      "git",
+      ["rev-list", "-n", "1", "v1.2.3"],
+      failure(`cannot resolve ${token}`),
+    );
+
+    await expect(
+      resolveRelease(operations, {
+        eventMode: "workflow-run",
+        repository,
+        workflowRunSha: releaseSha,
+        commitSubject: "chore(main): release 1.2.3",
+        pollAttempts: 1,
+        pollDelayMilliseconds: 0,
+        secretValues: [token],
+      }),
+    ).rejects.toThrow("No published release for release commit");
+
+    expect(operations.logs).toContain(
+      "git rev-list failed for release tag v1.2.3 (stderr: cannot resolve [REDACTED]); skipping.",
+    );
+    expect(operations.logs.join("\n")).not.toContain(token);
+  });
+
   it("rejects malformed GitHub release payloads", async () => {
     const operations = new FakeReleaseOperations();
     operations.respond(
