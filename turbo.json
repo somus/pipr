@@ -3,6 +3,7 @@
   "remoteCache": {
     "signature": true
   },
+  "globalDependencies": ["biome.json", "mise.toml", "tsconfig.base.json", "tsconfig.json"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -42,6 +43,7 @@
       "outputs": []
     },
     "//#check:scripts:root": {
+      "dependsOn": ["@usepipr/cli#build"],
       "outputs": []
     },
     "//#typecheck:root": {

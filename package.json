@@ -59,7 +59,7 @@
     "check:scripts:root": "bun test ./scripts/tests/*.test.ts",
     "check:quality": "turbo run //#check:release-metadata:root //#check:conventional-commit:root //#check:scripts:root //#typecheck:root //#format:check:root //#fallow:packages:root",
     "check:quality:docs": "turbo run //#format:check:docs-root //#fallow:docs:root",
-    "check:packages": "bun run build:packages && turbo run lint typecheck test format:check --filter='!@pipr/docs' && bun run check:quality",
+    "check:packages": "turbo run build lint typecheck test format:check //#check:release-metadata:root //#check:conventional-commit:root //#check:scripts:root //#typecheck:root //#format:check:root //#fallow:packages:root --filter='!@pipr/docs'",
     "check:docs": "turbo run lint typecheck:generated test:generated build:generated format:check --filter=@pipr/docs && bun run check:quality:docs",
     "check": "bun run check:packages && bun run check:docs && bun run fallow:audit",
     "check:actions": "bun run --cwd packages/e2e check:actions",

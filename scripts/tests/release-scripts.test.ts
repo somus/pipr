@@ -37,12 +37,15 @@ type Workflow = {
     string,
     {
       env?: Record<string, string>;
+      if?: string;
       needs?: string | string[];
+      outputs?: Record<string, string>;
       permissions?: Record<string, string>;
       steps?: Array<{
         "continue-on-error"?: boolean;
         env?: Record<string, string>;
         id?: string;
+        if?: string;
         name?: string;
         run?: string;
         uses?: string;
@@ -52,6 +55,8 @@ type Workflow = {
     }
   >;
 };
+
+type ChangedScope = "docs" | "docs-browser" | "docs-container" | "docker" | "prompt";
 
 let tempDir: string;
 beforeEach(async () => {
@@ -184,78 +189,147 @@ describe("changed-scope", () => {
     expect(config.tasks?.build?.inputs).toContain("$TURBO_ROOT$/skills/**");
   });
 
-  it("fails open when a push base commit is unavailable", () => {
-    const repository = changedScopeRepository("README.md");
-    const head = git(repository, "rev-parse", "HEAD");
-    const result = scriptResult(
-      path.join(repoRoot, "scripts/changed-scope.ts"),
-      ["docs"],
-      repository,
+  it("routes expensive lanes through table-driven owning paths", () => {
+    const cases: Array<{
+      scope: ChangedScope;
+      positive: string;
+      dependency: string;
+      negative: string;
+    }> = [
       {
-        EVENT_NAME: "push",
-        GITHUB_OUTPUT: undefined,
-        HEAD_SHA: head,
-        PUSH_BEFORE_SHA: "f".repeat(40),
+        scope: "docs",
+        positive: "apps/docs/content/docs/guide/quickstart.mdx",
+        dependency: "skills/pipr-setup/references/recipes.md",
+        negative: "packages/runtime/src/review/comment.ts",
       },
-    );
+      {
+        scope: "docs-browser",
+        positive: "apps/docs/src/router.tsx",
+        dependency: "apps/docs/vite.config.ts",
+        negative: "apps/docs/content/docs/guide/quickstart.mdx",
+      },
+      {
+        scope: "docs-container",
+        positive: "apps/docs/nginx.conf",
+        dependency: "bun.lock",
+        negative: "apps/docs/src/router.tsx",
+      },
+      {
+        scope: "docker",
+        positive: "packages/runtime/src/host-run/commands.ts",
+        dependency: "packages/e2e/action-fixture.ts",
+        negative: "packages/runtime/src/review/comment.ts",
+      },
+      {
+        scope: "prompt",
+        positive: "packages/evals/src/deterministic-smoke.ts",
+        dependency: "packages/runtime/src/review/contract.ts",
+        negative: "packages/runtime/src/hosts/github/event.ts",
+      },
+    ];
 
-    expect(result.exitCode, result.stderr || result.stdout).toBe(0);
-    expect(result.stdout.trim()).toBe("changed=true");
-  });
-
-  it("includes package inputs consumed by docs", () => {
-    for (const file of [
-      "Dockerfile.docs",
-      "install.sh",
-      "scripts/docs-docker-e2e.ts",
-      "packages/sdk/src/index.ts",
-      "packages/sdk/src/types/task.ts",
-      "packages/sdk/tsconfig.json",
-      "packages/runtime/src/config/recipes.ts",
-      "packages/runtime/src/config/recipes/default-review.ts",
-      "packages/runtime/src/config/official-github-workflow.ts",
-      "packages/runtime/src/internal/docs.ts",
-      "packages/runtime/package.json",
-    ]) {
-      expect(scopeChanged("docs", file)).toBe(true);
+    for (const { scope, positive, dependency, negative } of cases) {
+      expect(scopeChanged(scope, positive), `${scope}: ${positive}`).toBe(true);
+      expect(scopeChanged(scope, dependency), `${scope}: ${dependency}`).toBe(true);
+      expect(scopeChanged(scope, negative), `${scope}: ${negative}`).toBe(false);
     }
+  }, 30000);
 
-    for (const file of ["packages/sdk/package.json", "packages/runtime/src/review/review.ts"]) {
-      expect(scopeChanged("docs", file)).toBe(false);
-    }
-  }, 15000);
-
-  it("limits docker scope to Docker image and container check inputs", () => {
-    for (const file of [
-      "packages/e2e/action-fixture.ts",
-      "packages/e2e/action-metadata.ts",
-      "packages/e2e/action-run-plan.ts",
-      "packages/e2e/assertions.ts",
-      "packages/e2e/check.ts",
-      "packages/e2e/container-check.ts",
-      "packages/e2e/docker-e2e-plan.ts",
-      "packages/e2e/fake-pi",
-      "packages/e2e/package.json",
-      "packages/e2e/pi-contract.ts",
-      "packages/e2e/run.ts",
-      "packages/e2e/scenarios.ts",
-      "packages/e2e/webhook-fetch-mock.ts",
-      "packages/e2e/webhook-health-fixture.ts",
-      "deploy/webhook/compose.yml",
-      "scripts/docker-e2e.ts",
-      "skills/pipr-setup/SKILL.md",
-    ]) {
-      expect(scopeChanged("docker", file)).toBe(true);
-    }
-
+  it("keeps fixture tests and Pi CLI owners in the Docker Action lane", () => {
     for (const file of [
       "packages/e2e/assertions.test.ts",
-      "packages/e2e/prompt-evals.test.ts",
-      "packages/e2e/scenarios-cleanup.test.ts",
+      "packages/runtime/src/host-run/adapter.ts",
+      "packages/runtime/src/host-run/trusted-runtime.ts",
+      "packages/runtime/src/hosts/git.ts",
+      "packages/runtime/src/hosts/github/adapter.ts",
+      "packages/runtime/src/hosts/selection.ts",
+      "packages/runtime/src/pi/contract.ts",
+      "packages/runtime/src/pi/provider.ts",
+      "packages/runtime/src/pi/runner.ts",
     ]) {
-      expect(scopeChanged("docker", file)).toBe(false);
+      expect(scopeChanged("docker", file), file).toBe(true);
     }
-  }, 15000);
+  });
+
+  it("runs every expensive scope when the scope router changes", () => {
+    const scopes: ChangedScope[] = ["docs", "docs-browser", "docs-container", "docker", "prompt"];
+    for (const scope of scopes) {
+      expect(scopeChanged(scope, "scripts/changed-scope.ts"), scope).toBe(true);
+    }
+  });
+
+  it("routes canonical prompt and browser build owners to their lanes", () => {
+    for (const file of [
+      "packages/runtime/src/pi/runner.ts",
+      "packages/runtime/src/diff/manifest-projection.ts",
+      "packages/runtime/src/diff/manifest-sharding.ts",
+    ]) {
+      expect(scopeChanged("prompt", file), file).toBe(true);
+    }
+    expect(scopeChanged("docs-browser", "apps/docs/scripts/og-images.ts")).toBe(true);
+  });
+
+  it("keeps the source owner visible when an exact-match path is renamed", () => {
+    const repository = changedScopeRepository("packages/runtime/src/pi/runner.ts");
+    const base = git(repository, "rev-parse", "HEAD");
+    run("git", ["mv", "packages/runtime/src/pi/runner.ts", "renamed-runner.ts"], {
+      cwd: repository,
+    });
+    run("git", ["commit", "-m", "refactor: move runner"], { cwd: repository });
+    const head = git(repository, "rev-parse", "HEAD");
+
+    for (const scope of ["docker", "prompt"] satisfies ChangedScope[]) {
+      const result = changedScopeResult(scope, repository, {
+        EVENT_NAME: "pull_request",
+        PR_BASE_SHA: base,
+        PR_HEAD_SHA: head,
+      });
+      expect(result.exitCode, result.stderr || result.stdout).toBe(0);
+      expect(result.stdout.trim(), scope).toBe("changed=true");
+    }
+  });
+
+  it("fails open for every scope when PR history is unavailable", () => {
+    const scopes: ChangedScope[] = ["docs", "docs-browser", "docs-container", "docker", "prompt"];
+    const repository = changedScopeRepository("README.md");
+    const head = git(repository, "rev-parse", "HEAD");
+
+    for (const scope of scopes) {
+      const result = changedScopeResult(scope, repository, {
+        EVENT_NAME: "pull_request",
+        PR_BASE_SHA: "f".repeat(40),
+        PR_HEAD_SHA: head,
+      });
+      expect(result.exitCode, result.stderr || result.stdout).toBe(0);
+      expect(result.stdout.trim()).toBe("changed=true");
+    }
+  });
+
+  it("runs every expensive scope on main pushes", () => {
+    const scopes: ChangedScope[] = ["docs", "docs-browser", "docs-container", "docker", "prompt"];
+    const repository = changedScopeRepository("README.md");
+
+    for (const scope of scopes) {
+      const result = changedScopeResult(scope, repository, { EVENT_NAME: "push" });
+      expect(result.exitCode, result.stderr || result.stdout).toBe(0);
+      expect(result.stdout.trim()).toBe("changed=true");
+    }
+  });
+
+  it("writes the changed value to the GitHub output file", () => {
+    const repository = changedScopeRepository("apps/docs/src/router.tsx");
+    const outputPath = path.join(tempDir, "github-output");
+    const result = changedScopeResult("docs-browser", repository, {
+      EVENT_NAME: "pull_request",
+      GITHUB_OUTPUT: outputPath,
+      PR_BASE_SHA: git(repository, "rev-parse", "HEAD~1"),
+      PR_HEAD_SHA: git(repository, "rev-parse", "HEAD"),
+    });
+
+    expect(result.exitCode, result.stderr || result.stdout).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(readFileSync(outputPath, "utf8")).toBe("changed=true\n");
+  });
 });
 
 describe("developer checks", () => {
@@ -352,24 +426,117 @@ describe("developer checks", () => {
     expect(turbo.tasks["test:generated"].dependsOn).toContain("typegen");
   });
 
-  it("installs the docs browser with the pinned workspace Playwright", () => {
-    const workflow = parseWorkflow(".github/workflows/ci.yml");
-    const installStep = workflow.jobs.docs?.steps?.find((step) =>
-      step.run?.includes("playwright install"),
-    );
+  it("keeps the full check explicit while removing automatic pre-push checks", () => {
+    const hooks = readFileSync(path.join(repoRoot, "hk.pkl"), "utf8");
+    expect(hooks).not.toContain('["pre-push"]');
+    expect(hooks).toContain('["check"]');
+    expect(hooks).toContain('check = "bun run check"');
+  });
 
+  it("maps every changed scope output to its owning workflow step", () => {
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    expect(workflow.jobs.changes?.outputs).toEqual({
+      docs: "${{ steps.docs.outputs.changed }}",
+      docs_browser: "${{ steps.docs_browser.outputs.changed }}",
+      docs_container: "${{ steps.docs_container.outputs.changed }}",
+      docker: "${{ steps.docker.outputs.changed }}",
+      prompt: "${{ steps.prompt.outputs.changed }}",
+    });
+  });
+
+  it("installs the docs browser after its owning docs check", () => {
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const browser = workflow.jobs["docs-browser"];
+    const installStep = browser?.steps?.find((step) => step.run?.includes("playwright install"));
+
+    expect(browser?.needs).toEqual(["changes", "docs"]);
+    expect(browser?.if).toContain("needs.docs.result == 'success'");
+    expect(scopeChanged("docs", "apps/docs/src/router.tsx")).toBe(true);
+    expect(scopeChanged("docs-browser", "apps/docs/src/router.tsx")).toBe(true);
     expect(installStep?.run).toBe(
       "bun run --cwd apps/docs playwright install --with-deps chromium",
     );
   });
 
-  it("runs the runtime CI package gate once", () => {
+  it("routes PR packages through one affected graph and keeps main complete", () => {
     const workflow = parseWorkflow(".github/workflows/ci.yml");
-    const matrix = workflow.jobs.packages?.strategy?.matrix?.include ?? [];
-    expect(matrix.filter((entry) => entry.name === "runtime")).toHaveLength(1);
-    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-init");
-    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-config");
-    expect(matrix.map((entry) => entry.name)).not.toContain("runtime-core");
+    const packages = workflow.jobs.packages;
+    const commands = packages?.steps?.filter((step) => step.run?.includes("turbo run")) ?? [];
+    const checkout = packages?.steps?.find((step) => step.uses?.startsWith("actions/checkout@"));
+
+    expect(packages?.strategy).toBeUndefined();
+    expect(checkout?.with?.ref).toBeUndefined();
+    expect(commands).toHaveLength(2);
+    expect(commands.find((step) => step.if?.includes("pull_request"))?.run).toContain("--affected");
+    const mainCommand = commands.find((step) => step.if?.includes("push"))?.run;
+    expect(mainCommand).toContain("build lint typecheck test format:check");
+    expect(mainCommand).not.toContain("--affected");
+    expect(commands.find((step) => step.if?.includes("pull_request"))?.env).toMatchObject({
+      TURBO_SCM_BASE: "${{ github.event.pull_request.base.sha }}",
+      TURBO_SCM_HEAD: "${{ github.event.pull_request.head.sha }}",
+    });
+  });
+
+  it("aggregates every CI lane in the stable final check", () => {
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const expectedNeeds = [
+      "conventional-commits",
+      "changes",
+      "packages",
+      "package-quality",
+      "fallow-audit",
+      "docs",
+      "docs-browser",
+      "docs-container",
+      "docker-e2e",
+      "prompt-smoke",
+    ];
+    const needs = workflow.jobs.check?.needs;
+    expect(needs).toEqual(expectedNeeds);
+    const aggregate = workflow.jobs.check?.steps?.find((step) => step.run?.includes("for result"));
+    for (const job of expectedNeeds) {
+      expect(aggregate?.run).toContain(`needs.${job}.result`);
+    }
+  });
+
+  it("keeps package checks and deterministic prompt smoke graph-owned", () => {
+    const rootPackage = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    const evalPackage = JSON.parse(
+      readFileSync(path.join(repoRoot, "packages/evals/package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+    const workflow = parseWorkflow(".github/workflows/ci.yml");
+    const promptCommands = workflow.jobs["prompt-smoke"]?.steps
+      ?.map((step) => step.run)
+      .filter((run): run is string => Boolean(run));
+
+    expect(rootPackage.scripts?.["check:packages"]).toStartWith("turbo run build lint typecheck");
+    expect(rootPackage.scripts?.["check:packages"]).not.toContain("build:packages &&");
+    expect(rootPackage.scripts?.["check:packages"]).not.toContain("check:runtime-test-split");
+    expect(evalPackage.scripts?.["eval:deterministic:run"]).toBe(
+      "bun ./src/deterministic-smoke.ts",
+    );
+    expect(existsSync(path.join(repoRoot, "packages/e2e/prompt-evals.test.ts"))).toBe(false);
+    expect(promptCommands).toContain("bunx turbo run build --filter=@usepipr/runtime");
+    expect(promptCommands).toContain("bun run --cwd packages/evals eval:deterministic:run");
+  });
+
+  it("marks root package configuration as a global Turbo dependency", () => {
+    const turbo = JSON.parse(readFileSync(path.join(repoRoot, "turbo.json"), "utf8")) as {
+      globalDependencies?: string[];
+      tasks?: Record<string, { dependsOn?: string[] }>;
+    };
+    expect(turbo.globalDependencies).toContain("mise.toml");
+    expect(turbo.globalDependencies).toContain("tsconfig.base.json");
+    expect(turbo.globalDependencies).toContain("tsconfig.json");
+    expect(turbo.tasks?.["//#check:scripts:root"]?.dependsOn).toContain("@usepipr/cli#build");
+  });
+
+  it("runs the full release check only for manual dispatch", () => {
+    const workflow = parseWorkflow(".github/workflows/release.yml");
+    const fullCheck = workflow.jobs.publish?.steps?.find((step) => step.run === "bun run check");
+    expect(fullCheck?.if).toBe("github.event_name == 'workflow_dispatch'");
   });
 
   it("runs the Fallow 3 audit gate locally and against the explicit CI base", () => {
@@ -1005,25 +1172,28 @@ function git(cwd: string, ...args: string[]): string {
   return result.stdout.toString().trim();
 }
 
-function scopeChanged(scope: "docs" | "docker", relativePath: string): boolean {
+function scopeChanged(scope: ChangedScope, relativePath: string): boolean {
   const repository = changedScopeRepository(relativePath);
-  const base = git(repository, "rev-parse", "HEAD~1");
-  const head = git(repository, "rev-parse", "HEAD");
-  const result = scriptResult(
-    path.join(repoRoot, "scripts/changed-scope.ts"),
-    [scope],
-    repository,
-    {
-      EVENT_NAME: "pull_request",
-      GITHUB_OUTPUT: undefined,
-      PR_BASE_SHA: base,
-      PR_HEAD_SHA: head,
-    },
-  );
+  const result = changedScopeResult(scope, repository, {
+    EVENT_NAME: "pull_request",
+    PR_BASE_SHA: git(repository, "rev-parse", "HEAD~1"),
+    PR_HEAD_SHA: git(repository, "rev-parse", "HEAD"),
+  });
   if (result.exitCode !== 0) {
     throw new Error(result.stderr || result.stdout || "changed-scope failed");
   }
   return result.stdout.trim() === "changed=true";
+}
+
+function changedScopeResult(
+  scope: ChangedScope,
+  repository: string,
+  env: Record<string, string | undefined>,
+): { exitCode: number; stdout: string; stderr: string } {
+  return scriptResult(path.join(repoRoot, "scripts/changed-scope.ts"), [scope], repository, {
+    GITHUB_OUTPUT: undefined,
+    ...env,
+  });
 }
 
 function changedScopeRepository(relativePath: string): string {

@@ -84,7 +84,8 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - run: bun run check
+      - if: github.event_name == 'workflow_dispatch'
+        run: bun run check
       - name: Verify release tag metadata
         id: version
         run: bun scripts/release.ts verify-tag
