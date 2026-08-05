@@ -269,6 +269,16 @@ describe("changed-scope", () => {
 });
 
 describe("developer checks", () => {
+  it("selects only root script tests", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+
+    expect(rootPackageJson.scripts?.["check:scripts:root"]).toBe(
+      "bun test ./scripts/tests/*.test.ts",
+    );
+  });
+
   it("uses TypeScript 7 directly while keeping the TypeScript 6 API scoped to embedded tools", () => {
     const rootPackageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "package.json"), "utf8"),
@@ -865,16 +875,22 @@ describe("check-release-metadata", () => {
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
 
-  it("rejects published package dependency drift from the root catalog", () => {
-    const repository = copyRepositoryFixture();
-    const packagePath = path.join(repository, "packages/sdk/package.json");
-    const pkg = JSON.parse(readFileSync(packagePath, "utf8")) as {
-      dependencies: Record<string, string>;
-    };
-    pkg.dependencies.zod = "0.0.0";
-    write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+  it("keeps package Zod versions exact without a root catalog entry", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as { catalog?: Record<string, string> };
 
-    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
+    expect(rootPackageJson.catalog?.zod).toBeUndefined();
+    for (const packagePath of [
+      "packages/sdk/package.json",
+      "packages/runtime/package.json",
+      "packages/evals/package.json",
+    ]) {
+      const pkg = JSON.parse(readFileSync(path.join(repoRoot, packagePath), "utf8")) as {
+        dependencies?: Record<string, string>;
+      };
+      expect(pkg.dependencies?.zod).toBe("4.4.3");
+    }
   });
 
   it("rejects a registry runtime dependency in the private docs workspace", () => {

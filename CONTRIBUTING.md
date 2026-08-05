@@ -28,9 +28,9 @@ workflow fixtures, Pi CLI mapping, or GitHub pull request event handling:
 mise run check-actions
 ```
 
-Use narrower package commands while developing when they prove the change. See
-[Development](apps/docs/content/docs/reference/development.mdx) for local e2e,
-release, docs, and Docker workflow details.
+Use narrower package commands while developing when they prove the change. Choose
+commands from the canonical table in [AGENTS.md](AGENTS.md). For local Action,
+Docker, and fixture details, see the [e2e harness guide](packages/e2e/README.md).
 
 ## Remote cache
 
@@ -79,7 +79,9 @@ Keep `README.md` user-facing. Put docs content in the narrowest matching place:
 | First-run and product overview | `README.md` and `apps/docs/content/docs/index.mdx` |
 | Configuration examples | `apps/docs/content/docs/guide/configuration.mdx` |
 | GitHub Action usage | `apps/docs/content/docs/guide/github-action.mdx` |
-| Maintainer workflows | `apps/docs/content/docs/reference/development.mdx` |
+| Contribution policy and setup | `CONTRIBUTING.md` |
+| Focused command selection | `AGENTS.md` |
+| Local Action and Docker checks | `packages/e2e/README.md` |
 | Durable architecture decisions | `docs/adr` |
 | Product vocabulary | `docs/CONTEXT.md` |
 
