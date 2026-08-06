@@ -103,7 +103,7 @@ describe("pipr CLI", () => {
   it("uses injected cwd and env for check and inspect", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-context-"));
     try {
-      await initializeInProcess(workspace);
+      await initializeWorkspace(workspace);
       const check = await runInProcess(
         ["check", "--require-env"],
         { DEEPSEEK_API_KEY: "provider-key" },
@@ -398,8 +398,8 @@ function parseGitHubOutputRecords(source: string): Record<string, string> {
   return records;
 }
 
-async function initializeInProcess(workspace: string): Promise<void> {
-  const result = await runInProcess(["init"], {}, workspace);
+async function initializeWorkspace(workspace: string): Promise<void> {
+  const result = await runCli(["init"], {}, workspace);
   if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout);
 }
 
@@ -408,7 +408,7 @@ async function createLocalReviewWorkspace(
 ): Promise<{ rootDir: string; baseSha: string; headSha: string; piExecutable: string }> {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-review-"));
   await initializeGitRepository(rootDir);
-  await initializeInProcess(rootDir);
+  await initializeWorkspace(rootDir);
   await mkdir(path.join(rootDir, "src"));
   await Bun.write(path.join(rootDir, "src/a.ts"), "export const value = 1;\n");
   await runCommand("git", ["add", "."], rootDir);
@@ -434,7 +434,7 @@ async function runHostRunWithGitWorkspace(options: {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-host-"));
   try {
     await initializeGitRepository(workspace);
-    await initializeInProcess(workspace);
+    await initializeWorkspace(workspace);
     await mkdir(path.join(workspace, "src"));
     await Bun.write(path.join(workspace, "src/a.ts"), "export const value = 1;\n");
     await runCommand("git", ["add", "."], workspace);
