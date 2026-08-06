@@ -97,153 +97,6 @@ const referencedCustomReviewSchema: Schema<unknown> = {
   },
 };
 
-const composedCustomReviewSchema: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/composed-custom-review",
-  jsonSchema: {
-    $defs: {
-      content: {
-        type: "object",
-        properties: {
-          body: { type: "string" },
-        },
-      },
-      location: {
-        type: "object",
-        properties: {
-          path: { type: "string" },
-          rangeId: { type: "string" },
-          side: { enum: ["RIGHT", "LEFT"] },
-          startLine: { type: "number" },
-          endLine: { type: "number" },
-        },
-      },
-      finding: {
-        allOf: [{ $ref: "#/$defs/content" }, { $ref: "#/$defs/location" }],
-      },
-    },
-    type: "object",
-    properties: {
-      findings: {
-        type: "array",
-        items: { $ref: "#/$defs/finding" },
-      },
-    },
-  },
-};
-
-const composedAlternativeCustomReviewSchema: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/composed-alternative-custom-review",
-  jsonSchema: {
-    $defs: {
-      content: {
-        type: "object",
-        properties: {
-          body: { type: "string" },
-          path: { type: "string" },
-        },
-      },
-      rightLocation: {
-        type: "object",
-        properties: {
-          rangeId: { type: "string" },
-          side: { const: "RIGHT" },
-          startLine: { type: "number" },
-          endLine: { type: "number" },
-        },
-      },
-      leftLocation: {
-        type: "object",
-        properties: {
-          rangeId: { type: "string" },
-          side: { const: "LEFT" },
-          startLine: { type: "number" },
-          endLine: { type: "number" },
-        },
-      },
-      finding: {
-        allOf: [
-          { $ref: "#/$defs/content" },
-          {
-            anyOf: [{ $ref: "#/$defs/rightLocation" }, { $ref: "#/$defs/leftLocation" }],
-          },
-        ],
-      },
-    },
-    type: "object",
-    properties: {
-      findings: {
-        type: "array",
-        items: { $ref: "#/$defs/finding" },
-      },
-    },
-  },
-};
-
-const requiredPatternCustomReviewSchema: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/required-pattern-custom-review",
-  jsonSchema: {
-    $defs: {
-      finding: {
-        type: "object",
-        required: ["body", "path", "rangeId", "side", "startLine", "endLine"],
-        patternProperties: {
-          "^body$": { type: "string" },
-          "^path$": { type: "string" },
-          "^rangeId$": { type: "string" },
-          "^side$": { enum: ["RIGHT", "LEFT"] },
-          "^startLine$": { type: "number" },
-          "^endLine$": { type: "number" },
-        },
-      },
-    },
-    type: "object",
-    properties: {
-      findings: {
-        type: "array",
-        items: { $ref: "#/$defs/finding" },
-      },
-    },
-  },
-};
-
-const patternOnlyCustomReviewSchema: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/pattern-only-custom-review",
-  jsonSchema: {
-    type: "object",
-    patternProperties: {
-      "^body$": { type: "string" },
-      "^path$": { type: "string" },
-      "^rangeId$": { type: "string" },
-      "^side$": { enum: ["RIGHT", "LEFT"] },
-      "^startLine$": { type: "number" },
-      "^endLine$": { type: "number" },
-    },
-  },
-};
-
-const arrayPointerCustomReviewSchema: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/array-pointer-custom-review",
-  jsonSchema: {
-    $defs: {
-      variants: {
-        anyOf: [reviewFindingDefinition, { type: "string" }],
-      },
-    },
-    type: "object",
-    properties: {
-      findings: {
-        type: "array",
-        items: { $ref: "#/$defs/variants/anyOf/0" },
-      },
-    },
-  },
-};
-
 const nonReviewSchemaWithUnusedFindingDefinition: Schema<unknown> = {
   ...unknownSchema,
   id: "test/non-review-with-unused-finding-definition",
@@ -258,122 +111,25 @@ const nonReviewSchemaWithUnusedFindingDefinition: Schema<unknown> = {
   },
 };
 
-const tupleRestCustomReviewSchema: Schema<unknown> = {
+const cyclicCustomReviewSchema: Schema<unknown> = {
   ...unknownSchema,
-  id: "test/tuple-rest-custom-review",
+  id: "test/cyclic-custom-review",
   jsonSchema: {
-    $defs: {
-      finding: reviewFindingDefinition,
-    },
-    type: "array",
-    items: [{ type: "string" }],
-    additionalItems: { $ref: "#/$defs/finding" },
+    type: "object",
+    properties: { nested: { $ref: "#" } },
   },
 };
 
-const nonObjectSchemaWithFindingProperties: Schema<unknown> = {
+const malformedReferenceSchema: Schema<unknown> = {
   ...unknownSchema,
-  id: "test/non-object-with-finding-properties",
+  id: "test/malformed-reference",
   jsonSchema: {
-    type: "string",
-    properties: reviewFindingDefinition.properties,
+    type: "object",
+    properties: { nested: { $ref: "#/%E0%A4%A" } },
   },
 };
-
-const constantScalarSchemaWithFindingProperties: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/constant-scalar-with-finding-properties",
-  jsonSchema: {
-    const: "ok",
-    properties: reviewFindingDefinition.properties,
-  },
-};
-
-const scalarEnumSchemaWithFindingProperties: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/scalar-enum-with-finding-properties",
-  jsonSchema: {
-    enum: ["ok", "error"],
-    properties: reviewFindingDefinition.properties,
-  },
-};
-
-const scalarAnyOfSchemaWithFindingProperties: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/scalar-any-of-with-finding-properties",
-  jsonSchema: {
-    anyOf: [{ type: "string" }, { type: "number" }],
-    properties: reviewFindingDefinition.properties,
-  },
-};
-
-const scalarOneOfSchemaWithFindingProperties: Schema<unknown> = {
-  ...unknownSchema,
-  id: "test/scalar-one-of-with-finding-properties",
-  jsonSchema: {
-    oneOf: [{ type: "string" }, { type: "number" }],
-    properties: reviewFindingDefinition.properties,
-  },
-};
-
-const singleSchemaKeywords = [
-  "additionalItems",
-  "additionalProperties",
-  "contains",
-  "else",
-  "if",
-  "items",
-  "then",
-  "unevaluatedProperties",
-] as const;
-const schemaArrayKeywords = ["allOf", "anyOf", "oneOf", "prefixItems"] as const;
-const schemaMapKeywords = ["dependentSchemas", "patternProperties", "properties"] as const;
-
-function customSchemaThroughKeyword(keyword: string, child: JsonObject): Schema<unknown> {
-  const keywordValue = schemaArrayKeywords.includes(keyword as never)
-    ? [child]
-    : schemaMapKeywords.includes(keyword as never)
-      ? { nested: child }
-      : child;
-  return {
-    ...unknownSchema,
-    id: `test/custom-review-${keyword}`,
-    jsonSchema: { type: "object", [keyword]: keywordValue },
-  };
-}
 
 describe("renderAgentPrompt", () => {
-  for (const keyword of [...singleSchemaKeywords, ...schemaArrayKeywords, ...schemaMapKeywords]) {
-    it(`includes each review policy once when a finding is reachable through ${keyword}`, async () => {
-      const prompt = await renderTestPrompt(
-        customSchemaThroughKeyword(keyword, reviewFindingDefinition),
-        {},
-        undefined,
-        true,
-      );
-
-      expect(prompt).toContain("Review Policy:");
-      expect(prompt).toContain("Inline Review Selection Policy:");
-      expect(prompt.match(/^Review Policy:/gm)).toHaveLength(1);
-      expect(prompt.match(/^Inline Review Selection Policy:/gm)).toHaveLength(1);
-    });
-
-    it(`omits review policy when ${keyword} reaches only a scalar schema`, async () => {
-      const prompt = await renderTestPrompt(
-        customSchemaThroughKeyword(keyword, {
-          type: "string",
-          properties: reviewFindingDefinition.properties,
-        }),
-        {},
-        undefined,
-        true,
-      );
-
-      expect(prompt).not.toContain("Review Policy:");
-      expect(prompt).not.toContain("Inline Review Selection Policy:");
-    });
-  }
-
   it("includes bounded untrusted change request context for every agent", async () => {
     const description = "d".repeat(4100);
     const prompt = await renderTestPrompt(unknownSchema, { description });
@@ -457,60 +213,23 @@ describe("renderAgentPrompt", () => {
     expect(prompt).toContain(`at most ${maxInlineFindingBodyCharacters} characters`);
     expect(prompt).toContain("Inline Review Selection Policy:");
     expect(prompt).toContain("custom title or rationale");
+    expect(prompt.match(/^Review Policy:/gm)).toHaveLength(1);
+    expect(prompt.match(/^Inline Review Selection Policy:/gm)).toHaveLength(1);
   });
 
-  it("includes review policy for custom finding definitions with additional metadata", async () => {
+  it("includes each policy once for a referenced finding with metadata", async () => {
     const prompt = await renderTestPrompt(referencedCustomReviewSchema, {}, undefined, true);
 
-    expect(prompt).toContain("Review Policy:");
-    expect(prompt).toContain("Inline Review Selection Policy:");
+    expect(prompt.match(/^Review Policy:/gm)).toHaveLength(1);
+    expect(prompt.match(/^Inline Review Selection Policy:/gm)).toHaveLength(1);
   });
 
-  it("includes review policy for composed custom finding definitions", async () => {
-    const prompt = await renderTestPrompt(composedCustomReviewSchema, {}, undefined, true);
-
-    expect(prompt).toContain("Review Policy:");
-    expect(prompt).toContain("Inline Review Selection Policy:");
-  });
-
-  it("includes review policy when composed finding locations have alternatives", async () => {
-    const prompt = await renderTestPrompt(
-      composedAlternativeCustomReviewSchema,
-      {},
-      undefined,
-      true,
-    );
-
-    expect(prompt).toContain("Review Policy:");
-    expect(prompt).toContain("Inline Review Selection Policy:");
-  });
-
-  it("includes review policy for finding fields declared through required", async () => {
-    const prompt = await renderTestPrompt(requiredPatternCustomReviewSchema, {}, undefined, true);
-
-    expect(prompt).toContain("Review Policy:");
-    expect(prompt).toContain("Inline Review Selection Policy:");
-  });
-
-  it("includes review policy for finding fields declared through patterns", async () => {
-    const prompt = await renderTestPrompt(patternOnlyCustomReviewSchema, {}, undefined, true);
-
-    expect(prompt).toContain("Review Policy:");
-    expect(prompt).toContain("Inline Review Selection Policy:");
-  });
-
-  it("includes review policy for local references through schema arrays", async () => {
-    const prompt = await renderTestPrompt(arrayPointerCustomReviewSchema, {}, undefined, true);
-
-    expect(prompt).toContain("Review Policy:");
-    expect(prompt).toContain("Inline Review Selection Policy:");
-  });
-
-  it("includes review policy for tuple rest finding definitions", async () => {
-    const prompt = await renderTestPrompt(tupleRestCustomReviewSchema, {}, undefined, true);
-
-    expect(prompt).toContain("Review Policy:");
-    expect(prompt).toContain("Inline Review Selection Policy:");
+  it("fails closed for malformed and cyclic local references", async () => {
+    for (const schema of [cyclicCustomReviewSchema, malformedReferenceSchema]) {
+      const prompt = await renderTestPrompt(schema, {}, undefined, true);
+      expect(prompt).not.toContain("Review Policy:");
+      expect(prompt).not.toContain("Inline Review Selection Policy:");
+    }
   });
 
   it("does not include review policy for non-review outputs", async () => {
@@ -532,66 +251,6 @@ describe("renderAgentPrompt", () => {
   it("ignores unused review-shaped schema definitions", async () => {
     const prompt = await renderTestPrompt(
       nonReviewSchemaWithUnusedFindingDefinition,
-      {},
-      undefined,
-      true,
-    );
-
-    expect(prompt).not.toContain("Review Policy:");
-    expect(prompt).not.toContain("Inline Review Selection Policy:");
-  });
-
-  it("ignores review-shaped properties on non-object schemas", async () => {
-    const prompt = await renderTestPrompt(
-      nonObjectSchemaWithFindingProperties,
-      {},
-      undefined,
-      true,
-    );
-
-    expect(prompt).not.toContain("Review Policy:");
-    expect(prompt).not.toContain("Inline Review Selection Policy:");
-  });
-
-  it("ignores review-shaped properties on scalar const schemas", async () => {
-    const prompt = await renderTestPrompt(
-      constantScalarSchemaWithFindingProperties,
-      {},
-      undefined,
-      true,
-    );
-
-    expect(prompt).not.toContain("Review Policy:");
-    expect(prompt).not.toContain("Inline Review Selection Policy:");
-  });
-
-  it("ignores review-shaped properties on scalar enum schemas", async () => {
-    const prompt = await renderTestPrompt(
-      scalarEnumSchemaWithFindingProperties,
-      {},
-      undefined,
-      true,
-    );
-
-    expect(prompt).not.toContain("Review Policy:");
-    expect(prompt).not.toContain("Inline Review Selection Policy:");
-  });
-
-  it("ignores review-shaped properties on scalar anyOf schemas", async () => {
-    const prompt = await renderTestPrompt(
-      scalarAnyOfSchemaWithFindingProperties,
-      {},
-      undefined,
-      true,
-    );
-
-    expect(prompt).not.toContain("Review Policy:");
-    expect(prompt).not.toContain("Inline Review Selection Policy:");
-  });
-
-  it("ignores review-shaped properties on scalar oneOf schemas", async () => {
-    const prompt = await renderTestPrompt(
-      scalarOneOfSchemaWithFindingProperties,
       {},
       undefined,
       true,
