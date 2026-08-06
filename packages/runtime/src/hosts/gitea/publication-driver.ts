@@ -23,7 +23,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
     assertCurrent(prepared, expectedHeadSha) {
       return assertCurrentGiteaHead(client, prepared.change, expectedHeadSha);
     },
-    async loadOwnedState(prepared): Promise<LoadedPublicationState> {
+    async loadOwnedState(prepared, mainMarker): Promise<LoadedPublicationState> {
       const coordinates = giteaCoordinates(prepared.change);
       const owner = await client.currentUser();
       const [comments, reviewComments] = await Promise.all([
@@ -41,7 +41,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
       const main = findGiteaMainComment(
         comments,
         owner.login,
-        "pipr:main-comment",
+        mainMarker,
         prepared.change.change.number,
       );
       const owned = reviewComments.filter((comment) => comment.authorLogin === owner.login);
@@ -61,7 +61,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
         threads: giteaThreadContexts(reviewComments, owner.login, true),
       };
     },
-    async loadOwnedMain(prepared) {
+    async loadOwnedMain(prepared, mainMarker) {
       const coordinates = giteaCoordinates(prepared.change);
       const owner = await client.currentUser();
       const main = findGiteaMainComment(
@@ -71,7 +71,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
           prepared.change.change.number,
         ),
         owner.login,
-        "pipr:main-comment",
+        mainMarker,
         prepared.change.change.number,
       );
       return main ? { id: main.id, body: main.body } : undefined;

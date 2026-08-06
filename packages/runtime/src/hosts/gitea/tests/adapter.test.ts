@@ -23,6 +23,28 @@ describe("Gitea-compatible host adapter", () => {
     expect(client.issueComments[0]?.body).toContain("Summary.");
   });
 
+  it("uses the publication plan marker to find the owned main comment", async () => {
+    const client = new FakeGiteaClient();
+    client.issueComments.push({
+      id: "1",
+      body: "<!-- pipr:alternate-main change=7 version=1 -->\nOld summary.",
+      authorLogin: "pipr-bot",
+    });
+    const adapter = createGiteaHostAdapter({ host: "forgejo", client });
+    const defaultPlan = publicationPlan();
+    const plan = {
+      ...defaultPlan,
+      mainMarker: "pipr:alternate-main",
+      mainComment: defaultPlan.mainComment.replace("pipr:main-comment", "pipr:alternate-main"),
+    };
+
+    const result = await adapter.publication?.publish({ change, plan });
+
+    expect(result?.mainComment).toEqual({ id: "1", action: "updated" });
+    expect(client.issueComments).toHaveLength(1);
+    expect(client.issueComments[0]?.body).toContain("Summary.");
+  });
+
   it("publishes each inline finding once at a native single-line position", async () => {
     const client = new FakeGiteaClient();
     const adapter = createGiteaHostAdapter({ host: "forgejo", client });
