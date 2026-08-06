@@ -114,7 +114,6 @@ function createProgram(
   options: { exitOverride?: boolean } = {},
 ): Command {
   const program = new Command();
-  const { env } = context;
   program.name("pipr").version(cliPackage.version).showHelpAfterError();
   if (options.exitOverride) {
     program.exitOverride();
@@ -320,12 +319,14 @@ async function runHostRun(options: CliOptions, context: CliExecutionContext): Pr
     rootDir,
     configDir: options.configDir,
     host: options.host,
-    eventPath:
+    eventPath: resolveCliPath(
+      context.cwd,
       options.event ??
-      env.PIPR_EVENT_PATH ??
-      env.GITEA_EVENT_PATH ??
-      env.FORGEJO_EVENT_PATH ??
-      env.GITHUB_EVENT_PATH,
+        env.PIPR_EVENT_PATH ??
+        env.GITEA_EVENT_PATH ??
+        env.FORGEJO_EVENT_PATH ??
+        env.GITHUB_EVENT_PATH,
+    ),
     env,
     dryRun: env.PIPR_DRY_RUN === "1",
     logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
@@ -403,6 +404,10 @@ function publishGitHubRunMetadata(
   core.setOutput("run-artifact-name", artifactName);
 }
 
+function resolveCliPath(cwd: string, value: string | undefined): string | undefined {
+  return value === undefined ? undefined : path.resolve(cwd, value);
+}
+
 function hostRunRootDir(context: CliExecutionContext): string {
   return (
     context.env.GITEA_WORKSPACE ??
@@ -423,15 +428,18 @@ async function runWebhookServe(options: CliOptions, context: CliExecutionContext
   const port = webhookPort(options.port);
   await runWebhookServer({
     host,
-    workspace: options.workspace ?? context.cwd,
+    workspace: path.resolve(context.cwd, options.workspace ?? "."),
     configDir: options.configDir,
-    databasePath: options.database ?? ".pipr/webhooks.sqlite",
+    databasePath:
+      options.database === ":memory:"
+        ? options.database
+        : path.resolve(context.cwd, options.database ?? ".pipr/webhooks.sqlite"),
     expectedRepository: options.repository ?? "",
     secret,
     hostname: options.hostname,
     port,
     env: context.env,
-    runStoreDirectory: options.runStoreDir,
+    runStoreDirectory: resolveCliPath(context.cwd, options.runStoreDir),
     runRetentionDays: positiveIntegerOption(options.runRetentionDays, "--run-retention-days"),
     runMaxBytes: positiveIntegerOption(options.runMaxBytes, "--run-max-bytes"),
   });
@@ -803,7 +811,7 @@ async function runDryRun(options: CliOptions, context: CliExecutionContext): Pro
     configDir: options.configDir,
     host: options.host,
     env: context.env,
-    eventPath: options.event,
+    eventPath: path.resolve(context.cwd, options.event),
   });
   writeConfigWarnings(result.warnings);
   console.log(

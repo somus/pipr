@@ -20,7 +20,7 @@ export function schemaHasCanonicalInlineFindingsRoot(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const canonicalRoot = resolveCanonicalRootSchema(value);
   if (
-    !canonicalRoot ||
+    canonicalRoot?.type !== "object" ||
     canonicalRoot.additionalProperties !== false ||
     (isRecord(canonicalRoot.patternProperties) &&
       Object.keys(canonicalRoot.patternProperties).length > 0)
@@ -37,7 +37,7 @@ export function schemaHasCanonicalInlineFindingsRoot(value: unknown): boolean {
   return (
     isRecord(collection) &&
     collection.type === "array" &&
-    reachableSchemaContainsReviewFinding(collection.items, value, new Set())
+    schemaResolvesToReviewFinding(collection.items, value, new Set())
   );
 }
 
@@ -78,6 +78,18 @@ function reachableSchemaContainsReviewFinding(
   return properties.some((child) =>
     reachableSchemaContainsReviewFinding(child, rootSchema, visited),
   );
+}
+
+function schemaResolvesToReviewFinding(
+  schema: unknown,
+  rootSchema: Record<string, unknown>,
+  visited: Set<unknown>,
+): boolean {
+  if (!isRecord(schema) || visited.has(schema)) return false;
+  if (schemaDeclaresReviewFinding(schema)) return true;
+  visited.add(schema);
+  const referenced = resolveLocalSchemaReference(rootSchema, schema.$ref);
+  return referenced !== undefined && schemaResolvesToReviewFinding(referenced, rootSchema, visited);
 }
 
 function schemaDeclaresReviewFinding(schema: Record<string, unknown>): boolean {

@@ -97,6 +97,33 @@ const referencedCustomReviewSchema: Schema<unknown> = {
   },
 };
 
+const composedCustomReviewSchema: Schema<unknown> = {
+  ...unknownSchema,
+  id: "test/composed-custom-review",
+  jsonSchema: {
+    $defs: {
+      body: { type: "object", properties: { body: { type: "string" } } },
+      location: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          rangeId: { type: "string" },
+          side: { enum: ["RIGHT", "LEFT"] },
+          startLine: { type: "number" },
+          endLine: { type: "number" },
+        },
+      },
+    },
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: { allOf: [{ $ref: "#/$defs/body" }, { $ref: "#/$defs/location" }] },
+      },
+    },
+  },
+};
+
 const nonReviewSchemaWithUnusedFindingDefinition: Schema<unknown> = {
   ...unknownSchema,
   id: "test/non-review-with-unused-finding-definition",
@@ -222,6 +249,13 @@ describe("renderAgentPrompt", () => {
 
     expect(prompt.match(/^Review Policy:/gm)).toHaveLength(1);
     expect(prompt.match(/^Inline Review Selection Policy:/gm)).toHaveLength(1);
+  });
+
+  it("does not infer findings by merging composed schema branches", async () => {
+    const prompt = await renderTestPrompt(composedCustomReviewSchema, {}, undefined, true);
+
+    expect(prompt).not.toContain("Review Policy:");
+    expect(prompt).not.toContain("Inline Review Selection Policy:");
   });
 
   it("fails closed for malformed and cyclic local references", async () => {

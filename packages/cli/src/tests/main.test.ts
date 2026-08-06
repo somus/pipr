@@ -1,11 +1,12 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { access, chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, chmod, lstat, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import cliPackage from "../../package.json" with { type: "json" };
 import { publishRunBundleMetadata, runMain } from "../runner.js";
-import { containedSkillFilePath } from "../skill-catalog.js";
+import { containedSkillFilePath, readBundledSkillCatalog } from "../skill-catalog.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const cliProjectDir = path.resolve(testDir, "../..");
@@ -35,8 +36,23 @@ describe("pipr CLI", () => {
         },
       );
       const output = await Bun.file(outputPath).text();
-      expect(output).toContain("0123456789abcdef0123456789abcdef");
-      expect(output).toContain("pipr-run-v1-age-pr-42-0123456789abcdef0123456789abcdef");
+      expect(parseGitHubOutputRecords(output)).toEqual({
+        "execution-id": "0123456789abcdef0123456789abcdef",
+        "run-bundle-path": "bundle;%]\n",
+        "run-artifact-name": "pipr-run-v1-age-pr-42-0123456789abcdef0123456789abcdef",
+      });
+
+      await Bun.write(outputPath, "");
+      await publishRunBundleMetadata(
+        {
+          executionId: "fedcba9876543210fedcba9876543210",
+          directory: path.join(workspace, "bundle"),
+          kind: "review",
+          outcome: "succeeded",
+        },
+        { rootDir: workspace, env: {} },
+      );
+      expect(await Bun.file(outputPath).text()).toBe("");
     } finally {
       if (originalOutput === undefined) delete process.env.GITHUB_OUTPUT;
       else process.env.GITHUB_OUTPUT = originalOutput;
@@ -105,6 +121,31 @@ describe("pipr CLI", () => {
     }
   });
 
+  it("uses injected cwd for relative webhook status paths", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-webhook-context-"));
+    const databasePath = path.join(workspace, ".pipr", "webhooks.sqlite");
+    try {
+      await mkdir(path.dirname(databasePath), { recursive: true });
+      const database = new Database(databasePath, { create: true, strict: true });
+      database.exec(`
+        CREATE TABLE webhook_deliveries (
+          id TEXT PRIMARY KEY, host TEXT NOT NULL, payload TEXT,
+          status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      database.close();
+
+      const result = await runInProcess(["webhook", "status", "--json"], {}, workspace);
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({ formatVersion: 1, deliveries: [] });
+    } finally {
+      await removeWorkspace(workspace);
+    }
+  });
+
   it("uses injected cwd and env for local review", async () => {
     const workspace = await createLocalReviewWorkspace();
     try {
@@ -123,7 +164,7 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("uses injected cwd and env for host-run", async () => {
+  it("uses injected cwd and env for host-run with a relative event path", async () => {
     const result = await runHostRunWithGitWorkspace({ inProcess: true });
 
     expect(result.exitCode, result.stderr).toBe(0);
@@ -233,6 +274,44 @@ describe("pipr CLI", () => {
     }
   });
 
+  it("rejects unexpected files from the bundled skill catalog", async () => {
+    const skillsRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-skills-root-"));
+    try {
+      const skillDir = path.join(skillsRoot, "pipr-setup");
+      await mkdir(path.join(skillDir, "references"), { recursive: true });
+      await Bun.write(path.join(skillDir, "SKILL.md"), "---\ndescription: Test skill\n---\n");
+      await Bun.write(path.join(skillDir, "references/config-patterns.md"), "patterns\n");
+      await Bun.write(path.join(skillDir, "references/recipes.md"), "recipes\n");
+      await Bun.write(path.join(skillDir, "notes.txt"), "unexpected\n");
+
+      await expect(readBundledSkillCatalog(skillsRoot)).rejects.toThrow(
+        "pipr-setup bundled files must match the release allowlist",
+      );
+    } finally {
+      await removeWorkspace(skillsRoot);
+    }
+  });
+
+  it("replaces stale skill-cache symlinks without following them", async () => {
+    const cacheDir = await mkdtemp(path.join(os.tmpdir(), "pipr-skill-cache-"));
+    const staleSkillDir = path.join(cacheDir, cliPackage.version, "pipr-setup");
+    const victimPath = path.join(cacheDir, "victim.txt");
+    try {
+      await mkdir(staleSkillDir, { recursive: true });
+      await Bun.write(victimPath, "do not overwrite\n");
+      await symlink(victimPath, path.join(staleSkillDir, "SKILL.md"));
+
+      const result = await runCli(["skill", "path"], { PIPR_SKILL_CACHE_DIR: cacheDir });
+      const skillPath = result.stdout.trim();
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(await Bun.file(victimPath).text()).toBe("do not overwrite\n");
+      expect((await lstat(path.join(skillPath, "SKILL.md"))).isSymbolicLink()).toBe(false);
+    } finally {
+      await removeWorkspace(cacheDir);
+    }
+  });
+
   it("rejects self-update when running from source", async () => {
     const result = await runCli(["update"]);
 
@@ -302,6 +381,23 @@ describe("pipr CLI", () => {
   });
 });
 
+function parseGitHubOutputRecords(source: string): Record<string, string> {
+  const lines = source.split("\n");
+  const records: Record<string, string> = {};
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(?<name>[^<]+)<<(?<delimiter>.+)$/.exec(lines[index] ?? "");
+    if (!match?.groups) continue;
+    const values: string[] = [];
+    index += 1;
+    while (index < lines.length && lines[index] !== match.groups.delimiter) {
+      values.push(lines[index] ?? "");
+      index += 1;
+    }
+    records[match.groups.name ?? ""] = values.join("\n");
+  }
+  return records;
+}
+
 async function initializeInProcess(workspace: string): Promise<void> {
   const result = await runInProcess(["init"], {}, workspace);
   if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout);
@@ -361,7 +457,13 @@ async function runHostRunWithGitWorkspace(options: {
       GITHUB_WORKSPACE: workspace,
       ...(options.githubActions ? { GITHUB_ACTIONS: "true" } : {}),
     };
-    const args = ["host-run", "--host", "github", "--event", eventPath];
+    const args = [
+      "host-run",
+      "--host",
+      "github",
+      "--event",
+      options.inProcess ? path.basename(eventPath) : eventPath,
+    ];
     const result = options.inProcess
       ? await runInProcess(args, env, workspace)
       : await runCli(args, env, workspace);

@@ -509,7 +509,7 @@ Use `pipr.schemas.review` when an agent directly returns publishable Inline Revi
 
 Custom output receives review guidance when a reachable `properties` or `items` path contains one object that directly declares `body`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. Pipr follows local `$ref` links used by generated first-party schemas, but it does not infer findings by merging fields across conditional, alternative, pattern, or tuple schemas.
 
-Automatic large-diff splitting requires a closed root object whose only required property is `inlineFindings`, with that property defined as an array of the supported finding object. Pipr honors the array's integer `maxItems`; custom output with any other root shape runs once.
+Automatic large-diff splitting requires a closed root object whose only declared and required property is `inlineFindings`, with that property defined as an array of the supported finding object. Pipr honors the array's integer `maxItems`; custom output with any other root shape runs once.
 
 The `z` export is the recommended typed path for JSON-Schema-representable schemas. Generated `.pipr/types` include a standalone Zod authoring subset so `pipr init` projects type-check without installing `zod`; use `pipr.jsonSchema<T>()` for advanced JSON Schema shapes or when a Zod helper is outside that generated subset.
 

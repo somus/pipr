@@ -66,7 +66,16 @@ async function assertActionMetadataRendering(): Promise<void> {
     entrypointScript: "/opt/pipr/packages/e2e/action-fixture.ts",
   });
 
+  const metadata = Bun.YAML.parse(rendered) as { outputs?: Record<string, unknown> };
+
   expect(rendered).toBe(expected);
+  expect(Object.keys(metadata.outputs ?? {}).sort()).toEqual([
+    "execution-id",
+    "main-comment",
+    "result",
+    "run-artifact-name",
+    "run-bundle-path",
+  ]);
   expect(rendered).toContain("image: docker://pipr-action:test");
   expect(rendered).not.toContain("image: docker://ghcr.io/somus/pipr:main");
   expect(fixtureRendered).toContain("entrypoint: /usr/local/bin/bun");
