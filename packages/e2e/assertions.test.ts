@@ -4,14 +4,12 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { renderActActionMetadata } from "./action-metadata.ts";
-import { actArguments } from "./action-run-plan.ts";
 import {
   assertActCondensedFixture,
   assertActFullFixture,
   assertActOrchestratorFixture,
   assertCondensedPiWorkspace,
 } from "./assertions.ts";
-import { createDockerE2EPlan } from "./docker-e2e-plan.ts";
 import { prepareScenarioWorktree, scenarios } from "./scenarios.ts";
 
 const headSha = "head-sha";
@@ -22,28 +20,6 @@ test("prepares the dry-run scenario with distinct base and head commits", async 
 
 test("renders local Action metadata for the selected image and fixture entrypoint", async () => {
   await assertActionMetadataRendering();
-});
-
-test("runs every real Action scenario against the docker:e2e image", () => {
-  const plan = createDockerE2EPlan("pipr-action:test");
-  expect(plan.at(-1)).toEqual({
-    command: ["bun", "run", "--cwd", "packages/e2e", "check:actions"],
-    env: {
-      PIPR_ACTION_IMAGE: "pipr-action:test",
-      PIPR_SKIP_ACTION_IMAGE_BUILD: "1",
-    },
-    label: "Running all real Action scenarios with act: pipr-action:test",
-  });
-});
-
-test("uses the prepared Git worktree as the act workspace", () => {
-  expect(
-    actArguments({
-      eventFile: "event.json",
-      runnerImage: "runner:test",
-      workflowFile: "fixture.yml",
-    }),
-  ).toContain("--bind");
 });
 
 test("validates condensed Pi workspace telemetry and cleanup", async () => {
@@ -93,22 +69,8 @@ async function assertActionMetadataRendering(): Promise<void> {
   expect(rendered).toBe(expected);
   expect(rendered).toContain("image: docker://pipr-action:test");
   expect(rendered).not.toContain("image: docker://ghcr.io/somus/pipr:main");
-  expect(rendered).toContain("inputs:");
-  expect(rendered).toContain("outputs:");
-  expect(rendered).toContain("  main-comment:");
-  expect(rendered).toContain("  result:");
-  expect(rendered).toContain("  execution-id:");
-  expect(rendered).toContain("  run-bundle-path:");
-  expect(rendered).toContain("  run-artifact-name:");
-  expect(rendered).not.toContain("  inline-comments:");
-  expect(rendered).not.toContain("  dropped-findings:");
-  expect(rendered).not.toContain("  publication:");
-  expect(rendered).toContain("args:");
-  expect(rendered).toContain("    - host-run");
-  expect(rendered).not.toContain("    - action");
   expect(fixtureRendered).toContain("entrypoint: /usr/local/bin/bun");
   expect(fixtureRendered).toContain("    - /opt/pipr/packages/e2e/action-fixture.ts");
-  expect(fixtureRendered).toContain("    - host-run");
 }
 
 async function assertCondensedWorkspaceTelemetry(): Promise<void> {

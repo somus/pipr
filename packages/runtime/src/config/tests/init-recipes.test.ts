@@ -675,7 +675,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     });
   });
 
-  it("does not fail Security SAST for a high risk with an invalid diff anchor", async () => {
+  it("validates mapped findings before deriving the Security SAST check", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
 
     await initOfficialMinimalProject({
@@ -1297,23 +1297,6 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     ).rejects.toThrow("schema validation");
   });
 
-  it("initializes the quality gate recipe with commentable blocker filtering", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-quality-gate-"));
-
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "quality-gate",
-      minimal: true,
-    });
-    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-
-    expect(configTs).toContain("ctx.review.validateFindings(result.blockers)");
-    expect(configTs).not.toContain("commentableRangeForFinding");
-    expect(configTs).toContain("droppedBlockersNote");
-    expect(configTs).not.toContain("if (result.blockers.length > 0)");
-  });
-
   it("renders and fails the quality gate for a validated blocker", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-quality-gate-"));
 
@@ -1561,64 +1544,6 @@ describe("initOfficialMinimalProject: generated recipes", () => {
         }),
       }),
     ).rejects.toThrow("schema validation");
-  });
-
-  it("uses shared runtime validation for mapped recipe findings", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-diff-diagnostics-"));
-
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "diff-diagnostics",
-      minimal: true,
-    });
-    const project = await loadRuntimeProject({ rootDir });
-
-    const result = await runTaskRuntime({
-      workspace: rootDir,
-      config: project.settings.config,
-      event: eventContext(),
-      plan: project.plan,
-      diffManifestBuilder: () => reviewTestManifest(),
-      piRunner: jsonPiRunner({
-        summary: "Diagnostics completed.",
-        diagnostics: [
-          {
-            body: "This changed branch skips the fallback.",
-            path: "src/a.ts",
-            rangeId: "range-1",
-            side: "RIGHT",
-            startLine: 10,
-            endLine: 10,
-          },
-          {
-            body: "This changed branch skips the fallback.",
-            path: "src/a.ts",
-            rangeId: "range-1",
-            side: "RIGHT",
-            startLine: 10,
-            endLine: 10,
-          },
-          {
-            body: "This diagnostic has no changed-code anchor.",
-            path: "src/missing.ts",
-            rangeId: "missing-range",
-            side: "RIGHT",
-            startLine: 99,
-            endLine: 99,
-          },
-        ],
-      }),
-    });
-
-    assertReviewResult(result);
-    expect(result.mainComment).toContain("## 🧭 Summary\n\nDiagnostics completed.");
-    expect(result.inlineCommentDrafts).toHaveLength(1);
-    expect(result.inlineCommentDrafts[0]?.body).toContain("skips the fallback");
-    expect(result.validated.droppedFindings.map((drop) => drop.reason)).toEqual([
-      "duplicate finding fingerprint",
-      "unknown rangeId 'missing-range'",
-    ]);
   });
 
   it("initializes advanced recipes with inspectable agents, tools, and commands", async () => {

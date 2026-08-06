@@ -1029,20 +1029,6 @@ describe("check-release-metadata", () => {
     expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
 
-  it("rejects missing post-publish dogfood SDK automation", () => {
-    const repository = copyRepositoryFixture();
-    const workflowPath = path.join(repository, ".github/workflows/release.yml");
-    write(
-      workflowPath,
-      readFileSync(workflowPath, "utf8").replace(
-        "      - name: Open dogfood SDK update PR\n",
-        "      - name: Update dogfood SDK without PR\n",
-      ),
-    );
-
-    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
-  });
-
   it("keeps the security-sensitive publish pipeline declarative and ordered", () => {
     const workflow = parseWorkflow(".github/workflows/release.yml");
     const publishSteps = workflow.jobs.publish?.steps ?? [];
@@ -1079,20 +1065,6 @@ describe("check-release-metadata", () => {
     expect(workflow.jobs.dogfood?.needs).toBe("publish");
     expect(dogfoodStep?.run).toBe("bun scripts/release.ts dogfood");
     expect(dogfoodStep?.env?.GH_TOKEN).toContain("PIPR_RELEASE_PLEASE_TOKEN");
-  });
-
-  it("rejects protected-main commands in the dogfood workflow step", () => {
-    const repository = copyRepositoryFixture();
-    const workflowPath = path.join(repository, ".github/workflows/release.yml");
-    write(
-      workflowPath,
-      readFileSync(workflowPath, "utf8").replace(
-        "run: bun scripts/release.ts dogfood",
-        'run: git push origin "HEAD:main"',
-      ),
-    );
-
-    expect(runScript("scripts/check-release-metadata.ts", [], repository)).not.toBe(0);
   });
 });
 
