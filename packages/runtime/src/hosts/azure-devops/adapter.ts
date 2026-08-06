@@ -1,4 +1,4 @@
-import { commandStatusText } from "../publication.js";
+import { createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import {
   type AzureDevOpsClient,
@@ -10,17 +10,15 @@ import {
   loadAzureDevOpsInlineThreadContexts,
   loadAzureDevOpsPriorMainComment,
   loadAzureDevOpsPriorReviewState,
-  publishAzureDevOpsCommandResponse,
-  publishAzureDevOpsPlan,
-  publishAzureDevOpsReviewProgress,
-  publishAzureDevOpsThreadActions,
 } from "./publication.js";
+import { createAzureDevOpsPublicationDriver } from "./publication-driver.js";
 import { ensureAzureDevOpsHeadCheckout } from "./workspace.js";
 
 export function createAzureDevOpsHostAdapter(
   options: { env?: NodeJS.ProcessEnv; client?: AzureDevOpsClient } = {},
 ): CodeHostAdapter {
   const client = options.client ?? createAzureDevOpsClient(options.env);
+  const publication = createPublicationWorkflow(createAzureDevOpsPublicationDriver(client));
   return {
     id: "azure-devops",
     capabilities: {
@@ -64,20 +62,7 @@ export function createAzureDevOpsHostAdapter(
         );
       },
     },
-    publication: {
-      publish: ({ plan, change, progressLease }) =>
-        publishAzureDevOpsPlan({ client, plan, change, progressLease }),
-      publishReviewProgress: (args) => publishAzureDevOpsReviewProgress({ client, ...args }),
-      publishCommandResponse: (args) => publishAzureDevOpsCommandResponse({ client, ...args }),
-      publishCommandStatus: (args) =>
-        publishAzureDevOpsCommandResponse({
-          client,
-          ...args,
-          body: commandStatusText(args),
-          allowHeadDrift: true,
-        }),
-      publishThreadActions: (args) => publishAzureDevOpsThreadActions({ client, ...args }),
-    },
+    publication,
     comments: {
       loadPriorReviewState: ({ change }) => loadAzureDevOpsPriorReviewState({ client, change }),
       loadPriorMainComment: ({ change }) => loadAzureDevOpsPriorMainComment({ client, change }),
