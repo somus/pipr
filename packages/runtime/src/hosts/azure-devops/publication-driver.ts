@@ -1,7 +1,11 @@
 import type { InlinePublicationItem } from "../../review/comment.js";
 import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
+import type {
+  LoadedPublicationState,
+  OwnedMainComment,
+  PublicationDriver,
+} from "../publication/workflow.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
 import {
   assertCurrentAzurePullRequest,
@@ -66,34 +70,8 @@ export function createAzureDevOpsPublicationDriver(
         threads: azureThreadContexts(threads, prepared.ownerUniqueName),
       };
     },
-    async upsertMain(prepared, existing, body) {
-      const coordinates = azureCoordinates(prepared.change);
-      if (existing) {
-        const threads = await client.listThreads(
-          coordinates.repositoryId,
-          prepared.change.change.number,
-        );
-        const thread = threads.find((candidate) => candidate.comments[0]?.id === existing.id);
-        if (!thread) throw new Error("Azure DevOps Main Review Comment thread was not found");
-        const comment = await client.updateComment(
-          coordinates.repositoryId,
-          prepared.change.change.number,
-          thread.id,
-          existing.id,
-          body,
-        );
-        return { id: comment.id, action: "updated" };
-      }
-      const comment = (
-        await client.createThread(
-          coordinates.repositoryId,
-          prepared.change.change.number,
-          unpositionedAzureThread(body),
-        )
-      ).comments[0];
-      if (!comment) throw new Error("Azure DevOps did not return the Main Review Comment");
-      return { id: comment.id, action: "created" };
-    },
+    upsertMain: (prepared, existing, body) =>
+      upsertAzureRootComment(client, prepared, existing, body, "Main Review Comment"),
     inlineLocation: (_prepared, item) => azureInlineLocation(item),
     async createInline(prepared, item: InlinePublicationItem) {
       const coordinates = azureCoordinates(prepared.change);
@@ -123,34 +101,8 @@ export function createAzureDevOpsPublicationDriver(
       const comment = thread?.comments[0];
       return comment ? { id: comment.id, body: comment.content } : undefined;
     },
-    async upsertCommand(prepared, existing, body) {
-      const coordinates = azureCoordinates(prepared.change);
-      if (existing) {
-        const threads = await client.listThreads(
-          coordinates.repositoryId,
-          prepared.change.change.number,
-        );
-        const thread = threads.find((candidate) => candidate.comments[0]?.id === existing.id);
-        if (!thread) throw new Error("Azure DevOps command response thread was not found");
-        const comment = await client.updateComment(
-          coordinates.repositoryId,
-          prepared.change.change.number,
-          thread.id,
-          existing.id,
-          body,
-        );
-        return { id: comment.id, action: "updated" };
-      }
-      const comment = (
-        await client.createThread(
-          coordinates.repositoryId,
-          prepared.change.change.number,
-          unpositionedAzureThread(body),
-        )
-      ).comments[0];
-      if (!comment) throw new Error("Azure DevOps did not return the command response comment");
-      return { id: comment.id, action: "created" };
-    },
+    upsertCommand: (prepared, existing, body) =>
+      upsertAzureRootComment(client, prepared, existing, body, "command response comment"),
     async replyThread(prepared, action, body) {
       const coordinates = azureCoordinates(prepared.change);
       const thread = await findThread(prepared, action.threadId, action.commentId);
@@ -174,6 +126,41 @@ export function createAzureDevOpsPublicationDriver(
       );
     },
   };
+}
+
+async function upsertAzureRootComment(
+  client: AzureDevOpsClient,
+  prepared: Prepared,
+  existing: OwnedMainComment | undefined,
+  body: string,
+  description: string,
+) {
+  const coordinates = azureCoordinates(prepared.change);
+  if (existing) {
+    const threads = await client.listThreads(
+      coordinates.repositoryId,
+      prepared.change.change.number,
+    );
+    const thread = threads.find((candidate) => candidate.comments[0]?.id === existing.id);
+    if (!thread) throw new Error(`Azure DevOps ${description} thread was not found`);
+    const comment = await client.updateComment(
+      coordinates.repositoryId,
+      prepared.change.change.number,
+      thread.id,
+      existing.id,
+      body,
+    );
+    return { id: comment.id, action: "updated" as const };
+  }
+  const comment = (
+    await client.createThread(
+      coordinates.repositoryId,
+      prepared.change.change.number,
+      unpositionedAzureThread(body),
+    )
+  ).comments[0];
+  if (!comment) throw new Error(`Azure DevOps did not return the ${description}`);
+  return { id: comment.id, action: "created" as const };
 }
 
 function azureThreadContexts(threads: AzureDevOpsThread[], owner: string) {

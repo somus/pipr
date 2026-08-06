@@ -5,7 +5,6 @@ import type { ChangeRequestEventContext } from "../../types.js";
 import type {
   GitHubIssueComment,
   GitHubPublicationClient,
-  GitHubReviewComment,
   GitHubReviewThread,
 } from "./publication-client.js";
 
@@ -32,19 +31,6 @@ async function currentHeadShaMismatch(
   return currentHeadSha === reviewedHeadSha
     ? undefined
     : `Change request head changed from '${reviewedHeadSha}' to '${currentHeadSha}' before publication`;
-}
-
-export async function listOwnedReviewComments(options: {
-  client: GitHubPublicationClient;
-  change: ChangeRequestEventContext;
-  ownerLogin: string;
-}): Promise<GitHubReviewComment[]> {
-  return (
-    await options.client.listReviewComments({
-      repo: options.change.repository.slug,
-      pullRequestNumber: options.change.change.number,
-    })
-  ).filter((comment) => comment.authorLogin === options.ownerLogin);
 }
 
 export function reviewThreadByCommentId(

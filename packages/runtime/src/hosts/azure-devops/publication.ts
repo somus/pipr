@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../../review/comment.js";
+import type { InlinePublicationItem } from "../../review/comment.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
@@ -9,23 +9,8 @@ import {
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
-import {
-  extractReviewProgressToken,
-  type ReviewProgressLease,
-  ReviewProgressSupersededError,
-} from "../../review/progress.js";
-import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import {
-  assertHostInlinePublicationSucceeded,
-  assertHostPublicationWriteAllowed,
-  commandResponseBody,
-  completeHostPublication,
-  hostPublicationActionError,
-  nativeInlineLocation,
-  publishUnseenInlineItems,
-  threadActionReply,
-} from "../publication.js";
+import { nativeInlineLocation } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
 

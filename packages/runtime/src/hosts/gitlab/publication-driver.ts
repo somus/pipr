@@ -1,5 +1,4 @@
 import type { InlinePublicationItem } from "../../review/comment.js";
-import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
 import type { GitLabClient, GitLabDiffRefs } from "./client.js";
@@ -60,18 +59,7 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
         threads: gitLabThreadContexts(discussions, prepared.ownerUsername, true),
       };
     },
-    async upsertMain(prepared, existing, body) {
-      const coordinates = gitLabCoordinates(prepared.change);
-      const note = existing
-        ? await client.updateNote(
-            coordinates.projectId,
-            prepared.change.change.number,
-            existing.id,
-            body,
-          )
-        : await client.createNote(coordinates.projectId, prepared.change.change.number, body);
-      return { id: note.id, action: existing ? "updated" : "created" };
-    },
+    upsertMain: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
     inlineLocation: (_prepared, item) => gitLabInlineLocation(item),
     async createInline(prepared, item: InlinePublicationItem) {
       if (!prepared.refs) throw new Error("GitLab diff refs were not prepared");
@@ -92,18 +80,7 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       );
       return note ? { id: note.id, body: note.body } : undefined;
     },
-    async upsertCommand(prepared, existing, body) {
-      const coordinates = gitLabCoordinates(prepared.change);
-      const note = existing
-        ? await client.updateNote(
-            coordinates.projectId,
-            prepared.change.change.number,
-            existing.id,
-            body,
-          )
-        : await client.createNote(coordinates.projectId, prepared.change.change.number, body);
-      return { id: note.id, action: existing ? "updated" : "created" };
-    },
+    upsertCommand: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       const coordinates = gitLabCoordinates(prepared.change);
       const discussionId =
@@ -130,6 +107,24 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       );
     },
   };
+}
+
+async function upsertGitLabNote(
+  client: GitLabClient,
+  prepared: Prepared,
+  existing: { id: string } | undefined,
+  body: string,
+) {
+  const coordinates = gitLabCoordinates(prepared.change);
+  const note = existing
+    ? await client.updateNote(
+        coordinates.projectId,
+        prepared.change.change.number,
+        existing.id,
+        body,
+      )
+    : await client.createNote(coordinates.projectId, prepared.change.change.number, body);
+  return { id: note.id, action: existing ? ("updated" as const) : ("created" as const) };
 }
 
 async function discussionForComment(prepared: Prepared, commentId: string) {

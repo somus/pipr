@@ -1,7 +1,12 @@
 import type { InlinePublicationItem, ThreadAction } from "../../review/comment.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import { inlinePublicationDecision } from "../../review/inline-publication-policy.js";
-import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
+import {
+  extractInlineFindingMarkerRecords,
+  extractResolvedFindingMarkerRecords,
+  extractVerifierResponseMarkers,
+  inlineFindingMarker,
+} from "../../review/prior-state.js";
 import {
   extractReviewProgressToken,
   ReviewProgressSupersededError,
@@ -42,10 +47,7 @@ export interface PublicationDriver<Prepared> {
     body: string,
   ): Promise<{ id: string; action: "created" | "updated" }>;
   replyThread(prepared: Prepared, action: ThreadAction, body: string): Promise<void>;
-  resolveThread?(
-    prepared: Prepared,
-    action: Extract<ThreadAction, { kind: "resolve" }>,
-  ): Promise<void>;
+  resolveThread?(prepared: Prepared, action: ThreadAction): Promise<void>;
 }
 
 export function createPublicationWorkflow<Prepared>(
@@ -201,9 +203,10 @@ async function publishInlineItems<Prepared>(
       errors.push(errorMessage(error));
       continue;
     }
+    const marker = inlineFindingMarker(item.findingId, item.reviewedHeadSha);
     if (
       inlinePublicationDecision({
-        marker: item.marker,
+        marker,
         location,
         existing: { markers, locations },
       }) === "skip"
@@ -215,7 +218,7 @@ async function publishInlineItems<Prepared>(
     try {
       await driver.createInline(prepared, item);
       posted += 1;
-      markers.add(item.marker);
+      markers.add(marker);
       locations.push(location);
     } catch (error) {
       errors.push(errorMessage(error));
@@ -233,36 +236,65 @@ async function runThreadActions<Prepared>(
 ): Promise<{ errors: string[] }> {
   const errors: string[] = [];
   for (const action of actions) {
-    const thread = threads.find(
-      (item) => item.threadId === action.threadId || item.parentCommentId === action.commentId,
-    );
-    if (!thread) {
-      errors.push(`${driver.provider} thread not found for comment ${action.commentId}`);
-      continue;
-    }
-    const reply = threadActionReply(action);
-    if (!thread.comments.some((comment) => comment.body.includes(reply.marker))) {
-      await beforeWrite();
-      try {
-        await driver.replyThread(prepared, action, reply.body);
-        thread.comments.push({ id: "", body: reply.body });
-      } catch (error) {
-        if (error instanceof ReviewProgressSupersededError) throw error;
-        errors.push(errorMessage(error));
-      }
-    }
-    if (action.kind === "resolve" && !thread.threadResolved && driver.resolveThread) {
-      await beforeWrite();
-      try {
-        await driver.resolveThread(prepared, action);
-        thread.threadResolved = true;
-      } catch (error) {
-        if (error instanceof ReviewProgressSupersededError) throw error;
-        errors.push(errorMessage(error));
-      }
-    }
+    errors.push(...(await runThreadAction(driver, prepared, action, threads, beforeWrite)));
   }
   return { errors };
+}
+
+async function runThreadAction<Prepared>(
+  driver: PublicationDriver<Prepared>,
+  prepared: Prepared,
+  action: ThreadAction,
+  threads: readonly InlineThreadContext[],
+  beforeWrite: () => Promise<void>,
+): Promise<string[]> {
+  const thread = threads.find(
+    (item) => item.threadId === action.threadId || item.parentCommentId === action.commentId,
+  );
+  if (!thread) return [`${driver.provider} thread not found for comment ${action.commentId}`];
+  const errors: string[] = [];
+  const reply = threadActionReply(action);
+  if (!threadReplyExists(thread, action)) {
+    const error = await attemptThreadWrite(beforeWrite, () =>
+      driver.replyThread(prepared, action, reply.body),
+    );
+    if (error) errors.push(error);
+    else thread.comments.push({ id: "", body: reply.body });
+  }
+  if (action.kind === "resolve" && !thread.threadResolved && driver.resolveThread) {
+    const error = await attemptThreadWrite(beforeWrite, () =>
+      driver.resolveThread?.(prepared, action),
+    );
+    if (error) errors.push(error);
+    else thread.threadResolved = true;
+  }
+  return errors;
+}
+
+function threadReplyExists(thread: InlineThreadContext, action: ThreadAction): boolean {
+  const bodies = thread.comments.map((comment) => comment.body);
+  if (action.kind === "resolve") {
+    return extractResolvedFindingMarkerRecords(bodies).some(
+      (record) => record.id === action.findingId && record.head === action.findingHeadSha,
+    );
+  }
+  return extractVerifierResponseMarkers(bodies).has(
+    `pipr:verifier-response:${action.findingId}:${action.responseKey}`,
+  );
+}
+
+async function attemptThreadWrite(
+  beforeWrite: () => Promise<void>,
+  write: () => Promise<void> | undefined,
+): Promise<string | undefined> {
+  await beforeWrite();
+  try {
+    await write();
+    return undefined;
+  } catch (error) {
+    if (error instanceof ReviewProgressSupersededError) throw error;
+    return errorMessage(error);
+  }
 }
 
 function assertProgressLease(

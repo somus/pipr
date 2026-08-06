@@ -1,15 +1,15 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type { InlinePublicationItem } from "../../review/comment.js";
-import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
-import type { GiteaClient, GiteaReviewComment } from "./client.js";
+import type { GiteaClient } from "./client.js";
 import {
   assertCurrentGiteaHead,
   findGiteaMainComment,
   giteaCoordinates,
   giteaDisplayName,
   giteaReviewCommentLocation,
+  giteaThreadContexts,
 } from "./publication.js";
 
 type Prepared = { client: GiteaClient; change: ChangeRequestEventContext };
@@ -58,26 +58,10 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
                 },
               ],
         ),
-        threads: giteaThreadContexts(reviewComments, owner.login),
+        threads: giteaThreadContexts(reviewComments, owner.login, true),
       };
     },
-    async upsertMain(prepared, existing, body) {
-      const coordinates = giteaCoordinates(prepared.change);
-      const comment = existing
-        ? await client.updateIssueComment(
-            coordinates.owner,
-            coordinates.repository,
-            existing.id,
-            body,
-          )
-        : await client.createIssueComment(
-            coordinates.owner,
-            coordinates.repository,
-            prepared.change.change.number,
-            body,
-          );
-      return { id: comment.id, action: existing ? "updated" : "created" };
-    },
+    upsertMain: (prepared, existing, body) => upsertGiteaComment(client, prepared, existing, body),
     inlineLocation(_prepared, item) {
       return {
         path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
@@ -116,23 +100,8 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
       );
       return comment ? { id: comment.id, body: comment.body } : undefined;
     },
-    async upsertCommand(prepared, existing, body) {
-      const coordinates = giteaCoordinates(prepared.change);
-      const comment = existing
-        ? await client.updateIssueComment(
-            coordinates.owner,
-            coordinates.repository,
-            existing.id,
-            body,
-          )
-        : await client.createIssueComment(
-            coordinates.owner,
-            coordinates.repository,
-            prepared.change.change.number,
-            body,
-          );
-      return { id: comment.id, action: existing ? "updated" : "created" };
-    },
+    upsertCommand: (prepared, existing, body) =>
+      upsertGiteaComment(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       const coordinates = giteaCoordinates(prepared.change);
       await client.replyToReviewComment(
@@ -146,31 +115,20 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
   };
 }
 
-function giteaThreadContexts(comments: GiteaReviewComment[], ownerLogin: string) {
-  const byRoot = new Map<string, GiteaReviewComment[]>();
-  for (const comment of comments) {
-    const rootId = comment.parentId ?? comment.id;
-    const values = byRoot.get(rootId) ?? [];
-    values.push(comment);
-    byRoot.set(rootId, values);
-  }
-  return [...byRoot.entries()].flatMap(([rootId, thread]) => {
-    const root = thread.find((comment) => comment.id === rootId);
-    const marker = root ? extractInlineFindingMarkerRecords([root.body])[0] : undefined;
-    if (!root || !marker || root.authorLogin !== ownerLogin) return [];
-    return [
-      {
-        findingId: marker.id,
-        findingHeadSha: marker.head,
-        parentCommentId: root.id,
-        parentBody: root.body,
-        threadResolved: false,
-        comments: thread.flatMap((comment) =>
-          comment.authorLogin === ownerLogin
-            ? [{ id: comment.id, body: comment.body, authorLogin: comment.authorLogin }]
-            : [],
-        ),
-      },
-    ];
-  });
+async function upsertGiteaComment(
+  client: GiteaClient,
+  prepared: Prepared,
+  existing: { id: string } | undefined,
+  body: string,
+) {
+  const coordinates = giteaCoordinates(prepared.change);
+  const comment = existing
+    ? await client.updateIssueComment(coordinates.owner, coordinates.repository, existing.id, body)
+    : await client.createIssueComment(
+        coordinates.owner,
+        coordinates.repository,
+        prepared.change.change.number,
+        body,
+      );
+  return { id: comment.id, action: existing ? ("updated" as const) : ("created" as const) };
 }

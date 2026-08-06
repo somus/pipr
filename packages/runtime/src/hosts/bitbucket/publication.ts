@@ -1,4 +1,4 @@
-import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../../review/comment.js";
+import type { InlinePublicationItem } from "../../review/comment.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
@@ -8,26 +8,11 @@ import {
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
-import {
-  extractReviewProgressToken,
-  type ReviewProgressLease,
-  ReviewProgressSupersededError,
-} from "../../review/progress.js";
-import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import {
-  assertHostInlinePublicationSucceeded,
-  assertHostPublicationWriteAllowed,
-  commandResponseBody,
-  completeHostPublication,
-  hostPublicationActionError,
-  nativeInlineLocation,
-  publishUnseenInlineItems,
-  threadActionReply,
-} from "../publication.js";
+import { nativeInlineLocation } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
 import type { BitbucketClient, BitbucketComment } from "./client.js";
-import { normalizeBitbucketMarkdown, renderBitbucketMarkdown } from "./markdown.js";
+import { normalizeBitbucketMarkdown } from "./markdown.js";
 
 export function bitbucketInlineLocationFromComment(
   comment: BitbucketComment,
@@ -120,11 +105,19 @@ export async function loadBitbucketInlineThreadContexts(options: {
 }): Promise<InlineThreadContext[]> {
   const owner = await authenticatedBitbucketOwner(options.client);
   const comments = await options.client.listComments(options.change.change.number);
+  return bitbucketThreadContexts(comments, owner.uuid, false);
+}
+
+export function bitbucketThreadContexts(
+  comments: BitbucketComment[],
+  ownerUuid: string,
+  ownedRepliesOnly: boolean,
+): InlineThreadContext[] {
   return comments.flatMap((root) => {
     const marker = extractInlineFindingMarkerRecords([
       normalizeBitbucketMarkdown(root.content.raw),
     ])[0];
-    if (!marker || root.user?.uuid !== owner.uuid || root.parent) return [];
+    if (!marker || root.user?.uuid !== ownerUuid || root.parent) return [];
     const replies = comments.filter((comment) => comment.parent?.id === root.id);
     return [
       {
@@ -134,11 +127,17 @@ export async function loadBitbucketInlineThreadContexts(options: {
         parentBody: normalizeBitbucketMarkdown(root.content.raw),
         threadId: root.id,
         threadResolved: root.resolution !== undefined,
-        comments: [root, ...replies].map((comment) => ({
-          id: comment.id,
-          body: normalizeBitbucketMarkdown(comment.content.raw),
-          authorLogin: comment.user?.nickname,
-        })),
+        comments: [root, ...replies].flatMap((comment) =>
+          !ownedRepliesOnly || comment.user?.uuid === ownerUuid
+            ? [
+                {
+                  id: comment.id,
+                  body: normalizeBitbucketMarkdown(comment.content.raw),
+                  authorLogin: comment.user?.nickname,
+                },
+              ]
+            : [],
+        ),
       },
     ];
   });

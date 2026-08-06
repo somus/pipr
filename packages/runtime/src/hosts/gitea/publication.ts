@@ -1,5 +1,4 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
-import type { PublicationPlan, ThreadAction } from "../../review/comment.js";
 import {
   applyInlineFindingMarkers,
   applyResolvedFindingMarkers,
@@ -8,23 +7,9 @@ import {
   mainCommentMarker,
   parseMainCommentIdentity,
 } from "../../review/prior-state.js";
-import {
-  extractReviewProgressToken,
-  type ReviewProgressLease,
-  ReviewProgressSupersededError,
-} from "../../review/progress.js";
-import { PublicationError, type PublicationResult } from "../../review/publication-result.js";
+import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import {
-  assertHostInlinePublicationSucceeded,
-  assertHostPublicationWriteAllowed,
-  commandResponseBody,
-  completeHostPublication,
-  hostPublicationActionError,
-  nativeInlineLocation,
-  publishUnseenInlineItems,
-  threadActionReply,
-} from "../publication.js";
+import { nativeInlineLocation } from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
 import type { GiteaClient, GiteaComment, GiteaReviewComment } from "./client.js";
 
@@ -86,6 +71,14 @@ export async function loadGiteaInlineThreadContexts(options: {
 }): Promise<InlineThreadContext[]> {
   const owner = await options.client.currentUser();
   const comments = await loadGiteaReviewComments(options.client, options.change);
+  return giteaThreadContexts(comments, owner.login, false);
+}
+
+export function giteaThreadContexts(
+  comments: GiteaReviewComment[],
+  ownerLogin: string,
+  ownedRepliesOnly: boolean,
+): InlineThreadContext[] {
   const byRoot = new Map<string, GiteaReviewComment[]>();
   for (const comment of comments) {
     const rootId = comment.parentId ?? comment.id;
@@ -96,7 +89,7 @@ export async function loadGiteaInlineThreadContexts(options: {
   return [...byRoot.entries()].flatMap(([rootId, thread]) => {
     const root = thread.find((comment) => comment.id === rootId);
     const marker = root ? extractInlineFindingMarkerRecords([root.body])[0] : undefined;
-    if (!root || !marker || root.authorLogin !== owner.login) return [];
+    if (!root || !marker || root.authorLogin !== ownerLogin) return [];
     return [
       {
         findingId: marker.id,
@@ -104,11 +97,11 @@ export async function loadGiteaInlineThreadContexts(options: {
         parentCommentId: root.id,
         parentBody: root.body,
         threadResolved: false,
-        comments: thread.map((comment) => ({
-          id: comment.id,
-          body: comment.body,
-          authorLogin: comment.authorLogin,
-        })),
+        comments: thread.flatMap((comment) =>
+          !ownedRepliesOnly || comment.authorLogin === ownerLogin
+            ? [{ id: comment.id, body: comment.body, authorLogin: comment.authorLogin }]
+            : [],
+        ),
       },
     ];
   });
@@ -127,7 +120,7 @@ export function findGiteaMainComment(
   });
 }
 
-export function loadGiteaReviewComments(
+function loadGiteaReviewComments(
   client: GiteaClient,
   change: ChangeRequestEventContext,
 ): Promise<GiteaReviewComment[]> {

@@ -1,14 +1,14 @@
-import type { InlinePublicationItem, ThreadAction } from "../../review/comment.js";
+import type { ThreadAction } from "../../review/comment.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import type {
-  LoadedPublicationState,
-  OwnedMainComment,
-  PublicationDriver,
-} from "../publication/workflow.js";
+import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
 import { mapFindingToGithubReviewCommentLocation } from "./inline.js";
-import type { GitHubPublicationClient, GitHubReviewComment } from "./publication-client.js";
+import type {
+  GitHubPublicationClient,
+  GitHubReviewComment,
+  GitHubReviewThread,
+} from "./publication-client.js";
 import {
   assertCurrentHeadSha,
   findMainComment,
@@ -33,22 +33,8 @@ export function createGitHubPublicationDriver(
       return assertCurrentHeadSha(client, prepared.change, expectedHeadSha);
     },
     loadOwnedState,
-    async upsertMain(prepared, existing, body) {
-      if (existing) {
-        const updated = await client.updateIssueComment({
-          repo: prepared.change.repository.slug,
-          commentId: Number(existing.id),
-          body,
-        });
-        return { id: String(updated.id), action: "updated" };
-      }
-      const created = await client.createIssueComment({
-        repo: prepared.change.repository.slug,
-        issueNumber: prepared.change.change.number,
-        body,
-      });
-      return { id: String(created.id), action: "created" };
-    },
+    upsertMain: (prepared, existing, body) =>
+      upsertGitHubIssueComment(client, prepared, existing, body),
     inlineLocation(_prepared, item) {
       return publicationLocation(
         mapFindingToGithubReviewCommentLocation({
@@ -81,21 +67,8 @@ export function createGitHubPublicationDriver(
       );
       return found ? { id: String(found.id), body: found.body ?? undefined } : undefined;
     },
-    async upsertCommand(prepared, existing, body) {
-      if (existing) {
-        const updated = await client.updateIssueComment({
-          repo: prepared.change.repository.slug,
-          commentId: Number(existing.id),
-          body,
-        });
-        return { id: String(updated.id), action: "updated" };
-      }
-      const created = await client.createIssueComment({
-        ...issueCoordinates(prepared),
-        body,
-      });
-      return { id: String(created.id), action: "created" };
-    },
+    upsertCommand: (prepared, existing, body) =>
+      upsertGitHubIssueComment(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       await client.createReviewCommentReply({
         repo: prepared.change.repository.slug,
@@ -104,24 +77,59 @@ export function createGitHubPublicationDriver(
         body,
       });
     },
-    async resolveThread(prepared, action) {
-      const threads = await client.listReviewThreads(reviewCoordinates(prepared));
-      const byComment = reviewThreadByCommentId(threads);
-      const thread =
-        (action.threadId
-          ? threads.find((candidate) => candidate.id === action.threadId)
-          : undefined) ?? byComment.get(Number(action.commentId));
-      const threadId = action.threadId ?? thread?.id;
-      if (!threadId)
-        throw new Error(`GitHub review thread not found for pipr finding '${action.findingId}'`);
-      if (thread && !thread.viewerCanResolve) {
-        throw new Error(
-          `resolve thread '${threadId}' for finding '${action.findingId}': the GitHub credential cannot resolve this review thread; configure GITHUB_TOKEN with a user credential that can resolve pull request review threads`,
-        );
-      }
-      if (!thread?.isResolved) await client.resolveReviewThread({ threadId });
-    },
+    resolveThread: (prepared, action) => resolveGitHubThread(client, prepared, action),
   };
+}
+
+async function resolveGitHubThread(
+  client: GitHubPublicationClient,
+  prepared: Prepared,
+  action: ThreadAction,
+): Promise<void> {
+  const threads = await client.listReviewThreads(reviewCoordinates(prepared));
+  const thread = githubThreadForAction(threads, action);
+  const threadId = action.threadId ?? thread?.id;
+  if (!threadId) {
+    throw new Error(`GitHub review thread not found for pipr finding '${action.findingId}'`);
+  }
+  assertGitHubThreadResolvable(thread, threadId, action.findingId);
+  if (!thread?.isResolved) await client.resolveReviewThread({ threadId });
+}
+
+function githubThreadForAction(threads: GitHubReviewThread[], action: ThreadAction) {
+  return (
+    (action.threadId ? threads.find((candidate) => candidate.id === action.threadId) : undefined) ??
+    reviewThreadByCommentId(threads).get(Number(action.commentId))
+  );
+}
+
+function assertGitHubThreadResolvable(
+  thread: GitHubReviewThread | undefined,
+  threadId: string,
+  findingId: string,
+): void {
+  if (!thread || thread.viewerCanResolve) return;
+  throw new Error(
+    `resolve thread '${threadId}' for finding '${findingId}': the GitHub credential cannot resolve this review thread; configure GITHUB_TOKEN with a user credential that can resolve pull request review threads`,
+  );
+}
+
+async function upsertGitHubIssueComment(
+  client: GitHubPublicationClient,
+  prepared: Prepared,
+  existing: { id: string } | undefined,
+  body: string,
+) {
+  if (existing) {
+    const updated = await client.updateIssueComment({
+      repo: prepared.change.repository.slug,
+      commentId: Number(existing.id),
+      body,
+    });
+    return { id: String(updated.id), action: "updated" as const };
+  }
+  const created = await client.createIssueComment({ ...issueCoordinates(prepared), body });
+  return { id: String(created.id), action: "created" as const };
 }
 
 async function loadOwnedState(
