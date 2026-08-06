@@ -6,6 +6,7 @@ import {
   extractResolvedFindingMarkerRecords,
   extractVerifierResponseMarkers,
   inlineFindingMarker,
+  mainCommentMarker,
 } from "../../review/prior-state.js";
 import {
   extractReviewProgressToken,
@@ -146,10 +147,10 @@ async function publishProgress<Prepared>(
 ) {
   const prepared = await driver.prepare(options.change, options.reviewedHeadSha);
   await driver.assertCurrent(prepared, options.reviewedHeadSha);
-  let main = await driver.loadOwnedMain(prepared, "pipr:main-comment");
+  let main = await driver.loadOwnedMain(prepared, mainCommentMarker);
   if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
   await driver.assertCurrent(prepared, options.reviewedHeadSha);
-  main = await driver.loadOwnedMain(prepared, "pipr:main-comment");
+  main = await driver.loadOwnedMain(prepared, mainCommentMarker);
   if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
   if (!main && options.expectedToken) return { status: "superseded" as const };
   const result = await driver.upsertMain(prepared, main, options.renderBody(main?.body));
@@ -186,7 +187,7 @@ async function publishThreadActions<Prepared>(
   await driver.assertCurrent(prepared, options.reviewedHeadSha);
   const threads = driver.loadOwnedThreads
     ? await driver.loadOwnedThreads(prepared, options.actions)
-    : (await driver.loadOwnedState(prepared, "pipr:main-comment")).threads;
+    : (await driver.loadOwnedState(prepared, mainCommentMarker)).threads;
   await driver.assertCurrent(prepared, options.reviewedHeadSha);
   return runThreadActions(driver, prepared, options.actions, threads, () =>
     driver.assertCurrent(prepared, options.reviewedHeadSha),
