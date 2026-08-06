@@ -61,6 +61,21 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
         threads: giteaThreadContexts(reviewComments, owner.login, true),
       };
     },
+    async loadOwnedMain(prepared) {
+      const coordinates = giteaCoordinates(prepared.change);
+      const owner = await client.currentUser();
+      const main = findGiteaMainComment(
+        await client.listIssueComments(
+          coordinates.owner,
+          coordinates.repository,
+          prepared.change.change.number,
+        ),
+        owner.login,
+        "pipr:main-comment",
+        prepared.change.change.number,
+      );
+      return main ? { id: main.id, body: main.body } : undefined;
+    },
     upsertMain: (prepared, existing, body) => upsertGiteaComment(client, prepared, existing, body),
     inlineLocation(_prepared, item) {
       return {

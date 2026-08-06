@@ -53,6 +53,17 @@ export function createBitbucketPublicationDriver(
         threads: bitbucketThreadContexts(comments, owner.uuid, true),
       };
     },
+    async loadOwnedMain(prepared) {
+      const owner = await authenticatedBitbucketOwner(client);
+      const main = (await client.listComments(prepared.change.change.number)).find(
+        (comment) =>
+          comment.user?.uuid === owner.uuid &&
+          normalizeBitbucketMarkdown(comment.content.raw).includes(
+            bitbucketMainMarker(prepared.change.change.number),
+          ),
+      );
+      return main ? { id: main.id, body: normalizeBitbucketMarkdown(main.content.raw) } : undefined;
+    },
     upsertMain: (prepared, existing, body) =>
       upsertBitbucketComment(client, prepared, existing, body),
     inlineLocation: (_prepared, item) => bitbucketInlineLocation(item),

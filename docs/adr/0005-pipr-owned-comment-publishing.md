@@ -18,7 +18,7 @@ Comment Publishing:
 - dedupes Inline Review Comments by stable finding id, reviewed head SHA, and Pipr-owned same-head location overlap
 - passes open prior finding locations into rerun prompts so reviewers can keep prior finding ids without resolving by omission
 - resolves fixed prior findings only through explicit verifier output and thread actions
-- replies to stale GitHub Inline Review Comments with the resolving commit link and resolves their review threads when the verifier marks prior findings fixed
+- replies to stale Inline Review Comments with the resolving commit link and resolves native review threads when the verifier marks prior findings fixed and the code host supports resolution
 - leaves provider-specific inline comment payload mapping to the code host adapter
 - reports comment publishing failures in metadata and fails the Action for the MVP
 

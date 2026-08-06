@@ -42,20 +42,9 @@ export function createAzureDevOpsPublicationDriver(
       await assertCurrentAzurePullRequest(client, prepared.change, expectedHeadSha);
     },
     async loadOwnedState(prepared): Promise<LoadedPublicationState> {
-      const coordinates = azureCoordinates(prepared.change);
-      const threads = await client.listThreads(
-        coordinates.repositoryId,
-        prepared.change.change.number,
-      );
-      const main = ownedAzureRootThread(
-        threads,
-        prepared.ownerUniqueName,
-        azureMainMarker(prepared.change.change.number),
-      );
+      const threads = await loadAzureThreads(client, prepared);
       return {
-        main: main?.comments[0]
-          ? { id: main.comments[0].id, body: main.comments[0].content }
-          : undefined,
+        main: azureOwnedMain(threads, prepared),
         inline: threads.flatMap((thread) => {
           const root = thread.comments[0];
           if (!root || root.author?.uniqueName !== prepared.ownerUniqueName) return [];
@@ -69,6 +58,9 @@ export function createAzureDevOpsPublicationDriver(
         }),
         threads: azureThreadContexts(threads, prepared.ownerUniqueName),
       };
+    },
+    async loadOwnedMain(prepared) {
+      return azureOwnedMain(await loadAzureThreads(client, prepared), prepared);
     },
     upsertMain: (prepared, existing, body) =>
       upsertAzureRootComment(client, prepared, existing, body, "Main Review Comment"),
@@ -126,6 +118,20 @@ export function createAzureDevOpsPublicationDriver(
       );
     },
   };
+}
+
+function loadAzureThreads(client: AzureDevOpsClient, prepared: Prepared) {
+  const coordinates = azureCoordinates(prepared.change);
+  return client.listThreads(coordinates.repositoryId, prepared.change.change.number);
+}
+
+function azureOwnedMain(threads: AzureDevOpsThread[], prepared: Prepared) {
+  const main = ownedAzureRootThread(
+    threads,
+    prepared.ownerUniqueName,
+    azureMainMarker(prepared.change.change.number),
+  )?.comments[0];
+  return main ? { id: main.id, body: main.content } : undefined;
 }
 
 async function upsertAzureRootComment(

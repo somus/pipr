@@ -194,6 +194,180 @@ describe("GitHub host adapter contract", () => {
     ).rejects.toThrow("Change request head changed");
     expect(calls).toEqual(["getPullRequestHeadSha"]);
   });
+
+  it("publishes a summary without loading review comments or threads", async () => {
+    const calls: string[] = [];
+    const client = publicationClient(calls);
+    client.listReviewThreads = async () => {
+      throw new Error("review threads should not be loaded");
+    };
+    const adapter = createGitHubHostAdapter({
+      env: {},
+      commandClient: commandClient(),
+      publicationClient: client,
+    });
+    const change = changeEvent(
+      await commandClient().getPullRequest({
+        repository: { slug: "local/pipr" },
+        changeNumber: 7,
+      }),
+    );
+
+    await expect(
+      adapter.publication?.publish({
+        change,
+        plan: buildPublicationPlan({
+          event: change,
+          main: "No findings.",
+          inlineItems: [],
+          metadata: {
+            runtimeVersion,
+            reviewedHeadSha: "head",
+            selectedTasks: ["review"],
+            failedTasks: [],
+            validFindings: 0,
+            droppedFindings: 0,
+          },
+        }),
+      }),
+    ).resolves.toMatchObject({ mainComment: { action: "created" } });
+    expect(calls).toContain("listIssueComments");
+    expect(calls).not.toContain("listReviewComments");
+    expect(calls).not.toContain("listReviewThreads");
+  });
+
+  it("publishes progress without loading review comments or threads", async () => {
+    const calls: string[] = [];
+    const adapter = createGitHubHostAdapter({
+      env: {},
+      commandClient: commandClient(),
+      publicationClient: publicationClient(calls),
+    });
+    const change = changeEvent(
+      await commandClient().getPullRequest({
+        repository: { slug: "local/pipr" },
+        changeNumber: 7,
+      }),
+    );
+
+    await expect(
+      adapter.publication?.publishReviewProgress?.({
+        change,
+        reviewedHeadSha: "head",
+        renderBody: () => "<!-- pipr:main-comment change=7 version=1 -->\nProgress.",
+      }),
+    ).resolves.toMatchObject({ status: "published", action: "created" });
+    expect(calls).toContain("listIssueComments");
+    expect(calls).not.toContain("listReviewComments");
+    expect(calls).not.toContain("listReviewThreads");
+  });
+
+  it("publishes reply-only actions without loading GitHub review threads", async () => {
+    const calls: string[] = [];
+    const adapter = createGitHubHostAdapter({
+      env: {},
+      commandClient: commandClient(),
+      publicationClient: publicationClient(calls),
+    });
+    const change = changeEvent(
+      await commandClient().getPullRequest({
+        repository: { slug: "local/pipr" },
+        changeNumber: 7,
+      }),
+    );
+
+    await expect(
+      adapter.publication?.publishThreadActions?.({
+        change,
+        reviewedHeadSha: "head",
+        actions: [
+          {
+            kind: "reply",
+            findingId: "finding-right",
+            findingHeadSha: "head",
+            commentId: "10",
+            threadId: "thread-10",
+            body: "Still applies.",
+            responseKey: "reply:still-valid:finding-right",
+          },
+        ],
+      }),
+    ).resolves.toEqual({ errors: [] });
+    expect(calls).toContain("listReviewComments");
+    expect(calls).toContain("createReviewCommentReply");
+    expect(calls).not.toContain("listReviewThreads");
+  });
+
+  it("does not dedupe an unmarked comment owned by the GitHub identity", async () => {
+    const client = new StatefulGitHubClient();
+    const adapter = createGitHubHostAdapter({
+      commandClient: client,
+      publicationClient: client,
+    });
+    const change = changeEvent(await client.getPullRequest());
+    client.reviewComments.push({
+      id: 10,
+      body: "Another workflow commented here.",
+      authorLogin: "pipr-bot",
+      path: "src/new.ts",
+      commitId: "head",
+      line: 2,
+      startLine: undefined,
+      side: "RIGHT",
+      startSide: undefined,
+    });
+
+    await expect(
+      adapter.publication?.publish({ change, plan: githubReviewPlan(change) }),
+    ).resolves.toMatchObject({ inlineComments: { posted: 1, skipped: 0, failed: 0 } });
+    expect(client.reviewComments).toHaveLength(2);
+  });
+
+  it("does not reply to an already-resolved GitHub review thread", async () => {
+    const client = new StatefulGitHubClient();
+    const adapter = createGitHubHostAdapter({
+      commandClient: client,
+      publicationClient: client,
+    });
+    const change = changeEvent(await client.getPullRequest());
+    client.reviewComments.push({
+      id: 10,
+      body: `${renderInlineFindingMarker("finding-right", "head")}\nFix this.`,
+      authorLogin: "pipr-bot",
+      path: "src/new.ts",
+      commitId: "head",
+      line: 2,
+      startLine: undefined,
+      side: "RIGHT",
+      startSide: undefined,
+    });
+    client.threads.push({
+      id: "thread-10",
+      isResolved: true,
+      viewerCanResolve: true,
+      commentIds: [10],
+    });
+
+    await expect(
+      adapter.publication?.publishThreadActions?.({
+        change,
+        reviewedHeadSha: "head",
+        actions: [
+          {
+            kind: "resolve",
+            findingId: "finding-right",
+            findingHeadSha: "head",
+            commentId: "10",
+            threadId: "thread-10",
+            body: "Resolved.",
+            responseKey: "head:fixed:finding-right",
+          },
+        ],
+      }),
+    ).resolves.toEqual({ errors: [] });
+    expect(client.reviewComments).toHaveLength(1);
+    expect(client.resolutionWrites).toBe(0);
+  });
 });
 
 defineCodeHostAdapterConformanceSuite({
@@ -248,6 +422,53 @@ function changeEvent(
     platform: { id: "github" },
     workspace: loaded.workspace ?? "/workspace",
   };
+}
+
+function githubReviewPlan(change: ChangeRequestEventContext) {
+  const finding = {
+    body: "Fix this.",
+    path: "src/new.ts",
+    rangeId: "range-right",
+    side: "RIGHT" as const,
+    startLine: 2,
+    endLine: 2,
+  };
+  return buildPublicationPlan({
+    event: change,
+    main: "Summary.",
+    inlineItems: [
+      {
+        finding,
+        range: {
+          id: finding.rangeId,
+          path: finding.path,
+          side: finding.side,
+          startLine: 2,
+          endLine: 2,
+          kind: "added",
+          hunkIndex: 1,
+          hunkHeader: "@@ -1,1 +1,2 @@",
+          hunkContentHash: "deadbeefcafe",
+        },
+        path: finding.path,
+        side: finding.side,
+        startLine: 2,
+        endLine: 2,
+        body: `${renderInlineFindingMarker("finding-right", "head")}\nFix this.`,
+        marker: "pipr:finding:finding-right:head",
+        findingId: "finding-right",
+        reviewedHeadSha: "head",
+      },
+    ],
+    metadata: {
+      runtimeVersion,
+      reviewedHeadSha: "head",
+      selectedTasks: ["review"],
+      failedTasks: [],
+      validFindings: 1,
+      droppedFindings: 0,
+    },
+  });
 }
 
 function publicationClient(

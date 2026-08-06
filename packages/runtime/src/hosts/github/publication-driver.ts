@@ -33,6 +33,8 @@ export function createGitHubPublicationDriver(
       return assertCurrentHeadSha(client, prepared.change, expectedHeadSha);
     },
     loadOwnedState,
+    loadOwnedThreads,
+    loadOwnedMain,
     upsertMain: (prepared, existing, body) =>
       upsertGitHubIssueComment(client, prepared, existing, body),
     inlineLocation(_prepared, item) {
@@ -132,6 +134,41 @@ async function upsertGitHubIssueComment(
   return { id: String(created.id), action: "created" as const };
 }
 
+async function loadOwnedThreads(prepared: Prepared, actions: readonly ThreadAction[]) {
+  const ownerLogin = await prepared.client.getAuthenticatedUserLogin();
+  const reviewComments = await prepared.client.listReviewComments(reviewCoordinates(prepared));
+  const owned = reviewComments.filter((comment) => comment.authorLogin === ownerLogin);
+  if (!actions.some((action) => action.kind === "resolve")) {
+    const comments = owned.map((comment) => ({
+      id: String(comment.id),
+      body: comment.body ?? "",
+      authorLogin: comment.authorLogin,
+    }));
+    return actions.map((action) => ({
+      findingId: action.findingId,
+      findingHeadSha: action.findingHeadSha,
+      parentCommentId: action.commentId,
+      threadId: action.threadId,
+      parentBody: owned.find((comment) => String(comment.id) === action.commentId)?.body ?? "",
+      threadResolved: false,
+      comments: [...comments],
+    }));
+  }
+  const threads = await prepared.client.listReviewThreads(reviewCoordinates(prepared));
+  return githubThreadContexts(owned, reviewComments, threads, ownerLogin);
+}
+
+async function loadOwnedMain(prepared: Prepared, mainMarker: string) {
+  const ownerLogin = await prepared.client.getAuthenticatedUserLogin();
+  const main = findMainComment(
+    await prepared.client.listIssueComments(issueCoordinates(prepared)),
+    mainMarker,
+    prepared.change.change.number,
+    ownerLogin,
+  );
+  return main ? { id: String(main.id), body: main.body ?? undefined } : undefined;
+}
+
 async function loadOwnedState(
   prepared: Prepared,
   mainMarker: string,
@@ -150,7 +187,6 @@ async function loadOwnedState(
   );
   const owned = reviewComments.filter((comment) => comment.authorLogin === ownerLogin);
   const threadByComment = reviewThreadByCommentId(threads);
-  const commentById = new Map(reviewComments.map((comment) => [comment.id, comment]));
   return {
     main: main ? { id: String(main.id), body: main.body ?? undefined } : undefined,
     inline: owned.map((comment) => ({
@@ -158,28 +194,39 @@ async function loadOwnedState(
       location: locationFromComment(comment),
       resolved: threadByComment.get(comment.id)?.isResolved ?? false,
     })),
-    threads: owned.flatMap((comment) => {
-      const marker = extractInlineFindingMarkerRecords([comment.body ?? ""])[0];
-      if (!marker) return [];
-      const thread = threadByComment.get(comment.id);
-      return [
-        {
-          findingId: marker.id,
-          findingHeadSha: marker.head,
-          parentCommentId: String(comment.id),
-          parentBody: comment.body ?? "",
-          threadId: thread?.id,
-          threadResolved: thread?.isResolved ?? false,
-          comments: (thread?.commentIds ?? [comment.id]).flatMap((id) => {
-            const item = commentById.get(id);
-            return item && item.authorLogin === ownerLogin
-              ? [{ id: String(item.id), body: item.body ?? "", authorLogin: item.authorLogin }]
-              : [];
-          }),
-        },
-      ];
-    }),
+    threads: githubThreadContexts(owned, reviewComments, threads, ownerLogin),
   };
+}
+
+function githubThreadContexts(
+  owned: GitHubReviewComment[],
+  reviewComments: GitHubReviewComment[],
+  threads: GitHubReviewThread[],
+  ownerLogin: string,
+) {
+  const threadByComment = reviewThreadByCommentId(threads);
+  const commentById = new Map(reviewComments.map((comment) => [comment.id, comment]));
+  return owned.flatMap((comment) => {
+    const marker = extractInlineFindingMarkerRecords([comment.body ?? ""])[0];
+    if (!marker) return [];
+    const thread = threadByComment.get(comment.id);
+    return [
+      {
+        findingId: marker.id,
+        findingHeadSha: marker.head,
+        parentCommentId: String(comment.id),
+        parentBody: comment.body ?? "",
+        threadId: thread?.id,
+        threadResolved: thread?.isResolved ?? false,
+        comments: (thread?.commentIds ?? [comment.id]).flatMap((id) => {
+          const item = commentById.get(id);
+          return item && item.authorLogin === ownerLogin
+            ? [{ id: String(item.id), body: item.body ?? "", authorLogin: item.authorLogin }]
+            : [];
+        }),
+      },
+    ];
+  });
 }
 
 function issueCoordinates(prepared: Prepared) {

@@ -59,6 +59,15 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
         threads: gitLabThreadContexts(discussions, prepared.ownerUsername, true),
       };
     },
+    async loadOwnedMain(prepared) {
+      const coordinates = gitLabCoordinates(prepared.change);
+      const main = ownedGitLabNote(
+        await client.listNotes(coordinates.projectId, prepared.change.change.number),
+        prepared.ownerUsername,
+        gitLabMainMarker(prepared.change.change.number),
+      );
+      return main ? { id: main.id, body: main.body } : undefined;
+    },
     upsertMain: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
     inlineLocation: (_prepared, item) => gitLabInlineLocation(item),
     async createInline(prepared, item: InlinePublicationItem) {

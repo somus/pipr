@@ -64,6 +64,15 @@ class MemoryDriver implements PublicationDriver<Prepared> {
     return this.state;
   }
 
+  async loadOwnedMain(): Promise<OwnedMainComment | undefined> {
+    this.loadCount += 1;
+    if (this.changeHeadOnLoad === this.loadCount) this.currentHead = "new-head";
+    if (this.supersedeOnLoad === this.loadCount && this.state.main) {
+      this.state.main.body = progressBody(newerToken);
+    }
+    return this.state.main;
+  }
+
   async upsertMain(_prepared: Prepared, existing: OwnedMainComment | undefined, body: string) {
     const id = existing?.id ?? "main-1";
     this.writes.push(existing ? "update-main" : "create-main");
@@ -117,10 +126,8 @@ class MemoryDriver implements PublicationDriver<Prepared> {
     return { id: this.command.id, action: existing ? ("updated" as const) : ("created" as const) };
   }
 
-  async replyThread(_prepared: Prepared, action: ThreadAction, body: string): Promise<void> {
+  async replyThread(_prepared: Prepared, action: ThreadAction, _body: string): Promise<void> {
     this.writes.push(`reply:${action.findingId}`);
-    const thread = this.state.threads.find((item) => item.parentCommentId === action.commentId);
-    thread?.comments.push({ id: "reply", body, authorLogin: "pipr" });
   }
 
   async resolveThread(_prepared: Prepared, action: ThreadAction) {
@@ -232,6 +239,26 @@ describe("shared publication workflow", () => {
     });
   });
 
+  it("does not reserve a location from an unmarked owned comment", async () => {
+    const driver = new MemoryDriver();
+    const first = plan().inlineItems[0];
+    if (!first) throw new Error("expected inline item");
+    driver.state = {
+      ...driver.state,
+      inline: [
+        {
+          body: "A comment from another workflow using the same owner.",
+          location: driver.inlineLocation({ change }, first),
+          resolved: false,
+        },
+      ],
+    };
+
+    await expect(publication(driver).publish({ change, plan: plan() })).resolves.toMatchObject({
+      inlineComments: { posted: 2, skipped: 0, failed: 0 },
+    });
+  });
+
   it("dedupes markers and same-head locations but ignores resolved locations", async () => {
     const driver = new MemoryDriver();
     await publication(driver).publish({ change, plan: plan() });
@@ -276,8 +303,67 @@ describe("shared publication workflow", () => {
     ).resolves.toEqual({ errors: [] });
     expect(driver.writes.filter((write) => write === "reply:finding-right")).toHaveLength(1);
     expect(driver.writes.filter((write) => write === "resolve:finding-right")).toHaveLength(1);
-    const reply = driver.state.threads[0]?.comments.find((comment) => comment.id === "reply")?.body;
+    const reply = driver.state.threads[0]?.comments.at(-1)?.body;
     expect(reply).toContain("&lt;!-- spoof -->");
+  });
+
+  it("matches ID-less thread actions by parent comment", async () => {
+    const driver = new MemoryDriver();
+    driver.state = {
+      ...driver.state,
+      threads: [
+        {
+          findingId: "first",
+          findingHeadSha: "head",
+          parentCommentId: "first-comment",
+          parentBody: "First.",
+          threadResolved: false,
+          comments: [{ id: "first-comment", body: "First.", authorLogin: "pipr" }],
+        },
+        {
+          findingId: "second",
+          findingHeadSha: "head",
+          parentCommentId: "second-comment",
+          parentBody: "Second.",
+          threadResolved: false,
+          comments: [{ id: "second-comment", body: "Second.", authorLogin: "pipr" }],
+        },
+      ],
+    };
+    const action: ThreadAction = {
+      kind: "reply",
+      findingId: "second",
+      findingHeadSha: "head",
+      commentId: "second-comment",
+      body: "Still applies.",
+      responseKey: "reply:second",
+    };
+    const options = { change, actions: [action], reviewedHeadSha: "head" };
+
+    await publication(driver).publishThreadActions?.(options);
+    await publication(driver).publishThreadActions?.(options);
+
+    expect(driver.writes.filter((write) => write === "reply:second")).toHaveLength(1);
+    expect(driver.state.threads[0]?.comments).toHaveLength(1);
+    expect(driver.state.threads[1]?.comments).toHaveLength(2);
+  });
+
+  it("does not reply to a thread that is already resolved", async () => {
+    const driver = new MemoryDriver();
+    await publication(driver).publish({ change, plan: plan() });
+    const thread = driver.state.threads[0];
+    if (!thread) throw new Error("expected inline thread");
+    thread.threadResolved = true;
+
+    await expect(
+      publication(driver).publishThreadActions?.({
+        change,
+        actions: [threadAction("resolve")],
+        reviewedHeadSha: "head",
+      }),
+    ).resolves.toEqual({ errors: [] });
+    expect(driver.writes).not.toContain("reply:finding-right");
+    expect(driver.writes).not.toContain("resolve:finding-right");
   });
 
   it("ignores foreign reply markers and rechecks head before thread writes", async () => {

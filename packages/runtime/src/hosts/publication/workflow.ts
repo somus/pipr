@@ -33,6 +33,11 @@ export interface PublicationDriver<Prepared> {
   prepare(change: ChangeRequestEventContext, expectedHeadSha: string): Promise<Prepared>;
   assertCurrent(prepared: Prepared, expectedHeadSha: string): Promise<void>;
   loadOwnedState(prepared: Prepared, mainMarker: string): Promise<LoadedPublicationState>;
+  loadOwnedThreads?(
+    prepared: Prepared,
+    actions: readonly ThreadAction[],
+  ): Promise<readonly InlineThreadContext[]>;
+  loadOwnedMain(prepared: Prepared, mainMarker: string): Promise<OwnedMainComment | undefined>;
   upsertMain(
     prepared: Prepared,
     existing: OwnedMainComment | undefined,
@@ -75,15 +80,15 @@ async function publishReview<Prepared>(
   const expectedHeadSha = options.plan.metadata.reviewedHeadSha;
   const prepared = await driver.prepare(options.change, expectedHeadSha);
   await driver.assertCurrent(prepared, expectedHeadSha);
-  const initial = await driver.loadOwnedState(prepared, options.plan.mainMarker);
+  const initial = await loadReviewState(driver, prepared, options.plan);
   assertProgressLease(initial.main, options.progressLease);
   await driver.assertCurrent(prepared, expectedHeadSha);
 
   const beforeWrite = async () => {
     await driver.assertCurrent(prepared, expectedHeadSha);
     if (!options.progressLease) return;
-    const current = await driver.loadOwnedState(prepared, options.plan.mainMarker);
-    assertProgressLease(current.main, options.progressLease);
+    const currentMain = await driver.loadOwnedMain(prepared, options.plan.mainMarker);
+    assertProgressLease(currentMain, options.progressLease);
   };
   const inline = await publishInlineItems(
     driver,
@@ -105,9 +110,9 @@ async function publishReview<Prepared>(
   }
 
   await driver.assertCurrent(prepared, expectedHeadSha);
-  const current = await driver.loadOwnedState(prepared, options.plan.mainMarker);
-  assertProgressLease(current.main, options.progressLease);
-  const main = await driver.upsertMain(prepared, current.main, options.plan.mainComment);
+  const currentMain = await driver.loadOwnedMain(prepared, options.plan.mainMarker);
+  assertProgressLease(currentMain, options.progressLease);
+  const main = await driver.upsertMain(prepared, currentMain, options.plan.mainComment);
   if (inline.errors.length > 0) {
     throw new PublicationError(`${driver.provider} inline comment publication failed`, partial);
   }
@@ -120,25 +125,34 @@ async function publishReview<Prepared>(
   };
 }
 
+async function loadReviewState<Prepared>(
+  driver: PublicationDriver<Prepared>,
+  prepared: Prepared,
+  plan: Parameters<CodeHostPublication["publish"]>[0]["plan"],
+): Promise<LoadedPublicationState> {
+  if (plan.inlineItems.length > 0 || plan.threadActions.length > 0) {
+    return driver.loadOwnedState(prepared, plan.mainMarker);
+  }
+  return {
+    main: await driver.loadOwnedMain(prepared, plan.mainMarker),
+    inline: [],
+    threads: [],
+  };
+}
+
 async function publishProgress<Prepared>(
   driver: PublicationDriver<Prepared>,
   options: Parameters<NonNullable<CodeHostPublication["publishReviewProgress"]>>[0],
 ) {
   const prepared = await driver.prepare(options.change, options.reviewedHeadSha);
   await driver.assertCurrent(prepared, options.reviewedHeadSha);
-  let state = await driver.loadOwnedState(prepared, "pipr:main-comment");
-  if (progressWasSuperseded(state.main, options.expectedToken))
-    return { status: "superseded" as const };
+  let main = await driver.loadOwnedMain(prepared, "pipr:main-comment");
+  if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
   await driver.assertCurrent(prepared, options.reviewedHeadSha);
-  state = await driver.loadOwnedState(prepared, "pipr:main-comment");
-  if (progressWasSuperseded(state.main, options.expectedToken))
-    return { status: "superseded" as const };
-  if (!state.main && options.expectedToken) return { status: "superseded" as const };
-  const result = await driver.upsertMain(
-    prepared,
-    state.main,
-    options.renderBody(state.main?.body),
-  );
+  main = await driver.loadOwnedMain(prepared, "pipr:main-comment");
+  if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
+  if (!main && options.expectedToken) return { status: "superseded" as const };
+  const result = await driver.upsertMain(prepared, main, options.renderBody(main?.body));
   return { status: "published" as const, ...result };
 }
 
@@ -170,9 +184,11 @@ async function publishThreadActions<Prepared>(
   if (options.actions.length === 0) return { errors: [] };
   const prepared = await driver.prepare(options.change, options.reviewedHeadSha);
   await driver.assertCurrent(prepared, options.reviewedHeadSha);
-  const state = await driver.loadOwnedState(prepared, "pipr:main-comment");
+  const threads = driver.loadOwnedThreads
+    ? await driver.loadOwnedThreads(prepared, options.actions)
+    : (await driver.loadOwnedState(prepared, "pipr:main-comment")).threads;
   await driver.assertCurrent(prepared, options.reviewedHeadSha);
-  return runThreadActions(driver, prepared, options.actions, state.threads, () =>
+  return runThreadActions(driver, prepared, options.actions, threads, () =>
     driver.assertCurrent(prepared, options.reviewedHeadSha),
   );
 }
@@ -190,7 +206,9 @@ async function publishInlineItems<Prepared>(
     ),
   );
   const locations = state.inline.flatMap((item) =>
-    item.resolved || !item.location ? [] : [item.location],
+    item.resolved || !item.location || extractInlineFindingMarkerRecords([item.body]).length === 0
+      ? []
+      : [item.location],
   );
   const errors: string[] = [];
   let posted = 0;
@@ -248,27 +266,55 @@ async function runThreadAction<Prepared>(
   threads: readonly InlineThreadContext[],
   beforeWrite: () => Promise<void>,
 ): Promise<string[]> {
-  const thread = threads.find(
-    (item) => item.threadId === action.threadId || item.parentCommentId === action.commentId,
-  );
+  const thread = threadForAction(threads, action);
   if (!thread) return [`${driver.provider} thread not found for comment ${action.commentId}`];
+  if (action.kind === "resolve" && thread.threadResolved) return [];
   const errors: string[] = [];
-  const reply = threadActionReply(action);
-  if (!threadReplyExists(thread, action)) {
-    const error = await attemptThreadWrite(beforeWrite, () =>
-      driver.replyThread(prepared, action, reply.body),
-    );
-    if (error) errors.push(error);
-    else thread.comments.push({ id: "", body: reply.body });
-  }
-  if (action.kind === "resolve" && !thread.threadResolved && driver.resolveThread) {
-    const error = await attemptThreadWrite(beforeWrite, () =>
-      driver.resolveThread?.(prepared, action),
-    );
-    if (error) errors.push(error);
-    else thread.threadResolved = true;
-  }
+  const replyError = await runThreadReply(driver, prepared, action, thread, beforeWrite);
+  if (replyError) errors.push(replyError);
+  const resolveError = await runThreadResolution(driver, prepared, action, thread, beforeWrite);
+  if (resolveError) errors.push(resolveError);
   return errors;
+}
+
+async function runThreadReply<Prepared>(
+  driver: PublicationDriver<Prepared>,
+  prepared: Prepared,
+  action: ThreadAction,
+  thread: InlineThreadContext,
+  beforeWrite: () => Promise<void>,
+): Promise<string | undefined> {
+  if (threadReplyExists(thread, action)) return undefined;
+  const reply = threadActionReply(action);
+  const error = await attemptThreadWrite(beforeWrite, () =>
+    driver.replyThread(prepared, action, reply.body),
+  );
+  if (!error) thread.comments.push({ id: "", body: reply.body });
+  return error;
+}
+
+async function runThreadResolution<Prepared>(
+  driver: PublicationDriver<Prepared>,
+  prepared: Prepared,
+  action: ThreadAction,
+  thread: InlineThreadContext,
+  beforeWrite: () => Promise<void>,
+): Promise<string | undefined> {
+  if (action.kind !== "resolve" || !driver.resolveThread) return undefined;
+  const error = await attemptThreadWrite(beforeWrite, () =>
+    driver.resolveThread?.(prepared, action),
+  );
+  if (!error) thread.threadResolved = true;
+  return error;
+}
+
+function threadForAction(
+  threads: readonly InlineThreadContext[],
+  action: ThreadAction,
+): InlineThreadContext | undefined {
+  return action.threadId
+    ? threads.find((thread) => thread.threadId === action.threadId)
+    : threads.find((thread) => thread.parentCommentId === action.commentId);
 }
 
 function threadReplyExists(thread: InlineThreadContext, action: ThreadAction): boolean {
