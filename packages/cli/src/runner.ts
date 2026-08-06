@@ -72,20 +72,29 @@ type CliOptions = {
   runMaxBytes?: string;
 };
 
+type CliExecutionContext = {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+};
+
 type MainOptions = {
   argv?: string[];
   env?: NodeJS.ProcessEnv;
+  cwd?: string;
   updateNoticeFetch?: typeof fetch;
   writeUpdateNotice?: (message: string) => void;
 };
 
 export async function runMain(options: MainOptions = {}): Promise<void> {
   const argv = options.argv ?? process.argv;
-  const env = options.env ?? process.env;
+  const context: CliExecutionContext = {
+    cwd: options.cwd ?? process.cwd(),
+    env: options.env ?? process.env,
+  };
   if (!isUpdateCommand(argv)) {
-    await writeAvailableUpdateNotice(options);
+    await writeAvailableUpdateNotice(options, context.env);
   }
-  const program = createProgram({ exitOverride: env.GITHUB_ACTIONS === "true", env });
+  const program = createProgram(context, { exitOverride: context.env.GITHUB_ACTIONS === "true" });
   try {
     if (argv.length <= 2) {
       program.outputHelp();
@@ -100,9 +109,12 @@ export async function runMain(options: MainOptions = {}): Promise<void> {
   }
 }
 
-function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEnv } = {}): Command {
+function createProgram(
+  context: CliExecutionContext,
+  options: { exitOverride?: boolean } = {},
+): Command {
   const program = new Command();
-  const env = options.env ?? process.env;
+  const { env } = context;
   program.name("pipr").version(cliPackage.version).showHelpAfterError();
   if (options.exitOverride) {
     program.exitOverride();
@@ -124,7 +136,7 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--github-runner <label>", "Runner label used by generated GitHub setup")
     .option("--github-enterprise-server", "Generate GitHub Enterprise Server-compatible setup")
     .option("--force", "Overwrite existing pipr files")
-    .action(runInit);
+    .action((commandOptions: CliOptions) => runInit(commandOptions, context));
 
   program
     .command("host-run")
@@ -132,7 +144,7 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--host <host>", "Code host adapter")
     .option("--event <path>", "Native event payload path")
     .option("--config-dir <dir>", "Config directory", ".pipr")
-    .action(runHostRun);
+    .action((commandOptions: CliOptions) => runHostRun(commandOptions, context));
 
   const webhook = program.command("webhook").description("Run trusted webhook ingress");
   webhook
@@ -148,21 +160,21 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--run-store-dir <path>", "Diagnostic run store")
     .option("--run-retention-days <days>", "Completed run retention")
     .option("--run-max-bytes <bytes>", "Maximum webhook run store bytes")
-    .action(runWebhookServe);
+    .action((commandOptions: CliOptions) => runWebhookServe(commandOptions, context));
   webhook
     .command("status")
     .description("Show recent webhook delivery outcomes")
     .option("--database <path>", "SQLite delivery database", ".pipr/webhooks.sqlite")
     .option("--limit <count>", "Maximum deliveries to show", "20")
     .option("--json", "Print versioned JSON")
-    .action(runWebhookStatus);
+    .action((commandOptions: CliOptions) => runWebhookStatus(commandOptions, context));
 
   program
     .command("check")
     .description("Type-load config and validate the runtime plan")
     .option("--config-dir <dir>", "Config directory", ".pipr")
     .option("--require-env", "Require configured provider env vars")
-    .action(runCheck);
+    .action((commandOptions: CliOptions) => runCheck(commandOptions, context));
 
   program
     .command("dry-run")
@@ -170,13 +182,13 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .requiredOption("--event <path>", "Native event payload path")
     .option("--host <host>", "Code host adapter")
     .option("--config-dir <dir>", "Config directory", ".pipr")
-    .action(runDryRun);
+    .action((commandOptions: CliOptions) => runDryRun(commandOptions, context));
 
   program
     .command("inspect")
     .description("Print models, agents, tasks, commands, and tools")
     .option("--config-dir <dir>", "Config directory", ".pipr")
-    .action(runInspect);
+    .action((commandOptions: CliOptions) => runInspect(commandOptions, context));
 
   program
     .command("review")
@@ -188,7 +200,9 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--trace [path]", "Capture a diagnostic run bundle")
     .option("--pi-agent-dir <path>", "Pi agent directory for local authentication")
     .option("--json", "Print structured JSON output")
-    .action(runLocalReview);
+    .action((commandOptions: CliOptions & { base: string }) =>
+      runLocalReview(commandOptions, context),
+    );
 
   const runs = program.command("runs").description("Inspect captured Pipr runs");
   runs
@@ -203,7 +217,7 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--json", "Print versioned JSON")
     .option("--store <path>", "Local run store")
     .action(async (runOptions: RunsListOptions) => {
-      await runRunsList(runOptions, { env, cwd: process.cwd() });
+      await runRunsList(runOptions, context);
     });
   runs
     .command("show")
@@ -223,7 +237,7 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     .option("--json", "Print versioned JSON without prompt or output bodies")
     .option("--store <path>", "Local run store")
     .action(async (executionId: string | undefined, runOptions: RunsShowOptions) => {
-      await runRunsShow(executionId, runOptions, { env, cwd: process.cwd() });
+      await runRunsShow(executionId, runOptions, context);
     });
   runs
     .command("download")
@@ -241,7 +255,7 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     )
     .option("--store <path>", "Local run store")
     .action(async (executionId: string, runOptions: RunsDownloadOptions) => {
-      await runRunsDownload(executionId, runOptions, { env, cwd: process.cwd() });
+      await runRunsDownload(executionId, runOptions, context);
     });
   runs
     .command("inspect")
@@ -256,14 +270,14 @@ function createProgram(options: { exitOverride?: boolean; env?: NodeJS.ProcessEn
     )
     .option("--json", "Print versioned JSON without prompt or output bodies")
     .action(async (inputPath: string, runOptions: RunsInspectOptions) => {
-      await runRunsInspect(inputPath, runOptions, { env, cwd: process.cwd() });
+      await runRunsInspect(inputPath, runOptions, context);
     });
   runs
     .command("keygen")
     .description("Generate an age identity for encrypted Run Bundles")
     .option("--output <path>", "Identity file path")
     .action(async (runOptions: RunsKeygenOptions) => {
-      await runRunsKeygen(runOptions, { env, cwd: process.cwd() });
+      await runRunsKeygen(runOptions, context);
     });
 
   program.command("version").description("Print the CLI version").action(runVersion);
@@ -298,10 +312,10 @@ Prefer it over guessing commands or config shape from memory.
   skill path  Materialize the setup skill and print its directory path
 `;
 
-async function runHostRun(options: CliOptions): Promise<void> {
-  const env = process.env;
+async function runHostRun(options: CliOptions, context: CliExecutionContext): Promise<void> {
+  const { env } = context;
   const isGitHubAction = env.GITHUB_ACTIONS === "true";
-  const rootDir = hostRunRootDir(env);
+  const rootDir = hostRunRootDir(context);
   const result = await runHostRunCommand({
     rootDir,
     configDir: options.configDir,
@@ -389,34 +403,34 @@ function publishGitHubRunMetadata(
   core.setOutput("run-artifact-name", artifactName);
 }
 
-function hostRunRootDir(env: NodeJS.ProcessEnv): string {
+function hostRunRootDir(context: CliExecutionContext): string {
   return (
-    env.GITEA_WORKSPACE ??
-    env.FORGEJO_WORKSPACE ??
-    env.GITHUB_WORKSPACE ??
-    env.CI_PROJECT_DIR ??
-    env.BITBUCKET_CLONE_DIR ??
-    env.BUILD_SOURCESDIRECTORY ??
-    process.cwd()
+    context.env.GITEA_WORKSPACE ??
+    context.env.FORGEJO_WORKSPACE ??
+    context.env.GITHUB_WORKSPACE ??
+    context.env.CI_PROJECT_DIR ??
+    context.env.BITBUCKET_CLONE_DIR ??
+    context.env.BUILD_SOURCESDIRECTORY ??
+    context.cwd
   );
 }
 
-async function runWebhookServe(options: CliOptions): Promise<void> {
+async function runWebhookServe(options: CliOptions, context: CliExecutionContext): Promise<void> {
   const { runWebhookServer } = await import("@usepipr/runtime");
-  const secret = process.env.PIPR_WEBHOOK_SECRET;
+  const secret = context.env.PIPR_WEBHOOK_SECRET;
   if (!secret) throw new Error("PIPR_WEBHOOK_SECRET is required");
   const host = webhookHost(options.host);
   const port = webhookPort(options.port);
   await runWebhookServer({
     host,
-    workspace: options.workspace ?? process.cwd(),
+    workspace: options.workspace ?? context.cwd,
     configDir: options.configDir,
     databasePath: options.database ?? ".pipr/webhooks.sqlite",
     expectedRepository: options.repository ?? "",
     secret,
     hostname: options.hostname,
     port,
-    env: process.env,
+    env: context.env,
     runStoreDirectory: options.runStoreDir,
     runRetentionDays: positiveIntegerOption(options.runRetentionDays, "--run-retention-days"),
     runMaxBytes: positiveIntegerOption(options.runMaxBytes, "--run-max-bytes"),
@@ -432,10 +446,11 @@ function positiveIntegerOption(value: string | undefined, name: string): number 
   return parsed;
 }
 
-async function runWebhookStatus(options: CliOptions): Promise<void> {
+async function runWebhookStatus(options: CliOptions, context: CliExecutionContext): Promise<void> {
   const { readWebhookDeliveryStatus } = await import("@usepipr/runtime");
   const limit = Number(options.limit);
-  const deliveries = readWebhookDeliveryStatus(options.database ?? ".pipr/webhooks.sqlite", limit);
+  const databasePath = path.resolve(context.cwd, options.database ?? ".pipr/webhooks.sqlite");
+  const deliveries = readWebhookDeliveryStatus(databasePath, limit);
   if (options.json) {
     console.log(JSON.stringify({ formatVersion: 1, deliveries }, null, 2));
     return;
@@ -514,9 +529,9 @@ const githubActionLogWriters = {
   debug: core.debug,
 } satisfies Record<RuntimeLogRecord["level"], (message: string) => void>;
 
-async function runInit(options: CliOptions): Promise<void> {
+async function runInit(options: CliOptions, context: CliExecutionContext): Promise<void> {
   const result = await runInitCommand({
-    rootDir: process.cwd(),
+    rootDir: context.cwd,
     configDir: options.configDir,
     force: options.force === true,
     adapters: options.adapters?.split(",").map((adapter) => adapter.trim()),
@@ -538,22 +553,22 @@ async function runInit(options: CliOptions): Promise<void> {
   }
 }
 
-async function runCheck(options: CliOptions): Promise<void> {
+async function runCheck(options: CliOptions, context: CliExecutionContext): Promise<void> {
   const settings = await runValidateCommand({
-    rootDir: process.cwd(),
+    rootDir: context.cwd,
     configDir: options.configDir,
-    env: process.env,
+    env: context.env,
     requireProviderEnv: options.requireEnv === true,
   });
   console.log(`valid: ${settings.source}`);
   writeConfigWarnings(settings.warnings);
 }
 
-async function runInspect(options: CliOptions): Promise<void> {
+async function runInspect(options: CliOptions, context: CliExecutionContext): Promise<void> {
   const result = await runInspectCommand({
-    rootDir: process.cwd(),
+    rootDir: context.cwd,
     configDir: options.configDir,
-    env: process.env,
+    env: context.env,
   });
   const { warnings, ...plan } = result;
   writeConfigWarnings(warnings);
@@ -590,8 +605,10 @@ async function runUpdate(): Promise<void> {
   console.log(`updated pipr from ${result.previousVersion} to ${result.version}`);
 }
 
-async function writeAvailableUpdateNotice(options: MainOptions): Promise<void> {
-  const env = options.env ?? process.env;
+async function writeAvailableUpdateNotice(
+  options: MainOptions,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
   if (shouldSkipUpdateNotice(env)) {
     return;
   }
@@ -639,17 +656,20 @@ function isUpdateCommand(argv: string[]): boolean {
   );
 }
 
-async function runLocalReview(options: CliOptions & { base: string }): Promise<void> {
+async function runLocalReview(
+  options: CliOptions & { base: string },
+  context: CliExecutionContext,
+): Promise<void> {
   const traceDirectory =
     typeof options.trace === "string"
-      ? path.resolve(process.cwd(), options.trace)
+      ? path.resolve(context.cwd, options.trace)
       : options.trace
-        ? await defaultLocalTraceStore(process.cwd(), process.env)
+        ? await defaultLocalTraceStore(context.cwd, context.env)
         : undefined;
   const result = await runLocalReviewCommand({
-    rootDir: process.cwd(),
+    rootDir: context.cwd,
     configDir: options.configDir,
-    env: process.env,
+    env: context.env,
     baseSha: options.base,
     headSha: options.head,
     piExecutable: options.piExecutable,
@@ -774,15 +794,15 @@ function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }
     : [mainComment.trimEnd(), "", "## Inline Findings", "", inlineFindings.join("\n\n")].join("\n");
 }
 
-async function runDryRun(options: CliOptions): Promise<void> {
+async function runDryRun(options: CliOptions, context: CliExecutionContext): Promise<void> {
   if (!options.event) {
     throw new Error("dry-run requires --event <path>");
   }
   const result = await runDryRunCommand({
-    rootDir: process.cwd(),
+    rootDir: context.cwd,
     configDir: options.configDir,
     host: options.host,
-    env: process.env,
+    env: context.env,
     eventPath: options.event,
   });
   writeConfigWarnings(result.warnings);
