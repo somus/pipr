@@ -1,4 +1,4 @@
-import type { InlinePublicationItem, PublicationPlan, ThreadAction } from "../../review/comment.js";
+import type { InlinePublicationItem } from "../../review/comment.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
@@ -8,23 +8,7 @@ import {
   extractPriorReviewState,
   type PriorReviewState,
 } from "../../review/prior-state.js";
-import {
-  extractReviewProgressToken,
-  type ReviewProgressLease,
-  ReviewProgressSupersededError,
-} from "../../review/progress.js";
-import type { PublicationResult } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import {
-  assertHostInlinePublicationSucceeded,
-  assertHostPublicationWriteAllowed,
-  commandResponseBody,
-  completeHostPublication,
-  hostPublicationActionError,
-  nativeInlineLocation,
-  publishUnseenInlineItems,
-  threadActionReply,
-} from "../publication.js";
 import type { InlineThreadContext } from "../types.js";
 import type {
   GitLabClient,
@@ -33,238 +17,6 @@ import type {
   GitLabNote,
   GitLabPosition,
 } from "./client.js";
-
-export async function publishGitLabPlan(options: {
-  client: GitLabClient;
-  change: ChangeRequestEventContext;
-  plan: PublicationPlan;
-  progressLease?: ReviewProgressLease;
-}): Promise<PublicationResult> {
-  const { projectId } = gitLabCoordinates(options.change);
-  const owner = await options.client.currentUser();
-  const notes = await options.client.listNotes(projectId, options.change.change.number);
-  const existingMain = ownedNote(notes, owner.username, mainMarker(options.change.change.number));
-  assertGitLabProgressLease(existingMain, options.progressLease);
-  const discussions = await options.client.listDiscussions(projectId, options.change.change.number);
-  const ownedBodies = discussionNotes(discussions)
-    .filter((note) => note.author?.username === owner.username)
-    .map((note) => note.body);
-  const mergeRequest = await assertCurrentHead(options.client, projectId, options.change);
-  const assertLease = async () => {
-    if (!options.progressLease) return;
-    await assertCurrentHead(
-      options.client,
-      projectId,
-      options.change,
-      options.plan.metadata.reviewedHeadSha,
-    );
-    const currentMain = await loadOwnedMainNote(
-      options.client,
-      projectId,
-      options.change.change.number,
-      owner.username,
-    );
-    assertGitLabProgressLease(currentMain, options.progressLease);
-  };
-  const inline = await publishUnseenInlineItems({
-    items: options.plan.inlineItems,
-    existingBodies: ownedBodies,
-    existingLocations: gitLabInlineLocations(discussions, owner.username),
-    location: gitLabInlineLocation,
-    beforePublish: assertLease,
-    publish: async (item) => {
-      await options.client.createDiscussion(
-        projectId,
-        options.change.change.number,
-        gitLabInlineBody(item),
-        gitLabPosition(item, mergeRequest.diff_refs),
-      );
-    },
-  });
-  const resolution = await publishGitLabThreadActions({
-    client: options.client,
-    change: options.change,
-    actions: options.plan.threadActions,
-    reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
-    discussions,
-    ownerUsername: owner.username,
-    beforeWrite: assertLease,
-  });
-  if (options.progressLease) {
-    assertHostInlinePublicationSucceeded({
-      provider: "GitLab",
-      inline,
-      resolutionErrors: resolution.errors,
-      metadata: options.plan.metadata,
-    });
-  }
-  await assertCurrentHead(options.client, projectId, options.change);
-  const currentMain = await loadOwnedMainNote(
-    options.client,
-    projectId,
-    options.change.change.number,
-    owner.username,
-  );
-  assertGitLabProgressLease(currentMain, options.progressLease);
-  const main = currentMain
-    ? await options.client.updateNote(
-        projectId,
-        options.change.change.number,
-        currentMain.id,
-        options.plan.mainComment,
-      )
-    : await options.client.createNote(
-        projectId,
-        options.change.change.number,
-        options.plan.mainComment,
-      );
-  return completeHostPublication({
-    provider: "GitLab",
-    mainAction: options.progressLease?.mainCommentAction ?? (existingMain ? "updated" : "created"),
-    mainId: main.id,
-    inline,
-    resolutionErrors: resolution.errors,
-    metadata: options.plan.metadata,
-  });
-}
-
-export async function publishGitLabReviewProgress(options: {
-  client: GitLabClient;
-  change: ChangeRequestEventContext;
-  renderBody(currentBody: string | undefined): string;
-  reviewedHeadSha: string;
-  expectedToken?: string;
-}) {
-  const { projectId } = gitLabCoordinates(options.change);
-  const owner = await options.client.currentUser();
-  await assertCurrentHead(options.client, projectId, options.change);
-  let existing = await loadOwnedMainNote(
-    options.client,
-    projectId,
-    options.change.change.number,
-    owner.username,
-  );
-  if (progressUpdateWasSuperseded(existing, options.expectedToken)) {
-    return { status: "superseded" as const };
-  }
-  await assertCurrentHead(options.client, projectId, options.change);
-  existing = await loadOwnedMainNote(
-    options.client,
-    projectId,
-    options.change.change.number,
-    owner.username,
-  );
-  if (progressUpdateWasSuperseded(existing, options.expectedToken)) {
-    return { status: "superseded" as const };
-  }
-  if (existing) {
-    const note = await options.client.updateNote(
-      projectId,
-      options.change.change.number,
-      existing.id,
-      options.renderBody(existing.body),
-    );
-    return { status: "published" as const, action: "updated" as const, id: note.id };
-  }
-  if (options.expectedToken) return { status: "superseded" as const };
-  const note = await options.client.createNote(
-    projectId,
-    options.change.change.number,
-    options.renderBody(undefined),
-  );
-  return { status: "published" as const, action: "created" as const, id: note.id };
-}
-
-function assertGitLabProgressLease(
-  note: GitLabNote | undefined,
-  lease: ReviewProgressLease | undefined,
-): void {
-  if (!lease) return;
-  if (
-    String(note?.id ?? "") !== lease.mainCommentId ||
-    extractReviewProgressToken(note?.body) !== lease.token
-  ) {
-    throw new ReviewProgressSupersededError();
-  }
-}
-
-function gitLabInlineLocations(
-  discussions: GitLabDiscussion[],
-  ownerUsername: string,
-): InlinePublicationLocation[] {
-  const locations: InlinePublicationLocation[] = [];
-  for (const discussion of discussions) {
-    if (discussion.notes[0]?.author?.username !== ownerUsername) continue;
-    if (discussion.notes[0]?.resolved === true) continue;
-    const location = gitLabInlineLocationFromDiscussion(discussion);
-    if (location) locations.push(location);
-  }
-  return locations;
-}
-
-function gitLabInlineLocationFromDiscussion(
-  discussion: GitLabDiscussion,
-): InlinePublicationLocation | undefined {
-  const root = discussion.notes[0];
-  if (!root?.position) return undefined;
-  const marker = extractInlineFindingMarkerRecords([root.body])[0];
-  if (!marker) return undefined;
-  const position = root.position;
-  return nativeInlineLocation({
-    commitId: marker.head,
-    rightPath: position.new_path ?? "",
-    leftPath: position.old_path ?? position.new_path ?? "",
-    rightStart: position.line_range?.start.new_line ?? undefined,
-    rightEnd: position.new_line,
-    leftStart: position.line_range?.start.old_line ?? undefined,
-    leftEnd: position.old_line,
-  });
-}
-
-function gitLabInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
-  return {
-    path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
-    commitId: item.reviewedHeadSha,
-    side: item.side,
-    startLine: item.startLine,
-    endLine: item.endLine,
-  };
-}
-
-export async function publishGitLabCommandResponse(options: {
-  client: GitLabClient;
-  change: ChangeRequestEventContext;
-  sourceCommentId: string;
-  commandName: string;
-  body: string;
-  allowHeadDrift?: boolean;
-}) {
-  const { projectId } = gitLabCoordinates(options.change);
-  const owner = await options.client.currentUser();
-  const response = commandResponseBody({
-    changeNumber: options.change.change.number,
-    sourceCommentId: options.sourceCommentId,
-    commandName: options.commandName,
-    body: options.body,
-  });
-  const existing = ownedNote(
-    await options.client.listNotes(projectId, options.change.change.number),
-    owner.username,
-    response.marker,
-  );
-  if (!options.allowHeadDrift) {
-    await assertCurrentHead(options.client, projectId, options.change);
-  }
-  const note = existing
-    ? await options.client.updateNote(
-        projectId,
-        options.change.change.number,
-        existing.id,
-        response.body,
-      )
-    : await options.client.createNote(projectId, options.change.change.number, response.body);
-  return { action: existing ? ("updated" as const) : ("created" as const), id: note.id };
-}
 
 export async function loadGitLabPriorReviewState(options: {
   client: GitLabClient;
@@ -303,7 +55,8 @@ export async function loadGitLabPriorMainComment(options: {
     gitLabCoordinates(options.change).projectId,
     options.change.change.number,
   );
-  return ownedNote(notes, owner.username, mainMarker(options.change.change.number))?.body;
+  return ownedGitLabNote(notes, owner.username, gitLabMainMarker(options.change.change.number))
+    ?.body;
 }
 
 export async function loadGitLabInlineThreadContexts(options: {
@@ -315,10 +68,18 @@ export async function loadGitLabInlineThreadContexts(options: {
     gitLabCoordinates(options.change).projectId,
     options.change.change.number,
   );
+  return gitLabThreadContexts(discussions, owner.username, false);
+}
+
+export function gitLabThreadContexts(
+  discussions: GitLabDiscussion[],
+  ownerUsername: string,
+  ownedRepliesOnly: boolean,
+): InlineThreadContext[] {
   return discussions.flatMap((discussion) => {
     const root = discussion.notes[0];
     const marker = root ? extractInlineFindingMarkerRecords([root.body])[0] : undefined;
-    if (!root || !marker || root.author?.username !== owner.username) return [];
+    if (!root || !marker || root.author?.username !== ownerUsername) return [];
     return [
       {
         findingId: marker.id,
@@ -327,97 +88,49 @@ export async function loadGitLabInlineThreadContexts(options: {
         parentBody: root.body,
         threadId: discussion.id,
         threadResolved: root.resolved ?? false,
-        comments: discussion.notes.map((note) => ({
-          id: note.id,
-          body: note.body,
-          authorLogin: note.author?.username,
-        })),
+        comments: discussion.notes.flatMap((note) =>
+          !ownedRepliesOnly || note.author?.username === ownerUsername
+            ? [{ id: note.id, body: note.body, authorLogin: note.author?.username }]
+            : [],
+        ),
       },
     ];
   });
 }
 
-export async function publishGitLabThreadActions(options: {
-  client: GitLabClient;
-  change: ChangeRequestEventContext;
-  actions: ThreadAction[];
-  reviewedHeadSha: string;
-  discussions?: GitLabDiscussion[];
-  ownerUsername?: string;
-  beforeWrite?(): Promise<void>;
-}): Promise<{ errors: string[] }> {
-  if (options.actions.length === 0) return { errors: [] };
-  const { projectId } = gitLabCoordinates(options.change);
-  await assertCurrentHead(options.client, projectId, options.change, options.reviewedHeadSha);
-  const discussions =
-    options.discussions ??
-    (await options.client.listDiscussions(projectId, options.change.change.number));
-  const ownerUsername = options.ownerUsername ?? (await options.client.currentUser()).username;
-  await assertCurrentHead(options.client, projectId, options.change, options.reviewedHeadSha);
-  const byNote = new Map(
-    discussions.flatMap((discussion) => discussion.notes.map((note) => [note.id, discussion])),
-  );
-  const errors: string[] = [];
-  for (const action of options.actions) {
-    const error = await publishGitLabThreadAction({
-      client: options.client,
-      projectId,
-      changeNumber: options.change.change.number,
-      action,
-      ownerUsername,
-      discussion: action.threadId
-        ? discussions.find((candidate) => candidate.id === action.threadId)
-        : byNote.get(action.commentId),
-      beforeWrite: options.beforeWrite,
-    });
-    if (error) errors.push(error);
-  }
-  return { errors };
+export function gitLabInlineLocationFromDiscussion(
+  discussion: GitLabDiscussion,
+): InlinePublicationLocation | undefined {
+  const root = discussion.notes[0];
+  if (!root?.position) return undefined;
+  const marker = extractInlineFindingMarkerRecords([root.body])[0];
+  if (!marker) return undefined;
+  const position = root.position;
+  const rightSide = position.new_line !== undefined;
+  const endLine = rightSide ? position.new_line : position.old_line;
+  if (endLine === undefined) return undefined;
+  return {
+    path: rightSide ? (position.new_path ?? "") : (position.old_path ?? position.new_path ?? ""),
+    commitId: marker.head,
+    side: rightSide ? "RIGHT" : "LEFT",
+    startLine: rightSide
+      ? (position.line_range?.start.new_line ?? endLine)
+      : (position.line_range?.start.old_line ?? endLine),
+    endLine,
+  };
 }
 
-async function publishGitLabThreadAction(options: {
-  client: GitLabClient;
-  projectId: string;
-  changeNumber: number;
-  action: ThreadAction;
-  ownerUsername: string;
-  discussion?: GitLabDiscussion;
-  beforeWrite?(): Promise<void>;
-}): Promise<string | undefined> {
-  if (!options.discussion) {
-    return `GitLab discussion not found for comment ${options.action.commentId}`;
-  }
-  try {
-    const reply = threadActionReply(options.action);
-    if (
-      !options.discussion.notes.some(
-        (note) =>
-          note.author?.username === options.ownerUsername && note.body.includes(reply.marker),
-      )
-    ) {
-      await assertHostPublicationWriteAllowed(options.beforeWrite);
-      await options.client.replyDiscussion(
-        options.projectId,
-        options.changeNumber,
-        options.discussion.id,
-        reply.body,
-      );
-    }
-    if (options.action.kind === "resolve" && !options.discussion.notes[0]?.resolved) {
-      await assertHostPublicationWriteAllowed(options.beforeWrite);
-      await options.client.resolveDiscussion(
-        options.projectId,
-        options.changeNumber,
-        options.discussion.id,
-      );
-    }
-  } catch (error) {
-    return hostPublicationActionError(error);
-  }
-  return undefined;
+export function gitLabInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
+  return {
+    path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
+    commitId: item.reviewedHeadSha,
+    side: item.side,
+    startLine: item.startLine,
+    endLine: item.endLine,
+  };
 }
 
-function gitLabPosition(item: InlinePublicationItem, refs: GitLabDiffRefs): GitLabPosition {
+export function gitLabPosition(item: InlinePublicationItem, refs: GitLabDiffRefs): GitLabPosition {
   const oldPath = item.previousPath ?? item.path;
   const position: GitLabPosition = {
     position_type: "text",
@@ -439,27 +152,20 @@ function gitLabPosition(item: InlinePublicationItem, refs: GitLabDiffRefs): GitL
   return position;
 }
 
-function lineRangePoint(path: string, type: "old" | "new", line: number) {
-  const hash = new Bun.CryptoHasher("sha1").update(path).digest("hex");
-  return {
-    line_code: `${hash}_${type === "old" ? line : 0}_${type === "new" ? line : 0}`,
-    type,
-    ...(type === "old" ? { old_line: line } : { new_line: line }),
-  };
-}
-
-function gitLabInlineBody(item: InlinePublicationItem): string {
+export function gitLabInlineBody(item: InlinePublicationItem): string {
   const offset = item.endLine - item.startLine;
   return item.body.replaceAll(/(`{3,})suggestion(\r?\n)/g, `$1suggestion:-${offset}+0$2`);
 }
 
-async function assertCurrentHead(
+export async function assertCurrentGitLabHead(
   client: GitLabClient,
-  projectId: string,
   change: ChangeRequestEventContext,
   reviewedHeadSha = change.change.head.sha,
-): Promise<Awaited<ReturnType<GitLabClient["getMergeRequest"]>>> {
-  const current = await client.getMergeRequest(projectId, change.change.number);
+) {
+  const current = await client.getMergeRequest(
+    gitLabCoordinates(change).projectId,
+    change.change.number,
+  );
   if (current.diff_refs.head_sha !== reviewedHeadSha) {
     throw new Error(
       `GitLab merge request head changed from ${reviewedHeadSha} to ${current.diff_refs.head_sha}`,
@@ -468,43 +174,31 @@ async function assertCurrentHead(
   return current;
 }
 
-function gitLabCoordinates(change: ChangeRequestEventContext) {
-  if (change.coordinates?.provider !== "gitlab") {
+export function gitLabCoordinates(change: ChangeRequestEventContext) {
+  if (change.coordinates?.provider !== "gitlab")
     throw new Error("GitLab adapter requires GitLab coordinates");
-  }
   return change.coordinates;
 }
 
-function ownedNote(notes: GitLabNote[], username: string, marker: string): GitLabNote | undefined {
+export function ownedGitLabNote(notes: GitLabNote[], username: string, marker: string) {
   return notes.find(
     (note) => note.author?.username === username && note.body.trimStart().startsWith(marker),
   );
+}
+
+export function gitLabMainMarker(changeNumber: number): string {
+  return `<!-- pipr:main-comment change=${changeNumber} `;
 }
 
 function discussionNotes(discussions: GitLabDiscussion[]) {
   return discussions.flatMap((discussion) => discussion.notes);
 }
 
-function mainMarker(changeNumber: number): string {
-  return `<!-- pipr:main-comment change=${changeNumber} `;
-}
-
-async function loadOwnedMainNote(
-  client: GitLabClient,
-  projectId: string,
-  changeNumber: number,
-  ownerUsername: string,
-): Promise<GitLabNote | undefined> {
-  return ownedNote(
-    await client.listNotes(projectId, changeNumber),
-    ownerUsername,
-    mainMarker(changeNumber),
-  );
-}
-
-function progressUpdateWasSuperseded(
-  note: GitLabNote | undefined,
-  expectedToken: string | undefined,
-): boolean {
-  return expectedToken !== undefined && extractReviewProgressToken(note?.body) !== expectedToken;
+function lineRangePoint(path: string, type: "old" | "new", line: number) {
+  const hash = new Bun.CryptoHasher("sha1").update(path).digest("hex");
+  return {
+    line_code: `${hash}_${type === "old" ? line : 0}_${type === "new" ? line : 0}`,
+    type,
+    ...(type === "old" ? { old_line: line } : { new_line: line }),
+  };
 }

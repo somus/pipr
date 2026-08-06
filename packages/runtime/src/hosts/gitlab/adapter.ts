@@ -1,4 +1,4 @@
-import { commandStatusText } from "../publication.js";
+import { createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGitLabClient, type GitLabClient } from "./client.js";
 import { parseGitLabEvent } from "./event.js";
@@ -6,17 +6,15 @@ import {
   loadGitLabInlineThreadContexts,
   loadGitLabPriorMainComment,
   loadGitLabPriorReviewState,
-  publishGitLabCommandResponse,
-  publishGitLabPlan,
-  publishGitLabReviewProgress,
-  publishGitLabThreadActions,
 } from "./publication.js";
+import { createGitLabPublicationDriver } from "./publication-driver.js";
 import { ensureGitLabHeadCheckout } from "./workspace.js";
 
 export function createGitLabHostAdapter(
   options: { env?: NodeJS.ProcessEnv; client?: GitLabClient } = {},
 ): CodeHostAdapter {
   const client = options.client ?? createGitLabClient(options.env);
+  const publication = createPublicationWorkflow(createGitLabPublicationDriver(client));
   return {
     id: "gitlab",
     capabilities: {
@@ -62,20 +60,7 @@ export function createGitLabHostAdapter(
         );
       },
     },
-    publication: {
-      publish: ({ plan, change, progressLease }) =>
-        publishGitLabPlan({ client, plan, change, progressLease }),
-      publishReviewProgress: (args) => publishGitLabReviewProgress({ client, ...args }),
-      publishCommandResponse: (args) => publishGitLabCommandResponse({ client, ...args }),
-      publishCommandStatus: (args) =>
-        publishGitLabCommandResponse({
-          client,
-          ...args,
-          body: commandStatusText(args),
-          allowHeadDrift: true,
-        }),
-      publishThreadActions: (args) => publishGitLabThreadActions({ client, ...args }),
-    },
+    publication,
     comments: {
       loadPriorReviewState: ({ change }) => loadGitLabPriorReviewState({ client, change }),
       loadPriorMainComment: ({ change }) => loadGitLabPriorMainComment({ client, change }),
