@@ -29,195 +29,7 @@ import type { InlineThreadContext } from "../types.js";
 import type { BitbucketClient, BitbucketComment } from "./client.js";
 import { normalizeBitbucketMarkdown, renderBitbucketMarkdown } from "./markdown.js";
 
-export async function publishBitbucketPlan(options: {
-  client: BitbucketClient;
-  change: ChangeRequestEventContext;
-  plan: PublicationPlan;
-  progressLease?: ReviewProgressLease;
-}): Promise<PublicationResult> {
-  await assertCurrentEndpoints(options.client, options.change);
-  const { owner, comments } = await loadBitbucketWriteState(
-    options.client,
-    options.change,
-    options.plan.metadata.reviewedHeadSha,
-  );
-  const owned = comments.filter((comment) => comment.user?.uuid === owner.uuid);
-  const existingMain = owned.find((comment) =>
-    normalizeBitbucketMarkdown(comment.content.raw).includes(
-      mainMarker(options.change.change.number),
-    ),
-  );
-  assertBitbucketProgressLease(existingMain, options.progressLease);
-  const assertLease = async () => {
-    if (!options.progressLease) return;
-    const current = await loadBitbucketWriteState(
-      options.client,
-      options.change,
-      options.plan.metadata.reviewedHeadSha,
-    );
-    const currentMain = current.comments
-      .filter((comment) => comment.user?.uuid === current.owner.uuid)
-      .find((comment) =>
-        normalizeBitbucketMarkdown(comment.content.raw).includes(
-          mainMarker(options.change.change.number),
-        ),
-      );
-    assertBitbucketProgressLease(currentMain, options.progressLease);
-  };
-  const inline = await publishUnseenInlineItems({
-    items: options.plan.inlineItems,
-    existingBodies: owned.map((comment) => normalizeBitbucketMarkdown(comment.content.raw)),
-    existingLocations: bitbucketInlineLocations(owned),
-    location: bitbucketInlineLocation,
-    beforePublish: assertLease,
-    publish: (item) =>
-      options.client.createComment(options.change.change.number, {
-        content: { raw: renderBitbucketMarkdown(item.body) },
-        inline: bitbucketInline(item, options.client.deployment),
-      }),
-  });
-  const resolution = await publishBitbucketThreadActions({
-    client: options.client,
-    change: options.change,
-    actions: options.plan.threadActions,
-    reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
-    comments,
-    ownerUuid: owner.uuid,
-    beforeWrite: assertLease,
-  });
-  if (options.progressLease) {
-    assertHostInlinePublicationSucceeded({
-      provider: "Bitbucket",
-      inline,
-      resolutionErrors: resolution.errors,
-      metadata: options.plan.metadata,
-    });
-  }
-  const current = await loadBitbucketWriteState(
-    options.client,
-    options.change,
-    options.plan.metadata.reviewedHeadSha,
-  );
-  const currentOwned = current.comments.filter(
-    (comment) => comment.user?.uuid === current.owner.uuid,
-  );
-  const currentMain = currentOwned.find((comment) =>
-    normalizeBitbucketMarkdown(comment.content.raw).includes(
-      mainMarker(options.change.change.number),
-    ),
-  );
-  assertBitbucketProgressLease(currentMain, options.progressLease);
-  const mainComment = renderBitbucketMarkdown(options.plan.mainComment);
-  const main = currentMain
-    ? await options.client.updateComment(options.change.change.number, currentMain.id, mainComment)
-    : await options.client.createComment(options.change.change.number, {
-        content: { raw: mainComment },
-      });
-  return completeHostPublication({
-    provider: "Bitbucket",
-    mainAction: options.progressLease?.mainCommentAction ?? (existingMain ? "updated" : "created"),
-    mainId: main.id,
-    inline,
-    resolutionErrors: resolution.errors,
-    metadata: options.plan.metadata,
-  });
-}
-
-export async function publishBitbucketReviewProgress(options: {
-  client: BitbucketClient;
-  change: ChangeRequestEventContext;
-  renderBody(currentBody: string | undefined): string;
-  reviewedHeadSha: string;
-  expectedToken?: string;
-}) {
-  const { owner, comments: loadedComments } = await loadBitbucketWriteState(
-    options.client,
-    options.change,
-    options.reviewedHeadSha,
-  );
-  const comments = options.expectedToken
-    ? await options.client.listComments(options.change.change.number)
-    : loadedComments;
-  let existing = ownedBitbucketMainComment(comments, owner.uuid, options.change.change.number);
-  if (bitbucketProgressUpdateWasSuperseded(existing, options.expectedToken)) {
-    return { status: "superseded" as const };
-  }
-  await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
-  existing = ownedBitbucketMainComment(
-    await options.client.listComments(options.change.change.number),
-    owner.uuid,
-    options.change.change.number,
-  );
-  if (bitbucketProgressUpdateWasSuperseded(existing, options.expectedToken)) {
-    return { status: "superseded" as const };
-  }
-  const currentBody = existing ? normalizeBitbucketMarkdown(existing.content.raw) : undefined;
-  const body = renderBitbucketMarkdown(options.renderBody(currentBody));
-  if (existing) {
-    const comment = await options.client.updateComment(
-      options.change.change.number,
-      existing.id,
-      body,
-    );
-    return { status: "published" as const, action: "updated" as const, id: comment.id };
-  }
-  if (options.expectedToken) return { status: "superseded" as const };
-  const comment = await options.client.createComment(options.change.change.number, {
-    content: { raw: body },
-  });
-  return { status: "published" as const, action: "created" as const, id: comment.id };
-}
-
-function ownedBitbucketMainComment(
-  comments: BitbucketComment[],
-  ownerUuid: string,
-  changeNumber: number,
-): BitbucketComment | undefined {
-  return comments.find(
-    (comment) =>
-      comment.user?.uuid === ownerUuid &&
-      normalizeBitbucketMarkdown(comment.content.raw).includes(mainMarker(changeNumber)),
-  );
-}
-
-function bitbucketProgressUpdateWasSuperseded(
-  comment: BitbucketComment | undefined,
-  expectedToken: string | undefined,
-): boolean {
-  return Boolean(
-    expectedToken &&
-      extractReviewProgressToken(
-        comment ? normalizeBitbucketMarkdown(comment.content.raw) : undefined,
-      ) !== expectedToken,
-  );
-}
-
-function assertBitbucketProgressLease(
-  comment: BitbucketComment | undefined,
-  lease: ReviewProgressLease | undefined,
-): void {
-  if (!lease) return;
-  if (
-    String(comment?.id ?? "") !== lease.mainCommentId ||
-    extractReviewProgressToken(
-      comment ? normalizeBitbucketMarkdown(comment.content.raw) : undefined,
-    ) !== lease.token
-  ) {
-    throw new ReviewProgressSupersededError();
-  }
-}
-
-function bitbucketInlineLocations(comments: BitbucketComment[]): InlinePublicationLocation[] {
-  const locations: InlinePublicationLocation[] = [];
-  for (const comment of comments) {
-    if (comment.resolution !== undefined) continue;
-    const location = bitbucketInlineLocationFromComment(comment);
-    if (location) locations.push(location);
-  }
-  return locations;
-}
-
-function bitbucketInlineLocationFromComment(
+export function bitbucketInlineLocationFromComment(
   comment: BitbucketComment,
 ): InlinePublicationLocation | undefined {
   const marker = extractInlineFindingMarkerRecords([
@@ -236,7 +48,7 @@ function bitbucketInlineLocationFromComment(
   });
 }
 
-function bitbucketInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
+export function bitbucketInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
   return {
     path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
     commitId: item.reviewedHeadSha,
@@ -246,54 +58,6 @@ function bitbucketInlineLocation(item: InlinePublicationItem): InlinePublication
   };
 }
 
-export async function publishBitbucketCommandResponse(options: {
-  client: BitbucketClient;
-  change: ChangeRequestEventContext;
-  sourceCommentId: string;
-  commandName: string;
-  body: string;
-  allowHeadDrift?: boolean;
-}) {
-  const response = commandResponseBody({
-    changeNumber: options.change.change.number,
-    sourceCommentId: options.sourceCommentId,
-    commandName: options.commandName,
-    body: options.body,
-  });
-  if (!options.allowHeadDrift) {
-    await assertCurrentEndpoints(options.client, options.change);
-  }
-  const { owner, comments } = options.allowHeadDrift
-    ? {
-        owner: await authenticatedBitbucketOwner(options.client),
-        comments: await options.client.listComments(options.change.change.number),
-      }
-    : await loadBitbucketWriteState(options.client, options.change);
-  const existing = comments.find(
-    (comment) =>
-      comment.user?.uuid === owner.uuid &&
-      normalizeBitbucketMarkdown(comment.content.raw).includes(response.marker),
-  );
-  const responseBody = renderBitbucketMarkdown(response.body);
-  const comment = existing
-    ? await options.client.updateComment(options.change.change.number, existing.id, responseBody)
-    : await options.client.createComment(options.change.change.number, {
-        content: { raw: responseBody },
-      });
-  return { action: existing ? ("updated" as const) : ("created" as const), id: comment.id };
-}
-
-async function loadBitbucketWriteState(
-  client: BitbucketClient,
-  change: ChangeRequestEventContext,
-  reviewedHeadSha = change.change.head.sha,
-) {
-  const owner = await authenticatedBitbucketOwner(client);
-  const comments = await client.listComments(change.change.number);
-  await assertCurrentEndpoints(client, change, reviewedHeadSha);
-  return { owner, comments };
-}
-
 export async function loadBitbucketPriorReviewState(options: {
   client: BitbucketClient;
   change: ChangeRequestEventContext;
@@ -301,7 +65,7 @@ export async function loadBitbucketPriorReviewState(options: {
   const comments = await loadBitbucketOwnedComments(options);
   const body = comments.find((comment) =>
     normalizeBitbucketMarkdown(comment.content.raw).includes(
-      mainMarker(options.change.change.number),
+      bitbucketMainMarker(options.change.change.number),
     ),
   )?.content.raw;
   const normalizedBody = body ? normalizeBitbucketMarkdown(body) : undefined;
@@ -334,7 +98,7 @@ export async function loadBitbucketPriorMainComment(options: {
 }) {
   const body = (await loadBitbucketOwnedComments(options)).find((comment) =>
     normalizeBitbucketMarkdown(comment.content.raw).includes(
-      mainMarker(options.change.change.number),
+      bitbucketMainMarker(options.change.change.number),
     ),
   )?.content.raw;
   return body ? normalizeBitbucketMarkdown(body) : undefined;
@@ -380,73 +144,10 @@ export async function loadBitbucketInlineThreadContexts(options: {
   });
 }
 
-export async function publishBitbucketThreadActions(options: {
-  client: BitbucketClient;
-  change: ChangeRequestEventContext;
-  actions: ThreadAction[];
-  reviewedHeadSha: string;
-  comments?: BitbucketComment[];
-  ownerUuid?: string;
-  beforeWrite?(): Promise<void>;
-}) {
-  if (options.actions.length === 0) return { errors: [] };
-  await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
-  const comments =
-    options.comments ?? (await options.client.listComments(options.change.change.number));
-  const ownerUuid = options.ownerUuid ?? (await authenticatedBitbucketOwner(options.client)).uuid;
-  if (!ownerUuid) throw new Error("Bitbucket authenticated user UUID is required");
-  await assertCurrentEndpoints(options.client, options.change, options.reviewedHeadSha);
-  const errors: string[] = [];
-  for (const action of options.actions) {
-    const error = await publishBitbucketThreadAction(
-      options.client,
-      options.change.change.number,
-      comments,
-      action,
-      ownerUuid,
-      options.beforeWrite,
-    );
-    if (error) errors.push(error);
-  }
-  return { errors };
-}
-
-async function publishBitbucketThreadAction(
-  client: BitbucketClient,
-  changeNumber: number,
-  comments: BitbucketComment[],
-  action: ThreadAction,
-  ownerUuid: string,
-  beforeWrite?: () => Promise<void>,
-): Promise<string | undefined> {
-  const root = comments.find(
-    (comment) => comment.id === (action.threadId ?? action.commentId) && !comment.parent,
-  );
-  if (!root) return `Bitbucket comment not found for ${action.commentId}`;
-  try {
-    const replies = comments.filter((comment) => comment.parent?.id === root.id);
-    const reply = threadActionReply(action);
-    if (
-      !replies.some(
-        (comment) =>
-          comment.user?.uuid === ownerUuid &&
-          normalizeBitbucketMarkdown(comment.content.raw).includes(reply.marker),
-      )
-    ) {
-      await assertHostPublicationWriteAllowed(beforeWrite);
-      await client.replyToComment(changeNumber, root.id, renderBitbucketMarkdown(reply.body));
-    }
-    if (action.kind === "resolve" && root.resolution === undefined) {
-      await assertHostPublicationWriteAllowed(beforeWrite);
-      await client.resolveComment(changeNumber, root.id);
-    }
-    return undefined;
-  } catch (error) {
-    return hostPublicationActionError(error);
-  }
-}
-
-function bitbucketInline(item: InlinePublicationItem, deployment: BitbucketClient["deployment"]) {
+export function bitbucketInline(
+  item: InlinePublicationItem,
+  deployment: BitbucketClient["deployment"],
+) {
   return item.side === "RIGHT"
     ? {
         path: item.path,
@@ -463,7 +164,7 @@ function bitbucketInline(item: InlinePublicationItem, deployment: BitbucketClien
       };
 }
 
-async function assertCurrentEndpoints(
+export async function assertCurrentBitbucketEndpoints(
   client: BitbucketClient,
   change: ChangeRequestEventContext,
   reviewedHeadSha = change.change.head.sha,
@@ -477,12 +178,14 @@ async function assertCurrentEndpoints(
   }
 }
 
-async function authenticatedBitbucketOwner(client: BitbucketClient): Promise<{ uuid: string }> {
+export async function authenticatedBitbucketOwner(
+  client: BitbucketClient,
+): Promise<{ uuid: string }> {
   const owner = await client.currentUser();
   if (!owner.uuid) throw new Error("Bitbucket authenticated user UUID is required");
   return { uuid: owner.uuid };
 }
 
-function mainMarker(changeNumber: number): string {
+export function bitbucketMainMarker(changeNumber: number): string {
   return `<!-- pipr:main-comment change=${changeNumber} `;
 }

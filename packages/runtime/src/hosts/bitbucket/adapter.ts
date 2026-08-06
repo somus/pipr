@@ -1,4 +1,4 @@
-import { commandStatusText } from "../publication.js";
+import { createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import { type BitbucketClient, bitbucketStatusState, createBitbucketClient } from "./client.js";
 import { parseBitbucketEvent } from "./event.js";
@@ -6,17 +6,15 @@ import {
   loadBitbucketInlineThreadContexts,
   loadBitbucketPriorMainComment,
   loadBitbucketPriorReviewState,
-  publishBitbucketCommandResponse,
-  publishBitbucketPlan,
-  publishBitbucketReviewProgress,
-  publishBitbucketThreadActions,
 } from "./publication.js";
+import { createBitbucketPublicationDriver } from "./publication-driver.js";
 import { ensureBitbucketHeadCheckout } from "./workspace.js";
 
 export function createBitbucketHostAdapter(
   options: { env?: NodeJS.ProcessEnv; client?: BitbucketClient } = {},
 ): CodeHostAdapter {
   const client = options.client ?? createBitbucketClient(options.env);
+  const publication = createPublicationWorkflow(createBitbucketPublicationDriver(client));
   return {
     id: "bitbucket",
     capabilities: {
@@ -61,20 +59,7 @@ export function createBitbucketHostAdapter(
         return client.getRepositoryPermission(actor, coordinates.repositoryUuid);
       },
     },
-    publication: {
-      publish: ({ change, plan, progressLease }) =>
-        publishBitbucketPlan({ client, change, plan, progressLease }),
-      publishReviewProgress: (args) => publishBitbucketReviewProgress({ client, ...args }),
-      publishCommandResponse: (args) => publishBitbucketCommandResponse({ client, ...args }),
-      publishCommandStatus: (args) =>
-        publishBitbucketCommandResponse({
-          client,
-          ...args,
-          body: commandStatusText(args),
-          allowHeadDrift: true,
-        }),
-      publishThreadActions: (args) => publishBitbucketThreadActions({ client, ...args }),
-    },
+    publication,
     comments: {
       loadPriorReviewState: ({ change }) => loadBitbucketPriorReviewState({ client, change }),
       loadPriorMainComment: ({ change }) => loadBitbucketPriorMainComment({ client, change }),
