@@ -1,4 +1,4 @@
-import { commandStatusText } from "../publication.js";
+import { createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGiteaClient, type GiteaClient, type GiteaFamilyHost } from "./client.js";
 import { parseGiteaEvent } from "./event.js";
@@ -8,11 +8,8 @@ import {
   loadGiteaInlineThreadContexts,
   loadGiteaPriorMainComment,
   loadGiteaPriorReviewState,
-  publishGiteaCommandResponse,
-  publishGiteaPlan,
-  publishGiteaReviewProgress,
-  publishGiteaThreadActions,
 } from "./publication.js";
+import { createGiteaPublicationDriver } from "./publication-driver.js";
 import { ensureGiteaHeadCheckout } from "./workspace.js";
 
 export function createGiteaHostAdapter(options: {
@@ -21,6 +18,7 @@ export function createGiteaHostAdapter(options: {
   client?: GiteaClient;
 }): CodeHostAdapter {
   const client = options.client ?? createGiteaClient({ host: options.host, env: options.env });
+  const publication = createPublicationWorkflow(createGiteaPublicationDriver(client));
   return {
     id: options.host,
     capabilities: {
@@ -60,20 +58,7 @@ export function createGiteaHostAdapter(options: {
         return client.getRepositoryPermission(coordinates.owner, coordinates.repository, actor);
       },
     },
-    publication: {
-      publish: ({ change, plan, progressLease }) =>
-        publishGiteaPlan({ client, change, plan, progressLease }),
-      publishReviewProgress: (args) => publishGiteaReviewProgress({ client, ...args }),
-      publishCommandResponse: (args) => publishGiteaCommandResponse({ client, ...args }),
-      publishCommandStatus: (args) =>
-        publishGiteaCommandResponse({
-          client,
-          ...args,
-          body: commandStatusText(args),
-          allowHeadDrift: true,
-        }),
-      publishThreadActions: (args) => publishGiteaThreadActions({ client, ...args }),
-    },
+    publication,
     comments: {
       loadPriorReviewState: ({ change }) => loadGiteaPriorReviewState({ client, change }),
       loadPriorMainComment: ({ change }) => loadGiteaPriorMainComment({ client, change }),

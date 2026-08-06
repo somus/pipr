@@ -28,182 +28,6 @@ import {
 import type { InlineThreadContext } from "../types.js";
 import type { GiteaClient, GiteaComment, GiteaReviewComment } from "./client.js";
 
-export async function publishGiteaPlan(options: {
-  client: GiteaClient;
-  change: ChangeRequestEventContext;
-  plan: PublicationPlan;
-  progressLease?: ReviewProgressLease;
-}): Promise<PublicationResult> {
-  const coordinates = giteaCoordinates(options.change);
-  await assertCurrentGiteaHead(
-    options.client,
-    options.change,
-    options.plan.metadata.reviewedHeadSha,
-  );
-  const owner = await options.client.currentUser();
-  const comments = await options.client.listIssueComments(
-    coordinates.owner,
-    coordinates.repository,
-    options.change.change.number,
-  );
-  const existing = findMainComment(
-    comments,
-    owner.login,
-    options.plan.mainMarker,
-    options.change.change.number,
-  );
-  assertProgressLease(existing, options.progressLease);
-  const reviewComments = (
-    await options.client.listReviewComments(
-      coordinates.owner,
-      coordinates.repository,
-      options.change.change.number,
-    )
-  ).filter((comment) => comment.authorLogin === owner.login);
-  const existingLocations = reviewComments.flatMap((comment) => {
-    const location = giteaReviewCommentLocation(comment);
-    return location ? [location] : [];
-  });
-  const inline = await publishUnseenInlineItems({
-    items: options.plan.inlineItems,
-    existingBodies: reviewComments.map((comment) => comment.body),
-    existingLocations,
-    location: (item) => ({
-      path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
-      commitId: item.reviewedHeadSha,
-      side: item.side,
-      startLine: item.endLine,
-      endLine: item.endLine,
-    }),
-    beforePublish: () => assertCurrentProgressLease(options, owner.login),
-    publish: (item) =>
-      options.client.createReviewComment(
-        coordinates.owner,
-        coordinates.repository,
-        options.change.change.number,
-        {
-          body: item.body,
-          path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
-          commitId: item.reviewedHeadSha,
-          line: item.endLine,
-          side: item.side,
-        },
-      ),
-  });
-  const resolution = await publishGiteaThreadActions({
-    client: options.client,
-    change: options.change,
-    actions: options.plan.threadActions,
-    reviewedHeadSha: options.plan.metadata.reviewedHeadSha,
-    beforeWrite: () => assertCurrentProgressLease(options, owner.login),
-  });
-  if (options.progressLease) {
-    assertHostInlinePublicationSucceeded({
-      provider: displayName(options.client.host),
-      inline,
-      resolutionErrors: resolution.errors,
-      metadata: options.plan.metadata,
-    });
-  }
-  await assertCurrentGiteaHead(
-    options.client,
-    options.change,
-    options.plan.metadata.reviewedHeadSha,
-  );
-  const currentComments = await options.client.listIssueComments(
-    coordinates.owner,
-    coordinates.repository,
-    options.change.change.number,
-  );
-  const currentExisting = findMainComment(
-    currentComments,
-    owner.login,
-    options.plan.mainMarker,
-    options.change.change.number,
-  );
-  assertProgressLease(currentExisting, options.progressLease);
-  const main = currentExisting
-    ? await options.client.updateIssueComment(
-        coordinates.owner,
-        coordinates.repository,
-        currentExisting.id,
-        options.plan.mainComment,
-      )
-    : await options.client.createIssueComment(
-        coordinates.owner,
-        coordinates.repository,
-        options.change.change.number,
-        options.plan.mainComment,
-      );
-  return completeHostPublication({
-    provider: displayName(options.client.host),
-    mainAction:
-      options.progressLease?.mainCommentAction ?? (currentExisting ? "updated" : "created"),
-    mainId: main.id,
-    inline,
-    resolutionErrors: resolution.errors,
-    metadata: options.plan.metadata,
-  });
-}
-
-export async function publishGiteaReviewProgress(options: {
-  client: GiteaClient;
-  change: ChangeRequestEventContext;
-  renderBody(currentBody: string | undefined): string;
-  reviewedHeadSha: string;
-  expectedToken?: string;
-}) {
-  const coordinates = giteaCoordinates(options.change);
-  const owner = await options.client.currentUser();
-  await assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha);
-  let existing = await loadOwnedMainComment(
-    options.client,
-    options.change,
-    owner.login,
-    mainCommentMarker,
-  );
-  if (
-    options.expectedToken &&
-    extractReviewProgressToken(existing?.body) !== options.expectedToken
-  ) {
-    return { status: "superseded" as const };
-  }
-  await assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha);
-  existing = await loadOwnedMainComment(
-    options.client,
-    options.change,
-    owner.login,
-    mainCommentMarker,
-  );
-  if (
-    options.expectedToken &&
-    extractReviewProgressToken(existing?.body) !== options.expectedToken
-  ) {
-    return { status: "superseded" as const };
-  }
-  if (existing) {
-    const updated = await options.client.updateIssueComment(
-      coordinates.owner,
-      coordinates.repository,
-      existing.id,
-      options.renderBody(existing.body),
-    );
-    return {
-      status: "published" as const,
-      action: "updated" as const,
-      id: updated.id,
-    };
-  }
-  if (options.expectedToken) return { status: "superseded" as const };
-  const created = await options.client.createIssueComment(
-    coordinates.owner,
-    coordinates.repository,
-    options.change.change.number,
-    options.renderBody(undefined),
-  );
-  return { status: "published" as const, action: "created" as const, id: created.id };
-}
-
 export async function assertCurrentGiteaHead(
   client: GiteaClient,
   change: ChangeRequestEventContext,
@@ -223,53 +47,6 @@ export async function assertCurrentGiteaHead(
   }
 }
 
-export async function publishGiteaCommandResponse(options: {
-  client: GiteaClient;
-  change: ChangeRequestEventContext;
-  sourceCommentId: string;
-  commandName: string;
-  body: string;
-  allowHeadDrift?: boolean;
-}) {
-  const coordinates = giteaCoordinates(options.change);
-  if (!options.allowHeadDrift) {
-    await assertCurrentGiteaHead(options.client, options.change, options.change.change.head.sha);
-  }
-  const owner = await options.client.currentUser();
-  const response = commandResponseBody({
-    changeNumber: options.change.change.number,
-    sourceCommentId: options.sourceCommentId,
-    commandName: options.commandName,
-    body: options.body,
-  });
-  const comments = await options.client.listIssueComments(
-    coordinates.owner,
-    coordinates.repository,
-    options.change.change.number,
-  );
-  if (!options.allowHeadDrift) {
-    await assertCurrentGiteaHead(options.client, options.change, options.change.change.head.sha);
-  }
-  const existing = comments.find(
-    (comment) =>
-      comment.authorLogin === owner.login && firstNonEmptyLine(comment.body) === response.marker,
-  );
-  const comment = existing
-    ? await options.client.updateIssueComment(
-        coordinates.owner,
-        coordinates.repository,
-        existing.id,
-        response.body,
-      )
-    : await options.client.createIssueComment(
-        coordinates.owner,
-        coordinates.repository,
-        options.change.change.number,
-        response.body,
-      );
-  return { action: existing ? ("updated" as const) : ("created" as const), id: comment.id };
-}
-
 export async function loadGiteaPriorMainComment(options: {
   client: GiteaClient;
   change: ChangeRequestEventContext;
@@ -281,8 +58,12 @@ export async function loadGiteaPriorMainComment(options: {
     coordinates.repository,
     options.change.change.number,
   );
-  return findMainComment(comments, owner.login, mainCommentMarker, options.change.change.number)
-    ?.body;
+  return findGiteaMainComment(
+    comments,
+    owner.login,
+    mainCommentMarker,
+    options.change.change.number,
+  )?.body;
 }
 
 export async function loadGiteaPriorReviewState(options: {
@@ -293,7 +74,7 @@ export async function loadGiteaPriorReviewState(options: {
   const state = extractPriorReviewState(mainComment, options.change.change.number);
   if (!state) return undefined;
   const owner = await options.client.currentUser();
-  const inlineBodies = (await loadReviewComments(options.client, options.change))
+  const inlineBodies = (await loadGiteaReviewComments(options.client, options.change))
     .filter((comment) => comment.authorLogin === owner.login)
     .map((comment) => comment.body);
   return applyResolvedFindingMarkers(applyInlineFindingMarkers(state, inlineBodies), inlineBodies);
@@ -304,7 +85,7 @@ export async function loadGiteaInlineThreadContexts(options: {
   change: ChangeRequestEventContext;
 }): Promise<InlineThreadContext[]> {
   const owner = await options.client.currentUser();
-  const comments = await loadReviewComments(options.client, options.change);
+  const comments = await loadGiteaReviewComments(options.client, options.change);
   const byRoot = new Map<string, GiteaReviewComment[]>();
   for (const comment of comments) {
     const rootId = comment.parentId ?? comment.id;
@@ -333,49 +114,7 @@ export async function loadGiteaInlineThreadContexts(options: {
   });
 }
 
-export async function publishGiteaThreadActions(options: {
-  client: GiteaClient;
-  change: ChangeRequestEventContext;
-  actions: ThreadAction[];
-  reviewedHeadSha: string;
-  beforeWrite?: () => Promise<void>;
-}): Promise<{ errors: string[] }> {
-  if (options.actions.length === 0) return { errors: [] };
-  await assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha);
-  const coordinates = giteaCoordinates(options.change);
-  const owner = await options.client.currentUser();
-  const comments = await loadReviewComments(options.client, options.change);
-  await assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha);
-  const errors: string[] = [];
-  for (const action of options.actions) {
-    const reply = threadActionReply(action);
-    const owned = comments.some(
-      (comment) =>
-        comment.parentId === action.commentId &&
-        comment.authorLogin === owner.login &&
-        comment.body.includes(reply.marker),
-    );
-    if (owned) continue;
-    try {
-      await assertHostPublicationWriteAllowed(async () => {
-        await assertCurrentGiteaHead(options.client, options.change, options.reviewedHeadSha);
-        await options.beforeWrite?.();
-      });
-      await options.client.replyToReviewComment(
-        coordinates.owner,
-        coordinates.repository,
-        options.change.change.number,
-        action.commentId,
-        reply.body,
-      );
-    } catch (error) {
-      errors.push(hostPublicationActionError(error));
-    }
-  }
-  return { errors };
-}
-
-function findMainComment(
+export function findGiteaMainComment(
   comments: GiteaComment[],
   ownerLogin: string,
   marker: string,
@@ -388,69 +127,12 @@ function findMainComment(
   });
 }
 
-async function loadOwnedMainComment(
-  client: GiteaClient,
-  change: ChangeRequestEventContext,
-  ownerLogin: string,
-  marker: string,
-): Promise<GiteaComment | undefined> {
-  const coordinates = giteaCoordinates(change);
-  const comments = await client.listIssueComments(
-    coordinates.owner,
-    coordinates.repository,
-    change.change.number,
-  );
-  return findMainComment(comments, ownerLogin, marker, change.change.number);
-}
-
-function loadReviewComments(
+export function loadGiteaReviewComments(
   client: GiteaClient,
   change: ChangeRequestEventContext,
 ): Promise<GiteaReviewComment[]> {
   const coordinates = giteaCoordinates(change);
   return client.listReviewComments(coordinates.owner, coordinates.repository, change.change.number);
-}
-
-async function assertCurrentProgressLease(
-  options: {
-    client: GiteaClient;
-    change: ChangeRequestEventContext;
-    plan: PublicationPlan;
-    progressLease?: ReviewProgressLease;
-  },
-  ownerLogin: string,
-): Promise<void> {
-  await assertCurrentGiteaHead(
-    options.client,
-    options.change,
-    options.plan.metadata.reviewedHeadSha,
-  );
-  if (!options.progressLease) return;
-  const coordinates = giteaCoordinates(options.change);
-  const main = findMainComment(
-    await options.client.listIssueComments(
-      coordinates.owner,
-      coordinates.repository,
-      options.change.change.number,
-    ),
-    ownerLogin,
-    options.plan.mainMarker,
-    options.change.change.number,
-  );
-  assertProgressLease(main, options.progressLease);
-}
-
-function assertProgressLease(
-  comment: GiteaComment | undefined,
-  lease: ReviewProgressLease | undefined,
-): void {
-  if (!lease) return;
-  if (
-    comment?.id !== lease.mainCommentId ||
-    extractReviewProgressToken(comment.body) !== lease.token
-  ) {
-    throw new ReviewProgressSupersededError();
-  }
 }
 
 export function giteaCoordinates(change: ChangeRequestEventContext) {
@@ -460,7 +142,7 @@ export function giteaCoordinates(change: ChangeRequestEventContext) {
   return change.coordinates;
 }
 
-function giteaReviewCommentLocation(comment: GiteaReviewComment) {
+export function giteaReviewCommentLocation(comment: GiteaReviewComment) {
   if (!comment.path || !comment.commitId || !comment.side || comment.line === undefined) {
     return undefined;
   }
@@ -474,6 +156,6 @@ function giteaReviewCommentLocation(comment: GiteaReviewComment) {
   });
 }
 
-function displayName(host: GiteaClient["host"]): string {
+export function giteaDisplayName(host: GiteaClient["host"]): string {
   return host === "gitea" ? "Gitea" : host === "forgejo" ? "Forgejo" : "Codeberg";
 }
