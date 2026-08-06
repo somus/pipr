@@ -18,7 +18,7 @@ The generated job runs only for merge-request pipelines and fetches full history
 ```yaml
 pipr:
   image:
-    name: ghcr.io/somus/pipr:v0.7.0 # x-release-please-version
+    name: ghcr.io/somus/pipr:v0.8.0 # x-release-please-version
     entrypoint: [""]
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

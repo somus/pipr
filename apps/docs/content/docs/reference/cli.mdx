@@ -77,7 +77,7 @@ pipr init --config-dir .config/pipr
 pipr init \
   --github-enterprise-server \
   --checkout-action internal-actions/checkout@v6 \
-  --runtime-image registry.internal.example/pipr:v0.7.0 # x-release-please-version
+  --runtime-image registry.internal.example/pipr:v0.8.0 # x-release-please-version
 ```
 
 See [Init Recipes](/docs/recipes) for recipe ids. For disconnected networks, mirror the Pipr image and checkout repository before passing their internal references. The checkout action uses `OWNER/REPOSITORY@REF` on the GitHub instance that runs the workflow, not a cross-host URL.

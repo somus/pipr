@@ -4,6 +4,24 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.8.0](https://github.com/somus/pipr/compare/v0.7.0...v0.8.0) (2026-08-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* trigger 0.8.0 release
+
+### Features
+
+* improve review run observability ([#141](https://github.com/somus/pipr/issues/141)) ([b975983](https://github.com/somus/pipr/commit/b975983f237935330b4033a42f40e75db1ea2ede))
+* **sdk:** validate custom findings through task context ([#144](https://github.com/somus/pipr/issues/144)) ([99a3838](https://github.com/somus/pipr/commit/99a3838eca92318d0b67c6c85b139c830022a4ee))
+* trigger 0.8.0 release ([4821a0a](https://github.com/somus/pipr/commit/4821a0a903fa88515d6915eeee4e8d2160ff610d))
+
+
+### Bug Fixes
+
+* **bitbucket:** scope fork checkout credentials ([#143](https://github.com/somus/pipr/issues/143)) ([13dfdf6](https://github.com/somus/pipr/commit/13dfdf60f83a826b34503e2e200efb02f1066717))
+
 ## [0.7.0](https://github.com/somus/pipr/compare/v0.6.3...v0.7.0) (2026-07-28)
 
 
