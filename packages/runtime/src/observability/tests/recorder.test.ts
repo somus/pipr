@@ -4,12 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
 import { loadValidatedRunBundle } from "../archive.js";
+import { startFileRunRecorder } from "../file-run-recorder.js";
 import { parseOtlpHeaders } from "../otlp.js";
-import {
-  createInMemoryRunRecorder,
-  createNoopRunRecorder,
-  startFileRunRecorder,
-} from "../recorder.js";
+import { createInMemoryRunRecorder, createNoopRunRecorder } from "../simple-run-recorders.js";
 
 const temporaryDirectories: string[] = [];
 

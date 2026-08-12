@@ -1,6 +1,6 @@
 import type { CodeHostAdapter } from "../hosts/types.js";
 import type { RunObserver } from "../observability/types.js";
-import type { PiRunner } from "../review/agent/review-run.js";
+import type { PiRunner } from "../pi/types.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { SecretRedactor } from "../shared/secret-redaction.js";
 import { createHostRunAdapter } from "./adapter.js";

@@ -1,8 +1,6 @@
 // Unsupported internal test seam for Pipr's private e2e package.
-export {
-  type HostRunCommandResult,
-  runHostRunCommandWithDependencies,
-} from "../host-run/commands.js";
+export { runHostRunCommandWithDependencies } from "../host-run/commands-hosted.js";
+export type { HostRunCommandResult } from "../host-run/types.js";
 export { createGitHubHostAdapter } from "../hosts/github/adapter.js";
 export type { GitHubPublicationClient } from "../hosts/github/client.js";
 export {

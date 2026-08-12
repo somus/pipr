@@ -7,7 +7,8 @@ import type { AgentAttemptType, RunAgentAttemptObserver } from "../../observabil
 import { type PiReadOnlyToolName, piReadOnlyToolNames } from "../../pi/contract.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
 import { classifyProviderFailure, ProviderExecutionError } from "../../pi/provider-failure.js";
-import { type PiRunResult, runPi } from "../../pi/runner.js";
+import { runPi } from "../../pi/runner.js";
+import type { PiRunResult } from "../../pi/types.js";
 import { boundedLogSnippet, type RuntimeLog } from "../../shared/logging.js";
 import type { ProviderConfig } from "../../types.js";
 import type { PreparedAgentContext } from "./agent-prompt.js";

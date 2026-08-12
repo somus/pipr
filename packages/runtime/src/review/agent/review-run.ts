@@ -17,14 +17,6 @@ import {
 import type { RunReviewAgentOptions, RunReviewAgentResult } from "./review-run-types.js";
 import { canonicalInlineFindingsMaxItems } from "./review-schema.js";
 
-export type { PiRunner } from "../../pi/types.js";
-export type {
-  PiRunStats,
-  RunReviewAgentOptions,
-  RunReviewAgentResult,
-} from "./review-run-types.js";
-export { resolveProvider };
-
 export async function runReviewAgent(
   options: RunReviewAgentOptions,
 ): Promise<RunReviewAgentResult> {

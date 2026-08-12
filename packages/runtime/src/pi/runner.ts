@@ -26,8 +26,6 @@ import {
   type PreparedPiTools,
 } from "./types.js";
 
-export { buildPiArgs } from "./cli-args.js";
-export type { PiRunOptions, PiRunResult, PiRunUsage } from "./types.js";
 export { createReadOnlyWorkspace };
 
 export async function runPi(options: PiRunOptions): Promise<PiRunResult> {

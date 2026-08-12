@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import {
-  createDiffContextCoverageTracker,
   diffContextCoverageArtifact,
   summarizeDiffContextCoverage,
 } from "../diff-context-coverage.js";
+import { createDiffContextCoverageTracker } from "../diff-context-coverage-observer.js";
 
 describe("Diff Manifest context coverage", () => {
   it("marks every file and range covered when the full manifest is in the prompt", () => {

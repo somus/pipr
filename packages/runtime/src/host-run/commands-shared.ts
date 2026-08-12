@@ -1,5 +1,5 @@
 import { CodeHostHttpError } from "../hosts/http.js";
-import type { RunFailureCategory, RunRecorder } from "../observability/recorder.js";
+import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { PublicationError } from "../review/publication-result.js";
 import type { createRuntimeLog } from "../shared/logging.js";

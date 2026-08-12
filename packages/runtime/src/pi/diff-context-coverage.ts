@@ -1,7 +1,5 @@
 import { Buffer } from "node:buffer";
 
-export { createDiffContextCoverageTracker } from "./diff-context-coverage-observer.js";
-
 export type DiffContextCoverageSummary = {
   files: { total: number; covered: number };
   ranges: { total: number; covered: number };

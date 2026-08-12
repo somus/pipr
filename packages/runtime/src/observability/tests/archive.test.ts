@@ -9,7 +9,7 @@ import {
   loadValidatedRunBundle,
 } from "../archive.js";
 import { extractRunArchive } from "../archive-extraction.js";
-import { startFileRunRecorder } from "../recorder.js";
+import { startFileRunRecorder } from "../file-run-recorder.js";
 import { maximumRunBundleBytes } from "../types.js";
 
 const temporaryDirectories: string[] = [];

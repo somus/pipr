@@ -1,7 +1,7 @@
 import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
 import { aggregateCheckSettings, taskCheckSettings } from "../config/check-settings.js";
 import type { CodeHostAdapter, CodeHostStatus, CodeHostStatusState } from "../hosts/types.js";
-import type { RuntimeCheckSink, RuntimeTaskCheckResult } from "../review/task/task-runtime.js";
+import type { RuntimeCheckSink, RuntimeTaskCheckResult } from "../review/task/task-output.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 

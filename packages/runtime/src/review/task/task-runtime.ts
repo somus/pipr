@@ -10,6 +10,7 @@ import { diffContextCoverageArtifact } from "../../pi/diff-context-coverage.js";
 import type { PriorReviewState, PublicationPlan } from "../../publication/types.js";
 import { runLoggedPhase } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
+import { runtimeVersion } from "../../shared/version.js";
 import type {
   ChangeRequestEventContext,
   DiffManifest,
@@ -20,8 +21,9 @@ import type {
 } from "../../types.js";
 import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../types.js";
 import { type AgentRunBudget, createAgentRunBudget } from "../agent/agent-run-budget.js";
-import { type PiRunStats, resolveProvider } from "../agent/review-run.js";
-import { type InlineCommentDraft, runtimeVersion } from "../comment.js";
+import { resolveProvider } from "../agent/prompt-assembly.js";
+import type { PiRunStats } from "../agent/review-run-types.js";
+import type { InlineCommentDraft } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { priorReviewStateForSelectedTasks } from "../prior-state.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
@@ -44,11 +46,6 @@ import {
   runtimeTaskCheckResult,
 } from "./task-output.js";
 import type { RunTaskRuntimeOptions } from "./task-runtime-options.js";
-
-export type { PiRunner } from "../agent/review-run.js";
-export type { RuntimeCommandInvocation } from "../run-identity.js";
-export type { RuntimeCheckSink, RuntimeTaskCheckResult } from "./task-output.js";
-export type { RunTaskRuntimeOptions } from "./task-runtime-options.js";
 
 const genericTaskFailureSummary = "Task failed; see logs for details.";
 

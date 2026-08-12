@@ -1,7 +1,8 @@
 import type { PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
-import { type PiRunStats, resolveProvider } from "../review/agent/review-run.js";
+import { resolveProvider } from "../review/agent/prompt-assembly.js";
+import type { PiRunStats } from "../review/agent/review-run-types.js";
 import { isPiprThreadActionReplyBody } from "../review/prior-state.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { stableReviewRunId } from "../review/run-identity.js";

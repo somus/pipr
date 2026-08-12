@@ -8,13 +8,11 @@ import { createCodeHostWebhookProtocol } from "../hosts/webhook.js";
 import type { WebhookHost } from "../hosts/webhook-types.js";
 import { enforceRunStoreRetention } from "../observability/retention.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
-import { runHostRunCommand } from "./commands.js";
+import { runHostRunCommand } from "./commands-hosted.js";
 import { toPiprErrorResult, toPiprResult } from "./pipr-result.js";
 import type { HostRunCommandResult } from "./types.js";
 
 const MAX_WEBHOOK_PAYLOAD_BYTES = 2 * 1024 * 1024;
-
-export type { WebhookHost } from "../hosts/webhook-types.js";
 
 export type WebhookDelivery = {
   id: string;

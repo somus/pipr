@@ -9,7 +9,8 @@ import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-proj
 import type { DiffStructuralAnalysisLoader } from "../../diff/structural-analysis.js";
 import type { DiffManifest, PiprConfig, ProviderConfig } from "../../types.js";
 import type { AgentRunBudget } from "../agent/agent-run-budget.js";
-import { type PiRunStats, runReviewAgent } from "../agent/review-run.js";
+import { runReviewAgent } from "../agent/review-run.js";
+import type { PiRunStats } from "../agent/review-run-types.js";
 import { validateReviewFindings } from "../review.js";
 import {
   collectCommandResponse,

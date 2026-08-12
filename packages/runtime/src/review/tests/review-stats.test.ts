@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ReviewStats } from "../../publication/types.js";
-import type { PiRunStats } from "../agent/review-run.js";
+import type { PiRunStats } from "../agent/review-run-types.js";
 import { accumulateReviewStats } from "../review-stats.js";
 import { reviewStatsForRuns } from "../task/task-output.js";
 

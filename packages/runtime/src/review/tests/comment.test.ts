@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { runtimeVersion } from "../../shared/version.js";
 import type { DiffManifest, ReviewFinding } from "../../types.js";
 import {
   buildPublicationPlan,
   prepareInlinePublicationItems,
   publicationPlanForHostCapabilities,
-  runtimeVersion,
 } from "../comment.js";
 import {
   applyInlineFindingMarkers,

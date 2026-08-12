@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { PriorReviewState } from "../../publication/types.js";
+import { runtimeVersion } from "../../shared/version.js";
 import type { DiffManifest, ValidatedReview } from "../../types.js";
-import { runtimeVersion } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { extractPriorReviewState } from "../prior-state.js";
 

@@ -44,8 +44,6 @@ import {
 import { reviewStatsSchema } from "./review-stats.js";
 import { isPublishableSuggestedFixSelection } from "./suggested-fix-publication-policy.js";
 
-export { runtimeVersion } from "../shared/version.js";
-
 const inlinePublicationItemSchema = z
   .strictObject({
     finding: reviewFindingSchema,

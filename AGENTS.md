@@ -12,7 +12,7 @@ Pipr owns the provider-neutral change request runtime; Pi owns agent execution. 
 | Runtime | Config loading, task execution, diff handling, Pi execution, review validation, and rendering | `packages/runtime/src/` |
 | Review validation | Review contract, parse/repair, bounded-range validation, and comment publication | `packages/runtime/src/review/contract.ts`, `packages/runtime/src/review/agent/review-run.ts`, `packages/runtime/src/review/range-validation.ts`, `packages/runtime/src/review/review.ts` |
 | CLI and hosted runs | CLI commands, provider-neutral host execution, and GitHub Action packaging | `packages/cli/src/`, `packages/runtime/src/host-run/`, `action.yml`, `Dockerfile` |
-| Change request dispatch | Host-run command selection, change request entry, and native payload parsing | `packages/runtime/src/host-run/commands.ts`, `packages/runtime/src/host-run/change-request-entry.ts`, `packages/runtime/src/hosts/*/event.ts` |
+| Change request dispatch | Host-run command selection, change request entry, and native payload parsing | `packages/runtime/src/host-run/commands-hosted.ts`, `packages/runtime/src/host-run/change-request-entry.ts`, `packages/runtime/src/hosts/*/event.ts` |
 | Action integration tests | Docker image, Pi contract, and `act` fixtures | `packages/e2e/` |
 | Product docs | Fumadocs content | `apps/docs/content/docs/` |
 | Domain and decisions | Product language and durable architecture | `docs/CONTEXT.md`, `docs/adr/` |
@@ -71,7 +71,7 @@ Never commit real local sessions, secrets, credentials, private logs, unredacted
 
 - Use TDD for behavior changes: add or port one failing behavior test, implement the minimum, then refactor while green.
 - Add focused coverage when config loading, provider resolution, plan inspection, task execution, diff parsing, schema validation, comment rendering, code host publishing, or dry-run boundaries change.
-- Put executable tests in the nearest `tests/` folder under the source folder they cover: `src/host-run/commands.ts` maps to `src/host-run/tests/commands.test.ts`.
+- Put executable tests in the nearest `tests/` folder under the source folder they cover: `src/host-run/commands-local-review.ts` maps to `src/host-run/tests/commands-local-review.test.ts`.
 - Use `src/tests/` only for package-root files such as `src/index.ts` or `src/types.ts`.
 - Prefer public API tests. Test internals only when they have meaningful independent complexity.
 - Preserve fixture behavior unless the test documents an intentional divergence.

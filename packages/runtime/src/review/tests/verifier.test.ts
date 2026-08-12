@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
+import type { PiRunner } from "../../pi/types.js";
 import type { InlineThreadContext, PriorReviewState } from "../../publication/types.js";
 import type {
   ChangeRequestEventContext,
@@ -7,7 +8,6 @@ import type {
   PiprConfig,
   ProviderConfig,
 } from "../../types.js";
-import type { PiRunner } from "../agent/review-run.js";
 import { runInternalVerifier } from "../verifier.js";
 
 const provider: ProviderConfig = {

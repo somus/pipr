@@ -4,7 +4,7 @@ import { chmod, chown, cp, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/pr
 import os from "node:os";
 import path from "node:path";
 import type { RunAgentEvent } from "../observability/types.js";
-import { createDiffContextCoverageTracker } from "./diff-context-coverage.js";
+import { createDiffContextCoverageTracker } from "./diff-context-coverage-observer.js";
 import { PiOutputCollector } from "./output.js";
 import type {
   PiProcessIdentity,

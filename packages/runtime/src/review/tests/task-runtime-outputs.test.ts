@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { TaskContext } from "@usepipr/sdk";
 import { mainCommentTitle, piprRepositoryUrl } from "../comment-branding.js";
-import type { RuntimeTaskCheckResult } from "../task/task-runtime.js";
+import type { RuntimeTaskCheckResult } from "../task/task-output.js";
 import {
   askCommandInvocation,
   commandTaskPlan,

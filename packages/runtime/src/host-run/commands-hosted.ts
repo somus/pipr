@@ -2,16 +2,13 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { CodeHostAdapter, CodeHostEvent } from "../hosts/types.js";
+import { startFileRunRecorder } from "../observability/file-run-recorder.js";
 import {
   parseRunBundleRecipients,
   validateRunBundleRecipients,
 } from "../observability/protected-package.js";
-import {
-  combineRuntimeLogSinks,
-  type RunFailureCategory,
-  type RunRecorder,
-  startFileRunRecorder,
-} from "../observability/recorder.js";
+import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
+import { combineRuntimeLogSinks } from "../observability/runtime-log-sinks.js";
 import { maximumRunBundleBytes } from "../observability/types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { createRuntimeLog, type RuntimeLog } from "../shared/logging.js";

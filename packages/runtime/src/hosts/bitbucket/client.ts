@@ -6,8 +6,6 @@ import { createBitbucketDataCenterClient } from "./data-center-client.js";
 import { type BitbucketClient, commentSchema, pullRequestSchema, userSchema } from "./models.js";
 import { bitbucketRepositorySchema } from "./schema.js";
 
-export type { BitbucketClient } from "./models.js";
-
 export function createBitbucketClient(
   env: NodeJS.ProcessEnv = process.env,
   fetch: (

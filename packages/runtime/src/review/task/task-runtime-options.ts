@@ -3,6 +3,7 @@ import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import type { BuildDiffManifestOptions } from "../../diff/diff.js";
 import type { RunObserver } from "../../observability/types.js";
+import type { PiRunner } from "../../pi/types.js";
 import type {
   InlineThreadContext,
   PriorReviewState,
@@ -16,7 +17,6 @@ import type {
   PiprConfig,
   ProviderConfig,
 } from "../../types.js";
-import type { PiRunner } from "../agent/review-run.js";
 import type { ReviewProgressSink } from "../progress.js";
 import type { RuntimeCommandInvocation } from "../run-identity.js";
 import type { RuntimeCheckSink } from "./task-output.js";

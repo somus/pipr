@@ -18,7 +18,7 @@ import {
   prepareRunBundlePackage,
   validateRunBundlePackage,
 } from "../../index.js";
-import { startFileRunRecorder } from "../recorder.js";
+import { startFileRunRecorder } from "../file-run-recorder.js";
 
 const temporaryDirectories: string[] = [];
 

@@ -1,15 +1,12 @@
 import { expect } from "bun:test";
 import { type Agent, definePipr, type ReviewResult, type TaskHandler } from "@usepipr/sdk";
 import { buildPiprPlan } from "@usepipr/sdk/internal";
+import type { PiRunner } from "../../pi/types.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest, PiprConfig, ProviderConfig, ReviewFinding } from "../../types.js";
 import { priorReviewForTask } from "../task/task-output.js";
-import {
-  type PiRunner,
-  type ReviewRuntimeResult,
-  type RunTaskRuntimeOptions,
-  runTaskRuntime,
-} from "../task/task-runtime.js";
+import { type ReviewRuntimeResult, runTaskRuntime } from "../task/task-runtime.js";
+import type { RunTaskRuntimeOptions } from "../task/task-runtime-options.js";
 
 export const provider: ProviderConfig = {
   id: "deepseek/deepseek-v4-pro",

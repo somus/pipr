@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
-import { runLocalReviewCommand } from "../commands.js";
+import { runLocalReviewCommand } from "../commands-local-review.js";
 import {
   createCommandWorkspace,
   expectPiNotCalled,

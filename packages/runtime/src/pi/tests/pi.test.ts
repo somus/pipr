@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest } from "../../types.js";
+import { buildPiArgs } from "../cli-args.js";
 import {
   parsePiProviderInvocation,
   parsePiProviderProfile,
@@ -14,14 +15,13 @@ import {
 } from "../contract.js";
 import { toPiProviderInvocation } from "../provider.js";
 import {
-  buildPiArgs,
   createReadOnlyWorkspace,
   createScopedPiRunner,
-  type PiRunOptions,
   runPi,
   withPiRunWorkspace,
 } from "../runner.js";
 import { piRuntimeReadToolNames } from "../runtime-tools.js";
+import type { PiRunOptions } from "../types.js";
 
 describe("Pi contract", () => {
   it("tracks the Pi CLI contract pipr depends on", () => {

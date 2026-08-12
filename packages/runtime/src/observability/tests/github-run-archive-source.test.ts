@@ -3,9 +3,9 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { strToU8, zipSync } from "fflate";
+import { startFileRunRecorder } from "../file-run-recorder.js";
 import { GitHubRunArchiveSource } from "../github-run-archive-source.js";
 import { generateRunBundleIdentity, prepareRunBundlePackage } from "../protected-package.js";
-import { startFileRunRecorder } from "../recorder.js";
 
 const executionId = "0123456789abcdef0123456789abcdef";
 const artifactName = `pipr-run-v1-pr-42-${executionId}`;

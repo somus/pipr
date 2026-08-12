@@ -4,8 +4,7 @@ import type { DiffStructuralAnalysisLoader } from "../../diff/structural-analysi
 import type { RunObserver } from "../../observability/types.js";
 import type { DiffContextCoverageObservation } from "../../pi/diff-context-coverage.js";
 import type { ProviderFailureRemediation } from "../../pi/provider-failure.js";
-import type { PiRunUsage } from "../../pi/runner.js";
-import type { PiRunner } from "../../pi/types.js";
+import type { PiRunner, PiRunUsage } from "../../pi/types.js";
 import type { PriorReviewState } from "../../publication/types.js";
 import type { RuntimeLog } from "../../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";

@@ -4,12 +4,9 @@ import { loadRuntimeProject } from "../config/project.js";
 import { buildDiffManifest } from "../diff/diff.js";
 import { runGit as runGitCommand } from "../diff/git.js";
 import { createLocalChangeRequestEvent } from "../hosts/local/adapter.js";
-import {
-  combineRuntimeLogSinks,
-  type RunFailureCategory,
-  type RunRecorder,
-  startFileRunRecorder,
-} from "../observability/recorder.js";
+import { startFileRunRecorder } from "../observability/file-run-recorder.js";
+import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
+import { combineRuntimeLogSinks } from "../observability/runtime-log-sinks.js";
 import { selectLocalReviewTasks } from "../review/task/select-runtime-tasks.js";
 import { runTaskRuntime } from "../review/task/task-runtime.js";
 import { createRuntimeLog } from "../shared/logging.js";
