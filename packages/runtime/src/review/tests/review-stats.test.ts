@@ -30,6 +30,17 @@ describe("review stats", () => {
     });
   });
 
+  it("retains safe cache totals and marks aggregation partial on overflow", () => {
+    const prior = reviewStats({ cacheReadTokens: Number.MAX_SAFE_INTEGER });
+    const current = reviewStats({ cacheReadTokens: 10 });
+
+    expect(accumulateReviewStats(prior, current)).toMatchObject({
+      cacheReadTokens: Number.MAX_SAFE_INTEGER,
+      cacheWriteTokens: 2,
+      cacheUsageStatus: "partial",
+    });
+  });
+
   it("drops prior diff coverage when the current workflow has no agent runs", () => {
     const prior = reviewStats({
       diffContextCoverage: {
