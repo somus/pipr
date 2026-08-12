@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import type { CodeHostWebhookProtocol } from "../webhook.js";
 import { parseWebhookJson } from "../webhook-shared.js";
+import type { CodeHostWebhookProtocol } from "../webhook-types.js";
 import { createGiteaClient, type GiteaFamilyHost } from "./client.js";
 
 const eventSchema = z.looseObject({

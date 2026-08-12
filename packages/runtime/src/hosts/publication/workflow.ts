@@ -1,4 +1,8 @@
-import type { InlinePublicationItem, ThreadAction } from "../../review/comment.js";
+import type {
+  InlinePublicationItem,
+  InlineThreadContext,
+  ThreadAction,
+} from "../../publication/types.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import { inlinePublicationDecision } from "../../review/inline-publication-policy.js";
 import {
@@ -15,8 +19,7 @@ import {
 import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { commandResponseBody, commandStatusText, threadActionReply } from "../publication.js";
-import type { CodeHostPublication, InlineThreadContext } from "../types.js";
-
+import type { CodeHostPublication } from "../types.js";
 export type OwnedMainComment = { id: string; body?: string };
 export type OwnedInlineComment = {
   body: string;

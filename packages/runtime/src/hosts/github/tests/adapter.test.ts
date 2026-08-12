@@ -3,8 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createGitHubHostAdapter } from "../adapter.js";
-import type { GitHubCommandClient } from "../command.js";
-import type { GitHubPublicationClient } from "../publication.js";
+import type { GitHubCommandClient, GitHubPublicationClient } from "../client.js";
 
 describe("GitHub host adapter", () => {
   it("wires host capabilities into grouped adapter surfaces", () => {

@@ -1,8 +1,13 @@
 import type { ModelProfile, PiprRunContext, Schema } from "@usepipr/sdk";
 import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import { z } from "zod";
-import type { InlineThreadContext } from "../hosts/types.js";
 import type { RunObserver } from "../observability/types.js";
+import type {
+  InlineThreadContext,
+  PriorFindingRecord,
+  PriorReviewState,
+  ThreadAction,
+} from "../publication/types.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type {
   ChangeRequestEventContext,
@@ -16,13 +21,7 @@ import {
   createAgentRunBudget,
 } from "./agent/agent-run-budget.js";
 import { type PiRunner, type PiRunStats, runReviewAgent } from "./agent/review-run.js";
-import type { ThreadAction } from "./comment.js";
-import {
-  type PriorFindingRecord,
-  type PriorReviewState,
-  resolvePriorFindings,
-} from "./prior-state.js";
-
+import { resolvePriorFindings } from "./prior-state.js";
 export type VerifierMode =
   | { kind: "synchronize" }
   | {

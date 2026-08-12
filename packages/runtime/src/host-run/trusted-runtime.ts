@@ -3,29 +3,30 @@ import type { CodeHostAdapter } from "../hosts/types.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
 import { assertTrustedHostRunProviderEnv } from "./adapter.js";
+import type { HostRunWorkspace } from "./composition.js";
 import { loadRuntimeProjectFromGitCommit } from "./git-project.js";
 import { addProviderSecrets, logPhase, logTrustedRuntime } from "./logging.js";
-import type { HostRunCommandDependencyOptions, TrustedRuntimeProject } from "./types.js";
+import type { TrustedRuntimeProject } from "./types.js";
 
 export async function loadTrustedRuntimeForEvent(
-  options: HostRunCommandDependencyOptions,
+  workspace: Pick<HostRunWorkspace, "rootDir" | "configDir" | "env">,
   event: ChangeRequestEventContext,
   log: RuntimeLog,
 ): Promise<TrustedRuntimeProject> {
   await logPhase(log, "fetch trusted base", async () =>
     ensureCodeHostCommit({
-      rootDir: options.rootDir,
+      rootDir: workspace.rootDir,
       commitSha: event.change.base.sha,
       fetchRef: event.change.base.ref ?? event.change.base.sha,
-      fetchEnv: options.env,
+      fetchEnv: workspace.env,
     }),
   );
   const trustedRuntime = await logPhase(log, "load trusted config", async () =>
     loadRuntimeProjectFromGitCommit({
-      rootDir: options.rootDir,
-      configDir: options.configDir,
+      rootDir: workspace.rootDir,
+      configDir: workspace.configDir,
       commitSha: event.change.base.sha,
-      env: options.env,
+      env: workspace.env,
     }),
   );
   logTrustedRuntime(log, trustedRuntime);
@@ -33,15 +34,15 @@ export async function loadTrustedRuntimeForEvent(
 }
 
 export async function prepareTrustedHeadCheckout(
-  options: HostRunCommandDependencyOptions,
+  workspace: Pick<HostRunWorkspace, "rootDir" | "env">,
   adapter: CodeHostAdapter,
   config: PiprConfig,
   event: ChangeRequestEventContext,
   log: RuntimeLog,
 ): Promise<void> {
-  addProviderSecrets(log, config, options.env);
-  assertTrustedHostRunProviderEnv(options, config);
+  addProviderSecrets(log, config, workspace.env);
+  assertTrustedHostRunProviderEnv(workspace.env, config);
   await logPhase(log, "checkout head", async () => {
-    await adapter.workspace.ensureHeadCheckout({ rootDir: options.rootDir, change: event });
+    await adapter.workspace.ensureHeadCheckout({ rootDir: workspace.rootDir, change: event });
   });
 }

@@ -3,6 +3,7 @@ import type { CodeHostAdapter, CommandCommentEvent } from "../hosts/types.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import { parseChangeRequestEventContext } from "../types.js";
+import type { HostRunServices } from "./composition.js";
 import {
   dispatchRuntimeEntry,
   hasRequiredRepositoryPermission,
@@ -15,7 +16,6 @@ import { logEventContext, logPhase } from "./logging.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
 import type {
-  HostRunCommandDependencyOptions,
   HostRunCommandResult,
   TrustedReviewAndPublishResult,
   TrustedRuntimeProject,
@@ -33,36 +33,32 @@ type PreparedIssueCommentCommand =
     };
 
 export async function runIssueCommentHostRunCommand(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
-  log: RuntimeLog,
+  services: HostRunServices,
   comment: CommandCommentEvent,
 ): Promise<HostRunCommandResult> {
-  if (!adapter.capabilities.commandComments) {
+  if (!services.adapter.capabilities.commandComments) {
     const ignored = { kind: "ignored" as const, reason: "host adapter does not support commands" };
-    log.notice("event ignored", { reason: ignored.reason });
+    services.log.notice("event ignored", { reason: ignored.reason });
     return ignored;
   }
-  const prepared = await prepareIssueCommentCommand(options, adapter, log, comment);
+  const prepared = await prepareIssueCommentCommand(services, comment);
   if (prepared.kind === "ignored") {
-    log.notice("event ignored", { reason: prepared.reason });
+    services.log.notice("event ignored", { reason: prepared.reason });
     return prepared;
   }
-  return await dispatchIssueCommentCommand(options, adapter, prepared, log);
+  return await dispatchIssueCommentCommand(services, prepared);
 }
 
 async function prepareIssueCommentCommand(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
-  log: RuntimeLog,
+  services: HostRunServices,
   comment: CommandCommentEvent,
 ): Promise<PreparedIssueCommentCommand> {
-  const runnable = runnableIssueCommentCommand(comment, options.dryRun);
+  const runnable = runnableIssueCommentCommand(comment, services.dryRun);
   if (runnable.kind === "ignored") {
     return runnable;
   }
-  const loaded = await logPhase(log, "load change request", async () =>
-    adapter.events.loadChangeRequest({
+  const loaded = await logPhase(services.log, "load change request", async () =>
+    services.adapter.events.loadChangeRequest({
       repository: comment.repository,
       changeNumber: comment.changeNumber,
       workspace: comment.workspace,
@@ -75,14 +71,14 @@ async function prepareIssueCommentCommand(
     eventName: loaded.eventName ?? comment.eventName,
     action: loaded.action ?? comment.action,
     rawAction: loaded.rawAction ?? comment.rawAction,
-    platform: { id: adapter.id },
+    platform: { id: services.adapter.id },
     repository: loaded.repository,
     coordinates: loaded.coordinates,
     change: loaded.change,
     workspace: loaded.workspace ?? comment.workspace,
   });
-  logEventContext(log, event);
-  const trustedRuntime = await loadTrustedRuntimeForEvent(options, event, log);
+  logEventContext(services.log, event);
+  const trustedRuntime = await loadTrustedRuntimeForEvent(services, event, services.log);
   const resolution = resolvePlanCommand(trustedRuntime.plan, runnable.line);
   if (resolution.kind === "ignored") {
     return { kind: "ignored", reason: resolution.reason };
@@ -110,16 +106,14 @@ function runnableIssueCommentCommand(
 }
 
 async function dispatchIssueCommentCommand(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
+  services: HostRunServices,
   prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>,
-  log: RuntimeLog,
 ): Promise<HostRunCommandResult> {
-  const runnable = await resolveRunnableCommand(adapter, prepared, log);
+  const runnable = await resolveRunnableCommand(services.adapter, prepared, services.log);
   if (runnable.kind !== "matched") {
     return runnable;
   }
-  return await runCommandLifecycle(options, adapter, prepared, runnable.invocation, log);
+  return await runCommandLifecycle(services, prepared, runnable.invocation);
 }
 
 async function resolveRunnableCommand(
@@ -181,13 +175,11 @@ async function resolveRunnableCommand(
 }
 
 async function runCommandLifecycle(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
+  services: HostRunServices,
   prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>,
   invocation: Extract<PlanCommandResolution, { kind: "matched" }>["invocation"],
-  log: RuntimeLog,
 ): Promise<HostRunCommandResult> {
-  const status = adapter.publication?.publishCommandStatus;
+  const status = services.adapter.publication?.publishCommandStatus;
   if (!status) {
     throw new Error("command status publication is not available for this code host");
   }
@@ -200,11 +192,11 @@ async function runCommandLifecycle(
   await status({ ...statusOptions, state: "accepted" });
   try {
     await prepareTrustedHeadCheckout(
-      options,
-      adapter,
+      services,
+      services.adapter,
       prepared.trustedRuntime.settings.config,
       prepared.event,
-      log,
+      services.log,
     );
     const dispatch = dispatchRuntimeEntry({
       kind: "change-request",
@@ -214,8 +206,7 @@ async function runCommandLifecycle(
     });
     await status({ ...statusOptions, state: "running" });
     const completed = await runTrustedReviewAndPublish({
-      options,
-      adapter,
+      services,
       trustedRuntime: prepared.trustedRuntime,
       event: prepared.event,
       taskName: invocation.taskName,
@@ -227,10 +218,9 @@ async function runCommandLifecycle(
         arguments: invocation.arguments,
         sourceCommentId: prepared.comment.commentId,
       },
-      log,
     });
     const result = await issueCommentCommandResult({
-      adapter,
+      adapter: services.adapter,
       completed,
       event: prepared.event,
       commandName: invocation.commandName,
@@ -243,12 +233,12 @@ async function runCommandLifecycle(
     return result;
   } catch (error) {
     await publishCommandFailureStatus({
-      adapter,
+      adapter: services.adapter,
       prepared,
       status,
       statusOptions,
       error,
-      log,
+      log: services.log,
     });
     throw error;
   }

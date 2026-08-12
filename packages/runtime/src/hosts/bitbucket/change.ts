@@ -1,5 +1,5 @@
 import type { LoadedChangeRequest } from "../types.js";
-import type { BitbucketPullRequest } from "./client.js";
+import type { BitbucketPullRequest } from "./models.js";
 
 export function loadedBitbucketChange(
   pullRequest: BitbucketPullRequest,

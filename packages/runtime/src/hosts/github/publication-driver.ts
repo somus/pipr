@@ -1,20 +1,16 @@
-import type { ThreadAction } from "../../review/comment.js";
+import type { ThreadAction } from "../../publication/types.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
+import type { GitHubPublicationClient, GitHubReviewComment, GitHubReviewThread } from "./client.js";
 import { mapFindingToGithubReviewCommentLocation } from "./inline.js";
-import type {
-  GitHubPublicationClient,
-  GitHubReviewComment,
-  GitHubReviewThread,
-} from "./publication-client.js";
 import {
   assertCurrentHeadSha,
   findMainComment,
   findOwnedIssueComment,
   reviewThreadByCommentId,
-} from "./publication-shared.js";
+} from "./publication.js";
 
 type Prepared = {
   client: GitHubPublicationClient;

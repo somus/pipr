@@ -1,29 +1,22 @@
-import type { CodeHostAdapter } from "../hosts/types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
-import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
+import type { HostRunServices } from "./composition.js";
 import { dispatchRuntimeEntry } from "./entry-dispatch.js";
 import { logEventContext } from "./logging.js";
 import { startReviewProgress } from "./review-progress.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
-import type {
-  HostRunCommandDependencyOptions,
-  HostRunCommandResult,
-  TrustedReviewAndPublishResult,
-} from "./types.js";
+import type { HostRunCommandResult, TrustedReviewAndPublishResult } from "./types.js";
 import { failureActionFromEnvironment, workflowUrlFromEnvironment } from "./workflow-url.js";
 
 export async function runChangeRequestHostRunCommand(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
-  log: RuntimeLog,
+  services: HostRunServices,
   event: ChangeRequestEventContext,
 ): Promise<HostRunCommandResult> {
-  logEventContext(log, event);
-  const trustedRuntime = await loadTrustedRuntimeForEvent(options, event, log);
-  if (options.dryRun) {
-    log.notice("dry run stop before review runtime, model, or GitHub publishing calls");
+  logEventContext(services.log, event);
+  const trustedRuntime = await loadTrustedRuntimeForEvent(services, event, services.log);
+  if (services.dryRun) {
+    services.log.notice("dry run stop before review runtime, model, or GitHub publishing calls");
     return {
       kind: "dry-run",
       event,
@@ -36,36 +29,39 @@ export async function runChangeRequestHostRunCommand(
     event,
   });
   const selectedTasks = dispatch.kind === "change-request" ? dispatch.tasks : [];
-  log.notice("dispatch", {
+  services.log.notice("dispatch", {
     selectedTasks: selectedTasks.map((task) => task.name),
   });
   if (selectedTasks.length === 0) {
-    log.notice("event ignored", { reason: "No tasks matched the change request event" });
+    services.log.notice("event ignored", { reason: "No tasks matched the change request event" });
     return { kind: "ignored", reason: "No tasks matched the change request event" };
   }
-  const env = options.env ?? process.env;
-  const workflowUrl = workflowUrlFromEnvironment(adapter.id, env);
+  const workflowUrl = workflowUrlFromEnvironment(services.adapter.id, services.env);
   const progress = await startReviewProgress({
-    adapter,
+    adapter: services.adapter,
     event,
     config: trustedRuntime.settings.config,
     workflowUrl,
-    failureAction: failureActionFromEnvironment(adapter.id, env),
-    log,
-    secretRedactor: options.secretRedactor,
+    failureAction: failureActionFromEnvironment(services.adapter.id, services.env),
+    log: services.log,
+    secretRedactor: services.secretRedactor,
   });
   let completed: TrustedReviewAndPublishResult;
   try {
-    await prepareTrustedHeadCheckout(options, adapter, trustedRuntime.settings.config, event, log);
+    await prepareTrustedHeadCheckout(
+      services,
+      services.adapter,
+      trustedRuntime.settings.config,
+      event,
+      services.log,
+    );
     completed = await runTrustedReviewAndPublish({
-      options,
-      adapter,
+      services,
       trustedRuntime,
       event,
       selectedTasks,
       workflowUrl,
       progress,
-      log,
     });
   } catch (error) {
     const progressFailure = await progress?.fail(error);
@@ -74,7 +70,7 @@ export async function runChangeRequestHostRunCommand(
     throw error;
   }
   if (completed.kind === "skipped") {
-    log.notice("event ignored", { reason: completed.reason });
+    services.log.notice("event ignored", { reason: completed.reason });
     return { kind: "ignored", reason: completed.reason };
   }
   if (completed.kind === "command-response") {

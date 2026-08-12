@@ -2,7 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { buildPublicationPlan, type InlinePublicationItem } from "../../../review/comment.js";
+import type { InlinePublicationItem } from "../../../publication/types.js";
+import { buildPublicationPlan } from "../../../review/comment.js";
 import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
 import { priorReviewForTask } from "../../../review/task/task-output.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
@@ -12,8 +13,8 @@ import {
 } from "../../tests/conformance.js";
 import type { CodeHostStatusState, RepositoryPermission } from "../../types.js";
 import { createBitbucketHostAdapter } from "../adapter.js";
-import type { BitbucketClient, BitbucketComment, BitbucketPullRequest } from "../client.js";
 import { normalizeBitbucketMarkdown, renderBitbucketMarkdown } from "../markdown.js";
+import type { BitbucketClient, BitbucketComment, BitbucketPullRequest } from "../models.js";
 
 describe("Bitbucket Cloud adapter", () => {
   it("publishes idempotent main, multiline inline, commands, resolution, and statuses", async () => {

@@ -61,7 +61,7 @@ export {
 } from "./observability/protected-package.js";
 export { enforceRunStoreRetention } from "./observability/retention.js";
 export { copyRunBundleInput } from "./observability/run-bundle-input.js";
-export type { PublicationResult } from "./review/publication-result.js";
+export type { PublicationResult } from "./publication/types.js";
 export { PublicationError } from "./review/publication-result.js";
 export type {
   ChangeRequestEventContext,

@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { type PiprResult, parsePiprResult } from "@usepipr/sdk";
-import { createCodeHostWebhookProtocol, type WebhookHost } from "../hosts/webhook.js";
+import { createCodeHostWebhookProtocol } from "../hosts/webhook.js";
+import type { WebhookHost } from "../hosts/webhook-types.js";
 import { toPiprErrorResult, toPiprResult } from "../internal/pipr-result.js";
 import { enforceRunStoreRetention } from "../observability/retention.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
@@ -13,7 +14,7 @@ import type { HostRunCommandResult } from "./types.js";
 
 const MAX_WEBHOOK_PAYLOAD_BYTES = 2 * 1024 * 1024;
 
-export type { WebhookHost } from "../hosts/webhook.js";
+export type { WebhookHost } from "../hosts/webhook-types.js";
 
 export type WebhookDelivery = {
   id: string;

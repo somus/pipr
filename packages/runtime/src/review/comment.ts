@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { createDiffRangeIndex } from "../diff/ranges.js";
+import type {
+  InlinePublicationItem,
+  PriorReviewState,
+  PublicationMetadata,
+  PublicationPlan,
+  ReviewStats,
+  ThreadAction,
+} from "../publication/types.js";
 import { compareStableSemver, stableSemverPattern } from "../shared/semver.js";
 import type {
   ChangeRequestEventContext,
@@ -29,12 +37,11 @@ import {
   mainCommentMarker,
   matchFindingRecord,
   matchResolvedFindingRecord,
-  type PriorReviewState,
   priorReviewStateSchema,
   renderInlineFindingMarker,
   renderMainCommentMarker,
 } from "./prior-state.js";
-import { type ReviewStats, reviewStatsSchema } from "./review-stats.js";
+import { reviewStatsSchema } from "./review-stats.js";
 import { isPublishableSuggestedFixSelection } from "./suggested-fix-publication-policy.js";
 
 export { runtimeVersion } from "../shared/version.js";
@@ -78,7 +85,6 @@ const inlinePublicationItemSchema = z
 
 const inlinePublicationItemsSchema = z.array(inlinePublicationItemSchema);
 
-export type InlinePublicationItem = z.infer<typeof inlinePublicationItemSchema>;
 export type InlineCommentDraft = InlinePublicationItem;
 export type PublishableInlineFinding = {
   finding: ReviewFinding;
@@ -100,8 +106,6 @@ const threadActionSchema = z.strictObject({
 
 const threadActionsSchema = z.array(threadActionSchema);
 
-export type ThreadAction = z.infer<typeof threadActionSchema>;
-
 const publicationMetadataSchema = z.strictObject({
   runtimeVersion: z.string().min(1),
   configVersion: z.string().min(1).optional(),
@@ -118,8 +122,6 @@ const publicationMetadataSchema = z.strictObject({
   workflowUrl: z.string().url().max(2_048).optional(),
 });
 
-export type PublicationMetadata = z.infer<typeof publicationMetadataSchema>;
-
 const publicationPlanSchema = z.strictObject({
   mainComment: z.string().min(1),
   mainMarker: z.string().min(1),
@@ -129,8 +131,6 @@ const publicationPlanSchema = z.strictObject({
   reviewState: priorReviewStateSchema,
   threadActions: threadActionsSchema,
 });
-
-export type PublicationPlan = z.infer<typeof publicationPlanSchema>;
 
 export function publicationPlanForHostCapabilities(
   plan: PublicationPlan,

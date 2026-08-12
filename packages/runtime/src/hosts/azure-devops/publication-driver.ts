@@ -1,4 +1,4 @@
-import type { InlinePublicationItem } from "../../review/comment.js";
+import type { InlinePublicationItem } from "../../publication/types.js";
 import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type {

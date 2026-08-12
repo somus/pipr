@@ -3,8 +3,9 @@ import type { ReviewFinding } from "@usepipr/sdk";
 import { defaultMaxStoredFindings } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import { firstNonEmptyLine } from "../commands/grammar.js";
+import type { PriorFindingRecord, PriorReviewState, ReviewStats } from "../publication/types.js";
 import { reviewSideSchema } from "../types.js";
-import { accumulateReviewStats, type ReviewStats, reviewStatsSchema } from "./review-stats.js";
+import { accumulateReviewStats, reviewStatsSchema } from "./review-stats.js";
 
 export const mainCommentMarker = "pipr:main-comment";
 const inlineFindingMarkerPrefix = "pipr:finding";
@@ -58,8 +59,6 @@ export const priorReviewStateSchema = z.strictObject({
   workflowUrls: z.array(workflowUrlSchema).optional(),
 });
 
-export type PriorFindingRecord = z.infer<typeof priorFindingRecordSchema>;
-export type PriorReviewState = z.infer<typeof priorReviewStateSchema>;
 export type FindingMarkerRecord = {
   id: string;
   head: string;

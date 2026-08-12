@@ -1,4 +1,4 @@
-import type { ThreadAction } from "../review/comment.js";
+import type { ThreadAction } from "../publication/types.js";
 import type { InlinePublicationLocation } from "../review/inline-publication-policy.js";
 import {
   renderResolvedFindingMarker,

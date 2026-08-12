@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { createGitHubPublicationClient } from "../../hosts/github/publication.js";
+import { createGitHubPublicationClient } from "../../hosts/github/client.js";
 
 const originalFetch = globalThis.fetch;
 

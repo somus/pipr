@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process";
 import { lstat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { findEnclosingDeclaration } from "../diff/manifest-structure.js";
 import { createDiffRangeIndex } from "../diff/ranges.js";
 import type { DiffStructuralAnalysis, StructuralDeclaration } from "../diff/structural-analysis.js";
+import { runBoundedProcess } from "../shared/bounded-process.js";
 import { isRecord } from "../shared/record.js";
 import type { CommentableRange, DiffHunk, DiffManifest, DiffManifestFile } from "../types.js";
 
@@ -526,52 +526,15 @@ async function runAstGrepProcess(
     timeoutMs: number;
   },
 ): Promise<{ stdout: string; exitCode: number }> {
-  return await new Promise((resolve, reject) => {
-    const child = spawn(command[0], command.slice(1), {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const stdout: Buffer[] = [];
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    let settled = false;
-    const fail = (message: string) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      child.kill("SIGKILL");
-      reject(new Error(message));
-    };
-    const timer = setTimeout(() => fail("pipr_ast_grep timed out"), options.timeoutMs);
-    child.on("error", () => fail("pipr_ast_grep is unavailable"));
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdoutBytes += chunk.byteLength;
-      if (stdoutBytes > 16 * 1024 * 1024) {
-        fail("pipr_ast_grep exceeded its output limit");
-        return;
-      }
-      stdout.push(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderrBytes += chunk.byteLength;
-      if (stderrBytes > 1024 * 1024) {
-        fail("pipr_ast_grep exceeded its output limit");
-      }
-    });
-    child.on("close", (exitCode) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      resolve({
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        exitCode: exitCode ?? -1,
-      });
-    });
+  const result = await runBoundedProcess(command, {
+    ...options,
+    stdoutLimitBytes: 16 * 1024 * 1024,
+    stderrLimitBytes: 1024 * 1024,
+    errors: {
+      spawn: () => new Error("pipr_ast_grep is unavailable"),
+      timeout: () => new Error("pipr_ast_grep timed out"),
+      outputLimit: () => new Error("pipr_ast_grep exceeded its output limit"),
+    },
   });
+  return { stdout: result.stdout, exitCode: result.exitCode };
 }

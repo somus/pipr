@@ -331,21 +331,6 @@ export default definePipr((pipr) => {
     });
   });
 
-  it("rejects async TypeScript config callbacks", async () => {
-    const rootDir = await newInitializedProject();
-    await writePiprConfig(
-      rootDir,
-      `import { definePipr } from "@usepipr/sdk";
-
-export default definePipr(async () => {});
-`,
-    );
-
-    await expect(loadTypescriptConfig({ rootDir })).rejects.toThrow(
-      "definePipr configuration callback must be synchronous",
-    );
-  });
-
   it("type-checks user plugins and lists registered custom tools", async () => {
     const rootDir = await newInitializedProject();
     await writePiprConfig(

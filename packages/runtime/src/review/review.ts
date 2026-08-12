@@ -31,15 +31,11 @@ export function validateReviewResult(
   manifest: DiffManifest,
   options: ValidateReviewOptions,
 ): ValidatedReview {
-  const { validFindings, droppedFindings } = validateReviewFindings(
-    review.inlineFindings,
-    manifest,
-    options,
-  );
+  const findings = validateReviewFindings(review.inlineFindings, manifest, options);
   return parseValidatedReview({
     review,
-    validFindings,
-    droppedFindings,
+    validFindings: findings.validFindings,
+    droppedFindings: findings.droppedFindings,
   });
 }
 

@@ -1,10 +1,11 @@
-import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { runBoundedProcess } from "../shared/bounded-process.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { DiffManifest } from "../types.js";
+import { unquote } from "./source-text.js";
 
 export type StructuralDeclaration = {
   qualifiedName: string;
@@ -211,7 +212,7 @@ async function loadAstGrepVersion(
   env: NodeJS.ProcessEnv | undefined,
   limits: StructuralExecutionLimits,
 ): Promise<string> {
-  const result = await runBoundedProcess(["ast-grep", "--version"], {
+  const result = await runAnalysisProcess(["ast-grep", "--version"], {
     env,
     timeoutMs: limits.timeoutMs,
     stdoutLimitBytes: versionOutputLimitBytes,
@@ -234,7 +235,7 @@ async function loadOutlines(options: {
   env: NodeJS.ProcessEnv | undefined;
   limits: StructuralExecutionLimits;
 }): Promise<StructuralFile[]> {
-  const result = await runBoundedProcess(
+  const result = await runAnalysisProcess(
     [
       "ast-grep",
       "outline",
@@ -290,7 +291,7 @@ async function loadRefOutlines(options: {
   }
   await mkdir(options.root, { recursive: true });
   for (const filePath of options.paths) {
-    const result = await runBoundedProcess(["git", "show", `${options.ref}:${filePath}`], {
+    const result = await runAnalysisProcess(["git", "show", `${options.ref}:${filePath}`], {
       cwd: options.workspace,
       env: options.env,
       timeoutMs: options.limits.timeoutMs,
@@ -387,14 +388,6 @@ function normalizeRelativePath(filePath: string): string {
   return normalized;
 }
 
-function unquote(value: string): string {
-  const first = value[0];
-  const last = value.at(-1);
-  return first && last && first === last && ['"', "'", "`"].includes(first)
-    ? value.slice(1, -1)
-    : value;
-}
-
 function analysisDiagnostics(
   started: number,
   headFiles: readonly StructuralFile[],
@@ -424,7 +417,7 @@ function isMissingExecutableError(error: unknown): boolean {
   );
 }
 
-async function runBoundedProcess(
+async function runAnalysisProcess(
   command: [string, ...string[]],
   options: {
     cwd?: string;
@@ -434,57 +427,12 @@ async function runBoundedProcess(
     stderrLimitBytes: number;
   },
 ): Promise<ProcessResult> {
-  return await new Promise((resolve, reject) => {
-    const child = spawn(command[0], command.slice(1), {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    let settled = false;
-    const fail = (error: unknown) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      child.kill("SIGKILL");
-      reject(error);
-    };
-    const timer = setTimeout(() => fail(new StructuralAnalysisError("timeout")), options.timeoutMs);
-    child.on("error", fail);
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdoutBytes += chunk.byteLength;
-      if (stdoutBytes > options.stdoutLimitBytes) {
-        fail(new StructuralAnalysisError("output-limit"));
-        return;
-      }
-      stdout.push(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderrBytes += chunk.byteLength;
-      if (stderrBytes > options.stderrLimitBytes) {
-        fail(new StructuralAnalysisError("output-limit"));
-        return;
-      }
-      stderr.push(chunk);
-    });
-    child.on("close", (exitCode) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      resolve({
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stdoutBytes,
-        stderr: Buffer.concat(stderr).toString("utf8"),
-        exitCode: exitCode ?? -1,
-      });
-    });
+  return await runBoundedProcess(command, {
+    ...options,
+    errors: {
+      spawn: (error) => error,
+      timeout: () => new StructuralAnalysisError("timeout"),
+      outputLimit: () => new StructuralAnalysisError("output-limit"),
+    },
   });
 }

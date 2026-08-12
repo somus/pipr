@@ -1,5 +1,9 @@
 import path from "node:path";
-import type { InlinePublicationItem } from "../../review/comment.js";
+import type {
+  InlinePublicationItem,
+  InlineThreadContext,
+  PriorReviewState,
+} from "../../publication/types.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
@@ -7,11 +11,9 @@ import {
   applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
   extractPriorReviewState,
-  type PriorReviewState,
 } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { nativeInlineLocation } from "../publication.js";
-import type { InlineThreadContext } from "../types.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
 
 export function azureInlineLocationFromThread(

@@ -1,22 +1,15 @@
-import type { ChangeRequestAction } from "@usepipr/sdk";
 import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
-import { uniqBy } from "lodash-es";
+import { match, P } from "ts-pattern";
 import {
   commandPatternPrefixMatches,
   isPiprCommandLine,
   parseCommandPattern,
 } from "../commands/grammar.js";
 import type { RepositoryPermission } from "../hosts/types.js";
+import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { CommandPermissionLevel } from "../types.js";
 
 const permissionOrder: CommandPermissionLevel[] = ["read", "triage", "write", "maintain", "admin"];
-const changeRequestActions = [
-  "opened",
-  "updated",
-  "reopened",
-  "ready",
-  "closed",
-] as const satisfies readonly ChangeRequestAction[];
 
 type SelectedPlanCommand =
   | {
@@ -72,49 +65,18 @@ export function dispatchRuntimeEntry(
     | { kind: "change-request"; plan: RuntimePlan; event: { action?: string }; taskName?: string }
     | { kind: "command"; plan: RuntimePlan; line: string | undefined },
 ): RuntimeEntryDispatch {
-  if (options.kind === "change-request") {
-    return {
-      kind: "change-request",
+  return match(options)
+    .with({ kind: "change-request" }, (options) => ({
+      kind: "change-request" as const,
       tasks: selectRuntimeTasks({
         plan: options.plan,
         event: options.event,
         taskName: options.taskName,
       }),
       taskName: options.taskName,
-    };
-  }
-  return resolvePlanCommand(options.plan, options.line);
-}
-
-export function selectRuntimeTasks(options: {
-  plan: RuntimePlan;
-  event: { action?: string };
-  taskName?: string;
-}): RuntimeTask[] {
-  if (options.taskName) {
-    return options.plan.tasks.filter((task) => task.name === options.taskName);
-  }
-  return selectChangeRequestTasks(options.plan, options.event);
-}
-
-export function selectLocalReviewTasks(plan: RuntimePlan): RuntimeTask[] {
-  return uniqBy(
-    plan.changeRequestTriggers.map((trigger) => trigger.task),
-    (task) => task.name,
-  ).filter((task) => task.local !== false);
-}
-
-function selectChangeRequestTasks(plan: RuntimePlan, event: { action?: string }): RuntimeTask[] {
-  if (!changeRequestActions.includes(event.action as ChangeRequestAction)) {
-    return [];
-  }
-  const action = event.action as ChangeRequestAction;
-  return uniqBy(
-    plan.changeRequestTriggers
-      .filter((trigger) => trigger.actions.includes(action))
-      .map((trigger) => trigger.task),
-    (task) => task.name,
-  );
+    }))
+    .with({ kind: "command" }, (options) => resolvePlanCommand(options.plan, options.line))
+    .exhaustive();
 }
 
 function selectPlanCommand(plan: RuntimePlan, line: string): SelectedPlanCommand | undefined {
@@ -148,10 +110,9 @@ export function resolvePlanCommand(
   if (!isPiprCommandLine(line)) {
     return { kind: "ignored", reason: "comment did not target pipr" };
   }
-  const selected = selectPlanCommand(plan, line);
-  if (selected?.kind === "matched") {
-    return {
-      kind: "matched",
+  return match(selectPlanCommand(plan, line))
+    .with({ kind: "matched" }, (selected) => ({
+      kind: "matched" as const,
       invocation: {
         taskName: selected.command.task.name,
         commandName: selected.commandName,
@@ -160,22 +121,20 @@ export function resolvePlanCommand(
         pattern: selected.command.pattern,
         arguments: selected.arguments,
       },
-    };
-  }
-  if (selected?.kind === "invalid") {
-    return {
-      kind: "invalid",
+    }))
+    .with({ kind: "invalid" }, (selected) => ({
+      kind: "invalid" as const,
       reason: selected.error,
       requiredPermission: selected.command.permission,
       body: renderPlanCommandHelp(plan, selected.error),
-    };
-  }
-  return {
-    kind: "help",
-    reason: `unknown pipr command '${line}'`,
-    requiredPermission: "read",
-    body: renderPlanCommandHelp(plan, `Unknown command: ${line}`),
-  };
+    }))
+    .with(P.nullish, () => ({
+      kind: "help" as const,
+      reason: `unknown pipr command '${line}'`,
+      requiredPermission: "read" as const,
+      body: renderPlanCommandHelp(plan, `Unknown command: ${line}`),
+    }))
+    .exhaustive();
 }
 
 export function parsePlanCommandInputs(

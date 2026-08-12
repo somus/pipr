@@ -1,15 +1,18 @@
 import { githubCoordinates } from "../../shared/github.js";
 import { createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
-import { createGitHubCommandClient, type GitHubCommandClient } from "./command.js";
+import {
+  createGitHubCommandClient,
+  createGitHubPublicationClient,
+  type GitHubCommandClient,
+  type GitHubPublicationClient,
+} from "./client.js";
 import {
   loadGitHubIssueCommentEventContext,
   loadGitHubPullRequestEventContext,
   loadGitHubReviewCommentReplyEvent,
 } from "./event.js";
 import {
-  createGitHubPublicationClient,
-  type GitHubPublicationClient,
   loadGitHubInlineThreadContexts,
   loadGitHubPriorMainComment,
   loadGitHubPriorReviewState,

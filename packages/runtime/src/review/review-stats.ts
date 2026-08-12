@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ReviewStats } from "../publication/types.js";
 
 export const maxReviewStatsModels = 20;
 const maxReviewStatsModelLength = 200;
@@ -33,8 +34,6 @@ export const reviewStatsSchema = z.strictObject({
   cacheUsageStatus: z.enum(["complete", "partial", "unavailable"]).optional(),
   diffContextCoverage: diffContextCoverageSchema.optional(),
 });
-
-export type ReviewStats = z.infer<typeof reviewStatsSchema>;
 
 export function accumulateReviewStats(
   prior: ReviewStats | undefined,

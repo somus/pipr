@@ -1,3 +1,4 @@
+import { match } from "ts-pattern";
 import { createAzureDevOpsHostAdapter } from "../hosts/azure-devops/adapter.js";
 import { createBitbucketHostAdapter } from "../hosts/bitbucket/adapter.js";
 import { createGiteaHostAdapter } from "../hosts/gitea/adapter.js";
@@ -6,16 +7,15 @@ import { createGitLabHostAdapter } from "../hosts/gitlab/adapter.js";
 import { resolveCodeHostId } from "../hosts/selection.js";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import type { PiprConfig } from "../types.js";
-import type { HostRunCommandDependencyOptions } from "./types.js";
 
 export function assertTrustedHostRunProviderEnv(
-  options: HostRunCommandDependencyOptions,
+  env: NodeJS.ProcessEnv | undefined,
   trustedConfig: PiprConfig,
 ): void {
-  const env = options.env ?? process.env;
+  const resolvedEnv = env ?? process.env;
   const missing: string[] = [];
   for (const provider of trustedConfig.providers) {
-    if (provider.apiKeyEnv && !env[provider.apiKeyEnv]) {
+    if (provider.apiKeyEnv && !resolvedEnv[provider.apiKeyEnv]) {
       missing.push(provider.apiKeyEnv);
     }
   }
@@ -36,20 +36,13 @@ export function createHostRunAdapter(options: {
     explicitHost: options.host,
     env: options.env ?? process.env,
   });
-  if (host !== "github") {
-    if (host === "azure-devops") {
-      return createAzureDevOpsHostAdapter({ env: options.env });
-    }
-    if (host === "gitlab") {
-      return createGitLabHostAdapter({ env: options.env });
-    }
-    if (host === "bitbucket") {
-      return createBitbucketHostAdapter({ env: options.env });
-    }
-    if (host === "gitea" || host === "forgejo" || host === "codeberg") {
-      return createGiteaHostAdapter({ host, env: options.env });
-    }
-    throw new Error(`Code host adapter '${host}' is not available in this build`);
-  }
-  return createGitHubHostAdapter({ env: options.env });
+  return match(host)
+    .with("github", () => createGitHubHostAdapter({ env: options.env }))
+    .with("azure-devops", () => createAzureDevOpsHostAdapter({ env: options.env }))
+    .with("gitlab", () => createGitLabHostAdapter({ env: options.env }))
+    .with("bitbucket", () => createBitbucketHostAdapter({ env: options.env }))
+    .with("gitea", "forgejo", "codeberg", (id) =>
+      createGiteaHostAdapter({ host: id, env: options.env }),
+    )
+    .exhaustive();
 }

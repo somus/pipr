@@ -1,3 +1,4 @@
+import { match } from "ts-pattern";
 import { z } from "zod";
 import { githubActor, githubCoordinates } from "../../shared/github.js";
 import type { ChangeRequestEventContext, RepositoryRef } from "../../types.js";
@@ -309,11 +310,8 @@ export async function loadGitHubReviewCommentReplyEvent(options: {
 }
 
 function normalizeGitHubPullRequestAction(action: string | undefined): string | undefined {
-  if (action === "synchronize") {
-    return "updated";
-  }
-  if (action === "ready_for_review") {
-    return "ready";
-  }
-  return action;
+  return match(action)
+    .with("synchronize", () => "updated")
+    .with("ready_for_review", () => "ready")
+    .otherwise((value) => value);
 }

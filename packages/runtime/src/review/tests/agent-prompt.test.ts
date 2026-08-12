@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { JsonObject, Schema } from "@usepipr/sdk";
 import type { RuntimeAgent } from "@usepipr/sdk/internal";
+import type { PriorReviewState } from "../../publication/types.js";
 import { type AgentRunContext, renderAgentPrompt } from "../agent/agent-prompt.js";
 import type { PreparedDiffManifestContext } from "../agent/diff-manifest-context.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
-import type { PriorReviewState } from "../prior-state.js";
 import { reviewResultSchemaId } from "../review.js";
 
 const unknownSchema: Schema<unknown> = {

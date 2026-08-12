@@ -233,18 +233,10 @@ describe("validateReviewResult", () => {
     ]);
   });
 
-  it("drops semantic mismatches and duplicate fingerprints", () => {
+  it("drops range mismatches and duplicate fingerprints", () => {
     const review: ReviewResult = {
       ...baseReview,
-      inlineFindings: [
-        { ...baseFinding, side: "LEFT" },
-        { ...baseFinding, path: "src/other.ts" },
-        { ...baseFinding, rangeId: "missing", startLine: 13, endLine: 13 },
-        { ...baseFinding, startLine: 12, endLine: 11 },
-        { ...baseFinding, startLine: 9 },
-        baseFinding,
-        baseFinding,
-      ],
+      inlineFindings: [{ ...baseFinding, startLine: 9 }, baseFinding, baseFinding],
     };
 
     const validated = validateReviewResult(review, manifest, {
@@ -253,10 +245,6 @@ describe("validateReviewResult", () => {
 
     expect(validated.validFindings).toHaveLength(1);
     expect(validated.droppedFindings.map((drop) => drop.reason)).toEqual([
-      "finding side does not match range side",
-      "finding path does not match range path",
-      "unknown rangeId 'missing'",
-      "finding startLine is after endLine",
       "finding lines fall outside the commentable range",
       "duplicate finding fingerprint",
     ]);

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { CodeHostWebhookProtocol } from "../webhook.js";
 import { parseWebhookJson, webhookSecretsEqual } from "../webhook-shared.js";
+import type { CodeHostWebhookProtocol } from "../webhook-types.js";
 import { createGitLabClient } from "./client.js";
 
 const projectSchema = z.looseObject({

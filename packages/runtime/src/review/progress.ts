@@ -1,3 +1,4 @@
+import type { ReviewStats } from "../publication/types.js";
 import { formatReviewDuration, renderReviewStatsTable } from "./comment.js";
 import {
   mainCommentFooterHiddenMarker,
@@ -7,7 +8,6 @@ import {
   piprProgressImageUrl,
   reviewProgressEndMarker,
 } from "./comment-branding.js";
-import type { ReviewStats } from "./review-stats.js";
 
 const reviewProgressStages = [
   "preparing-workspace",
@@ -108,13 +108,6 @@ const progressLabels: Record<ReviewProgressStage, string> = {
 
 const progressStartPattern =
   /^<!-- pipr:progress:start token=([A-Za-z0-9-]+) head=([^\s]+) stage=([a-z-]+) state=(running|failed) -->$/;
-
-export type ReviewProgressLease = {
-  token: string;
-  mainCommentId: string;
-  mainCommentAction: "created" | "updated";
-  reviewedHeadSha: string;
-};
 
 export type RenderReviewProgressOptions = {
   body?: string;

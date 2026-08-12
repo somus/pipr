@@ -210,19 +210,6 @@ describe("presentGitHubActionResult", () => {
     expect(JSON.parse(calls.output[1]?.[1] ?? "null").mainComment).toBe(expectedMainComment);
   });
 
-  it("presents command help", async () => {
-    const calls = recordingPresenter();
-    await presentGitHubActionResult(commandHelpResult(), calls.sink);
-    expect(calls.info.at(-1)).toBe("pipr command help: missing question");
-    expect(calls.output).toEqual([
-      ["main-comment", "usage body"],
-      [
-        "result",
-        '{"formatVersion":2,"kind":"command-help","reason":"missing question","mainComment":"usage body"}',
-      ],
-    ]);
-  });
-
   it("presents command responses and publication metadata", async () => {
     const calls = recordingPresenter();
     await presentGitHubActionResult(commandResponseResult(), calls.sink);
@@ -348,16 +335,6 @@ function ignoredResult(overrides: Omit<Partial<ResultOf<"ignored">>, "kind"> = {
 
 function dryRunResult(overrides: Omit<Partial<ResultOf<"dry-run">>, "kind"> = {}) {
   return { ...loadedContext(), kind: "dry-run", ...overrides } satisfies ResultOf<"dry-run">;
-}
-
-function commandHelpResult(overrides: Omit<Partial<ResultOf<"command-help">>, "kind"> = {}) {
-  return {
-    ...loadedContext(),
-    kind: "command-help",
-    reason: "missing question",
-    body: "usage body",
-    ...overrides,
-  } satisfies ResultOf<"command-help">;
 }
 
 function commandResponseResult(

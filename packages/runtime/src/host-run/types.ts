@@ -2,7 +2,8 @@ import type { PiprRunSummary } from "@usepipr/sdk";
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
 import type { RunObserver } from "../observability/types.js";
-import type { PublicationResult } from "../review/publication-result.js";
+import type { PublicationResult } from "../publication/types.js";
+import type { PiRunner } from "../review/agent/review-run.js";
 import type { ReviewRuntimeResult } from "../review/task/task-runtime.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
 import type { SecretRedactor } from "../shared/secret-redaction.js";
@@ -45,8 +46,10 @@ export type HostRunCommandOptions = RuntimeCommandOptions & {
   }) => void | Promise<void>;
 };
 
+/** Injection bag accepted only at the host-run composition root. */
 export type HostRunCommandDependencyOptions = HostRunCommandOptions & {
   piExecutable?: string;
+  piRunner?: PiRunner;
   hostAdapter?: CodeHostAdapter;
   secretRedactor?: SecretRedactor;
   runObserver?: RunObserver;
@@ -63,6 +66,7 @@ export type LocalReviewCommandOptions = RuntimeCommandOptions & {
   headSha?: string;
   piExecutable?: string;
   piAgentDir?: string;
+  piRunner?: PiRunner;
   logSink?: RuntimeLogSink;
   taskLog?: LocalReviewTaskLog;
   traceDirectory?: string;

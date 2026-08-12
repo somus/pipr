@@ -1,8 +1,8 @@
-import type { InlinePublicationItem } from "../../review/comment.js";
+import type { InlinePublicationItem } from "../../publication/types.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
-import type { BitbucketClient } from "./client.js";
 import { normalizeBitbucketMarkdown, renderBitbucketMarkdown } from "./markdown.js";
+import type { BitbucketClient } from "./models.js";
 import {
   assertCurrentBitbucketEndpoints,
   authenticatedBitbucketOwner,

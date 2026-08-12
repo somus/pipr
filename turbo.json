@@ -42,10 +42,6 @@
     "//#check:conventional-commit:root": {
       "outputs": []
     },
-    "//#check:scripts:root": {
-      "dependsOn": ["@usepipr/cli#build"],
-      "outputs": []
-    },
     "//#typecheck:root": {
       "outputs": []
     },

@@ -1,6 +1,6 @@
+import type { ThreadAction } from "../publication/types.js";
 import type { SecretRedactor } from "../shared/secret-redaction.js";
 import type { ValidatedReview } from "../types.js";
-import type { ThreadAction } from "./comment.js";
 import type { RuntimeTaskCheckResult } from "./task/task-output.js";
 
 export type RedactedReviewPublication = {

@@ -4,7 +4,7 @@ export {
   runHostRunCommandWithDependencies,
 } from "../host-run/commands.js";
 export { createGitHubHostAdapter } from "../hosts/github/adapter.js";
-export type { GitHubPublicationClient } from "../hosts/github/publication.js";
+export type { GitHubPublicationClient } from "../hosts/github/client.js";
 export {
   piBuiltinToolNames,
   piReadOnlyToolNames,

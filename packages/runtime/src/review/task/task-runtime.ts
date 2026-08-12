@@ -1,25 +1,14 @@
-import type {
-  Agent,
-  DiffManifestOptions,
-  PiprRunContext,
-  PiprRunSummary,
-  SecretRef,
-  TaskContext,
-} from "@usepipr/sdk";
-import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
+import type { PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
+import type { RuntimeTask } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
-import { type BuildDiffManifestOptions, buildDiffManifest } from "../../diff/diff.js";
-import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
+import { buildDiffManifest } from "../../diff/diff.js";
 import { enrichDiffManifestWithStructure } from "../../diff/manifest-structure.js";
-import {
-  createDiffStructuralAnalysisLoader,
-  type DiffStructuralAnalysisLoader,
-} from "../../diff/structural-analysis.js";
-import { selectRuntimeTasks } from "../../host-run/entry-dispatch.js";
+import { createDiffStructuralAnalysisLoader } from "../../diff/structural-analysis.js";
 import type { RunObserver } from "../../observability/types.js";
 import { diffContextCoverageArtifact } from "../../pi/diff-context-coverage.js";
-import { type RuntimeLog, runLoggedPhase } from "../../shared/logging.js";
+import type { PriorReviewState, PublicationPlan } from "../../publication/types.js";
+import { runLoggedPhase } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
 import type {
   ChangeRequestEventContext,
@@ -31,83 +20,37 @@ import type {
 } from "../../types.js";
 import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../types.js";
 import { type AgentRunBudget, createAgentRunBudget } from "../agent/agent-run-budget.js";
-import {
-  type PiRunner,
-  type PiRunStats,
-  resolveProvider,
-  runReviewAgent,
-} from "../agent/review-run.js";
-import { type InlineCommentDraft, type PublicationPlan, runtimeVersion } from "../comment.js";
+import { type PiRunStats, resolveProvider } from "../agent/review-run.js";
+import { type InlineCommentDraft, runtimeVersion } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
-import { type PriorReviewState, priorReviewStateForSelectedTasks } from "../prior-state.js";
-import type { ReviewProgressSink } from "../progress.js";
+import { priorReviewStateForSelectedTasks } from "../prior-state.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
-import { validateReviewFindings, validateReviewResult } from "../review.js";
+import { validateReviewResult } from "../review.js";
 import { type RuntimeCommandInvocation, stableReviewRunId } from "../run-identity.js";
 import { runInternalVerifier } from "../verifier.js";
+import { selectRuntimeTasks } from "./select-runtime-tasks.js";
+import { createTaskContext } from "./task-context.js";
 import {
   type CommandResponseContribution,
-  collectCommandResponse,
-  collectComment,
   collectedReview,
-  createCheckHandle,
   createOutputState,
   mergeTaskOutputs,
   type OutputState,
   type OutputStateWithComment,
-  priorReviewForTask,
   type RuntimeCheckSink,
   type RuntimeTaskCheckResult,
-  recordDroppedFindings,
   reviewStatsForRuns,
   runSummaryStatsFields,
   runtimeTaskCheckResult,
-  trackResultFindingScope,
 } from "./task-output.js";
+import type { RunTaskRuntimeOptions } from "./task-runtime-options.js";
 
 export type { PiRunner } from "../agent/review-run.js";
 export type { RuntimeCommandInvocation } from "../run-identity.js";
 export type { RuntimeCheckSink, RuntimeTaskCheckResult } from "./task-output.js";
-export type DiffManifestBuilder = (options: BuildDiffManifestOptions) => DiffManifest;
+export type { RunTaskRuntimeOptions } from "./task-runtime-options.js";
 
 const genericTaskFailureSummary = "Task failed; see logs for details.";
-
-export type RunTaskRuntimeOptions = {
-  workspace: string;
-  config: PiprConfig;
-  event: ChangeRequestEventContext;
-  plan: RuntimePlan;
-  versionCompatibility?: ConfigVersionCompatibility;
-  env?: NodeJS.ProcessEnv;
-  providerOverride?: ProviderConfig;
-  taskName?: string;
-  taskInput?: unknown;
-  selectedTasks?: readonly RuntimeTask[];
-  emptyTasksReason?: string;
-  trustedConfigSha?: string;
-  trustedConfigHash?: string;
-  piExecutable?: string;
-  piAgentDir?: string;
-  piRunner?: PiRunner;
-  structuralHeadRef?: string;
-  diffManifestBuilder?: DiffManifestBuilder;
-  priorReviewState?: PriorReviewState;
-  priorMainComment?: string;
-  loadPriorReviewState?: () => Promise<PriorReviewState | undefined>;
-  loadPriorMainComment?: () => Promise<string | undefined>;
-  loadInlineThreadContexts?: () => Promise<import("../../hosts/types.js").InlineThreadContext[]>;
-  checkSink?: RuntimeCheckSink;
-  commandInvocation?: RuntimeCommandInvocation;
-  log?: RuntimeLog;
-  taskLog?: TaskContext["log"];
-  secretRedactor?: SecretRedactor;
-  runTrigger?: Exclude<PiprRunContext["trigger"], "verifier">;
-  runObserver?: RunObserver;
-  workflowUrl?: string;
-  progress?: ReviewProgressSink & {
-    recordStats(stats: import("../review-stats.js").ReviewStats | undefined): void;
-  };
-};
 
 type ReviewRuntimeBaseResult = {
   provider: ProviderConfig;
@@ -701,154 +644,6 @@ async function runSynchronizeVerifier(options: {
     runObserver: options.options.runObserver,
     agentRunBudget: options.agentRunBudget,
   });
-}
-
-function createTaskContext(
-  options: RunTaskRuntimeOptions & {
-    config: PiprConfig;
-    provider: ProviderConfig;
-    diffManifest: DiffManifest;
-    manifestCache: Map<string, DiffManifest>;
-    output: OutputState;
-    taskName: string;
-    taskOrder: number;
-    run: PiprRunContext;
-    piRunSink: (run: PiRunStats) => void;
-    agentRunBudget: AgentRunBudget;
-    structuralAnalysis: DiffStructuralAnalysisLoader;
-    structuralManifest: () => Promise<DiffManifest>;
-  },
-): TaskContext {
-  const repositorySlugParts = options.event.repository.slug.split("/");
-  let reviewerOrder = 0;
-  let taskContext: TaskContext;
-  taskContext = {
-    run: options.run,
-    repository: {
-      root: options.workspace,
-      owner: repositorySlugParts.length > 1 ? repositorySlugParts[0] : undefined,
-      name: repositorySlugParts.at(-1) ?? "repo",
-    },
-    change: {
-      number: options.event.change.number,
-      title: options.event.change.title,
-      description: options.event.change.description,
-      url: options.event.change.url,
-      author: options.event.change.author,
-      base: options.event.change.base,
-      head: options.event.change.head,
-      isFork: options.event.change.isFork,
-      async diffManifest(manifestOptions?: DiffManifestOptions) {
-        const key = JSON.stringify(manifestOptions ?? {});
-        const cached = options.manifestCache.get(key);
-        if (cached) {
-          return cloneDiffManifest(cached);
-        }
-        const manifest = projectDiffManifest(await options.structuralManifest(), manifestOptions);
-        options.manifestCache.set(key, manifest);
-        return cloneDiffManifest(manifest);
-      },
-      async changedFiles() {
-        return options.diffManifest.files.map((file) => ({
-          path: file.path,
-          previousPath: file.previousPath,
-          status: file.status,
-        }));
-      },
-    },
-    platform: { id: options.event.platform.id },
-    command: options.commandInvocation
-      ? {
-          name: options.commandInvocation.name,
-          line: options.commandInvocation.line,
-          arguments: { ...options.commandInvocation.arguments },
-          async reply(markdown) {
-            collectCommandResponse(options.output, markdown, options.taskName);
-          },
-        }
-      : undefined,
-    secret(secret) {
-      return resolveTaskSecret(secret, options);
-    },
-    pi: {
-      async run(agent, input, runOptions) {
-        const resolvedAgent = options.plan.resolveAgent(agent);
-        const currentReviewerOrder = reviewerOrder++;
-        const reviewerName = resolvedAgent.name?.trim() || `Reviewer ${currentReviewerOrder + 1}`;
-        const result = await runReviewAgent({
-          agent: resolvedAgent,
-          input,
-          runOptions,
-          runtime: {
-            ...options,
-            taskContext,
-            run: options.run,
-            piRunSink: options.piRunSink,
-            reviewWork: options.progress
-              ? {
-                  taskId: String(options.taskOrder),
-                  reviewerId: `${options.taskOrder}:${currentReviewerOrder}`,
-                  reviewerName,
-                  reviewerOrder: currentReviewerOrder,
-                  emit: (event) => options.progress?.work(event),
-                }
-              : undefined,
-          },
-        });
-        options.output.providerModels.push(...result.providerModels);
-        if (result.repairAttempted) {
-          options.output.repairAttempted = true;
-        }
-        trackResultFindingScope(options.output, result.value, runOptions?.paths);
-        return agentOutputForTaskContext(agent, result.value);
-      },
-    },
-    review: {
-      async prior() {
-        return priorReviewForTask(options.priorMainComment, options.priorReviewState);
-      },
-      validateFindings(findings, validationOptions) {
-        const paths = validationOptions?.paths ?? options.output.findingScopes.get(findings);
-        const validated = validateReviewFindings(findings, options.diffManifest, {
-          expectedHeadSha: options.event.change.head.sha,
-          pathScopeForFinding: () => paths,
-        });
-        recordDroppedFindings(options.output, validated.droppedFindings);
-        if (paths) {
-          options.output.findingScopes.set(validated.validFindings, paths);
-        }
-        return validated;
-      },
-    },
-    check: createCheckHandle(options.output),
-    async comment(value) {
-      collectComment(options.output, value, options.taskName);
-    },
-    log: options.taskLog ?? console,
-  };
-  return taskContext;
-}
-
-function agentOutputForTaskContext<Input, Output>(
-  _agent: Agent<Input, Output>,
-  value: unknown,
-): Output {
-  // The agent output schema was parsed by runReviewAgent before TaskContext resolves.
-  return value as Output;
-}
-
-function resolveTaskSecret(secret: SecretRef, options: RunTaskRuntimeOptions): string {
-  if (secret.kind !== "pipr.secret" || typeof secret.name !== "string") {
-    throw new Error("ctx.secret(...) requires a pipr.secret reference");
-  }
-  const value = (options.env ?? process.env)[secret.name];
-  if (!value) {
-    throw new Error(`Missing secret env var: ${secret.name}`);
-  }
-  options.log?.addSecret(value);
-  options.secretRedactor?.addSecret(value);
-  options.runObserver?.registerSecret?.(value);
-  return value;
 }
 
 function commandResponseRuntimeResult(options: {

@@ -1,3 +1,5 @@
+import { match } from "ts-pattern";
+
 const codeHostIds = [
   "github",
   "gitlab",
@@ -47,20 +49,22 @@ export function resolveCodeHostId(options: {
 }
 
 function parseCodeHostId(value: string): CodeHostId {
-  switch (value) {
-    case "github":
-    case "gitlab":
-    case "azure-devops":
-    case "bitbucket":
-    case "gitea":
-    case "forgejo":
-    case "codeberg":
-      return value;
-    default:
+  return match(value)
+    .with(
+      "github",
+      "gitlab",
+      "azure-devops",
+      "bitbucket",
+      "gitea",
+      "forgejo",
+      "codeberg",
+      (host) => host,
+    )
+    .otherwise((unsupported) => {
       throw new Error(
-        `Unsupported code host '${value}'. Supported hosts: ${codeHostIds.join(", ")}`,
+        `Unsupported code host '${unsupported}'. Supported hosts: ${codeHostIds.join(", ")}`,
       );
-  }
+    });
 }
 
 function detectedGiteaFamilyHost(env: NodeJS.ProcessEnv): CodeHostId | undefined {

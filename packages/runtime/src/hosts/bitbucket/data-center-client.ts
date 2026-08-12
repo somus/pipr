@@ -3,7 +3,12 @@ import { createCodeHostHttpClient } from "../http.js";
 import type { RepositoryPermission } from "../types.js";
 import { trustedBitbucketDataCenterBaseUrl } from "./base-url.js";
 import { loadedBitbucketChange } from "./change.js";
-import type { BitbucketClient, BitbucketComment, BitbucketPullRequest } from "./client.js";
+import {
+  type BitbucketClient,
+  type BitbucketComment,
+  type BitbucketPullRequest,
+  pullRequestBaseSchema,
+} from "./models.js";
 
 const userSchema = z
   .looseObject({
@@ -24,11 +29,7 @@ const refSchema = z.looseObject({
   latestCommit: z.string().min(1),
   repository: repositorySchema,
 });
-const pullRequestSchema = z.looseObject({
-  id: z.number().int().positive(),
-  draft: z.boolean().optional(),
-  title: z.string(),
-  description: z.string().default(""),
+const pullRequestSchema = pullRequestBaseSchema.extend({
   author: z.looseObject({ user: userSchema }).optional(),
   fromRef: refSchema,
   toRef: refSchema,

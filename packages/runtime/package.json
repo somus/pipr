@@ -81,6 +81,7 @@
     "fflate": "0.8.3",
     "lodash-es": "4.18.1",
     "picomatch": "4.0.5",
+    "ts-pattern": "5.9.0",
     "typescript6": "npm:typescript@6.0.3",
     "zod": "4.4.3"
   },

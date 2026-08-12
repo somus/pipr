@@ -1,7 +1,12 @@
-import type { PublicationPlan, ThreadAction } from "../review/comment.js";
-import type { PriorReviewState } from "../review/prior-state.js";
-import type { ReviewProgressLease } from "../review/progress.js";
-import type { PublicationResult } from "../review/publication-result.js";
+import type {
+  InlineThreadContext,
+  NativeId,
+  PriorReviewState,
+  PublicationPlan,
+  PublicationResult,
+  ReviewProgressLease,
+  ThreadAction,
+} from "../publication/types.js";
 import type {
   ChangeRequestEventContext,
   ChangeRequestRef,
@@ -15,8 +20,6 @@ export type HostEventParseOptions = {
   env: NodeJS.ProcessEnv;
   workspace: string;
 };
-
-export type NativeId = string;
 
 export type CommandCommentEvent = {
   eventName: string;
@@ -37,20 +40,6 @@ export type CommandResponsePublicationResult = {
 };
 
 export type CommandLifecycleState = "accepted" | "running" | "completed" | "failed" | "superseded";
-
-export type InlineThreadContext = {
-  findingId: string;
-  findingHeadSha: string;
-  parentCommentId: NativeId;
-  parentBody: string;
-  threadId?: string;
-  threadResolved: boolean;
-  comments: Array<{
-    id: NativeId;
-    body: string;
-    authorLogin?: string;
-  }>;
-};
 
 export type ReviewCommentReplyEvent = {
   eventName: string;

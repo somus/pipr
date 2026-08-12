@@ -1,7 +1,7 @@
 import type { CodeHostAdapter } from "../hosts/types.js";
 import { providerFailureRemediation } from "../pi/provider-failure.js";
+import type { ReviewProgressLease, ReviewStats } from "../publication/types.js";
 import {
-  type ReviewProgressLease,
   type ReviewProgressSink,
   type ReviewProgressStage,
   ReviewProgressSupersededError,
@@ -9,7 +9,6 @@ import {
   renderFailedReviewProgress,
   renderRunningReviewProgress,
 } from "../review/progress.js";
-import type { ReviewStats } from "../review/review-stats.js";
 import { createReviewWorkTracker } from "../review/work-progress.js";
 import { type RuntimeLog, runLoggedPhase } from "../shared/logging.js";
 import type { SecretRedactor } from "../shared/secret-redaction.js";

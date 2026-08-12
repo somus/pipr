@@ -5,6 +5,7 @@ import {
   partitionDiffManifestForPrompt,
   prepareDiffManifestPrompt,
 } from "./manifest-projection.js";
+import { unquote } from "./source-text.js";
 import {
   analyzeDiffStructure,
   type DiffStructuralAnalysis,
@@ -268,14 +269,6 @@ function longestSharedSegmentSequence(left: readonly string[], right: readonly s
     }
   }
   return longest;
-}
-
-function unquote(value: string): string {
-  const first = value[0];
-  const last = value.at(-1);
-  return first && last && first === last && ['"', "'", "`"].includes(first)
-    ? value.slice(1, -1)
-    : value;
 }
 
 function connectTestsToSources(

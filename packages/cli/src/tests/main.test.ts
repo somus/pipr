@@ -194,6 +194,7 @@ describe("pipr CLI", () => {
 
     expect(noArgs.exitCode).toBe(0);
     expect(help.exitCode).toBe(0);
+    expect(version.exitCode).toBe(0);
     expect(noArgs.stdout).toContain("Usage: pipr");
     expect(help.stdout).toContain("Start here (for AI agents):");
     expect(version.stdout).toBe(`${cliPackage.version}\n`);

@@ -1,20 +1,4 @@
-import type { PublicationMetadata } from "./comment.js";
-
-export type PublicationResult = {
-  mainComment: {
-    action: "created" | "updated";
-    id: string;
-  };
-  inlineComments: {
-    posted: number;
-    skipped: number;
-    failed: number;
-  };
-  metadata: PublicationMetadata & {
-    inlinePublicationErrors: string[];
-    inlineResolutionErrors: string[];
-  };
-};
+import type { PublicationResult } from "../publication/types.js";
 
 /** Error thrown when publication fails after producing partial result metadata. */
 export class PublicationError extends Error {

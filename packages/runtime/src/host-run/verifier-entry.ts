@@ -10,45 +10,40 @@ import { runInternalVerifier } from "../review/verifier.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
 import { parseChangeRequestEventContext } from "../types.js";
+import type { HostRunPorts, HostRunServices } from "./composition.js";
 import { hasRequiredRepositoryPermission } from "./entry-dispatch.js";
 import { logEventContext, logPhase } from "./logging.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
-import type {
-  HostRunCommandDependencyOptions,
-  HostRunCommandResult,
-  TrustedRuntimeProject,
-} from "./types.js";
+import type { HostRunCommandResult, TrustedRuntimeProject } from "./types.js";
 
 export async function runReviewCommentReplyHostRunCommand(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
-  log: RuntimeLog,
+  services: HostRunServices,
   reply: ReviewCommentReplyEvent,
 ): Promise<HostRunCommandResult> {
-  const capabilities = reviewCommentReplyDispatchCapabilities(options, adapter);
+  const capabilities = reviewCommentReplyDispatchCapabilities(services);
   if (capabilities.kind === "ignored") {
-    log.notice("event ignored", { reason: capabilities.reason });
+    services.log.notice("event ignored", { reason: capabilities.reason });
     return capabilities;
   }
   const runnable = runnableReviewCommentReply(reply);
   if (runnable.kind === "ignored") {
-    log.notice("event ignored", { reason: runnable.reason });
+    services.log.notice("event ignored", { reason: runnable.reason });
     return runnable;
   }
-  const prepared = await prepareReviewCommentVerifier(options, adapter, reply, log);
+  const prepared = await prepareReviewCommentVerifier(services, reply);
   if (prepared.kind === "ignored") {
-    log.notice("event ignored", { reason: prepared.reason });
+    services.log.notice("event ignored", { reason: prepared.reason });
     return prepared;
   }
-  const result = await runReviewCommentVerifier(options, adapter, prepared, log);
-  const publication = await logPhase(log, "publish verifier thread actions", async () =>
+  const result = await runReviewCommentVerifier(services, prepared);
+  const publication = await logPhase(services.log, "publish verifier thread actions", async () =>
     capabilities.publishThreadActions({
       change: prepared.event,
       actions: result.threadActions,
       reviewedHeadSha: prepared.event.change.head.sha,
     }),
   );
-  log.notice("verifier publication", {
+  services.log.notice("verifier publication", {
     errors: publication?.errors.length ?? 0,
     threadActions: result.threadActions.length,
   });
@@ -61,10 +56,7 @@ export async function runReviewCommentReplyHostRunCommand(
   };
 }
 
-function reviewCommentReplyDispatchCapabilities(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
-):
+function reviewCommentReplyDispatchCapabilities(services: HostRunServices):
   | { kind: "ignored"; reason: string }
   | {
       kind: "ready";
@@ -72,18 +64,21 @@ function reviewCommentReplyDispatchCapabilities(
         NonNullable<CodeHostAdapter["publication"]>["publishThreadActions"]
       >;
     } {
-  if (!adapter.capabilities.reviewCommentReplies || !adapter.capabilities.threadResolution) {
+  if (
+    !services.adapter.capabilities.reviewCommentReplies ||
+    !services.adapter.capabilities.threadResolution
+  ) {
     return { kind: "ignored", reason: "host adapter does not support verifier replies" };
   }
-  if (!adapter.publication?.publishThreadActions) {
+  if (!services.adapter.publication?.publishThreadActions) {
     return { kind: "ignored", reason: "host adapter does not support verifier thread actions" };
   }
-  if (options.dryRun) {
+  if (services.dryRun) {
     return { kind: "ignored", reason: "PIPR_DRY_RUN=1; verifier dispatch skipped" };
   }
   return {
     kind: "ready",
-    publishThreadActions: adapter.publication.publishThreadActions,
+    publishThreadActions: services.adapter.publication.publishThreadActions,
   };
 }
 
@@ -97,16 +92,14 @@ type PreparedReviewCommentVerifier =
     };
 
 async function prepareReviewCommentVerifier(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
+  services: HostRunServices,
   reply: ReviewCommentReplyEvent,
-  log: RuntimeLog,
 ): Promise<PreparedReviewCommentVerifier> {
   if (!reply.parentCommentId) {
     return { kind: "ignored", reason: "review comment was not a reply" };
   }
-  const loaded = await logPhase(log, "load change request", async () =>
-    adapter.events.loadChangeRequest({
+  const loaded = await logPhase(services.log, "load change request", async () =>
+    services.adapter.events.loadChangeRequest({
       repository: reply.repository,
       changeNumber: reply.changeNumber,
       workspace: reply.workspace,
@@ -119,14 +112,14 @@ async function prepareReviewCommentVerifier(
     eventName: loaded.eventName ?? reply.eventName,
     action: loaded.action ?? reply.action,
     rawAction: loaded.rawAction ?? reply.rawAction,
-    platform: { id: adapter.id },
+    platform: { id: services.adapter.id },
     repository: loaded.repository,
     coordinates: loaded.coordinates,
     change: loaded.change,
     workspace: loaded.workspace ?? reply.workspace,
   });
-  logEventContext(log, event);
-  const trustedRuntime = await loadTrustedRuntimeForEvent(options, event, log);
+  logEventContext(services.log, event);
+  const trustedRuntime = await loadTrustedRuntimeForEvent(services, event, services.log);
   const config = trustedRuntime.settings.config;
   if (!config.publication.autoResolve.enabled) {
     return { kind: "ignored", reason: "publication.autoResolve is disabled" };
@@ -134,10 +127,16 @@ async function prepareReviewCommentVerifier(
   if (!config.publication.autoResolve.userReplies.enabled) {
     return { kind: "ignored", reason: "publication.autoResolve.userReplies is disabled" };
   }
-  if (!(await verifierActorAllowed(adapter, event, reply, config))) {
+  if (!(await verifierActorAllowed(services.adapter, event, reply, config))) {
     return { kind: "ignored", reason: "review comment reply actor is not allowed" };
   }
-  await prepareTrustedHeadCheckout(options, adapter, trustedRuntime.settings.config, event, log);
+  await prepareTrustedHeadCheckout(
+    services,
+    services.adapter,
+    trustedRuntime.settings.config,
+    event,
+    services.log,
+  );
   return {
     kind: "prepared",
     reply: { ...reply, parentCommentId: reply.parentCommentId },
@@ -147,14 +146,12 @@ async function prepareReviewCommentVerifier(
 }
 
 async function runReviewCommentVerifier(
-  options: HostRunCommandDependencyOptions,
-  adapter: CodeHostAdapter,
+  services: HostRunServices,
   prepared: Exclude<PreparedReviewCommentVerifier, { kind: "ignored" }>,
-  log: RuntimeLog,
 ) {
   const { event, reply, trustedRuntime } = prepared;
   const config = trustedRuntime.settings.config;
-  registerVerifierProviderSecrets(config, options, log);
+  registerVerifierProviderSecrets(config, services, services.log);
   const provider = resolveProvider(config, config.defaultProvider);
   const verifierProvider = resolveProvider(
     config,
@@ -175,20 +172,20 @@ async function runReviewCommentVerifier(
   });
   const runContext: PiprRunContext = Object.freeze({ id: runId, trigger: "verifier" });
   const threadContexts =
-    (await adapter.comments?.loadInlineThreadContexts?.({ change: event })) ?? [];
-  log.notice("verifier start", {
+    (await services.adapter.comments?.loadInlineThreadContexts?.({ change: event })) ?? [];
+  services.log.notice("verifier start", {
     mode: "user-reply",
     threadContexts: threadContexts.length,
     replyCommentId: reply.commentId,
     parentCommentId: reply.parentCommentId,
   });
   const diffManifest = buildDiffManifest({
-    cwd: options.rootDir,
+    cwd: services.rootDir,
     baseSha: event.change.base.sha,
     headSha: event.change.head.sha,
   });
   try {
-    await options.runObserver?.recordArtifact?.({
+    await services.runObserver?.recordArtifact?.({
       kind: "diff-manifest",
       name: "diff-manifest.json",
       mediaType: "application/json",
@@ -196,24 +193,25 @@ async function runReviewCommentVerifier(
       sensitive: true,
     });
   } catch (error) {
-    log.warning("run capture artifact failed", {
+    services.log.warning("run capture artifact failed", {
       kind: "diff-manifest",
       error: error instanceof Error ? error.message : "unknown capture error",
     });
   }
   const result = await runInternalVerifier({
-    workspace: options.rootDir,
+    workspace: services.rootDir,
     config,
     event,
     provider,
     verifierProvider,
     plan: trustedRuntime.plan,
-    env: options.env,
-    piExecutable: options.piExecutable,
-    log,
-    runObserver: options.runObserver,
+    env: services.env,
+    piExecutable: services.piExecutable,
+    piRunner: services.piRunner,
+    log: services.log,
+    runObserver: services.runObserver,
     diffManifest,
-    priorReviewState: await adapter.comments?.loadPriorReviewState?.({ change: event }),
+    priorReviewState: await services.adapter.comments?.loadPriorReviewState?.({ change: event }),
     threadContexts,
     mode: {
       kind: "user-reply",
@@ -245,24 +243,23 @@ async function runReviewCommentVerifier(
     run,
     threadActions: redactThreadActions({
       threadActions: result.threadActions,
-      redactor: options.secretRedactor,
+      redactor: services.secretRedactor,
     }),
   };
 }
 
 function registerVerifierProviderSecrets(
   config: PiprConfig,
-  options: HostRunCommandDependencyOptions,
+  ports: Pick<HostRunPorts, "secretRedactor" | "runObserver"> & { env: NodeJS.ProcessEnv },
   log: RuntimeLog,
 ): void {
-  const env = options.env ?? process.env;
   for (const provider of config.providers) {
     if (!provider.apiKeyEnv) continue;
-    const value = env[provider.apiKeyEnv];
+    const value = ports.env[provider.apiKeyEnv];
     if (!value) continue;
     log.addSecret(value);
-    options.secretRedactor?.addSecret(value);
-    options.runObserver?.registerSecret?.(value);
+    ports.secretRedactor?.addSecret(value);
+    ports.runObserver?.registerSecret?.(value);
   }
 }
 

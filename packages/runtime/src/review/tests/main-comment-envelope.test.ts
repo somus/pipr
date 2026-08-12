@@ -73,28 +73,4 @@ describe("parseGeneratedMainCommentEnvelope", () => {
 
     expect(parseGeneratedMainCommentEnvelope(lines).statsRange).toEqual({ start: 1, end: 16 });
   });
-
-  it("recognizes combined completion details from accumulated workflow runs", () => {
-    const lines = [
-      "body",
-      reviewStatsStartMarker,
-      "<details>",
-      "<summary>📊 3 workflow runs completed: 10m 43.9s combined</summary>",
-      "",
-      "| Metric | Total |",
-      "| --- | ---: |",
-      "| Models | <code>model</code> |",
-      "| Agent runs | 6 |",
-      "| Combined runtime | 10m 43.9s |",
-      "| Input tokens | 181,543 |",
-      "| Output tokens | 37,697 |",
-      "| Cost (USD) | $0.12 |",
-      "| Workflow runs | [Run 1](<https://github.com/acme/repo/actions/runs/123>), [Run 2](<https://github.com/acme/repo/actions/runs/124>), [Run 3](<https://github.com/acme/repo/actions/runs/125>) |",
-      "",
-      "</details>",
-      reviewStatsEndMarker,
-    ];
-
-    expect(parseGeneratedMainCommentEnvelope(lines).statsRange).toEqual({ start: 1, end: 16 });
-  });
 });

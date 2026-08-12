@@ -27,39 +27,7 @@ const range: CommentableRange = {
 };
 
 describe("GitHub review comment mapping", () => {
-  it("maps multi-line findings to current GitHub line fields", () => {
-    expect(
-      mapFindingToGithubReviewCommentLocation({
-        finding,
-        range,
-        headSha: "head123",
-      }),
-    ).toEqual({
-      path: "src/a.ts",
-      commit_id: "head123",
-      line: 12,
-      side: "RIGHT",
-      start_line: 10,
-      start_side: "RIGHT",
-    });
-  });
-
-  it("omits start fields for single-line findings", () => {
-    expect(
-      mapFindingToGithubReviewCommentLocation({
-        finding: { ...finding, startLine: 12 },
-        range,
-        headSha: "head123",
-      }),
-    ).toEqual({
-      path: "src/a.ts",
-      commit_id: "head123",
-      line: 12,
-      side: "RIGHT",
-    });
-  });
-
-  it("maps left-side multi-line findings", () => {
+  it("maps validated findings to GitHub inline comment locations", async () => {
     const leftFinding: ReviewFinding = {
       ...finding,
       rangeId: "rng_abcd1234_h1_LEFT_3_4_deadbeefcafe",
@@ -75,7 +43,34 @@ describe("GitHub review comment mapping", () => {
       endLine: 4,
       kind: "deleted",
     };
+    const multiLine = mapFindingToGithubReviewCommentLocation({
+      finding,
+      range,
+      headSha: "head123",
+    });
+    const singleLine = mapFindingToGithubReviewCommentLocation({
+      finding: { ...finding, startLine: 12 },
+      range,
+      headSha: "head123",
+    });
+    const expected = (await readJsonFixture(
+      "fixtures/github-inline-payloads.golden.json",
+    )) as Array<ReturnType<typeof mapFindingToGithubReviewCommentLocation>>;
 
+    expect(multiLine).toEqual({
+      path: "src/a.ts",
+      commit_id: "head123",
+      line: 12,
+      side: "RIGHT",
+      start_line: 10,
+      start_side: "RIGHT",
+    });
+    expect(singleLine).toEqual({
+      path: "src/a.ts",
+      commit_id: "head123",
+      line: 12,
+      side: "RIGHT",
+    });
     expect(
       mapFindingToGithubReviewCommentLocation({
         finding: leftFinding,
@@ -90,9 +85,8 @@ describe("GitHub review comment mapping", () => {
       start_line: 3,
       start_side: "LEFT",
     });
-  });
+    expect([multiLine, singleLine]).toEqual(expected);
 
-  it("rejects findings outside the supplied range", () => {
     expect(() =>
       mapFindingToGithubReviewCommentLocation({
         finding: { ...finding, endLine: 13 },
@@ -100,16 +94,13 @@ describe("GitHub review comment mapping", () => {
         headSha: "head123",
       }),
     ).toThrow("finding lines fall outside the commentable range");
-  });
 
-  it("rejects malformed multi-line GitHub locations", () => {
     const baseLocation = {
       path: "src/a.ts",
       commit_id: "head123",
       line: 12,
       side: "RIGHT",
     };
-
     expect(() =>
       githubReviewCommentLocationSchema.parse({
         ...baseLocation,
@@ -129,25 +120,6 @@ describe("GitHub review comment mapping", () => {
         start_side: "RIGHT",
       }),
     ).toThrow("start_line must be before or equal to line");
-  });
-
-  it("matches the golden GitHub inline payload locations", async () => {
-    const expected = (await readJsonFixture(
-      "fixtures/github-inline-payloads.golden.json",
-    )) as Array<ReturnType<typeof mapFindingToGithubReviewCommentLocation>>;
-
-    expect([
-      mapFindingToGithubReviewCommentLocation({
-        finding,
-        range,
-        headSha: "head123",
-      }),
-      mapFindingToGithubReviewCommentLocation({
-        finding: { ...finding, startLine: 12 },
-        range,
-        headSha: "head123",
-      }),
-    ]).toEqual(expected);
   });
 });
 

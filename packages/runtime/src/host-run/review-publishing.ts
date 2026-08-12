@@ -1,26 +1,23 @@
 import type { RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter } from "../hosts/types.js";
+import type { RunObserver } from "../observability/types.js";
 import { publicationPlanForHostCapabilities } from "../review/comment.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { PublicationError } from "../review/publication-result.js";
 import { type RuntimeCommandInvocation, runTaskRuntime } from "../review/task/task-runtime.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
+import type { HostRunServices } from "./composition.js";
 import type { ReviewProgressReporter } from "./review-progress.js";
 import {
   finalizeRuntimeChecks,
   genericCheckFailureSummary,
   startRuntimeChecks,
 } from "./runtime-checks.js";
-import type {
-  HostRunCommandDependencyOptions,
-  TrustedReviewAndPublishResult,
-  TrustedRuntimeProject,
-} from "./types.js";
+import type { TrustedReviewAndPublishResult, TrustedRuntimeProject } from "./types.js";
 
 export async function runTrustedReviewAndPublish(options: {
-  options: HostRunCommandDependencyOptions;
-  adapter: CodeHostAdapter;
+  services: HostRunServices;
   trustedRuntime: TrustedRuntimeProject;
   event: ChangeRequestEventContext;
   taskName?: string;
@@ -29,15 +26,15 @@ export async function runTrustedReviewAndPublish(options: {
   commandInvocation?: RuntimeCommandInvocation;
   workflowUrl?: string;
   progress?: ReviewProgressReporter;
-  log: RuntimeLog;
 }): Promise<TrustedReviewAndPublishResult> {
+  const { services } = options;
   const checks = await startRuntimeChecks({
-    adapter: options.adapter,
+    adapter: services.adapter,
     event: options.event,
     plan: options.trustedRuntime.plan,
     taskName: options.taskName,
     selectedTasks: options.selectedTasks,
-    log: options.log,
+    log: services.log,
   });
   try {
     if (checks?.startupError) throw checks.startupError;
@@ -66,33 +63,36 @@ async function executeTaskRuntime(
   options: ReviewPublishingOptions,
   checkSink: NonNullable<RuntimeChecks>["sink"] | undefined,
 ): Promise<RuntimeReview> {
+  const { services } = options;
   return await runTaskRuntime({
-    workspace: options.options.rootDir,
+    workspace: services.rootDir,
     config: options.trustedRuntime.settings.config,
     event: options.event,
-    env: options.options.env,
+    env: services.env,
     plan: options.trustedRuntime.plan,
     versionCompatibility: options.trustedRuntime.versionCompatibility,
     taskName: options.taskName,
     taskInput: options.taskInput,
+    selectedTasks: options.selectedTasks,
     commandInvocation: options.commandInvocation,
     trustedConfigSha: options.trustedRuntime.trustedConfigSha,
     trustedConfigHash: options.trustedRuntime.trustedConfigHash,
-    piExecutable: options.options.piExecutable,
-    log: options.log,
+    piExecutable: services.piExecutable,
+    piRunner: services.piRunner,
+    log: services.log,
     checkSink,
-    secretRedactor: options.options.secretRedactor,
-    runObserver: options.options.runObserver,
+    secretRedactor: services.secretRedactor,
+    runObserver: services.runObserver,
     workflowUrl: options.workflowUrl,
     progress: options.progress,
     loadPriorReviewState: () =>
-      options.adapter.comments?.loadPriorReviewState?.({ change: options.event }) ??
+      services.adapter.comments?.loadPriorReviewState?.({ change: options.event }) ??
       Promise.resolve(undefined),
     loadPriorMainComment: () =>
-      options.adapter.comments?.loadPriorMainComment?.({ change: options.event }) ??
+      services.adapter.comments?.loadPriorMainComment?.({ change: options.event }) ??
       Promise.resolve(undefined),
     loadInlineThreadContexts: () =>
-      options.adapter.comments?.loadInlineThreadContexts?.({ change: options.event }) ??
+      services.adapter.comments?.loadInlineThreadContexts?.({ change: options.event }) ??
       Promise.resolve([]),
   });
 }
@@ -130,16 +130,17 @@ async function publishCompletedReview(
   options: ReviewPublishingOptions,
   review: Extract<RuntimeReview, { kind: "review" }>,
 ) {
-  const publish = options.adapter.publication?.publish;
+  const { services } = options;
+  const publish = services.adapter.publication?.publish;
   if (!publish) throw new Error("review publication is not available for this code host");
   try {
-    return await options.log.group("publish review", async () => {
+    return await services.log.group("publish review", async () => {
       await options.progress?.transition("publishing-review");
       const plan = publicationPlanForHostCapabilities(
         review.publicationPlan,
-        options.adapter.capabilities,
+        services.adapter.capabilities,
       );
-      options.log.info("publication plan", {
+      services.log.info("publication plan", {
         inlineItems: plan.inlineItems.length,
         threadActions: plan.threadActions.length,
       });
@@ -148,8 +149,8 @@ async function publishCompletedReview(
         plan,
         progressLease: options.progress?.lease,
       });
-      logPublicationResult(options, result);
-      await recordPublicationArtifact(options, {
+      logPublicationResult(services.log, result);
+      await recordPublicationArtifact(services, {
         kind: "publication-plan",
         name: "publication-result.json",
         mediaType: "application/json",
@@ -161,16 +162,16 @@ async function publishCompletedReview(
   } catch (error) {
     if (error instanceof ReviewProgressSupersededError) throw error;
     const publicationError = asPublicationError(error);
-    await recordPublicationError(options, publicationError, error);
+    await recordPublicationError(services, publicationError, error);
     throw publicationError;
   }
 }
 
 function logPublicationResult(
-  options: ReviewPublishingOptions,
+  log: RuntimeLog,
   result: Awaited<ReturnType<NonNullable<NonNullable<CodeHostAdapter["publication"]>["publish"]>>>,
 ): void {
-  options.log.notice("publication result", {
+  log.notice("publication result", {
     main: result.mainComment.action,
     inlinePosted: result.inlineComments.posted,
     inlineSkipped: result.inlineComments.skipped,
@@ -190,11 +191,11 @@ function asPublicationError(error: unknown): PublicationError {
 }
 
 async function recordPublicationError(
-  options: ReviewPublishingOptions,
+  services: HostRunServices,
   publicationError: PublicationError,
   cause: unknown,
 ): Promise<void> {
-  await recordPublicationArtifact(options, {
+  await recordPublicationArtifact(services, {
     kind: "publication-plan",
     name: "publication-error.json",
     mediaType: "application/json",
@@ -228,22 +229,20 @@ async function finalizeFailedChecks(
           ),
         }),
   }).catch((finalizeError: unknown) => {
-    options.log.warning("check finalization after failure failed", {
+    options.services.log.warning("check finalization after failure failed", {
       error: finalizeError instanceof Error ? finalizeError.message : String(finalizeError),
     });
   });
 }
 
 async function recordPublicationArtifact(
-  options: Parameters<typeof runTrustedReviewAndPublish>[0],
-  artifact: Parameters<
-    NonNullable<NonNullable<HostRunCommandDependencyOptions["runObserver"]>["recordArtifact"]>
-  >[0],
+  services: HostRunServices,
+  artifact: Parameters<NonNullable<RunObserver["recordArtifact"]>>[0],
 ): Promise<void> {
   try {
-    await options.options.runObserver?.recordArtifact?.(artifact);
+    await services.runObserver?.recordArtifact?.(artifact);
   } catch (error) {
-    options.log.warning("run capture artifact failed", {
+    services.log.warning("run capture artifact failed", {
       kind: artifact.kind,
       error: error instanceof Error ? error.message : "unknown capture error",
     });

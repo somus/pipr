@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { definePipr } from "@usepipr/sdk";
 import { buildPiprPlan } from "@usepipr/sdk/internal";
+import { selectLocalReviewTasks } from "../../review/task/select-runtime-tasks.js";
 import {
   dispatchRuntimeEntry,
   parsePlanCommandInputs,
   permissionDeniedHelp,
   resolvePlanCommand,
-  selectLocalReviewTasks,
 } from "../entry-dispatch.js";
 
 describe("entry dispatch command routing", () => {

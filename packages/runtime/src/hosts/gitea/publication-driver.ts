@@ -1,5 +1,5 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
-import type { InlinePublicationItem } from "../../review/comment.js";
+import type { InlinePublicationItem } from "../../publication/types.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
 import type { GiteaClient } from "./client.js";

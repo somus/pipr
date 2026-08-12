@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import type { PriorReviewState } from "../../publication/types.js";
 import type { DiffManifest, ValidatedReview } from "../../types.js";
 import { runtimeVersion } from "../comment.js";
 import { buildCommentPublishingPlan } from "../comment-publishing.js";
-import { extractPriorReviewState, type PriorReviewState } from "../prior-state.js";
+import { extractPriorReviewState } from "../prior-state.js";
 
 const event = {
   change: {

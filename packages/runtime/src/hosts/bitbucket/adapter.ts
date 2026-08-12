@@ -1,7 +1,8 @@
 import { createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
-import { type BitbucketClient, bitbucketStatusState, createBitbucketClient } from "./client.js";
+import { bitbucketStatusState, createBitbucketClient } from "./client.js";
 import { parseBitbucketEvent } from "./event.js";
+import type { BitbucketClient } from "./models.js";
 import {
   loadBitbucketInlineThreadContexts,
   loadBitbucketPriorMainComment,

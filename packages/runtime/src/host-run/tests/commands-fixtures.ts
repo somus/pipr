@@ -6,8 +6,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { runGit as runGitCommand } from "../../diff/git.js";
 import { createGitHubHostAdapter } from "../../hosts/github/adapter.js";
-import type { GitHubCommandClient } from "../../hosts/github/command.js";
-import type { GitHubPublicationClient } from "../../hosts/github/publication.js";
+import type { GitHubCommandClient, GitHubPublicationClient } from "../../hosts/github/client.js";
 import type {
   CodeHostAdapter,
   CodeHostCapabilities,

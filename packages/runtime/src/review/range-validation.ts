@@ -1,10 +1,26 @@
+import type { Result } from "../shared/result.js";
+import { err, ok } from "../shared/result.js";
 import type { CommentableRange, ReviewFinding } from "../types.js";
 
 export function assertFindingMatchesRange(finding: ReviewFinding, range: CommentableRange): void {
+  const matched = matchFindingRange(finding, range);
+  if (!matched.ok) {
+    throw new Error(matched.error);
+  }
+}
+
+export function matchFindingRange(
+  finding: ReviewFinding,
+  range: CommentableRange | undefined,
+): Result<CommentableRange> {
   const reason = findingRangeMismatchReason(finding, range);
   if (reason) {
-    throw new Error(reason);
+    return err(reason);
   }
+  if (!range) {
+    return err(`unknown rangeId '${finding.rangeId}'`);
+  }
+  return ok(range);
 }
 
 export function findingRangeMismatchReason(

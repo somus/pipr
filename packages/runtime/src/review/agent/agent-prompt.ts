@@ -2,9 +2,9 @@ import type { AgentPromptContext, PathFilter, PiprRunContext, Schema } from "@us
 import { type RuntimeAgent, type RuntimeAgentTool, renderPromptValue } from "@usepipr/sdk/internal";
 import { compact } from "lodash-es";
 import { piReadOnlyToolNames } from "../../pi/contract.js";
+import type { PriorReviewState } from "../../publication/types.js";
 import { isRecord } from "../../shared/record.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
-import type { PriorReviewState } from "../prior-state.js";
 import { reviewResultSchemaId, reviewSchemaExample } from "../review.js";
 import type { PreparedDiffManifestContext } from "./diff-manifest-context.js";
 import { schemaContainsReviewFinding } from "./review-schema.js";

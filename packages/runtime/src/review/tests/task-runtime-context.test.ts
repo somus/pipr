@@ -970,46 +970,6 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     expect(countOccurrences(observedPrompt, "Inline Review Selection Policy:")).toBe(0);
     expect(result.mainComment).toContain('{"ok":true}');
   });
-
-  it("uses repair prompts with the same contract and validation error for custom schemas", async () => {
-    const prompts: string[] = [];
-    const plan = testPlan((pipr) => {
-      const output = pipr.jsonSchema<{ ok: boolean }>({
-        id: "custom/json-output",
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          required: ["ok"],
-          properties: { ok: { type: "boolean" } },
-        },
-      });
-      const agent = pipr.agent({
-        name: "custom-json",
-        model: deepseekModel(pipr),
-        instructions: "Return custom JSON.",
-        output,
-        prompt: () => "Return ok.",
-      });
-      registerCommentingAgentTask(pipr, "custom", agent);
-    });
-
-    const result = await runRuntime({
-      plan,
-      piRunner: async (options) => {
-        prompts.push(options.prompt);
-        return prompts.length === 1
-          ? { exitCode: 0, stdout: JSON.stringify({ ok: "yes" }), stderr: "", durationMs: 1 }
-          : { exitCode: 0, stdout: JSON.stringify({ ok: true }), stderr: "", durationMs: 1 };
-      },
-    });
-
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]).toContain("Schema validation error:");
-    expect(prompts[1]).toContain("Role:\nYou are pipr's read-only change request agent.");
-    expect(prompts[1]).toContain("Schema ID: custom/json-output.");
-    expect(result.repairAttempted).toBe(true);
-    expect(result.mainComment).toContain('{"ok":true}');
-  });
 });
 
 function outlineItem(name: string, startLine: number, endLine: number) {

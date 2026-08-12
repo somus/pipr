@@ -1,4 +1,5 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
+import type { InlineThreadContext } from "../../publication/types.js";
 import {
   applyInlineFindingMarkers,
   applyResolvedFindingMarkers,
@@ -10,7 +11,6 @@ import {
 import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { nativeInlineLocation } from "../publication.js";
-import type { InlineThreadContext } from "../types.js";
 import type { GiteaClient, GiteaComment, GiteaReviewComment } from "./client.js";
 
 export async function assertCurrentGiteaHead(

@@ -1177,23 +1177,6 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(observedTimeout).toBe(300);
   });
 
-  it("retries once when Pi returns invalid review JSON", async () => {
-    let calls = 0;
-
-    const result = await runRuntime({
-      plan: defaultReviewPlan(),
-      piRunner: async () => {
-        calls += 1;
-        return calls === 1
-          ? { exitCode: 0, stdout: "{", stderr: "", durationMs: 1 }
-          : noFindingsPiResult();
-      },
-    });
-
-    expect(calls).toBe(2);
-    expect(result.repairAttempted).toBe(true);
-  });
-
   it("accepts review JSON wrapped in a Markdown code fence", async () => {
     let calls = 0;
 

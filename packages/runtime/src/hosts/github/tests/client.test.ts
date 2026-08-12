@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { createGitHubCommandClient } from "../command.js";
+import { createGitHubCommandClient } from "../client.js";
 
-describe("GitHub command client", () => {
+describe("GitHub client", () => {
   it("loads pull request details into provider-neutral change refs", async () => {
     const originalFetch = globalThis.fetch;
     try {

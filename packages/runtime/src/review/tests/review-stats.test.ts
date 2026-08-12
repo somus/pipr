@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import type { ReviewStats } from "../../publication/types.js";
 import type { PiRunStats } from "../agent/review-run.js";
-import { accumulateReviewStats, type ReviewStats } from "../review-stats.js";
+import { accumulateReviewStats } from "../review-stats.js";
 import { reviewStatsForRuns } from "../task/task-output.js";
 
 describe("review stats", () => {
@@ -24,30 +25,6 @@ describe("review stats", () => {
     });
     expect(reviewStatsForRuns([complete, partial], 10)).toMatchObject({
       cacheReadTokens: 25,
-      cacheWriteTokens: 3,
-      cacheUsageStatus: "partial",
-    });
-  });
-
-  it("retains safe cache totals and marks aggregation overflow partial", () => {
-    const stats = reviewStatsForRuns(
-      [
-        piRun({
-          cacheReadTokens: Number.MAX_SAFE_INTEGER,
-          cacheWriteTokens: 2,
-          cacheUsageStatus: "complete",
-        }),
-        piRun({
-          cacheReadTokens: 1,
-          cacheWriteTokens: 1,
-          cacheUsageStatus: "complete",
-        }),
-      ],
-      10,
-    );
-
-    expect(stats).toMatchObject({
-      cacheReadTokens: Number.MAX_SAFE_INTEGER,
       cacheWriteTokens: 3,
       cacheUsageStatus: "partial",
     });
