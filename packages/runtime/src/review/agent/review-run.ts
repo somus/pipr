@@ -11,7 +11,6 @@ import { runAgentWithProvider } from "./parse-repair.js";
 import {
   assembleReviewAgentRun,
   inputWithManifest,
-  resolveProvider,
   scheduledReviewManifests,
 } from "./prompt-assembly.js";
 import type { RunReviewAgentOptions, RunReviewAgentResult } from "./review-run-types.js";
