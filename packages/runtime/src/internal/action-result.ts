@@ -1,6 +1,10 @@
+import {
+  stripPiprMainCommentMarkers,
+  toPiprErrorResult,
+  toPiprResult,
+} from "../host-run/pipr-result.js";
 import type { HostRunCommandResult } from "../host-run/types.js";
 import type { PublicationError } from "../review/publication-result.js";
-import { stripPiprMainCommentMarkers, toPiprErrorResult, toPiprResult } from "./pipr-result.js";
 
 export type GitHubActionResultPresenter = {
   info(message: string): void | Promise<void>;

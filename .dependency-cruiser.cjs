@@ -29,19 +29,13 @@ function layerPath(name) {
 
 const layerOrderRules = runtimeLayers.slice(0, -1).map((fromLayer, index) => {
   const outerLayers = runtimeLayers.slice(index + 1);
-  const rule = {
+  return {
     name: `${fromLayer}-must-not-import-outer-layers`,
     severity: "error",
     comment: `${fromLayer} may import inward layers only; outer layers are forbidden.`,
     from: { path: layerPath(fromLayer) },
     to: { path: outerLayers.map(layerPath).join("|") },
   };
-  // Narrow exception: webhook composition imports pipr-result helpers that live
-  // under outermost `internal/` (internal also imports host-run types).
-  if (fromLayer === "host-run") {
-    rule.to.pathNot = "^packages/runtime/src/internal/pipr-result\\.ts$";
-  }
-  return rule;
 });
 
 module.exports = {

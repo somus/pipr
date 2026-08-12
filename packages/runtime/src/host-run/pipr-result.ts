@@ -1,8 +1,8 @@
 import { type PiprResult, type PiprRunSummary, parsePiprResult } from "@usepipr/sdk";
-import type { HostRunCommandResult, LocalReviewCommandResult } from "../host-run/types.js";
 import { mainCommentFooterHiddenMarker } from "../review/comment-branding.js";
 import { parseGeneratedMainCommentEnvelope } from "../review/main-comment-envelope.js";
 import type { PublicationError } from "../review/publication-result.js";
+import type { HostRunCommandResult, LocalReviewCommandResult } from "./types.js";
 
 const genericFailureMessage = "Pipr failed; see the Action log for details.";
 const publicationFailureMessage =

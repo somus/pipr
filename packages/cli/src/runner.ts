@@ -18,8 +18,8 @@ import {
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
+import { stripPiprMainCommentMarkers, toPiprResult } from "@usepipr/runtime/host-run/pipr-result";
 import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
-import { stripPiprMainCommentMarkers, toPiprResult } from "@usepipr/runtime/internal/pipr-result";
 import { Command, CommanderError } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import {
