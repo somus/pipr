@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 
-export const reviewSideSchema = z.enum(["RIGHT", "LEFT"]);
+const reviewSideSchema = z.enum(["RIGHT", "LEFT"]);
 
 export const findingIdSchema = z
   .string()
@@ -67,7 +67,7 @@ const workflowUrlSchema = z
     );
   });
 
-export const priorFindingRecordSchema = z.strictObject({
+const priorFindingRecordSchema = z.strictObject({
   id: findingIdSchema,
   anchorFingerprint: z
     .string()
