@@ -1,39 +1,12 @@
-import { z } from "zod";
+import {
+  maxReviewStatsModelsLimit,
+  reviewStatsSchema,
+  sanitizeReviewStatsModel,
+} from "../publication/schemas.js";
 import type { ReviewStats } from "../publication/types.js";
 
-export const maxReviewStatsModels = 20;
-const maxReviewStatsModelLength = 200;
-const reviewStatsModelSchema = z
-  .string()
-  .min(1)
-  .max(maxReviewStatsModelLength)
-  .transform((model) => sanitizeReviewStatsModel(model) ?? "[invalid model]");
-const coverageCountsSchema = z
-  .strictObject({
-    total: z.number().int().nonnegative(),
-    covered: z.number().int().nonnegative(),
-  })
-  .refine((coverage) => coverage.covered <= coverage.total, {
-    message: "covered context cannot exceed total context",
-  });
-const diffContextCoverageSchema = z.strictObject({
-  files: coverageCountsSchema,
-  ranges: coverageCountsSchema,
-});
-
-export const reviewStatsSchema = z.strictObject({
-  models: z.array(reviewStatsModelSchema).min(1).max(maxReviewStatsModels),
-  agentRuns: z.number().int().positive(),
-  durationMs: z.number().int().nonnegative(),
-  inputTokens: z.number().int().nonnegative(),
-  outputTokens: z.number().int().nonnegative(),
-  costUsd: z.number().nonnegative(),
-  usageStatus: z.enum(["complete", "partial", "unavailable"]),
-  cacheReadTokens: z.number().int().nonnegative().optional(),
-  cacheWriteTokens: z.number().int().nonnegative().optional(),
-  cacheUsageStatus: z.enum(["complete", "partial", "unavailable"]).optional(),
-  diffContextCoverage: diffContextCoverageSchema.optional(),
-});
+export { reviewStatsSchema, sanitizeReviewStatsModel };
+export const maxReviewStatsModels = maxReviewStatsModelsLimit;
 
 export function accumulateReviewStats(
   prior: ReviewStats | undefined,
@@ -97,9 +70,4 @@ function addUsageTotal(
   return isValid(total) && total >= 0
     ? { total, complete: true }
     : { total: prior, complete: false };
-}
-
-export function sanitizeReviewStatsModel(model: string): string | undefined {
-  const normalized = model.replace(/\s+/g, " ").trim();
-  return normalized ? normalized.slice(0, maxReviewStatsModelLength) : undefined;
 }

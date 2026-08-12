@@ -13,12 +13,12 @@ export function matchFindingRange(
   finding: ReviewFinding,
   range: CommentableRange | undefined,
 ): Result<CommentableRange> {
+  if (!range) {
+    return err(`unknown rangeId '${finding.rangeId}'`);
+  }
   const reason = findingRangeMismatchReason(finding, range);
   if (reason) {
     return err(reason);
-  }
-  if (!range) {
-    return err(`unknown rangeId '${finding.rangeId}'`);
   }
   return ok(range);
 }

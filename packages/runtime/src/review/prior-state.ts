@@ -1,63 +1,17 @@
 import { Buffer } from "node:buffer";
 import type { ReviewFinding } from "@usepipr/sdk";
 import { defaultMaxStoredFindings } from "@usepipr/sdk/internal";
-import { z } from "zod";
 import { firstNonEmptyLine } from "../commands/grammar.js";
+import { findingIdSchema, priorReviewStateSchema } from "../publication/schemas.js";
 import type { PriorFindingRecord, PriorReviewState, ReviewStats } from "../publication/types.js";
-import { reviewSideSchema } from "../types.js";
-import { accumulateReviewStats, reviewStatsSchema } from "./review-stats.js";
+import { accumulateReviewStats } from "./review-stats.js";
+
+export { findingIdSchema, priorReviewStateSchema };
 
 export const mainCommentMarker = "pipr:main-comment";
 const inlineFindingMarkerPrefix = "pipr:finding";
 const resolvedFindingMarkerPrefix = "pipr:resolved";
 const verifierResponseMarkerPrefix = "pipr:verifier-response";
-
-export const findingIdSchema = z
-  .string()
-  .min(1)
-  .regex(/^[A-Za-z0-9_.-]+$/);
-
-const priorFindingStatusSchema = z.enum(["open", "resolved"]);
-const workflowUrlSchema = z
-  .string()
-  .url()
-  .max(2_048)
-  .refine((candidate) => {
-    const url = new URL(candidate);
-    return (
-      (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password
-    );
-  });
-
-const priorFindingRecordSchema = z.strictObject({
-  id: findingIdSchema,
-  anchorFingerprint: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional(),
-  issueFingerprint: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional(),
-  status: priorFindingStatusSchema,
-  path: z.string().min(1),
-  rangeId: z.string().min(1),
-  side: reviewSideSchema,
-  startLine: z.number().int().positive(),
-  endLine: z.number().int().positive(),
-  firstSeenHeadSha: z.string().min(1),
-  lastSeenHeadSha: z.string().min(1),
-  lastCommentedHeadSha: z.string().min(1).optional(),
-});
-
-export const priorReviewStateSchema = z.strictObject({
-  version: z.literal(1),
-  reviewedHeadSha: z.string().min(1),
-  selectedTasks: z.array(z.string().min(1)),
-  findings: z.array(priorFindingRecordSchema),
-  stats: reviewStatsSchema.optional(),
-  workflowUrls: z.array(workflowUrlSchema).optional(),
-});
 
 export type FindingMarkerRecord = {
   id: string;

@@ -1,9 +1,18 @@
 /**
  * Leaf publication contract types shared by review core and host adapters.
- * This module may import from shared/ and external packages only — never
- * review/, hosts/, or host-run/.
+ * Schema-backed types (`ReviewStats`, `PriorFindingRecord`, `PriorReviewState`)
+ * are derived via `z.infer` in `./schemas.js` so they cannot drift from
+ * runtime validation. This module may import from shared/ and external
+ * packages only — never review/, hosts/, or host-run/.
  */
 import type { CommentableRange, ReviewFinding, ReviewSide } from "@usepipr/sdk";
+import type { PriorReviewState, ReviewStats } from "./schemas.js";
+
+export type {
+  PriorFindingRecord,
+  PriorReviewState,
+  ReviewStats,
+} from "./schemas.js";
 
 export type NativeId = string;
 
@@ -19,47 +28,6 @@ export type InlineThreadContext = {
     body: string;
     authorLogin?: string;
   }>;
-};
-
-export type ReviewStats = {
-  models: string[];
-  agentRuns: number;
-  durationMs: number;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-  usageStatus: "complete" | "partial" | "unavailable";
-  cacheReadTokens?: number;
-  cacheWriteTokens?: number;
-  cacheUsageStatus?: "complete" | "partial" | "unavailable";
-  diffContextCoverage?: {
-    files: { total: number; covered: number };
-    ranges: { total: number; covered: number };
-  };
-};
-
-export type PriorFindingRecord = {
-  id: string;
-  anchorFingerprint?: string;
-  issueFingerprint?: string;
-  status: "open" | "resolved";
-  path: string;
-  rangeId: string;
-  side: ReviewSide;
-  startLine: number;
-  endLine: number;
-  firstSeenHeadSha: string;
-  lastSeenHeadSha: string;
-  lastCommentedHeadSha?: string;
-};
-
-export type PriorReviewState = {
-  version: 1;
-  reviewedHeadSha: string;
-  selectedTasks: string[];
-  findings: PriorFindingRecord[];
-  stats?: ReviewStats;
-  workflowUrls?: string[];
 };
 
 export type ThreadAction = {
