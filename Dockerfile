@@ -1,6 +1,6 @@
 FROM ghcr.io/somus/ast-grep:0.45.0-alpine3.22@sha256:b6da090fc5db9eb80c57444c628637ed20f5170e214268a9572369a2986dc215 AS ast-grep
 
-FROM oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS base
+FROM oven/bun:1.4.0-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5dbfdd3d3d38058437eb AS base
 
 USER root
 COPY --from=ast-grep /usr/local/bin/ast-grep /usr/local/bin/ast-grep

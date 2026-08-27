@@ -261,6 +261,7 @@ export default definePipr((pipr) => {
     await initOfficialMinimalProject({ rootDir, adapters: [] });
     const configDir = path.join(rootDir, ".pipr");
     const localPackageDir = path.join(configDir, "typescript-local");
+    await rm(localPackageDir, { recursive: true, force: true });
     await cp(path.join(configDir, "node_modules", "typescript"), localPackageDir, {
       recursive: true,
     });
@@ -464,13 +465,13 @@ describe("prepareConfigDirectory", () => {
         '        "@usepipr/sdk": "999.0.0",',
         "      },",
         '      "devDependencies": {',
-        '        "@types/bun": "1.3.14",',
+        '        "@types/bun": "1.4.0",',
         '        "typescript": "6.0.3",',
         "      },",
         "    },",
         "  },",
         '  "packages": {',
-        '    "@types/bun": ["@types/bun@1.3.14", "", {}, "sha512-test"],',
+        '    "@types/bun": ["@types/bun@1.4.0", "", {}, "sha512-test"],',
         "",
         '    "@usepipr/sdk": ["@usepipr/sdk@999.0.0", "", { "dependencies": { "zod": "4.4.3" } }, "sha512-test"],',
         "",

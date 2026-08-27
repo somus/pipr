@@ -13,14 +13,14 @@
     "url": "https://github.com/somus/pipr/issues"
   },
   "homepage": "https://github.com/somus/pipr#readme",
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.0",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "catalog": {
-    "@types/bun": "1.3.14",
-    "@types/node": "26.1.1",
+    "@types/bun": "1.4.0",
+    "@types/node": "26.4.0",
     "typescript": "7.0.2"
   },
   "scripts": {
@@ -65,13 +65,13 @@
     "eval:prompts": "bun run --cwd packages/evals eval"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.5",
+    "@biomejs/biome": "2.5.10",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "dependency-cruiser": "18.2.0",
-    "fallow": "3.9.1",
+    "fallow": "3.19.0",
     "tsdown": "0.22.14",
-    "turbo": "2.10.6",
+    "turbo": "2.10.12",
     "typescript": "catalog:",
     "typescript6": "npm:typescript@6.0.3"
   }

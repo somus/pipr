@@ -242,8 +242,13 @@ assert(
   releaseWorkflow.includes("workflow_run:"),
   "release workflow must wait for the CI workflow before publishing",
 );
+const releaseOn = (
+  parsedReleaseWorkflow as ReleaseWorkflow & {
+    on?: { workflow_run?: { workflows?: string[] } };
+  }
+).on;
 assert(
-  releaseWorkflow.includes("workflows: [CI]"),
+  releaseOn?.workflow_run?.workflows?.includes("CI"),
   "release workflow must wait for the CI workflow by name",
 );
 assert(
