@@ -1,27 +1,6 @@
-import { z } from "zod";
-import { createDiffRangeIndex } from "../diff/ranges.js";
-import {
-  findingIdSchema,
-  priorReviewStateSchema,
-  publicationMetadataSchema,
-  threadActionSchema,
-} from "../publication/schemas.js";
-import type {
-  InlinePublicationItem,
-  PriorReviewState,
-  PublicationMetadata,
-  PublicationPlan,
-  ReviewStats,
-  ThreadAction,
-} from "../publication/types.js";
+import type { PriorReviewState, PublicationMetadata, ReviewStats } from "../publication/types.js";
 import { compareStableSemver, stableSemverPattern } from "../shared/semver.js";
-import type {
-  ChangeRequestEventContext,
-  CommentableRange,
-  DiffManifest,
-  ReviewFinding,
-} from "../types.js";
-import { commentableRangeSchema, reviewSideSchema } from "../types.js";
+import type { ChangeRequestEventContext, ReviewFinding } from "../types.js";
 import {
   mainCommentFooterHiddenMarker,
   mainCommentHeaderHiddenMarker,
@@ -33,264 +12,13 @@ import {
   reviewStatsHiddenMarker,
   reviewStatsStartMarker,
 } from "./comment-branding.js";
-import { reviewFindingSchema } from "./contract.js";
 import {
-  buildPriorReviewState,
-  countFindingFingerprints,
-  findingIdFor,
-  inlineFindingMarker,
   mainCommentMarker,
-  matchFindingRecord,
-  matchResolvedFindingRecord,
   renderInlineFindingMarker,
   renderMainCommentMarker,
 } from "./prior-state.js";
-import { isPublishableSuggestedFixSelection } from "./suggested-fix-publication-policy.js";
 
-const inlinePublicationItemSchema = z
-  .strictObject({
-    finding: reviewFindingSchema,
-    range: commentableRangeSchema,
-    path: z.string().min(1),
-    previousPath: z.string().min(1).optional(),
-    side: reviewSideSchema,
-    startLine: z.number().int().positive(),
-    endLine: z.number().int().positive(),
-    body: z.string().min(1),
-    marker: z.string().min(1),
-    findingId: findingIdSchema,
-    reviewedHeadSha: z.string().min(1),
-  })
-  .superRefine((item, context) => {
-    if (item.path !== item.finding.path) {
-      context.addIssue({ code: "custom", path: ["path"], message: "path must match finding.path" });
-    }
-    if (item.side !== item.finding.side) {
-      context.addIssue({ code: "custom", path: ["side"], message: "side must match finding.side" });
-    }
-    if (item.startLine !== item.finding.startLine) {
-      context.addIssue({
-        code: "custom",
-        path: ["startLine"],
-        message: "startLine must match finding.startLine",
-      });
-    }
-    if (item.endLine !== item.finding.endLine) {
-      context.addIssue({
-        code: "custom",
-        path: ["endLine"],
-        message: "endLine must match finding.endLine",
-      });
-    }
-  });
-
-export type InlineCommentDraft = InlinePublicationItem;
-export type PublishableInlineFinding = {
-  finding: ReviewFinding;
-  range: CommentableRange;
-  previousPath?: string;
-  anchorFingerprint?: string;
-  issueFingerprint?: string;
-};
-
-/** Validated plan inputs; the rendered main comment and marker are added after parsing. */
-const publicationPlanInputSchema = z.strictObject({
-  changeNumber: z.number().int().positive(),
-  inlineItems: z.array(inlinePublicationItemSchema),
-  metadata: publicationMetadataSchema,
-  reviewState: priorReviewStateSchema,
-  threadActions: z.array(threadActionSchema),
-});
-
-export function publicationPlanForHostCapabilities(
-  plan: PublicationPlan,
-  capabilities: { multilineInlineComments: boolean; suggestedChanges: boolean },
-): PublicationPlan {
-  return {
-    ...plan,
-    inlineItems: plan.inlineItems
-      .filter((item) => capabilities.multilineInlineComments || item.startLine === item.endLine)
-      .map((item) => {
-        if (capabilities.suggestedChanges || !item.finding.suggestedFix) {
-          return item;
-        }
-        const finding = withoutSuggestedFix(item.finding);
-        return {
-          ...item,
-          finding,
-          body: [
-            renderInlineBody(finding, item.findingId, item.reviewedHeadSha),
-            "**Suggested change**",
-            "",
-            renderSuggestedChange(item.finding.suggestedFix, false),
-          ].join("\n"),
-        };
-      }),
-  };
-}
-
-export type BuildPublicationPlanOptions = {
-  event: Pick<ChangeRequestEventContext, "change">;
-  main: string;
-  inlineItems: InlinePublicationItem[];
-  metadata: Omit<PublicationMetadata, "cappedInlineFindings">;
-  maxInlineComments?: number;
-  maxStoredFindings?: number;
-  showHeader?: boolean;
-  showFooter?: boolean;
-  showStats?: boolean;
-  reviewState?: PriorReviewState;
-  threadActions?: ThreadAction[];
-};
-
-export function buildPublicationPlan(options: BuildPublicationPlanOptions): PublicationPlan {
-  const reviewState =
-    options.reviewState ??
-    buildPriorReviewState({
-      findings: options.inlineItems.map((item) => ({ finding: item.finding })),
-      reviewedHeadSha: options.metadata.reviewedHeadSha,
-      selectedTasks: options.metadata.selectedTasks,
-    });
-  const publishedCount =
-    options.maxInlineComments === undefined
-      ? options.inlineItems.length
-      : options.inlineItems.slice(0, options.maxInlineComments).length;
-  const input = publicationPlanInputSchema.parse({
-    changeNumber: options.event.change.number,
-    inlineItems: options.inlineItems,
-    metadata: {
-      ...options.metadata,
-      cappedInlineFindings: options.inlineItems.length - publishedCount,
-    },
-    reviewState,
-    threadActions: options.threadActions ?? [],
-  });
-  return {
-    mainComment: renderMainComment({
-      event: options.event,
-      reviewState,
-      maxStoredFindings: options.maxStoredFindings,
-      main: options.main,
-      metadata: input.metadata,
-      showHeader: options.showHeader ?? true,
-      showFooter: options.showFooter ?? true,
-      showStats: options.showStats ?? true,
-    }),
-    mainMarker: mainCommentMarker,
-    changeNumber: input.changeNumber,
-    inlineItems: input.inlineItems.slice(0, publishedCount),
-    metadata: input.metadata,
-    reviewState: input.reviewState,
-    threadActions: input.threadActions,
-  };
-}
-
-export function preparePublishableInlineFindings(options: {
-  validated: {
-    validFindings: ReviewFinding[];
-  };
-  manifest: DiffManifest;
-}): PublishableInlineFinding[] {
-  const ranges = createDiffRangeIndex(options.manifest);
-  return options.validated.validFindings.flatMap((finding) => {
-    const match = ranges.findRange(finding.rangeId);
-    if (!match) {
-      throw new Error(`Validated finding range '${finding.rangeId}' is missing from Diff Manifest`);
-    }
-    const { file, range } = match;
-    const findingWithBody = findingWithPublishableBody(finding);
-    if (!findingWithBody) {
-      return [];
-    }
-    return [
-      {
-        finding: findingWithPublishableSuggestedFix(findingWithBody, range),
-        range,
-        previousPath: file.previousPath,
-      },
-    ];
-  });
-}
-
-export function prepareInlinePublicationItemsForPublishableFindings(options: {
-  publishableFindings: PublishableInlineFinding[];
-  reviewedHeadSha: string;
-  reviewState?: PriorReviewState;
-}): InlinePublicationItem[] {
-  const seenFindingIds = new Set<string>();
-  const fingerprintCounts = countFindingFingerprints(options.publishableFindings);
-  return options.publishableFindings.flatMap(
-    ({ finding: publishableFinding, range, previousPath, anchorFingerprint, issueFingerprint }) => {
-      const stateRecord = options.reviewState
-        ? matchFindingRecord(options.reviewState, publishableFinding)
-        : undefined;
-      const findingId = findingIdFor(publishableFinding, stateRecord);
-      const resolvedRecord = options.reviewState
-        ? matchResolvedFindingRecord(
-            options.reviewState.findings,
-            publishableFinding,
-            anchorFingerprint,
-            issueFingerprint,
-            fingerprintCounts,
-            previousPath,
-          )
-        : undefined;
-      if (
-        seenFindingIds.has(findingId) ||
-        resolvedRecord !== undefined ||
-        stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha
-      ) {
-        return [];
-      }
-      seenFindingIds.add(findingId);
-      return [
-        {
-          finding: publishableFinding,
-          range,
-          path: publishableFinding.path,
-          previousPath,
-          side: publishableFinding.side,
-          startLine: publishableFinding.startLine,
-          endLine: publishableFinding.endLine,
-          marker: inlineFindingMarker(findingId, options.reviewedHeadSha),
-          findingId,
-          reviewedHeadSha: options.reviewedHeadSha,
-          body: renderInlineBody(publishableFinding, findingId, options.reviewedHeadSha),
-        },
-      ];
-    },
-  );
-}
-
-function findingWithPublishableBody(finding: ReviewFinding): ReviewFinding | undefined {
-  const body = finding.body.trim();
-  if (body.length === 0) {
-    return undefined;
-  }
-  return body === finding.body ? finding : { ...finding, body };
-}
-
-function findingWithPublishableSuggestedFix(
-  finding: ReviewFinding,
-  range: CommentableRange,
-): ReviewFinding {
-  if (!finding.suggestedFix) {
-    return finding;
-  }
-  if (!isPublishableSuggestedFixSelection(finding, range)) {
-    return withoutSuggestedFix(finding);
-  }
-
-  return finding;
-}
-
-function withoutSuggestedFix(finding: ReviewFinding): ReviewFinding {
-  const next = { ...finding };
-  delete next.suggestedFix;
-  return next;
-}
-
-function renderMainComment(options: {
+export function renderMainComment(options: {
   event: Pick<ChangeRequestEventContext, "change">;
   reviewState: PriorReviewState;
   maxStoredFindings?: number;
@@ -494,7 +222,7 @@ function configVersionNotice(metadata: PublicationMetadata): string {
   return ` Config SDK ${metadata.configVersion} is behind [Pipr ${metadata.runtimeVersion}](${releaseUrl}).`;
 }
 
-function renderInlineBody(
+export function renderInlineBody(
   finding: ReviewFinding,
   findingId: string,
   reviewedHeadSha: string,
@@ -526,7 +254,7 @@ function startsWithStructuredMarkdown(value: string): boolean {
   );
 }
 
-function renderSuggestedChange(suggestedFix: string, native = true): string {
+export function renderSuggestedChange(suggestedFix: string, native = true): string {
   const longestBacktickRun = Math.max(
     0,
     ...[...suggestedFix.matchAll(/`+/g)].map((match) => match[0].length),

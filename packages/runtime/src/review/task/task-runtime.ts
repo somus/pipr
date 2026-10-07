@@ -27,9 +27,8 @@ import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../t
 import { type AgentRunBudget, createAgentRunBudget } from "../agent/agent-run-budget.js";
 import { resolveProvider } from "../agent/prompt-assembly.js";
 import type { PiRunStats } from "../agent/review-run-types.js";
-import type { InlineCommentDraft } from "../comment.js";
-import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { priorReviewStateForSelectedTasks } from "../prior-state.js";
+import { buildCommentPublishingPlan, type InlineCommentDraft } from "../publication-plan.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
 import { validateReviewResult } from "../review.js";
 import { reviewStatsForRuns, runSummaryStatsFields } from "../review-stats.js";

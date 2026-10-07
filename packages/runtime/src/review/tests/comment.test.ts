@@ -2,14 +2,15 @@ import { describe, expect, it } from "bun:test";
 import type { PriorReviewState } from "../../publication/types.js";
 import { runtimeVersion } from "../../shared/version.js";
 import type { DiffManifest, ReviewFinding } from "../../types.js";
-import { buildPublicationPlan, publicationPlanForHostCapabilities } from "../comment.js";
-import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import {
   applyInlineFindingMarkers,
-  buildPriorReviewState,
   extractInlineFindingMarkers,
   extractPriorReviewState,
 } from "../prior-state.js";
+import {
+  buildCommentPublishingPlan,
+  publicationPlanForHostCapabilities,
+} from "../publication-plan.js";
 
 const finding: ReviewFinding = {
   body: "This can fail.",
@@ -72,28 +73,28 @@ const event = {
 
 describe("comments", () => {
   it("adapts inline publication to host capabilities", () => {
-    const singleLine = prepareInlinePublicationItems({
-      validated: { validFindings: [finding] },
-      manifest,
-      reviewedHeadSha: "head",
+    const multilineFinding = {
+      ...finding,
+      path: "src/b.ts",
+      rangeId: "range-2",
+      startLine: 10,
+      endLine: 11,
+    };
+    const multilineFile = manifestWithRange(10, 11, "fail()\nrecover()").files.map((file) => ({
+      ...file,
+      path: "src/b.ts",
+      commentableRanges: file.commentableRanges.map((range) => ({
+        ...range,
+        id: "range-2",
+        path: "src/b.ts",
+      })),
+    }));
+    const { publicationPlan: plan } = publishingPlan({
+      validFindings: [finding, multilineFinding],
+      manifest: { ...manifest, files: [...manifest.files, ...multilineFile] },
     });
-    const multilineFinding = { ...finding, startLine: 10, endLine: 11 };
-    const multiline = prepareInlinePublicationItems({
-      validated: { validFindings: [multilineFinding] },
-      manifest: manifestWithRange(10, 11, "fail()\nrecover()"),
-      reviewedHeadSha: "head",
-    });
-    const plan = buildPublicationPlan({
-      event,
-      main: "Summary.",
-      inlineItems: [...singleLine, ...multiline],
-      reviewState: buildPriorReviewState({
-        findings: [{ finding }, { finding: multilineFinding }],
-        reviewedHeadSha: "head",
-        selectedTasks: ["review"],
-      }),
-      metadata: metadata(),
-    });
+
+    expect(plan.inlineItems).toHaveLength(2);
 
     const adapted = publicationPlanForHostCapabilities(plan, {
       multilineInlineComments: false,
@@ -109,16 +110,9 @@ describe("comments", () => {
   });
 
   it("renders one whole main comment body with review state", () => {
-    const plan = buildPublicationPlan({
-      event,
+    const { publicationPlan: plan } = publishingPlan({
       main: "Summary body.\n\nTests passed.",
-      inlineItems: [],
-      reviewState: buildPriorReviewState({
-        findings: [{ finding }],
-        reviewedHeadSha: "head",
-        selectedTasks: ["review"],
-      }),
-      metadata: metadata(),
+      validFindings: [finding],
     });
 
     expect(plan.mainComment).toContain("<!-- pipr:main-comment change=1 version=1 state=");
@@ -234,12 +228,7 @@ describe("comments", () => {
         reviewedHeadSha: "head",
       });
       const [plain] = publicationPlanForHostCapabilities(
-        buildPublicationPlan({
-          event,
-          main: "Summary.",
-          inlineItems: native ? [native] : [],
-          metadata: metadata(),
-        }),
+        publishingPlan({ validFindings: [{ ...finding, suggestedFix }] }).publicationPlan,
         { multilineInlineComments: true, suggestedChanges: false },
       ).inlineItems;
 
@@ -406,21 +395,12 @@ describe("comments", () => {
       body: "The literal pipr_eval_secret_do_not_repeat_12345 should not be repeated.",
       suggestedFix: 'const apiKey = "pipr_eval_secret_do_not_repeat_12345";',
     };
-    const [item] = prepareInlinePublicationItems({
-      validated: { validFindings: [rawFinding] },
-      manifest,
-      reviewedHeadSha: "head",
-    });
+    const publishing = publishingPlan({ validFindings: [rawFinding] });
+    const [item] = publishing.inlineCommentDrafts;
     if (!item) {
       throw new Error("test fixture missing inline item");
     }
-    const plan = buildPublicationPlan({
-      event,
-      main: "Summary.",
-      inlineItems: [item],
-      metadata: metadata(),
-    });
-    const state = extractPriorReviewState(plan.mainComment, 1);
+    const state = extractPriorReviewState(publishing.publicationPlan.mainComment, 1);
     if (!state) {
       throw new Error("test fixture missing review state");
     }
@@ -463,6 +443,29 @@ function metadata() {
   };
 }
 
+/** Builds a publication plan through the public comment-publishing path. */
+function publishingPlan(options: {
+  validFindings: ReviewFinding[];
+  manifest?: DiffManifest;
+  main?: string;
+  reviewedHeadSha?: string;
+  reviewState?: PriorReviewState;
+}) {
+  const reviewedHeadSha = options.reviewedHeadSha ?? "head";
+  return buildCommentPublishingPlan({
+    event: { change: { ...event.change, head: { sha: reviewedHeadSha } } },
+    main: options.main ?? "Summary.",
+    validated: {
+      review: { summary: { body: "Summary." }, inlineFindings: [] },
+      validFindings: options.validFindings,
+      droppedFindings: [],
+    },
+    manifest: options.manifest ?? manifest,
+    metadata: metadata(),
+    priorReviewState: options.reviewState,
+  });
+}
+
 /** Prepares inline drafts through the public comment-publishing path. */
 function prepareInlinePublicationItems(options: {
   validated: { validFindings: ReviewFinding[] };
@@ -470,17 +473,11 @@ function prepareInlinePublicationItems(options: {
   reviewedHeadSha: string;
   reviewState?: PriorReviewState;
 }) {
-  return buildCommentPublishingPlan({
-    event: { change: { ...event.change, head: { sha: options.reviewedHeadSha } } },
-    main: "Summary.",
-    validated: {
-      review: { summary: { body: "Summary." }, inlineFindings: [] },
-      validFindings: options.validated.validFindings,
-      droppedFindings: [],
-    },
+  return publishingPlan({
+    validFindings: options.validated.validFindings,
     manifest: options.manifest,
-    metadata: metadata(),
-    priorReviewState: options.reviewState,
+    reviewedHeadSha: options.reviewedHeadSha,
+    reviewState: options.reviewState,
   }).inlineCommentDrafts;
 }
 

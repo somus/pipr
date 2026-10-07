@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildPublicationPlan } from "../../../review/comment.js";
+import { buildPublicationPlan } from "../../../review/publication-plan.js";
 import { runtimeVersion } from "../../../shared/version.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import { createGitHubHostAdapter } from "../adapter.js";

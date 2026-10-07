@@ -5,13 +5,13 @@ import type {
   ReviewProgressLease,
   ThreadAction,
 } from "../../publication/types.js";
-import { buildPublicationPlan } from "../../review/comment.js";
 import {
   mainCommentMarker,
   renderInlineFindingMarker,
   renderMainCommentMarker,
   renderVerifierResponseMarker,
 } from "../../review/prior-state.js";
+import { buildPublicationPlan } from "../../review/publication-plan.js";
 import { runtimeVersion } from "../../shared/version.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type {
