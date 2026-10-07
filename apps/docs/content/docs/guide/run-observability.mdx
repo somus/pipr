@@ -131,12 +131,77 @@ The webhook runner also writes each delivery's public Finding Outcome events to 
 
 Recipient rotation affects future runs only. Keep old identities through the provider retention period when older diagnostics remain useful.
 
+## Measure finding outcomes
+
+Finding Outcomes record what happened to each finding after a reviewer proposed it. Each outcome is an append-only event keyed by the finding's stable ID:
+
+| Kind | Recorded when |
+| --- | --- |
+| `proposed` | A reviewer returned a finding that passed schema validation. |
+| `dropped` | Validation, selection, or publication planning removed the finding. The event carries a reason code such as `out-of-range`, `duplicate`, `cap`, or `inline-cap`. |
+| `published` | The code host accepted the inline comment. |
+| `carried` | A later review found the same finding again. |
+| `outdated` | A later review no longer reported an open finding. |
+| `fixed`, `still-valid` | The verifier judged a published finding after a push or a reply. |
+| `resolved-by-human` | A maintainer resolved the thread without a Pipr resolution. Only hosts with thread resolution record it. |
+| `replied` | A human replied to the finding. The event carries the replier's repository permission. |
+
+Pipr records outcomes in three places: the `ledger` artifact of every Run Bundle, the main review comment's state across pushes, and the webhook `finding_events` table.
+
+### Report outcome rates
+
+`pipr runs stats` reads public ledgers and webhook events and reports rates without paths, bodies, or finding IDs:
+
+```bash
+pipr runs stats --repository acme/app --since 30d --group-by agent
+pipr runs stats --webhook-db /var/lib/pipr/webhooks.sqlite --group-by facet --json
+```
+
+Pipr merges every source and counts each event once by event ID. When a reply appears both in the reply run's ledger and as an outcome rebuilt from review state, Pipr keeps the replier's recorded permission.
+
+Each published finding gets one terminal outcome. The first matching rule wins:
+
+1. `fixed`: the verifier judged the finding fixed.
+2. `dismissed`: a maintainer resolved the thread without a fix.
+3. `disputed`: a human replied, and the verifier then judged the finding still valid.
+4. `open`: none of the above.
+
+| Rate | Formula |
+| --- | --- |
+| Fix | fixed / published |
+| Dismissal | dismissed / published, counting only findings from hosts with thread resolution |
+| Acceptance | fixed / (fixed + dismissed) |
+| Drop | dropped and never published / proposed |
+
+GitHub, GitLab, Bitbucket, and Azure DevOps report thread resolution. Gitea, Forgejo, and Codeberg do not, so their findings never count toward dismissal, and local runs never do either. Stats also count drops by reason code and replies by permission. `--group-by` splits every count by enum field value (`key=value`), agent, model, or config hash. Findings without that attribute appear under `(none)`.
+
+`pipr runs stats` reads only the public metadata plane, so it works without a decryption identity. For GitHub repositories it downloads one archive per run, so `--limit` defaults to 100 runs.
+
+### Export evaluation datasets
+
+`pipr runs export --dataset` turns labeled outcomes into prompt evaluation cases:
+
+```bash
+pipr runs export --dataset ./pipr-dataset \
+  --identity ~/.local/state/pipr/keys/run-observability.agekey \
+  --repo .
+```
+
+Export needs at least one decryption identity because finding paths, ranges, and bodies exist only in the diagnostic ledger. Pipr reads each finding's file at the reviewed base and head commits with `git show` from `--repo`. It reads no other files. Findings whose commits are missing from that checkout are skipped and counted.
+
+| Terminal outcome | Case |
+| --- | --- |
+| `fixed` or still valid | Positive: the review should report the finding at the same line range. |
+| `dismissed` | Negative: the review should publish no inline findings. |
+
+The directory gets one JSON file per case and an `index.json` listing cases and skipped counts. Cases contain source code and finding bodies, so treat the directory like a decrypted bundle: keep it out of the repository and share it only through an authorized channel. `findingDatasetCaseSchema` from `@usepipr/sdk` validates the case format.
+
 ## Export telemetry
 
 Set standard `OTEL_EXPORTER_OTLP_*` variables to export content-free traces, metrics, and logs. Exported telemetry contains timings, statuses, sizes, hashes, usage, and provider-neutral identifiers; it excludes prompts, model output, source text, environment values, and tool payload bodies.
 
 ## Next steps
 
-- Use the [CLI reference](/docs/reference/cli#pipr-runs-list) for every filter and output option.
+- Use the [CLI reference](/docs/reference/cli#pipr-runs-list) for every filter and output option, including [`pipr runs stats`](/docs/reference/cli#pipr-runs-stats) and [`pipr runs export`](/docs/reference/cli#pipr-runs-export).
 - Map a diagnosed failure to its fix in [Troubleshooting](/docs/guide/troubleshooting).
 - Review [Trust and security](/docs/concepts/trust-security#diagnostic-data) before sharing a bundle.

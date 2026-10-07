@@ -242,6 +242,46 @@ pipr runs download 0123456789abcdef0123456789abcdef --output ./pipr-run
 
 See [Debug captured runs](/docs/guide/run-observability) for GitHub credentials, capture settings, artifact states, and bundle security.
 
+## `pipr runs stats`
+
+Report content-free Finding Outcome rates across captured runs and webhook deliveries:
+
+```bash
+pipr runs stats
+pipr runs stats --repository acme/app --since 30d --group-by facet
+pipr runs stats --webhook-db /var/lib/pipr/webhooks.sqlite --json
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--group-by <dimension>` | none | Split rates by `facet` (enum field `key=value`), `agent`, `model`, or `config` hash. |
+| `--since <date>` | all | Count only runs and events since an ISO 8601 date or timestamp, or a day count such as `30d`. |
+| `--host <host>` | Git remote | Override the code host, and filter local runs to it. A GitHub repository adds its GitHub Actions archives as a source. |
+| `--repository <repository>` | Git remote | Override the provider repository path, and filter local runs and webhook events to it. |
+| `--limit <count>` | `100` | Read at most 1 to 1,000 runs. |
+| `--store <path>` | `PIPR_RUN_STORE_DIR`, otherwise `.pipr-runs` and platform state | Select the local store. |
+| `--webhook-db <path>` | `PIPR_WEBHOOK_DB` | Add the `finding_events` table of a webhook delivery database. |
+| `--json` | false | Print a versioned JSON envelope with totals, rates, drop reasons, reply permissions, groups, and source counts. |
+
+Stats read only public metadata and contain no paths, bodies, or finding IDs. Events are counted once by event ID across all sources. A webhook database that `pipr webhook serve` has not opened since finding events were added fails with instructions to start the server once. See [Measure finding outcomes](/docs/guide/run-observability#measure-finding-outcomes) for the rate definitions.
+
+## `pipr runs export`
+
+Export labeled evaluation cases from decrypted Finding Outcome ledgers:
+
+```bash
+pipr runs export --dataset ./pipr-dataset --identity ./run-observability.agekey
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--dataset <dir>` | required | Write one JSON file per case and `index.json`. |
+| `--repo <dir>` | current directory | Git checkout that contains the reviewed base and head commits. |
+| `--identity <path>` | `PIPR_RUN_AGE_IDENTITY`, then the platform default | Decrypt diagnostic ledgers. Required. Repeat for multiple identities. |
+| `--since`, `--host`, `--repository`, `--limit`, `--store`, `--webhook-db` | As for `pipr runs stats` | Select the runs and outcome events. |
+
+Fixed and still-valid findings become positive cases that expect the finding at its line range. Dismissed findings become negative cases that expect no inline findings. Findings without decrypted evidence, or whose commits or file are missing from `--repo`, are skipped and counted in `index.json`. The output contains source code and finding bodies; keep it out of the repository.
+
 ## `pipr runs keygen`
 
 Generate a standard X25519 age identity for encrypted diagnostic bundles:

@@ -82,6 +82,8 @@ Run bundles can contain repository and model evidence. Treat them as sensitive r
 
 GitHub Actions publishes content-free metadata by default. When `PIPR_RUN_AGE_RECIPIENTS` is configured, it can also publish an encrypted diagnostic package. GitHub access permits discovery and download; a matching local age identity is required to read the diagnostic content.
 
+Public metadata keeps one artifact body: the Finding Outcome ledger. It holds content-free events: finding IDs, outcome kinds, drop reason codes, work and execution IDs, head SHAs, config hashes, agent names, model IDs, and enum field values. Finding paths, line ranges, bodies, and suggested fixes stay in the encrypted diagnostic ledger. `pipr runs stats` reads only the public form. `pipr runs export --dataset` requires a decryption identity, and the cases it writes contain source files and finding bodies, so handle them like decrypted diagnostics.
+
 Trusted webhook stores and opt-in local captures use filesystem access controls. Never store a decryption identity beside its provider artifact or share decrypted diagnostics outside an authorized repository channel.
 
 See [Debug captured runs](/docs/guide/run-observability) for setup and retention behavior.

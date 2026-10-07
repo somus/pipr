@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, not yet implemented. Amends
+Accepted and implemented. Amends
 [ADR 0009](./0009-protected-public-repository-run-observability.md).
 
 ## Context
@@ -45,3 +45,7 @@ Learning signals depend on host capabilities. Hosts without thread resolution re
 
 Outcome aggregation across repositories is meaningful only where repositories declare the same
 field vocabulary.
+
+The Main Review Comment state moved to a new format to carry outcome history, capped at 24,000
+compressed characters to fit the smallest host comment limit. State in the earlier format is
+ignored once, so the first review after upgrading starts without prior findings.

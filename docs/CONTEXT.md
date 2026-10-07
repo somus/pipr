@@ -78,7 +78,7 @@ A user-owned Zod schema created with `pipr.finding()` that extends the core Revi
 _Avoid_: hardcoded severity, built-in category
 
 **Finding Outcome**:
-An append-only event recording what happened to one finding: proposed, dropped, published, carried, outdated, fixed, still valid, resolved by a human, or replied to. Each Run Bundle carries its events in a `ledger` artifact; drops carry a content-free reason code. The Main Review Comment state keeps each finding's last six outcomes so outcomes continue across pushes; `resolved by a human` is observable only on hosts with thread resolution.
+An append-only event recording what happened to one finding: proposed, dropped, published, carried, outdated, fixed, still valid, resolved by a human, or replied to. Each Run Bundle carries its events in a `ledger` artifact; drops carry a content-free reason code. The Main Review Comment state keeps each finding's last six outcomes so outcomes continue across pushes; `resolved by a human` is observable only on hosts with thread resolution. Outcome stats reduce each published finding to one terminal outcome: fixed, dismissed (resolved by a human without a fix), disputed (replied to, then judged still valid), or open.
 _Avoid_: feedback score, reaction
 
 **Pipr Result**:
