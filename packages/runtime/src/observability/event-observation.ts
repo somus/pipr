@@ -18,7 +18,8 @@ export type AttemptRecord = {
   turns: number;
   /** Per response model: summed turn usage and turn count. */
   models: Map<string, RunAgentUsage & { turns: number }>;
-  conversation?: Extract<RunAgentEvent, { kind: "conversation" }>;
+  /** The settled conversation's identity; its entries go straight to the conversation artifact. */
+  conversation?: { conversationId: number; truncated: boolean };
 };
 
 export function observeAttemptEvent(
@@ -63,7 +64,10 @@ export function observeAttemptEvent(
       observeTurnEnd(event, context);
       return;
     case "conversation":
-      context.record.conversation = event;
+      context.record.conversation = {
+        conversationId: event.conversationId,
+        truncated: event.truncated,
+      };
       return;
     case "tool-start":
       observeToolStart(event, context);

@@ -5,7 +5,8 @@ import type { RunAgentUsage, RunObserver } from "./types.js";
 export type RecordedAttempt = {
   /** Sequence and attempt type, such as `001-initial`; also the attempt's artifact name suffix. */
   id: string;
-  options: Parameters<RunObserver["beginAgentAttempt"]>[0];
+  /** How the attempt began, without its prompt. */
+  options: Omit<Parameters<RunObserver["beginAgentAttempt"]>[0], "prompt">;
   status: "ok" | "error";
   usage?: RunAgentUsage;
   record: AttemptRecord;

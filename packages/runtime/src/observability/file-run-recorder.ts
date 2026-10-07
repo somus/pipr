@@ -56,6 +56,7 @@ import { boundLogString, normalizeLogFields } from "./runtime-log-sinks.js";
 import {
   maximumRunBundleBytes,
   type RunAgentAttemptResult,
+  type RunAgentEvent,
   type RunAgentUsage,
   type RunObserver,
 } from "./types.js";
@@ -364,6 +365,10 @@ export async function startFileRunRecorder(options: {
           // Conversation artifacts are diagnostic; metadata capture would drop them unread.
           capturesConversation: options.mode !== "metadata",
           event(event) {
+            if (event.kind === "conversation") {
+              // Written on arrival so the attempt record keeps only the conversation's identity, never its entries.
+              pendingWrites = pendingWrites.then(() => addAttemptConversation(suffix, event));
+            }
             observeAttemptEvent(event, {
               suffix,
               attempt,
@@ -465,9 +470,10 @@ export async function startFileRunRecorder(options: {
     const failed = result.error !== undefined || (result.exitCode ?? 0) !== 0;
     closeAgentSpan(suffix, record, result, failed);
     closeAttemptSpans(suffix, failed);
+    const { prompt: _prompt, ...attemptOptions } = context.attempt;
     recordedAttempts.push({
       id: suffix,
-      options: context.attempt,
+      options: attemptOptions,
       status: failed ? "error" : "ok",
       ...(result.usage ? { usage: attemptUsage(result.usage) } : {}),
       record,
@@ -480,7 +486,6 @@ export async function startFileRunRecorder(options: {
       sensitive: true,
     });
     await addAttemptStderr(suffix, result.error);
-    await addAttemptConversation(suffix, record);
     queueAttemptResources(context, failed, resourceSnapshot());
   }
 
@@ -501,9 +506,11 @@ export async function startFileRunRecorder(options: {
     closeSpan(`agent:${suffix}`, failed ? "error" : "ok", result.durationMs, attributes);
   }
 
-  async function addAttemptConversation(suffix: string, record: AttemptRecord): Promise<void> {
-    if (!record.conversation) return;
-    const { content, counts } = conversationArtifact(record.conversation.entries);
+  async function addAttemptConversation(
+    suffix: string,
+    conversation: Extract<RunAgentEvent, { kind: "conversation" }>,
+  ): Promise<void> {
+    const { content, counts } = conversationArtifact(conversation.entries);
     await addRecorderArtifact({
       kind: "conversation",
       name: `conversation-${suffix}.jsonl`,

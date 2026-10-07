@@ -236,6 +236,35 @@ describe("file run recorder", () => {
     ).toEqual([false, false]);
   });
 
+  it("writes the conversation artifact when the conversation arrives", async () => {
+    const recorder = await startFileRunRecorder({
+      rootDirectory: await temporaryDirectory(),
+      env: {},
+    });
+    const attempt = await recorder.observer.beginAgentAttempt({
+      attemptType: "initial",
+      attemptNumber: 1,
+      agent: "reviewer",
+      provider: "openai",
+      model: "gpt-test",
+      prompt: "prompt",
+    });
+    attempt.event({
+      kind: "conversation",
+      conversationId: 3,
+      entries: conversationEntries("interrupted answer"),
+      truncated: false,
+    });
+    await recorder.finish({ kind: "review", outcome: "failed" });
+
+    const { manifest } = await loadValidatedRunBundle(recorder.directory);
+    const conversation = manifest.artifacts.find((artifact) => artifact.kind === "conversation");
+    expect(conversation).toMatchObject({ path: "artifacts/conversation-001-initial.jsonl" });
+    expect(
+      await readFile(path.join(recorder.directory, conversation?.path ?? ""), "utf8"),
+    ).toContain("interrupted answer");
+  });
+
   it("asks for the conversation only in diagnostic capture", async () => {
     const captures: Array<boolean | undefined> = [];
     for (const mode of ["diagnostic", "metadata"] as const) {
