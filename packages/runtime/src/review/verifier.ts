@@ -1,8 +1,10 @@
 import type { ModelProfile, PiprRunContext, Schema } from "@usepipr/sdk";
-import type { RuntimeAgent } from "@usepipr/sdk/internal";
+import { type RuntimeAgent, zodOutputSchema } from "@usepipr/sdk/internal";
 import { z } from "zod";
+import { createDiffContext } from "../diff/diff-context.js";
 import type { RunObserver } from "../observability/types.js";
-import type { PiRunner } from "../pi/types.js";
+import { withPiRunWorkspace } from "../pi/runner.js";
+import type { PiProviderModule, PiRunner } from "../pi/types.js";
 import type {
   InlineThreadContext,
   PriorFindingRecord,
@@ -45,8 +47,9 @@ export type RunVerifierOptions = {
   verifierProvider: ProviderConfig;
   plan: Parameters<typeof runReviewAgent>[0]["runtime"]["plan"];
   env?: NodeJS.ProcessEnv;
-  piExecutable?: string;
-  piAgentDir?: string;
+  piProviderModule?: PiProviderModule;
+  piAuthFile?: string;
+  piStoreDir?: string;
   piRunner?: PiRunner;
   diffManifest: DiffManifest;
   priorReviewState?: PriorReviewState;
@@ -94,7 +97,21 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
   if (candidates.length === 0) {
     return { priorReviewState: prior, threadActions: [], providerModels: [] };
   }
+  if (options.piRunner) {
+    return await verifyCandidates(options, options.piRunner, prior, candidates);
+  }
+  return await withPiRunWorkspace(
+    { workspace: options.workspace, env: options.env, storeDir: options.piStoreDir },
+    async (piRunner) => await verifyCandidates(options, piRunner, prior, candidates),
+  );
+}
 
+async function verifyCandidates(
+  options: RunVerifierOptions,
+  piRunner: PiRunner,
+  prior: PriorReviewState,
+  candidates: Array<{ finding: PriorFindingRecord; thread: InlineThreadContext }>,
+): Promise<VerifierResult> {
   try {
     const outputSchema = verifierSchemaForCandidates(
       candidates.map((candidate) => candidate.finding.id),
@@ -112,9 +129,9 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         provider: options.provider,
         plan: options.plan,
         env: options.env,
-        piExecutable: options.piExecutable,
-        piAgentDir: options.piAgentDir,
-        piRunner: options.piRunner,
+        piProviderModule: options.piProviderModule,
+        piAuthFile: options.piAuthFile,
+        piRunner,
         run: options.run,
         log: options.log,
         runObserver: options.runObserver,
@@ -124,7 +141,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
       },
     });
     const output = outputSchema.parse(result.value);
-    return applyVerifierOutput(options, candidates, output, result.providerModels);
+    return applyVerifierOutput(options, prior, candidates, output, result.providerModels);
   } catch (error) {
     if (error instanceof AgentRunBudgetExhaustedError) {
       throw error;
@@ -142,7 +159,7 @@ function verifierInput(
   candidates: Array<{ finding: PriorFindingRecord; thread: InlineThreadContext }>,
 ) {
   return {
-    manifest: options.diffManifest,
+    diff: createDiffContext(options.diffManifest),
     runId: options.run.id,
     mode: options.mode.kind,
     reviewedHeadSha: prior.reviewedHeadSha,
@@ -202,6 +219,7 @@ function verifierCandidates(
 
 function applyVerifierOutput(
   options: RunVerifierOptions,
+  prior: PriorReviewState,
   candidates: Array<{ finding: PriorFindingRecord; thread: InlineThreadContext }>,
   output: VerifierOutput,
   providerModels: string[],
@@ -211,24 +229,18 @@ function applyVerifierOutput(
   const threadActions: ThreadAction[] = [];
 
   for (const item of output.findings) {
-    const candidate = candidateById.get(item.id);
-    const action = verifierThreadAction(options, candidate, item);
-    if (!candidate || item.status === "unknown") {
+    const action = verifierThreadAction(options, candidateById.get(item.id), item);
+    if (!action) {
       continue;
     }
-    if (item.status === "fixed" && action?.kind === "resolve") {
+    if (action.kind === "resolve") {
       resolvedIds.push(item.id);
     }
-    if (action) {
-      threadActions.push(action);
-    }
+    threadActions.push(action);
   }
 
   return {
-    priorReviewState:
-      resolvedIds.length > 0
-        ? resolvePriorFindings(options.priorReviewState as PriorReviewState, resolvedIds)
-        : options.priorReviewState,
+    priorReviewState: resolvedIds.length > 0 ? resolvePriorFindings(prior, resolvedIds) : prior,
     threadActions,
     providerModels,
   };
@@ -334,12 +346,11 @@ function internalVerifierAgent(
         .join("\n"),
       prompt: (value) => {
         const input = value as VerifierInput;
-        const { manifest: _manifest, ...verifierPromptInput } = input;
+        const { diff: _diff, ...verifierPromptInput } = input;
         return JSON.stringify(verifierPromptInput, null, 2);
       },
       tools: [],
       timeout: "2m",
-      retry: { invalidOutput: 1, transientFailure: 0 },
     },
   };
 }
@@ -365,20 +376,7 @@ function verifierSchemaForCandidates(candidateIds: readonly string[]): Schema<Ve
         seenIds.add(finding.id);
       }
     });
-  return {
-    kind: "pipr.schema",
-    id: "core/prior-finding-verification",
-    jsonSchema: z.toJSONSchema(outputSchema) as Schema<VerifierOutput>["jsonSchema"],
-    parse(value) {
-      return outputSchema.parse(value);
-    },
-    safeParse(value) {
-      const parsed = outputSchema.safeParse(value);
-      return parsed.success
-        ? { success: true, data: parsed.data }
-        : { success: false, error: parsed.error };
-    },
-  };
+  return zodOutputSchema("core/prior-finding-verification", outputSchema);
 }
 
 function modelProfile(provider: ProviderConfig): ModelProfile {

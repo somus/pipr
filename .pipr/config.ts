@@ -1,40 +1,5 @@
-import type { DefaultReviewSummaryManifest, DiffManifest, ReviewFinding } from "@usepipr/sdk";
-import { definePipr, z } from "@usepipr/sdk";
-
-const categorizedFindingSchema = z.strictObject({
-  title: z.string().min(1).max(160),
-  severity: z.enum(["critical", "high", "medium", "low"]),
-  category: z.enum([
-    "correctness",
-    "security",
-    "reliability",
-    "performance",
-    "test-coverage",
-    "maintainability",
-    "documentation",
-  ]),
-  rationale: z.string().min(1).max(1200),
-  body: z.string().min(1).max(700),
-  path: z.string().min(1),
-  rangeId: z.string().min(1),
-  side: z.enum(["RIGHT", "LEFT"]),
-  startLine: z.number().int().positive(),
-  endLine: z.number().int().positive(),
-  suggestedFix: z.string().min(1).optional(),
-});
-type CategorizedFinding = ReviewFinding & {
-  title: string;
-  severity: "critical" | "high" | "medium" | "low";
-  category:
-    | "correctness"
-    | "security"
-    | "reliability"
-    | "performance"
-    | "test-coverage"
-    | "maintainability"
-    | "documentation";
-  rationale: string;
-};
+import type { ReviewSummaryInput } from "@usepipr/sdk";
+import { definePipr, md, z } from "@usepipr/sdk";
 
 const reviewSummarySchema = z.strictObject({
   headline: z.string().min(1).max(160),
@@ -44,92 +9,8 @@ const reviewSummarySchema = z.strictObject({
   reviewerFocus: z.array(z.string().min(1).max(500)).max(4),
 });
 
-const severityRank = { critical: 0, high: 1, medium: 2, low: 3 } as const;
-
-function hasCommentableAnchor(finding: ReviewFinding, manifest: DiffManifest): boolean {
-  const range = manifest.files
-    .find((file) => file.path === finding.path)
-    ?.commentableRanges.find(
-      (candidate) =>
-        candidate.id === finding.rangeId &&
-        candidate.path === finding.path &&
-        candidate.side === finding.side,
-    );
-  return Boolean(
-    range &&
-      finding.startLine <= finding.endLine &&
-      finding.startLine >= range.startLine &&
-      finding.endLine <= range.endLine,
-  );
-}
-
-function deduplicateFindings(findings: CategorizedFinding[]): CategorizedFinding[] {
-  const seen = new Set<string>();
-  return findings.filter((finding) => {
-    const key = JSON.stringify([
-      finding.path,
-      finding.rangeId,
-      finding.side,
-      finding.startLine,
-      finding.endLine,
-      finding.body,
-    ]);
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-function summaryManifest(manifest: DiffManifest): DefaultReviewSummaryManifest {
-  const files: DefaultReviewSummaryManifest["files"][number][] = [];
-  let serializedCharacters = 0;
-
-  for (const file of manifest.files) {
-    const projected = {
-      path: file.path.slice(0, 1_000),
-      ...(file.previousPath ? { previousPath: file.previousPath.slice(0, 1_000) } : {}),
-      status: file.status,
-      ...(file.language ? { language: file.language.slice(0, 100) } : {}),
-      additions: file.additions,
-      deletions: file.deletions,
-      ...(file.changedSymbols?.length
-        ? {
-            changedSymbols: file.changedSymbols.slice(0, 20).map((symbol) => symbol.slice(0, 200)),
-          }
-        : {}),
-      ...(file.excludedReason ? { excludedReason: file.excludedReason.slice(0, 500) } : {}),
-    };
-    const projectedCharacters = JSON.stringify(projected).length;
-    if (serializedCharacters + projectedCharacters > 40_000) {
-      continue;
-    }
-    files.push(projected);
-    serializedCharacters += projectedCharacters;
-  }
-
-  return {
-    baseSha: manifest.baseSha,
-    headSha: manifest.headSha,
-    mergeBaseSha: manifest.mergeBaseSha,
-    fileCount: manifest.files.length,
-    omittedFileCount: manifest.files.length - files.length,
-    files,
-  };
-}
-
-function escapeInlineCommentHtml(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-}
-
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   pipr.config({
     limits: {
@@ -151,16 +32,52 @@ export default definePipr((pipr) => {
     },
   });
 
-  const findingsOutput = pipr.schema({
-    id: "review/categorized-findings",
-    schema: z.strictObject({
-      inlineFindings: z.array(categorizedFindingSchema),
-    }),
+  const finding = pipr.finding({
+    title: z.string().min(1).max(160),
+    severity: z.enum(["critical", "high", "medium", "low"]),
+    category: z.enum([
+      "correctness",
+      "security",
+      "reliability",
+      "performance",
+      "test-coverage",
+      "maintainability",
+      "documentation",
+    ]),
+    rationale: z.string().min(1).max(1200),
+  });
+  type Finding = z.infer<typeof finding>;
+
+  const summaryReviewer = pipr.agent<
+    ReviewSummaryInput<Finding>,
+    z.infer<typeof reviewSummarySchema>
+  >({
+    name: "summary-reviewer",
+    model,
+    instructions: `
+      Make the summary maintainer-facing and scannable: one concrete headline,
+      one to four behavior-focused change bullets, a risk level with rationale,
+      and reviewer focus only for useful human follow-up. Use the selected
+      findings as evidence, but do not invent additional defects or copy
+      secret-looking literals into any summary field.
+    `,
+    output: reviewSummarySchema,
+    tools: pipr.tools.readOnly,
+    timeout: "10m",
+    prompt: ({ diff, findings }) =>
+      pipr.prompt`
+        Summarize this change using the selected findings.
+
+        ${pipr.section("Changed files", pipr.json(diff, { maxCharacters: 60_000 }))}
+
+        ${pipr.section("Selected findings", pipr.json(findings, { maxCharacters: 60_000 }))}
+      `,
   });
 
-  const findingsReviewer = pipr.agent({
-    name: "findings-reviewer",
+  pipr.review({
+    id: "review",
     model,
+    finding,
     instructions: `
       Review the pull request diff for correctness, security, reliability,
       performance, test coverage, maintainability, and documentation risks.
@@ -174,116 +91,30 @@ export default definePipr((pipr) => {
       Never copy secret-looking literals into title, body, rationale, or
       suggestedFix. Describe only the secret kind and location.
     `,
-    output: findingsOutput,
-    tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
+    summary: { agent: summaryReviewer },
     timeout: "10m",
-    prompt: () => "Review this change with severity and category metadata.",
+    render: ({ findings, summary }) => ({
+      main: md.blocks(
+        md`## 🧭 Summary`,
+        summary ? md`**${md.line(summary.headline)}**` : "",
+        summary
+          ? md`**Review risk:** ${md.label(summary.riskLevel)}. ${md.line(summary.riskSummary)}`
+          : "",
+        md`## 🗺️ What Changed`,
+        md.list(summary?.changeSummary ?? []),
+        summary?.reviewerFocus.length ? md`## 🎯 Reviewer Focus` : "",
+        md.list(summary?.reviewerFocus ?? []),
+      ),
+      inlineFindings: findings.map((item) => ({
+        ...item,
+        body: String(
+          md.blocks(
+            md`**${md.label(item.severity)} ${item.category.replaceAll("-", " ")}:** ${md.line(item.title)}`,
+            md`${item.body}`,
+            md.details("Rationale", md`${item.rationale}`),
+          ),
+        ),
+      })),
+    }),
   });
-
-  const summaryOutput = pipr.schema({
-    id: "review/rich-summary",
-    schema: reviewSummarySchema,
-  });
-
-  const summaryReviewer = pipr.agent({
-    name: "summary-reviewer",
-    model,
-    instructions: `
-      Make the summary maintainer-facing and scannable: one concrete headline,
-      one to four behavior-focused change bullets, a risk level with rationale,
-      and reviewer focus only for useful human follow-up. Use the selected
-      findings as evidence, but do not invent additional defects or copy
-      secret-looking literals into any summary field.
-    `,
-    output: summaryOutput,
-    tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
-    timeout: "10m",
-    prompt: ({ inlineFindings, manifestSummary }) =>
-      pipr.prompt`
-        Summarize this change using the selected findings.
-
-        ${pipr.section("Scoped compressed manifest", pipr.json(manifestSummary, { maxCharacters: 60_000 }))}
-
-        ${pipr.section("Selected findings", pipr.json(inlineFindings, { maxCharacters: 60_000 }))}
-      `,
-  });
-
-  const task = pipr.task({
-    name: "review",
-    async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
-      const result = await ctx.pi.run(findingsReviewer, { manifest });
-      const selectedFindings = deduplicateFindings(
-        result.inlineFindings.filter((finding) => hasCommentableAnchor(finding, manifest)),
-      )
-        .sort((left, right) => severityRank[left.severity] - severityRank[right.severity])
-        .slice(0, 8);
-      const summary = await ctx.pi.run(summaryReviewer, {
-        manifestSummary: summaryManifest(manifest),
-        inlineFindings: selectedFindings,
-      });
-      const inlineFindings: ReviewFinding[] = selectedFindings.map((finding) => {
-        const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
-        const category = finding.category.replaceAll("-", " ");
-        return {
-          body: [
-            `**${severity} ${category}:** ${escapeInlineCommentHtml(lineText(finding.title))}`,
-            "",
-            escapeInlineCommentHtml(finding.body),
-            "",
-            "<details>",
-            "<summary>Rationale</summary>",
-            "",
-            escapeInlineCommentHtml(finding.rationale),
-            "",
-            "</details>",
-          ].join("\n"),
-          path: finding.path,
-          rangeId: finding.rangeId,
-          side: finding.side,
-          startLine: finding.startLine,
-          endLine: finding.endLine,
-          ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
-        };
-      });
-      const sections = [
-        "## 🧭 Summary",
-        "",
-        `**${lineText(summary.headline)}**`,
-        "",
-        `**Review risk:** ${labelValue(summary.riskLevel)}. ${lineText(summary.riskSummary)}`,
-        "",
-        "## 🗺️ What Changed",
-        "",
-        bulletList(summary.changeSummary),
-      ];
-      if (summary.reviewerFocus.length > 0) {
-        sections.push("", "## 🎯 Reviewer Focus", "", bulletList(summary.reviewerFocus));
-      }
-      await ctx.comment({
-        main: sections.join("\n"),
-        inlineFindings,
-      });
-    },
-  });
-
-  pipr.on.changeRequest({
-    actions: ["opened", "updated", "reopened", "ready"],
-    task,
-  });
-  pipr.command({ pattern: "@pipr review", permission: "write", task });
 });
-
-function bulletList(items: string[]): string {
-  return items.map((item) => `- ${lineText(item)}`).join("\n");
-}
-
-function labelValue(value: string): string {
-  return value.replaceAll("-", " ").replace(/^./, (char) => char.toUpperCase());
-}
-
-function lineText(value: string): string {
-  return value.replace(/\r\n?|\n/g, " ").trim();
-}

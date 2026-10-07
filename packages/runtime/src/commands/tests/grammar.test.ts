@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { assertSupportedCommandRestCapture } from "@usepipr/sdk/internal";
+import { definePipr } from "@usepipr/sdk";
+import { buildPiprPlan } from "@usepipr/sdk/internal";
 import {
   commandPatternPrefixMatches,
   firstNonEmptyLine,
@@ -104,3 +105,12 @@ describe("command grammar", () => {
     expect(commandPatternPrefixMatches("@pipr explain <finding>", "@pipr review")).toBe(false);
   });
 });
+
+/** Registers a command through the public SDK so registration-time validation runs. */
+function assertSupportedCommandRestCapture(pattern: string): void {
+  buildPiprPlan(
+    definePipr((pipr) => {
+      pipr.command({ pattern, task: pipr.task({ name: "ask", run() {} }) });
+    }),
+  );
+}

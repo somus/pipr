@@ -4,7 +4,7 @@ import type { DiffStructuralAnalysisLoader } from "../../diff/structural-analysi
 import type { RunObserver } from "../../observability/types.js";
 import type { DiffContextCoverageObservation } from "../../pi/diff-context-coverage.js";
 import type { ProviderFailureRemediation } from "../../pi/provider-failure.js";
-import type { PiRunner, PiRunUsage } from "../../pi/types.js";
+import type { PiProviderModule, PiRunner, PiRunUsage } from "../../pi/types.js";
 import type { PriorReviewState } from "../../publication/types.js";
 import type { RuntimeLog } from "../../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
@@ -32,9 +32,12 @@ export type RunReviewAgentOptions = {
     providerOverride?: ProviderConfig;
     plan: RuntimePlan;
     env?: NodeJS.ProcessEnv;
-    piExecutable?: string;
-    piAgentDir?: string;
-    piRunner?: PiRunner;
+    piProviderModule?: PiProviderModule;
+    piAuthFile?: string;
+    /** Shares one worker and conversation store across a run, so repair can continue a conversation. */
+    piRunner: PiRunner;
+    /** Fork from a parent conversation holding the shared change context, so sibling calls share its cache prefix. */
+    forkSharedContext?: boolean;
     taskContext?: TaskContext;
     taskName?: string;
     priorReviewState?: PriorReviewState;
@@ -61,14 +64,7 @@ export type RunReviewAgentResult = {
   providerModels: string[];
 };
 
-export type ParseAgentResult =
-  | { ok: true; value: unknown; repairAttempted: boolean }
-  | { ok: false; error: string };
-
-export type RetrySettings = {
-  invalidOutput: number;
-  transientFailure: number;
-};
+export type ParseAgentResult = { ok: true; value: unknown } | { ok: false; error: string };
 
 export type AgentAttemptResult =
   | { ok: true; value: unknown; repairAttempted: boolean }

@@ -45,11 +45,7 @@ The default config uses this model profile:
 
 ```ts twoslash
 // @include: pipr-builder
-const model = pipr.model({
-  provider: "deepseek",
-  model: "deepseek-v4-pro",
-  apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-});
+const model = pipr.model("deepseek/deepseek-v4-pro");
 ```
 
 Add the matching Actions secret:

@@ -1,20 +1,14 @@
 import path from "node:path";
-import type {
-  InlinePublicationItem,
-  InlineThreadContext,
-  PriorReviewState,
-} from "../../publication/types.js";
+import type { InlinePublicationItem, InlineThreadContext } from "../../publication/types.js";
+import { parseInlineFindingMarker } from "../../review/comment-markers.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
-import {
-  applyInlineFindingMarkers,
-  applyNativeThreadResolutions,
-  applyResolvedFindingMarkers,
-  extractInlineFindingMarkerRecords,
-  extractPriorReviewState,
-} from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import { nativeInlineLocation } from "../publication.js";
+import { requireCoordinates } from "../change-request.js";
+import { assertEndpointsCurrent, type ChangeRequestEndpoints } from "../publication/workflow.js";
+import { inlineItemPath, nativeInlineLocation } from "../publication.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
+
+export const azureDevOpsProvider = "Azure DevOps";
 
 export function azureInlineLocationFromThread(
   thread: AzureDevOpsThread,
@@ -22,7 +16,7 @@ export function azureInlineLocationFromThread(
   const root = thread.comments[0];
   const context = thread.threadContext;
   if (!root || !context?.filePath) return undefined;
-  const marker = extractInlineFindingMarkerRecords([root.content])[0];
+  const marker = parseInlineFindingMarker(root.content);
   if (!marker) return undefined;
   const path = context.filePath.replace(/^\/+/, "");
   return nativeInlineLocation({
@@ -36,77 +30,15 @@ export function azureInlineLocationFromThread(
   });
 }
 
-export function azureInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
-  return {
-    path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
-    commitId: item.reviewedHeadSha,
-    side: item.side,
-    startLine: item.startLine,
-    endLine: item.endLine,
-  };
-}
-
-export async function loadAzureDevOpsPriorReviewState(options: {
-  client: AzureDevOpsClient;
-  change: ChangeRequestEventContext;
-}): Promise<PriorReviewState | undefined> {
-  const body = await loadAzureDevOpsPriorMainComment(options);
-  const state = extractPriorReviewState(body, options.change.change.number);
-  if (!state) return undefined;
-  const owner = await authenticatedAzureOwner(options.client);
-  const threads = await options.client.listThreads(
-    azureCoordinates(options.change).repositoryId,
-    options.change.change.number,
-  );
-  const bodies = ownedThreadComments(threads, owner.uniqueName).map((comment) => comment.content);
-  const markerState = applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
-  return applyNativeThreadResolutions(
-    markerState,
-    threads.flatMap((thread) => {
-      const root = thread.comments[0];
-      const marker = root ? extractInlineFindingMarkerRecords([root.content])[0] : undefined;
-      return root && marker && root.author?.uniqueName === owner.uniqueName
-        ? [
-            {
-              findingId: marker.id,
-              findingHeadSha: marker.head,
-              resolved: isAzureThreadResolved(thread),
-            },
-          ]
-        : [];
-    }),
-  );
-}
-
-export async function loadAzureDevOpsPriorMainComment(options: {
-  client: AzureDevOpsClient;
-  change: ChangeRequestEventContext;
-}): Promise<string | undefined> {
-  const owner = await authenticatedAzureOwner(options.client);
-  const threads = await options.client.listThreads(
-    azureCoordinates(options.change).repositoryId,
-    options.change.change.number,
-  );
-  return ownedAzureRootThread(
-    threads,
-    owner.uniqueName,
-    azureMainMarker(options.change.change.number),
-  )?.comments[0]?.content;
-}
-
-export async function loadAzureDevOpsInlineThreadContexts(options: {
-  client: AzureDevOpsClient;
-  change: ChangeRequestEventContext;
-}): Promise<InlineThreadContext[]> {
-  const owner = await authenticatedAzureOwner(options.client);
-  const threads = await options.client.listThreads(
-    azureCoordinates(options.change).repositoryId,
-    options.change.change.number,
-  );
+export function azureThreadContexts(
+  threads: AzureDevOpsThread[],
+  ownerUniqueName: string,
+  ownedRepliesOnly: boolean,
+): InlineThreadContext[] {
   return threads.flatMap((thread) => {
     const root = thread.comments[0];
-    const marker = root ? extractInlineFindingMarkerRecords([root.content])[0] : undefined;
-    if (!root || !marker || root.author?.uniqueName !== owner.uniqueName) return [];
+    const marker = root ? parseInlineFindingMarker(root.content) : undefined;
+    if (!root || !marker || root.author?.uniqueName !== ownerUniqueName) return [];
     return [
       {
         findingId: marker.id,
@@ -115,11 +47,11 @@ export async function loadAzureDevOpsInlineThreadContexts(options: {
         parentBody: root.content,
         threadId: thread.id,
         threadResolved: isAzureThreadResolved(thread),
-        comments: thread.comments.map((comment) => ({
-          id: comment.id,
-          body: comment.content,
-          authorLogin: comment.author?.uniqueName,
-        })),
+        comments: thread.comments.flatMap((comment) =>
+          !ownedRepliesOnly || comment.author?.uniqueName === ownerUniqueName
+            ? [{ id: comment.id, body: comment.content, authorLogin: comment.author?.uniqueName }]
+            : [],
+        ),
       },
     ];
   });
@@ -131,7 +63,7 @@ export async function azureInlineThread(
   changes: AzureDevOpsIterationChange[],
   iterationId: number,
 ): Promise<Record<string, unknown>> {
-  const selectedPath = item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path;
+  const selectedPath = inlineItemPath(item);
   const nativeChange = changes.find((candidate) => {
     const candidatePath =
       candidate.path === selectedPath || candidate.originalPath === selectedPath;
@@ -190,45 +122,39 @@ async function lineEndOffset(
   return content.length + 1;
 }
 
-export async function currentAzureNativeChange(
+export async function currentAzureEndpoints(
   client: AzureDevOpsClient,
   change: ChangeRequestEventContext,
-  reviewedHeadSha = change.change.head.sha,
-) {
-  const pullRequest = await assertCurrentAzurePullRequest(client, change, reviewedHeadSha);
+): Promise<ChangeRequestEndpoints> {
+  const coordinates = azureCoordinates(change);
+  const pullRequest = await client.getPullRequest(coordinates.repositoryId, change.change.number);
+  return {
+    headSha: pullRequest.lastMergeSourceCommit.commitId,
+    baseSha: pullRequest.lastMergeTargetCommit.commitId,
+  };
+}
+
+/** Asserts the pull request still matches the reviewed commits and returns the head iteration id. */
+export async function currentAzureIterationId(
+  client: AzureDevOpsClient,
+  change: ChangeRequestEventContext,
+  reviewedHeadSha: string,
+  stage?: string,
+): Promise<number> {
+  assertEndpointsCurrent(azureDevOpsProvider, await currentAzureEndpoints(client, change), change, {
+    headSha: reviewedHeadSha,
+    stage,
+  });
   const coordinates = azureCoordinates(change);
   const iterations = await client.listIterations(coordinates.repositoryId, change.change.number);
   const iteration = iterations.findLast((candidate) => candidate.headSha === reviewedHeadSha);
   if (!iteration)
     throw new Error(`Azure DevOps has no pull request iteration for head ${reviewedHeadSha}`);
-  return { pullRequest, iterationId: iteration.id };
+  return iteration.id;
 }
 
-export async function assertCurrentAzurePullRequest(
-  client: AzureDevOpsClient,
-  change: ChangeRequestEventContext,
-  reviewedHeadSha = change.change.head.sha,
-) {
-  const coordinates = azureCoordinates(change);
-  const pullRequest = await client.getPullRequest(coordinates.repositoryId, change.change.number);
-  if (pullRequest.lastMergeSourceCommit.commitId !== reviewedHeadSha) {
-    throw new Error(
-      `Azure DevOps pull request head changed from ${reviewedHeadSha} to ${pullRequest.lastMergeSourceCommit.commitId}`,
-    );
-  }
-  if (pullRequest.lastMergeTargetCommit.commitId !== change.change.base.sha) {
-    throw new Error(
-      `Azure DevOps pull request base changed from ${change.change.base.sha} to ${pullRequest.lastMergeTargetCommit.commitId}`,
-    );
-  }
-  return pullRequest;
-}
-
-export function azureCoordinates(change: ChangeRequestEventContext) {
-  if (change.coordinates?.provider !== "azure-devops") {
-    throw new Error("Azure DevOps adapter requires Azure DevOps coordinates");
-  }
-  return change.coordinates;
+export function azureCoordinates(change: Pick<ChangeRequestEventContext, "coordinates">) {
+  return requireCoordinates(change, "azure-devops", "Azure DevOps");
 }
 
 export function ownedAzureRootThread(
@@ -244,12 +170,6 @@ export function ownedAzureRootThread(
       root.content.trimStart().startsWith(marker)
     );
   });
-}
-
-function ownedThreadComments(threads: AzureDevOpsThread[], uniqueName: string) {
-  return threads.flatMap((thread) =>
-    thread.comments.filter((comment) => comment.author?.uniqueName === uniqueName),
-  );
 }
 
 export async function authenticatedAzureOwner(
@@ -273,8 +193,4 @@ export function isAzureThreadResolved(thread: AzureDevOpsThread): boolean {
     thread.status === "wontFix" ||
     thread.status === "byDesign"
   );
-}
-
-export function azureMainMarker(changeNumber: number): string {
-  return `<!-- pipr:main-comment change=${changeNumber} `;
 }

@@ -1,26 +1,25 @@
-import { rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
-  type HostRunCommandOptions,
-  parseRunBundleRecipients,
-  prepareRunBundlePackage,
+  parseWebhookHostId,
   type RuntimeLogRecord,
   type RuntimeLogSink,
+  readWebhookDeliveryStatus,
+  runAgentWorkerCommand,
   runDryRunCommand,
   runHostRunCommand,
   runInitCommand,
   runInspectCommand,
   runLocalReviewCommand,
   runValidateCommand,
+  runWebhookServer,
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
 import { stripPiprMainCommentMarkers, toPiprResult } from "@usepipr/runtime/host-run/pipr-result";
 import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
-import { Command, CommanderError } from "commander";
+import { Command, CommanderError, Option } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import {
   defaultLocalTraceStore,
@@ -62,8 +61,9 @@ type CliOptions = {
   requireEnv?: boolean;
   base?: string;
   head?: string;
-  piExecutable?: string;
-  piAgentDir?: string;
+  providerModule?: string;
+  providerConfig?: string;
+  piAuthFile?: string;
   json?: boolean;
   limit?: string;
   trace?: string | boolean;
@@ -87,6 +87,10 @@ type MainOptions = {
 
 export async function runMain(options: MainOptions = {}): Promise<void> {
   const argv = options.argv ?? process.argv;
+  if (argv[2] === "agent-worker") {
+    await runAgentWorkerCommand(argv.slice(3));
+    return;
+  }
   const context: CliExecutionContext = {
     cwd: options.cwd ?? process.cwd(),
     env: options.env ?? process.env,
@@ -181,7 +185,7 @@ function createProgram(
     .requiredOption("--event <path>", "Native event payload path")
     .option("--host <host>", "Code host adapter")
     .option("--config-dir <dir>", "Config directory", ".pipr")
-    .action((commandOptions: CliOptions) => runDryRun(commandOptions, context));
+    .action((commandOptions: CliOptions & { event: string }) => runDryRun(commandOptions, context));
 
   program
     .command("inspect")
@@ -195,9 +199,10 @@ function createProgram(
     .requiredOption("--base <sha>", "Base commit SHA")
     .option("--head <sha>", "Head commit SHA or ref; omitted reviews the working tree")
     .option("--config-dir <dir>", "Config directory", ".pipr")
-    .option("--pi-executable <path>", "Pi executable path")
     .option("--trace [path]", "Capture a diagnostic run bundle")
-    .option("--pi-agent-dir <path>", "Pi agent directory for local authentication")
+    .option("--pi-auth-file <path>", "Pi auth file for models without apiKey")
+    .option("--provider-module <path>", "Module whose default export returns Pi providers")
+    .option("--provider-config <path>", "Config path passed to the provider module")
     .option("--json", "Print structured JSON output")
     .action((commandOptions: CliOptions & { base: string }) =>
       runLocalReview(commandOptions, context),
@@ -227,12 +232,7 @@ function createProgram(
     .option("--repository <repository>", "Provider repository path")
     .option("--kind <kind>", "Run kind (review, command, verifier, startup, or all)")
     .option("--timeline", "Print the complete span timeline")
-    .option(
-      "--identity <path>",
-      "Age identity file; repeat for multiple identities",
-      collectOption,
-      [],
-    )
+    .addOption(identityOption())
     .option("--json", "Print versioned JSON without prompt or output bodies")
     .option("--store <path>", "Local run store")
     .action(async (executionId: string | undefined, runOptions: RunsShowOptions) => {
@@ -246,12 +246,7 @@ function createProgram(
     .option("--repository <repository>", "Provider repository path")
     .option("--output <path>", "Destination directory")
     .option("--archive", "Preserve the GitHub Actions archive beside the unpacked bundle")
-    .option(
-      "--identity <path>",
-      "Age identity file; repeat for multiple identities",
-      collectOption,
-      [],
-    )
+    .addOption(identityOption())
     .option("--store <path>", "Local run store")
     .action(async (executionId: string, runOptions: RunsDownloadOptions) => {
       await runRunsDownload(executionId, runOptions, context);
@@ -261,12 +256,7 @@ function createProgram(
     .description("Validate and diagnose a downloaded run bundle")
     .argument("<path>", "Downloaded Run Bundle package, archive, or directory")
     .option("--timeline", "Print the complete span timeline")
-    .option(
-      "--identity <path>",
-      "Age identity file; repeat for multiple identities",
-      collectOption,
-      [],
-    )
+    .addOption(identityOption())
     .option("--json", "Print versioned JSON without prompt or output bodies")
     .action(async (inputPath: string, runOptions: RunsInspectOptions) => {
       await runRunsInspect(inputPath, runOptions, context);
@@ -295,8 +285,10 @@ function createProgram(
   return program;
 }
 
-function collectOption(value: string, previous: string[]): string[] {
-  return [...previous, value];
+function identityOption(): Option {
+  return new Option("--identity <path>", "Age identity file; repeat for multiple identities")
+    .argParser((value: string, previous: string[]) => [...previous, value])
+    .default([]);
 }
 
 const agentHelpText = `
@@ -314,24 +306,19 @@ Prefer it over guessing commands or config shape from memory.
 async function runHostRun(options: CliOptions, context: CliExecutionContext): Promise<void> {
   const { env } = context;
   const isGitHubAction = env.GITHUB_ACTIONS === "true";
-  const rootDir = hostRunRootDir(context);
   const result = await runHostRunCommand({
-    rootDir,
+    cwd: context.cwd,
     configDir: options.configDir,
     host: options.host,
-    eventPath: resolveCliPath(
-      context.cwd,
-      options.event ??
-        env.PIPR_EVENT_PATH ??
-        env.GITEA_EVENT_PATH ??
-        env.FORGEJO_EVENT_PATH ??
-        env.GITHUB_EVENT_PATH,
-    ),
+    eventPath: options.event,
     env,
     dryRun: env.PIPR_DRY_RUN === "1",
     logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
-    onRunBundleFinalized: async (bundle) => {
-      await prepareAndPublishRunBundle(bundle, { env, rootDir });
+    onRunBundlePublished(bundle) {
+      if (!isGitHubAction) return;
+      core.setOutput("execution-id", bundle.executionId);
+      core.setOutput("run-bundle-path", bundle.bundlePath);
+      core.setOutput("run-artifact-name", bundle.artifactName);
     },
   });
   if (isGitHubAction) {
@@ -351,80 +338,14 @@ async function runHostRun(options: CliOptions, context: CliExecutionContext): Pr
   console.log(`pipr ${result.kind} completed for change #${result.event.change.number}`);
 }
 
-async function prepareAndPublishRunBundle(
-  bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0],
-  options: { env: NodeJS.ProcessEnv; rootDir: string },
-): Promise<void> {
-  const captureRoot = path.dirname(bundle.directory);
-  try {
-    const prepared = await prepareRunBundlePackage({
-      bundleDirectory: bundle.directory,
-      destinationRoot: options.env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"),
-      recipients: parseRunBundleRecipients(options.env.PIPR_RUN_AGE_RECIPIENTS),
-    });
-    await publishRunBundleMetadata(
-      { ...bundle, directory: prepared.directory, protection: prepared.envelope.protection },
-      options,
-    );
-  } finally {
-    if (
-      path.dirname(captureRoot) === path.resolve(os.tmpdir()) &&
-      path.basename(captureRoot).startsWith("pipr-run-capture-")
-    ) {
-      await rm(captureRoot, { recursive: true, force: true }).catch(() => undefined);
-    }
-  }
-}
-
-export async function publishRunBundleMetadata(
-  bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0] & {
-    protection?: "metadata" | "age";
-  },
-  options: { env: NodeJS.ProcessEnv; rootDir: string },
-): Promise<void> {
-  const relative = path.relative(options.rootDir, bundle.directory);
-  const bundlePath = relative && !relative.startsWith("..") ? relative : bundle.directory;
-  const changeNumber = bundle.repository?.changeNumber;
-  const protection = bundle.protection ?? "unknown";
-  const artifactName = changeNumber
-    ? `pipr-run-v1-${protection}-pr-${changeNumber}-${bundle.executionId}`
-    : `pipr-run-v1-${protection}-${bundle.executionId}`;
-  publishGitHubRunMetadata(options.env, bundle.executionId, bundlePath, artifactName);
-}
-
-function publishGitHubRunMetadata(
-  env: NodeJS.ProcessEnv,
-  executionId: string,
-  bundlePath: string,
-  artifactName: string,
-): void {
-  if (env.GITHUB_ACTIONS !== "true") return;
-  core.setOutput("execution-id", executionId);
-  core.setOutput("run-bundle-path", bundlePath);
-  core.setOutput("run-artifact-name", artifactName);
-}
-
 function resolveCliPath(cwd: string, value: string | undefined): string | undefined {
   return value === undefined ? undefined : path.resolve(cwd, value);
 }
 
-function hostRunRootDir(context: CliExecutionContext): string {
-  return (
-    context.env.GITEA_WORKSPACE ??
-    context.env.FORGEJO_WORKSPACE ??
-    context.env.GITHUB_WORKSPACE ??
-    context.env.CI_PROJECT_DIR ??
-    context.env.BITBUCKET_CLONE_DIR ??
-    context.env.BUILD_SOURCESDIRECTORY ??
-    context.cwd
-  );
-}
-
 async function runWebhookServe(options: CliOptions, context: CliExecutionContext): Promise<void> {
-  const { runWebhookServer } = await import("@usepipr/runtime");
   const secret = context.env.PIPR_WEBHOOK_SECRET;
   if (!secret) throw new Error("PIPR_WEBHOOK_SECRET is required");
-  const host = webhookHost(options.host);
+  const host = parseWebhookHostId(options.host);
   const port = webhookPort(options.port);
   await runWebhookServer({
     host,
@@ -455,7 +376,6 @@ function positiveIntegerOption(value: string | undefined, name: string): number 
 }
 
 async function runWebhookStatus(options: CliOptions, context: CliExecutionContext): Promise<void> {
-  const { readWebhookDeliveryStatus } = await import("@usepipr/runtime");
   const limit = Number(options.limit);
   const databasePath = path.resolve(context.cwd, options.database ?? ".pipr/webhooks.sqlite");
   const deliveries = readWebhookDeliveryStatus(databasePath, limit);
@@ -485,24 +405,6 @@ async function runWebhookStatus(options: CliOptions, context: CliExecutionContex
 
 function shorten(value: string, length: number): string {
   return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
-}
-
-function webhookHost(
-  value: string | undefined,
-): "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg" {
-  if (
-    value === "gitlab" ||
-    value === "azure-devops" ||
-    value === "bitbucket" ||
-    value === "gitea" ||
-    value === "forgejo" ||
-    value === "codeberg"
-  ) {
-    return value;
-  }
-  throw new Error(
-    "webhook serve supports --host gitlab, azure-devops, bitbucket, gitea, forgejo, or codeberg",
-  );
 }
 
 function webhookPort(value: string | undefined): number {
@@ -680,13 +582,35 @@ async function runLocalReview(
     env: context.env,
     baseSha: options.base,
     headSha: options.head,
-    piExecutable: options.piExecutable,
     traceDirectory,
-    piAgentDir: options.piAgentDir,
+    piAuthFile: options.piAuthFile,
+    ...(options.providerModule
+      ? {
+          piProviderModule: {
+            path: path.resolve(context.cwd, options.providerModule),
+            ...(options.providerConfig
+              ? { config: path.resolve(context.cwd, options.providerConfig) }
+              : {}),
+          },
+        }
+      : {}),
     logSink: localConsoleLogSink,
     taskLog: stderrTaskLog,
   });
   writeLocalReviewResult(result, options.json === true);
+  assertLocalReviewChecksPassed(result);
+}
+
+/** Fails like CI after the result is printed when any task check or gate concluded `failure`. */
+function assertLocalReviewChecksPassed(result: LocalReviewResult): void {
+  const failed = result.taskChecks.filter((check) => check.conclusion === "failure");
+  if (failed.length === 0) {
+    return;
+  }
+  const details = failed.map((check) =>
+    check.summary ? `${check.taskName} (${check.summary})` : check.taskName,
+  );
+  throw new Error(`pipr review failed: ${details.join(", ")}`);
 }
 
 type LocalReviewResult = Awaited<ReturnType<typeof runLocalReviewCommand>>;
@@ -713,18 +637,15 @@ const localConsoleLogSink: RuntimeLogSink = {
 };
 
 function formatLocalLogRecord(record: RuntimeLogRecord): string {
+  const level = record.level === "info" || record.level === "notice" ? "" : record.level;
   const fields = Object.entries(record.fields)
-    .map(([key, value]) => formatLocalLogField(key, value))
-    .filter((field): field is string => field !== undefined);
-  const prefix = formatLocalLogPrefix(record);
-  const formatted = [...prefix, ...fields].join(" ");
+    .filter(([, value]) => value != null)
+    .map(([key, value]) => {
+      const formatter = typeof value === "number" ? localLogNumberFields[key] : undefined;
+      return formatter ? formatter(value as number) : `${key}=${formatLocalLogValue(value)}`;
+    });
+  const formatted = [...["pipr", level, record.event].filter(Boolean), ...fields].join(" ");
   return record.text === undefined ? formatted : `${formatted}\n${record.text}`;
-}
-
-function formatLocalLogPrefix(record: RuntimeLogRecord): string[] {
-  return ["pipr", localLogPlainLevels.has(record.level) ? "" : record.level, record.event].filter(
-    Boolean,
-  );
 }
 
 const localLogNumberFields: Record<string, (value: number) => string> = {
@@ -737,39 +658,12 @@ const localLogNumberFields: Record<string, (value: number) => string> = {
   stdoutBytes: (value) => `stdout=${value}B`,
 };
 
-const localLogPlainLevels = new Set(["info", "notice"]);
-
-function formatLocalLogField(key: string, value: unknown): string | undefined {
-  if (value == null) {
-    return undefined;
-  }
-
-  return formatLocalLogFieldValue(key, value);
-}
-
-function formatLocalLogFieldValue(key: string, value: unknown): string {
-  const formattedNumber =
-    typeof value === "number" ? localLogNumberFields[key]?.(value) : undefined;
-  return formattedNumber ?? `${key}=${formatLocalLogValue(value)}`;
-}
-
-const localLogValueFormatters: Record<string, (value: unknown) => string> = {
-  boolean: String,
-  number: String,
-  object: (value) =>
-    Array.isArray(value)
-      ? value.length === 0
-        ? "-"
-        : value.map(formatLocalLogValue).join(",")
-      : JSON.stringify(value),
-  string: (value) => {
-    const text = String(value);
-    return /\s/.test(text) ? JSON.stringify(text) : text;
-  },
-};
-
 function formatLocalLogValue(value: unknown): string {
-  return (localLogValueFormatters[typeof value] ?? JSON.stringify)(value);
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  if (typeof value === "string") return /\s/.test(value) ? JSON.stringify(value) : value;
+  if (Array.isArray(value))
+    return value.length === 0 ? "-" : value.map(formatLocalLogValue).join(",");
+  return JSON.stringify(value);
 }
 
 function writeLocalReviewResult(result: LocalReviewResult, json: boolean): void {
@@ -802,10 +696,10 @@ function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }
     : [mainComment.trimEnd(), "", "## Inline Findings", "", inlineFindings.join("\n\n")].join("\n");
 }
 
-async function runDryRun(options: CliOptions, context: CliExecutionContext): Promise<void> {
-  if (!options.event) {
-    throw new Error("dry-run requires --event <path>");
-  }
+async function runDryRun(
+  options: CliOptions & { event: string },
+  context: CliExecutionContext,
+): Promise<void> {
   const result = await runDryRunCommand({
     rootDir: context.cwd,
     configDir: options.configDir,

@@ -3,8 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { InlinePublicationItem } from "../../../publication/types.js";
-import { buildPublicationPlan } from "../../../review/comment.js";
-import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
+import { renderInlineFindingMarker } from "../../../review/comment-markers.js";
+import { buildPriorReviewState } from "../../../review/prior-state.js";
+import { buildPublicationPlan } from "../../../review/publication-plan.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import {
   type CodeHostAdapterConformanceHarness,
@@ -53,38 +54,6 @@ describe("GitLab host adapter", () => {
     expect(status).toEqual({ id: "status-1", name: "review" });
   });
 
-  it("fails stale publication before any GitLab write", async () => {
-    const client = new FakeGitLabClient();
-    client.mergeRequest = {
-      ...client.mergeRequest,
-      diff_refs: { ...client.mergeRequest.diff_refs, head_sha: "new-head" },
-    };
-    const adapter = createGitLabHostAdapter({ client });
-
-    await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
-      "head changed",
-    );
-    expect(client.notes).toEqual([]);
-    expect(client.discussions).toEqual([]);
-  });
-
-  it("rechecks the head after publication reads and before the first write", async () => {
-    const client = new FakeGitLabClient();
-    client.afterListNotes = () => {
-      client.mergeRequest = {
-        ...client.mergeRequest,
-        diff_refs: { ...client.mergeRequest.diff_refs, head_sha: "new-head" },
-      };
-    };
-    const adapter = createGitLabHostAdapter({ client });
-
-    await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
-      "head changed",
-    );
-    expect(client.notes).toEqual([]);
-    expect(client.discussions).toEqual([]);
-  });
-
   it("loads prior state and inline discussion contexts", async () => {
     const client = new FakeGitLabClient();
     const adapter = createGitLabHostAdapter({ client });
@@ -98,17 +67,9 @@ describe("GitLab host adapter", () => {
     ]);
   });
 
-  it("exposes full capabilities and upserts command responses", async () => {
+  it("upserts command responses in one marked note", async () => {
     const client = new FakeGitLabClient();
     const adapter = createGitLabHostAdapter({ client });
-    expect(adapter.capabilities).toEqual({
-      commandComments: true,
-      reviewCommentReplies: true,
-      threadResolution: true,
-      multilineInlineComments: true,
-      suggestedChanges: true,
-      statuses: true,
-    });
 
     await expect(
       adapter.publication?.publishCommandResponse?.({
@@ -308,6 +269,7 @@ class FakeGitLabClient implements GitLabClient {
   afterListNotes?: () => void;
   permission: RepositoryPermission = "write";
   permissionActors: string[] = [];
+  changeLoads = 0;
   mainCreates = 0;
   mainUpdates = 0;
   commandCreates = 0;
@@ -331,11 +293,14 @@ class FakeGitLabClient implements GitLabClient {
   };
   getProject = async () => ({ id: "42", path: "group/project" });
   currentUser = async () => ({ id: 1, username: "pipr-bot" });
-  loadChange = async () => ({
-    repository: { slug: "group/project" },
-    coordinates: { provider: "gitlab" as const, projectId: "42", projectPath: "group/project" },
-    change: change.change,
-  });
+  loadChange = async () => {
+    this.changeLoads += 1;
+    return {
+      repository: { slug: "group/project" },
+      coordinates: { provider: "gitlab" as const, projectId: "42", projectPath: "group/project" },
+      change: change.change,
+    };
+  };
   getMergeRequest = async () => this.mergeRequest;
   getRepositoryPermission = async (_projectId: string, actor: string) => {
     this.permissionActors.push(actor);
@@ -515,6 +480,10 @@ async function createGitLabConformanceHarness(): Promise<CodeHostAdapterConforma
         }),
       );
       const reply = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
+      return { changeRequest, command, reply };
+    },
+    async draftEvent() {
+      const eventPath = path.join(root, "draft.json");
       await Bun.write(
         eventPath,
         JSON.stringify({
@@ -523,9 +492,9 @@ async function createGitLabConformanceHarness(): Promise<CodeHostAdapterConforma
           object_attributes: { iid: 7, action: "open", draft: true },
         }),
       );
-      const draft = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
-      return { changeRequest, command, reply, draft };
+      return adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
     },
+    changeLoads: () => client.changeLoads,
     setPermission(permission) {
       client.permission = permission;
     },
@@ -558,13 +527,13 @@ async function createGitLabConformanceHarness(): Promise<CodeHostAdapterConforma
     failNextInline() {
       client.createDiscussionError = new Error("GitLab rejected the position");
     },
-    seedForeignInline() {
+    seedForeignInline(body) {
       client.discussions.push({
         id: "discussion-foreign",
         notes: [
           {
             id: "inline-foreign",
-            body: `${renderInlineFindingMarker("foreign", "head")}\nForeign.`,
+            body,
             author: { id: 2, username: "developer" },
             resolved: false,
             position: {
@@ -580,6 +549,9 @@ async function createGitLabConformanceHarness(): Promise<CodeHostAdapterConforma
           },
         ],
       });
+    },
+    seedForeignMainComment(body) {
+      client.notes.push({ id: "foreign-main", body, author: { id: 2, username: "developer" } });
     },
     seedForeignReply(body) {
       const discussion = client.discussions.find(

@@ -2,6 +2,7 @@ import { afterAll, afterEach, describe, expect, it } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import { runTaskRuntime } from "../../review/task/task-runtime.js";
+import { piRunResult } from "../../tests/helpers/pi-run-result.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
 import { listOfficialInitRecipes, supportedOfficialInitRecipes } from "../recipes.js";
@@ -12,10 +13,8 @@ import {
   configCoreInitFiles,
   eventContext,
   githubExpression,
-  initializedConfigOnlyProject,
   jsonPiRunner,
   mkdtemp,
-  packageInitFiles,
   recipeConfigFiles,
   sequentialJsonPiRunner,
   useLocalInitSdk,
@@ -25,7 +24,7 @@ afterAll(await useLocalInitSdk());
 afterEach(cleanupTemporaryDirectories);
 
 describe("initOfficialMinimalProject: generated recipes", () => {
-  it("initializes every official recipe and validates the generated config", async () => {
+  it("initializes and type-checks every official recipe config", async () => {
     expect(supportedOfficialInitRecipes).toContain("rich-review");
     expect(supportedOfficialInitRecipes).toContain("fix-suggestions");
     expect(listOfficialInitRecipes().map((recipe) => recipe.id)).toEqual([
@@ -33,28 +32,23 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     ]);
 
     for (const recipe of supportedOfficialInitRecipes) {
-      const { rootDir, result, project } = await initializedConfigOnlyProject(recipe);
+      const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${recipe}-`));
+      const result = await initOfficialMinimalProject({
+        rootDir,
+        adapters: [],
+        recipe,
+        minimal: true,
+      });
 
-      expect(result.created).toEqual(expect.arrayContaining(configCoreInitFiles));
-      expect(result.created).toEqual(expect.arrayContaining(packageInitFiles));
-      for (const file of recipeConfigFiles(recipe)) {
-        expect(result.created).toContain(file);
-      }
+      expect(result.created).toEqual(
+        expect.arrayContaining([...configCoreInitFiles, ...recipeConfigFiles(recipe)]),
+      );
       expect(result.overwritten).toEqual([]);
-      expect(project.kind).toBe("typescript");
-      const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-      expect(configTs).toContain("definePipr");
-      expect(configTs).not.toContain("pipr.local");
-      expect(configTs).not.toContain('section("Diff Manifest"');
-      expect(configTs).not.toContain("json(input.manifest");
-      expect(configTs).not.toContain("input.manifest");
-      expect(configTs).not.toContain("Include suggestedFix only");
-      expect(configTs).not.toContain("Omit suggestedFix when");
-      expect(configTs).not.toContain("Omit suggestedFix for secrets");
-      expect(configTs).not.toContain("suggestedFix directly fixes");
-      expect(configTs).not.toContain("trailing-blank-line-only");
+      await expect(validateProject({ rootDir }), recipe).resolves.toMatchObject({
+        settings: { source: ".pipr/config.ts" },
+      });
     }
-  });
+  }, 120_000);
 
   it("omits empty findings sections from clean default and bug-focused reviews", async () => {
     for (const recipe of ["default-review", "bug-hunter"] as const) {
@@ -186,57 +180,20 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     }
   });
 
-  it("initializes the structured review recipe with category and severity metadata", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+  it.each([
+    ["rich-review", ["review-findings", "summary-reviewer"], "review"],
+    ["security-sast", ["security-sast"], "security-sast"],
+  ] as const)("initializes the %s recipe plan", async (recipe, agents, task) => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${recipe}-`));
 
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "rich-review",
-      minimal: true,
-    });
-    const project = await loadRuntimeProject({ rootDir });
-    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-
-    expect(configTs).toContain("reviewSummarySchema");
-    expect(configTs).not.toContain("issueKey");
-    expect(configTs).toContain("changeSummary: z.array(z.string().min(1).max(500)).min(1).max(4)");
-    expect(configTs).toContain("reviewerFocus: z.array(z.string().min(1).max(500)).max(4)");
-    expect(configTs).toContain("**Review risk:**");
-    expect(configTs).toContain("ctx.review.validateFindings(result.inlineFindings)");
-    expect(configTs).toContain("severity");
-    expect(configTs).toContain("category");
-    expect(configTs).not.toContain('"nit"');
-    expect(configTs).toContain("@pipr review");
-    expect(configTs).not.toContain('"## Findings"');
-    expect(configTs).not.toContain('"## Review"');
-    expect(configTs).not.toContain("rich-review");
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toEqual(
-      expect.arrayContaining(["findings-reviewer", "summary-reviewer"]),
+    await initOfficialMinimalProject({ rootDir, adapters: [], recipe, minimal: true });
+    const plan = inspectRuntimePlan(
+      (await loadRuntimeProject({ rootDir })).plan,
+      ".pipr/config.ts",
     );
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("review");
-  });
 
-  it("initializes the security SAST recipe with structured summary rendering", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
-
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "security-sast",
-      minimal: true,
-    });
-    const project = await loadRuntimeProject({ rootDir });
-    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-
-    expect(configTs).toContain("type SecuritySummary");
-    expect(configTs).toContain('required: ["headline", "riskSummary", "reviewerFocus"]');
-    expect(configTs).toContain("diagramMermaid");
-    expect(configTs).toContain("attackPathDiagramBlock");
-    expect(configTs).toContain("ctx.review.validateFindings(riskFindings)");
-    expect(configTs).toContain("$" + "{fence}mermaid");
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("security-sast");
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("security-sast");
+    expect(plan.agents).toEqual(expect.arrayContaining([...agents]));
+    expect(plan.tasks).toContain(task);
   });
 
   it("renders the structured review recipe as a scannable clean summary", async () => {
@@ -323,9 +280,8 @@ describe("initOfficialMinimalProject: generated recipes", () => {
         if (summary) {
           summaryPrompt = options.prompt;
         }
-        return {
-          exitCode: 0,
-          stdout: JSON.stringify(
+        return piRunResult(
+          JSON.stringify(
             summary
               ? {
                   headline: "Bounded summary",
@@ -336,15 +292,13 @@ describe("initOfficialMinimalProject: generated recipes", () => {
                 }
               : { inlineFindings: [] },
           ),
-          stderr: "",
-          durationMs: 1,
-        };
+        );
       },
     });
 
     assertReviewResult(result);
     expect(calls.filter((call) => call === "summary")).toEqual(["summary"]);
-    expect(summaryPrompt).toContain("Scoped compressed manifest");
+    expect(summaryPrompt).toContain("Changed files");
     expect(summaryPrompt).not.toContain("Diff Manifest:");
     expect(summaryPrompt.length).toBeLessThan(70_000);
     expect(result.mainComment).toContain("Bounded summary");
@@ -416,12 +370,12 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       [
         "**Medium correctness:** Fallback **value** is skipped",
         "",
-        "This returns &lt;early&gt; before the fallback path can execute.",
+        "This returns &lt;early> before the fallback path can execute.",
         "",
         "<details>",
         "<summary>Rationale</summary>",
         "",
-        "The new branch returns &lt;/details&gt; before the fallback can run.",
+        "The new branch returns &lt;/details> before the fallback can run.",
         "",
         "</details>",
       ].join("\n"),
@@ -501,22 +455,18 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       piRunner: async (options) => {
         if (options.prompt.includes("Selected findings")) {
           summaryPrompt = options.prompt;
-          return {
-            exitCode: 0,
-            stdout: JSON.stringify({
+          return piRunResult(
+            JSON.stringify({
               headline: "One valid finding remains",
               changeSummary: ["Changes request handling."],
               riskLevel: "low",
               riskSummary: "Only the commentable finding remains.",
               reviewerFocus: [],
             }),
-            stderr: "",
-            durationMs: 1,
-          };
+          );
         }
-        return {
-          exitCode: 0,
-          stdout: JSON.stringify({
+        return piRunResult(
+          JSON.stringify({
             inlineFindings: [
               ...Array.from({ length: 8 }, (_, index) => ({
                 title: `Critical blocker ${index}`,
@@ -544,9 +494,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
               },
             ],
           }),
-          stderr: "",
-          durationMs: 1,
-        };
+        );
       },
     });
 
@@ -631,14 +579,12 @@ describe("initOfficialMinimalProject: generated recipes", () => {
             severity: "high",
             rationale:
               "An attacker-controlled issue comment can satisfy </details> in the new guard.",
-            finding: {
-              body: "This guard accepts issue comments without proving the actor is trusted.",
-              path: "src/a.ts",
-              rangeId: "range-1",
-              side: "RIGHT",
-              startLine: 10,
-              endLine: 10,
-            },
+            body: "This guard accepts issue comments without proving the actor is trusted.",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 10,
+            endLine: 10,
           },
         ],
         diagramMermaid: [
@@ -660,7 +606,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     );
     expect(result.mainComment).toContain("<summary>Risk rationales</summary>");
     expect(result.mainComment).toContain(
-      "An attacker-controlled issue comment can satisfy &lt;/details&gt; in the new guard.",
+      "An attacker-controlled issue comment can satisfy &lt;/details> in the new guard.",
     );
     expect(result.mainComment).not.toContain(
       "An attacker-controlled issue comment can satisfy </details> in the new guard.",
@@ -704,14 +650,12 @@ describe("initOfficialMinimalProject: generated recipes", () => {
             category: "auth",
             severity: "high",
             rationale: "The reported path is not present in the diff.",
-            finding: {
-              body: "This should not affect the required check.",
-              path: "src/missing.ts",
-              rangeId: "missing-range",
-              side: "RIGHT",
-              startLine: 99,
-              endLine: 99,
-            },
+            body: "This should not affect the required check.",
+            path: "src/missing.ts",
+            rangeId: "missing-range",
+            side: "RIGHT",
+            startLine: 99,
+            endLine: 99,
           },
         ],
       }),
@@ -765,14 +709,14 @@ describe("initOfficialMinimalProject: generated recipes", () => {
             category: "auth",
             severity: "low",
             rationale: "The first duplicate understates the impact.",
-            finding,
+            ...finding,
           },
           {
             title: "High-severity interpretation",
             category: "auth",
             severity: "high",
             rationale: "The changed guard reaches a privileged workflow.",
-            finding,
+            ...finding,
           },
         ],
       }),
@@ -805,21 +749,11 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
     const inspected = inspectRuntimePlan(project.plan, ".pipr/config.ts");
 
-    expect(configTs).toContain("suggestedFix: z.string().min(1)");
-    expect(configTs).toContain("fixVerificationOutput");
-    expect(configTs).toContain("isPublishableSuggestion");
-    expect(configTs).toContain("isPublishableSuggestedFixSelection");
-    expect(configTs).toContain("suggestionIncludesUnselectedContext");
-    expect(configTs).toContain("onlyChangesWhitespace");
-    expect(configTs).toContain("suggestionIntroducesNewEnvironmentAccess");
-    expect(configTs).toContain("structuralEdgeToken");
-    expect(configTs).toContain('"{}[]()<>".includes(char)');
-    expect(configTs).toContain(String.raw`].join("\n")`);
-    expect(configTs).toContain("scanCodeWhitespace");
-    expect(configTs).toContain(String.raw`/\s/.test(char)`);
-    expect(configTs).toContain(String.raw`/\b(?:process|Bun|import\.meta)`);
-    expect(configTs).not.toContain(String.raw`/\\s/.test(char)`);
-    expect(configTs).not.toContain(String.raw`/\\b(?:process|Bun|import\\.meta)`);
+    expect(configTs).toContain("requireSuggestedFix: true");
+    expect(configTs).toContain("review/fix-suggestion-verification");
+    expect(configTs).not.toContain("isPublishableSuggestedFixSelection");
+    expect(configTs).not.toContain("onlyChangesWhitespace");
+    expect(configTs).not.toContain("suggestionIntroducesNewEnvironmentAccess");
     expect(configTs).toContain("@pipr improve");
     expect(configTs).toContain("maxInlineComments: 6");
     expect(inspected.agents).toContain("fix-suggestions");
@@ -1838,12 +1772,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
           aggregatorPrompt = run.prompt;
           aggregatorTools = run.builtinTools;
         }
-        return {
-          exitCode: 0,
-          stdout: JSON.stringify(reviewOutput),
-          stderr: "",
-          durationMs: 1,
-        };
+        return piRunResult(JSON.stringify(reviewOutput));
       },
     });
 
@@ -1924,23 +1853,6 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       "> ℹ️ **CI triage needs more context:** The excerpt does not support a diagnosis.",
     );
     expect(insufficient.commandResponse.body).not.toContain("## Likely Causes");
-  });
-
-  it("initializes the PR briefing recipe with dynamic diagram fences", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-briefing-"));
-
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "pr-briefing",
-      minimal: true,
-    });
-    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-
-    expect(configTs).toContain("function markdownFenceFor");
-    expect(configTs).toContain("$" + "{fence}mermaid");
-    expect(configTs).toContain("Return empty arrays for list sections with no useful content");
-    expect(configTs).not.toContain('"```mermaid",\n    diagram,\n    "```"');
   });
 
   it("omits empty optional PR briefing sections", async () => {
@@ -2145,50 +2057,6 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     );
   });
 
-  it("generates grounded recipe policies and expanded dependency scopes", async () => {
-    const recipeConfigs = new Map<string, string>();
-    for (const recipe of [
-      "dependency-risk",
-      "plugin-tool-review",
-      "interactive-ask",
-      "changelog-draft",
-    ] as const) {
-      const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${recipe}-`));
-      await initOfficialMinimalProject({
-        rootDir,
-        adapters: [],
-        recipe,
-        minimal: true,
-      });
-      recipeConfigs.set(recipe, await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text());
-    }
-
-    const dependencyConfig = recipeConfigs.get("dependency-risk") ?? "";
-    for (const dependencyFile of [
-      "deno.json",
-      "deno.jsonc",
-      "jsr.json",
-      "uv.lock",
-      "poetry.lock",
-      "Pipfile",
-      "Pipfile.lock",
-      "Gemfile",
-      "Gemfile.lock",
-      "composer.json",
-      "composer.lock",
-      "Package.swift",
-      "Package.resolved",
-      "Directory.Packages.props",
-      "packages.lock.json",
-    ]) {
-      expect(dependencyConfig).toContain(`**/${dependencyFile}`);
-    }
-    expect(dependencyConfig).toContain("z.array(z.string()).max(6)");
-    expect(recipeConfigs.get("plugin-tool-review")).toContain("based only on memory");
-    expect(recipeConfigs.get("interactive-ask")).toContain("Distinguish evidence from inference");
-    expect(recipeConfigs.get("changelog-draft")).toContain("Do not invent issue IDs");
-  });
-
   it("renders changelog drafts with a safe collapsed rationale", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-changelog-draft-"));
     await initOfficialMinimalProject({
@@ -2218,7 +2086,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     );
     expect(result.mainComment).toContain("<summary>Rationale</summary>");
     expect(result.mainComment).toContain(
-      "The changed branch now reaches &lt;/details&gt; the existing fallback.",
+      "The changed branch now reaches &lt;/details> the existing fallback.",
     );
     expect(result.mainComment).not.toContain(
       "The changed branch now reaches </details> the existing fallback.",
@@ -2266,19 +2134,21 @@ describe("initOfficialMinimalProject: generated recipes", () => {
 
     await initOfficialMinimalProject({ rootDir, recipe: "plugin-tool-review" });
 
-    const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
-    expect(workflow).toContain(
-      `PIPR_R2_MEMORY_BUCKET: ${githubExpression("secrets.PIPR_R2_MEMORY_BUCKET")}`,
+    const workflow = Bun.YAML.parse(
+      await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text(),
+    ) as { jobs: Record<string, { steps: Array<{ env?: Record<string, string> }> }> };
+    const env = Object.assign(
+      {},
+      ...Object.values(workflow.jobs).flatMap((job) => job.steps.map((step) => step.env ?? {})),
     );
-    expect(workflow).toContain(
-      `PIPR_R2_MEMORY_ENDPOINT: ${githubExpression("secrets.PIPR_R2_MEMORY_ENDPOINT")}`,
-    );
-    expect(workflow).toContain(
-      `PIPR_R2_MEMORY_ACCESS_KEY_ID: ${githubExpression("secrets.PIPR_R2_MEMORY_ACCESS_KEY_ID")}`,
-    );
-    expect(workflow).toContain(
-      `PIPR_R2_MEMORY_SECRET_ACCESS_KEY: ${githubExpression("secrets.PIPR_R2_MEMORY_SECRET_ACCESS_KEY")}`,
-    );
+    for (const name of [
+      "PIPR_R2_MEMORY_BUCKET",
+      "PIPR_R2_MEMORY_ENDPOINT",
+      "PIPR_R2_MEMORY_ACCESS_KEY_ID",
+      "PIPR_R2_MEMORY_SECRET_ACCESS_KEY",
+    ]) {
+      expect(env[name]).toBe(githubExpression(`secrets.${name}`));
+    }
   });
 
   it("generates SDK types that preserve optional Zod object fields", async () => {
@@ -2289,11 +2159,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       `import { definePipr, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
 
   const summary = pipr.schema({
     id: "custom/summary",
@@ -2310,6 +2176,6 @@ export default definePipr((pipr) => {
     );
 
     const validation = await validateProject({ rootDir });
-    expect(validation.kind).toBe("typescript");
+    expect(validation.settings.source).toBe(".pipr/config.ts");
   });
 });

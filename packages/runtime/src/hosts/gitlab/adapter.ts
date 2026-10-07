@@ -1,12 +1,9 @@
-import { createPublicationWorkflow } from "../publication/workflow.js";
+import { withEventRef } from "../change-request.js";
+import { createCommentsReader, createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGitLabClient, type GitLabClient } from "./client.js";
 import { parseGitLabEvent } from "./event.js";
-import {
-  loadGitLabInlineThreadContexts,
-  loadGitLabPriorMainComment,
-  loadGitLabPriorReviewState,
-} from "./publication.js";
+import { gitLabCoordinates } from "./publication.js";
 import { createGitLabPublicationDriver } from "./publication-driver.js";
 import { ensureGitLabHeadCheckout } from "./workspace.js";
 
@@ -14,7 +11,8 @@ export function createGitLabHostAdapter(
   options: { env?: NodeJS.ProcessEnv; client?: GitLabClient } = {},
 ): CodeHostAdapter {
   const client = options.client ?? createGitLabClient(options.env);
-  const publication = createPublicationWorkflow(createGitLabPublicationDriver(client));
+  const driver = createGitLabPublicationDriver(client);
+  const publication = createPublicationWorkflow(driver);
   return {
     id: "gitlab",
     capabilities: {
@@ -35,42 +33,30 @@ export function createGitLabHostAdapter(
         });
       },
       loadChangeRequest(ref) {
-        const coordinates = gitLabCoordinates(ref.repository.slug, ref.repository.url);
         return client
           .loadChange({
-            projectId: coordinates.projectId,
-            projectPath: coordinates.projectPath,
+            ...gitLabProject(ref.repository.slug, ref.repository.url),
             changeNumber: ref.changeNumber,
           })
-          .then((loaded) => ({
-            ...loaded,
-            eventName: ref.eventName,
-            action: ref.action,
-            rawAction: ref.rawAction,
-            workspace: ref.workspace,
-          }));
+          .then((loaded) => withEventRef(loaded, ref));
       },
     },
     workspace: { ensureHeadCheckout: ensureGitLabHeadCheckout },
     permissions: {
       getRepositoryPermission({ change, actor }) {
         return client.getRepositoryPermission(
-          gitLabCoordinates(change.repository.slug, change.repository.url).projectId,
+          gitLabProject(change.repository.slug, change.repository.url).projectId,
           actor,
         );
       },
     },
     publication,
-    comments: {
-      loadPriorReviewState: ({ change }) => loadGitLabPriorReviewState({ client, change }),
-      loadPriorMainComment: ({ change }) => loadGitLabPriorMainComment({ client, change }),
-      loadInlineThreadContexts: ({ change }) => loadGitLabInlineThreadContexts({ client, change }),
-    },
+    comments: createCommentsReader(driver),
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {
         const id = await client.setStatus(
-          gitLabChangeCoordinates(change).projectId,
+          gitLabCoordinates(change).projectId,
           change.change.head.sha,
           name,
           state,
@@ -82,16 +68,7 @@ export function createGitLabHostAdapter(
   };
 }
 
-function gitLabChangeCoordinates(
-  change: Parameters<NonNullable<CodeHostAdapter["statuses"]>["upsert"]>[0]["change"],
-) {
-  if (change.coordinates?.provider !== "gitlab") {
-    throw new Error("GitLab adapter requires GitLab coordinates");
-  }
-  return change.coordinates;
-}
-
-function gitLabCoordinates(slug: string, url: string | undefined) {
+function gitLabProject(slug: string, url: string | undefined) {
   const projectId = url?.match(/\/projects\/(\d+)/)?.[1] ?? slug;
   return { projectId, projectPath: slug };
 }

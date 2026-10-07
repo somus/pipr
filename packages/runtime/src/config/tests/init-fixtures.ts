@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { PiRunner } from "../../pi/types.js";
 import type { ReviewRuntimeResult } from "../../review/task/task-runtime.js";
+import { piRunResult } from "../../tests/helpers/pi-run-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { loadRuntimeProject } from "../project.js";
 import { officialInitRecipeFiles } from "../recipes.js";
@@ -111,12 +112,7 @@ export function eventContext(): ChangeRequestEventContext {
 }
 
 export function jsonPiRunner(output: unknown): PiRunner {
-  return async () => ({
-    exitCode: 0,
-    stdout: JSON.stringify(output),
-    stderr: "",
-    durationMs: 1,
-  });
+  return async () => piRunResult(JSON.stringify(output));
 }
 
 export function sequentialJsonPiRunner(outputs: unknown[], onCall?: () => void): PiRunner {
@@ -125,12 +121,7 @@ export function sequentialJsonPiRunner(outputs: unknown[], onCall?: () => void):
     onCall?.();
     const output = outputs[index];
     index += 1;
-    return {
-      exitCode: 0,
-      stdout: JSON.stringify(output ?? {}),
-      stderr: "",
-      durationMs: 1,
-    };
+    return piRunResult(JSON.stringify(output ?? {}));
   };
 }
 

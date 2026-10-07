@@ -13,3 +13,6 @@ docs for current user-facing behavior.
 - [0007: Public results, command lifecycle, and webhook history](0007-public-results-command-lifecycle-and-webhook-history.md)
 - [0008: Provider-neutral run observability](0008-provider-neutral-run-observability.md)
 - [0009: Protected public-repository run observability](0009-protected-public-repository-run-observability.md)
+- [0010: Durable harness in an agent worker](0010-durable-harness-in-agent-worker.md)
+- [0011: Finding outcome ledger](0011-finding-outcome-ledger.md)
+- [0012: Authoring API v2](0012-authoring-api-v2.md)

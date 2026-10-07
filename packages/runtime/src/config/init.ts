@@ -1,7 +1,7 @@
 import { lstat, mkdir } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
-import { assertBunAvailable } from "./config-deps.js";
+import { assertBunAvailable, runBunInstall } from "./config-deps.js";
 import { renderOfficialGithubWorkflow } from "./official-github-workflow.js";
 import { isPathContained, resolveContainedConfigDir } from "./paths.js";
 import { loadRuntimeProject } from "./project.js";
@@ -47,6 +47,42 @@ export type OfficialInitAdapter = (typeof supportedOfficialInitAdapters)[number]
 type StarterFile = {
   relativePath: string;
   contents: string;
+};
+
+type StarterSetup = Pick<
+  InitOfficialMinimalProjectOptions,
+  "runtimeImage" | "checkoutAction" | "githubRunner" | "githubEnterpriseServer"
+>;
+
+/** Code-host variables listed in each webhook runner `.env.example`, before the shared secret. */
+const webhookEnvironmentNames: Record<Exclude<OfficialInitAdapter, "github">, readonly string[]> = {
+  gitlab: ["GITLAB_API_URL=", "GITLAB_TOKEN="],
+  "azure-devops": [
+    "AZURE_DEVOPS_ORGANIZATION=",
+    "AZURE_DEVOPS_COLLECTION_URL=",
+    "AZURE_DEVOPS_API_VERSION=7.1",
+    "AZURE_DEVOPS_PROJECT=",
+    "AZURE_DEVOPS_BEARER_TOKEN=",
+    "AZURE_DEVOPS_TOKEN=",
+    "PIPR_AZURE_SUBSCRIPTION_ID=",
+  ],
+  bitbucket: [
+    "BITBUCKET_WORKSPACE=",
+    "BITBUCKET_REPO_SLUG=",
+    "BITBUCKET_EMAIL=",
+    "BITBUCKET_API_TOKEN=",
+    "BITBUCKET_PERMISSION_EMAIL=",
+    "BITBUCKET_PERMISSION_API_TOKEN=",
+    "# Bitbucket Data Center only:",
+    "BITBUCKET_BASE_URL=",
+    "BITBUCKET_PROJECT_KEY=",
+    "BITBUCKET_TOKEN=",
+    "BITBUCKET_USER=",
+    "BITBUCKET_PERMISSION_TOKEN=",
+  ],
+  gitea: ["GITEA_SERVER_URL=", "GITEA_TOKEN="],
+  forgejo: ["FORGEJO_SERVER_URL=", "FORGEJO_TOKEN="],
+  codeberg: ["FORGEJO_SERVER_URL=https://codeberg.org", "CODEBERG_TOKEN="],
 };
 
 const defaultGitLabImageRef = "ghcr.io/somus/pipr:v0.8.0"; // x-release-please-version
@@ -100,12 +136,7 @@ export async function initOfficialMinimalProject(
   assertDistinctAdapterTargets(adapters);
   const rootDir = path.resolve(options.rootDir);
   const minimal = options.minimal === true;
-  const files = await starterFiles(relativeConfigDir, adapters, options.recipe, minimal, {
-    runtimeImage: options.runtimeImage,
-    checkoutAction: options.checkoutAction,
-    githubRunner: options.githubRunner,
-    githubEnterpriseServer: options.githubEnterpriseServer,
-  });
+  const files = await starterFiles(relativeConfigDir, adapters, options.recipe, minimal, options);
   const targets = files.map((file) => ({
     ...file,
     absolutePath: path.join(rootDir, file.relativePath),
@@ -119,7 +150,7 @@ export async function initOfficialMinimalProject(
     );
   }
 
-  const result = await writeTargets(targets, existing, { skipExisting: false });
+  const result = await writeTargets(targets, existing);
 
   if (!minimal)
     await installStarterDependencies({
@@ -148,22 +179,7 @@ async function installStarterDependencies(options: {
   created: string[];
 }): Promise<void> {
   await assertBunAvailable();
-  const install = Bun.spawn(initInstallCommand(), {
-    cwd: options.projectDir,
-    env: process.env,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [exitCode, stderr] = await Promise.all([
-    install.exited,
-    new Response(install.stderr).text(),
-  ]);
-  if (exitCode !== 0) {
-    throw new Error(
-      `${options.configDir}: bun install failed (exit ${exitCode}).` +
-        (stderr.trim().length > 0 ? `\n${stderr.trim()}` : ""),
-    );
-  }
+  await runBunInstall(options.projectDir, initInstallArgs(), { label: options.configDir });
   if (!(await Bun.file(path.join(options.projectDir, "bun.lock")).exists())) return;
   const lockRelative = path.join(options.relativeConfigDir, "bun.lock");
   if (!options.existing.includes(lockRelative) && !options.created.includes(lockRelative)) {
@@ -259,10 +275,10 @@ function isValidOptionalOciDigest(digest: string | undefined): boolean {
   return match[2].length === encodedLengths[match[1] as keyof typeof encodedLengths];
 }
 
-function initInstallCommand(env: NodeJS.ProcessEnv = process.env): string[] {
-  const command = ["bun", "install", "--ignore-scripts"];
-  if (env.PIPR_INTERNAL_INIT_OFFLINE === "1") command.push("--offline");
-  return command;
+function initInstallArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const args = ["install", "--ignore-scripts"];
+  if (env.PIPR_INTERNAL_INIT_OFFLINE === "1") args.push("--offline");
+  return args;
 }
 
 async function starterFiles(
@@ -270,12 +286,7 @@ async function starterFiles(
   adapters: readonly OfficialInitAdapter[],
   recipe?: string,
   minimal = false,
-  setup: {
-    runtimeImage?: string;
-    checkoutAction?: string;
-    githubRunner?: string;
-    githubEnterpriseServer?: boolean;
-  } = {},
+  setup: StarterSetup = {},
 ): Promise<StarterFile[]> {
   const files: StarterFile[] = [
     {
@@ -315,85 +326,66 @@ function starterAdapterFiles(
   relativeConfigDir: string,
   recipe: string | undefined,
   minimal: boolean,
-  setup: {
-    runtimeImage?: string;
-    checkoutAction?: string;
-    githubRunner?: string;
-    githubEnterpriseServer?: boolean;
-  },
+  setup: StarterSetup,
 ): StarterFile[] {
+  if (adapter === "github") {
+    return [
+      {
+        relativePath: path.join(".github", "workflows", "pipr.yml"),
+        contents: renderOfficialGithubWorkflow({
+          relativeConfigDir,
+          recipe,
+          minimal,
+          runtimeImage: setup.runtimeImage,
+          checkoutAction: setup.checkoutAction,
+          githubRunner: setup.githubRunner,
+          githubEnterpriseServer: setup.githubEnterpriseServer,
+        }),
+      },
+    ];
+  }
+  return [
+    {
+      relativePath: `${adapter}.pipr.env.example`,
+      contents: starterWebhookEnvironment(adapter, recipe),
+    },
+    starterPipelineFile(adapter, relativeConfigDir, recipe, setup),
+  ];
+}
+
+function starterPipelineFile(
+  adapter: Exclude<OfficialInitAdapter, "github">,
+  relativeConfigDir: string,
+  recipe: string | undefined,
+  setup: StarterSetup,
+): StarterFile {
   switch (adapter) {
-    case "github":
-      return [
-        {
-          relativePath: path.join(".github", "workflows", "pipr.yml"),
-          contents: renderOfficialGithubWorkflow({
-            relativeConfigDir,
-            recipe,
-            minimal,
-            runtimeImage: setup.runtimeImage,
-            checkoutAction: setup.checkoutAction,
-            githubRunner: setup.githubRunner,
-            githubEnterpriseServer: setup.githubEnterpriseServer,
-          }),
-        },
-      ];
     case "gitlab":
-      return [
-        {
-          relativePath: "gitlab.pipr.env.example",
-          contents: starterGitLabWebhookEnvironment(recipe),
-        },
-        {
-          relativePath: ".gitlab-ci.yml",
-          contents: starterGitLabPipeline(relativeConfigDir, recipe, setup.runtimeImage),
-        },
-      ];
+      return {
+        relativePath: ".gitlab-ci.yml",
+        contents: starterGitLabPipeline(relativeConfigDir, recipe, setup.runtimeImage),
+      };
     case "azure-devops":
-      return [
-        {
-          relativePath: "azure-devops.pipr.env.example",
-          contents: starterAzureDevOpsWebhookEnvironment(recipe),
-        },
-        {
-          relativePath: "azure-pipelines.pipr.yml",
-          contents: starterAzureDevOpsPipeline(relativeConfigDir, recipe, setup.runtimeImage),
-        },
-      ];
+      return {
+        relativePath: "azure-pipelines.pipr.yml",
+        contents: starterAzureDevOpsPipeline(relativeConfigDir, recipe, setup.runtimeImage),
+      };
     case "bitbucket":
-      return [
-        {
-          relativePath: "bitbucket.pipr.env.example",
-          contents: starterBitbucketWebhookEnvironment(recipe),
-        },
-        {
-          relativePath: "bitbucket-pipelines.yml",
-          contents: starterBitbucketPipeline(relativeConfigDir, recipe, setup.runtimeImage),
-        },
-      ];
+      return {
+        relativePath: "bitbucket-pipelines.yml",
+        contents: starterBitbucketPipeline(relativeConfigDir, recipe, setup.runtimeImage),
+      };
     case "gitea":
-      return [
-        {
-          relativePath: "gitea.pipr.env.example",
-          contents: starterGiteaWebhookEnvironment("gitea", recipe),
-        },
-        {
-          relativePath: path.join(".gitea", "workflows", "pipr.yml"),
-          contents: starterGiteaActionsWorkflow("gitea", relativeConfigDir, recipe, setup),
-        },
-      ];
+      return {
+        relativePath: path.join(".gitea", "workflows", "pipr.yml"),
+        contents: starterGiteaActionsWorkflow("gitea", relativeConfigDir, recipe, setup),
+      };
     case "forgejo":
     case "codeberg":
-      return [
-        {
-          relativePath: `${adapter}.pipr.env.example`,
-          contents: starterGiteaWebhookEnvironment(adapter, recipe),
-        },
-        {
-          relativePath: path.join(".forgejo", "workflows", "pipr.yml"),
-          contents: starterGiteaActionsWorkflow(adapter, relativeConfigDir, recipe, setup),
-        },
-      ];
+      return {
+        relativePath: path.join(".forgejo", "workflows", "pipr.yml"),
+        contents: starterGiteaActionsWorkflow(adapter, relativeConfigDir, recipe, setup),
+      };
   }
 }
 
@@ -401,12 +393,7 @@ function starterGiteaActionsWorkflow(
   adapter: "gitea" | "forgejo" | "codeberg",
   relativeConfigDir: string,
   recipe: string | undefined,
-  setup: {
-    runtimeImage?: string;
-    checkoutAction?: string;
-    githubRunner?: string;
-    githubEnterpriseServer?: boolean;
-  },
+  setup: StarterSetup,
 ): string {
   const tokenEnv = adapter === "gitea" ? "GITEA_TOKEN" : "FORGEJO_TOKEN";
   const lines = [
@@ -440,24 +427,15 @@ function starterGiteaActionsWorkflow(
   return lines.join("\n");
 }
 
-function starterGiteaWebhookEnvironment(
-  adapter: "gitea" | "forgejo" | "codeberg",
-  recipe?: string,
+function starterWebhookEnvironment(
+  adapter: Exclude<OfficialInitAdapter, "github">,
+  recipe: string | undefined,
 ): string {
-  const lines =
-    adapter === "gitea"
-      ? [
-          "# Copy these names into the trusted webhook runner's secret store.",
-          "GITEA_SERVER_URL=",
-          "GITEA_TOKEN=",
-          "PIPR_WEBHOOK_SECRET=",
-        ]
-      : [
-          "# Copy these names into the trusted webhook runner's secret store.",
-          `FORGEJO_SERVER_URL=${adapter === "codeberg" ? "https://codeberg.org" : ""}`,
-          `${adapter === "codeberg" ? "CODEBERG_TOKEN" : "FORGEJO_TOKEN"}=`,
-          "PIPR_WEBHOOK_SECRET=",
-        ];
+  const lines = [
+    "# Copy these names into the trusted webhook runner's secret store.",
+    ...webhookEnvironmentNames[adapter],
+    "PIPR_WEBHOOK_SECRET=",
+  ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);
   lines.push("");
   return lines.join("\n");
@@ -465,18 +443,6 @@ function starterGiteaWebhookEnvironment(
 
 function workflowExpression(value: string): string {
   return `$${["{{ ", value, " }}"].join("")}`;
-}
-
-function starterGitLabWebhookEnvironment(recipe?: string): string {
-  const lines = [
-    "# Copy these names into the trusted webhook runner's secret store.",
-    "GITLAB_API_URL=",
-    "GITLAB_TOKEN=",
-    "PIPR_WEBHOOK_SECRET=",
-  ];
-  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);
-  lines.push("");
-  return lines.join("\n");
 }
 
 function starterGitLabPipeline(
@@ -499,25 +465,6 @@ function starterGitLabPipeline(
   ];
   for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
     lines.push(`    # Configure ${secret.env} as a masked GitLab CI/CD variable.`);
-  }
-  lines.push("");
-  return lines.join("\n");
-}
-
-function starterAzureDevOpsWebhookEnvironment(recipe?: string): string {
-  const lines = [
-    "# Copy these names into the trusted webhook runner's secret store.",
-    "AZURE_DEVOPS_ORGANIZATION=",
-    "AZURE_DEVOPS_COLLECTION_URL=",
-    "AZURE_DEVOPS_API_VERSION=7.1",
-    "AZURE_DEVOPS_PROJECT=",
-    "AZURE_DEVOPS_BEARER_TOKEN=",
-    "AZURE_DEVOPS_TOKEN=",
-    "PIPR_AZURE_SUBSCRIPTION_ID=",
-    "PIPR_WEBHOOK_SECRET=",
-  ];
-  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) {
-    lines.push(`${secret.env}=`);
   }
   lines.push("");
   return lines.join("\n");
@@ -573,28 +520,6 @@ function starterAzureDevOpsPipeline(
   return lines.join("\n");
 }
 
-function starterBitbucketWebhookEnvironment(recipe?: string): string {
-  const lines = [
-    "# Copy these names into the trusted webhook runner's secret store.",
-    "BITBUCKET_WORKSPACE=",
-    "BITBUCKET_REPO_SLUG=",
-    "BITBUCKET_EMAIL=",
-    "BITBUCKET_API_TOKEN=",
-    "BITBUCKET_PERMISSION_EMAIL=",
-    "BITBUCKET_PERMISSION_API_TOKEN=",
-    "# Bitbucket Data Center only:",
-    "BITBUCKET_BASE_URL=",
-    "BITBUCKET_PROJECT_KEY=",
-    "BITBUCKET_TOKEN=",
-    "BITBUCKET_USER=",
-    "BITBUCKET_PERMISSION_TOKEN=",
-    "PIPR_WEBHOOK_SECRET=",
-  ];
-  for (const secret of officialInitRecipeWorkflowEnvSecrets(recipe)) lines.push(`${secret.env}=`);
-  lines.push("");
-  return lines.join("\n");
-}
-
 function starterBitbucketPipeline(
   relativeConfigDir: string,
   recipe?: string,
@@ -644,15 +569,11 @@ function starterPackageJson(): string {
 async function writeTargets(
   targets: Array<StarterFile & { absolutePath: string }>,
   existing: readonly string[],
-  options: { skipExisting: boolean },
 ): Promise<{ created: string[]; overwritten: string[] }> {
   const created: string[] = [];
   const overwritten: string[] = [];
   for (const target of targets) {
     const existed = existing.includes(target.relativePath);
-    if (existed && options.skipExisting) {
-      continue;
-    }
     await mkdir(path.dirname(target.absolutePath), { recursive: true });
     await Bun.write(target.absolutePath, target.contents);
     if (existed) {

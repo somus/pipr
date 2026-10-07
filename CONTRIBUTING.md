@@ -22,7 +22,7 @@ mise run check
 ```
 
 Run the Action gate after editing GitHub Action behavior, Docker packaging,
-workflow fixtures, Pi CLI mapping, or GitHub pull request event handling:
+workflow fixtures, agent worker or harness wiring, or GitHub pull request event handling:
 
 ```bash
 mise run check-actions

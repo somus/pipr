@@ -71,25 +71,4 @@ describe("createRuntimeLog", () => {
     expect(output).not.toContain(secret);
     expect(output).not.toContain(secret.slice(0, 24));
   });
-
-  it("leaves unregistered secret-like values unchanged", async () => {
-    const sink = memoryRuntimeLogSink();
-    const token = "github_token_abcdefghijklmnopqrstuvwxyz123456";
-    const log = createRuntimeLog({ logSink: sink.logSink, env: {} });
-
-    log.error(`failed ${token}`, { error: token, values: [token] });
-    log.text("error", "pi invalid output", `stdout ${token}`);
-    log.textSnippet("error", "pi stderr", `stderr ${token}`);
-    await log.group(`group ${token}`, async () => {});
-
-    expect(sink.records[0]).toEqual({
-      level: "error",
-      event: `failed ${token}`,
-      fields: { error: token, values: [token] },
-    });
-    expect(sink.records[1]?.text).toContain(`stdout ${token}`);
-    expect(sink.records[2]?.text).toContain(`stderr ${token}`);
-    expect(sink.groups).toEqual([`group ${token}`]);
-    expect(sink.messages.join("\n")).toContain(token);
-  });
 });

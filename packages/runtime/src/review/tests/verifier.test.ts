@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import type { PiRunner } from "../../pi/types.js";
 import type { InlineThreadContext, PriorReviewState } from "../../publication/types.js";
+import { piRunResult } from "../../tests/helpers/pi-run-result.js";
 import type {
   ChangeRequestEventContext,
   DiffManifest,
@@ -463,18 +464,25 @@ describe("runInternalVerifier", () => {
     );
   });
 
-  it("passes the supplied stable run id to verifier input", async () => {
-    let observedPrompt = "";
+  it("derives verifier request ids from the supplied stable run id", async () => {
+    const requestIdFor = async (runId: string) => {
+      const requestIds: Array<string | undefined> = [];
+      await runVerifier({
+        runId,
+        output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
+        observeRun: (run) => {
+          requestIds.push(run.requestId);
+        },
+      });
+      return requestIds;
+    };
 
-    await runVerifier({
-      runId: "pipr-stable-verifier-run",
-      output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
-      observePrompt: (prompt) => {
-        observedPrompt = prompt;
-      },
-    });
+    const first = await requestIdFor("pipr-stable-verifier-run");
 
-    expect(observedPrompt).toContain('"runId": "pipr-stable-verifier-run"');
+    expect(first).toHaveLength(1);
+    expect(first[0]).toBeString();
+    expect(await requestIdFor("pipr-stable-verifier-run")).toEqual(first);
+    expect(await requestIdFor("pipr-other-verifier-run")).not.toEqual(first);
   });
 
   it("projects the Diff Manifest once and caps every verifier attempt at two minutes", async () => {
@@ -594,12 +602,7 @@ async function runVerifier(options: {
     options.observeModel?.(run.provider.model);
     const output = typeof options.output === "function" ? options.output(attempt) : options.output;
     attempt += 1;
-    return {
-      stdout: JSON.stringify(output),
-      stderr: "",
-      exitCode: 0,
-      durationMs: 1,
-    };
+    return piRunResult(JSON.stringify(output));
   };
   return await runInternalVerifier({
     workspace: process.cwd(),

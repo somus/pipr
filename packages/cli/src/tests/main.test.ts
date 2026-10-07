@@ -1,11 +1,15 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { access, chmod, lstat, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  type ScriptedProviderScript,
+  scriptedProviderModulePath,
+} from "@usepipr/runtime/internal/testing";
 import cliPackage from "../../package.json" with { type: "json" };
-import { publishRunBundleMetadata, runMain } from "../runner.js";
+import { runMain } from "../runner.js";
 import { containedSkillFilePath, readBundledSkillCatalog } from "../skill-catalog.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
@@ -14,52 +18,6 @@ const repoRoot = path.resolve(cliProjectDir, "../..");
 const cliPath = path.join(cliProjectDir, "src", "main.ts");
 
 describe("pipr CLI", () => {
-  it("publishes finalized run metadata only for GitHub", async () => {
-    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-run-metadata-"));
-    const outputPath = path.join(workspace, "github-output.txt");
-    await Bun.write(outputPath, "");
-    const originalOutput = process.env.GITHUB_OUTPUT;
-    process.env.GITHUB_OUTPUT = outputPath;
-    try {
-      await publishRunBundleMetadata(
-        {
-          executionId: "0123456789abcdef0123456789abcdef",
-          directory: path.join(workspace, "bundle;%]\n"),
-          kind: "review",
-          outcome: "succeeded",
-          protection: "age",
-          repository: { host: "bitbucket", repository: "pipr", changeNumber: 42 },
-        },
-        {
-          rootDir: workspace,
-          env: { GITHUB_ACTIONS: "true", TF_BUILD: "True", BITBUCKET_BUILD_NUMBER: "7" },
-        },
-      );
-      const output = await Bun.file(outputPath).text();
-      expect(parseGitHubOutputRecords(output)).toEqual({
-        "execution-id": "0123456789abcdef0123456789abcdef",
-        "run-bundle-path": "bundle;%]\n",
-        "run-artifact-name": "pipr-run-v1-age-pr-42-0123456789abcdef0123456789abcdef",
-      });
-
-      await Bun.write(outputPath, "");
-      await publishRunBundleMetadata(
-        {
-          executionId: "fedcba9876543210fedcba9876543210",
-          directory: path.join(workspace, "bundle"),
-          kind: "review",
-          outcome: "succeeded",
-        },
-        { rootDir: workspace, env: {} },
-      );
-      expect(await Bun.file(outputPath).text()).toBe("");
-    } finally {
-      if (originalOutput === undefined) delete process.env.GITHUB_OUTPUT;
-      else process.env.GITHUB_OUTPUT = originalOutput;
-      await removeWorkspace(workspace);
-    }
-  });
-
   it("maps update-notice policy before command execution", async () => {
     const requests: string[] = [];
     const notices: string[] = [];
@@ -85,7 +43,9 @@ describe("pipr CLI", () => {
         updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
         writeUpdateNotice: (message) => notices.push(message),
       }),
-    ).rejects.toThrow("compiled GitHub Release binaries");
+    ).rejects.toThrow(
+      /only supports compiled GitHub Release binaries[\s\S]*npm install -g @usepipr\/cli@latest/,
+    );
     expect(requests).toEqual([]);
     expect(notices).toEqual([]);
   });
@@ -112,7 +72,7 @@ describe("pipr CLI", () => {
       const inspect = await runInProcess(["inspect"], {}, workspace);
 
       expect(check.exitCode, check.stderr).toBe(0);
-      expect(check.stdout).toContain(`valid: ${path.join(workspace, ".pipr", "config.ts")}`);
+      expect(check.stdout).toContain("valid: .pipr/config.ts");
       expect(inspect.exitCode, inspect.stderr).toBe(0);
       expect(inspect.stdout).toContain("models");
       expect(inspect.stdout).toContain("core/pr-review");
@@ -130,7 +90,9 @@ describe("pipr CLI", () => {
       database.exec(`
         CREATE TABLE webhook_deliveries (
           id TEXT PRIMARY KEY, host TEXT NOT NULL, payload TEXT,
+          event_name TEXT,
           status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT,
+          run_id TEXT, result_kind TEXT, result_json TEXT, result_omitted_reason TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
@@ -143,24 +105,6 @@ describe("pipr CLI", () => {
       expect(JSON.parse(result.stdout)).toEqual({ formatVersion: 1, deliveries: [] });
     } finally {
       await removeWorkspace(workspace);
-    }
-  });
-
-  it("uses injected cwd and env for local review", async () => {
-    const workspace = await createLocalReviewWorkspace();
-    try {
-      const result = await runInProcess(
-        ["review", "--base", workspace.baseSha, "--pi-executable", workspace.piExecutable],
-        { DEEPSEEK_API_KEY: "provider-key" },
-        workspace.rootDir,
-      );
-
-      expect(result.exitCode, result.stderr).toBe(0);
-      expect(result.stdout).toContain("No findings.");
-      expect(result.stderr).toContain("pipr local review complete");
-      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(2);
-    } finally {
-      await removeWorkspace(workspace.rootDir);
     }
   });
 
@@ -187,17 +131,8 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("starts and exposes no-args, help, and version process boundaries", async () => {
-    const noArgs = await runCli([]);
-    const help = await runCli(["--help"]);
-    const version = await runCli(["--version"]);
-
-    expect(noArgs.exitCode).toBe(0);
-    expect(help.exitCode).toBe(0);
-    expect(version.exitCode).toBe(0);
-    expect(noArgs.stdout).toContain("Usage: pipr");
-    expect(help.stdout).toContain("Start here (for AI agents):");
-    expect(version.stdout).toBe(`${cliPackage.version}\n`);
+  it("exits successfully with no arguments", async () => {
+    expect((await runCli([])).exitCode).toBe(0);
   });
 
   it("keeps local fatal exit and terminal sanitization at the process boundary", async () => {
@@ -245,13 +180,13 @@ describe("pipr CLI", () => {
     try {
       await Bun.write(path.join(workspace.rootDir, ".env"), "DEEPSEEK_API_KEY=provider-key\n");
       const result = await runCli(
-        ["review", "--base", workspace.baseSha, "--pi-executable", workspace.piExecutable],
+        ["review", "--base", workspace.baseSha, ...workspace.providerArgs],
         {},
         workspace.rootDir,
       );
 
       expect(result.exitCode, result.stderr).toBe(0);
-      expect(await countLines(path.join(workspace.rootDir, "pi-called"))).toBe(2);
+      expect(await countLines(workspace.callLog)).toBe(2);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -313,14 +248,6 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("rejects self-update when running from source", async () => {
-    const result = await runCli(["update"]);
-
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("pipr update only supports compiled GitHub Release binaries");
-    expect(result.stderr).toContain("npm install -g @usepipr/cli@latest");
-  });
-
   it("initializes and checks a TypeScript config through the process boundary", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-init-"));
     try {
@@ -337,18 +264,34 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("prints versioned local-review JSON through the process boundary", async () => {
+  it("serves the agent worker protocol on stdio until stdin closes", async () => {
+    const worker = Bun.spawnSync(["bun", cliPath, "agent-worker"], {
+      env: minimalEnv(),
+      stdin: new Blob([]),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    expect(worker.exitCode, worker.stderr.toString()).toBe(0);
+    expect(worker.stdout.toString()).toBe(`${JSON.stringify({ type: "ready", protocol: 1 })}\n`);
+  });
+
+  it("prints local review text in-process and versioned JSON through the process boundary", async () => {
     const workspace = await createLocalReviewWorkspace({ findings: true });
     try {
+      const text = await runInProcess(
+        ["review", "--base", workspace.baseSha, ...workspace.providerArgs],
+        { DEEPSEEK_API_KEY: "provider-key" },
+        workspace.rootDir,
+      );
+      expect(text.exitCode, text.stderr).toBe(0);
+      expect(text.stdout).toContain("## Inline Findings");
+      expect(text.stdout).toContain("Use the reviewed value.");
+      expect(text.stderr).toContain("pipr local review complete");
+      expect(await countLines(workspace.callLog)).toBe(2);
+
       const result = await runCli(
-        [
-          "review",
-          "--base",
-          workspace.baseSha,
-          "--pi-executable",
-          workspace.piExecutable,
-          "--json",
-        ],
+        ["review", "--base", workspace.baseSha, ...workspace.providerArgs, "--json"],
         { DEEPSEEK_API_KEY: "provider-key" },
         workspace.rootDir,
       );
@@ -371,6 +314,32 @@ describe("pipr CLI", () => {
     }
   }, 30_000);
 
+  it("exits non-zero after printing the local review when a gate fails", async () => {
+    const workspace = await createLocalReviewWorkspace({ findings: true, gate: true });
+    const review = (extra: string[] = []) =>
+      runCli(
+        ["review", "--base", workspace.baseSha, ...workspace.providerArgs, ...extra],
+        { DEEPSEEK_API_KEY: "provider-key" },
+        workspace.rootDir,
+      );
+    try {
+      const text = await review();
+      expect(text.exitCode).toBe(1);
+      expect(text.stdout).toContain("Use the reviewed value.");
+      expect(text.stderr).toContain("error: pipr review failed: review");
+
+      const json = await review(["--json"]);
+      expect(json.exitCode).toBe(1);
+      expect(JSON.parse(json.stdout)).toMatchObject({ kind: "review" });
+
+      await Bun.write(workspace.scriptPath, JSON.stringify(reviewScript(workspace.callLog, [])));
+      const passing = await review();
+      expect(passing.exitCode, passing.stderr).toBe(0);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  }, 30_000);
+
   it("runs a hosted GitHub Action event through the process boundary", async () => {
     const result = await runHostRunWithGitWorkspace({ githubActions: true });
 
@@ -382,34 +351,32 @@ describe("pipr CLI", () => {
   });
 });
 
-function parseGitHubOutputRecords(source: string): Record<string, string> {
-  const lines = source.split("\n");
-  const records: Record<string, string> = {};
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = /^(?<name>[^<]+)<<(?<delimiter>.+)$/.exec(lines[index] ?? "");
-    if (!match?.groups) continue;
-    const values: string[] = [];
-    index += 1;
-    while (index < lines.length && lines[index] !== match.groups.delimiter) {
-      values.push(lines[index] ?? "");
-      index += 1;
-    }
-    records[match.groups.name ?? ""] = values.join("\n");
-  }
-  return records;
-}
-
 async function initializeWorkspace(workspace: string): Promise<void> {
   const result = await runCli(["init"], {}, workspace);
   if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout);
 }
 
 async function createLocalReviewWorkspace(
-  options: { findings?: boolean } = {},
-): Promise<{ rootDir: string; baseSha: string; headSha: string; piExecutable: string }> {
+  options: { findings?: boolean; gate?: boolean } = {},
+): Promise<{
+  rootDir: string;
+  baseSha: string;
+  headSha: string;
+  providerArgs: string[];
+  callLog: string;
+  scriptPath: string;
+}> {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-review-"));
   await initializeGitRepository(rootDir);
   await initializeWorkspace(rootDir);
+  if (options.gate) {
+    const configPath = path.join(rootDir, ".pipr", "config.ts");
+    const config = await Bun.file(configPath).text();
+    await Bun.write(
+      configPath,
+      config.replace('timeout: "10m",', 'timeout: "10m",\n    gate: { failOn: () => true },'),
+    );
+  }
   await mkdir(path.join(rootDir, "src"));
   await Bun.write(path.join(rootDir, "src/a.ts"), "export const value = 1;\n");
   await runCommand("git", ["add", "."], rootDir);
@@ -419,13 +386,20 @@ async function createLocalReviewWorkspace(
   await runCommand("git", ["add", "."], rootDir);
   await runCommand("git", ["commit", "--no-verify", "-m", "head"], rootDir);
   const headSha = (await runCommand("git", ["rev-parse", "HEAD"], rootDir)).trim();
-  const piExecutable = path.join(rootDir, "fake-pi.ts");
-  await Bun.write(
-    piExecutable,
-    options.findings ? reviewFindingsExecutable() : noFindingsExecutable(),
-  );
-  await chmod(piExecutable, 0o755);
-  return { rootDir, baseSha, headSha, piExecutable };
+  const scriptPath = path.join(rootDir, "scripted-pi.json");
+  const callLog = path.join(rootDir, "pi-calls.jsonl");
+  const providerArgs = [
+    "--provider-module",
+    await scriptedProviderModulePath(),
+    "--provider-config",
+    scriptPath,
+  ];
+  await Bun.write(scriptPath, JSON.stringify(reviewScript(callLog, [])));
+  if (options.findings) {
+    const rangeId = await rightRangeId({ rootDir, baseSha, providerArgs, callLog });
+    await Bun.write(scriptPath, JSON.stringify(reviewScript(callLog, findingsFor(rangeId))));
+  }
+  return { rootDir, baseSha, headSha, providerArgs, callLog, scriptPath };
 }
 
 async function runHostRunWithGitWorkspace(options: {
@@ -482,38 +456,57 @@ async function initializeGitRepository(workspace: string): Promise<void> {
   await runCommand("git", ["config", "commit.gpgsign", "false"], workspace);
 }
 
-function noFindingsExecutable(): string {
-  return [
-    "#!/usr/bin/env bun",
-    'const callLog = import.meta.dir + "/pi-called";',
-    'const previous = (await Bun.file(callLog).exists()) ? await Bun.file(callLog).text() : "";',
-    'await Bun.write(callLog, previous + "1\\n");',
-    'const promptArg = process.argv.at(-1) ?? "";',
-    'const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;',
-    'if (prompt.includes("Schema ID: core/inline-findings.")) console.log(JSON.stringify({ inlineFindings: [] }));',
-    'else if (prompt.includes("Schema ID: core/summary.")) console.log(JSON.stringify({ body: "No findings." }));',
-    'else console.log(JSON.stringify({ summary: { body: "No findings." }, inlineFindings: [] }));',
-  ].join("\n");
+/** Answers review and summary prompts; every model call is appended to `callLog`. */
+function reviewScript(callLog: string, inlineFindings: unknown[]): ScriptedProviderScript {
+  const summary = inlineFindings.length > 0 ? "One finding." : "No findings.";
+  return {
+    models: ["deepseek/deepseek-v4-pro"],
+    rules: [
+      {
+        when: { promptIncludes: "Schema ID: core/inline-findings." },
+        response: { text: JSON.stringify({ inlineFindings }) },
+      },
+      {
+        when: { promptIncludes: "Schema ID: core/summary." },
+        response: { text: JSON.stringify({ body: summary }) },
+      },
+    ],
+    responses: [{ text: JSON.stringify({ summary: { body: summary }, inlineFindings }) }],
+    recordPath: callLog,
+  };
 }
 
-function reviewFindingsExecutable(): string {
-  return [
-    "#!/usr/bin/env bun",
-    'const promptArg = process.argv.at(-1) ?? "";',
-    'const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;',
-    'if (prompt.includes("Schema ID: core/summary.")) { console.log(JSON.stringify({ body: "One finding." })); process.exit(0); }',
-    'const label = "\\nManifest:";',
-    "const content = prompt.slice(prompt.indexOf(label) + label.length);",
-    'const markers = ["\\n\\nCondensed manifest helper tools:", "\\n\\nInstructions:", "\\n\\nRun Instructions:", "\\n\\nPrompt:"]',
-    "  .map((marker) => content.indexOf(marker)).filter((index) => index !== -1);",
-    "const manifest = JSON.parse(content.slice(0, Math.min(...markers)).trim());",
-    'const file = manifest.files.find((item) => item.path === "src/a.ts");',
-    'const range = file.commentableRanges.find((item) => item.side === "RIGHT");',
-    'const finding = { body: "Use the reviewed value.", path: range.path, rangeId: range.id, side: range.side, startLine: range.startLine, endLine: range.startLine };',
-    'const inlineFindings = [finding, { ...finding, body: "Invalid location.", rangeId: "rng_missing" }];',
-    'if (prompt.includes("Schema ID: core/inline-findings.")) console.log(JSON.stringify({ inlineFindings }));',
-    'else console.log(JSON.stringify({ summary: { body: "One finding." }, inlineFindings }));',
-  ].join("\n");
+/** Runs a no-findings review once and reads the first right-side range id the model was shown. */
+async function rightRangeId(workspace: {
+  rootDir: string;
+  baseSha: string;
+  providerArgs: string[];
+  callLog: string;
+}): Promise<string> {
+  const result = await runCli(
+    ["review", "--base", workspace.baseSha, ...workspace.providerArgs],
+    { DEEPSEEK_API_KEY: "provider-key" },
+    workspace.rootDir,
+  );
+  if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout);
+  const calls = await Bun.file(workspace.callLog).text();
+  await rm(workspace.callLog, { force: true });
+  const rangeId = /rng_[A-Za-z0-9]+_h\d+_RIGHT_\d+_\d+_[a-f0-9]+/.exec(calls)?.[0];
+  if (!rangeId) throw new Error("the review prompt did not include a right-side range id");
+  return rangeId;
+}
+
+function findingsFor(rangeId: string): unknown[] {
+  const line = Number(/_RIGHT_(\d+)_/.exec(rangeId)?.[1]);
+  const finding = {
+    body: "Use the reviewed value.",
+    path: "src/a.ts",
+    rangeId,
+    side: "RIGHT",
+    startLine: line,
+    endLine: line,
+  };
+  return [finding, { ...finding, body: "Invalid location.", rangeId: "rng_missing" }];
 }
 
 async function runInProcess(

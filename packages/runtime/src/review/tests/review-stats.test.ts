@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ReviewStats } from "../../publication/types.js";
 import type { PiRunStats } from "../agent/review-run-types.js";
-import { accumulateReviewStats } from "../review-stats.js";
-import { reviewStatsForRuns } from "../task/task-output.js";
+import { accumulateReviewStats, reviewStatsForRuns } from "../review-stats.js";
 
 describe("review stats", () => {
   it("marks mixed and partial cache reports as partial while retaining safe totals", () => {

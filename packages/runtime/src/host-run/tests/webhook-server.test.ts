@@ -78,6 +78,7 @@ describe("webhook runner", () => {
           },
         }),
       ).rejects.toThrow("positive integer");
+      await expect(access(path.join(root, "invalid.sqlite"))).rejects.toThrow();
 
       const server = runWebhookServer({
         host: "gitlab",
@@ -185,6 +186,28 @@ describe("webhook runner", () => {
 
     await processor.run();
     expect(backingStore.completed).toEqual(["delivery-1"]);
+  });
+
+  it("rejects signed payloads above the configured size limit before enqueue", async () => {
+    const store = new MemoryDeliveryStore();
+    const ingress = createWebhookIngress({
+      host: "gitlab",
+      secret: "webhook-secret",
+      expectedRepository: { id: "42", path: "group/project" },
+      store,
+      maxPayloadBytes: 10,
+    });
+
+    const response = await ingress(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "X-Gitlab-Token": "webhook-secret", "X-Gitlab-Webhook-UUID": "too-large" },
+        body: "x".repeat(20),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(store.deliveries).toHaveLength(0);
   });
 
   it("validates GitLab secrets and dedupes delivery IDs before enqueue", async () => {
@@ -951,7 +974,7 @@ describe("webhook runner", () => {
     }
   });
 
-  it("migrates legacy queues and preserves provider event names", async () => {
+  it("rejects delivery-status reads from legacy queues missing required columns", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
     const databasePath = path.join(root, "deliveries.sqlite");
     try {
@@ -972,24 +995,35 @@ describe("webhook runner", () => {
       `);
       legacy.close();
 
-      const store = new SqliteWebhookDeliveryStore(databasePath);
-      expect(store.next()).toEqual({ id: "legacy", host: "gitlab", payload: "{}" });
-      store.complete("legacy", ignoredPiprResult);
+      expect(() => readWebhookDeliveryStatus(databasePath)).toThrow(/no such column/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("persists provider event names across current-schema restarts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      const first = new SqliteWebhookDeliveryStore(databasePath);
       expect(
-        store.enqueue({
+        first.enqueue({
           id: "bitbucket",
           host: "bitbucket",
           payload: "{}",
           eventName: "pullrequest:updated",
         }),
       ).toBe("created");
-      expect(store.next()).toEqual({
+      first.close();
+
+      const second = new SqliteWebhookDeliveryStore(databasePath);
+      expect(second.next()).toEqual({
         id: "bitbucket",
         host: "bitbucket",
         payload: "{}",
         eventName: "pullrequest:updated",
       });
-      store.close();
+      second.close();
     } finally {
       await rm(root, { recursive: true, force: true });
     }

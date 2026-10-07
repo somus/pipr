@@ -160,6 +160,31 @@ describe("GitLab API client", () => {
     await expect(client.getRepositoryPermission("42", "outside-user")).resolves.toBe("none");
   });
 
+  it.each([
+    { sourceProjectId: 43, isFork: true },
+    { sourceProjectId: 42, isFork: false },
+  ])("marks a merge request from project $sourceProjectId as fork=$isFork", async (fixture) => {
+    const client = createGitLabClient({ GITLAB_TOKEN: "test-token" }, async () =>
+      Response.json({
+        iid: 7,
+        title: "MR",
+        source_branch: "feature",
+        target_branch: "main",
+        source_project_id: fixture.sourceProjectId,
+        target_project_id: 42,
+        sha: "head",
+        diff_refs: { base_sha: "base", start_sha: "start", head_sha: "head" },
+      }),
+    );
+
+    const loaded = await client.loadChange({
+      projectId: "42",
+      projectPath: "group/project",
+      changeNumber: 7,
+    });
+    expect(loaded.change.isFork).toBe(fixture.isFork);
+  });
+
   it("bounds pagination when GitLab never returns a terminal page", async () => {
     let calls = 0;
     const fullPage = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: "note" }));

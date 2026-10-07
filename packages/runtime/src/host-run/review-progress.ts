@@ -56,21 +56,22 @@ export async function startReviewProgress(options: {
   let failurePublication: Promise<"failed" | "superseded"> | undefined;
   const workTracker = createReviewWorkTracker();
   let lastPublishedWork = JSON.stringify(workTracker.snapshot());
+  const progressFields = (body: string | undefined, stage: ReviewProgressStage) => ({
+    body,
+    changeNumber: options.event.change.number,
+    token,
+    reviewedHeadSha,
+    stage,
+    showHeader: options.config.publication.showHeader,
+    showFooter: options.config.publication.showFooter,
+    firstRun,
+  });
   const initial = await publishProgressWithTrace({
     change: options.event,
     reviewedHeadSha,
     renderBody(currentBody) {
       firstRun = currentBody === undefined;
-      return renderRunningReviewProgress({
-        body: currentBody,
-        changeNumber: options.event.change.number,
-        token,
-        reviewedHeadSha,
-        stage: activeStage,
-        showHeader: options.config.publication.showHeader,
-        showFooter: options.config.publication.showFooter,
-        firstRun,
-      });
+      return renderRunningReviewProgress(progressFields(currentBody, activeStage));
     },
   });
   if (initial.status === "superseded") throw new ReviewProgressSupersededError();
@@ -103,17 +104,7 @@ export async function startReviewProgress(options: {
           reviewedHeadSha,
           expectedToken: token,
           renderBody: (body) =>
-            renderRunningReviewProgress({
-              body,
-              changeNumber: options.event.change.number,
-              token,
-              reviewedHeadSha,
-              stage: activeStage,
-              showHeader: options.config.publication.showHeader,
-              showFooter: options.config.publication.showFooter,
-              firstRun,
-              work,
-            }),
+            renderRunningReviewProgress({ ...progressFields(body, activeStage), work }),
         });
         if (result.status === "superseded") {
           superseded = true;
@@ -148,14 +139,7 @@ export async function startReviewProgress(options: {
         expectedToken: token,
         renderBody: (body) =>
           renderFailedReviewProgress({
-            body,
-            changeNumber: options.event.change.number,
-            token,
-            reviewedHeadSha,
-            stage: activeStage,
-            showHeader: options.config.publication.showHeader,
-            showFooter: options.config.publication.showFooter,
-            firstRun,
+            ...progressFields(body, activeStage),
             showStats: options.config.publication.showStats,
             durationMs: Date.now() - startedAt,
             reason: failure.reason,
@@ -202,14 +186,7 @@ export async function startReviewProgress(options: {
         expectedToken: token,
         renderBody: (body) =>
           renderRunningReviewProgress({
-            body,
-            changeNumber: options.event.change.number,
-            token,
-            reviewedHeadSha,
-            stage,
-            showHeader: options.config.publication.showHeader,
-            showFooter: options.config.publication.showFooter,
-            firstRun,
+            ...progressFields(body, stage),
             work: workTracker.snapshot(),
           }),
       });

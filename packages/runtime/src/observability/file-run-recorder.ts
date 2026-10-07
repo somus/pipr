@@ -33,6 +33,7 @@ import {
   setDefined,
   stringField,
 } from "./event-observation.js";
+import { publicLog } from "./metadata-log.js";
 import { exportRunTelemetry } from "./otlp.js";
 import {
   ensureSafeDirectory,
@@ -73,16 +74,18 @@ export async function startFileRunRecorder(options: {
 
   const startedAt = new Date();
   const activePath = path.join(directory, "active.json");
-  await writePrivateFile(
-    activePath,
-    `${JSON.stringify({
-      executionId,
-      startedAt: startedAt.toISOString(),
-      heartbeatAt: startedAt.toISOString(),
-      pid: process.pid,
-      processIdentity: currentProcessIdentity,
-    })}\n`,
-  );
+  const writeActiveMarker = (heartbeatAt: Date): Promise<void> =>
+    writePrivateFile(
+      activePath,
+      `${JSON.stringify({
+        executionId,
+        startedAt: startedAt.toISOString(),
+        heartbeatAt: heartbeatAt.toISOString(),
+        pid: process.pid,
+        processIdentity: currentProcessIdentity,
+      })}\n`,
+    );
+  await writeActiveMarker(startedAt);
   const startedMs = Date.now();
   const startedCpu = process.resourceUsage();
   const rootSpanId = randomBytes(8).toString("hex");
@@ -113,18 +116,7 @@ export async function startFileRunRecorder(options: {
   let heartbeatWrite = Promise.resolve();
   const heartbeatTimer = setInterval(() => {
     heartbeatWrite = heartbeatWrite
-      .then(() =>
-        writePrivateFile(
-          activePath,
-          `${JSON.stringify({
-            executionId,
-            startedAt: startedAt.toISOString(),
-            heartbeatAt: new Date().toISOString(),
-            pid: process.pid,
-            processIdentity: currentProcessIdentity,
-          })}\n`,
-        ),
-      )
+      .then(() => writeActiveMarker(new Date()))
       .catch((error: unknown) => {
         captureErrors.push(safeErrorMessage(error));
       });
@@ -285,7 +277,7 @@ export async function startFileRunRecorder(options: {
 
   const queueLog = (record: RuntimeLogRecord) => {
     observeLogRecord(record);
-    const bundleRecord: RunLogRecord = {
+    const fullRecord: RunLogRecord = {
       formatVersion: 1,
       timestamp: new Date().toISOString(),
       sequence: sequence++,
@@ -300,6 +292,9 @@ export async function startFileRunRecorder(options: {
             text: boundLogString(redactor.redact(record.text).value, 65_536, markSignalTruncated),
           }),
     };
+    // Metadata capture is content-free: only the public projection of a log is kept.
+    const bundleRecord = options.mode === "metadata" ? publicLog(fullRecord) : fullRecord;
+    if (!bundleRecord) return;
     const line = `${JSON.stringify(bundleRecord)}\n`;
     const bytes = Buffer.byteLength(line);
     if (logBytes + bytes > logLimitBytes) {
@@ -440,7 +435,7 @@ export async function startFileRunRecorder(options: {
       content: context.result.output ?? "",
       sensitive: true,
     });
-    await addAttemptStderr(context.suffix, context.result.stderr || context.result.error);
+    await addAttemptStderr(context.suffix, context.result.error);
     queueAttemptResources(context, failed, resourceSnapshot());
   }
 
@@ -708,23 +703,25 @@ export async function startFileRunRecorder(options: {
     }
   }
 
-  async function evictLowerPriorityArtifacts(
-    desiredBytes: number,
-    incomingPriority: number,
-  ): Promise<void> {
-    if (artifactBytes + desiredBytes <= artifactLimitBytes) return;
-    const candidates = artifacts
-      .filter(
-        (artifact) =>
-          !artifact.omitted &&
-          artifact.sizeBytes > 0 &&
-          (artifactPriorities.get(artifact) ?? 0) < incomingPriority,
-      )
+  /** Stored artifacts in eviction order: lowest priority first, then by path. */
+  function evictionCandidates(): RunBundleArtifact[] {
+    return artifacts
+      .filter((artifact) => !artifact.omitted && artifact.sizeBytes > 0)
       .sort(
         (left, right) =>
           (artifactPriorities.get(left) ?? 0) - (artifactPriorities.get(right) ?? 0) ||
           left.path.localeCompare(right.path),
       );
+  }
+
+  async function evictLowerPriorityArtifacts(
+    desiredBytes: number,
+    incomingPriority: number,
+  ): Promise<void> {
+    if (artifactBytes + desiredBytes <= artifactLimitBytes) return;
+    const candidates = evictionCandidates().filter(
+      (artifact) => (artifactPriorities.get(artifact) ?? 0) < incomingPriority,
+    );
     for (const candidate of candidates) {
       if (artifactBytes + desiredBytes <= artifactLimitBytes) break;
       await omitArtifact(candidate);
@@ -740,13 +737,7 @@ export async function startFileRunRecorder(options: {
       if (artifactBytes + spanBytes + logBytes + metricsBytes + manifestBytes <= bundleLimitBytes) {
         return;
       }
-      const candidate = artifacts
-        .filter((artifact) => !artifact.omitted && artifact.sizeBytes > 0)
-        .sort(
-          (left, right) =>
-            (artifactPriorities.get(left) ?? 0) - (artifactPriorities.get(right) ?? 0) ||
-            left.path.localeCompare(right.path),
-        )[0];
+      const candidate = evictionCandidates()[0];
       if (!candidate) {
         captureErrors.push("Run bundle metadata exceeded the configured bundle limit");
         return;

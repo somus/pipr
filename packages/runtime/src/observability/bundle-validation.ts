@@ -13,6 +13,7 @@ import {
   runSpanRecordSchema,
 } from "@usepipr/sdk";
 import { bundleFilePaths } from "./bundle-files.js";
+import { isMissingFileError, requireRealDirectory } from "./recorder-fs.js";
 
 export type DownloadedBundle = {
   directory: string;
@@ -62,14 +63,6 @@ export async function loadValidatedRunBundle(directory: string): Promise<Validat
   return { directory, manifest, spans, logs, metrics };
 }
 
-async function requireRealDirectory(directory: string): Promise<void> {
-  const details = await lstat(directory);
-  if (details.isSymbolicLink()) {
-    throw new Error(`Run bundle directory cannot be a symlink: ${directory}`);
-  }
-  if (!details.isDirectory()) throw new Error(`Run bundle path is not a directory: ${directory}`);
-}
-
 async function ensureNewDestination(directory: string): Promise<void> {
   try {
     await lstat(directory);
@@ -78,10 +71,6 @@ async function ensureNewDestination(directory: string): Promise<void> {
     if (!isMissingFileError(error)) throw error;
   }
   await mkdir(directory, { recursive: false, mode: 0o700 });
-}
-
-function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 async function validateBundleFileSet(

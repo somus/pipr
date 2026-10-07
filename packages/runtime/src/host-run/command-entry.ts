@@ -1,20 +1,25 @@
 import { firstNonEmptyLine, isPiprCommandLine } from "../commands/grammar.js";
 import type { CodeHostAdapter, CommandCommentEvent } from "../hosts/types.js";
+import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
-import { parseChangeRequestEventContext } from "../types.js";
 import type { HostRunServices } from "./composition.js";
 import {
-  dispatchRuntimeEntry,
   hasRequiredRepositoryPermission,
+  type PlanCommandInvocation,
   type PlanCommandResolution,
   parsePlanCommandInputs,
   permissionDeniedHelp,
   resolvePlanCommand,
 } from "./entry-dispatch.js";
-import { logEventContext, logPhase } from "./logging.js";
+import { ignore, logPhase } from "./logging.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
-import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
+import {
+  loadCommentChangeRequest,
+  loadCommentChangeRequestRef,
+  loadTrustedRuntimeForEvent,
+  prepareTrustedHeadCheckout,
+} from "./trusted-runtime.js";
 import type {
   HostRunCommandResult,
   TrustedReviewAndPublishResult,
@@ -37,14 +42,11 @@ export async function runIssueCommentHostRunCommand(
   comment: CommandCommentEvent,
 ): Promise<HostRunCommandResult> {
   if (!services.adapter.capabilities.commandComments) {
-    const ignored = { kind: "ignored" as const, reason: "host adapter does not support commands" };
-    services.log.notice("event ignored", { reason: ignored.reason });
-    return ignored;
+    return ignore(services.log, "host adapter does not support commands");
   }
   const prepared = await prepareIssueCommentCommand(services, comment);
   if (prepared.kind === "ignored") {
-    services.log.notice("event ignored", { reason: prepared.reason });
-    return prepared;
+    return ignore(services.log, prepared.reason);
   }
   return await dispatchIssueCommentCommand(services, prepared);
 }
@@ -57,27 +59,7 @@ async function prepareIssueCommentCommand(
   if (runnable.kind === "ignored") {
     return runnable;
   }
-  const loaded = await logPhase(services.log, "load change request", async () =>
-    services.adapter.events.loadChangeRequest({
-      repository: comment.repository,
-      changeNumber: comment.changeNumber,
-      workspace: comment.workspace,
-      eventName: comment.eventName,
-      action: comment.action,
-      rawAction: comment.rawAction,
-    }),
-  );
-  const event = parseChangeRequestEventContext({
-    eventName: loaded.eventName ?? comment.eventName,
-    action: loaded.action ?? comment.action,
-    rawAction: loaded.rawAction ?? comment.rawAction,
-    platform: { id: services.adapter.id },
-    repository: loaded.repository,
-    coordinates: loaded.coordinates,
-    change: loaded.change,
-    workspace: loaded.workspace ?? comment.workspace,
-  });
-  logEventContext(services.log, event);
+  const event = await loadCommentChangeRequest(services, comment);
   const trustedRuntime = await loadTrustedRuntimeForEvent(services, event, services.log);
   const resolution = resolvePlanCommand(trustedRuntime.plan, runnable.line);
   if (resolution.kind === "ignored") {
@@ -116,6 +98,19 @@ async function dispatchIssueCommentCommand(
   return await runCommandLifecycle(services, prepared, runnable.invocation);
 }
 
+function commandHelp(
+  prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>,
+  help: { body: string; reason: string },
+): HostRunCommandResult {
+  return {
+    kind: "command-help",
+    event: prepared.event,
+    configSource: prepared.trustedRuntime.settings.source,
+    body: help.body,
+    reason: help.reason,
+  };
+}
+
 async function resolveRunnableCommand(
   adapter: CodeHostAdapter,
   prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>,
@@ -137,47 +132,27 @@ async function resolveRunnableCommand(
     actualPermission: permission,
   });
   if (!hasRequiredRepositoryPermission(permission, requiredPermission)) {
-    return {
-      kind: "command-help",
-      event: prepared.event,
-      configSource: prepared.trustedRuntime.settings.source,
+    return commandHelp(prepared, {
       body: permissionDeniedHelp(prepared.trustedRuntime.plan, requiredPermission),
       reason: `permission denied for '${prepared.line}'`,
-    };
+    });
   }
-  if (prepared.resolution.kind === "help" || prepared.resolution.kind === "invalid") {
-    return {
-      kind: "command-help",
-      event: prepared.event,
-      configSource: prepared.trustedRuntime.settings.source,
-      body: prepared.resolution.body,
-      reason: prepared.resolution.reason,
-    };
+  if (prepared.resolution.kind !== "matched") {
+    return commandHelp(prepared, prepared.resolution);
   }
-
   const parsedResolution = parsePlanCommandInputs(
     prepared.trustedRuntime.plan,
     prepared.resolution.invocation,
   );
-  if (parsedResolution.kind === "invalid") {
-    return {
-      kind: "command-help",
-      event: prepared.event,
-      configSource: prepared.trustedRuntime.settings.source,
-      body: parsedResolution.body,
-      reason: parsedResolution.reason,
-    };
-  }
-  if (parsedResolution.kind !== "matched") {
-    return { kind: "ignored", reason: "command dispatch did not resolve to a runnable task" };
-  }
-  return parsedResolution;
+  return parsedResolution.kind === "invalid"
+    ? commandHelp(prepared, parsedResolution)
+    : parsedResolution;
 }
 
 async function runCommandLifecycle(
   services: HostRunServices,
   prepared: Extract<PreparedIssueCommentCommand, { kind: "prepared" }>,
-  invocation: Extract<PlanCommandResolution, { kind: "matched" }>["invocation"],
+  invocation: PlanCommandInvocation,
 ): Promise<HostRunCommandResult> {
   const status = services.adapter.publication?.publishCommandStatus;
   if (!status) {
@@ -198,8 +173,7 @@ async function runCommandLifecycle(
       prepared.event,
       services.log,
     );
-    const dispatch = dispatchRuntimeEntry({
-      kind: "change-request",
+    const selectedTasks = selectRuntimeTasks({
       plan: prepared.trustedRuntime.plan,
       event: prepared.event,
       taskName: invocation.taskName,
@@ -211,7 +185,7 @@ async function runCommandLifecycle(
       event: prepared.event,
       taskName: invocation.taskName,
       taskInput: invocation.inputs,
-      selectedTasks: dispatch.kind === "change-request" ? dispatch.tasks : [],
+      selectedTasks,
       commandInvocation: {
         name: invocation.commandName,
         line: invocation.line,
@@ -258,14 +232,7 @@ async function publishCommandFailureStatus(options: {
   log: RuntimeLog;
 }): Promise<void> {
   try {
-    const current = await options.adapter.events.loadChangeRequest({
-      repository: options.prepared.comment.repository,
-      changeNumber: options.prepared.comment.changeNumber,
-      workspace: options.prepared.comment.workspace,
-      eventName: options.prepared.comment.eventName,
-      action: options.prepared.comment.action,
-      rawAction: options.prepared.comment.rawAction,
-    });
+    const current = await loadCommentChangeRequestRef(options.adapter, options.prepared.comment);
     const state =
       current.change.head.sha === options.prepared.event.change.head.sha ? "failed" : "superseded";
     await options.status({ ...options.statusOptions, state });

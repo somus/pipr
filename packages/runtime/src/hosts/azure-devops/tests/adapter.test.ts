@@ -4,12 +4,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { InlinePublicationItem } from "../../../publication/types.js";
-import { buildPublicationPlan } from "../../../review/comment.js";
 import {
-  buildPriorReviewState,
   renderInlineFindingMarker,
   renderVerifierResponseMarker,
-} from "../../../review/prior-state.js";
+} from "../../../review/comment-markers.js";
+import { buildPriorReviewState } from "../../../review/prior-state.js";
+import { buildPublicationPlan } from "../../../review/publication-plan.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import {
   type CodeHostAdapterConformanceHarness,
@@ -75,73 +75,6 @@ describe("Azure DevOps host adapter", () => {
     });
   });
 
-  it("fails stale publication before any Azure write", async () => {
-    const client = new FakeAzureDevOpsClient();
-    client.pullRequest = {
-      ...client.pullRequest,
-      lastMergeSourceCommit: { commitId: "new-head" },
-    };
-    const adapter = createAzureDevOpsHostAdapter({ client });
-
-    await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
-      "head changed",
-    );
-    expect(client.threads).toEqual([]);
-  });
-
-  it("rechecks the head immediately before a progress write", async () => {
-    const client = new FakeAzureDevOpsClient();
-    client.afterGetPullRequest = () => {
-      client.afterGetPullRequest = undefined;
-      client.pullRequest = {
-        ...client.pullRequest,
-        lastMergeSourceCommit: { commitId: "new-head" },
-      };
-    };
-    const adapter = createAzureDevOpsHostAdapter({ client });
-
-    await expect(
-      adapter.publication?.publishReviewProgress?.({
-        change,
-        reviewedHeadSha: "head",
-        renderBody: () => "Progress.",
-      }),
-    ).rejects.toThrow("head changed");
-    expect(client.mainCreates).toBe(0);
-  });
-
-  it("rechecks the progress token immediately before an update write", async () => {
-    const client = new FakeAzureDevOpsClient();
-    const adapter = createAzureDevOpsHostAdapter({ client });
-    const publishProgress = adapter.publication?.publishReviewProgress;
-    if (!publishProgress) throw new Error("Expected progress publication");
-    await publishProgress({
-      change,
-      reviewedHeadSha: "head",
-      renderBody: () => progressBody("old-token"),
-    });
-    let headReads = 0;
-    client.afterGetPullRequest = () => {
-      headReads += 1;
-      if (headReads !== 2) return;
-      client.afterGetPullRequest = undefined;
-      const comment = client.threads[0]?.comments[0];
-      if (!comment) throw new Error("Expected progress comment");
-      comment.content = progressBody("new-token");
-    };
-
-    await expect(
-      publishProgress({
-        change,
-        reviewedHeadSha: "head",
-        expectedToken: "old-token",
-        renderBody: () => progressBody("old-token"),
-      }),
-    ).resolves.toEqual({ status: "superseded" });
-    expect(client.mainUpdates).toBe(0);
-    expect(client.threads[0]?.comments[0]?.content).toBe(progressBody("new-token"));
-  });
-
   it("reports an inline publication failure when the reviewed blob cannot be read", async () => {
     const client = new FakeAzureDevOpsClient();
     const adapter = createAzureDevOpsHostAdapter({ client });
@@ -168,11 +101,13 @@ describe("Azure DevOps host adapter", () => {
     const adapter = createAzureDevOpsHostAdapter({ client });
 
     await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
-      "base changed",
+      "Azure DevOps change request base changed from 'base' to 'new-base' before publication",
     );
     await expect(
       adapter.statuses?.upsert({ change, name: "review", state: "success" }),
-    ).rejects.toThrow("endpoints changed");
+    ).rejects.toThrow(
+      "Azure DevOps change request base changed from 'base' to 'new-base' before status publication",
+    );
     expect(client.threads).toEqual([]);
     expect(client.statusBodies).toEqual([]);
   });
@@ -384,18 +319,6 @@ describe("Azure DevOps host adapter", () => {
     expect(comments?.[0]?.content).toContain("```\nconst value = 2;\n```");
   });
 
-  it("declares Azure-native capability limits", () => {
-    const adapter = createAzureDevOpsHostAdapter({ client: new FakeAzureDevOpsClient() });
-    expect(adapter.capabilities).toEqual({
-      commandComments: true,
-      reviewCommentReplies: true,
-      threadResolution: true,
-      multilineInlineComments: true,
-      suggestedChanges: false,
-      statuses: true,
-    });
-  });
-
   it("uses one-based UTF-16 end offsets from the reviewed commit", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-azure-offset-"));
     try {
@@ -489,15 +412,6 @@ const change: ChangeRequestEventContext = {
   workspace: fixtureWorkspace,
 };
 
-function progressBody(token: string): string {
-  return [
-    "<!-- pipr:main-comment change=7 version=1 -->",
-    `<!-- pipr:progress:start token=${token} head=head stage=preparing-workspace state=running -->`,
-    "## Progress",
-    "<!-- pipr:progress:end -->",
-  ].join("\n");
-}
-
 function publicationPlan() {
   const inlineItem: InlinePublicationItem = {
     finding: {
@@ -559,6 +473,7 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
   headSha = "head";
   iterationChanges = [{ changeTrackingId: 11, changeType: "edit", path: "src/a.ts" }];
   listIterationsCalls = 0;
+  changeLoads = 0;
   permission: RepositoryPermission = "write";
   permissionActors: string[] = [];
   failInline = false;
@@ -606,18 +521,21 @@ class FakeAzureDevOpsClient implements AzureDevOpsClient {
     this.afterGetPullRequest?.();
     return pullRequest;
   };
-  loadChange = async () => ({
-    repository: change.repository,
-    coordinates: {
-      provider: "azure-devops" as const,
-      organization: "org",
-      project: "project",
-      projectId: "project-id",
-      repositoryId: "repo-id",
-    },
-    change: change.change,
-    iterationId: 2,
-  });
+  loadChange = async () => {
+    this.changeLoads += 1;
+    return {
+      repository: change.repository,
+      coordinates: {
+        provider: "azure-devops" as const,
+        organization: "org",
+        project: "project",
+        projectId: "project-id",
+        repositoryId: "repo-id",
+      },
+      change: change.change,
+      iterationId: 2,
+    };
+  };
   listIterations = async () => {
     this.listIterationsCalls += 1;
     return [
@@ -829,20 +747,30 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
         }),
       );
       const reply = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
+      return { changeRequest, command, reply };
+    },
+    async draftEvent() {
+      const eventPath = path.join(root, "draft.json");
       await Bun.write(
         eventPath,
         JSON.stringify({
-          ...envelope({
+          id: "event-1",
+          eventType: "git.pullrequest.updated",
+          resource: {
             pullRequestId: 7,
             isDraft: true,
             repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
-          }),
-          eventType: "git.pullrequest.updated",
+          },
+          resourceContainers: {
+            account: { id: "account-id", baseUrl: "https://dev.azure.com/org/" },
+            collection: { id: "collection-id", baseUrl: "https://dev.azure.com/org/" },
+            project: { id: "project-id", baseUrl: "https://dev.azure.com/org/project/" },
+          },
         }),
       );
-      const draft = await adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
-      return { changeRequest, command, reply, draft };
+      return adapter.events.parseEvent({ eventPath, env: {}, workspace: root });
     },
+    changeLoads: () => client.changeLoads,
     setPermission(permission) {
       client.permission = permission;
     },
@@ -851,6 +779,12 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
       client.pullRequest = {
         ...client.pullRequest,
         lastMergeSourceCommit: { commitId: headSha },
+      };
+    },
+    setCurrentBase(baseSha) {
+      client.pullRequest = {
+        ...client.pullRequest,
+        lastMergeTargetCommit: { commitId: baseSha },
       };
     },
     advanceHeadDuringPreflight() {
@@ -878,14 +812,14 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
     failNextInline() {
       client.failInline = true;
     },
-    seedForeignInline() {
+    seedForeignInline(body) {
       client.threads.push({
         id: "thread-foreign",
         status: "active",
         comments: [
           {
             id: "inline-foreign",
-            content: `${renderInlineFindingMarker("foreign", "head")}\nForeign.`,
+            content: body,
             author: { uniqueName: "developer@example.com" },
           },
         ],
@@ -897,6 +831,15 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
         pullRequestThreadContext: {
           iterationContext: { firstComparingIteration: 1, secondComparingIteration: 2 },
         },
+      });
+    },
+    seedForeignMainComment(body) {
+      client.threads.push({
+        id: "thread-foreign-main",
+        status: "active",
+        comments: [
+          { id: "foreign-main", content: body, author: { uniqueName: "developer@example.com" } },
+        ],
       });
     },
     seedForeignReply(body) {

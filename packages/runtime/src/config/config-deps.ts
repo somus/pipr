@@ -4,7 +4,10 @@ import { normalizePackageManifest, type PackageManifest } from "./package-manife
 
 const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
 
-export async function installConfigDependencies(configDir: string): Promise<void> {
+export async function installConfigDependencies(
+  configDir: string,
+  env?: NodeJS.ProcessEnv,
+): Promise<void> {
   const packageJsonPath = path.join(configDir, "package.json");
   if (!(await Bun.file(packageJsonPath).exists())) {
     return;
@@ -24,21 +27,20 @@ export async function installConfigDependencies(configDir: string): Promise<void
         "Run `bun install` in .pipr/ and commit bun.lock.",
     );
   }
-  await assertBunAvailable();
+  await assertBunAvailable(env);
   await withSanitizedConfigInstallInputs(
     { packageJsonPath, originalPackageJson, bunLockPath, originalBunLock },
     async () => {
       if (hasRuntimeProvidedDependencies(manifest)) {
-        await runConfigBunInstall(configDir, ["install", "--ignore-scripts", "--lockfile-only"]);
+        await runBunInstall(configDir, ["install", "--ignore-scripts", "--lockfile-only"], { env });
         const projectedBunLock = await Bun.file(bunLockPath).text();
         assertTrustedLockProjection(configDir, originalBunLock, projectedBunLock);
       }
-      await runConfigBunInstall(configDir, [
-        "install",
-        "--ignore-scripts",
-        "--no-save",
-        "--frozen-lockfile",
-      ]);
+      await runBunInstall(
+        configDir,
+        ["install", "--ignore-scripts", "--no-save", "--frozen-lockfile"],
+        { env },
+      );
     },
   );
 }
@@ -68,17 +70,23 @@ async function withSanitizedConfigInstallInputs(
   }
 }
 
-async function runConfigBunInstall(configDir: string, args: string[]): Promise<void> {
+/** Runs `bun <args>` in `cwd` with `env` (the process environment by default); failures name `label`. */
+export async function runBunInstall(
+  cwd: string,
+  args: string[],
+  options: { label?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<void> {
+  const label = options.label ?? cwd;
   const proc = Bun.spawn(["bun", ...args], {
-    cwd: configDir,
-    env: process.env,
+    cwd,
+    env: options.env ?? process.env,
     stdout: "pipe",
     stderr: "pipe",
   });
   const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
   if (exitCode !== 0) {
     throw new Error(
-      `${configDir}: bun install failed (exit ${exitCode}).` +
+      `${label}: bun install failed (exit ${exitCode}).` +
         (stderr.trim().length > 0 ? `\n${stderr.trim()}` : ""),
     );
   }
@@ -254,20 +262,18 @@ function firstRecordProjectionChange(
   return undefined;
 }
 
-export async function assertBunAvailable(): Promise<void> {
+export async function assertBunAvailable(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  let exitCode: number | undefined;
   try {
-    const proc = Bun.spawn(["bun", "--version"], {
-      env: process.env,
+    exitCode = await Bun.spawn(["bun", "--version"], {
+      env,
       stdout: "pipe",
       stderr: "pipe",
-    });
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      throw new Error(
-        "bun is required on PATH to install .pipr/package.json dependencies. Install Bun from https://bun.sh",
-      );
-    }
+    }).exited;
   } catch {
+    // Reported below like a non-zero exit.
+  }
+  if (exitCode !== 0) {
     throw new Error(
       "bun is required on PATH to install .pipr/package.json dependencies. Install Bun from https://bun.sh",
     );

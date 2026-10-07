@@ -42,7 +42,7 @@ After the check passes, run `pipr inspect` to confirm the selected models, tasks
 
 ## A provider secret is missing
 
-Match the name passed to `pipr.secret(...)` with the variable exposed by local execution, CI, or the webhook worker.
+Expose the model's key variable to local execution, CI, or the webhook worker. A model without `apiKey` reads its provider's standard variable, such as `DEEPSEEK_API_KEY`; a model with `apiKey: pipr.secret({ name })` reads that name. Models of a provider declared with `pipr.provider(...)` read the provider's `apiKey` variable, such as `MERGE_GATEWAY_API_KEY`.
 
 For GitHub:
 
@@ -103,11 +103,11 @@ Common causes include:
 - the file is binary, removed, generated, locked, or too large for inline review
 - another current finding duplicates the same issue and range
 
-Pass the manifest to the agent and map custom output to exact manifest anchors. See [Comments and findings](/docs/concepts/comments#dropped-findings).
+Pass the `ctx.change.diff()` value to the agent and map custom output to exact manifest anchors. See [Comments and findings](/docs/concepts/comments#dropped-findings).
 
 ## Model output is invalid
 
-Agent output must match the declared schema after the configured repair policy.
+Agent output must match the declared schema. Pipr allows one repair attempt in the same conversation, then tries the agent's fallback models.
 
 If invalid output persists:
 

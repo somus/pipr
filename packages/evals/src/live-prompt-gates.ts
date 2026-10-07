@@ -1,35 +1,19 @@
-import { type PiprEvalCase, type PiprEvalExpected, promptEvalCasesForMode } from "./cases.js";
+import { type PiprEvalCase, promptEvalCasesForMode } from "./cases.js";
 import type { PiprEvalOutput } from "./runner.js";
 import { runPiprEvalCase } from "./runner.js";
 import {
   diagnoseExpectedFindingRecall,
   type ExpectedFindingRecallDiagnostics,
-  scoreExpectedFindings,
-  scoreExpectedInlineSelection,
-  scoreExpectedSuggestedFixBehavior,
-  scoreFalsePositiveSuppression,
-  scoreFindingCountBudget,
-  scoreForbiddenOutputSuppression,
-  scoreInlineFindingBodyBudget,
-  scoreSuggestedFixRangeShape,
-  scoreValidAnchoring,
+  type PiprEvalScoreInput,
+  type PiprEvalScorer,
+  piprEvalScorers,
 } from "./scoring.js";
-
-type LivePromptScoreInput = {
-  output: PiprEvalOutput;
-  expected?: PiprEvalExpected;
-};
-
-type LivePromptScorer = {
-  name: string;
-  scorer: (input: LivePromptScoreInput) => number;
-};
 
 type LivePromptGateDefinition = {
   name: string;
   label: string;
   caseIds: readonly string[];
-  scorers: readonly LivePromptScorer[];
+  scorers: readonly PiprEvalScorer[];
 };
 
 export type LivePromptGateFailure = {
@@ -60,104 +44,67 @@ export const livePromptGateCaseIds = {
   ],
 } as const;
 
-const runSucceededScorer = {
-  name: "Run succeeded",
-  scorer: ({ output }) => (output.ok ? 1 : 0),
-} satisfies LivePromptScorer;
-
-const expectedFindingRecallScorer = {
-  name: "Expected finding recall",
-  scorer: ({ output, expected }) => scoreExpectedFindings(output, expected),
-} satisfies LivePromptScorer;
-
-const forbiddenOutputSuppressionScorer = {
-  name: "Forbidden output suppression",
-  scorer: ({ output, expected }) => scoreForbiddenOutputSuppression(output, expected),
-} satisfies LivePromptScorer;
-
-const falsePositiveSuppressionScorer = {
-  name: "False-positive suppression",
-  scorer: ({ output, expected }) => scoreFalsePositiveSuppression(output, expected),
-} satisfies LivePromptScorer;
-
-const validInlineAnchoringScorer = {
-  name: "Valid inline anchoring",
-  scorer: ({ output }) => scoreValidAnchoring(output),
-} satisfies LivePromptScorer;
-
-const expectedInlineSelectionScorer = {
-  name: "Expected inline selection",
-  scorer: ({ output, expected }) => scoreExpectedInlineSelection(output, expected),
-} satisfies LivePromptScorer;
-
-const inlineFindingBodyBudgetScorer = {
-  name: "Inline finding body budget",
-  scorer: ({ output }) => scoreInlineFindingBodyBudget(output),
-} satisfies LivePromptScorer;
-
-const suggestedFixRangeShapeScorer = {
-  name: "Suggested fix range shape",
-  scorer: ({ output }) => scoreSuggestedFixRangeShape(output),
-} satisfies LivePromptScorer;
-
-const expectedSuggestedFixBehaviorScorer = {
-  name: "Expected suggested fix behavior",
-  scorer: ({ output, expected }) => scoreExpectedSuggestedFixBehavior(output, expected),
-} satisfies LivePromptScorer;
-
-const findingCountBudgetScorer = {
-  name: "Finding count budget",
-  scorer: ({ output, expected }) => scoreFindingCountBudget(output, expected),
-} satisfies LivePromptScorer;
+const {
+  runSucceeded,
+  expectedFindingRecall,
+  forbiddenOutputSuppression,
+  falsePositiveSuppression,
+  validInlineAnchoring,
+  expectedInlineSelection,
+  inlineFindingBodyBudget,
+  suggestedFixRangeShape,
+  expectedSuggestedFixBehavior,
+  findingCountBudget,
+} = piprEvalScorers;
 
 const cleanSuppressionGateScorers = [
-  runSucceededScorer,
-  falsePositiveSuppressionScorer,
-  findingCountBudgetScorer,
-] satisfies LivePromptScorer[];
+  runSucceeded,
+  falsePositiveSuppression,
+  findingCountBudget,
+] satisfies PiprEvalScorer[];
 
 const defectRecallGateScorers = [
-  runSucceededScorer,
-  expectedFindingRecallScorer,
-  falsePositiveSuppressionScorer,
-  validInlineAnchoringScorer,
-  expectedInlineSelectionScorer,
-  inlineFindingBodyBudgetScorer,
-  findingCountBudgetScorer,
-] satisfies LivePromptScorer[];
+  runSucceeded,
+  expectedFindingRecall,
+  falsePositiveSuppression,
+  validInlineAnchoring,
+  expectedInlineSelection,
+  inlineFindingBodyBudget,
+  findingCountBudget,
+] satisfies PiprEvalScorer[];
 
 export const fullAdvisoryScorers = [
-  runSucceededScorer,
-  expectedFindingRecallScorer,
-  forbiddenOutputSuppressionScorer,
-  falsePositiveSuppressionScorer,
-  validInlineAnchoringScorer,
-  expectedInlineSelectionScorer,
-  inlineFindingBodyBudgetScorer,
-  suggestedFixRangeShapeScorer,
-  expectedSuggestedFixBehaviorScorer,
-  findingCountBudgetScorer,
-] satisfies LivePromptScorer[];
+  runSucceeded,
+  expectedFindingRecall,
+  forbiddenOutputSuppression,
+  falsePositiveSuppression,
+  validInlineAnchoring,
+  expectedInlineSelection,
+  inlineFindingBodyBudget,
+  suggestedFixRangeShape,
+  expectedSuggestedFixBehavior,
+  findingCountBudget,
+] satisfies PiprEvalScorer[];
 
 const safetyHygieneGateScorers = [
-  runSucceededScorer,
-  expectedFindingRecallScorer,
-  forbiddenOutputSuppressionScorer,
-  falsePositiveSuppressionScorer,
-  findingCountBudgetScorer,
-] satisfies LivePromptScorer[];
+  runSucceeded,
+  expectedFindingRecall,
+  forbiddenOutputSuppression,
+  falsePositiveSuppression,
+  findingCountBudget,
+] satisfies PiprEvalScorer[];
 
 export const suggestedFixGateScorers = [
-  runSucceededScorer,
-  expectedFindingRecallScorer,
-  forbiddenOutputSuppressionScorer,
-  falsePositiveSuppressionScorer,
-  validInlineAnchoringScorer,
-  inlineFindingBodyBudgetScorer,
-  suggestedFixRangeShapeScorer,
-  expectedSuggestedFixBehaviorScorer,
-  findingCountBudgetScorer,
-] satisfies LivePromptScorer[];
+  runSucceeded,
+  expectedFindingRecall,
+  forbiddenOutputSuppression,
+  falsePositiveSuppression,
+  validInlineAnchoring,
+  inlineFindingBodyBudget,
+  suggestedFixRangeShape,
+  expectedSuggestedFixBehavior,
+  findingCountBudget,
+] satisfies PiprEvalScorer[];
 
 export const suggestedFixLivePromptGate = {
   name: "Pipr suggested-fix live prompt gate",
@@ -187,12 +134,6 @@ export const safetyHygieneLivePromptGate = {
   scorers: safetyHygieneGateScorers,
 } satisfies LivePromptGateDefinition;
 
-export function assertLiveEvalEnv(): void {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    throw new Error("DEEPSEEK_API_KEY is required for live prompt evals");
-  }
-}
-
 function livePromptEvalCases(ids: readonly string[], label: string): PiprEvalCase[] {
   const idSet = new Set(ids);
   const cases = promptEvalCasesForMode("live").filter((testCase) => idSet.has(testCase.id));
@@ -209,7 +150,7 @@ export async function runLivePiprEvalCase(testCase: PiprEvalCase): Promise<PiprE
 export function livePromptGateFailure(
   gate: LivePromptGateDefinition,
   caseId: string,
-  input: LivePromptScoreInput,
+  input: PiprEvalScoreInput,
 ): LivePromptGateFailure | undefined {
   const failedScorers = gate.scorers
     .filter(({ scorer }) => scorer(input) !== 1)
@@ -219,7 +160,7 @@ export function livePromptGateFailure(
         caseId,
         gate: gate.label,
         failedScorers,
-        ...(failedScorers.includes(expectedFindingRecallScorer.name)
+        ...(failedScorers.includes(expectedFindingRecall.name)
           ? { recall: diagnoseExpectedFindingRecall(input.output, input.expected) }
           : {}),
       }

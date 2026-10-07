@@ -36,8 +36,8 @@ export const reviewSummarySchema: ZodSchema<ReviewSummary> = z.strictObject({
   body: nonEmptyStringSchema,
 });
 
-/** Zod schema for one inline review finding. */
-export const reviewFindingSchema: ZodSchema<ReviewFinding> = z.strictObject({
+/** Zod shape for the fields every inline review finding carries. */
+export const reviewFindingShape = {
   body: nonEmptyStringSchema,
   path: nonEmptyStringSchema,
   rangeId: nonEmptyStringSchema,
@@ -45,7 +45,10 @@ export const reviewFindingSchema: ZodSchema<ReviewFinding> = z.strictObject({
   startLine: positiveIntegerSchema,
   endLine: positiveIntegerSchema,
   suggestedFix: nonEmptyStringSchema.optional(),
-});
+};
+
+/** Zod schema for one inline review finding. */
+export const reviewFindingSchema: ZodSchema<ReviewFinding> = z.strictObject(reviewFindingShape);
 
 /** Zod schema for Pipr's core inline-finding result. */
 export const reviewFindingsResultSchema: ZodSchema<ReviewFindingsResult> = z.strictObject({

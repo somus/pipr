@@ -18,12 +18,13 @@ export type LoadTypescriptConfigOptions = {
   rootDir: string;
   configDir?: string;
   typecheck?: boolean;
+  /** Environment for config dependency installs; the process environment by default. */
+  env?: NodeJS.ProcessEnv;
 };
 
 export type LoadedTypescriptConfig = {
   plan: RuntimePlan;
   source: string;
-  tempRoot: string;
   versionCompatibility: ConfigVersionCompatibility;
 };
 
@@ -43,6 +44,8 @@ export async function loadTypescriptConfig(
 ): Promise<LoadedTypescriptConfig> {
   const { projectDir, relativeConfigDir } = resolveContainedConfigDir(options);
   const sourceConfigPath = path.join(projectDir, "config.ts");
+  // Reported relative to the project, so a trusted config loaded from a temporary checkout reads as `.pipr/config.ts`.
+  const source = path.relative(path.resolve(options.rootDir), sourceConfigPath);
   if (!(await Bun.file(sourceConfigPath).exists())) {
     throw new Error(
       `No Pipr config found at ${sourceConfigPath}.\n` +
@@ -54,7 +57,7 @@ export async function loadTypescriptConfig(
     configDir: relativeConfigDir,
   });
   if (options.typecheck) {
-    await typecheckTypescriptConfig(path.resolve(options.rootDir), relativeConfigDir);
+    await typecheckTypescriptConfig(path.resolve(options.rootDir), relativeConfigDir, options.env);
   }
 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-config-"));
@@ -69,18 +72,17 @@ export async function loadTypescriptConfig(
         return relative !== "node_modules" && !relative.startsWith(`node_modules${path.sep}`);
       },
     });
-    await prepareConfigDirectory(tempConfigDir);
+    await prepareConfigDirectory(tempConfigDir, options.env);
 
     const configPath = path.join(tempConfigDir, "config.ts");
     const imported = await import(`${pathToFileURL(configPath).href}?pipr=${Date.now()}`);
     const factory = imported.default as unknown;
     if (!isPiprConfigFactory(factory)) {
-      throw new Error(`${sourceConfigPath}: default export must be created by definePipr()`);
+      throw new Error(`${source}: default export must be created by definePipr()`);
     }
     return {
       plan: buildPiprPlan(factory),
-      source: sourceConfigPath,
-      tempRoot,
+      source,
       versionCompatibility,
     };
   } finally {
@@ -88,14 +90,18 @@ export async function loadTypescriptConfig(
   }
 }
 
-export async function prepareConfigDirectory(configDir: string): Promise<void> {
-  await installConfigDependencies(configDir);
+async function prepareConfigDirectory(
+  configDir: string,
+  env: NodeJS.ProcessEnv | undefined,
+): Promise<void> {
+  await installConfigDependencies(configDir, env);
   await installTypedSdkStub(configDir);
 }
 
 async function typecheckTypescriptConfig(
   rootDir: string,
   relativeConfigDir: string,
+  env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-config-check-"));
   try {
@@ -116,7 +122,7 @@ async function typecheckTypescriptConfig(
         );
       },
     });
-    await prepareConfigDirectory(tempConfigDir);
+    await prepareConfigDirectory(tempConfigDir, env);
     const tsconfigPath = path.join(tempConfigDir, "tsconfig.json");
     if (!(await Bun.file(tsconfigPath).exists())) {
       await mkdir(tempConfigDir, { recursive: true });

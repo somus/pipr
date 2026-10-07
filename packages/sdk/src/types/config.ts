@@ -25,12 +25,20 @@ export type SecretOptions = {
   name: string;
 };
 
-/** Options for registering a model. Omit apiKey only for local Pi authentication. */
+/** Model reference in `provider/model` form, for example `deepseek/deepseek-v4-pro`. */
+export type ModelRef = `${string}/${string}`;
+
+/**
+ * API key source for a model. Omit to read the provider's standard environment variable (for
+ * example `DEEPSEEK_API_KEY`), pass `pipr.secret(...)` to read another variable, or pass `"local"`
+ * to use local Pi login credentials.
+ */
+export type ModelApiKey = SecretRef | "local";
+
+/** Options for registering a model. */
 export type ModelOptions = {
   id?: string;
-  provider: string;
-  model: string;
-  apiKey?: SecretRef;
+  apiKey?: ModelApiKey;
   thinking?: ModelThinkingLevel;
 };
 
@@ -40,8 +48,55 @@ export type ModelProfile = {
   readonly id: string;
   readonly provider: string;
   readonly model: string;
-  readonly apiKey?: SecretRef;
+  readonly apiKey?: ModelApiKey;
   readonly thinking?: ModelThinkingLevel;
+};
+
+/** Wire API an OpenAI-compatible provider speaks; only Chat Completions is supported. */
+export type ProviderApi = "openai-completions";
+
+/** Metadata overrides for one model served by a custom provider. */
+export type ProviderModelOptions = {
+  reasoning?: boolean;
+  input?: ("text" | "image")[];
+  contextWindow?: number;
+  maxTokens?: number;
+  /** Replaces the catalog price; cache rates default to 0. */
+  cost?: ProviderModelCost;
+};
+
+/** Model price in USD per million tokens. */
+export type ProviderModelCost = {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+};
+
+/**
+ * Options for declaring an OpenAI-compatible provider, such as an LLM gateway. Models reference it as
+ * `pipr.model("<id>/<model>")`; the API key is sent to `baseUrl`.
+ */
+export type ProviderOptions = {
+  /** Lowercase slug; must not be the id of a built-in Pi provider. */
+  id: string;
+  api: ProviderApi;
+  /** `https` URL, or `http` for `localhost`, `127.0.0.1`, or `[::1]`; no credentials, query, or fragment. */
+  baseUrl: string;
+  /** Secret holding the provider's API key; models of this provider use it unless they pass their own. */
+  apiKey: SecretRef;
+  /** Per-model metadata overrides keyed by the provider's model id. */
+  models?: Record<string, ProviderModelOptions>;
+};
+
+/** Registered custom provider. */
+export type ProviderProfile = {
+  readonly kind: "pipr.provider";
+  readonly id: string;
+  readonly api: ProviderApi;
+  readonly baseUrl: string;
+  readonly apiKey: SecretRef;
+  readonly models?: Readonly<Record<string, ProviderModelOptions>>;
 };
 
 /** Aggregate check-run options for a Pipr review run. */

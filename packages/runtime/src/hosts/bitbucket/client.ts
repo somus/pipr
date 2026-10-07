@@ -1,9 +1,15 @@
 import { z } from "zod";
-import { createCodeHostHttpClient } from "../http.js";
+import { createCodeHostHttpClient, jsonRequest } from "../http.js";
 import type { CodeHostStatusState } from "../types.js";
 import { loadedBitbucketChange } from "./change.js";
 import { createBitbucketDataCenterClient } from "./data-center-client.js";
-import { type BitbucketClient, commentSchema, pullRequestSchema, userSchema } from "./models.js";
+import {
+  type BitbucketClient,
+  commentSchema,
+  positiveCommentId,
+  pullRequestSchema,
+  userSchema,
+} from "./models.js";
 import { bitbucketRepositorySchema } from "./schema.js";
 
 export function createBitbucketClient(
@@ -124,13 +130,6 @@ export function createBitbucketClient(
   };
 }
 
-function positiveCommentId(value: string): number {
-  const id = Number(value);
-  if (!Number.isSafeInteger(id) || id <= 0)
-    throw new Error("Bitbucket comment ID must be a positive integer");
-  return id;
-}
-
 export function bitbucketStatusState(state: CodeHostStatusState): string {
   if (state === "pending") return "INPROGRESS";
   if (state === "failure") return "FAILED";
@@ -165,8 +164,4 @@ async function listAll<T>(
     next = page.next;
   }
   return values;
-}
-
-function jsonRequest(method: "POST" | "PUT", body: Record<string, unknown>): RequestInit {
-  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }

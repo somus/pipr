@@ -4,11 +4,11 @@ import type {
   ReviewProgressLease,
   ThreadAction,
 } from "../../publication/types.js";
-import { buildPublicationPlan } from "../../review/comment.js";
 import {
   renderInlineFindingMarker,
   renderVerifierResponseMarker,
-} from "../../review/prior-state.js";
+} from "../../review/comment-markers.js";
+import { buildPublicationPlan } from "../../review/publication-plan.js";
 import { PublicationError } from "../../review/publication-result.js";
 import { runtimeVersion } from "../../shared/version.js";
 import type { ChangeRequestEventContext } from "../../types.js";
@@ -51,8 +51,8 @@ class MemoryDriver implements PublicationDriver<Prepared> {
     return { change: input };
   }
 
-  async assertCurrent(_prepared: Prepared, expectedHeadSha: string): Promise<void> {
-    if (this.currentHead !== expectedHeadSha) throw new Error("head changed");
+  async currentEndpoints(): Promise<{ headSha: string }> {
+    return { headSha: this.currentHead };
   }
 
   async loadOwnedState(): Promise<LoadedPublicationState> {
@@ -71,6 +71,17 @@ class MemoryDriver implements PublicationDriver<Prepared> {
       this.state.main.body = progressBody(newerToken);
     }
     return this.state.main;
+  }
+
+  async upsertComment(
+    prepared: Prepared,
+    existing: OwnedMainComment | undefined,
+    body: string,
+    kind: "main" | "command",
+  ) {
+    return kind === "main"
+      ? this.upsertMain(prepared, existing, body)
+      : this.upsertCommand(prepared, existing, body);
   }
 
   async upsertMain(_prepared: Prepared, existing: OwnedMainComment | undefined, body: string) {

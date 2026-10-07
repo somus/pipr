@@ -6,23 +6,13 @@ USER root
 COPY --from=ast-grep /usr/local/bin/ast-grep /usr/local/bin/ast-grep
 RUN apk add --no-cache bash fd git ripgrep su-exec=0.2-r3 \
   && ln -sf /usr/local/bin/bun /usr/local/bin/node \
-  && mkdir -p /home/bun/.pi/agent/bin \
-  && ln -sf /usr/bin/rg /home/bun/.pi/agent/bin/rg \
-  && ln -sf /usr/bin/fd /home/bun/.pi/agent/bin/fd \
-  && chown -R bun:bun /home/bun/.pi \
-  && chmod 1777 /tmp
+  && chmod 1777 /tmp \
+  && ast-grep outline --help >/dev/null
 
 ENV BUN_INSTALL=/usr/local
 ENV TMPDIR=/tmp
 ENV PIPR_PI_SANDBOX_UID=1000
 ENV PIPR_PI_SANDBOX_GID=1000
-RUN bun add -g \
-  @earendil-works/pi-coding-agent@0.80.10 \
-  @earendil-works/pi-ai@0.80.10 \
-  @earendil-works/pi-tui@0.80.10 \
-  @earendil-works/pi-agent-core@0.80.10 \
-  && ast-grep outline --help >/dev/null \
-  && PI_OFFLINE=1 PI_TELEMETRY=0 pi --help >/dev/null
 
 WORKDIR /opt/pipr
 
@@ -78,15 +68,18 @@ RUN mkdir -p /var/lib/pipr/runs \
   && ln -sf /opt/pipr/packages/cli/dist/main.mjs /usr/local/bin/pipr \
   && command -v wget >/dev/null \
   && pipr host-run --help >/dev/null \
+  && pipr agent-worker --help >/dev/null \
   && pipr webhook serve --help >/dev/null
 
 FROM runtime-base AS e2e
 COPY --chown=bun:bun packages/e2e/action-fixture.ts packages/e2e/action-fixture.ts
 COPY --chown=bun:bun packages/e2e/assertions.ts packages/e2e/assertions.ts
+COPY --chown=bun:bun packages/e2e/scripted-provider.ts packages/e2e/scripted-provider.ts
 COPY --chown=bun:bun packages/e2e/webhook-fetch-mock.ts packages/e2e/webhook-fetch-mock.ts
 COPY --chown=bun:bun packages/e2e/webhook-health-fixture.ts packages/e2e/webhook-health-fixture.ts
-RUN mkdir -p packages/e2e/node_modules/@usepipr \
-  && ln -sf ../../../runtime packages/e2e/node_modules/@usepipr/runtime
+RUN mkdir -p packages/e2e/node_modules/@usepipr packages/e2e/node_modules/@earendil-works \
+  && ln -sf ../../../runtime packages/e2e/node_modules/@usepipr/runtime \
+  && ln -sf ../../../runtime/node_modules/@earendil-works/pi-ai packages/e2e/node_modules/@earendil-works/pi-ai
 WORKDIR /workspace
 ENTRYPOINT ["pipr"]
 

@@ -1,8 +1,10 @@
+import type { MarkdownText } from "../markdown.js";
+
 /** Markdown text accepted by review comments and command replies. */
-export type Markdown = string;
+export type Markdown = string | MarkdownText;
 
 /** Prompt text accepted by agent instructions and prompt functions. */
-export type PromptSource = string | PromptText;
+export type PromptSource = string | PromptText | MarkdownText;
 /** Value accepted by prompt rendering helpers. */
 export type PromptValue = unknown;
 

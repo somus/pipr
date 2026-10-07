@@ -1,6 +1,6 @@
 import type { RunBundleArtifact, RunBundleManifest } from "@usepipr/sdk";
-import type { RuntimeLogRecord, RuntimeLogSink } from "../shared/logging.js";
-import type { RunAgentEvent, RunObserver } from "./types.js";
+import type { RuntimeLogSink } from "../shared/logging.js";
+import type { RunObserver } from "./types.js";
 
 export type RunFailureCategory = NonNullable<RunBundleManifest["failureCategory"]>;
 
@@ -29,17 +29,4 @@ export type RunRecorder = {
   }): Promise<void>;
   discard(): Promise<void>;
   finish(result: RunRecorderFinish): Promise<void>;
-};
-
-export type InMemoryRunCapture = {
-  logs: RuntimeLogRecord[];
-  groups: string[];
-  artifacts: Array<Parameters<RunRecorder["addArtifact"]>[0]>;
-  attempts: Array<{
-    options: Parameters<RunObserver["beginAgentAttempt"]>[0];
-    events: RunAgentEvent[];
-    result?: Parameters<Awaited<ReturnType<RunObserver["beginAgentAttempt"]>>["finish"]>[0];
-  }>;
-  result?: RunRecorderFinish;
-  discarded: boolean;
 };

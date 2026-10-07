@@ -101,6 +101,39 @@ export function createCodeHostHttpClient(options: CodeHostHttpClientOptions) {
   };
 }
 
+export function jsonRequest(
+  method: "POST" | "PUT" | "PATCH",
+  body: Record<string, unknown>,
+): RequestInit {
+  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
+
+/** Resolves a permission lookup, treating a 404 from the code host as no permission. */
+export async function orNoneOn404<T>(request: Promise<T>): Promise<T | "none"> {
+  try {
+    return await request;
+  } catch (error) {
+    if (error instanceof CodeHostHttpError && error.status === 404) return "none";
+    throw error;
+  }
+}
+
+/** Loads numbered pages until a short page arrives, failing after 100 pages. */
+export async function collectNumberedPages<T>(options: {
+  label: string;
+  path: string;
+  pageSize: number;
+  loadPage(page: number): Promise<T[]>;
+}): Promise<T[]> {
+  const values: T[] = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const batch = await options.loadPage(page);
+    values.push(...batch);
+    if (batch.length < options.pageSize) return values;
+  }
+  throw new Error(`${options.label} pagination exceeded 100 pages for ${options.path}`);
+}
+
 export function createCodeHostSuccessThrottle(
   sleep: (milliseconds: number) => Promise<void> = (milliseconds) => Bun.sleep(milliseconds),
 ): CodeHostSuccessThrottle {

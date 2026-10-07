@@ -32,16 +32,15 @@ export function evalReviewEnv(options: {
   const sourceEnv = options.sourceEnv ?? process.env;
   const env = evalSubprocessEnv(sourceEnv);
   env.DEEPSEEK_API_KEY =
-    options.mode === "deterministic"
-      ? "pipr-eval-dummy-key"
-      : requiredEnv(sourceEnv, "DEEPSEEK_API_KEY");
+    options.mode === "deterministic" ? "pipr-eval-dummy-key" : assertLiveEvalEnv(sourceEnv);
   return env;
 }
 
-function requiredEnv(sourceEnv: NodeJS.ProcessEnv, name: string): string {
-  const value = sourceEnv[name];
+/** Returns the live model key, failing fast when live prompt evals cannot reach the provider. */
+export function assertLiveEvalEnv(sourceEnv: NodeJS.ProcessEnv = process.env): string {
+  const value = sourceEnv.DEEPSEEK_API_KEY;
   if (!value) {
-    throw new Error(`${name} is required for live prompt evals`);
+    throw new Error("DEEPSEEK_API_KEY is required for live prompt evals");
   }
   return value;
 }

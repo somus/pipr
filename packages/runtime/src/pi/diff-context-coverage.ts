@@ -14,9 +14,10 @@ export type DiffContextCoverageObservation = {
   }>;
 };
 
-export type DiffContextCoverageTracker = {
-  observe(event: Record<string, unknown>): void;
-  result(): DiffContextCoverageObservation;
+type MergedFileCoverage = {
+  rangeIds: Set<string>;
+  coveredRangeIds: Set<string>;
+  fullFile: boolean;
 };
 
 export function summarizeDiffContextCoverage(
@@ -35,12 +36,7 @@ export function summarizeDiffContextCoverage(
   return {
     files: {
       total: files.size,
-      covered: [...files.values()].filter(
-        (file) =>
-          file.fullFile ||
-          (file.rangeIds.size > 0 &&
-            [...file.rangeIds].every((rangeId) => file.coveredRangeIds.has(rangeId))),
-      ).length,
+      covered: [...files.values()].filter(isFileCovered).length,
     },
     ranges,
   };
@@ -56,10 +52,7 @@ export function diffContextCoverageArtifact(
     .map(([path, file]) => ({
       path,
       fullFile: file.fullFile,
-      covered:
-        file.fullFile ||
-        (file.rangeIds.size > 0 &&
-          [...file.rangeIds].every((rangeId) => file.coveredRangeIds.has(rangeId))),
+      covered: isFileCovered(file),
       ranges: [...file.rangeIds]
         .sort()
         .map((id) => ({ id, covered: file.coveredRangeIds.has(id) })),
@@ -82,16 +75,21 @@ export function diffContextCoverageArtifact(
   return JSON.stringify(payload);
 }
 
+function isFileCovered(file: MergedFileCoverage): boolean {
+  return (
+    file.fullFile ||
+    (file.rangeIds.size > 0 &&
+      [...file.rangeIds].every((rangeId) => file.coveredRangeIds.has(rangeId)))
+  );
+}
+
 function mergeDiffContextCoverage(
   observations: readonly DiffContextCoverageObservation[],
-): Map<string, { rangeIds: Set<string>; coveredRangeIds: Set<string>; fullFile: boolean }> {
-  const files = new Map<
-    string,
-    { rangeIds: Set<string>; coveredRangeIds: Set<string>; fullFile: boolean }
-  >();
+): Map<string, MergedFileCoverage> {
+  const files = new Map<string, MergedFileCoverage>();
   for (const observation of observations) {
     for (const observed of observation.files) {
-      const file = files.get(observed.path) ?? {
+      const file: MergedFileCoverage = files.get(observed.path) ?? {
         rangeIds: new Set<string>(),
         coveredRangeIds: new Set<string>(),
         fullFile: false,

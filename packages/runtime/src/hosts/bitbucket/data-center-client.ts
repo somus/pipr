@@ -1,12 +1,15 @@
 import { z } from "zod";
-import { createCodeHostHttpClient } from "../http.js";
+import { createCodeHostHttpClient, jsonRequest } from "../http.js";
 import type { RepositoryPermission } from "../types.js";
 import { trustedBitbucketDataCenterBaseUrl } from "./base-url.js";
 import { loadedBitbucketChange } from "./change.js";
 import {
   type BitbucketClient,
   type BitbucketComment,
+  type BitbucketCommentRequest,
+  type BitbucketInlineRequest,
   type BitbucketPullRequest,
+  positiveCommentId,
   pullRequestBaseSchema,
 } from "./models.js";
 
@@ -320,40 +323,18 @@ function flattenDataCenterComments(
 }
 
 async function dataCenterCommentRequest(
-  body: Record<string, unknown>,
+  body: BitbucketCommentRequest,
   getPullRequest: () => Promise<z.infer<typeof pullRequestSchema>>,
 ): Promise<Record<string, unknown>> {
-  const content = z.looseObject({ raw: z.string() }).parse(body.content);
-  const parent = z.looseObject({ id: z.number().int().positive() }).optional().parse(body.parent);
-  const inline = z
-    .looseObject({
-      path: z.string().min(1),
-      src_path: z.string().min(1).optional(),
-      from: z.number().int().positive().optional(),
-      to: z.number().int().positive().optional(),
-      start_from: z.number().int().positive().optional(),
-      start_to: z.number().int().positive().optional(),
-    })
-    .optional()
-    .parse(body.inline);
-  if (parent) return { text: content.raw, parent };
-  if (!inline) return { text: content.raw };
-  const pullRequest = await getPullRequest();
+  if (!body.inline) return { text: body.content.raw };
   return {
-    text: content.raw,
-    anchor: dataCenterAnchor(inline, pullRequest),
+    text: body.content.raw,
+    anchor: dataCenterAnchor(body.inline, await getPullRequest()),
   };
 }
 
 function dataCenterAnchor(
-  inline: {
-    path: string;
-    src_path?: string;
-    from?: number;
-    to?: number;
-    start_from?: number;
-    start_to?: number;
-  },
+  inline: BitbucketInlineRequest,
   pullRequest: z.infer<typeof pullRequestSchema>,
 ): Record<string, unknown> {
   const right = inline.to !== undefined;
@@ -423,25 +404,9 @@ function dataCenterPath(
   return [value.parent, value.name].filter(Boolean).join("/");
 }
 
-function positiveCommentId(value: string): number {
-  const id = Number(value);
-  if (!Number.isSafeInteger(id) || id <= 0) {
-    throw new Error("Bitbucket comment ID must be a positive integer");
-  }
-  return id;
-}
-
 function required(value: string | undefined, name: string): string {
   if (!value) throw new Error(`${name} is required for Bitbucket Data Center API calls`);
   return value;
-}
-
-function jsonRequest(method: "POST" | "PUT", body: Record<string, unknown>): RequestInit {
-  return {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  };
 }
 
 const dataCenterPermissions: ReadonlyArray<

@@ -23,7 +23,7 @@ See [Local runs](/docs/guide/local-runs) for working-tree and ref-to-ref example
 A hosted review follows this order:
 
 1. Load `.pipr/config.ts` from the change request's base commit.
-2. Validate the selected models, tasks, entrypoints, and required environment variables.
+2. Validate the selected models, tasks, triggers, and required environment variables.
 3. Check out the exact proposed head.
 4. Build a Diff Manifest from the base and head.
 5. Run the selected tasks and agents.
@@ -39,16 +39,16 @@ The Diff Manifest is Pipr's changed-code model. It contains changed files, hunks
 
 ```ts twoslash
 // @include: task-context
-const manifest = await ctx.change.diffManifest({
+const diff = await ctx.change.diff({
   paths: { include: ["src/**"], exclude: ["**/*.generated.ts"] },
 });
 ```
 
-Pass the manifest to `ctx.pi.run(...)` when an agent needs changed-code context:
+Pass the diff context to `ctx.pi.run(...)` when an agent needs changed-code context:
 
 ```ts twoslash
 // @include: task-pi-review
-const result = await ctx.pi.run(reviewer, { manifest });
+const result = await ctx.pi.run(reviewer, { diff });
 await ctx.comment({
   main: result.summary.body,
   inlineFindings: result.inlineFindings,
@@ -63,7 +63,7 @@ For large changes, Pipr can reduce the manifest and attach bounded read tools. C
 
 Tasks run typed agents through `ctx.pi.run(...)`. Pipr selects the call override first, then the agent model and fallbacks, then the configured default provider.
 
-Agent output must match its declared schema. Invalid output can use the configured repair policy, while transient retries and fallbacks follow the agent settings. Every provider call counts toward `limits.maxAgentRuns` when that limit is set.
+Agent output must match its declared schema. Invalid output gets one repair attempt as a follow-up turn in the same conversation. Transient provider failures retry inside the agent harness before Pipr moves to the next fallback model. Each initial call, shard, repair, and fallback counts toward `limits.maxAgentRuns` when that limit is set.
 
 ## Final output
 

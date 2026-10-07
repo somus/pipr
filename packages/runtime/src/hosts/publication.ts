@@ -1,9 +1,10 @@
-import type { ThreadAction } from "../publication/types.js";
-import type { InlinePublicationLocation } from "../review/inline-publication-policy.js";
+import type { InlinePublicationItem, ThreadAction } from "../publication/types.js";
 import {
+  parseMainCommentIdentity,
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
-} from "../review/prior-state.js";
+} from "../review/comment-markers.js";
+import type { InlinePublicationLocation } from "../review/inline-publication-policy.js";
 import type { CommandLifecycleState } from "./types.js";
 
 export function nativeInlineLocation(options: {
@@ -25,6 +26,40 @@ export function nativeInlineLocation(options: {
     startLine: (rightSide ? options.rightStart : options.leftStart) ?? endLine,
     endLine,
   };
+}
+
+/** The file path an inline item anchors to: the previous path for LEFT-side renames. */
+export function inlineItemPath(item: InlinePublicationItem): string {
+  return item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path;
+}
+
+/** The location an inline item will occupy; `singleLine` anchors to the end line only. */
+export function planInlineLocation(
+  item: InlinePublicationItem,
+  options: { singleLine?: boolean } = {},
+): InlinePublicationLocation {
+  return {
+    path: inlineItemPath(item),
+    commitId: item.reviewedHeadSha,
+    side: item.side,
+    startLine: options.singleLine ? item.endLine : item.startLine,
+    endLine: item.endLine,
+  };
+}
+
+/** Prefix that starts a main review comment for hosts that match main comments by prefix. */
+export function mainCommentPrefix(changeNumber: number): string {
+  return `<!-- pipr:main-comment change=${changeNumber} `;
+}
+
+/** Whether a comment's first non-empty line identifies the main comment for this change. */
+export function isMainCommentLine(
+  firstLine: string | undefined,
+  marker: string,
+  changeNumber: number,
+): boolean {
+  const identity = parseMainCommentIdentity(firstLine);
+  return identity?.marker === marker && identity.changeNumber === changeNumber;
 }
 
 export function commandResponseBody(options: {

@@ -1,5 +1,5 @@
+import { findInputDiffContext } from "../../diff/diff-context.js";
 import {
-  type DiffManifestPromptLimits,
   type DiffManifestPromptMode,
   type PreparedDiffManifestPrompt,
   prepareDiffManifestPrompt,
@@ -7,21 +7,11 @@ import {
 import type { DiffStructuralAnalysis } from "../../diff/structural-analysis.js";
 import type { PiRuntimeReadToolName, PiRuntimeReadToolRequest } from "../../pi/runtime-tools.js";
 import { piRuntimeReadToolNames, piRuntimeStructuralToolNames } from "../../pi/runtime-tools.js";
-import type {
-  DiffManifest,
-  DiffManifestLimitsConfig,
-  DiffManifestPromptMetrics,
-} from "../../types.js";
-import { parseDiffManifest } from "../../types.js";
+import type { DiffManifest, DiffManifestLimitsConfig } from "../../types.js";
 
 export type PreparedDiffManifestContext = {
   manifest: DiffManifest;
   mode: DiffManifestPromptMode;
-  metrics: {
-    full: DiffManifestPromptMetrics;
-    selected: DiffManifestPromptMetrics;
-  };
-  limits: DiffManifestPromptLimits;
   body: string;
   runtimeToolNames: readonly PiRuntimeReadToolName[];
   runtimeToolRequest?: PiRuntimeReadToolRequest;
@@ -34,7 +24,7 @@ export function prepareDiffManifestContext(options: {
   allowOversizedCondensed?: boolean;
   structuralAnalysis?: DiffStructuralAnalysis;
 }): PreparedDiffManifestContext | undefined {
-  const manifest = readReservedInputManifest(options.input);
+  const manifest = findInputDiffContext(options.input)?.context.manifest;
   if (!manifest) {
     return undefined;
   }
@@ -51,8 +41,6 @@ export function prepareDiffManifestContext(options: {
   return {
     manifest,
     mode: prompt.mode,
-    metrics: prompt.metrics,
-    limits: prompt.limits,
     body: diffManifestPromptBody(prompt, runtimeToolNames),
     runtimeToolNames,
     ...(runtimeToolsEnabled
@@ -65,17 +53,6 @@ export function prepareDiffManifestContext(options: {
         }
       : {}),
   };
-}
-
-export function readReservedInputManifest(input: unknown): DiffManifest | undefined {
-  if (typeof input !== "object" || input === null || !("manifest" in input)) {
-    return undefined;
-  }
-  try {
-    return parseDiffManifest((input as { manifest: unknown }).manifest);
-  } catch {
-    return undefined;
-  }
 }
 
 function diffManifestPromptBody(

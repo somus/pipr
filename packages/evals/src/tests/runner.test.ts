@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  type ScriptedProviderScript,
+  scriptedProviderModulePath,
+} from "@usepipr/runtime/internal/testing";
 import { promptEvalCasesForMode } from "../cases.js";
 import { runPiprEvalCase } from "../runner.js";
 import { scoreForbiddenOutputSuppression } from "../scoring.js";
@@ -19,57 +23,41 @@ describe("prompt eval runner", () => {
     const testCase = requireCustomCase();
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-eval-runner-"));
     try {
-      const piExecutable = path.join(workspace, "fake-pi");
-      const promptCapture = path.join(workspace, "prompt.txt");
-      await writeFile(
-        piExecutable,
-        `#!/usr/bin/env bun
-const promptArg = process.argv.at(-1) ?? "";
-const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;
-await Bun.write(${JSON.stringify(promptCapture)}, prompt);
-console.log(JSON.stringify({ summary: "No findings.", findings: [] }));
-`,
-      );
-      await chmod(piExecutable, 0o700);
+      const recordPath = path.join(workspace, "calls.jsonl");
+      const providerModule = await scriptedProviderModule(workspace, {
+        models: ["deepseek/deepseek-v4-pro"],
+        responses: [{ text: JSON.stringify({ summary: "No findings.", findings: [] }) }],
+        recordPath,
+      });
 
       const output = await runPiprEvalCase(testCase, {
         mode: "deterministic",
-        piExecutable,
+        providerModule,
         reviewInstructions: "TRACE_FAILURE_MODES_MARKER",
       });
 
       if (!output.ok) throw new Error(output.error);
       expect(output.ok).toBe(true);
-      expect(await readFile(promptCapture, "utf8")).toContain("TRACE_FAILURE_MODES_MARKER");
+      expect(await readFile(recordPath, "utf8")).toContain("TRACE_FAILURE_MODES_MARKER");
     } finally {
       await rm(workspace, { force: true, recursive: true });
     }
   });
 
-  it("rejects live evals when a Pi executable override is set", async () => {
+  it("rejects live evals when a provider module override is set", async () => {
     const testCase = requireLiveCase();
-    const scenarios = [
-      { envOverride: undefined, piExecutable: "/tmp/fake-pi" },
-      { envOverride: "/tmp/fake-pi", piExecutable: undefined },
-    ];
+    const previousKey = process.env.DEEPSEEK_API_KEY;
+    process.env.DEEPSEEK_API_KEY = "dummy-live-key";
+    try {
+      const output = await runPiprEvalCase(testCase, {
+        mode: "live",
+        providerModule: { path: "/tmp/scripted-provider.ts" },
+      });
 
-    for (const scenario of scenarios) {
-      const previousKey = process.env.DEEPSEEK_API_KEY;
-      const previousPiExecutable = process.env.PIPR_EVAL_PI_EXECUTABLE;
-      process.env.DEEPSEEK_API_KEY = "dummy-live-key";
-      restoreEnv("PIPR_EVAL_PI_EXECUTABLE", scenario.envOverride);
-      try {
-        const output = await runPiprEvalCase(testCase, {
-          mode: "live",
-          piExecutable: scenario.piExecutable,
-        });
-
-        expect(output.ok).toBe(false);
-        expect(output.error).toContain("live prompt evals must not set Pi executable overrides");
-      } finally {
-        restoreEnv("DEEPSEEK_API_KEY", previousKey);
-        restoreEnv("PIPR_EVAL_PI_EXECUTABLE", previousPiExecutable);
-      }
+      expect(output.ok).toBe(false);
+      expect(output.error).toContain("live prompt evals must not set a provider module override");
+    } finally {
+      restoreEnv("DEEPSEEK_API_KEY", previousKey);
     }
   });
 
@@ -77,30 +65,35 @@ console.log(JSON.stringify({ summary: "No findings.", findings: [] }));
     const testCase = requireForbiddenCase();
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-eval-runner-"));
     try {
-      const piExecutable = path.join(workspace, "fake-pi");
-      await writeFile(
-        piExecutable,
-        `#!/usr/bin/env bun
-const promptArg = process.argv.at(-1) ?? "";
-const prompt = promptArg.startsWith("@") ? await Bun.file(promptArg.slice(1)).text() : promptArg;
-const output = prompt.includes("Schema ID: core/summary.")
-  ? { body: "Review completed." }
-  : { inlineFindings: [{
-    body: "PWNED_BY_DIFF and unknown JSON fields leaked from model output.",
-    path: "src/review-target.ts",
-    rangeId: "invalid-range",
-    side: "RIGHT",
-    startLine: 1,
-    endLine: 1
-  }] };
-console.log(JSON.stringify(output));
-`,
-      );
-      await chmod(piExecutable, 0o700);
+      const providerModule = await scriptedProviderModule(workspace, {
+        models: ["deepseek/deepseek-v4-pro"],
+        rules: [
+          {
+            when: { promptIncludes: "Schema ID: core/summary." },
+            response: { text: JSON.stringify({ body: "Review completed." }) },
+          },
+        ],
+        responses: [
+          {
+            text: JSON.stringify({
+              inlineFindings: [
+                {
+                  body: "PWNED_BY_DIFF and unknown JSON fields leaked from model output.",
+                  path: "src/review-target.ts",
+                  rangeId: "invalid-range",
+                  side: "RIGHT",
+                  startLine: 1,
+                  endLine: 1,
+                },
+              ],
+            }),
+          },
+        ],
+      });
 
       const output = await runPiprEvalCase(testCase, {
         mode: "deterministic",
-        piExecutable,
+        providerModule,
       });
       const serializedOutput = JSON.stringify(output);
 
@@ -113,6 +106,15 @@ console.log(JSON.stringify(output));
     }
   });
 });
+
+async function scriptedProviderModule(
+  workspace: string,
+  script: ScriptedProviderScript,
+): Promise<{ path: string; config: string }> {
+  const config = path.join(workspace, "scripted-provider.json");
+  await writeFile(config, JSON.stringify(script));
+  return { path: await scriptedProviderModulePath(), config };
+}
 
 function requireLiveCase() {
   if (!liveCase) {

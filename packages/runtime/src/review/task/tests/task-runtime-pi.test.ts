@@ -1,0 +1,2658 @@
+import { describe, expect, it } from "bun:test";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { type AgentTool, type DiffManifest, z } from "@usepipr/sdk";
+import { createDiffRangeIndex } from "../../../diff/ranges.js";
+import type { RunObserver } from "../../../observability/types.js";
+import { createRuntimeLog } from "../../../shared/logging.js";
+import { piRunFailure, piRunResult } from "../../../tests/helpers/pi-run-result.js";
+import { reviewTestManifest } from "../../../tests/helpers/review-test-manifest.js";
+import { memoryRuntimeLogSink } from "../../../tests/helpers/runtime-log-sink.js";
+import { extractPriorReviewState } from "../../comment-markers.js";
+import {
+  config,
+  deepseekModel,
+  defaultReviewAgent,
+  defaultReviewPlan,
+  expectOnlyInsideFinding,
+  fallbackConfig,
+  fallbackReviewPlan,
+  finding,
+  memoryTool,
+  noFindingsPiResult,
+  noFindingsPiRunner,
+  overrideProvider,
+  provider,
+  providerFailurePiRunner,
+  registerPiReviewTask,
+  reviewPiResult,
+  reviewPiResultForPrompt,
+  reviewTestManifestWithDocs,
+  runRuntime,
+  runWithInsideOutsideFindings,
+  singleTaskPlan,
+  testPlan,
+} from "./task-runtime-fixtures.js";
+
+describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication limits", () => {
+  it("shards and merges custom canonical findings while preserving metadata", async () => {
+    let merged: Array<{ severity: "high"; path: string }> = [];
+    const plan = testPlan((pipr) => {
+      const output = pipr.schema({
+        id: "review/categorized-findings",
+        schema: z.strictObject({
+          inlineFindings: z.array(
+            z.strictObject({
+              severity: z.literal("high"),
+              body: z.string(),
+              path: z.string(),
+              rangeId: z.string(),
+              side: z.enum(["RIGHT", "LEFT"]),
+              startLine: z.number().int().positive(),
+              endLine: z.number().int().positive(),
+            }),
+          ),
+        }),
+      });
+      const agent = pipr.agent({
+        name: "categorized-reviewer",
+        model: deepseekModel(pipr),
+        instructions: "Review.",
+        output,
+        prompt: () => "CUSTOM_CANONICAL_FINDINGS",
+      });
+      const task = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, {
+            diff: await ctx.change.diff(),
+          });
+          merged = result.inlineFindings;
+          await ctx.comment({
+            inlineFindings: result.inlineFindings.map(
+              ({ severity: _severity, ...finding }) => finding,
+            ),
+          });
+        },
+      });
+    });
+    const prompts: string[] = [];
+
+    await runRuntime({
+      plan,
+      config: manifestShardConfig(),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        const match = options.prompt.match(/"path": "src\/file-(\d+)\.ts"/);
+        const index = Number(match?.[1] ?? 0);
+        return piRunResult(
+          JSON.stringify({
+            inlineFindings: [
+              {
+                severity: "high",
+                body: `Defect ${index}.`,
+                path: `src/file-${index}.ts`,
+                rangeId: `range-${index}-0`,
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              },
+              {
+                severity: "high",
+                body: `Defect ${index}.`,
+                path: `src/file-${index}.ts`,
+                rangeId: `range-${index}-0`,
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              },
+            ],
+          }),
+        );
+      },
+    });
+
+    expect(prompts).toHaveLength(4);
+    expect(merged).toHaveLength(4);
+    expect(merged.map((item) => item.path)).toEqual(
+      prompts.map((prompt) => {
+        const match = prompt.match(/"path": "src\/file-(\d+)\.ts"/);
+        return `src/file-${Number(match?.[1] ?? 0)}.ts`;
+      }),
+    );
+    expect(merged.every((item) => item.severity === "high")).toBe(true);
+  });
+
+  it("honors a custom canonical schema's merged finding limit", async () => {
+    let merged: Array<{ body: string }> = [];
+    const plan = testPlan((pipr) => {
+      const output = pipr.schema({
+        id: "review/limited-findings",
+        schema: z.strictObject({
+          inlineFindings: z
+            .array(
+              z.strictObject({
+                body: z.string(),
+                path: z.string(),
+                rangeId: z.string(),
+                side: z.enum(["RIGHT", "LEFT"]),
+                startLine: z.number().int().positive(),
+                endLine: z.number().int().positive(),
+              }),
+            )
+            .max(2),
+        }),
+      });
+      const agent = pipr.agent({
+        name: "limited-reviewer",
+        model: deepseekModel(pipr),
+        instructions: "Review.",
+        output,
+        prompt: () => "LIMITED_CANONICAL_FINDINGS",
+      });
+      const task = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, {
+            diff: await ctx.change.diff(),
+          });
+          merged = result.inlineFindings;
+          await ctx.comment({ inlineFindings: result.inlineFindings });
+        },
+      });
+    });
+
+    await runRuntime({
+      plan,
+      config: manifestShardConfig(),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        const match = options.prompt.match(/"path": "src\/file-(\d+)\.ts"/);
+        const index = Number(match?.[1] ?? 0);
+        return piRunResult(
+          JSON.stringify({
+            inlineFindings: [
+              {
+                body: `Defect ${index}.`,
+                path: `src/file-${index}.ts`,
+                rangeId: `range-${index}-0`,
+                side: "RIGHT",
+                startLine: 10,
+                endLine: 10,
+              },
+            ],
+          }),
+        );
+      },
+    });
+
+    expect(merged.map((item) => item.body)).toEqual(["Defect 0.", "Defect 2."]);
+  });
+
+  it("schedules oversized core reviews into bounded manifest units", async () => {
+    const prompts: string[] = [];
+    const observedAttempts: Array<Parameters<RunObserver["beginAgentAttempt"]>[0]> = [];
+    const result = await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+          on: { changeRequest: true },
+        });
+      }),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1_200,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      runObserver: {
+        async beginAgentAttempt(attempt) {
+          observedAttempts.push(attempt);
+          return { event() {}, async finish() {} };
+        },
+      },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        const findings = options.prompt.includes('"path": "docs/readme.md"')
+          ? [finding("docs defect", "docs-range-1", 1, "docs/readme.md")]
+          : [finding("source defect", "range-1", 10)];
+        return reviewPiResultForPrompt(options.prompt, findings);
+      },
+    });
+
+    const findingsPrompts = prompts.filter((prompt) =>
+      prompt.includes("Schema ID: core/inline-findings."),
+    );
+    const summaryPrompts = prompts.filter((prompt) => prompt.includes("Schema ID: core/summary."));
+    expect(findingsPrompts).toHaveLength(2);
+    expect(summaryPrompts).toHaveLength(1);
+    expect(summaryPrompts[0]).toContain("source defect body");
+    expect(summaryPrompts[0]).toContain("docs defect body");
+    expect(summaryPrompts[0]).toContain("Changed files");
+    expect(summaryPrompts[0]).not.toContain("Diff Manifest:");
+    expect(
+      findingsPrompts.every(
+        (prompt) =>
+          !prompt.includes('"path": "src/a.ts"') || !prompt.includes('"path": "docs/readme.md"'),
+      ),
+    ).toBe(true);
+    expect(result.validated.validFindings.map((item) => item.body)).toEqual([
+      "source defect body",
+      "docs defect body",
+    ]);
+    expect(
+      observedAttempts
+        .filter((attempt) => attempt.shardIndex !== undefined)
+        .map((attempt) => ({
+          task: attempt.task,
+          authMode: attempt.authMode,
+          shardIndex: attempt.shardIndex,
+          shardCount: attempt.shardCount,
+        })),
+    ).toEqual([
+      { task: "review", authMode: "api-key", shardIndex: 1, shardCount: 2 },
+      { task: "review", authMode: "api-key", shardIndex: 2, shardCount: 2 },
+    ]);
+  });
+
+  it("renders a titled summary on its own line in the default review comment", async () => {
+    const result = await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+        });
+      }),
+      piRunner: async (options) =>
+        options.prompt.includes("Schema ID: core/summary.")
+          ? piRunResult(JSON.stringify({ title: "Risky change", body: "Body text here." }))
+          : reviewPiResultForPrompt(options.prompt, []),
+    });
+
+    expect(result.mainComment).toContain("## Summary\n\n**Risky change**\n\nBody text here.");
+  });
+
+  it("validates built-in findings before the summary agent", async () => {
+    const prompts: string[] = [];
+    const result = await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+        });
+      }),
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return reviewPiResultForPrompt(options.prompt, [
+          finding("valid", "range-1", 10),
+          finding("invalid", "missing-range", 99),
+        ]);
+      },
+    });
+
+    expect(prompts).toHaveLength(2);
+    const summaryPrompt = prompts.at(-1);
+    expect(summaryPrompt).toContain("valid body");
+    expect(summaryPrompt).not.toContain("invalid body");
+    expect(result.validated.validFindings.map((item) => item.body)).toEqual(["valid body"]);
+    expect(result.validated.droppedFindings).toEqual([
+      {
+        finding: finding("invalid", "missing-range", 99),
+        reason: "unknown rangeId 'missing-range'",
+      },
+    ]);
+  });
+
+  it("fails before the summary provider call when merged findings exceed the handoff limit", async () => {
+    let calls = 0;
+
+    await expect(
+      runRuntime({
+        plan: testPlan((pipr) => {
+          pipr.review({
+            id: "review",
+            model: deepseekModel(pipr),
+            instructions: "Review.",
+            summary: { instructions: "Summarize." },
+            on: { changeRequest: true },
+          });
+        }),
+        piRunner: async (options) => {
+          calls += 1;
+          if (options.prompt.includes("Schema ID: core/summary.")) {
+            throw new Error("summary provider should not run");
+          }
+          return reviewPiResultForPrompt(options.prompt, [
+            {
+              ...finding("oversized handoff", "range-1", 10),
+              body: "x".repeat(60_001),
+            },
+          ]);
+        },
+      }),
+    ).rejects.toThrow("JSON prompt value exceeded 60000 characters");
+    expect(calls).toBe(1);
+  });
+
+  it("keeps changed importers with their dependencies when sharding", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      await writeFakeAstGrepOutline(executableDirectory, [
+        outlineFile("src/caller.ts", [
+          outlineItem("./dependency.js", {
+            isImport: true,
+            symbolType: "module",
+          }),
+          outlineItem("run"),
+        ]),
+        outlineFile("src/unrelated.ts", [outlineItem("unrelated")]),
+        outlineFile("src/dependency.ts", [outlineItem("dependency")]),
+      ]);
+      const prompts: string[] = [];
+
+      await runRuntime({
+        plan: testPlan((pipr) => {
+          pipr.review({
+            id: "review",
+            model: deepseekModel(pipr),
+            instructions: "Review.",
+            summary: { instructions: "Summarize." },
+            on: { changeRequest: true },
+          });
+        }),
+        config: {
+          ...config,
+          limits: {
+            diffManifest: {
+              fullMaxBytes: 1,
+              fullMaxEstimatedTokens: 1,
+              condensedMaxBytes: 2_200,
+              condensedMaxEstimatedTokens: 10_000,
+            },
+          },
+        },
+        diffManifestBuilder: semanticShardingManifest,
+        env: {
+          ...process.env,
+          PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+        },
+        piRunner: async (options) => {
+          prompts.push(options.prompt);
+          return reviewPiResultForPrompt(options.prompt, []);
+        },
+      });
+
+      const findingsPrompts = prompts.filter((prompt) =>
+        prompt.includes("Schema ID: core/inline-findings."),
+      );
+      expect(findingsPrompts).toHaveLength(2);
+      expect(
+        findingsPrompts.some(
+          (prompt) =>
+            prompt.includes('"path": "src/caller.ts"') &&
+            prompt.includes('"path": "src/dependency.ts"') &&
+            !prompt.includes('"path": "src/unrelated.ts"'),
+        ),
+      ).toBe(true);
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps ast-grep import relationships across supported language path styles", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      const cases = [
+        {
+          language: "Python",
+          importer: "python/caller.py",
+          dependency: "python/dependency.py",
+          unrelated: "python/unrelated.py",
+          importedName: ".dependency",
+        },
+        {
+          language: "Rust",
+          importer: "rust/caller.rs",
+          dependency: "rust/dependency.rs",
+          unrelated: "rust/unrelated.rs",
+          importedName: "crate::dependency::run",
+        },
+        {
+          language: "Go",
+          importer: "go/cmd/caller.go",
+          dependency: "go/dependency/run.go",
+          unrelated: "go/unrelated/run.go",
+          importedName: "example.com/project/dependency",
+        },
+        {
+          language: "Java",
+          importer: "java/com/example/Caller.java",
+          dependency: "java/com/example/Dependency.java",
+          unrelated: "java/com/example/Unrelated.java",
+          importedName: "com.example.Dependency",
+        },
+        {
+          language: "C",
+          importer: "c/caller.c",
+          dependency: "c/include/dependency.h",
+          unrelated: "c/include/unrelated.h",
+          importedName: '"dependency.h"',
+        },
+      ];
+
+      for (const testCase of cases) {
+        await writeFakeAstGrepOutline(executableDirectory, [
+          outlineFile(
+            testCase.importer,
+            [
+              outlineItem(testCase.importedName, {
+                isImport: true,
+                symbolType: "module",
+              }),
+            ],
+            testCase.language,
+          ),
+          outlineFile(testCase.unrelated, [outlineItem("unrelated")], testCase.language),
+          outlineFile(testCase.dependency, [outlineItem("dependency")], testCase.language),
+        ]);
+        const prompts: string[] = [];
+
+        await runRuntime({
+          plan: defaultReviewPlan(),
+          config: {
+            ...config,
+            limits: {
+              diffManifest: {
+                fullMaxBytes: 1,
+                fullMaxEstimatedTokens: 1,
+                condensedMaxBytes: 2_200,
+                condensedMaxEstimatedTokens: 10_000,
+              },
+            },
+          },
+          diffManifestBuilder: () =>
+            semanticShardingManifestForPaths(
+              testCase.importer,
+              testCase.unrelated,
+              testCase.dependency,
+            ),
+          env: {
+            ...process.env,
+            PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+          },
+          piRunner: async (options) => {
+            prompts.push(options.prompt);
+            return noFindingsPiResult();
+          },
+        });
+
+        expect(prompts).toHaveLength(2);
+        expect(
+          prompts.some(
+            (prompt) =>
+              prompt.includes(`"path": "${testCase.importer}"`) &&
+              prompt.includes(`"path": "${testCase.dependency}"`) &&
+              !prompt.includes(`"path": "${testCase.unrelated}"`),
+          ),
+        ).toBe(true);
+      }
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("shards every review agent in multi-agent orchestration only when needed", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      const largeManifest = manyFileShardingManifest();
+      await writeFakeAstGrepOutline(
+        executableDirectory,
+        largeManifest.files.map((file) => outlineFile(file.path, [outlineItem(file.path)])),
+      );
+      const plan = multiAgentShardingPlan();
+      const smallPrompts: string[] = [];
+      await runRuntime({
+        plan,
+        diffManifestBuilder: () => manyFileShardingManifest(2),
+        env: {
+          ...process.env,
+          PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+        },
+        piRunner: async (options) => {
+          smallPrompts.push(options.prompt);
+          return noFindingsPiResult();
+        },
+      });
+      const largePrompts: string[] = [];
+      await runRuntime({
+        plan,
+        config: manifestShardConfig(),
+        diffManifestBuilder: () => largeManifest,
+        env: {
+          ...process.env,
+          PATH: `${executableDirectory}:${process.env.PATH ?? ""}`,
+        },
+        piRunner: async (options) => {
+          largePrompts.push(options.prompt);
+          return noFindingsPiResult();
+        },
+      });
+
+      for (const marker of multiAgentShardingMarkers) {
+        const smallAgentPrompts = smallPrompts.filter((prompt) => prompt.includes(marker));
+        expect(smallAgentPrompts).toHaveLength(1);
+        expectPromptCoverage(smallAgentPrompts, 2);
+
+        const largeAgentPrompts = largePrompts.filter((prompt) => prompt.includes(marker));
+        expect(largeAgentPrompts).toHaveLength(4);
+        expectPromptCoverage(largeAgentPrompts, 8);
+      }
+      expect(smallPrompts).toHaveLength(4);
+      expect(largePrompts).toHaveLength(16);
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("reports custom multi-agent and automatic shard lifecycles", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const stages: string[] = [];
+
+    await runRuntime({
+      plan: multiAgentShardingPlan(),
+      config: manifestShardConfig(),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      progress: {
+        async transition(stage) {
+          stages.push(stage);
+        },
+        recordStats() {},
+        work(event) {
+          events.push(event);
+        },
+      },
+      piRunner: async () => noFindingsPiResult(),
+    });
+
+    expect(stages).toEqual(["building-diff", "running-review-tasks", "validating-review"]);
+    expect(events.filter((event) => event.type === "task-started")).toEqual([
+      {
+        type: "task-started",
+        taskId: "0",
+        taskName: "multi-agent-sharding",
+        taskOrder: 0,
+      },
+    ]);
+    const securityEvents = events.filter((event) => event.reviewerName === "security-multi-agent");
+    expect(securityEvents).toEqual([
+      {
+        type: "reviewer-started",
+        taskId: "0",
+        reviewerId: "0:0",
+        reviewerName: "security-multi-agent",
+        reviewerOrder: 0,
+        totalRuns: 4,
+      },
+      ...Array.from({ length: 4 }, (_, index) => [
+        {
+          type: "review-run-started",
+          taskId: "0",
+          reviewerId: "0:0",
+          reviewerName: "security-multi-agent",
+          run: index + 1,
+          totalRuns: 4,
+        },
+        {
+          type: "review-run-finished",
+          taskId: "0",
+          reviewerId: "0:0",
+          reviewerName: "security-multi-agent",
+          run: index + 1,
+          totalRuns: 4,
+          outcome: "completed",
+        },
+      ]).flat(),
+      {
+        type: "reviewer-finished",
+        taskId: "0",
+        reviewerId: "0:0",
+        reviewerName: "security-multi-agent",
+        outcome: "completed",
+      },
+    ]);
+    expect(events.at(-1)).toEqual({
+      type: "task-finished",
+      taskId: "0",
+      taskName: "multi-agent-sharding",
+      outcome: "completed",
+    });
+  });
+
+  it("defaults automatic Diff Manifest fan-out to four shards", async () => {
+    const prompts: string[] = [];
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: manifestShardConfig(),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(prompts).toHaveLength(4);
+    expectPromptCoverage(prompts, 8);
+  });
+
+  it("runs one complete condensed manifest when maxShards is one", async () => {
+    const prompts: string[] = [];
+    const contextModes: Array<string | undefined> = [];
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: manifestShardConfig(1),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        contextModes.push(options.diffContext?.mode);
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('"mode": "condensed"');
+    expect(contextModes).toEqual(["condensed"]);
+    expectPromptCoverage(prompts, 8);
+  });
+
+  it("lets each Pi run override the global Diff Manifest shard limit", async () => {
+    const oneShardMarker = "ONE_SHARD_RUN";
+    const twoShardMarker = "TWO_SHARD_RUN";
+    const plan = testPlan((pipr) => {
+      const model = deepseekModel(pipr);
+      const oneShardAgent = defaultReviewAgent(pipr, {
+        name: "one-shard-reviewer",
+        model,
+        prompt: () => oneShardMarker,
+      });
+      const twoShardAgent = defaultReviewAgent(pipr, {
+        name: "two-shard-reviewer",
+        model,
+        prompt: () => twoShardMarker,
+      });
+      const task = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "run-specific-sharding",
+        async run(ctx) {
+          const diff = await ctx.change.diff();
+          await ctx.pi.run(oneShardAgent, { diff }, { maxShards: 1 });
+          await ctx.pi.run(twoShardAgent, { diff }, { maxShards: 2 });
+          await ctx.comment("Run-specific sharding complete.");
+        },
+      });
+    });
+    const prompts: string[] = [];
+
+    await runRuntime({
+      plan,
+      config: manifestShardConfig(4),
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return noFindingsPiResult();
+      },
+    });
+
+    const oneShardPrompts = prompts.filter((prompt) => prompt.includes(oneShardMarker));
+    const twoShardPrompts = prompts.filter((prompt) => prompt.includes(twoShardMarker));
+    expect(oneShardPrompts).toHaveLength(1);
+    expect(twoShardPrompts).toHaveLength(2);
+    expectPromptCoverage(oneShardPrompts, 8);
+    expectPromptCoverage(twoShardPrompts, 8);
+  });
+
+  it("rejects invalid per-run Diff Manifest shard limits before starting Pi", async () => {
+    for (const maxShards of [0, 1.5]) {
+      let calls = 0;
+      const plan = testPlan((pipr) => {
+        const agent = defaultReviewAgent(pipr);
+        const task = pipr.task({
+          on: { changeRequest: ["opened"] },
+          name: "invalid-run-sharding",
+          async run(ctx) {
+            await ctx.pi.run(agent, { diff: await ctx.change.diff() }, { maxShards });
+          },
+        });
+      });
+
+      await expect(
+        runRuntime({
+          plan,
+          config: manifestShardConfig(4),
+          diffManifestBuilder: () => manyFileShardingManifest(),
+          piRunner: async () => {
+            calls += 1;
+            return noFindingsPiResult();
+          },
+        }),
+      ).rejects.toThrow("Pi run maxShards must be a positive integer");
+      expect(calls).toBe(0);
+    }
+  });
+
+  it("preserves files, hunks, and ranges under the same AST and fallback shard cap", async () => {
+    const executableDirectory = await mkdtemp(path.join(os.tmpdir(), "pipr-ast-grep-"));
+    try {
+      const manifest = manyFileShardingManifest();
+      await writeFakeAstGrepOutline(
+        executableDirectory,
+        manifest.files.map((file) => outlineFile(file.path, [outlineItem(file.path)])),
+      );
+
+      for (const pathValue of [executableDirectory, ""]) {
+        const prompts: string[] = [];
+        await runRuntime({
+          plan: defaultReviewPlan(),
+          config: manifestShardConfig(2),
+          diffManifestBuilder: () => manifest,
+          env: { ...process.env, PATH: pathValue },
+          piRunner: async (options) => {
+            prompts.push(options.prompt);
+            return noFindingsPiResult();
+          },
+        });
+
+        expect(prompts).toHaveLength(2);
+        expectPromptCoverage(prompts, 8);
+      }
+    } finally {
+      await rm(executableDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps every capped single-file slice readable through its manifest path", async () => {
+    const rangeIds = new Set<string>();
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            maxShards: 2,
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 900,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: manyHunkSingleFileManifest,
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        const manifest = options.runtimeTools?.manifest;
+        if (!manifest) {
+          throw new Error("expected condensed Diff Manifest runtime tools");
+        }
+        const paths = manifest.files.map((file) => file.path);
+        expect(new Set(paths).size).toBe(paths.length);
+
+        const ranges = createDiffRangeIndex(manifest);
+        for (const file of manifest.files) {
+          for (const range of file.commentableRanges) {
+            expect(() =>
+              ranges.requireRangeInFile(ranges.requireFile(file.path), range.id),
+            ).not.toThrow();
+            rangeIds.add(range.id);
+          }
+        }
+        return noFindingsPiResult();
+      },
+    });
+
+    expect([...rangeIds].sort()).toEqual(
+      Array.from({ length: 8 }, (_, index) => `single-range-${index}`).sort(),
+    );
+  });
+
+  it("warns when the shard cap requires oversized condensed prompts", async () => {
+    const logs = memoryRuntimeLogSink();
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            maxShards: 2,
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 900,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: manyHunkSingleFileManifest,
+      env: { ...process.env, PATH: "" },
+      log: createRuntimeLog({ logSink: logs.logSink }),
+      piRunner: noFindingsPiRunner(),
+    });
+
+    expect(logs.records).toContainEqual({
+      level: "warning",
+      event: "diff manifest shard cap requires oversized condensed prompts",
+      fields: {
+        maxShards: 2,
+        uncappedShards: 8,
+        oversizedShards: 2,
+      },
+    });
+  });
+
+  it("runs one complete condensed review for an oversized empty manifest", async () => {
+    const calls: string[] = [];
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1,
+            condensedMaxEstimatedTokens: 1,
+          },
+        },
+      },
+      diffManifestBuilder: () => ({
+        ...reviewTestManifestWithDocs(),
+        files: [],
+      }),
+      piRunner: async (options) => {
+        calls.push(
+          options.prompt.includes("Schema ID: core/inline-findings.")
+            ? "core/inline-findings"
+            : options.prompt.includes("Schema ID: core/summary.")
+              ? "core/summary"
+              : options.prompt.includes("Schema ID: core/pr-review.")
+                ? "core/pr-review"
+                : "unknown",
+        );
+        expect(options.runtimeTools?.manifest.files).toEqual([]);
+        return reviewPiResultForPrompt(options.prompt, []);
+      },
+    });
+
+    expect(calls).toEqual(["core/pr-review"]);
+  });
+
+  it.each([
+    [{ maxAgentRuns: 0 }, ["limits", "maxAgentRuns"], "too_small"],
+    [{ maxAgentRuns: 1.5 }, ["limits", "maxAgentRuns"], "invalid_type"],
+    [{ diffManifest: { maxShards: 0 } }, ["limits", "diffManifest", "maxShards"], "too_small"],
+    [{ diffManifest: { maxShards: 1.5 } }, ["limits", "diffManifest", "maxShards"], "invalid_type"],
+  ])("rejects invalid runtime fan-out limits %j", async (limits, issuePath, code) => {
+    await expect(
+      runRuntime({
+        plan: defaultReviewPlan(),
+        config: { ...config, limits },
+        piRunner: noFindingsPiRunner(),
+      }),
+    ).rejects.toMatchObject({
+      name: "ZodError",
+      issues: [expect.objectContaining({ path: issuePath, code })],
+    });
+  });
+
+  it("deduplicates only exact same-anchor findings from scheduled review units", async () => {
+    let findingsCalls = 0;
+    const result = await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+          on: { changeRequest: true },
+        });
+      }),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1_200,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async (options) => {
+        if (options.prompt.includes("Schema ID: core/summary.")) {
+          return reviewPiResultForPrompt(options.prompt, []);
+        }
+        findingsCalls += 1;
+        return reviewPiResultForPrompt(
+          options.prompt,
+          findingsCalls === 1
+            ? [
+                {
+                  ...finding("discarded config", "range-1", 10),
+                  body: "`config` is copied and `schedule_type` is replaced with its display value, but the return statement uses the original unmodified monitor config. The modified copy is discarded, so the integer is emitted instead of the display string.",
+                },
+                {
+                  ...finding("wrong cleanup", "range-1", 10),
+                  body: "The cleanup branch removes the active cache entry instead of the expired entry, so stale state remains reachable.",
+                },
+              ]
+            : [
+                {
+                  ...finding("discarded config", "range-1", 10),
+                  body: "`config` is copied and `schedule_type` is replaced with its display value, but the return statement uses the original unmodified monitor config. The modified copy is discarded, so the integer is emitted instead of the display string.",
+                },
+                {
+                  ...finding("discarded config", "range-1", 10),
+                  body: "`config` is copied and `schedule_type` is replaced with its display value, but the return dictionary uses the original monitor config instead of the modified copy. The integer reaches the issue event instead of the display string.",
+                },
+              ],
+        );
+      },
+    });
+
+    expect(result.validated.validFindings.map((item) => item.body)).toEqual([
+      "`config` is copied and `schedule_type` is replaced with its display value, but the return statement uses the original unmodified monitor config. The modified copy is discarded, so the integer is emitted instead of the display string.",
+      "The cleanup branch removes the active cache entry instead of the expired entry, so stale state remains reachable.",
+      "`config` is copied and `schedule_type` is replaced with its display value, but the return dictionary uses the original monitor config instead of the modified copy. The integer reaches the issue event instead of the display string.",
+    ]);
+  });
+
+  it("preserves a shared summary title across scheduled review units", async () => {
+    let observedTitle: string | undefined;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const task = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, {
+            diff: await ctx.change.diff(),
+          });
+          observedTitle = result.summary.title;
+          await ctx.comment(result.summary.body);
+        },
+      });
+    });
+
+    await runRuntime({
+      plan,
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 1_200,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async () =>
+        piRunResult(
+          JSON.stringify({
+            summary: { title: "Shared title", body: "No findings." },
+            inlineFindings: [],
+          }),
+        ),
+    });
+
+    expect(observedTitle).toBe("Shared title");
+  });
+
+  it("keeps fitting core reviews on one Pi call", async () => {
+    let calls = 0;
+    await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+          on: { changeRequest: true },
+        });
+      }),
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async (options) => {
+        calls += 1;
+        return reviewPiResultForPrompt(options.prompt, []);
+      },
+    });
+
+    expect(calls).toBe(2);
+  });
+
+  it("preserves provider output when a core review schedules one manifest", async () => {
+    let observedFindingCount = 0;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const task = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, {
+            diff: await ctx.change.diff(),
+          });
+          observedFindingCount = result.inlineFindings.length;
+          await ctx.comment(result.summary.body);
+        },
+      });
+    });
+    const duplicate = finding("same provider finding", "range-1", 10);
+
+    await runRuntime({
+      plan,
+      diffManifestBuilder: () => reviewTestManifestWithDocs(),
+      piRunner: async () => reviewPiResult([duplicate, duplicate]),
+    });
+
+    expect(observedFindingCount).toBe(2);
+  });
+
+  it("splits one oversized file across complete multi-hunk ranges", async () => {
+    const prompts: string[] = [];
+    const baseManifest = reviewTestManifestWithDocs();
+    const source = baseManifest.files[0];
+    if (!source) {
+      throw new Error("expected a source file in the review test manifest");
+    }
+    const manifest = {
+      ...baseManifest,
+      files: [
+        {
+          ...source,
+          hunks: [
+            ...source.hunks,
+            {
+              hunkIndex: 2,
+              header: "@@ -29,1 +30,1 @@",
+              oldStart: 29,
+              oldLines: 1,
+              newStart: 30,
+              newLines: 1,
+              contentHash: "feedfacecafe",
+            },
+          ],
+          commentableRanges: [
+            ...source.commentableRanges,
+            {
+              id: "range-3",
+              path: source.path,
+              side: "RIGHT" as const,
+              startLine: 30,
+              endLine: 30,
+              kind: "added" as const,
+              hunkIndex: 2,
+              hunkHeader: "@@ -29,1 +30,1 @@",
+              hunkContentHash: "feedfacecafe",
+              preview: "return updated;",
+            },
+          ],
+        },
+        ...baseManifest.files.slice(1),
+      ],
+    };
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        limits: {
+          diffManifest: {
+            fullMaxBytes: 1,
+            fullMaxEstimatedTokens: 1,
+            condensedMaxBytes: 900,
+            condensedMaxEstimatedTokens: 10_000,
+          },
+        },
+      },
+      diffManifestBuilder: () => manifest,
+      piRunner: async (options) => {
+        prompts.push(options.prompt);
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(prompts).toHaveLength(4);
+    expect(prompts.filter((prompt) => prompt.includes('"id": "range-1"'))).toHaveLength(1);
+    expect(prompts.filter((prompt) => prompt.includes('"id": "range-2"'))).toHaveLength(1);
+    expect(prompts.filter((prompt) => prompt.includes('"id": "range-3"'))).toHaveLength(1);
+    expect(prompts.filter((prompt) => prompt.includes('"path": "docs/readme.md"'))).toHaveLength(1);
+  });
+
+  it("uses agent timeout when running Pi", async () => {
+    let observedTimeout: number | undefined;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr, { timeout: "5m" });
+      registerPiReviewTask(pipr, agent);
+    });
+
+    await runRuntime({
+      plan,
+      piRunner: async (options) => {
+        observedTimeout = options.timeoutSeconds;
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(observedTimeout).toBe(300);
+  });
+
+  it("accepts review JSON wrapped in a Markdown code fence", async () => {
+    let calls = 0;
+
+    const result = await runRuntime({
+      plan: defaultReviewPlan(),
+      piRunner: async () => {
+        calls += 1;
+        return piRunResult(`\`\`\`json\n${noFindingsPiResult().text}\n\`\`\``);
+      },
+    });
+
+    expect(calls).toBe(1);
+    expect(result.repairAttempted).toBe(false);
+  });
+
+  it("rejects review JSON surrounded by provider prose", async () => {
+    let calls = 0;
+
+    await expect(
+      runRuntime({
+        plan: defaultReviewPlan(),
+        piRunner: async () => {
+          calls += 1;
+          return piRunResult(
+            `The review result is:\n${noFindingsPiResult().text}\nNo further comments.`,
+          );
+        },
+      }),
+    ).rejects.toThrow("Pi output failed schema validation");
+    expect(calls).toBe(2);
+  });
+
+  it("rejects unsupported core review fields returned by Pi", async () => {
+    let calls = 0;
+
+    await expect(
+      runRuntime({
+        plan: defaultReviewPlan(),
+        piRunner: async () => {
+          calls += 1;
+          return piRunResult(
+            JSON.stringify({
+              summary: { body: "Review." },
+              inlineFindings: [
+                {
+                  ...finding("unsupported id", "range-1", 10),
+                  id: "finding-1",
+                },
+              ],
+            }),
+          );
+        },
+      }),
+    ).rejects.toThrow("Pi output failed schema validation");
+    expect(calls).toBe(2);
+  });
+
+  it("uses run model and fallbacks in order", async () => {
+    const calls: string[] = [];
+    const plan = fallbackReviewPlan({
+      agentModel: "fallback",
+      runOverridesModel: true,
+    });
+
+    await runRuntime({
+      config: fallbackConfig,
+      plan,
+      piRunner: providerFailurePiRunner(calls),
+    });
+
+    expect(calls).toEqual(["deepseek-v4-pro", "fallback-model"]);
+  });
+
+  it("uses provider override without model fallback selection", async () => {
+    const calls: string[] = [];
+    const plan = fallbackReviewPlan();
+
+    await runRuntime({
+      config: fallbackConfig,
+      plan,
+      providerOverride: overrideProvider,
+      piRunner: async (options) => {
+        calls.push(options.provider.model);
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(calls).toEqual(["override-model"]);
+  });
+
+  it("runs invalid-output repair attempts per model before falling back", async () => {
+    const calls: string[] = [];
+    const plan = fallbackReviewPlan();
+
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan,
+      piRunner: async (options) => {
+        calls.push(options.provider.model);
+        return options.provider.id === "deepseek/deepseek-v4-pro"
+          ? piRunResult("{")
+          : noFindingsPiResult();
+      },
+    });
+
+    expect(calls).toEqual(["deepseek-v4-pro", "deepseek-v4-pro", "fallback-model"]);
+    expect(result.repairAttempted).toBe(true);
+  });
+
+  it("aggregates review stats across repair and fallback Pi runs", async () => {
+    let call = 0;
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async () => {
+        call += 1;
+        const common = {
+          durationMs: 60_000,
+          models: [call < 3 ? "primary-response-model" : "fallback-response-model"],
+          usage: {
+            status: "complete" as const,
+            inputTokens: call * 100,
+            outputTokens: call * 10,
+            costUsd: call * 0.001,
+            cacheReadTokens: call * 20,
+            cacheWriteTokens: call * 2,
+            cacheUsageStatus: "complete" as const,
+          },
+          diffContextCoverage: {
+            files: [
+              {
+                path: "src/example.ts",
+                rangeIds: ["range-1", "range-2"],
+                coveredRangeIds: [call === 3 ? "range-2" : "range-1"],
+                fullFile: false,
+              },
+            ],
+          },
+        };
+        return call < 3 ? piRunResult("{", common) : { ...noFindingsPiResult(), ...common };
+      },
+    });
+    if (result.kind !== "review") {
+      throw new Error(`expected review, received ${result.kind}`);
+    }
+
+    expect(result.publicationPlan.metadata.stats).toEqual({
+      models: ["primary-response-model", "fallback-response-model"],
+      agentRuns: 3,
+      durationMs: expect.any(Number),
+      inputTokens: 600,
+      outputTokens: 60,
+      costUsd: 0.006,
+      usageStatus: "complete",
+      cacheReadTokens: 120,
+      cacheWriteTokens: 12,
+      cacheUsageStatus: "complete",
+      diffContextCoverage: {
+        files: { total: 1, covered: 1 },
+        ranges: { total: 2, covered: 2 },
+      },
+    });
+    expect(result.run).toMatchObject({
+      models: ["deepseek-v4-pro", "fallback-model"],
+      agentRuns: 3,
+      inputTokens: 600,
+      outputTokens: 60,
+      costUsd: 0.006,
+      usageStatus: "complete",
+      cacheReadTokens: 120,
+      cacheWriteTokens: 12,
+      cacheUsageStatus: "complete",
+      diffContextCoverage: {
+        files: { total: 1, covered: 1 },
+        ranges: { total: 2, covered: 2 },
+      },
+    });
+    expect(result.publicationPlan.metadata.stats?.durationMs).toBeLessThan(60_000);
+    expect(result.mainComment).toContain("<summary>📊 Review completed in ");
+  });
+
+  it("keeps exact diff context coverage in a sensitive diagnostic artifact", async () => {
+    const artifacts: Array<{
+      kind: string;
+      content: string;
+      sensitive: boolean;
+    }> = [];
+    const result = await runRuntime({
+      plan: defaultReviewPlan(),
+      runObserver: {
+        async recordArtifact(artifact) {
+          artifacts.push(artifact);
+        },
+        async beginAgentAttempt() {
+          return { event() {}, async finish() {} };
+        },
+      },
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        diffContextCoverage: {
+          files: [
+            {
+              path: "src/private-file.ts",
+              rangeIds: ["private-range"],
+              coveredRangeIds: [],
+              fullFile: false,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(artifacts).toContainEqual(
+      expect.objectContaining({
+        kind: "diff-context-coverage",
+        sensitive: true,
+        content: expect.stringContaining("src/private-file.ts"),
+      }),
+    );
+    expect(result.mainComment).not.toContain("src/private-file.ts");
+  });
+
+  it("keeps exact diff context coverage when a review task fails", async () => {
+    const artifacts: Array<{ kind: string; content: string; sensitive: boolean }> = [];
+
+    await expect(
+      runRuntime({
+        plan: defaultReviewPlan(),
+        runObserver: {
+          async recordArtifact(artifact) {
+            artifacts.push(artifact);
+          },
+          async beginAgentAttempt() {
+            return { event() {}, async finish() {} };
+          },
+        },
+        piRunner: async () =>
+          piRunResult("{", {
+            diffContextCoverage: {
+              files: [
+                {
+                  path: "src/private-failure.ts",
+                  rangeIds: ["private-failure-range"],
+                  coveredRangeIds: [],
+                  fullFile: false,
+                },
+              ],
+            },
+          }),
+      }),
+    ).rejects.toThrow("Pi agent failed");
+
+    expect(artifacts).toContainEqual(
+      expect.objectContaining({
+        kind: "diff-context-coverage",
+        sensitive: true,
+        content: expect.stringContaining("src/private-failure.ts"),
+      }),
+    );
+  });
+
+  it("keeps aggregate usage safe when reported run totals overflow", async () => {
+    let call = 0;
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async () => {
+        call += 1;
+        const telemetry = {
+          durationMs: 1,
+          models: ["reported-model"],
+          usage: {
+            status: "complete" as const,
+            inputTokens: Number.MAX_SAFE_INTEGER,
+            outputTokens: 1,
+            costUsd: 0.001,
+          },
+        };
+        return call < 3 ? piRunResult("{", telemetry) : { ...noFindingsPiResult(), ...telemetry };
+      },
+    });
+
+    expect(result.publicationPlan.metadata.stats).toMatchObject({
+      inputTokens: Number.MAX_SAFE_INTEGER,
+      outputTokens: 3,
+      costUsd: 0.003,
+      usageStatus: "partial",
+    });
+  });
+
+  it("bounds reported model telemetry before publication", async () => {
+    const secretModel = "model-api_key-abcdefghijklmnop";
+    const oversizedModel = "m".repeat(500);
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: [
+          secretModel,
+          oversizedModel,
+          ...Array.from({ length: 25 }, (_, index) => `model-${index}`),
+        ],
+      }),
+    });
+
+    const models = result.publicationPlan.metadata.stats?.models ?? [];
+    expect(models).toHaveLength(20);
+    expect(models[0]).toBe(secretModel);
+    expect(models[1]).toBe("m".repeat(200));
+    expect(result.mainComment).toContain(secretModel);
+  });
+
+  it("falls back to the requested model when reported models are blank", async () => {
+    const result = await runRuntime({
+      plan: fallbackReviewPlan(),
+      config: fallbackConfig,
+      piRunner: async () => ({ ...noFindingsPiResult(), models: ["   "] }),
+    });
+
+    expect(result.publicationPlan.metadata.stats?.models).toEqual(["deepseek-v4-pro"]);
+  });
+
+  it("aggregates Pi runs from parallel Review Tasks", async () => {
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const first = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "first",
+        async run(ctx) {
+          await ctx.pi.run(agent, {
+            diff: await ctx.change.diff(),
+          });
+        },
+      });
+      const second = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "second",
+        async run(ctx) {
+          await ctx.pi.run(agent, {
+            diff: await ctx.change.diff(),
+          });
+          await ctx.comment("Parallel review complete.");
+        },
+      });
+    });
+
+    let call = 0;
+    const result = await runRuntime({
+      plan,
+      piRunner: async () => {
+        call += 1;
+        if (call === 1) {
+          await Bun.sleep(20);
+          return { ...noFindingsPiResult(), models: ["first-task-model"] };
+        }
+        return { ...noFindingsPiResult(), models: ["second-task-model"] };
+      },
+    });
+
+    expect(result.publicationPlan.metadata.stats).toMatchObject({
+      models: ["second-task-model", "first-task-model"],
+      agentRuns: 2,
+      usageStatus: "complete",
+    });
+  });
+
+  it("reserves maxAgentRuns atomically across parallel Review Tasks", async () => {
+    const release = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    let calls = 0;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const first = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "first",
+        async run(ctx) {
+          await ctx.pi.run(agent, {
+            diff: await ctx.change.diff(),
+          });
+        },
+      });
+      const second = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "second",
+        async run(ctx) {
+          await ctx.pi.run(agent, {
+            diff: await ctx.change.diff(),
+          });
+          await ctx.comment("Parallel review complete.");
+        },
+      });
+    });
+
+    const run = runRuntime({
+      plan,
+      config: { ...config, limits: { maxAgentRuns: 1 } },
+      piRunner: async () => {
+        calls += 1;
+        started.resolve();
+        await release.promise;
+        return noFindingsPiResult();
+      },
+    });
+    await started.promise;
+    const callsBeforeRelease = calls;
+    release.resolve();
+
+    await expect(run).rejects.toThrow(
+      "Review Run agent-call budget exhausted after 1 provider invocations",
+    );
+    expect(callsBeforeRelease).toBe(1);
+    expect(calls).toBe(1);
+  });
+
+  it("runs ctx.pi.all requests concurrently with shared diff context", async () => {
+    const releases: Array<() => void> = [];
+    const allStarted = Promise.withResolvers<void>();
+    const sawManifestTools: boolean[] = [];
+    const requestIds: Array<string | undefined> = [];
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const diff = await ctx.change.diff();
+          const [first, second] = await ctx.pi.all([
+            { agent, input: { diff } },
+            { agent, input: { diff } },
+          ]);
+          await ctx.comment({
+            main: "Parallel review complete.",
+            inlineFindings: [...first.inlineFindings, ...second.inlineFindings],
+          });
+        },
+      });
+    });
+
+    const result = await runRuntime({
+      plan,
+      piRunner: async (options) => {
+        sawManifestTools.push(options.runtimeTools?.manifest !== undefined);
+        requestIds.push(options.requestId);
+        const released = new Promise<void>((resolve) => releases.push(resolve));
+        if (releases.length === 2) {
+          allStarted.resolve();
+        }
+        await allStarted.promise;
+        releases.shift()?.();
+        await released;
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(sawManifestTools).toHaveLength(2);
+    expect(new Set(requestIds).size).toBe(2);
+    expect(result.publicationPlan.metadata.stats).toMatchObject({ agentRuns: 2 });
+  });
+
+  it("rejects ctx.pi.all before any run when maxAgentRuns cannot cover every request", async () => {
+    let calls = 0;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const diff = await ctx.change.diff();
+          await ctx.pi.all([
+            { agent, input: { diff } },
+            { agent, input: { diff } },
+          ]);
+        },
+      });
+    });
+
+    await expect(
+      runRuntime({
+        plan,
+        config: { ...config, limits: { maxAgentRuns: 1 } },
+        piRunner: async () => {
+          calls += 1;
+          return noFindingsPiResult();
+        },
+      }),
+    ).rejects.toThrow("Review Run agent-call budget cannot start 2 concurrent runs; 1 of 1 remain");
+    expect(calls).toBe(0);
+  });
+
+  it("drops findings without a publishable suggested fix when select requires one", async () => {
+    let dropped: unknown[] = [];
+    const anchor = {
+      path: "src/a.ts",
+      rangeId: "range-1",
+      side: "RIGHT" as const,
+      startLine: 10,
+      endLine: 10,
+    };
+    const plan = testPlan((pipr) => {
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const selection = ctx.review.select(
+            [
+              { ...anchor, body: "Exact fix.", suggestedFix: "const x = recover();" },
+              { ...anchor, body: "No fix." },
+              { ...anchor, body: "Identical fix.", suggestedFix: "const x = fail();" },
+            ],
+            { requireSuggestedFix: true },
+          );
+          dropped = selection.dropped.map((item) => [item.finding.body, item.reason]);
+          await ctx.comment({ main: "Done.", inlineFindings: selection.findings });
+        },
+      });
+    });
+
+    const result = await runRuntime({ plan, diffManifestBuilder: () => reviewTestManifest() });
+
+    expect(result.inlineCommentDrafts.map((draft) => draft.finding.body)).toEqual(["Exact fix."]);
+    expect(dropped).toEqual([
+      ["No fix.", "suggested fix is missing or not publishable"],
+      ["Identical fix.", "suggested fix is missing or not publishable"],
+    ]);
+  });
+
+  it("only treats branded ctx.change.diff values as Diff Manifest context", async () => {
+    const observed: boolean[] = [];
+    const plan = testPlan((pipr) => {
+      const agent = pipr.agent({
+        name: "reviewer",
+        model: deepseekModel(pipr),
+        instructions: "Review.",
+        output: pipr.schemas.review,
+        prompt: () => "Review.",
+      });
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const diff = await ctx.change.diff();
+          await ctx.pi.run(agent, { manifest: diff.manifest });
+          await ctx.pi.run(agent, { context: diff });
+          await ctx.comment("Done.");
+        },
+      });
+    });
+
+    await runRuntime({
+      plan,
+      piRunner: async (options) => {
+        observed.push(options.prompt.includes("\nDiff Manifest:\n"));
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(observed).toEqual([false, true]);
+  });
+
+  it("keeps provider invocations unlimited when maxAgentRuns is omitted", async () => {
+    let calls = 0;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      const task = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          for (let index = 0; index < 5; index += 1) {
+            await ctx.pi.run(agent, {
+              diff: await ctx.change.diff(),
+            });
+          }
+          await ctx.comment("Unlimited review complete.");
+        },
+      });
+    });
+
+    const result = await runRuntime({
+      plan,
+      piRunner: async () => {
+        calls += 1;
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(calls).toBe(5);
+    expect(result.publicationPlan.metadata.stats?.agentRuns).toBe(5);
+  });
+
+  it("accumulates review stats across reruns of the same Review Tasks", async () => {
+    const first = await runRuntime({
+      plan: defaultReviewPlan(),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["first-run-model"],
+        usage: {
+          status: "complete" as const,
+          inputTokens: 100,
+          outputTokens: 10,
+          costUsd: 0.001,
+        },
+        diffContextCoverage: {
+          files: [
+            {
+              path: "src/a.ts",
+              rangeIds: ["range-1", "range-2"],
+              coveredRangeIds: ["range-1", "range-2"],
+              fullFile: false,
+            },
+          ],
+        },
+      }),
+    });
+    const second = await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...fallbackConfig,
+        publication: { ...fallbackConfig.publication, showStats: false },
+      },
+      priorReviewState: extractPriorReviewState(first.mainComment, 1),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["second-run-model"],
+        usage: {
+          status: "complete" as const,
+          inputTokens: 200,
+          outputTokens: 20,
+          costUsd: 0.002,
+        },
+        diffContextCoverage: {
+          files: [
+            {
+              path: "src/a.ts",
+              rangeIds: ["range-1", "range-2"],
+              coveredRangeIds: ["range-1"],
+              fullFile: false,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(second.publicationPlan.metadata.stats).toMatchObject({
+      models: ["first-run-model", "second-run-model"],
+      agentRuns: 2,
+      inputTokens: 300,
+      outputTokens: 30,
+      costUsd: 0.003,
+      usageStatus: "complete",
+      diffContextCoverage: {
+        files: { total: 1, covered: 0 },
+        ranges: { total: 2, covered: 1 },
+      },
+    });
+    expect(second.publicationPlan.reviewState.stats).toEqual(second.publicationPlan.metadata.stats);
+    expect(second.mainComment).not.toContain("<summary>📊 Review completed in ");
+
+    const third = await runRuntime({
+      plan: defaultReviewPlan(),
+      priorReviewState: extractPriorReviewState(second.mainComment, 1),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["third-run-model"],
+        usage: {
+          status: "complete" as const,
+          inputTokens: 300,
+          outputTokens: 30,
+          costUsd: 0.003,
+        },
+      }),
+    });
+
+    expect(third.publicationPlan.metadata.stats).toMatchObject({
+      models: ["first-run-model", "second-run-model", "third-run-model"],
+      agentRuns: 3,
+      inputTokens: 600,
+      outputTokens: 60,
+      costUsd: 0.006,
+      usageStatus: "complete",
+    });
+    expect(third.mainComment).toContain("<summary>📊 Review completed in ");
+  });
+
+  it("marks cumulative usage partial when an earlier rerun did not report usage", async () => {
+    const first = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async (options) => {
+        if (options.provider.id === "deepseek/deepseek-v4-pro") {
+          throw piRunFailure("unreported usage");
+        }
+        return {
+          ...noFindingsPiResult(),
+          models: ["unreported-model"],
+        };
+      },
+    });
+    const second = await runRuntime({
+      plan: defaultReviewPlan(),
+      priorReviewState: extractPriorReviewState(first.mainComment, 1),
+      piRunner: async () => ({
+        ...noFindingsPiResult(),
+        models: ["reported-model"],
+        usage: {
+          status: "complete" as const,
+          inputTokens: 200,
+          outputTokens: 20,
+          costUsd: 0.002,
+        },
+      }),
+    });
+
+    expect(second.publicationPlan.metadata.stats).toMatchObject({
+      agentRuns: 3,
+      inputTokens: 200,
+      outputTokens: 20,
+      costUsd: 0.002,
+      usageStatus: "partial",
+    });
+  });
+
+  it("counts rejected Pi attempts as partial usage before retrying", async () => {
+    let call = 0;
+    const result = await runRuntime({
+      config: { ...fallbackConfig, limits: { maxAgentRuns: 2 } },
+      plan: fallbackReviewPlan(),
+      piRunner: async () => {
+        call += 1;
+        if (call === 1) {
+          throw new Error("temporary failure");
+        }
+        return {
+          ...noFindingsPiResult(),
+          models: ["primary-response-model"],
+          usage: {
+            status: "complete" as const,
+            inputTokens: 100,
+            outputTokens: 10,
+            costUsd: 0.001,
+          },
+        };
+      },
+    });
+
+    expect(result.publicationPlan.metadata.stats).toMatchObject({
+      models: ["deepseek-v4-pro", "primary-response-model"],
+      agentRuns: 2,
+      inputTokens: 100,
+      outputTokens: 10,
+      costUsd: 0.001,
+      usageStatus: "partial",
+    });
+  });
+
+  it("falls back after a final provider failure without retrying the same model", async () => {
+    const calls: string[] = [];
+    const plan = fallbackReviewPlan();
+
+    await runRuntime({
+      config: fallbackConfig,
+      plan,
+      piRunner: providerFailurePiRunner(calls),
+    });
+
+    expect(calls).toEqual(["deepseek-v4-pro", "fallback-model"]);
+  });
+
+  it("derives stable, distinct request ids for initial, repair, fallback, and shard calls", async () => {
+    const shardedFallbackConfig = {
+      ...manifestShardConfig(2),
+      providers: fallbackConfig.providers,
+    };
+    const run = async () => {
+      const requestIds: string[] = [];
+      await runRuntime({
+        config: shardedFallbackConfig,
+        plan: fallbackReviewPlan(),
+        diffManifestBuilder: () => manyFileShardingManifest(),
+        env: { ...process.env, PATH: "" },
+        piRunner: async (options) => {
+          requestIds.push(options.requestId ?? "missing");
+          return options.provider.id === "deepseek/deepseek-v4-pro"
+            ? piRunResult("{")
+            : noFindingsPiResult();
+        },
+      });
+      return requestIds;
+    };
+
+    const first = await run();
+    const second = await run();
+
+    // Per shard: primary initial, primary repair, fallback initial.
+    expect(first).toHaveLength(6);
+    expect(new Set(first).size).toBe(6);
+    expect(first).not.toContain("missing");
+    expect(second).toEqual(first);
+  });
+
+  it("continues the first attempt's conversation when repairing invalid output", async () => {
+    const conversations: unknown[] = [];
+
+    const result = await runRuntime({
+      plan: defaultReviewPlan(),
+      piRunner: async (options) => {
+        conversations.push(options.conversation);
+        return conversations.length === 1
+          ? piRunResult("{", { conversationId: 41 })
+          : noFindingsPiResult();
+      },
+    });
+
+    expect(conversations).toHaveLength(2);
+    expect(conversations[1]).toEqual({ kind: "continue", conversationId: 41 });
+    expect(result.repairAttempted).toBe(true);
+  });
+
+  it("moves to the fallback without a second repair when the repair call fails", async () => {
+    const calls: string[] = [];
+
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async (options) => {
+        const isRepair = options.conversation?.kind === "continue";
+        calls.push(`${options.provider.model}${isRepair ? ":repair" : ""}`);
+        if (options.provider.id !== "deepseek/deepseek-v4-pro") {
+          return noFindingsPiResult();
+        }
+        if (isRepair) {
+          throw piRunFailure("repair failed");
+        }
+        return piRunResult("{");
+      },
+    });
+
+    expect(calls).toEqual(["deepseek-v4-pro", "deepseek-v4-pro:repair", "fallback-model"]);
+    expect(result.repairAttempted).toBe(true);
+  });
+
+  it("propagates agent-call budget exhaustion during repair instead of falling back", async () => {
+    let calls = 0;
+
+    await expect(
+      runRuntime({
+        config: { ...fallbackConfig, limits: { maxAgentRuns: 1 } },
+        plan: fallbackReviewPlan(),
+        piRunner: async () => {
+          calls += 1;
+          return piRunResult("{");
+        },
+      }),
+    ).rejects.toThrow("Review Run agent-call budget exhausted after 1 provider invocations");
+    expect(calls).toBe(1);
+  });
+
+  it("fails the whole review when one manifest shard fails on every provider", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const calls: string[] = [];
+
+    await expect(
+      runRuntime({
+        config: { ...manifestShardConfig(2), providers: fallbackConfig.providers },
+        plan: fallbackReviewPlan(),
+        diffManifestBuilder: () => manyFileShardingManifest(),
+        env: { ...process.env, PATH: "" },
+        progress: {
+          async transition() {},
+          recordStats() {},
+          work(event) {
+            events.push(event);
+          },
+        },
+        piRunner: async (options) => {
+          calls.push(options.provider.model);
+          if (calls.length === 1) {
+            return reviewPiResult([finding("shard one", "range-0-0", 10, "src/file-0.ts")]);
+          }
+          throw piRunFailure("shard two failed");
+        },
+      }),
+    ).rejects.toThrow("Pi agent failed for all configured models");
+
+    expect(calls).toEqual(["deepseek-v4-pro", "deepseek-v4-pro", "fallback-model"]);
+    expect(
+      events
+        .filter((event) => event.type === "review-run-finished")
+        .map((event) => [event.run, event.outcome]),
+    ).toEqual([
+      [1, "completed"],
+      [2, "failed"],
+    ]);
+    expect(events.filter((event) => event.type === "reviewer-finished")).toEqual([
+      expect.objectContaining({ outcome: "failed" }),
+    ]);
+  });
+
+  it("counts shards, repairs, and fallbacks against maxAgentRuns", async () => {
+    let calls = 0;
+    const limitedConfig = {
+      ...manifestShardConfig(2),
+      providers: fallbackConfig.providers,
+      limits: {
+        ...manifestShardConfig(2).limits,
+        maxAgentRuns: 4,
+      },
+    };
+
+    await expect(
+      runRuntime({
+        config: limitedConfig,
+        plan: fallbackReviewPlan(),
+        diffManifestBuilder: () => manyFileShardingManifest(),
+        env: { ...process.env, PATH: "" },
+        piRunner: async () => {
+          calls += 1;
+          if (calls < 4) {
+            return piRunResult("{");
+          }
+          return noFindingsPiResult();
+        },
+      }),
+    ).rejects.toThrow("Review Run agent-call budget exhausted after 4 provider invocations");
+
+    expect(calls).toBe(4);
+  });
+
+  it("does not fall back when the primary model returns a valid empty review", async () => {
+    const calls: string[] = [];
+    const plan = fallbackReviewPlan();
+
+    await runRuntime({
+      config: fallbackConfig,
+      plan,
+      piRunner: async (options) => {
+        calls.push(options.provider.model);
+        if (options.provider.id === "fallback") {
+          throw new Error("fallback should not run");
+        }
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(calls).toEqual(["deepseek-v4-pro"]);
+  });
+
+  it("passes registered custom Pi tools to the runner", async () => {
+    let observedToolNames: readonly string[] = [];
+    let observedToolResult: unknown;
+    const plan = testPlan((pipr) => {
+      const customTool = memoryTool(pipr);
+      registerPiReviewTask(
+        pipr,
+        defaultReviewAgent(pipr, {
+          tools: [...pipr.tools.readOnly, customTool],
+        }),
+      );
+    });
+
+    await runRuntime({
+      plan,
+      piRunner: async (options) => {
+        observedToolNames = options.customTools?.tools.map((tool) => tool.name) ?? [];
+        observedToolResult = await options.customTools?.tools[0]?.execute(
+          options.customTools.context,
+          { body: "Remember this." },
+        );
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(observedToolNames).toEqual(["custom_tool"]);
+    expect(observedToolResult).toEqual({ body: "Remember this." });
+  });
+
+  it("fails closed when a custom tool forges the readOnly name", () => {
+    expect(() =>
+      testPlan((pipr) => {
+        registerPiReviewTask(
+          pipr,
+          defaultReviewAgent(pipr, {
+            tools: [{ kind: "pipr.tool", name: "readOnly" } as AgentTool],
+          }),
+        );
+      }),
+    ).toThrow("Expected a tool handle created by pipr.tool");
+  });
+
+  it("fails closed when an agent copies a registered custom tool handle", () => {
+    expect(() =>
+      testPlan((pipr) => {
+        const customTool = memoryTool(pipr);
+        const copiedTool = { ...customTool } as AgentTool;
+        registerPiReviewTask(pipr, defaultReviewAgent(pipr, { tools: [copiedTool] }));
+      }),
+    ).toThrow("Expected a tool handle created by pipr.tool");
+  });
+
+  it("renders custom task details through ctx.comment markdown", async () => {
+    const plan = singleTaskPlan({
+      name: "metadata",
+      async run(ctx) {
+        await ctx.comment(JSON.stringify({ status: "ok" }));
+      },
+    });
+
+    const result = await runRuntime({
+      plan,
+    });
+
+    expect(result.mainComment).toContain('"status":"ok"');
+  });
+
+  it("resolves declared task secrets from runtime env", async () => {
+    let observedSecret: string | undefined;
+    let registeredSecret: string | undefined;
+    const plan = testPlan((pipr) => {
+      const token = pipr.secret({ name: "CUSTOM_TOOL_TOKEN" });
+      const task = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "secret-task",
+        async run(ctx) {
+          observedSecret = ctx.secret(token);
+          await ctx.comment("secret resolved");
+        },
+      });
+    });
+
+    await runRuntime({
+      plan,
+      env: { CUSTOM_TOOL_TOKEN: "resolved-token" },
+      runObserver: {
+        registerSecret(value) {
+          registeredSecret = value;
+        },
+        async beginAgentAttempt() {
+          return { event() {}, async finish() {} };
+        },
+      },
+    });
+
+    expect(observedSecret).toBe("resolved-token");
+    expect(registeredSecret).toBe("resolved-token");
+  });
+
+  it("registers configured provider keys even when their env name is nonstandard", async () => {
+    const registeredSecrets: Array<string | undefined> = [];
+    let registeredBeforeArtifacts = false;
+
+    await runRuntime({
+      plan: defaultReviewPlan(),
+      config: {
+        ...config,
+        providers: [{ ...provider, apiKeyEnv: "FOO" }],
+      },
+      env: { FOO: "provider-secret" },
+      runObserver: {
+        registerSecret(value) {
+          registeredSecrets.push(value);
+        },
+        async recordArtifact() {
+          registeredBeforeArtifacts = registeredSecrets.includes("provider-secret");
+        },
+        async beginAgentAttempt() {
+          return { event() {}, async finish() {} };
+        },
+      },
+      piRunner: noFindingsPiRunner(),
+    });
+
+    expect(registeredSecrets).toContain("provider-secret");
+    expect(registeredBeforeArtifacts).toBe(true);
+  });
+
+  it("fails when a declared task secret is missing", async () => {
+    const plan = testPlan((pipr) => {
+      const token = pipr.secret({ name: "CUSTOM_TOOL_TOKEN" });
+      const task = pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "secret-task",
+        async run(ctx) {
+          ctx.secret(token);
+          await ctx.comment("secret resolved");
+        },
+      });
+    });
+
+    await expect(runRuntime({ plan, env: {} })).rejects.toThrow(
+      "Missing secret env var: CUSTOM_TOOL_TOKEN",
+    );
+  });
+
+  it("rejects multiple selected review recipes that emit comments", async () => {
+    const plan = testPlan((pipr) => {
+      const model = deepseekModel(pipr);
+      pipr.review({
+        id: "correctness",
+        model,
+        instructions: "Review correctness.",
+        summary: { instructions: "Summarize correctness risk." },
+        on: { changeRequest: true },
+      });
+      pipr.review({
+        id: "security",
+        model,
+        instructions: "Review security.",
+        summary: { instructions: "Summarize security risk." },
+        on: { changeRequest: true },
+      });
+    });
+
+    await expect(runRuntime({ plan, piRunner: noFindingsPiRunner() })).rejects.toThrow(
+      "ctx.comment(...) may be called once per selected run",
+    );
+  });
+
+  it("skips scoped pipr.review Pi calls when no changed files match", async () => {
+    const plan = testPlan((pipr) => {
+      pipr.review({
+        id: "review",
+        model: deepseekModel(pipr),
+        instructions: "Review docs.",
+        summary: { instructions: "Summarize docs changes." },
+        paths: { include: ["docs/**"] },
+        on: { changeRequest: true },
+      });
+    });
+
+    const result = await runRuntime({
+      plan,
+      priorMainComment: [
+        "<!-- pipr:main-comment change=1 version=1 state=bad -->",
+        "",
+        "# pipr Review",
+        "",
+        "Stale scoped review.",
+      ].join("\n"),
+      piRunner: async () => {
+        throw new Error("Pi should not run when the scoped manifest is empty");
+      },
+    });
+
+    expect(result.review.inlineFindings).toEqual([]);
+    expect(result.mainComment).not.toContain("Stale scoped review.");
+    expect(result.publicationPlan.metadata.providerModels).toEqual([provider.model]);
+    expect(result.taskChecks).toEqual([
+      {
+        taskName: "review",
+        conclusion: "neutral",
+        summary: "No changed files matched this review's path scope.",
+      },
+    ]);
+  });
+
+  it("enforces pipr.review paths against model findings", async () => {
+    const plan = testPlan((pipr) => {
+      pipr.review({
+        id: "review",
+        model: deepseekModel(pipr),
+        instructions: "Review source.",
+        summary: { instructions: "Summarize source changes." },
+        paths: { include: ["src/**"] },
+        on: { changeRequest: true },
+      });
+    });
+
+    const result = await runWithInsideOutsideFindings(plan);
+
+    expectOnlyInsideFinding(result);
+  });
+
+  it("caps pipr.review selection at publication maxInlineComments", async () => {
+    const plan = testPlan((pipr) => {
+      pipr.config({ publication: { maxInlineComments: 0 } });
+      pipr.review({
+        id: "review",
+        model: deepseekModel(pipr),
+        instructions: "Review source.",
+        summary: { instructions: "Summarize source changes." },
+        on: { changeRequest: true },
+      });
+    });
+
+    const result = await runRuntime({
+      plan,
+      config: {
+        ...config,
+        publication: { ...config.publication, maxInlineComments: 0 },
+      },
+      piRunner: async (options) =>
+        reviewPiResultForPrompt(options.prompt, [finding("hidden", "range-1", 10)]),
+    });
+
+    expect(result.review.inlineFindings).toEqual([]);
+    expect(result.validated.droppedFindings).toEqual([
+      { finding: finding("hidden", "range-1", 10), reason: "cap" },
+    ]);
+    expect(result.inlineCommentDrafts).toEqual([]);
+    expect(result.mainComment).toContain("No inline findings.");
+    expect(result.mainComment).not.toContain("hidden");
+  });
+
+  it("honors publication maxStoredFindings 0 without hiding current findings", async () => {
+    const plan = testPlan((pipr) => {
+      pipr.config({ publication: { maxStoredFindings: 0 } });
+      pipr.review({
+        id: "review",
+        model: deepseekModel(pipr),
+        instructions: "Review source.",
+        summary: { instructions: "Summarize source changes." },
+        on: { changeRequest: true },
+      });
+    });
+
+    const result = await runRuntime({
+      plan,
+      config: {
+        ...config,
+        publication: { ...config.publication, maxStoredFindings: 0 },
+      },
+      piRunner: async (options) =>
+        reviewPiResultForPrompt(options.prompt, [finding("retained for this run", "range-1", 10)]),
+    });
+
+    expect(result.review.inlineFindings).toHaveLength(1);
+    expect(result.inlineCommentDrafts).toHaveLength(1);
+    expect(extractPriorReviewState(result.mainComment, 1)?.findings).toEqual([]);
+  });
+});
+
+function semanticShardingManifest(): DiffManifest {
+  return semanticShardingManifestForPaths("src/caller.ts", "src/unrelated.ts", "src/dependency.ts");
+}
+
+const multiAgentShardingMarkers = [
+  "SECURITY_MULTI_AGENT",
+  "TESTS_MULTI_AGENT",
+  "MAINTAINABILITY_MULTI_AGENT",
+  "AGGREGATOR_MULTI_AGENT",
+] as const;
+
+function multiAgentShardingPlan() {
+  return testPlan((pipr) => {
+    const model = deepseekModel(pipr);
+    const security = defaultReviewAgent(pipr, {
+      name: "security-multi-agent",
+      model,
+      instructions: multiAgentShardingMarkers[0],
+      prompt: () => multiAgentShardingMarkers[0],
+    });
+    const tests = defaultReviewAgent(pipr, {
+      name: "tests-multi-agent",
+      model,
+      instructions: multiAgentShardingMarkers[1],
+      prompt: () => multiAgentShardingMarkers[1],
+    });
+    const maintainability = defaultReviewAgent(pipr, {
+      name: "maintainability-multi-agent",
+      model,
+      instructions: multiAgentShardingMarkers[2],
+      prompt: () => multiAgentShardingMarkers[2],
+    });
+    const aggregator = pipr.agent({
+      name: "aggregator-multi-agent",
+      model,
+      instructions: multiAgentShardingMarkers[3],
+      output: pipr.schemas.review,
+      prompt: (_input: { diff: unknown; specialistResults: unknown }) =>
+        multiAgentShardingMarkers[3],
+    });
+    const task = pipr.task({
+      on: { changeRequest: ["opened"] },
+      name: "multi-agent-sharding",
+      async run(ctx) {
+        const diff = await ctx.change.diff();
+        const [securityResult, testResult, maintainabilityResult] = await Promise.all([
+          ctx.pi.run(security, { diff }),
+          ctx.pi.run(tests, { diff }),
+          ctx.pi.run(maintainability, { diff }),
+        ]);
+        const result = await ctx.pi.run(aggregator, {
+          diff,
+          specialistResults: {
+            securityResult,
+            testResult,
+            maintainabilityResult,
+          },
+        });
+        await ctx.comment({
+          main: result.summary.body,
+          inlineFindings: result.inlineFindings,
+        });
+      },
+    });
+  });
+}
+
+function semanticShardingManifestForPaths(
+  importer: string,
+  unrelated: string,
+  dependency: string,
+): DiffManifest {
+  return {
+    baseSha: "base",
+    headSha: "head",
+    mergeBaseSha: "base",
+    files: [
+      semanticShardingFile(importer, 1),
+      semanticShardingFile(unrelated, 2),
+      semanticShardingFile(dependency, 3),
+    ],
+  };
+}
+
+function semanticShardingFile(filePath: string, hunkIndex: number): DiffManifest["files"][number] {
+  const contentHash = `00000000000${hunkIndex}`;
+  const header = "@@ -1,1 +1,1 @@";
+  return {
+    path: filePath,
+    status: "modified",
+    additions: 1,
+    deletions: 0,
+    hunks: [
+      {
+        hunkIndex,
+        header,
+        oldStart: 1,
+        oldLines: 1,
+        newStart: 1,
+        newLines: 1,
+        contentHash,
+      },
+    ],
+    commentableRanges: [
+      {
+        id: `range-${hunkIndex}`,
+        path: filePath,
+        side: "RIGHT",
+        startLine: 1,
+        endLine: 1,
+        kind: "added",
+        hunkIndex,
+        hunkHeader: header,
+        hunkContentHash: contentHash,
+        preview: `changed ${filePath}`,
+      },
+    ],
+  };
+}
+
+function outlineFile(filePath: string, items: unknown[], language = "TypeScript") {
+  return { path: filePath, language, items };
+}
+
+function outlineItem(name: string, options: { isImport?: boolean; symbolType?: string } = {}) {
+  return {
+    role: "item",
+    symbolType: options.symbolType ?? "function",
+    name,
+    range: {
+      byteOffset: { start: 0, end: 10 },
+      start: { line: 0, column: 0 },
+      end: { line: 0, column: 10 },
+    },
+    signature: options.isImport ? `import "${name}";` : `function ${name}()`,
+    astKind: options.isImport ? "import_statement" : "function_declaration",
+    isImport: options.isImport ?? false,
+    isExported: !options.isImport,
+  };
+}
+
+async function writeFakeAstGrepOutline(directory: string, output: unknown): Promise<void> {
+  const executable = path.join(directory, "ast-grep");
+  await Bun.write(
+    executable,
+    [
+      "#!/usr/bin/env bun",
+      'if (process.argv.includes("--version")) {',
+      '  process.stdout.write("ast-grep 0.44.1\\n");',
+      "} else {",
+      `  process.stdout.write(${JSON.stringify(JSON.stringify(output))});`,
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await chmod(executable, 0o755);
+}
+
+function manifestShardConfig(maxShards?: number) {
+  return {
+    ...config,
+    limits: {
+      diffManifest: {
+        ...(maxShards === undefined ? {} : { maxShards }),
+        fullMaxBytes: 1,
+        fullMaxEstimatedTokens: 1,
+        condensedMaxBytes: 1_200,
+        condensedMaxEstimatedTokens: 10_000,
+      },
+    },
+  };
+}
+
+function manyFileShardingManifest(fileCount = 8): DiffManifest {
+  const manifest = reviewTestManifestWithDocs();
+  const seedFile = manifest.files[0];
+  if (!seedFile) {
+    throw new Error("expected a changed file");
+  }
+  return {
+    ...manifest,
+    files: Array.from({ length: fileCount }, (_, index) => {
+      const filePath = `src/file-${index}.ts`;
+      const contentHash = index.toString(16).padStart(12, "0");
+      return {
+        ...seedFile,
+        path: filePath,
+        hunks: seedFile.hunks.map((hunk) => ({ ...hunk, contentHash })),
+        commentableRanges: seedFile.commentableRanges.map((range, rangeIndex) => ({
+          ...range,
+          id: `range-${index}-${rangeIndex}`,
+          path: filePath,
+          hunkContentHash: contentHash,
+        })),
+      };
+    }),
+  };
+}
+
+function manyHunkSingleFileManifest(): DiffManifest {
+  const manifest = reviewTestManifestWithDocs();
+  const seedFile = manifest.files[0];
+  if (!seedFile) {
+    throw new Error("expected a changed file");
+  }
+  return {
+    ...manifest,
+    files: [
+      {
+        ...seedFile,
+        hunks: Array.from({ length: 8 }, (_, index) => {
+          const line = index + 1;
+          return {
+            hunkIndex: line,
+            header: `@@ -${line},1 +${line},1 @@`,
+            oldStart: line,
+            oldLines: 1,
+            newStart: line,
+            newLines: 1,
+            contentHash: index.toString(16).padStart(12, "0"),
+          };
+        }),
+        commentableRanges: Array.from({ length: 8 }, (_, index) => {
+          const line = index + 1;
+          const header = `@@ -${line},1 +${line},1 @@`;
+          return {
+            id: `single-range-${index}`,
+            path: seedFile.path,
+            side: "RIGHT" as const,
+            startLine: line,
+            endLine: line,
+            kind: "added" as const,
+            hunkIndex: line,
+            hunkHeader: header,
+            hunkContentHash: index.toString(16).padStart(12, "0"),
+            preview: `changed line ${line}`,
+          };
+        }),
+      },
+    ],
+  };
+}
+
+function expectPromptCoverage(prompts: readonly string[], fileCount: number): void {
+  const combined = prompts.join("\n");
+  for (let index = 0; index < fileCount; index += 1) {
+    const contentHash = index.toString(16).padStart(12, "0");
+    expect(combined).toContain(`"path": "src/file-${index}.ts"`);
+    expect(combined).toContain(`"contentHash": "${contentHash}"`);
+    expect(combined).toContain(`"id": "range-${index}-0"`);
+    expect(combined).toContain(`"id": "range-${index}-1"`);
+  }
+}

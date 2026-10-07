@@ -1,3 +1,4 @@
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export type ScenarioName = "dry-run" | "full" | "condensed" | "orchestrator";
@@ -22,6 +23,11 @@ export type Scenario = {
   invalidFirstOutput?: boolean;
 };
 
+export type PublicationScenario = Scenario & {
+  assertion: ScenarioAssertion;
+  publicationFixture: string;
+};
+
 export type PreparedScenario = {
   scenario: Scenario;
   tmpRoot: string;
@@ -33,7 +39,6 @@ export type PreparedScenario = {
 
 type PrepareScenarioOptions = {
   beforeBaseCommit?: (context: { scenario: Scenario; worktree: string }) => Promise<void> | void;
-  forceAddBasePaths?: string[];
 };
 
 type TrackedChange = {
@@ -46,18 +51,12 @@ export const scenarioNames = ["dry-run", "full", "condensed", "orchestrator"] as
 const packageRootPath = "packages/e2e";
 export const fixtureRootPath = `${packageRootPath}/fixtures/act`;
 export const actionFixtureScript = `${packageRootPath}/action-fixture.ts`;
-export const fakePiScript = `${packageRootPath}/fake-pi`;
 export const sourceRoot = gitOutput(process.cwd(), ["rev-parse", "--show-toplevel"]).trim();
 
 const fullConfig = `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
   const reviewer = pipr.agent({
     name: "review",
     model,
@@ -70,13 +69,14 @@ export default definePipr((pipr) => {
     include: ["packages/e2e/fixtures/act/project/**"],
     exclude: ["**/*.test.ts"],
   };
-  const task = pipr.task({
+  pipr.task({
     name: "pipr/review",
+    on: { changeRequest: ["opened"] },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true, paths: sourcePaths });
-      const [review, duplicate] = await Promise.all([
-        ctx.pi.run(reviewer, { manifest }, { paths: sourcePaths }),
-        ctx.pi.run(reviewer, { manifest }, { paths: sourcePaths }),
+      const diff = await ctx.change.diff({ compressed: true, paths: sourcePaths });
+      const [review, duplicate] = await ctx.pi.all([
+        { agent: reviewer, input: { diff }, options: { paths: sourcePaths } },
+        { agent: reviewer, input: { diff }, options: { paths: sourcePaths } },
       ]);
       await ctx.comment({
         main: [
@@ -88,25 +88,14 @@ export default definePipr((pipr) => {
       });
     },
   });
-  pipr.on.changeRequest({ actions: ["opened"], task });
 });
 `;
 
 const condensedConfig = `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const primary = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
-  const fallback = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-fallback",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const primary = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
+  const fallback = pipr.model("deepseek/deepseek-v4-fallback", { thinking: "high" });
   pipr.config({
     publication: { maxInlineComments: 5 },
     limits: {
@@ -127,33 +116,27 @@ export default definePipr((pipr) => {
     instructions: "Review the condensed act fixture.",
     output: pipr.schemas.review,
     tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
-    prompt: (input) => pipr.prompt\`Review this change.\n\nDiff Manifest:\n\${pipr.json(input.manifest)}\`,
+    prompt: (input) => pipr.prompt\`Review this change.\n\nDiff Manifest:\n\${pipr.json(input.diff.manifest)}\`,
   });
-  const task = pipr.task({
+  pipr.task({
     name: "review",
+    on: { changeRequest: ["opened"] },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
-      const review = await ctx.pi.run(reviewer, { manifest });
+      const diff = await ctx.change.diff({ compressed: true });
+      const review = await ctx.pi.run(reviewer, { diff });
       await ctx.comment({
         main: review.summary.body,
         inlineFindings: review.inlineFindings,
       });
     },
   });
-  pipr.on.changeRequest({ actions: ["opened"], task });
 });
 `;
 
 const orchestratorConfig = `import { definePipr, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
   const specialistOutput = pipr.schema({
     id: "fixture/specialist-output",
     schema: z.strictObject({
@@ -193,19 +176,20 @@ export default definePipr((pipr) => {
     model,
     instructions: "Merge specialist reviews into one final review.",
     output: orchestratorOutput,
-    prompt: (input) => pipr.prompt\`Manifest:\\n\${pipr.json(input.manifest)}\\n\\nSpecialist reviews:\\n\${pipr.json(input.reviews)}\`,
+    prompt: (input) => pipr.prompt\`Manifest:\\n\${pipr.json(input.diff.manifest)}\\n\\nSpecialist reviews:\\n\${pipr.json(input.reviews)}\`,
   });
-  const task = pipr.task({
+  pipr.task({
     name: "review",
+    on: { changeRequest: ["opened"] },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
-      const [correctness, security, tests] = await Promise.all([
-        ctx.pi.run(specialist, { manifest, focus: "correctness" }),
-        ctx.pi.run(specialist, { manifest, focus: "security" }),
-        ctx.pi.run(specialist, { manifest, focus: "tests" }),
+      const diff = await ctx.change.diff({ compressed: true });
+      const [correctness, security, tests] = await ctx.pi.all([
+        { agent: specialist, input: { diff, focus: "correctness" } },
+        { agent: specialist, input: { diff, focus: "security" } },
+        { agent: specialist, input: { diff, focus: "tests" } },
       ]);
       const result = await ctx.pi.run(orchestrator, {
-        manifest,
+        diff,
         reviews: { correctness, security, tests },
       });
       const inlineFindings = result.findings.map(({ severity, ...finding }) => ({
@@ -229,7 +213,6 @@ export default definePipr((pipr) => {
       });
     },
   });
-  pipr.on.changeRequest({ actions: ["opened"], task });
 });
 `;
 
@@ -238,18 +221,12 @@ import { splitValues } from "pipr-config-dependency";
 
 export default definePipr((pipr) => {
   void splitValues;
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro");
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: "Review the act fixture change.",
-      summary: "Summarize the act fixture change.",
-    },
+    instructions: "Review the act fixture change.",
+    summary: { instructions: "Summarize the act fixture change." },
   });
 });
 `;
@@ -341,7 +318,7 @@ export async function prepareScenarioWorktree(
   const worktree = join(tmpRoot, "worktree");
   try {
     await initializeScenarioWorktree(worktree, scenario, options);
-    const baseSha = await commitScenarioBase(worktree, scenario, options);
+    const baseSha = await commitScenarioBase(worktree, scenario);
     const headSha = await commitScenarioHead(worktree, scenario);
     await writePullRequestEvent(worktree, scenario, baseSha, headSha);
 
@@ -373,17 +350,11 @@ async function initializeScenarioWorktree(
   await overlayTrackedChanges(worktree);
   await copySourcePath(worktree, packageRootPath);
   await options.beforeBaseCommit?.({ scenario, worktree });
-  run("chmod", ["755", join(worktree, fakePiScript)], sourceRoot);
 }
 
-async function commitScenarioBase(
-  worktree: string,
-  scenario: Scenario,
-  options: PrepareScenarioOptions,
-): Promise<string> {
+async function commitScenarioBase(worktree: string, scenario: Scenario): Promise<string> {
   await writeScenarioConfig(worktree, scenario);
   await writeScenarioBaseSample(worktree, scenario);
-  forceAddBasePaths(worktree, options.forceAddBasePaths ?? []);
   git(worktree, ["add", "-A"]);
   git(worktree, ["commit", "-m", `test: prepare ${scenario.name} e2e fixture base`]);
   return gitOutput(worktree, ["rev-parse", "HEAD"]).trim();
@@ -461,12 +432,6 @@ async function writeScenarioBaseSample(worktree: string, scenario: Scenario): Pr
   }
 }
 
-function forceAddBasePaths(worktree: string, paths: string[]): void {
-  for (const path of paths) {
-    git(worktree, ["add", "-f", path]);
-  }
-}
-
 async function commitScenarioHead(worktree: string, scenario: Scenario): Promise<string> {
   await writeWorktreeFile(worktree, scenario.headPath, scenario.headContent);
   git(worktree, ["add", "-A"]);
@@ -476,6 +441,63 @@ async function commitScenarioHead(worktree: string, scenario: Scenario): Promise
 
 export function scenarioFromName(name: string | undefined): Scenario | undefined {
   return name && isScenarioName(name) ? scenarios[name] : undefined;
+}
+
+export function isPublicationScenario(scenario: Scenario): scenario is PublicationScenario {
+  return scenario.publicationFixture !== undefined && scenario.assertion !== undefined;
+}
+
+/** Environment the action fixture wrapper reads, with fixture paths under the container's `workspace` mount. */
+export function publicationFixtureEnv(
+  scenario: PublicationScenario,
+  workspace: string,
+): Record<string, string> {
+  const fixtureRoot = `${workspace}/${fixtureRootPath}`;
+  return {
+    DEEPSEEK_API_KEY: "local-fixture-key",
+    GITHUB_TOKEN: "local-fixture-token",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "safe.directory",
+    GIT_CONFIG_VALUE_0: workspace,
+    PIPR_ACT_ASSERTION: scenario.assertion,
+    PIPR_ACT_GITHUB_FIXTURE_PATH: `${fixtureRoot}/${scenario.publicationFixture}`,
+    ...(scenario.invalidFirstOutput
+      ? { PIPR_ACT_INVALID_FIRST_OUTPUT: "1", PIPR_ACT_FAIL_PRIMARY_PROVIDER: "1" }
+      : {}),
+    ...(scenario.telemetryDir
+      ? { PIPR_ACT_MODEL_CALL_DIR: `${fixtureRoot}/${scenario.telemetryDir}` }
+      : {}),
+  };
+}
+
+/**
+ * Writes the empty GitHub publication fixture and the model-call directory. Both stay world-writable because the
+ * container (and its UID-1000 agent worker) writes into them.
+ */
+export async function writePublicationFixture(
+  prepared: PreparedScenario,
+  scenario: PublicationScenario,
+): Promise<void> {
+  await writeWorktreeFile(
+    prepared.worktree,
+    `${fixtureRootPath}/${scenario.publicationFixture}`,
+    `${JSON.stringify(
+      {
+        ownerLogin: "github-actions[bot]",
+        headSha: prepared.headSha,
+        issueComments: [],
+        reviewComments: [],
+        reviewThreads: [],
+        reviewCommentPayloads: [],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  if (scenario.telemetryDir) {
+    mkdirSync(join(prepared.worktree, fixtureRootPath, scenario.telemetryDir), { recursive: true });
+  }
+  run("chmod", ["-R", "a+rwX", join(prepared.worktree, fixtureRootPath)], sourceRoot);
 }
 
 export function envValue(name: string): string | undefined {
@@ -489,7 +511,7 @@ export async function writeWorktreeFile(
   content: string,
 ): Promise<void> {
   const target = join(worktree, relativePath);
-  run("mkdir", ["-p", dirname(target)], sourceRoot);
+  mkdirSync(dirname(target), { recursive: true });
   await Bun.write(target, content);
 }
 
@@ -571,13 +593,13 @@ function renamedPath(change: TrackedChange): string {
 
 async function copySourcePath(worktree: string, relativePath: string): Promise<void> {
   const source = join(sourceRoot, relativePath);
-  if (!pathExists(source)) {
+  if (!existsSync(source)) {
     return;
   }
   const target = join(worktree, relativePath);
-  run("mkdir", ["-p", dirname(target)], sourceRoot);
+  mkdirSync(dirname(target), { recursive: true });
   removePath(target);
-  run("cp", ["-pR", source, target], sourceRoot);
+  cpSync(source, target, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true });
 }
 
 async function writePullRequestEvent(
@@ -625,22 +647,22 @@ function gitOutput(cwd: string, args: string[]): string {
 function removePath(targetPath: string): void {
   let failure = "";
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const result = Bun.spawnSync(["rm", "-rf", targetPath], {
-      cwd: sourceRoot,
-      env: Bun.env,
-      stderr: "pipe",
-      stdout: "pipe",
-    });
-    if (result.exitCode === 0 || !pathExists(targetPath)) {
+    try {
+      rmSync(targetPath, { recursive: true, force: true, maxRetries: 3 });
       return;
+    } catch (error) {
+      if (!existsSync(targetPath)) {
+        return;
+      }
+      failure = error instanceof Error ? error.message : String(error);
+      makePathWritable(targetPath);
+      Bun.sleepSync(50);
     }
-    failure = result.stderr.toString().trim() || result.stdout.toString().trim();
-    makePathWritable(targetPath);
-    sleepSync(50);
   }
   throw new Error(`rm -rf ${targetPath} failed${failure ? `: ${failure}` : ""}`);
 }
 
+/** Container runs leave UID-1000-owned files; widen permissions before retrying removal. */
 function makePathWritable(targetPath: string): void {
   Bun.spawnSync(["chmod", "-R", "u+rwX,a+rwX", targetPath], {
     cwd: sourceRoot,
@@ -650,26 +672,6 @@ function makePathWritable(targetPath: string): void {
   });
 }
 
-function sleepSync(milliseconds: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
-}
-
-function pathExists(path: string): boolean {
-  return (
-    Bun.spawnSync(["test", "-e", path], {
-      stderr: "ignore",
-      stdout: "ignore",
-    }).exitCode === 0
-  );
-}
-
 function mktemp(prefix: string): string {
-  const result = Bun.spawnSync(["mktemp", "-d", `/tmp/${prefix}.XXXXXX`], {
-    stderr: "pipe",
-    stdout: "pipe",
-  });
-  if (result.exitCode !== 0) {
-    throw new Error(`mktemp failed with exit ${result.exitCode}`);
-  }
-  return result.stdout.toString().trim();
+  return mkdtempSync(`/tmp/${prefix}.`);
 }

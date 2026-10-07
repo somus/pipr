@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseChangeRequestEventContext } from "../../types.js";
+import { changeRequestEvent } from "../change-request.js";
 import { positiveIntegerHostEnv, requiredHostEnv } from "../env.js";
 import type { CodeHostEvent, HostEventParseOptions, LoadedChangeRequest } from "../types.js";
 
@@ -39,7 +39,7 @@ const noteHookSchema = z.looseObject({
 });
 
 export type GitLabEventParseOptions = HostEventParseOptions & {
-  loadChangeRequest?: (ref: {
+  loadChangeRequest: (ref: {
     projectId: string;
     projectPath: string;
     changeNumber: number;
@@ -74,23 +74,17 @@ async function pipelineEvent(options: GitLabEventParseOptions): Promise<CodeHost
     "CI_MERGE_REQUEST_IID",
     "GitLab pipeline",
   );
-  const loaded = await loadChange(options, { projectId, projectPath, changeNumber });
+  const loaded = await options.loadChangeRequest({ projectId, projectPath, changeNumber });
   if (loaded.change.isDraft) {
     return { kind: "ignored", reason: "merge request is a draft" };
   }
-  return {
-    kind: "change-request",
-    change: parseChangeRequestEventContext({
-      eventName: "gitlab_pipeline",
-      action: options.env.PIPR_CHANGE_ACTION ?? "updated",
-      rawAction: options.env.PIPR_CHANGE_ACTION,
-      platform: { id: "gitlab", host: options.env.CI_SERVER_URL ?? "https://gitlab.com" },
-      repository: loaded.repository,
-      coordinates: loaded.coordinates,
-      change: loaded.change,
-      workspace: options.workspace,
-    }),
-  };
+  return changeRequestEvent(loaded, {
+    eventName: "gitlab_pipeline",
+    action: options.env.PIPR_CHANGE_ACTION ?? "updated",
+    rawAction: options.env.PIPR_CHANGE_ACTION,
+    platform: { id: "gitlab", host: options.env.CI_SERVER_URL ?? "https://gitlab.com" },
+    workspace: options.workspace,
+  });
 }
 
 async function mergeRequestEvent(
@@ -103,24 +97,18 @@ async function mergeRequestEvent(
   if (hook.object_attributes.draft === true && !becameReady) {
     return { kind: "ignored", reason: "merge request is a draft" };
   }
-  const loaded = await loadChange(options, {
+  const loaded = await options.loadChangeRequest({
     projectId: String(hook.project.id),
     projectPath: hook.project.path_with_namespace,
     changeNumber: hook.object_attributes.iid,
   });
-  return {
-    kind: "change-request",
-    change: parseChangeRequestEventContext({
-      eventName: "merge_request",
-      action: normalizeMergeRequestAction(hook.object_attributes.action, hook.changes?.draft),
-      rawAction: hook.object_attributes.action,
-      platform: { id: "gitlab", host: gitLabHost(hook.project.web_url) },
-      repository: loaded.repository,
-      coordinates: loaded.coordinates,
-      change: loaded.change,
-      workspace: options.workspace,
-    }),
-  };
+  return changeRequestEvent(loaded, {
+    eventName: "merge_request",
+    action: normalizeMergeRequestAction(hook.object_attributes.action, hook.changes?.draft),
+    rawAction: hook.object_attributes.action,
+    platform: { id: "gitlab", host: gitLabHost(hook.project.web_url) },
+    workspace: options.workspace,
+  });
 }
 
 async function noteEvent(
@@ -151,16 +139,6 @@ async function noteEvent(
   return parentCommentId
     ? { kind: "review-comment-reply", reply: { ...common, parentCommentId } }
     : { kind: "command-comment", comment: { ...common, isChangeRequest: true } };
-}
-
-async function loadChange(
-  options: GitLabEventParseOptions,
-  ref: { projectId: string; projectPath: string; changeNumber: number },
-): Promise<LoadedChangeRequest> {
-  if (!options.loadChangeRequest) {
-    throw new Error("GitLab merge request events require an API-backed change loader");
-  }
-  return await options.loadChangeRequest(ref);
 }
 
 function normalizeMergeRequestAction(

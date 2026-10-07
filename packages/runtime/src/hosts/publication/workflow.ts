@@ -3,28 +3,34 @@ import type {
   InlineThreadContext,
   ThreadAction,
 } from "../../publication/types.js";
-import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
-import { inlinePublicationDecision } from "../../review/inline-publication-policy.js";
 import {
+  applyInlineFindingMarkers,
+  applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
+  extractPriorReviewState,
   extractResolvedFindingMarkerRecords,
   extractVerifierResponseMarkers,
   inlineFindingMarker,
   mainCommentMarker,
-} from "../../review/prior-state.js";
+  parseInlineFindingMarker,
+} from "../../review/comment-markers.js";
+import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
+import { inlinePublicationDecision } from "../../review/inline-publication-policy.js";
+import { applyNativeThreadResolutions } from "../../review/prior-state.js";
 import {
   extractReviewProgressToken,
   ReviewProgressSupersededError,
 } from "../../review/progress.js";
-import { PublicationError } from "../../review/publication-result.js";
+import { PublicationError, StaleHeadError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { commandResponseBody, commandStatusText, threadActionReply } from "../publication.js";
-import type { CodeHostPublication } from "../types.js";
+import type { CodeHostComments, CodeHostPublication } from "../types.js";
 export type OwnedMainComment = { id: string; body?: string };
 export type OwnedInlineComment = {
   body: string;
   location?: InlinePublicationLocation;
-  resolved: boolean;
+  /** Native thread resolution; undefined when the host reports no native thread state. */
+  resolved?: boolean;
 };
 export type LoadedPublicationState = {
   main?: OwnedMainComment;
@@ -32,29 +38,65 @@ export type LoadedPublicationState = {
   threads: readonly InlineThreadContext[];
 };
 
+/** Commits the host currently reports for a change request; `baseSha` only where the host pins the base. */
+export type ChangeRequestEndpoints = { headSha: string; baseSha?: string };
+
+/**
+ * Throws {@link StaleHeadError} when the host's current endpoints moved away from the reviewed
+ * head (defaults to the change head) or, when the host reports one, the change's base.
+ */
+export function assertEndpointsCurrent(
+  provider: string,
+  current: ChangeRequestEndpoints,
+  change: ChangeRequestEventContext,
+  options: { headSha?: string; stage?: string } = {},
+): void {
+  const expectedHeadSha = options.headSha ?? change.change.head.sha;
+  const expectedBaseSha = change.change.base.sha;
+  const stale = (endpoint: "head" | "base", expectedSha: string, currentSha: string) =>
+    new StaleHeadError({ provider, endpoint, expectedSha, currentSha, stage: options.stage });
+  if (current.headSha !== expectedHeadSha) {
+    throw stale("head", expectedHeadSha, current.headSha);
+  }
+  if (current.baseSha !== undefined && current.baseSha !== expectedBaseSha) {
+    throw stale("base", expectedBaseSha, current.baseSha);
+  }
+}
+
 export interface PublicationDriver<Prepared> {
   readonly provider: string;
+  /**
+   * Whether owned inline state costs reads beyond the main comment. Such hosts read the main comment first, so a first
+   * review, which has no prior state, loads no inline comments or threads.
+   */
+  readonly inlineStateNeedsExtraReads?: boolean;
   prepare(change: ChangeRequestEventContext, expectedHeadSha: string): Promise<Prepared>;
-  assertCurrent(prepared: Prepared, expectedHeadSha: string): Promise<void>;
-  loadOwnedState(prepared: Prepared, mainMarker: string): Promise<LoadedPublicationState>;
+  /** Reads the change request's current endpoints; the workflow compares them to the reviewed commits. */
+  currentEndpoints(prepared: Prepared): Promise<ChangeRequestEndpoints>;
+  /**
+   * Loads owned comments in one snapshot. Threads keep only owned replies unless
+   * `allReplies` is set.
+   */
+  loadOwnedState(
+    prepared: Prepared,
+    mainMarker: string,
+    options?: { allReplies?: boolean },
+  ): Promise<LoadedPublicationState>;
   loadOwnedThreads?(
     prepared: Prepared,
     actions: readonly ThreadAction[],
   ): Promise<readonly InlineThreadContext[]>;
   loadOwnedMain(prepared: Prepared, mainMarker: string): Promise<OwnedMainComment | undefined>;
-  upsertMain(
+  /** Creates or updates a top-level main or command response comment. */
+  upsertComment(
     prepared: Prepared,
     existing: OwnedMainComment | undefined,
     body: string,
+    kind: "main" | "command",
   ): Promise<{ id: string; action: "created" | "updated" }>;
   inlineLocation(prepared: Prepared, item: InlinePublicationItem): InlinePublicationLocation;
   createInline(prepared: Prepared, item: InlinePublicationItem): Promise<void>;
   loadOwnedCommand(prepared: Prepared, marker: string): Promise<OwnedMainComment | undefined>;
-  upsertCommand(
-    prepared: Prepared,
-    existing: OwnedMainComment | undefined,
-    body: string,
-  ): Promise<{ id: string; action: "created" | "updated" }>;
   replyThread(prepared: Prepared, action: ThreadAction, body: string): Promise<void>;
   resolveThread?(prepared: Prepared, action: ThreadAction): Promise<void>;
 }
@@ -77,19 +119,67 @@ export function createPublicationWorkflow<Prepared>(
   };
 }
 
+/** Reads prior Pipr comments through the same owned-state loaders publication uses. */
+export function createCommentsReader<Prepared>(
+  driver: PublicationDriver<Prepared>,
+): Required<CodeHostComments> {
+  const prepare = (change: ChangeRequestEventContext) =>
+    driver.prepare(change, change.change.head.sha);
+  return {
+    async loadPriorMainComment({ change }) {
+      return (await driver.loadOwnedMain(await prepare(change), mainCommentMarker))?.body;
+    },
+    async loadPriorReviewState({ change }) {
+      const prepared = await prepare(change);
+      if (driver.inlineStateNeedsExtraReads) {
+        const main = await driver.loadOwnedMain(prepared, mainCommentMarker);
+        if (!extractPriorReviewState(main?.body, change.change.number)) return undefined;
+      }
+      const state = await driver.loadOwnedState(prepared, mainCommentMarker);
+      const prior = extractPriorReviewState(state.main?.body, change.change.number);
+      if (!prior) return undefined;
+      const bodies = [
+        ...state.inline.map((item) => item.body),
+        ...state.threads.flatMap((thread) =>
+          thread.comments.flatMap((comment) =>
+            comment.id === thread.parentCommentId ? [] : [comment.body],
+          ),
+        ),
+      ];
+      return applyNativeThreadResolutions(
+        applyResolvedFindingMarkers(applyInlineFindingMarkers(prior, bodies), bodies),
+        state.inline.flatMap(({ body, resolved }) => {
+          const marker = resolved === undefined ? undefined : parseInlineFindingMarker(body);
+          return marker && resolved !== undefined
+            ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved }]
+            : [];
+        }),
+      );
+    },
+    async loadInlineThreadContexts({ change }) {
+      const state = await driver.loadOwnedState(await prepare(change), mainCommentMarker, {
+        allReplies: true,
+      });
+      return [...state.threads];
+    },
+  };
+}
+
 async function publishReview<Prepared>(
   driver: PublicationDriver<Prepared>,
   options: Parameters<CodeHostPublication["publish"]>[0],
 ) {
   const expectedHeadSha = options.plan.metadata.reviewedHeadSha;
   const prepared = await driver.prepare(options.change, expectedHeadSha);
-  await driver.assertCurrent(prepared, expectedHeadSha);
+  const assertCurrent = () =>
+    assertCurrentEndpoints(driver, prepared, options.change, expectedHeadSha);
+  await assertCurrent();
   const initial = await loadReviewState(driver, prepared, options.plan);
   assertProgressLease(initial.main, options.progressLease);
-  await driver.assertCurrent(prepared, expectedHeadSha);
+  await assertCurrent();
 
   const beforeWrite = async () => {
-    await driver.assertCurrent(prepared, expectedHeadSha);
+    await assertCurrent();
     if (!options.progressLease) return;
     const currentMain = await driver.loadOwnedMain(prepared, options.plan.mainMarker);
     assertProgressLease(currentMain, options.progressLease);
@@ -113,10 +203,10 @@ async function publishReview<Prepared>(
     throw new PublicationError(`${driver.provider} inline comment publication failed`, partial);
   }
 
-  await driver.assertCurrent(prepared, expectedHeadSha);
+  await assertCurrent();
   const currentMain = await driver.loadOwnedMain(prepared, options.plan.mainMarker);
   assertProgressLease(currentMain, options.progressLease);
-  const main = await driver.upsertMain(prepared, currentMain, options.plan.mainComment);
+  const main = await driver.upsertComment(prepared, currentMain, options.plan.mainComment, "main");
   if (inline.errors.length > 0) {
     throw new PublicationError(`${driver.provider} inline comment publication failed`, partial);
   }
@@ -149,14 +239,16 @@ async function publishProgress<Prepared>(
   options: Parameters<NonNullable<CodeHostPublication["publishReviewProgress"]>>[0],
 ) {
   const prepared = await driver.prepare(options.change, options.reviewedHeadSha);
-  await driver.assertCurrent(prepared, options.reviewedHeadSha);
+  const assertCurrent = () =>
+    assertCurrentEndpoints(driver, prepared, options.change, options.reviewedHeadSha);
+  await assertCurrent();
   let main = await driver.loadOwnedMain(prepared, mainCommentMarker);
   if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
-  await driver.assertCurrent(prepared, options.reviewedHeadSha);
+  await assertCurrent();
   main = await driver.loadOwnedMain(prepared, mainCommentMarker);
   if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
   if (!main && options.expectedToken) return { status: "superseded" as const };
-  const result = await driver.upsertMain(prepared, main, options.renderBody(main?.body));
+  const result = await driver.upsertComment(prepared, main, options.renderBody(main?.body), "main");
   return { status: "published" as const, ...result };
 }
 
@@ -169,7 +261,12 @@ async function publishCommand<Prepared>(
 ) {
   const expectedHeadSha = options.change.change.head.sha;
   const prepared = await driver.prepare(options.change, expectedHeadSha);
-  if (!options.allowHeadDrift) await driver.assertCurrent(prepared, expectedHeadSha);
+  const assertCurrent = async () => {
+    if (!options.allowHeadDrift) {
+      await assertCurrentEndpoints(driver, prepared, options.change, expectedHeadSha);
+    }
+  };
+  await assertCurrent();
   const response = commandResponseBody({
     changeNumber: options.change.change.number,
     sourceCommentId: options.sourceCommentId,
@@ -177,8 +274,8 @@ async function publishCommand<Prepared>(
     body: options.body,
   });
   const existing = await driver.loadOwnedCommand(prepared, response.marker);
-  if (!options.allowHeadDrift) await driver.assertCurrent(prepared, expectedHeadSha);
-  return driver.upsertCommand(prepared, existing, response.body);
+  await assertCurrent();
+  return driver.upsertComment(prepared, existing, response.body, "command");
 }
 
 async function publishThreadActions<Prepared>(
@@ -187,14 +284,25 @@ async function publishThreadActions<Prepared>(
 ) {
   if (options.actions.length === 0) return { errors: [] };
   const prepared = await driver.prepare(options.change, options.reviewedHeadSha);
-  await driver.assertCurrent(prepared, options.reviewedHeadSha);
+  const assertCurrent = () =>
+    assertCurrentEndpoints(driver, prepared, options.change, options.reviewedHeadSha);
+  await assertCurrent();
   const threads = driver.loadOwnedThreads
     ? await driver.loadOwnedThreads(prepared, options.actions)
     : (await driver.loadOwnedState(prepared, mainCommentMarker)).threads;
-  await driver.assertCurrent(prepared, options.reviewedHeadSha);
-  return runThreadActions(driver, prepared, options.actions, threads, () =>
-    driver.assertCurrent(prepared, options.reviewedHeadSha),
-  );
+  await assertCurrent();
+  return runThreadActions(driver, prepared, options.actions, threads, assertCurrent);
+}
+
+async function assertCurrentEndpoints<Prepared>(
+  driver: PublicationDriver<Prepared>,
+  prepared: Prepared,
+  change: ChangeRequestEventContext,
+  expectedHeadSha: string,
+): Promise<void> {
+  assertEndpointsCurrent(driver.provider, await driver.currentEndpoints(prepared), change, {
+    headSha: expectedHeadSha,
+  });
 }
 
 async function publishInlineItems<Prepared>(
@@ -210,9 +318,7 @@ async function publishInlineItems<Prepared>(
     ),
   );
   const locations = state.inline.flatMap((item) =>
-    item.resolved || !item.location || extractInlineFindingMarkerRecords([item.body]).length === 0
-      ? []
-      : [item.location],
+    item.resolved || !item.location || !parseInlineFindingMarker(item.body) ? [] : [item.location],
   );
   const errors: string[] = [];
   let posted = 0;

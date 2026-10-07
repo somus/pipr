@@ -1,9 +1,9 @@
-amends "package://github.com/jdx/hk/releases/download/v1.56.1/hk@1.56.1#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.5.0/hk@2.5.0#/Config.pkl"
 
 local biome = new Step {
   glob = List("*.ts", "*.tsx", "*.js", "*.jsx", "*.json", "*.jsonc", "*.md", "*.yml", "*.yaml")
-  check = "bunx biome check {{files}}"
-  fix = "bunx biome check --write {{files}}"
+  check = "bunx biome check --no-errors-on-unmatched {{files}}"
+  fix = "bunx biome check --write --no-errors-on-unmatched {{files}}"
 }
 
 local repoCheck = new Step {

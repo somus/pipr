@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { chmod, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { availablePiprUpdateNotice, releaseAssetForPlatform, runPiprUpdate } from "../update.js";
+import { releaseAssetForPlatform } from "../release/targets.js";
+import { availablePiprUpdateNotice, runPiprUpdate } from "../update.js";
 
 describe("pipr update", () => {
   it("resolves release assets for supported platforms", () => {
@@ -24,58 +25,48 @@ describe("pipr update", () => {
     );
   });
 
-  it("returns an update notice when the latest release is newer", async () => {
-    const requests: string[] = [];
+  it.each([
+    ["0.1.0", "0.2.0", true, 1],
+    ["0.9.0", "0.10.0", true, 1],
+    ["1.9.9", "2.0.0", true, 1],
+    ["0.2.0", "0.2.0", false, 1],
+    ["0.10.0", "0.9.0", false, 1],
+    ["0.2.0-beta.1", "0.2.0", false, 0],
+  ])(
+    "compares current %s with latest %s for update notices",
+    async (current, latest, notify, fetches) => {
+      const requests: string[] = [];
 
-    const notice = await availablePiprUpdateNotice({
-      currentVersion: "0.1.0",
-      fetch: fakeReleaseFetch({
-        asset: "pipr-linux-x64",
-        binary: "unused",
-        checksum: "unused",
-        releaseVersion: "0.2.0",
-        requests,
+      const notice = await availablePiprUpdateNotice({
+        currentVersion: current,
+        fetch: fakeReleaseFetch({
+          asset: "pipr-linux-x64",
+          binary: "unused",
+          checksum: "unused",
+          releaseVersion: latest,
+          requests,
+        }),
+      });
+
+      expect(notice).toEqual(
+        notify ? { currentVersion: current, latestVersion: latest } : undefined,
+      );
+      expect(requests).toHaveLength(fetches);
+    },
+  );
+
+  it("rejects prerelease latest versions for update notices", async () => {
+    await expect(
+      availablePiprUpdateNotice({
+        currentVersion: "0.2.0",
+        fetch: fakeReleaseFetch({
+          asset: "pipr-linux-x64",
+          binary: "unused",
+          checksum: "unused",
+          releaseVersion: "0.3.0-rc.1",
+        }),
       }),
-    });
-
-    expect(notice).toEqual({ currentVersion: "0.1.0", latestVersion: "0.2.0" });
-    expect(requests).toEqual(["https://api.github.com/repos/somus/pipr/releases/latest"]);
-  });
-
-  it("does not return an update notice when the current version is already latest", async () => {
-    const requests: string[] = [];
-
-    const notice = await availablePiprUpdateNotice({
-      currentVersion: "0.2.0",
-      fetch: fakeReleaseFetch({
-        asset: "pipr-linux-x64",
-        binary: "unused",
-        checksum: "unused",
-        releaseVersion: "0.2.0",
-        requests,
-      }),
-    });
-
-    expect(notice).toBeUndefined();
-    expect(requests).toEqual(["https://api.github.com/repos/somus/pipr/releases/latest"]);
-  });
-
-  it("does not fetch an update notice for non-stable current versions", async () => {
-    const requests: string[] = [];
-
-    const notice = await availablePiprUpdateNotice({
-      currentVersion: "0.2.0-beta.1",
-      fetch: fakeReleaseFetch({
-        asset: "pipr-linux-x64",
-        binary: "unused",
-        checksum: "unused",
-        releaseVersion: "0.2.0",
-        requests,
-      }),
-    });
-
-    expect(notice).toBeUndefined();
-    expect(requests).toEqual([]);
+    ).rejects.toThrow("latest release tag is not a stable semver version: v0.3.0-rc.1");
   });
 
   it("rejects non-stable current versions before fetching release metadata", async () => {

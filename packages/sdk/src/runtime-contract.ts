@@ -3,10 +3,12 @@ import type {
   ChangeRequestAction,
   ChecksOptions,
   ModelProfile,
+  ProviderProfile,
   PublicationOptions,
   RepositoryPermission,
 } from "./types/config.js";
 import type { RuntimeLimits } from "./types/manifest.js";
+import type { Schema } from "./types/schema.js";
 import type { PluginToolDefinition, TaskCheckOptions, TaskContext } from "./types/task.js";
 
 /** Type-erased executable task stored in a runtime plan. */
@@ -29,7 +31,8 @@ export type RuntimeAgentTool = {
 };
 
 /** Type-erased executable agent definition stored in a runtime plan. */
-export type RuntimeAgentDefinition = Omit<AgentDefinition<unknown, unknown>, "tools"> & {
+export type RuntimeAgentDefinition = Omit<AgentDefinition<unknown, unknown>, "tools" | "output"> & {
+  output: Schema<unknown>;
   tools?: readonly RuntimeAgentTool[];
 };
 
@@ -43,6 +46,8 @@ export type RuntimeAgent = {
 export type RuntimePlan = {
   resolveAgent<Input, Output>(agent: Agent<Input, Output>): RuntimeAgent;
   models: ModelProfile[];
+  /** Custom providers declared with `pipr.provider`. */
+  providers: ProviderProfile[];
   agents: RuntimeAgent[];
   tasks: RuntimeTask[];
   changeRequestTriggers: Array<{ actions: ChangeRequestAction[]; task: RuntimeTask }>;

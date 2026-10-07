@@ -1,9 +1,6 @@
 import { evalite } from "evalite";
-import {
-  assertLiveEvalEnv,
-  livePromptGateEvalConfig,
-  suggestedFixLivePromptGate,
-} from "./live-prompt-gates.js";
+import { assertLiveEvalEnv } from "./env.js";
+import { livePromptGateEvalConfig, suggestedFixLivePromptGate } from "./live-prompt-gates.js";
 
 assertLiveEvalEnv();
 

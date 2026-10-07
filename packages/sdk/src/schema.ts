@@ -14,7 +14,8 @@ import type {
   ZodSchema,
 } from "./types/schema.js";
 
-const coreReviewOutputSchemaId = "core/pr-review";
+/** Stable identifier for Pipr's built-in change request review output schema. */
+export const reviewOutputSchemaId = "core/pr-review";
 
 /** Defines a typed schema from a Zod schema. */
 export function schema<T>(definition: SchemaDefinition<T>): Schema<T> {
@@ -41,7 +42,7 @@ export const schemas: BuiltinSchemaCatalog = {
     "core/inline-findings",
     coreReviewFindingsResultSchema,
   ),
-  review: createZodSchema<ReviewResult>(coreReviewOutputSchemaId, coreReviewResultSchema),
+  review: createZodSchema<ReviewResult>(reviewOutputSchemaId, coreReviewResultSchema),
   summary: createZodSchema<ReviewSummary>("core/summary", coreReviewSummarySchema),
 };
 
@@ -68,6 +69,18 @@ function createSchema<T>(
       }
     },
   };
+}
+
+/** Returns whether a value is a `pipr.schema` wrapper rather than a raw Zod schema. */
+export function isSchema(value: unknown): value is Schema<unknown> {
+  return (
+    typeof value === "object" && value !== null && Reflect.get(value, "kind") === "pipr.schema"
+  );
+}
+
+/** Wraps a Zod schema passed directly as agent output. */
+export function zodOutputSchema<T>(id: string, zodSchema: ZodSchema<T>): Schema<T> {
+  return createZodSchema(id, zodSchema);
 }
 
 function createZodSchema<T>(id: string, zodSchema: ZodSchema<T>): Schema<T> {

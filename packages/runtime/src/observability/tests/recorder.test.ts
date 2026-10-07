@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { access, mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
 import { loadValidatedRunBundle } from "../archive.js";
 import { startFileRunRecorder } from "../file-run-recorder.js";
-import { parseOtlpHeaders } from "../otlp.js";
-import { createInMemoryRunRecorder, createNoopRunRecorder } from "../simple-run-recorders.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -17,12 +15,6 @@ afterEach(async () => {
 });
 
 describe("file run recorder", () => {
-  it("trims OTLP header values before URI decoding", () => {
-    expect(parseOtlpHeaders(" authorization = Bearer%20token ")).toEqual({
-      authorization: "Bearer token",
-    });
-  });
-
   it("bounds log records so finalized bundles remain loadable", async () => {
     const rootDirectory = await temporaryDirectory();
     const recorder = await startFileRunRecorder({ rootDirectory, env: {} });
@@ -65,34 +57,6 @@ describe("file run recorder", () => {
         gid: storeOwner.gid,
       });
     }
-  });
-
-  it("provides no-op and in-memory adapters through the recorder interface", async () => {
-    const noop = createNoopRunRecorder();
-    await noop.addArtifact({
-      kind: "other",
-      name: "ignored.txt",
-      mediaType: "text/plain",
-      content: "ignored",
-      sensitive: false,
-    });
-    await noop.finish({ kind: "startup", outcome: "succeeded" });
-
-    const memory = createInMemoryRunRecorder({ executionId: "a".repeat(32) });
-    memory.logSink.log({ level: "info", event: "test", fields: {} });
-    await memory.addArtifact({
-      kind: "other",
-      name: "captured.txt",
-      mediaType: "text/plain",
-      content: "captured",
-      sensitive: false,
-    });
-    await memory.finish({ kind: "review", outcome: "succeeded" });
-
-    expect(noop.executionId).toMatch(/^[a-f0-9]{32}$/);
-    expect(memory.capture.logs).toHaveLength(1);
-    expect(memory.capture.artifacts).toHaveLength(1);
-    expect(memory.capture.result).toEqual({ kind: "review", outcome: "succeeded" });
   });
 
   it("correlates concurrent model spans by attempt ID", async () => {
@@ -286,7 +250,7 @@ describe("file run recorder", () => {
       model: "test",
       prompt: `prompt ${secret}`,
     });
-    await attempt.finish({ output: `output ${secret}`, stderr: `stderr ${secret}` });
+    await attempt.finish({ output: `output ${secret}`, error: `stderr ${secret}` });
     await recorder.finish({ kind: "review", outcome: "succeeded" });
 
     const files = await Promise.all(
@@ -303,14 +267,49 @@ describe("file run recorder", () => {
     expect(files.join("\n")).not.toContain(secret);
   });
 
+  it("redacts environment secrets from every bundle file", async () => {
+    const secrets = {
+      GITHUB_TOKEN: "ghs_envSourcedSecretValue123",
+      DEEPSEEK_API_KEY: "sk-env-sourced-provider-key-456",
+    };
+    const recorder = await startFileRunRecorder({
+      rootDirectory: await temporaryDirectory(),
+      env: secrets,
+    });
+    const leak = Object.values(secrets).join(" ");
+    recorder.logSink.log({ level: "info", event: "context", fields: { leak }, text: leak });
+    const attempt = await recorder.observer.beginAgentAttempt({
+      attemptType: "initial",
+      attemptNumber: 1,
+      agent: "reviewer",
+      provider: "test",
+      model: "test",
+      prompt: `prompt ${leak}`,
+    });
+    await attempt.finish({ output: `output ${leak}`, error: `stderr ${leak}` });
+    await recorder.finish({ kind: "review", outcome: "succeeded" });
+
+    const bundleText = await readBundleText(recorder.directory);
+    expect(bundleText).toContain("artifacts/prompt-001-initial.md");
+    for (const secret of Object.values(secrets)) {
+      expect(bundleText).not.toContain(secret);
+    }
+  });
+
   it("exports content-free traces, metrics, and logs through OTLP HTTP/protobuf", async () => {
-    const requests: Array<{ path: string; contentType: string | null; body: Buffer }> = [];
+    const requests: Array<{
+      path: string;
+      contentType: string | null;
+      authorization: string | null;
+      body: Buffer;
+    }> = [];
     const server = Bun.serve({
       port: 0,
       async fetch(request) {
         requests.push({
           path: new URL(request.url).pathname,
           contentType: request.headers.get("content-type"),
+          authorization: request.headers.get("authorization"),
           body: Buffer.from(await request.arrayBuffer()),
         });
         return new Response(null, { status: 200 });
@@ -325,6 +324,7 @@ describe("file run recorder", () => {
         env: {
           OPENAI_API_KEY: secret,
           OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${server.port}`,
+          OTEL_EXPORTER_OTLP_HEADERS: " authorization = Bearer%20token ",
         },
       });
       recorder.logSink.log({
@@ -363,6 +363,7 @@ describe("file run recorder", () => {
       expect(requests.every((request) => request.contentType === "application/x-protobuf")).toBe(
         true,
       );
+      expect(requests.every((request) => request.authorization === "Bearer token")).toBe(true);
       const exported = Buffer.concat(requests.map((request) => request.body)).toString("utf8");
       expect(exported).not.toContain(secret);
       expect(exported).not.toContain("visible output");
@@ -412,7 +413,7 @@ describe("file run recorder", () => {
     }
   });
 
-  it("records OTLP configuration failures in the bundle", async () => {
+  it("records OTLP header configuration failures in the bundle", async () => {
     const recorder = await startFileRunRecorder({
       rootDirectory: await temporaryDirectory(),
       env: {
@@ -589,6 +590,13 @@ describe("file run recorder", () => {
       env: {},
       mode: "metadata",
     });
+    recorder.logSink.log({
+      level: "info",
+      event: "pi run",
+      fields: { model: "gpt-test", durationMs: 12, path: "private/path.ts" },
+      text: "private log",
+    });
+    recorder.logSink.log({ level: "info", event: "private custom event", fields: {} });
     const attempt = await recorder.observer.beginAgentAttempt({
       attemptType: "initial",
       attemptNumber: 1,
@@ -597,7 +605,7 @@ describe("file run recorder", () => {
       model: "gpt-test",
       prompt: "private prompt",
     });
-    await attempt.finish({ output: "private output", exitCode: 0 });
+    await attempt.finish({ output: "private output", error: "private stderr", exitCode: 0 });
 
     await recorder.finish({ kind: "review", outcome: "succeeded" });
 
@@ -606,10 +614,27 @@ describe("file run recorder", () => {
     );
     expect(manifest.capture.mode).toBe("metadata");
     expect(manifest.artifacts).toEqual([]);
-    const bundleText = await readFile(path.join(recorder.directory, "spans.jsonl"), "utf8");
-    expect(bundleText).toContain("attempt_resources");
-    expect(bundleText).not.toContain("private prompt");
-    expect(bundleText).not.toContain("private output");
+    const spans = await readFile(path.join(recorder.directory, "spans.jsonl"), "utf8");
+    expect(spans).toContain("attempt_resources");
+    const bundleText = await readBundleText(recorder.directory);
+    for (const privateText of [
+      "private prompt",
+      "private output",
+      "private stderr",
+      "private log",
+      "private/path.ts",
+      "private custom event",
+    ]) {
+      expect(bundleText).not.toContain(privateText);
+    }
+    const logs = (await readFile(path.join(recorder.directory, "logs.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { event: string; fields: Record<string, unknown> });
+    expect(logs.find((log) => log.event === "pi run")?.fields).toEqual({
+      model: "gpt-test",
+      durationMs: 12,
+    });
   });
 });
 
@@ -617,4 +642,18 @@ async function temporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-run-recorder-"));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+/** Every file of a bundle, each prefixed with its relative path, as one string. */
+async function readBundleText(directory: string): Promise<string> {
+  const files = (await readdir(directory, { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath, entry.name))
+    .sort();
+  const contents = await Promise.all(
+    files.map(
+      async (file) => `== ${path.relative(directory, file)}\n${await readFile(file, "utf8")}`,
+    ),
+  );
+  return contents.join("\n");
 }

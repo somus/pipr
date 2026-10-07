@@ -1,8 +1,9 @@
 import type { PiprRunSummary } from "@usepipr/sdk";
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
+import type { PublishedRunBundle } from "../observability/run-bundle-publication.js";
 import type { RunObserver } from "../observability/types.js";
-import type { PiRunner } from "../pi/types.js";
+import type { PiProviderModule, PiRunner } from "../pi/types.js";
 import type { PublicationResult } from "../publication/types.js";
 import type { ReviewRuntimeResult } from "../review/task/task-runtime.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
@@ -32,11 +33,18 @@ export type DryRunCommandOptions = RuntimeCommandOptions & {
   eventPath: string;
 };
 
-export type HostRunCommandOptions = RuntimeCommandOptions & {
+export type HostRunCommandOptions = Omit<RuntimeCommandOptions, "rootDir"> & {
+  /** Workspace root; defaults to the CI checkout directory from env, then `cwd`. */
+  rootDir?: string;
+  /** Base for relative event paths and the workspace fallback; defaults to `process.cwd()`. */
+  cwd?: string;
   host?: string;
+  /** Native event payload; defaults to `PIPR_EVENT_PATH` or the CI event path from env. */
   eventPath?: string;
   dryRun: boolean;
   logSink?: RuntimeLogSink;
+  /** Root for per-change-request agent stores so redelivered events resume prior conversations. */
+  piStoreRoot?: string;
   onRunBundleFinalized?: (bundle: {
     executionId: string;
     directory: string;
@@ -44,11 +52,16 @@ export type HostRunCommandOptions = RuntimeCommandOptions & {
     outcome: "in-progress" | "succeeded" | "failed" | "partial";
     repository?: import("@usepipr/sdk").RunBundleManifest["repository"];
   }) => void | Promise<void>;
+  /**
+   * Opts into publishing native-CI captures: runtime packages the temporary capture into the
+   * run store, removes the temporary directory, and reports the package for artifact upload.
+   */
+  onRunBundlePublished?: (bundle: PublishedRunBundle) => void | Promise<void>;
 };
 
 /** Injection bag accepted only at the host-run composition root. */
 export type HostRunCommandDependencyOptions = HostRunCommandOptions & {
-  piExecutable?: string;
+  piProviderModule?: PiProviderModule;
   piRunner?: PiRunner;
   hostAdapter?: CodeHostAdapter;
   secretRedactor?: SecretRedactor;
@@ -64,8 +77,8 @@ export type LocalReviewTaskLog = {
 export type LocalReviewCommandOptions = RuntimeCommandOptions & {
   baseSha: string;
   headSha?: string;
-  piExecutable?: string;
-  piAgentDir?: string;
+  piProviderModule?: PiProviderModule;
+  piAuthFile?: string;
   piRunner?: PiRunner;
   logSink?: RuntimeLogSink;
   taskLog?: LocalReviewTaskLog;

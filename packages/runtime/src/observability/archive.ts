@@ -17,6 +17,8 @@ export {
   type ValidatedRunBundle,
 } from "./bundle-validation.js";
 
+import { isMissingFileError, requireRealDirectory } from "./recorder-fs.js";
+
 export type RunRecordState =
   | "available"
   | "in-progress"
@@ -387,13 +389,6 @@ function statusMatches(status: RunQuery["status"], record: RunRecord): boolean {
   return status === undefined || record.state === status || record.outcome === status;
 }
 
-async function requireRealDirectory(directory: string): Promise<void> {
-  const details = await lstat(directory);
-  if (details.isSymbolicLink())
-    throw new Error(`Run bundle directory cannot be a symlink: ${directory}`);
-  if (!details.isDirectory()) throw new Error(`Run bundle path is not a directory: ${directory}`);
-}
-
 function compareSpans(left: RunSpanRecord, right: RunSpanRecord): number {
   return left.startedAt.localeCompare(right.startedAt) || left.name.localeCompare(right.name);
 }
@@ -462,10 +457,6 @@ function sumLogField(logs: RunLogRecord[], field: string): number {
     const value = log.fields[field];
     return sum + (typeof value === "number" ? value : 0);
   }, 0);
-}
-
-function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 async function readStoreEntries(

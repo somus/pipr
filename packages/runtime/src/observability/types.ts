@@ -4,7 +4,6 @@ export const maximumRunBundleBytes = 64 * 1024 * 1024;
 
 export type RunAgentAttemptResult = {
   output?: string;
-  stderr?: string;
   exitCode?: number;
   durationMs?: number;
   usage?: {

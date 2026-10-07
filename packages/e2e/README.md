@@ -1,23 +1,30 @@
 # @pipr/e2e
 
 `@pipr/e2e` is Pipr's private harness for local Action checks, direct-container
-checks, fake Pi runs, and fixture scenarios.
+checks, scripted model runs, and fixture scenarios.
 
 This workspace package is for Pipr maintainers. It is not part of the public
 SDK or CLI surface.
 
 ## Technical notes
 
-- `pipr-e2e-check` builds the local Action image, verifies the Pi CLI contract,
-  runs fixture assertions, and runs every local `act` scenario.
-- `pipr-e2e-container-check` runs direct-container equivalents against an
-  existing Docker image.
-- `pipr-e2e-run` runs one local `act` scenario.
-- `pipr-e2e-action-fixture` is the in-container GitHub fixture entrypoint.
+- `check.ts` (`check:actions`) builds the local Action image, verifies the durable harness
+  contract (pinned `@earendil-works/pi-durable`, `pi-ai`, and `chord` versions
+  plus `pipr agent-worker --help`), runs fixture assertions, and runs every local
+  `act` scenario.
+- `container-check.ts` (`check:container`) runs direct-container equivalents
+  against an existing Docker image. It leaves the harness contract to
+  `check:actions`, which the Docker e2e pipeline runs next.
+- `run.ts` runs one local `act` scenario.
+- `action-fixture.ts` is the in-container GitHub fixture entrypoint. It
+  loads `scripted-provider.ts` into the agent worker as the model provider, so
+  fixtures answer from the rendered prompt and drive the Pipr read tools without
+  a model API call.
 
 Use `check:actions` after editing Action behavior, Docker packaging, workflow
-fixtures, Pi CLI mapping, or PR event handling. Use `check:container` when you
-already have a Docker image and need the direct-container CI equivalent.
+fixtures, agent worker or harness wiring, or PR event handling. Use
+`check:container` when you already have a Docker image and need the
+direct-container CI equivalent.
 
 ## Environment
 
@@ -26,8 +33,7 @@ already have a Docker image and need the direct-container CI equivalent.
 | `PIPR_ACTION_IMAGE` | Docker image used by local Action and container checks |
 | `PIPR_SKIP_ACTION_IMAGE_BUILD` | Reuse an existing image when set to `1` |
 | `PIPR_ACT_RUNNER_IMAGE` | Runner image used by local `act` scenarios |
-| `PIPR_ACT_PI_CALL_DIR` | Directory for fake Pi call logs |
-| `PIPR_EVAL_PI_EXECUTABLE` | Optional fake Pi executable override for deterministic prompt eval smoke tests |
+| `PIPR_ACT_MODEL_CALL_DIR` | Directory for scripted model call logs |
 
 ## Commands
 
@@ -37,8 +43,8 @@ bun run --cwd packages/e2e check:actions
 bun run --cwd packages/e2e check:container
 ```
 
-`check` includes deterministic prompt eval smoke tests through the fake Pi
-harness. To run only those smoke tests:
+Deterministic prompt eval smoke tests run through the scripted eval provider
+without a model API call:
 
 ```bash
 bun run --cwd packages/evals eval:deterministic

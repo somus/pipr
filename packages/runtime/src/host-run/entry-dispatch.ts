@@ -1,4 +1,4 @@
-import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
+import type { RuntimePlan } from "@usepipr/sdk/internal";
 import { match, P } from "ts-pattern";
 import {
   commandPatternPrefixMatches,
@@ -6,7 +6,6 @@ import {
   parseCommandPattern,
 } from "../commands/grammar.js";
 import type { RepositoryPermission } from "../hosts/types.js";
-import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { CommandPermissionLevel } from "../types.js";
 
 const permissionOrder: CommandPermissionLevel[] = ["read", "triage", "write", "maintain", "admin"];
@@ -39,45 +38,18 @@ export type PlanCommandResolution =
       requiredPermission: CommandPermissionLevel;
       body: string;
     }
-  | {
-      kind: "matched";
-      invocation: {
-        taskName: string;
-        commandName: string;
-        requiredPermission: CommandPermissionLevel;
-        line: string;
-        pattern: string;
-        arguments: Record<string, string>;
-        inputs?: unknown;
-      };
-    };
+  | { kind: "matched"; invocation: PlanCommandInvocation };
 
-export type RuntimeEntryDispatch =
-  | {
-      kind: "change-request";
-      tasks: RuntimeTask[];
-      taskName?: string;
-    }
-  | PlanCommandResolution;
-
-export function dispatchRuntimeEntry(
-  options:
-    | { kind: "change-request"; plan: RuntimePlan; event: { action?: string }; taskName?: string }
-    | { kind: "command"; plan: RuntimePlan; line: string | undefined },
-): RuntimeEntryDispatch {
-  return match(options)
-    .with({ kind: "change-request" }, (options) => ({
-      kind: "change-request" as const,
-      tasks: selectRuntimeTasks({
-        plan: options.plan,
-        event: options.event,
-        taskName: options.taskName,
-      }),
-      taskName: options.taskName,
-    }))
-    .with({ kind: "command" }, (options) => resolvePlanCommand(options.plan, options.line))
-    .exhaustive();
-}
+export type PlanCommandInvocation = {
+  command: RuntimePlan["commands"][number];
+  taskName: string;
+  commandName: string;
+  requiredPermission: CommandPermissionLevel;
+  line: string;
+  pattern: string;
+  arguments: Record<string, string>;
+  inputs?: unknown;
+};
 
 function selectPlanCommand(plan: RuntimePlan, line: string): SelectedPlanCommand | undefined {
   let firstInvalid: SelectedPlanCommand | undefined;
@@ -114,6 +86,7 @@ export function resolvePlanCommand(
     .with({ kind: "matched" }, (selected) => ({
       kind: "matched" as const,
       invocation: {
+        command: selected.command,
         taskName: selected.command.task.name,
         commandName: selected.commandName,
         requiredPermission: selected.command.permission,
@@ -139,29 +112,15 @@ export function resolvePlanCommand(
 
 export function parsePlanCommandInputs(
   plan: RuntimePlan,
-  invocation: Extract<PlanCommandResolution, { kind: "matched" }>["invocation"],
-): PlanCommandResolution {
-  const matchingCommand =
-    plan.commands.find(
-      (candidate) =>
-        candidate.task.name === invocation.taskName && candidate.pattern === invocation.pattern,
-    ) ?? plan.commands.find((candidate) => candidate.task.name === invocation.taskName);
-  if (!matchingCommand) {
-    return {
-      kind: "invalid",
-      reason: `No command registered for task '${invocation.taskName}'`,
-      requiredPermission: invocation.requiredPermission,
-      body: renderPlanCommandHelp(plan),
-    };
-  }
+  invocation: PlanCommandInvocation,
+): Extract<PlanCommandResolution, { kind: "matched" | "invalid" }> {
+  const { command } = invocation;
   try {
     return {
       kind: "matched",
       invocation: {
         ...invocation,
-        inputs: matchingCommand.parse
-          ? matchingCommand.parse(invocation.arguments)
-          : invocation.arguments,
+        inputs: command.parse ? command.parse(invocation.arguments) : invocation.arguments,
       },
     };
   } catch (error) {

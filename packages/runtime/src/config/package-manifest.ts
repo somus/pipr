@@ -11,9 +11,8 @@ export function normalizePackageManifest(value: unknown): PackageManifest {
   }
 
   const manifest: PackageManifest = {};
-  const rawManifest = value as Record<string, unknown>;
   for (const key of ["dependencies", "devDependencies"] as const) {
-    const dependencyMap = rawManifest[key];
+    const dependencyMap = value[key];
     if (!isRecord(dependencyMap)) {
       continue;
     }

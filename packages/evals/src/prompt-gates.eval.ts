@@ -1,6 +1,6 @@
 import { evalite } from "evalite";
+import { assertLiveEvalEnv } from "./env.js";
 import {
-  assertLiveEvalEnv,
   cleanSuppressionLivePromptGate,
   defectRecallLivePromptGate,
   livePromptGateEvalConfig,

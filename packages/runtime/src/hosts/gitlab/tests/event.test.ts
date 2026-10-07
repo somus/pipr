@@ -90,7 +90,12 @@ describe("GitLab event parser", () => {
     });
     try {
       await expect(
-        parseGitLabEvent({ eventPath: command.path, env: {}, workspace: command.root }),
+        parseGitLabEvent({
+          eventPath: command.path,
+          env: {},
+          workspace: command.root,
+          loadChangeRequest: unexpectedChangeLoad,
+        }),
       ).resolves.toMatchObject({
         kind: "command-comment",
         comment: { commentId: "101", changeNumber: 7, body: "@pipr review", actor: "developer" },
@@ -100,6 +105,7 @@ describe("GitLab event parser", () => {
           eventPath: reply.path,
           env: {},
           workspace: reply.root,
+          loadChangeRequest: unexpectedChangeLoad,
           resolveReplyParent: async ({ noteId }) => (noteId === "102" ? "101" : undefined),
         }),
       ).resolves.toMatchObject({
@@ -138,31 +144,6 @@ describe("GitLab event parser", () => {
           }),
         }),
       ).resolves.toMatchObject({ kind: "change-request", change: { action: "ready" } });
-    } finally {
-      await rm(fixture.root, { recursive: true, force: true });
-    }
-  });
-
-  it("ignores draft merge request webhooks before loading the change", async () => {
-    const fixture = await eventFixture({
-      object_kind: "merge_request",
-      project: { id: 42, path_with_namespace: "group/project" },
-      object_attributes: { iid: 7, action: "open", draft: true },
-    });
-    let loadCalls = 0;
-    try {
-      await expect(
-        parseGitLabEvent({
-          eventPath: fixture.path,
-          env: {},
-          workspace: fixture.root,
-          loadChangeRequest: async () => {
-            loadCalls += 1;
-            throw new Error("draft merge requests must not be loaded");
-          },
-        }),
-      ).resolves.toEqual({ kind: "ignored", reason: "merge request is a draft" });
-      expect(loadCalls).toBe(0);
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
     }
@@ -262,4 +243,8 @@ async function eventFixture(payload: unknown) {
   const eventPath = path.join(root, "event.json");
   await Bun.write(eventPath, JSON.stringify(payload));
   return { root, path: eventPath };
+}
+
+function unexpectedChangeLoad(): never {
+  throw new Error("comment events must not load the change request");
 }

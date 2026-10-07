@@ -1,14 +1,12 @@
 import type { InlinePublicationItem } from "../../publication/types.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
+import { mainCommentPrefix, planInlineLocation } from "../publication.js";
 import type { GitLabClient, GitLabDiffRefs } from "./client.js";
 import {
-  assertCurrentGitLabHead,
   gitLabCoordinates,
   gitLabInlineBody,
-  gitLabInlineLocation,
   gitLabInlineLocationFromDiscussion,
-  gitLabMainMarker,
   gitLabPosition,
   gitLabThreadContexts,
   ownedGitLabNote,
@@ -24,15 +22,20 @@ type Prepared = {
 export function createGitLabPublicationDriver(client: GitLabClient): PublicationDriver<Prepared> {
   return {
     provider: "GitLab",
+    inlineStateNeedsExtraReads: true,
     async prepare(change) {
       const owner = await client.currentUser();
       return { client, change, ownerUsername: owner.username };
     },
-    async assertCurrent(prepared, expectedHeadSha) {
-      const current = await assertCurrentGitLabHead(client, prepared.change, expectedHeadSha);
+    async currentEndpoints(prepared) {
+      const current = await client.getMergeRequest(
+        gitLabCoordinates(prepared.change).projectId,
+        prepared.change.change.number,
+      );
       prepared.refs = current.diff_refs;
+      return { headSha: current.diff_refs.head_sha };
     },
-    async loadOwnedState(prepared): Promise<LoadedPublicationState> {
+    async loadOwnedState(prepared, _mainMarker, options): Promise<LoadedPublicationState> {
       const coordinates = gitLabCoordinates(prepared.change);
       const [notes, discussions] = await Promise.all([
         client.listNotes(coordinates.projectId, prepared.change.change.number),
@@ -41,7 +44,7 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       const main = ownedGitLabNote(
         notes,
         prepared.ownerUsername,
-        gitLabMainMarker(prepared.change.change.number),
+        mainCommentPrefix(prepared.change.change.number),
       );
       return {
         main: main ? { id: main.id, body: main.body } : undefined,
@@ -56,7 +59,7 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
             },
           ];
         }),
-        threads: gitLabThreadContexts(discussions, prepared.ownerUsername, true),
+        threads: gitLabThreadContexts(discussions, prepared.ownerUsername, !options?.allReplies),
       };
     },
     async loadOwnedMain(prepared) {
@@ -64,12 +67,12 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       const main = ownedGitLabNote(
         await client.listNotes(coordinates.projectId, prepared.change.change.number),
         prepared.ownerUsername,
-        gitLabMainMarker(prepared.change.change.number),
+        mainCommentPrefix(prepared.change.change.number),
       );
       return main ? { id: main.id, body: main.body } : undefined;
     },
-    upsertMain: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
-    inlineLocation: (_prepared, item) => gitLabInlineLocation(item),
+    upsertComment: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
+    inlineLocation: (_prepared, item) => planInlineLocation(item),
     async createInline(prepared, item: InlinePublicationItem) {
       if (!prepared.refs) throw new Error("GitLab diff refs were not prepared");
       const coordinates = gitLabCoordinates(prepared.change);
@@ -89,7 +92,6 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       );
       return note ? { id: note.id, body: note.body } : undefined;
     },
-    upsertCommand: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       const coordinates = gitLabCoordinates(prepared.change);
       const discussionId =

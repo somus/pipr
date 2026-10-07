@@ -4,6 +4,37 @@ const text = z.string().min(1);
 const count = z.number().int().nonnegative();
 const duration = z.number().nonnegative().finite();
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
+const traceIdSchema = z.string().regex(/^[a-f0-9]{32}$/);
+const spanIdSchema = z.string().regex(/^[a-f0-9]{16}$/);
+const runHosts = [
+  "github",
+  "gitlab",
+  "azure-devops",
+  "bitbucket",
+  "gitea",
+  "forgejo",
+  "codeberg",
+  "local",
+] as const;
+const runKinds = ["review", "command", "verifier", "startup"] as const;
+const runOutcomes = ["in-progress", "succeeded", "failed", "partial"] as const;
+const failureCategories = [
+  "startup",
+  "event",
+  "auth",
+  "workspace",
+  "trusted-config",
+  "diff",
+  "dispatch",
+  "agent-timeout",
+  "agent-exit",
+  "invalid-output",
+  "validation",
+  "publication",
+  "stale-head",
+  "capture",
+  "unknown",
+] as const;
 const bundlePath = text
   .max(1024)
   .refine(
@@ -24,7 +55,7 @@ const packagedArchiveSchema = z.strictObject({
 export const runBundleEnvelopeSchema = z
   .strictObject({
     formatVersion: z.literal(1),
-    executionId: z.string().regex(/^[a-f0-9]{32}$/),
+    executionId: traceIdSchema,
     protection: z.enum(["metadata", "age"]),
     diagnosticState: z.enum(["available", "not-captured", "encryption-failed", "size-limit"]),
     metadata: packagedArchiveSchema.extend({
@@ -148,12 +179,9 @@ const spanAttributes = z
 
 export const runSpanRecordSchema = z.strictObject({
   formatVersion: z.literal(1),
-  traceId: z.string().regex(/^[a-f0-9]{32}$/),
-  spanId: z.string().regex(/^[a-f0-9]{16}$/),
-  parentSpanId: z
-    .string()
-    .regex(/^[a-f0-9]{16}$/)
-    .optional(),
+  traceId: traceIdSchema,
+  spanId: spanIdSchema,
+  parentSpanId: spanIdSchema.optional(),
   name: text.max(500),
   category: z.enum(["run", "phase", "agent", "model", "tool", "http", "internal"]),
   startedAt: z.string().datetime({ offset: true }),
@@ -171,11 +199,8 @@ export const runLogRecordSchema = z.strictObject({
   sequence: count,
   level: z.enum(["info", "notice", "warning", "error", "debug"]),
   event: text.max(500),
-  traceId: z.string().regex(/^[a-f0-9]{32}$/),
-  spanId: z
-    .string()
-    .regex(/^[a-f0-9]{16}$/)
-    .optional(),
+  traceId: traceIdSchema,
+  spanId: spanIdSchema.optional(),
   fields: z.record(z.string().min(1).max(200), attributeValue),
   text: z.string().max(65_536).optional(),
 });
@@ -183,39 +208,10 @@ export const runLogRecordSchema = z.strictObject({
 export type RunLogRecord = z.infer<typeof runLogRecordSchema>;
 
 const metricAttributes = z.strictObject({
-  host: z
-    .enum([
-      "github",
-      "gitlab",
-      "azure-devops",
-      "bitbucket",
-      "gitea",
-      "forgejo",
-      "codeberg",
-      "local",
-    ])
-    .optional(),
-  runKind: z.enum(["review", "command", "verifier", "startup"]).optional(),
-  outcome: z.enum(["in-progress", "succeeded", "failed", "partial"]).optional(),
-  failureCategory: z
-    .enum([
-      "startup",
-      "event",
-      "auth",
-      "workspace",
-      "trusted-config",
-      "diff",
-      "dispatch",
-      "agent-timeout",
-      "agent-exit",
-      "invalid-output",
-      "validation",
-      "publication",
-      "stale-head",
-      "capture",
-      "unknown",
-    ])
-    .optional(),
+  host: z.enum(runHosts).optional(),
+  runKind: z.enum(runKinds).optional(),
+  outcome: z.enum(runOutcomes).optional(),
+  failureCategory: z.enum(failureCategories).optional(),
   attemptType: z.enum(["initial", "retry", "repair", "fallback"]).optional(),
   providerFamily: text.max(100).optional(),
 });
@@ -244,16 +240,7 @@ export const runMetricsSnapshotSchema = z.strictObject({
 export type RunMetricsSnapshot = z.infer<typeof runMetricsSnapshotSchema>;
 
 const repositorySchema = z.strictObject({
-  host: z.enum([
-    "github",
-    "gitlab",
-    "azure-devops",
-    "bitbucket",
-    "gitea",
-    "forgejo",
-    "codeberg",
-    "local",
-  ]),
+  host: z.enum(runHosts),
   repository: text.max(500),
   changeNumber: z.number().int().positive().optional(),
   changeUrl: z.string().url().max(2000).optional(),
@@ -299,29 +286,11 @@ const signalsSchema = z.strictObject({
 
 export const runBundleManifestSchema = z.strictObject({
   formatVersion: z.literal(1),
-  executionId: z.string().regex(/^[a-f0-9]{32}$/),
+  executionId: traceIdSchema,
   workId: text.max(200).optional(),
-  kind: z.enum(["review", "command", "verifier", "startup"]),
-  outcome: z.enum(["in-progress", "succeeded", "failed", "partial"]),
-  failureCategory: z
-    .enum([
-      "startup",
-      "event",
-      "auth",
-      "workspace",
-      "trusted-config",
-      "diff",
-      "dispatch",
-      "agent-timeout",
-      "agent-exit",
-      "invalid-output",
-      "validation",
-      "publication",
-      "stale-head",
-      "capture",
-      "unknown",
-    ])
-    .optional(),
+  kind: z.enum(runKinds),
+  outcome: z.enum(runOutcomes),
+  failureCategory: z.enum(failureCategories).optional(),
   startedAt: z.string().datetime({ offset: true }),
   endedAt: z.string().datetime({ offset: true }).optional(),
   durationMs: duration.optional(),

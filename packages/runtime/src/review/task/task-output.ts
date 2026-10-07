@@ -1,23 +1,21 @@
+import { createHash } from "node:crypto";
 import type {
   CheckHandle,
-  CommentValue,
   DroppedReviewFinding,
+  FindingFacets,
   PathFilter,
-  PiprRunSummary,
   PriorReview,
   ReviewFinding,
 } from "@usepipr/sdk";
 import { z } from "zod";
-import { summarizeDiffContextCoverage } from "../../pi/diff-context-coverage.js";
-import type { PriorReviewState, ReviewStats } from "../../publication/types.js";
+import type { PriorReviewState } from "../../publication/types.js";
 import type { ReviewResult } from "../../types.js";
-import type { PiRunStats } from "../agent/review-run-types.js";
 import { mainCommentTitles } from "../comment-branding.js";
 import {
   type GeneratedMainCommentEnvelope,
   parseGeneratedMainCommentEnvelope,
 } from "../main-comment-envelope.js";
-import { maxReviewStatsModels, sanitizeReviewStatsModel } from "../review-stats.js";
+import { findingFacetValues } from "../selection.js";
 export type RuntimeCheckConclusion = "success" | "failure" | "neutral";
 
 export type RuntimeTaskCheckResult = {
@@ -36,14 +34,22 @@ export type OutputState = {
   findings: FindingContribution[];
   droppedFindings: DroppedReviewFinding[];
   findingScopes: WeakMap<readonly ReviewFinding[], PathFilter>;
+  /** Facet values of selected findings keyed by finding location. */
+  findingFacets: Map<string, Record<string, string>>;
   providerModels: string[];
   repairAttempted: boolean;
   check?: Omit<RuntimeTaskCheckResult, "taskName">;
 };
 
+/** Comment value after Markdown helpers have been converted to strings. */
+export type RuntimeCommentValue =
+  | string
+  | { main: string; inlineFindings?: readonly ReviewFinding[] }
+  | { main?: never; inlineFindings: readonly ReviewFinding[] };
+
 export type CommentContribution = {
   taskName: string;
-  value: CommentValue;
+  value: RuntimeCommentValue;
 };
 
 export type OutputStateWithComment = OutputState & {
@@ -92,6 +98,7 @@ export function createOutputState(): OutputState {
     findings: [],
     droppedFindings: [],
     findingScopes: new WeakMap(),
+    findingFacets: new Map(),
     providerModels: [],
     repairAttempted: false,
   };
@@ -108,179 +115,6 @@ export function mergeTaskOutputs(results: TaskRunResult[]): OutputState {
     merged.repairAttempted ||= output.repairAttempted;
   }
   return merged;
-}
-
-export function reviewStatsForRuns(
-  runs: PiRunStats[],
-  durationMs: number,
-): ReviewStats | undefined {
-  if (runs.length === 0) {
-    return undefined;
-  }
-  const usage = aggregateReviewUsage(runs);
-  const coverage = runs.map((run) => run.diffContextCoverage).filter((item) => item !== undefined);
-  return {
-    models: collectReviewModels(runs),
-    agentRuns: runs.length,
-    durationMs,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    costUsd: usage.costUsd,
-    usageStatus: usage.status,
-    cacheReadTokens: usage.cacheReadTokens,
-    cacheWriteTokens: usage.cacheWriteTokens,
-    cacheUsageStatus: usage.cacheStatus,
-    ...(coverage.length > 0 ? { diffContextCoverage: summarizeDiffContextCoverage(coverage) } : {}),
-  };
-}
-
-export function runSummaryStatsFields(
-  stats: ReviewStats | undefined,
-): Pick<
-  PiprRunSummary,
-  | "agentRuns"
-  | "inputTokens"
-  | "outputTokens"
-  | "costUsd"
-  | "usageStatus"
-  | "cacheReadTokens"
-  | "cacheWriteTokens"
-  | "cacheUsageStatus"
-  | "diffContextCoverage"
-> {
-  return {
-    agentRuns: stats?.agentRuns ?? 0,
-    inputTokens: stats?.inputTokens ?? 0,
-    outputTokens: stats?.outputTokens ?? 0,
-    costUsd: stats?.costUsd ?? 0,
-    usageStatus: stats?.usageStatus ?? "unavailable",
-    cacheReadTokens: stats?.cacheReadTokens ?? 0,
-    cacheWriteTokens: stats?.cacheWriteTokens ?? 0,
-    cacheUsageStatus: stats?.cacheUsageStatus ?? "unavailable",
-    ...(stats?.diffContextCoverage ? { diffContextCoverage: stats.diffContextCoverage } : {}),
-  };
-}
-
-function collectReviewModels(runs: PiRunStats[]): string[] {
-  const models: string[] = [];
-  for (const model of runs.flatMap((run) => run.models)) {
-    const sanitized = sanitizeReviewStatsModel(model);
-    if (sanitized && models.length < maxReviewStatsModels && !models.includes(sanitized)) {
-      models.push(sanitized);
-    }
-  }
-  return models.length > 0 ? models : ["[invalid model]"];
-}
-
-function aggregateReviewUsage(runs: PiRunStats[]): {
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-  status: ReviewStats["usageStatus"];
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  cacheStatus: NonNullable<ReviewStats["cacheUsageStatus"]>;
-} {
-  return { ...aggregateCoreUsage(runs), ...aggregateCacheUsage(runs) };
-}
-
-function aggregateCoreUsage(runs: PiRunStats[]): {
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-  status: ReviewStats["usageStatus"];
-} {
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let costUsd = 0;
-  let reportedRuns = 0;
-  let partialUsage = false;
-  for (const run of runs) {
-    if (!run.usage) continue;
-    reportedRuns += 1;
-    const input = addReportedUsage(inputTokens, run.usage.inputTokens, Number.isSafeInteger);
-    const output = addReportedUsage(outputTokens, run.usage.outputTokens, Number.isSafeInteger);
-    const cost = addReportedUsage(costUsd, run.usage.costUsd, Number.isFinite);
-    inputTokens = input.total;
-    outputTokens = output.total;
-    costUsd = cost.total;
-    const sumsComplete = [input, output, cost].every((sum) => sum.complete);
-    partialUsage ||= run.usage.status === "partial" || !sumsComplete;
-  }
-  return {
-    inputTokens,
-    outputTokens,
-    costUsd,
-    status: aggregateUsageStatus(reportedRuns, runs.length, partialUsage),
-  };
-}
-
-function aggregateCacheUsage(runs: PiRunStats[]): {
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  cacheStatus: NonNullable<ReviewStats["cacheUsageStatus"]>;
-} {
-  let cacheReadTokens = 0;
-  let cacheWriteTokens = 0;
-  let reportedRuns = 0;
-  let partialUsage = false;
-  for (const run of runs) {
-    if (!hasReportedCacheUsage(run)) continue;
-    const usage = run.usage;
-    reportedRuns += 1;
-    const cacheRead = addReportedUsage(
-      cacheReadTokens,
-      usage.cacheReadTokens,
-      Number.isSafeInteger,
-    );
-    const cacheWrite = addReportedUsage(
-      cacheWriteTokens,
-      usage.cacheWriteTokens,
-      Number.isSafeInteger,
-    );
-    cacheReadTokens = cacheRead.total;
-    cacheWriteTokens = cacheWrite.total;
-    partialUsage ||=
-      usage.cacheUsageStatus === "partial" || !cacheRead.complete || !cacheWrite.complete;
-  }
-  return {
-    cacheReadTokens,
-    cacheWriteTokens,
-    cacheStatus: aggregateUsageStatus(reportedRuns, runs.length, partialUsage),
-  };
-}
-
-function hasReportedCacheUsage(run: PiRunStats): run is PiRunStats & {
-  usage: PiRunStats["usage"] & {
-    cacheReadTokens: number;
-    cacheWriteTokens: number;
-    cacheUsageStatus: "complete" | "partial";
-  };
-} {
-  return (
-    run.usage?.cacheReadTokens !== undefined &&
-    run.usage.cacheWriteTokens !== undefined &&
-    run.usage.cacheUsageStatus !== undefined &&
-    run.usage.cacheUsageStatus !== "unavailable"
-  );
-}
-
-function aggregateUsageStatus(
-  reported: number,
-  total: number,
-  partial: boolean,
-): "complete" | "partial" | "unavailable" {
-  if (reported === 0) return "unavailable";
-  return reported < total || partial ? "partial" : "complete";
-}
-
-function addReportedUsage(
-  current: number,
-  reported: number,
-  isValid: (value: number) => boolean,
-): { total: number; complete: boolean } {
-  const next = current + reported;
-  return isValid(next) ? { total: next, complete: true } : { total: current, complete: false };
 }
 
 function mergeCommentContribution(
@@ -346,7 +180,29 @@ export function createCheckHandle(state: OutputState): CheckHandle {
     neutral(summary) {
       setCheckResult(state, "neutral", summary);
     },
+    gate(findings, options) {
+      const failOn = options.failOn;
+      const blocks =
+        typeof failOn === "function"
+          ? failOn
+          : (finding: ReviewFinding) =>
+              Object.entries(failOn).some(([key, values]) => {
+                const value = (finding as Record<string, unknown>)[key];
+                return typeof value === "string" && values.includes(value);
+              });
+      const blocking = findings.filter((finding) => blocks(finding));
+      const summary = options.summary?.(blocking) ?? defaultGateSummary(blocking.length);
+      setCheckResult(state, blocking.length > 0 ? "failure" : "success", summary);
+      return { passed: blocking.length === 0, blocking };
+    },
   };
+}
+
+function defaultGateSummary(blockingCount: number): string {
+  if (blockingCount === 0) {
+    return "No blocking findings.";
+  }
+  return `${blockingCount} blocking finding${blockingCount === 1 ? "" : "s"}.`;
 }
 
 function setCheckResult(
@@ -369,7 +225,11 @@ export function runtimeTaskCheckResult(
     : { taskName, conclusion: check.conclusion };
 }
 
-export function collectComment(state: OutputState, value: CommentValue, taskName: string): void {
+export function collectComment(
+  state: OutputState,
+  value: RuntimeCommentValue,
+  taskName: string,
+): void {
   assertOutputContributionAllowed(
     state,
     "comment",
@@ -477,6 +337,25 @@ export function recordDroppedFindings(
       reason,
     })),
   );
+}
+
+export function recordFindingFacets(
+  state: OutputState,
+  findings: readonly ReviewFinding[],
+  facets: FindingFacets,
+): void {
+  if (Object.keys(facets).length === 0) {
+    return;
+  }
+  for (const finding of findings) {
+    state.findingFacets.set(findingFacetKey(finding), findingFacetValues(finding, facets));
+  }
+}
+
+/** Identifies one finding for facet tracking and outcome events; findings on the same lines differ by body. */
+function findingFacetKey(finding: ReviewFinding): string {
+  const body = createHash("sha256").update(finding.body).digest("hex").slice(0, 16);
+  return [finding.path, finding.side, finding.startLine, finding.endLine, body].join(":");
 }
 
 function canonicalFindingProjection(finding: ReviewFinding): ReviewFinding {

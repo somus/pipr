@@ -60,7 +60,7 @@ Before I initialize Pipr, choose the setup policy:
    security-sast, quality-gate, diff-diagnostics, pr-hygiene, dependency-risk,
    ci-triage-command, multi-agent-review, plugin-tool-review, pr-briefing,
    interactive-ask, changelog-draft, or a custom workflow.
-2. Model: use Pipr default DeepSeek, or specify provider/model/secret env var names.
+2. Model: use Pipr default DeepSeek, or specify provider/model/secret env var names. For an OpenAI-compatible gateway or local model server, also ask for its provider id, base URL, and key variable name.
 3. Triggers and publishing: automatic PR review plus @pipr review with capped inline comments, command-only, or merge-gate checks.
 4. Code host and existing files: choose github, gitlab, azure-devops, bitbucket,
    gitea, forgejo, codeberg,
@@ -88,9 +88,9 @@ For existing setups:
 While customizing:
 
 - Keep config load synchronous. Runtime work belongs inside `pipr.task(...)`.
-- Use `pipr.secret({ name })`; never write raw secret values.
+- Omit `apiKey` when the model should read its provider's standard variable, such as `DEEPSEEK_API_KEY`; otherwise use `apiKey: pipr.secret({ name })`. Never write raw secret values.
 - Prefer `pipr.review(...)` for the built-in findings-plus-summary flow. Use custom agents and tasks for custom prompts, additional Pi calls, command input, custom schemas, plugin tools, explicit checks, or main-comment-only output.
-- For custom tasks, pass `{ manifest }` to `ctx.pi.run(...)`; do not interpolate the Diff Manifest into prompts yourself.
+- For custom tasks, pass the `ctx.change.diff()` value in the agent input, such as `ctx.pi.run(agent, { diff })`; do not interpolate the Diff Manifest into prompts yourself.
 - Core already adds bounded change request metadata and schema-aware `suggestedFix` rules to agent prompts. Do not duplicate them in `instructions` or prompt input.
 - Emit exactly one final output from each selected task: `ctx.comment(...)` or `ctx.command.reply(...)`.
 
@@ -105,7 +105,7 @@ pipr inspect
 pipr check
 ```
 
-Use `pipr check --require-env` only when the required provider env vars should already be present. Use `pipr review --base <ref>` only when the user has a safe local base ref, Pi is available, and provider secrets are intentionally exported.
+Use `pipr check --require-env` only when the required provider env vars should already be present. Use `pipr review --base <ref>` only when the user has a safe local base ref and provider secrets are intentionally exported, or the model uses `apiKey: "local"` with a local Pi login.
 
 For generated adapter files, inspect the selected integration artifact. Use `pipr dry-run --host <host> --event <path>` only when a real native event fixture is available. Use `pipr webhook serve --host <host>` only after the user has approved the trusted workspace, repository identifier, and webhook secret handling.
 

@@ -49,14 +49,10 @@
     "./host-run/pipr-result": {
       "types": "./dist/host-run/pipr-result.d.mts",
       "default": "./dist/host-run/pipr-result.mjs"
-    },
-    "./runtime-tools-extension": {
-      "types": "./dist/pi/runtime-tools-extension.d.mts",
-      "default": "./dist/pi/runtime-tools-extension.mjs"
     }
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/internal/testing.ts src/internal/review-testing.ts src/internal/docs.ts src/internal/action-result.ts src/host-run/pipr-result.ts src/pi/runtime-tools-extension.ts --dts --format esm --out-dir dist --tsconfig tsconfig.build.json",
+    "build": "tsdown src/index.ts src/internal/testing.ts src/internal/review-testing.ts src/internal/docs.ts src/internal/action-result.ts src/host-run/pipr-result.ts src/agent-worker/main.ts src/agent-worker/scripted-provider.ts --dts --format esm --out-dir dist --tsconfig tsconfig.build.json",
     "typecheck": "bun ../../node_modules/typescript/bin/tsc --noEmit",
     "test": "bun test --timeout 60000",
     "lint": "biome lint src",
@@ -65,6 +61,9 @@
     "check": "bun run lint && bun run typecheck && bun run test"
   },
   "dependencies": {
+    "@earendil-works/chord": "1.0.4",
+    "@earendil-works/pi-ai": "1.0.4",
+    "@earendil-works/pi-durable": "1.0.4",
     "@octokit/rest": "22.0.1",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/exporter-logs-otlp-proto": "0.220.0",
@@ -75,7 +74,7 @@
     "@opentelemetry/sdk-metrics": "2.9.0",
     "@opentelemetry/sdk-trace-base": "2.9.0",
     "@opentelemetry/semantic-conventions": "1.43.0",
-    "@types/bun": "1.4.0",
+    "@types/bun": "1.4.2",
     "@usepipr/sdk": "0.8.0",
     "age-encryption": "0.3.0",
     "fflate": "0.8.3",

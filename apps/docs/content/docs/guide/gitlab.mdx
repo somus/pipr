@@ -34,7 +34,7 @@ Configure masked CI/CD variables:
 | Variable | Purpose |
 | --- | --- |
 | `GITLAB_TOKEN` | Read the merge request and publish notes, discussions, and statuses |
-| Model-provider key | Match the secret name in `.pipr/config.ts` |
+| Model-provider key | The provider's standard variable, such as `DEEPSEEK_API_KEY`, or the `apiKey` secret name in `.pipr/config.ts` |
 
 Give the GitLab project token API scope and a role that can read code, comment on merge requests, resolve discussions, and create commit statuses.
 

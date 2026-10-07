@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { enforceRunStoreRetention } from "../../index.js";
 import { currentProcessIdentity, readActiveCaptureMarker } from "../active-capture.js";
+import { enforceRunStoreRetention } from "../retention.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -44,6 +44,38 @@ describe("run store retention", () => {
     expect(result.quota).toEqual(["2".repeat(32)]);
     expect(await directoryExists(path.join(root, "3".repeat(32)))).toBe(true);
     expect(await directoryExists(path.join(root, "4".repeat(32)))).toBe(true);
+  });
+
+  it("expires idle agent conversation stores and counts them toward the quota", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-retention-"));
+    temporaryDirectories.push(root);
+    const writeStore = async (change: string, modifiedAt: string, bytes: number) => {
+      const directory = path.join(root, "agent-stores", "github", "acme__app", change);
+      await mkdir(directory, { recursive: true });
+      const file = path.join(directory, "agent.sqlite");
+      await writeFile(file, "x".repeat(bytes));
+      const time = new Date(modifiedAt);
+      await utimes(file, time, time);
+      await utimes(directory, time, time);
+    };
+    await writeStore("1", "2026-06-01T00:00:00.000Z", 100);
+    await writeStore("2", "2026-07-18T00:00:00.000Z", 600);
+    await writeStore("3", "2026-07-19T00:00:00.000Z", 600);
+
+    const result = await enforceRunStoreRetention({
+      rootDirectory: root,
+      retentionDays: 14,
+      maxBytes: 1_000,
+      now: new Date("2026-07-20T00:00:00.000Z"),
+    });
+
+    expect(result.expired).toEqual(["agent-stores/github/acme__app/1"]);
+    expect(result.quota).toEqual(["agent-stores/github/acme__app/2"]);
+    expect(
+      await Bun.file(
+        path.join(root, "agent-stores", "github", "acme__app", "3", "agent.sqlite"),
+      ).exists(),
+    ).toBe(true);
   });
 
   it("includes failed partial captures in quota cleanup", async () => {

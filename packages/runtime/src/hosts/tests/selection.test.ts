@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { resolveCodeHostId } from "../selection.js";
+import {
+  isCodeHostId,
+  parseWebhookHostId,
+  resolveCodeHostId,
+  webhookHostIds,
+} from "../selection.js";
 
 describe("code host selection", () => {
   it("prefers an explicit host over CI environment detection", () => {
@@ -48,5 +53,19 @@ describe("code host selection", () => {
     expect(() => resolveCodeHostId({ explicitHost: "unknown-host", env: {} })).toThrow(
       "Unsupported code host 'unknown-host'",
     );
+  });
+
+  it("recognizes code host ids", () => {
+    expect(isCodeHostId("azure-devops")).toBe(true);
+    expect(isCodeHostId("local")).toBe(false);
+  });
+
+  it("accepts webhook hosts and lists them when rejecting others", () => {
+    expect(webhookHostIds.map((host) => parseWebhookHostId(host))).toEqual([...webhookHostIds]);
+    for (const value of ["github", undefined]) {
+      expect(() => parseWebhookHostId(value)).toThrow(
+        "webhook serve supports --host gitlab, azure-devops, bitbucket, gitea, forgejo, or codeberg",
+      );
+    }
   });
 });

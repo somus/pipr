@@ -1,6 +1,6 @@
 ---
 name: pipr-action-e2e
-description: Validate Pipr's GitHub Action through the narrowest relevant fixture, local act, container, or live GitHub lane, then collect evidence for workflows, events, permissions, checks, comments, reruns, and release references. Use after changing the Docker Action, action metadata, workflow fixtures, Pi CLI mapping, pull request event handling, GitHub publication, comment deduplication, or release packaging, and when reproducing a live Action failure. Do not use for ordinary runtime unit tests, prompt-only review behavior, or read-only inspection of an existing workflow run or code path unless reproduction or validation is requested.
+description: Validate Pipr's GitHub Action through the narrowest relevant fixture, local act, container, or live GitHub lane, then collect evidence for workflows, events, permissions, checks, comments, reruns, and release references. Use after changing the Docker Action, action metadata, workflow fixtures, agent worker or harness wiring, pull request event handling, GitHub publication, comment deduplication, or release packaging, and when reproducing a live Action failure. Do not use for ordinary runtime unit tests, prompt-only review behavior, or read-only inspection of an existing workflow run or code path unless reproduction or validation is requested.
 ---
 
 # Pipr Action E2E
@@ -18,9 +18,9 @@ Drive Pipr's existing Action harness instead of creating an ad hoc repository or
 
 Use one lane first:
 
-- **Fixture or package**: run `bun run --cwd packages/e2e test` for assertion, scenario cleanup, or fake-Pi behavior.
+- **Fixture or package**: run `bun run --cwd packages/e2e test` for assertion, scenario cleanup, or harness contract behavior.
 - **One local act scenario**: run `bun packages/e2e/run.ts <scenario>` using a name already defined in `packages/e2e/scenarios.ts`.
-- **Full local Action**: run `mise run check-actions` after Action, Docker, workflow, Pi CLI, publication, or event changes.
+- **Full local Action**: run `mise run check-actions` after Action, Docker, workflow, agent worker, publication, or event changes.
 - **Existing image or direct container**: run `bun run --cwd packages/e2e check:container`, setting `PIPR_ACTION_IMAGE` only when an image is already available.
 - **Docker packaging**: run `bun run docker:e2e` when the image itself changed.
 - **Live GitHub**: use only when the user explicitly requests live proof or the failure depends on GitHub permissions, hosted events, checks, comments, or release references.
@@ -32,7 +32,7 @@ Do not run every lane by default. After a focused lane passes, run the repositor
 Classify the first failing boundary:
 
 - image build or Action metadata;
-- Pi CLI contract or container entrypoint;
+- durable harness contract, agent worker, or container entrypoint;
 - fixture setup, event payload, or head checkout;
 - `.pipr/config.ts` loading or provider environment;
 - Review Task execution, schema validation, or dropped findings;

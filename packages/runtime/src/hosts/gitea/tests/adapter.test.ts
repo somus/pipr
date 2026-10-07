@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { InlinePublicationItem, ThreadAction } from "../../../publication/types.js";
-import { buildPublicationPlan } from "../../../review/comment.js";
-import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
+import { renderInlineFindingMarker } from "../../../review/comment-markers.js";
+import { buildPriorReviewState } from "../../../review/prior-state.js";
+import { buildPublicationPlan } from "../../../review/publication-plan.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import { createGiteaHostAdapter } from "../adapter.js";
 import type { GiteaClient, GiteaComment, GiteaPullRequest, GiteaReviewComment } from "../client.js";
@@ -174,38 +175,6 @@ describe("Gitea-compatible host adapter", () => {
       "Summary.",
     );
   });
-
-  it("does not publish a final review after progress ownership changes", async () => {
-    const client = new FakeGiteaClient();
-    const adapter = createGiteaHostAdapter({ host: "forgejo", client });
-    const publishProgress = adapter.publication?.publishReviewProgress;
-    if (!publishProgress) throw new Error("Expected progress publication");
-    const first = await publishProgress({
-      change,
-      reviewedHeadSha: "head",
-      renderBody: () => progressBody("11111111-1111-4111-8111-111111111111"),
-    });
-    if (first.status !== "published") throw new Error("Expected published progress");
-    await publishProgress({
-      change,
-      reviewedHeadSha: "head",
-      renderBody: () => progressBody("22222222-2222-4222-8222-222222222222"),
-    });
-
-    await expect(
-      adapter.publication?.publish({
-        change,
-        plan: publicationPlan(true),
-        progressLease: {
-          token: "11111111-1111-4111-8111-111111111111",
-          mainCommentId: first.id,
-          mainCommentAction: first.action,
-          reviewedHeadSha: "head",
-        },
-      }),
-    ).rejects.toThrow("superseded");
-    expect(client.reviewWrites).toEqual([]);
-  });
 });
 
 const change: ChangeRequestEventContext = {
@@ -274,15 +243,6 @@ function publicationPlan(withInline = false, threadActions: ThreadAction[] = [])
       droppedFindings: 0,
     },
   });
-}
-
-function progressBody(token: string): string {
-  return [
-    "<!-- pipr:main-comment change=7 version=1 -->",
-    `<!-- pipr:progress:start token=${token} head=head stage=preparing-workspace state=running -->`,
-    "## Progress",
-    "<!-- pipr:progress:end -->",
-  ].join("\n");
 }
 
 class FakeGiteaClient implements GiteaClient {

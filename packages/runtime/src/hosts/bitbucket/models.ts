@@ -50,6 +50,29 @@ export const commentSchema = z.looseObject({
 export type BitbucketPullRequest = z.infer<typeof pullRequestSchema>;
 export type BitbucketComment = z.infer<typeof commentSchema>;
 
+/** Inline anchor Pipr sends when creating a Bitbucket inline comment. */
+export type BitbucketInlineRequest = {
+  path: string;
+  src_path?: string;
+  from?: number;
+  to?: number;
+  start_from?: number;
+  start_to?: number;
+};
+
+export type BitbucketCommentRequest = {
+  content: { raw: string };
+  inline?: BitbucketInlineRequest;
+};
+
+export function positiveCommentId(value: string): number {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new Error("Bitbucket comment ID must be a positive integer");
+  }
+  return id;
+}
+
 export type BitbucketClient = {
   deployment: "cloud" | "data-center";
   workspace: string;
@@ -64,7 +87,7 @@ export type BitbucketClient = {
     changeNumber: number;
   }): Promise<LoadedChangeRequest>;
   listComments(changeNumber: number): Promise<BitbucketComment[]>;
-  createComment(changeNumber: number, body: Record<string, unknown>): Promise<BitbucketComment>;
+  createComment(changeNumber: number, body: BitbucketCommentRequest): Promise<BitbucketComment>;
   updateComment(
     changeNumber: number,
     commentId: string,

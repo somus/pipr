@@ -1,3 +1,5 @@
+import type { CommentableRange, ReviewFinding } from "@usepipr/sdk";
+
 type SuggestedFixPublicationSelection = {
   side: "RIGHT" | "LEFT";
   kind: "added" | "deleted" | "context" | "mixed";
@@ -16,9 +18,23 @@ const environmentDestructurePattern =
   /\{([^{}]*)\}\s*=\s*(?:process|Bun|import\.meta)(?:\s*\.|\s*\?\.)\s*env\b/g;
 const environmentKeyNamePattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** Whether a finding's suggested fix can be published as a replacement for its selected range lines. */
 export function isPublishableSuggestedFixSelection(
-  selection: SuggestedFixPublicationSelection,
+  finding: Pick<ReviewFinding, "startLine" | "endLine" | "suggestedFix">,
+  range: Pick<CommentableRange, "side" | "kind" | "startLine" | "preview">,
 ): boolean {
+  if (finding.suggestedFix === undefined) {
+    return false;
+  }
+  const selection: SuggestedFixPublicationSelection = {
+    side: range.side,
+    kind: range.kind,
+    rangeStartLine: range.startLine,
+    startLine: finding.startLine,
+    endLine: finding.endLine,
+    preview: range.preview,
+    suggestedFix: finding.suggestedFix,
+  };
   const suggestedLines = normalizedSuggestedFixLines(selection.suggestedFix);
   const selectedLineCount = selection.endLine - selection.startLine + 1;
   if (

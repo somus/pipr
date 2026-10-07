@@ -2,15 +2,13 @@ import { describe, expect, it } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
-import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import { runLocalReviewCommand } from "../commands-local-review.js";
 import {
   createCommandWorkspace,
-  expectPiNotCalled,
   localReviewSelectionConfigTs,
   removeWorkspace,
   reviewConfigTs,
-  writeFailingPiExecutable,
+  writeFailingPiOutput,
 } from "./commands-fixtures.js";
 
 describe("runLocalReviewCommand", () => {
@@ -26,7 +24,7 @@ describe("runLocalReviewCommand", () => {
         env: { DEEPSEEK_API_KEY: "provider-key" },
         baseSha: workspace.baseSha,
         headSha: workspace.headSha,
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
       });
 
       expect(result.kind).toBe("review");
@@ -45,32 +43,6 @@ describe("runLocalReviewCommand", () => {
     }
   });
 
-  it("logs config version warnings for local reviews", async () => {
-    const workspace = await createCommandWorkspace({
-      baseConfigTs: localReviewSelectionConfigTs(),
-      headConfigTs: localReviewSelectionConfigTs(),
-      sdkVersion: "0.1.0",
-    });
-    const logs = memoryRuntimeLogSink();
-    try {
-      const result = await runLocalReviewCommand({
-        rootDir: workspace.rootDir,
-        configDir: ".pipr",
-        env: { DEEPSEEK_API_KEY: "provider-key" },
-        baseSha: workspace.baseSha,
-        headSha: workspace.headSha,
-        piExecutable: workspace.piExecutable,
-        logSink: logs.logSink,
-      });
-
-      expect(result.kind).toBe("review");
-      expect(logs.messages.join("\n")).toContain('"event":"config warning"');
-      expect(logs.messages.join("\n")).toContain(".pipr/package.json pins @usepipr/sdk 0.1.0");
-    } finally {
-      await removeWorkspace(workspace.rootDir);
-    }
-  });
-
   it("captures successful local review evidence without environment secrets", async () => {
     const workspace = await createCommandWorkspace({
       baseConfigTs: localReviewSelectionConfigTs(),
@@ -84,7 +56,7 @@ describe("runLocalReviewCommand", () => {
         env: { DEEPSEEK_API_KEY: "provider-key" },
         baseSha: workspace.baseSha,
         headSha: workspace.headSha,
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
         traceDirectory,
       });
       if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
@@ -122,7 +94,7 @@ describe("runLocalReviewCommand", () => {
     }
   });
 
-  it("uses the process Pi agent directory when env is omitted", async () => {
+  it("reads the Pi auth file from the process agent directory when env is omitted", async () => {
     const config = reviewConfigTs({ subscriptionModel: true });
     const workspace = await createCommandWorkspace({
       baseConfigTs: config,
@@ -131,48 +103,33 @@ describe("runLocalReviewCommand", () => {
     const piAgentDir = path.join(workspace.rootDir, "process-pi-agent");
     const previousPiAgentDir = process.env.PI_CODING_AGENT_DIR;
     process.env.PI_CODING_AGENT_DIR = piAgentDir;
+    const authFiles: Array<string | undefined> = [];
     try {
       const result = await runLocalReviewCommand({
         rootDir: workspace.rootDir,
         configDir: ".pipr",
         baseSha: workspace.baseSha,
         headSha: workspace.headSha,
-        piExecutable: workspace.piExecutable,
+        async piRunner(options) {
+          authFiles.push(options.authFile);
+          return {
+            text: '{"summary":{"body":"No findings."},"inlineFindings":[]}',
+            conversationId: 1,
+            durationMs: 1,
+            models: [options.provider.model],
+            usage: { status: "complete", inputTokens: 1, outputTokens: 1, costUsd: 0 },
+          };
+        },
       });
 
       expect(result.kind).toBe("review");
-      expect((await Bun.file(path.join(workspace.rootDir, "pi-agent-dir")).text()).trim()).toBe(
-        piAgentDir,
-      );
+      expect(authFiles).toEqual([path.join(piAgentDir, "auth.json")]);
     } finally {
       if (previousPiAgentDir === undefined) {
         delete process.env.PI_CODING_AGENT_DIR;
       } else {
         process.env.PI_CODING_AGENT_DIR = previousPiAgentDir;
       }
-      await removeWorkspace(workspace.rootDir);
-    }
-  });
-
-  it("fails local reviews before Pi when the config SDK pin is newer than Pipr", async () => {
-    const workspace = await createCommandWorkspace({
-      baseConfigTs: localReviewSelectionConfigTs(),
-      headConfigTs: localReviewSelectionConfigTs(),
-      sdkVersion: "999.0.0",
-    });
-    try {
-      await expect(
-        runLocalReviewCommand({
-          rootDir: workspace.rootDir,
-          configDir: ".pipr",
-          env: { DEEPSEEK_API_KEY: "provider-key" },
-          baseSha: workspace.baseSha,
-          headSha: workspace.headSha,
-          piExecutable: workspace.piExecutable,
-        }),
-      ).rejects.toThrow("Upgrade Pipr before running this config");
-      await expectPiNotCalled(workspace);
-    } finally {
       await removeWorkspace(workspace.rootDir);
     }
   });
@@ -192,7 +149,7 @@ describe("runLocalReviewCommand", () => {
           env: { DEEPSEEK_API_KEY: "provider-key" },
           baseSha: workspace.baseSha,
           headSha: workspace.headSha,
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
           traceDirectory,
         }),
       ).rejects.toThrow("Upgrade Pipr before running this config");
@@ -221,7 +178,7 @@ describe("runLocalReviewCommand", () => {
       headConfigTs: reviewConfigTs(),
     });
     const traceDirectory = path.join(workspace.rootDir, "traces");
-    await writeFailingPiExecutable(workspace.piExecutable);
+    await writeFailingPiOutput(workspace);
     try {
       await expect(
         runLocalReviewCommand({
@@ -230,10 +187,10 @@ describe("runLocalReviewCommand", () => {
           env: { DEEPSEEK_API_KEY: "provider-key" },
           baseSha: workspace.baseSha,
           headSha: workspace.headSha,
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
           traceDirectory,
         }),
-      ).rejects.toThrow("Pi agent failed with exit 42");
+      ).rejects.toThrow("Pi agent failed (model_error)");
 
       const [executionId] = await readdir(traceDirectory);
       const manifest = parseRunBundleManifest(

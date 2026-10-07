@@ -32,26 +32,11 @@ These are the complete files written by `pipr init --recipe ci-triage-command`:
 <RecipeFilePane path=".pipr/config.ts">
 
 ```ts title=".pipr/config.ts"
-import { definePipr, z } from "@usepipr/sdk";
+import { definePipr, md, z } from "@usepipr/sdk";
+import type { DiffContext, PriorReview } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
-
-  const ciTriageOutput = pipr.schema({
-    id: "ci/triage",
-    schema: z.strictObject({
-      status: z.enum(["diagnosed", "insufficient-context"]),
-      summary: z.string(),
-      evidence: z.array(z.string()).max(4),
-      likelyCauses: z.array(z.string()).max(3),
-      nextSteps: z.array(z.string()).max(4),
-    }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   const ciTriage = pipr.agent({
     name: "ci-triage",
@@ -63,83 +48,62 @@ export default definePipr((pipr) => {
       status "insufficient-context" when the excerpt cannot support a diagnosis.
       Do not infer a cause from a final exit code alone.
     `,
-    output: ciTriageOutput,
-    prompt: (input: { log: string; manifest: unknown; prior: unknown }) => pipr.prompt`
+    output: z.strictObject({
+      status: z.enum(["diagnosed", "insufficient-context"]),
+      summary: z.string(),
+      evidence: z.array(z.string()).max(4),
+      likelyCauses: z.array(z.string()).max(3),
+      nextSteps: z.array(z.string()).max(4),
+    }),
+    prompt: (input: { log: string; diff: DiffContext; prior: PriorReview }) => pipr.prompt`
       ${pipr.section("CI log excerpt", input.log)}
       ${pipr.section("Prior pipr review", pipr.json(input.prior, { maxCharacters: 20000 }))}
     `,
   });
 
-  const task = pipr.task<{ log: string }>({
+  pipr.task<{ log: string }>({
     name: "ci-triage",
+    on: {
+      command: {
+        pattern: "@pipr ci <log...>",
+        permission: "write",
+        description: "Triage a pasted CI failure log.",
+        parse: (args) => ({ log: args.log ?? "" }),
+      },
+    },
     async run(ctx, input) {
       if (!ctx.command) {
         throw new Error("ci-triage is a command-only task");
       }
-      const manifest = await ctx.change.diffManifest({ compressed: true });
+      const diff = await ctx.change.diff({ compressed: true });
       const prior = await ctx.review.prior();
-      const result = await ctx.pi.run(ciTriage, { log: input.log, manifest, prior });
-      await ctx.command.reply(ciTriageComment(result));
+      const result = await ctx.pi.run(ciTriage, { log: input.log, diff, prior });
+      await ctx.command.reply(
+        md.blocks(
+          result.status === "diagnosed"
+            ? md.callout({
+                icon: "ℹ️",
+                title: "CI triage diagnosed",
+                body: "An actionable failure was identified.",
+              })
+            : md.callout({
+                icon: "ℹ️",
+                title: "CI triage needs more context",
+                body: "The excerpt does not support a diagnosis.",
+              }),
+          md`## 🧭 Summary`,
+          md`${result.summary}`,
+          result.evidence.length > 0 ? md`## Evidence` : "",
+          md.list(result.evidence),
+          result.likelyCauses.length > 0 ? md`## Likely Causes` : "",
+          md.list(result.likelyCauses),
+          result.nextSteps.length > 0 ? md`## 🛠️ Next Steps` : "",
+          md.list(result.nextSteps, { ordered: true }),
+        ),
+      );
     },
   });
-
-  pipr.command({
-    pattern: "@pipr ci <log...>",
-    permission: "write",
-    description: "Triage a pasted CI failure log.",
-    parse: (args) => ({ log: args.log ?? "" }),
-    task,
-  });
 });
-
-type CiTriageResult = {
-  status: "diagnosed" | "insufficient-context";
-  summary: string;
-  evidence: string[];
-  likelyCauses: string[];
-  nextSteps: string[];
-};
-
-function ciTriageComment(result: CiTriageResult): string {
-  const sections = [
-    ciTriageCallout(result.status),
-    "",
-    "## 🧭 Summary",
-    "",
-    result.summary,
-  ];
-  appendList(sections, "Evidence", result.evidence);
-  appendList(sections, "Likely Causes", result.likelyCauses);
-  appendList(sections, "🛠️ Next Steps", result.nextSteps, true);
-  return sections.join("\n");
-}
-
-function ciTriageCallout(status: CiTriageResult["status"]): string {
-  return status === "diagnosed"
-    ? "> ℹ️ **CI triage diagnosed:** An actionable failure was identified."
-    : "> ℹ️ **CI triage needs more context:** The excerpt does not support a diagnosis.";
-}
-
-function appendList(
-  sections: string[],
-  title: string,
-  items: string[],
-  ordered = false,
-): void {
-  if (items.length === 0) {
-    return;
-  }
-  sections.push(
-    "",
-    "## " + title,
-    "",
-    ...items.map((item, index) => (ordered ? index + 1 + ". " : "- ") + lineText(item)),
-  );
-}
-
-function lineText(value: string): string {
-  return value.replace(/\r\n?|\n/g, " ").trim();
-}
 ```
 
 </RecipeFilePane>

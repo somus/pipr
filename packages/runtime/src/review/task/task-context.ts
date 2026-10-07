@@ -1,24 +1,38 @@
 import type {
   Agent,
+  CommentValue,
   DiffManifestOptions,
+  PathFilter,
   PiprRunContext,
+  ReviewFinding,
   SecretRef,
+  SelectedReviewFindings,
+  SelectFindingsOptions,
   TaskContext,
 } from "@usepipr/sdk";
+import { facetsForFindingSchema, isMarkdownText, markdownString } from "@usepipr/sdk/internal";
+import { createDiffContext } from "../../diff/diff-context.js";
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
 import type { DiffStructuralAnalysisLoader } from "../../diff/structural-analysis.js";
+import { registerSecretValue } from "../../observability/capture-sinks.js";
+import type { PiRunner } from "../../pi/types.js";
 import type { DiffManifest, PiprConfig, ProviderConfig } from "../../types.js";
-import type { AgentRunBudget } from "../agent/agent-run-budget.js";
+import { type AgentRunBudget, assertAgentRunCapacity } from "../agent/agent-run-budget.js";
+import { repositoryContext } from "../agent/prompt-assembly.js";
 import { runReviewAgent } from "../agent/review-run.js";
 import type { PiRunStats } from "../agent/review-run-types.js";
 import { validateReviewFindings } from "../review.js";
+import { rankFindings } from "../selection.js";
+import { isPublishableSuggestedFixSelection } from "../suggested-fix-publication-policy.js";
 import {
   collectCommandResponse,
   collectComment,
   createCheckHandle,
   type OutputState,
   priorReviewForTask,
+  type RuntimeCommentValue,
   recordDroppedFindings,
+  recordFindingFacets,
   trackResultFindingScope,
 } from "./task-output.js";
 import type { TaskRuntimePorts, TaskRuntimeRequest } from "./task-runtime-options.js";
@@ -27,6 +41,7 @@ export type CreateTaskContextOptions = TaskRuntimeRequest &
   TaskRuntimePorts & {
     config: PiprConfig;
     provider: ProviderConfig;
+    piRunner: PiRunner;
     diffManifest: DiffManifest;
     manifestCache: Map<string, DiffManifest>;
     output: OutputState;
@@ -40,16 +55,49 @@ export type CreateTaskContextOptions = TaskRuntimeRequest &
   };
 
 export function createTaskContext(options: CreateTaskContextOptions): TaskContext {
-  const repositorySlugParts = options.event.repository.slug.split("/");
   let reviewerOrder = 0;
   let taskContext: TaskContext;
+  const runAgent = async (
+    agent: Agent<unknown, unknown>,
+    input: unknown,
+    runOptions: Parameters<TaskContext["pi"]["run"]>[2],
+    forkSharedContext: boolean,
+  ): Promise<unknown> => {
+    const resolvedAgent = options.plan.resolveAgent(agent);
+    const currentReviewerOrder = reviewerOrder++;
+    const reviewerName = resolvedAgent.name?.trim() || `Reviewer ${currentReviewerOrder + 1}`;
+    const result = await runReviewAgent({
+      agent: resolvedAgent,
+      input,
+      runOptions,
+      runtime: {
+        ...options,
+        taskContext,
+        forkSharedContext,
+        run: options.run,
+        piRunSink: options.piRunSink,
+        reviewWork: options.progress
+          ? {
+              taskId: String(options.taskOrder),
+              reviewerId: `${options.taskOrder}:${currentReviewerOrder}`,
+              reviewerName,
+              reviewerOrder: currentReviewerOrder,
+              emit: (event) => options.progress?.work(event),
+            }
+          : undefined,
+      },
+    });
+    options.output.providerModels.push(...result.providerModels);
+    if (result.repairAttempted) {
+      options.output.repairAttempted = true;
+    }
+    trackResultFindingScope(options.output, result.value, runOptions?.paths);
+    // The agent output schema was parsed by runReviewAgent before TaskContext resolves.
+    return result.value;
+  };
   taskContext = {
     run: options.run,
-    repository: {
-      root: options.workspace,
-      owner: repositorySlugParts.length > 1 ? repositorySlugParts[0] : undefined,
-      name: repositorySlugParts.at(-1) ?? "repo",
-    },
+    repository: repositoryContext(options.workspace, options.event.repository.slug),
     change: {
       number: options.event.change.number,
       title: options.event.change.title,
@@ -59,15 +107,15 @@ export function createTaskContext(options: CreateTaskContextOptions): TaskContex
       base: options.event.change.base,
       head: options.event.change.head,
       isFork: options.event.change.isFork,
-      async diffManifest(manifestOptions?: DiffManifestOptions) {
+      async diff(manifestOptions?: DiffManifestOptions) {
         const key = JSON.stringify(manifestOptions ?? {});
         const cached = options.manifestCache.get(key);
         if (cached) {
-          return cloneDiffManifest(cached);
+          return createDiffContext(cloneDiffManifest(cached));
         }
         const manifest = projectDiffManifest(await options.structuralManifest(), manifestOptions);
         options.manifestCache.set(key, manifest);
-        return cloneDiffManifest(manifest);
+        return createDiffContext(cloneDiffManifest(manifest));
       },
       async changedFiles() {
         return options.diffManifest.files.map((file) => ({
@@ -84,7 +132,7 @@ export function createTaskContext(options: CreateTaskContextOptions): TaskContex
           line: options.commandInvocation.line,
           arguments: { ...options.commandInvocation.arguments },
           async reply(markdown) {
-            collectCommandResponse(options.output, markdown, options.taskName);
+            collectCommandResponse(options.output, markdownString(markdown), options.taskName);
           },
         }
       : undefined,
@@ -93,35 +141,25 @@ export function createTaskContext(options: CreateTaskContextOptions): TaskContex
     },
     pi: {
       async run(agent, input, runOptions) {
-        const resolvedAgent = options.plan.resolveAgent(agent);
-        const currentReviewerOrder = reviewerOrder++;
-        const reviewerName = resolvedAgent.name?.trim() || `Reviewer ${currentReviewerOrder + 1}`;
-        const result = await runReviewAgent({
-          agent: resolvedAgent,
+        return (await runAgent(
+          agent as Agent<unknown, unknown>,
           input,
           runOptions,
-          runtime: {
-            ...options,
-            taskContext,
-            run: options.run,
-            piRunSink: options.piRunSink,
-            reviewWork: options.progress
-              ? {
-                  taskId: String(options.taskOrder),
-                  reviewerId: `${options.taskOrder}:${currentReviewerOrder}`,
-                  reviewerName,
-                  reviewerOrder: currentReviewerOrder,
-                  emit: (event) => options.progress?.work(event),
-                }
-              : undefined,
-          },
-        });
-        options.output.providerModels.push(...result.providerModels);
-        if (result.repairAttempted) {
-          options.output.repairAttempted = true;
-        }
-        trackResultFindingScope(options.output, result.value, runOptions?.paths);
-        return agentOutputForTaskContext(agent, result.value);
+          false,
+        )) as never;
+      },
+      async all(runs) {
+        assertAgentRunCapacity(options.agentRunBudget, runs.length);
+        return (await Promise.all(
+          runs.map((request) =>
+            runAgent(
+              request.agent as Agent<unknown, unknown>,
+              request.input,
+              request.options,
+              runs.length > 1,
+            ),
+          ),
+        )) as never;
       },
     },
     review: {
@@ -140,22 +178,110 @@ export function createTaskContext(options: CreateTaskContextOptions): TaskContex
         }
         return validated;
       },
+      select<T extends ReviewFinding>(
+        findings: readonly T[] | readonly (readonly T[])[],
+        selectOptions: SelectFindingsOptions<T> = {},
+      ): SelectedReviewFindings<T> {
+        const lists = isFindingLists(findings) ? findings : [findings];
+        const scopes = findingScopesByFinding(options.output, lists, selectOptions.paths);
+        const facets = facetsForFindingSchema(selectOptions.finding) ?? {};
+        const ranked = rankFindings<T>(lists.flat(), {
+          facets,
+          rank: selectOptions.rank,
+          compare: selectOptions.compare as ((left: T, right: T) => number) | undefined,
+        });
+        const validated = validateReviewFindings<T>(ranked, options.diffManifest, {
+          expectedHeadSha: options.event.change.head.sha,
+          pathScopeForFinding: (_finding, index) => scopes.get(ranked[index] as T),
+        });
+        const capped = capSelectedFindings(validated.validFindings, {
+          manifest: options.diffManifest,
+          requireSuggestedFix: selectOptions.requireSuggestedFix === true,
+          limit: selectOptions.limit ?? options.config.publication.maxInlineComments,
+        });
+        const selected = capped.findings;
+        const dropped = [...validated.droppedFindings, ...capped.dropped];
+        recordDroppedFindings(options.output, dropped);
+        recordFindingFacets(options.output, selected, facets);
+        const paths = selectOptions.paths ?? sharedFindingScope(options.output, lists);
+        if (paths) {
+          options.output.findingScopes.set(selected, paths);
+        }
+        return { findings: selected, dropped };
+      },
     },
     check: createCheckHandle(options.output),
     async comment(value) {
-      collectComment(options.output, value, options.taskName);
+      collectComment(options.output, normalizeCommentValue(value), options.taskName);
     },
     log: options.taskLog ?? console,
   };
   return taskContext;
 }
 
-function agentOutputForTaskContext<Input, Output>(
-  _agent: Agent<Input, Output>,
-  value: unknown,
-): Output {
-  // The agent output schema was parsed by runReviewAgent before TaskContext resolves.
-  return value as Output;
+function isFindingLists<T>(
+  value: readonly T[] | readonly (readonly T[])[],
+): value is readonly (readonly T[])[] {
+  return value.length > 0 && value.every(Array.isArray);
+}
+
+function findingScopesByFinding<T extends ReviewFinding>(
+  output: OutputState,
+  lists: readonly (readonly T[])[],
+  paths: PathFilter | undefined,
+): Map<T, PathFilter | undefined> {
+  const scopes = new Map<T, PathFilter | undefined>();
+  for (const list of lists) {
+    const scope = paths ?? output.findingScopes.get(list);
+    for (const finding of list) {
+      scopes.set(finding, scope);
+    }
+  }
+  return scopes;
+}
+
+function capSelectedFindings<F extends ReviewFinding>(
+  findings: readonly F[],
+  options: { manifest: DiffManifest; requireSuggestedFix: boolean; limit: number | undefined },
+): { findings: F[]; dropped: { finding: F; reason: string }[] } {
+  const unfixable = options.requireSuggestedFix
+    ? findings.filter((finding) => !hasPublishableSuggestedFix(finding, options.manifest))
+    : [];
+  const candidates = findings.filter((finding) => !unfixable.includes(finding));
+  return {
+    findings: candidates.slice(0, options.limit),
+    dropped: [
+      ...unfixable.map((finding) => ({ finding, reason: unpublishableSuggestedFixDropReason })),
+      ...candidates.slice(options.limit).map((finding) => ({ finding, reason: "cap" })),
+    ],
+  };
+}
+
+const unpublishableSuggestedFixDropReason = "suggested fix is missing or not publishable";
+
+function hasPublishableSuggestedFix(finding: ReviewFinding, manifest: DiffManifest): boolean {
+  if (!finding.suggestedFix) {
+    return false;
+  }
+  const range = manifest.files
+    .flatMap((file) => file.commentableRanges)
+    .find((candidate) => candidate.id === finding.rangeId);
+  return range !== undefined && isPublishableSuggestedFixSelection(finding, range);
+}
+
+function sharedFindingScope(
+  output: OutputState,
+  lists: readonly (readonly ReviewFinding[])[],
+): PathFilter | undefined {
+  const scopes = new Set(lists.map((list) => output.findingScopes.get(list)));
+  return scopes.size === 1 ? [...scopes][0] : undefined;
+}
+
+function normalizeCommentValue(value: CommentValue): RuntimeCommentValue {
+  if (typeof value === "string" || isMarkdownText(value)) {
+    return markdownString(value);
+  }
+  return value.main === undefined ? value : { ...value, main: markdownString(value.main) };
 }
 
 function resolveTaskSecret(
@@ -169,8 +295,6 @@ function resolveTaskSecret(
   if (!value) {
     throw new Error(`Missing secret env var: ${secret.name}`);
   }
-  options.log?.addSecret(value);
-  options.secretRedactor?.addSecret(value);
-  options.runObserver?.registerSecret?.(value);
+  registerSecretValue(options, value);
   return value;
 }

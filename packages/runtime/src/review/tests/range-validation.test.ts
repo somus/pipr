@@ -2,11 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createDiffRangeIndex } from "../../diff/ranges.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { CommentableRange, ReviewFinding } from "../../types.js";
-import {
-  assertFindingMatchesRange,
-  findingRangeMismatchReason,
-  matchFindingRange,
-} from "../range-validation.js";
+import { assertFindingMatchesRange, findingRangeMismatchReason } from "../range-validation.js";
 
 const manifest = reviewTestManifest();
 const finding: ReviewFinding = {
@@ -19,7 +15,7 @@ const finding: ReviewFinding = {
 };
 
 function rangeById(id: string): CommentableRange {
-  const range = createDiffRangeIndex(manifest).rangeById(id);
+  const range = createDiffRangeIndex(manifest).findRange(id)?.range;
   if (!range) {
     throw new Error(`test fixture missing range ${id}`);
   }
@@ -31,7 +27,6 @@ describe("review range validation", () => {
     const range = rangeById("range-1");
 
     expect(findingRangeMismatchReason(finding, range)).toBeUndefined();
-    expect(matchFindingRange(finding, range)).toEqual({ ok: true, value: range });
     expect(() => assertFindingMatchesRange(finding, range)).not.toThrow();
   });
 
@@ -55,10 +50,6 @@ describe("review range validation", () => {
     const range = rangeById("range-1");
 
     expect(findingRangeMismatchReason(finding, undefined)).toBe("unknown rangeId 'range-1'");
-    expect(matchFindingRange(finding, undefined)).toEqual({
-      ok: false,
-      error: "unknown rangeId 'range-1'",
-    });
     expect(findingRangeMismatchReason({ ...finding, rangeId: "range-2" }, range)).toBe(
       "finding rangeId does not match range",
     );
@@ -90,10 +81,6 @@ describe("review range validation", () => {
     expect(
       findingRangeMismatchReason({ ...finding, startLine: 10, endLine: 13 }, githubStyleRange),
     ).toBe("finding lines fall outside the commentable range");
-    expect(matchFindingRange({ ...finding, startLine: 10, endLine: 13 }, range)).toEqual({
-      ok: false,
-      error: "finding lines fall outside the commentable range",
-    });
     expect(() =>
       assertFindingMatchesRange({ ...finding, startLine: 10, endLine: 13 }, range),
     ).toThrow("finding lines fall outside the commentable range");

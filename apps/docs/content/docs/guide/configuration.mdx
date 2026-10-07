@@ -1,6 +1,6 @@
 ---
 title: "Configuration"
-description: "Configure Pipr models, review scope, publication, limits, and retries."
+description: "Configure Pipr models, review scope, publication, limits, and fallbacks."
 ---
 
 Pipr loads repository-owned policy from `.pipr/config.ts`. Start with `pipr.review(...)`; move to custom agents and tasks only when the default review cannot express the workflow.
@@ -13,12 +13,7 @@ This config registers one model, caps inline comments, and runs a general review
 import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   pipr.config({
     publication: { maxInlineComments: 5 },
@@ -27,11 +22,9 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: "Report concrete correctness, security, and regression risks.",
-      summary: "Summarize the change, risk, and useful reviewer focus.",
-    },
-    entrypoints: {
+    instructions: "Report concrete correctness, security, and regression risks.",
+    summary: { instructions: "Summarize the change, risk, and useful reviewer focus." },
+    on: {
       changeRequest: ["opened", "updated", "reopened", "ready"],
       command: { pattern: "@pipr review", permission: "write" },
     },
@@ -44,22 +37,35 @@ Run `pipr check` after editing the config and `pipr inspect` to review the resol
 
 ## Models and secrets
 
-Model profiles select a Pi provider and model. `pipr.secret(...)` records an environment-variable name; pass the value through the local process, CI secret store, or webhook worker environment.
+Model profiles select a Pi provider and model. Without `apiKey`, Pipr reads the provider's standard environment variable, such as `DEEPSEEK_API_KEY`. Providers with other credential sources also accept those, such as AWS access keys for Amazon Bedrock, and providers that need more settings read them from their standard variables too, such as `CLOUDFLARE_ACCOUNT_ID`. Pass `apiKey: pipr.secret({ name })` to read a different variable; that variable must then be set. `pipr.secret(...)` records only the variable name; pass the value through the local process, CI secret store, or webhook worker environment.
 
 ```ts twoslash
 // @include: pipr-builder
-const model = pipr.model({
-  provider: "deepseek",
-  model: "deepseek-v4-pro",
-  apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-});
+const model = pipr.model("deepseek/deepseek-v4-pro");
 ```
 
 Use an explicit `id` only when multiple profiles use the same provider and model with different credentials or thinking levels. Browse [Pi's Model Catalog](https://pi.dev/models) for current identifiers.
 
+### Use an OpenAI-compatible gateway
+
+Declare a gateway or local model server with `pipr.provider(...)`, then reference its models as `<provider id>/<gateway model id>`. Models of the provider use its `apiKey` unless they pass their own:
+
+```ts twoslash
+// @include: pipr-builder
+pipr.provider({
+  id: "merge",
+  api: "openai-completions",
+  baseUrl: "https://api-gateway.merge.dev/v1/openai",
+  apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
+});
+const model = pipr.model("merge/anthropic/claude-sonnet-5-5", { thinking: "high" });
+```
+
+The key and prompts go to the configured `baseUrl`, which must use `https` unless it points at `localhost`. See [OpenAI-compatible gateways](/docs/reference/sdk-reference#openai-compatible-gateways) for local servers, model metadata, and validation rules.
+
 ### Use local Pi authentication
 
-For local-only subscription authentication, omit `apiKey` and select that model only when `ctx.run.trigger === "local"`. Hosted runs do not receive your local Pi agent directory, so they must select a profile with an environment-backed key.
+For local-only subscription authentication, pass `apiKey: "local"` and select that model only when `ctx.run.trigger === "local"`. Hosted runs do not receive your local Pi agent directory, so they must select a profile with an environment-backed key.
 
 See [Local runs](/docs/guide/local-runs#model-authentication) for directory resolution and trust behavior.
 
@@ -124,11 +130,11 @@ pipr.config({
 });
 ```
 
-`maxAgentRuns` counts initial calls, large-diff shards, retries, repairs, and fallbacks. `maxShards: 1` disables automatic splitting for review-schema agents.
+`maxAgentRuns` counts initial calls, large-diff shards, repairs, and fallbacks. Transient provider retries inside the agent harness are not counted. `maxShards: 1` disables automatic splitting for review-schema agents.
 
-## Configure fallback and retry
+## Configure fallback models
 
-An agent can declare fallback models and retry policy:
+An agent can declare fallback models:
 
 ```ts twoslash
 // @include: pipr-models
@@ -139,12 +145,10 @@ const reviewer = pipr.agent({
   instructions: "Report only actionable defects.",
   output: pipr.schemas.review,
   prompt: () => "Review the current change request.",
-  retry: {
-    invalidOutput: 1,
-    transientFailure: 1,
-  },
 });
 ```
+
+Pipr always validates structured output and allows one repair attempt for invalid output, sent as a follow-up turn in the same conversation. Transient provider failures retry inside the agent harness with backoff before Pipr moves to the next fallback model.
 
 Call-level model and fallback options override the agent settings. Without an override, Pipr uses the agent model and fallbacks, then the configured default provider.
 

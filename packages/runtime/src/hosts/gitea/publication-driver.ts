@@ -2,12 +2,12 @@ import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type { InlinePublicationItem } from "../../publication/types.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
-import type { GiteaClient } from "./client.js";
+import { inlineItemPath, planInlineLocation } from "../publication.js";
+import { type GiteaClient, giteaDisplayName } from "./client.js";
 import {
-  assertCurrentGiteaHead,
+  currentGiteaEndpoints,
   findGiteaMainComment,
   giteaCoordinates,
-  giteaDisplayName,
   giteaReviewCommentLocation,
   giteaThreadContexts,
 } from "./publication.js";
@@ -17,13 +17,12 @@ type Prepared = { client: GiteaClient; change: ChangeRequestEventContext };
 export function createGiteaPublicationDriver(client: GiteaClient): PublicationDriver<Prepared> {
   return {
     provider: giteaDisplayName(client.host),
+    inlineStateNeedsExtraReads: true,
     async prepare(change) {
       return { client, change };
     },
-    assertCurrent(prepared, expectedHeadSha) {
-      return assertCurrentGiteaHead(client, prepared.change, expectedHeadSha);
-    },
-    async loadOwnedState(prepared, mainMarker): Promise<LoadedPublicationState> {
+    currentEndpoints: (prepared) => currentGiteaEndpoints(client, prepared.change),
+    async loadOwnedState(prepared, mainMarker, options): Promise<LoadedPublicationState> {
       const coordinates = giteaCoordinates(prepared.change);
       const owner = await client.currentUser();
       const [comments, reviewComments] = await Promise.all([
@@ -44,6 +43,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
         mainMarker,
         prepared.change.change.number,
       );
+      // Gitea-family hosts have no native thread resolution, so inline comments carry none.
       const owned = reviewComments.filter((comment) => comment.authorLogin === owner.login);
       return {
         main: main ? { id: main.id, body: main.body } : undefined,
@@ -54,11 +54,10 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
                 {
                   body: comment.body,
                   location: giteaReviewCommentLocation(comment),
-                  resolved: false,
                 },
               ],
         ),
-        threads: giteaThreadContexts(reviewComments, owner.login, true),
+        threads: giteaThreadContexts(reviewComments, owner.login, !options?.allReplies),
       };
     },
     async loadOwnedMain(prepared, mainMarker) {
@@ -76,16 +75,9 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
       );
       return main ? { id: main.id, body: main.body } : undefined;
     },
-    upsertMain: (prepared, existing, body) => upsertGiteaComment(client, prepared, existing, body),
-    inlineLocation(_prepared, item) {
-      return {
-        path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
-        commitId: item.reviewedHeadSha,
-        side: item.side,
-        startLine: item.endLine,
-        endLine: item.endLine,
-      };
-    },
+    upsertComment: (prepared, existing, body) =>
+      upsertGiteaComment(client, prepared, existing, body),
+    inlineLocation: (_prepared, item) => planInlineLocation(item, { singleLine: true }),
     async createInline(prepared, item: InlinePublicationItem) {
       const coordinates = giteaCoordinates(prepared.change);
       await client.createReviewComment(
@@ -94,7 +86,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
         prepared.change.change.number,
         {
           body: item.body,
-          path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
+          path: inlineItemPath(item),
           commitId: item.reviewedHeadSha,
           line: item.endLine,
           side: item.side,
@@ -115,8 +107,6 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
       );
       return comment ? { id: comment.id, body: comment.body } : undefined;
     },
-    upsertCommand: (prepared, existing, body) =>
-      upsertGiteaComment(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       const coordinates = giteaCoordinates(prepared.change);
       await client.replyToReviewComment(

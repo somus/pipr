@@ -1,51 +1,44 @@
+import type { AgentRunRequest, AgentWorkspaceToolName } from "../agent-worker/protocol.js";
 import type { RunAgentEvent } from "../observability/types.js";
 import type { ProviderConfig } from "../types.js";
-import type { PiReadOnlyToolName } from "./contract.js";
-import type { PiCustomToolRequest, PreparedPiCustomTools } from "./custom-tools.js";
+import type { PiCustomToolRequest } from "./custom-tools.js";
 import type { DiffContextCoverageObservation } from "./diff-context-coverage.js";
-import type { PiRuntimeReadToolRequest, PreparedPiRuntimeReadTools } from "./runtime-tools.js";
+import type { PiRuntimeReadToolRequest } from "./runtime-tools.js";
+
+export type PiConversation = AgentRunRequest["conversation"];
 
 export type PiRunOptions = {
   workspace: string;
   provider: ProviderConfig;
   prompt: string;
+  /** Stable identity of this model call; a repeated id resumes or returns the recorded answer. Defaults to a fresh id. */
+  requestId?: string;
+  conversation?: PiConversation;
   env?: NodeJS.ProcessEnv;
-  piExecutable?: string;
-  piAgentDir?: string;
+  providerModule?: PiProviderModule;
+  /** Pi `auth.json` for models without an API key env var. */
+  authFile?: string;
   timeoutSeconds?: number;
-  builtinTools?: readonly PiReadOnlyToolName[];
+  builtinTools?: readonly AgentWorkspaceToolName[];
   runtimeTools?: PiRuntimeReadToolRequest;
   diffContext?: {
     manifest: PiRuntimeReadToolRequest["manifest"];
     mode: "full" | "condensed";
   };
   customTools?: PiCustomToolRequest;
-  streamLimits?: PiStreamLimits;
   eventObserver?: (event: RunAgentEvent) => void;
 };
 
+/** Module whose default export receives `config` and returns replacement model providers, for scripted fixtures. */
+export type PiProviderModule = { path: string; config?: string };
+
 export type PiRunResult = {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
+  text: string;
+  conversationId: number;
   durationMs: number;
-  models?: string[];
-  usage?: PiRunUsage;
-  stream?: PiRunStreamStats;
+  models: string[];
+  usage: PiRunUsage;
   diffContextCoverage?: DiffContextCoverageObservation;
-};
-
-export type PiRunStreamStats = {
-  rawStdoutBytes: number;
-  jsonEventCount: number;
-  largestEventBytes: number;
-  peakBufferedBytes: number;
-};
-
-export type PiStreamLimits = {
-  maxJsonEventBytes: number;
-  maxRawStdoutBytes: number;
-  maxStderrBytes: number;
 };
 
 export type PiRunUsage = {
@@ -58,36 +51,5 @@ export type PiRunUsage = {
   cacheUsageStatus?: "complete" | "partial" | "unavailable";
 };
 
-export type PiRunSandbox = {
-  root: string;
-  workspace: string;
-  home: string;
-  sessionDir: string;
-  tmp: string;
-};
-
-export type PiProcessIdentity = {
-  uid: number;
-  gid: number;
-};
-
-export type PiWorkspaceScope = {
-  sourceWorkspace: string;
-  workspace: string;
-  processIdentity?: PiProcessIdentity;
-};
-
+/** Runs one model call; failures throw `ProviderExecutionError`. */
 export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;
-
-export type PreparedPiTools = {
-  extensionPath: string;
-  runtimeRead?: PreparedPiRuntimeReadTools;
-  custom?: PreparedPiCustomTools;
-  toolNames: readonly string[];
-};
-
-export const defaultPiStreamLimits: PiStreamLimits = {
-  maxJsonEventBytes: 16 * 1024 * 1024,
-  maxRawStdoutBytes: 16 * 1024 * 1024,
-  maxStderrBytes: 16 * 1024 * 1024,
-};

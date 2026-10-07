@@ -1,14 +1,13 @@
 import type { ThreadAction } from "../../publication/types.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
-import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
 import type { GitHubPublicationClient, GitHubReviewComment, GitHubReviewThread } from "./client.js";
 import { mapFindingToGithubReviewCommentLocation } from "./inline.js";
 import {
-  assertCurrentHeadSha,
   findMainComment,
   findOwnedIssueComment,
+  githubThreadContexts,
   reviewThreadByCommentId,
 } from "./publication.js";
 
@@ -22,16 +21,21 @@ export function createGitHubPublicationDriver(
 ): PublicationDriver<Prepared> {
   return {
     provider: "GitHub",
+    inlineStateNeedsExtraReads: true,
     async prepare(change) {
       return { client, change };
     },
-    assertCurrent(prepared, expectedHeadSha) {
-      return assertCurrentHeadSha(client, prepared.change, expectedHeadSha);
+    async currentEndpoints(prepared) {
+      const headSha = await client.getPullRequestHeadSha({
+        repo: prepared.change.repository.slug,
+        pullRequestNumber: prepared.change.change.number,
+      });
+      return { headSha };
     },
     loadOwnedState,
     loadOwnedThreads,
     loadOwnedMain,
-    upsertMain: (prepared, existing, body) =>
+    upsertComment: (prepared, existing, body) =>
       upsertGitHubIssueComment(client, prepared, existing, body),
     inlineLocation(_prepared, item) {
       return publicationLocation(
@@ -65,8 +69,6 @@ export function createGitHubPublicationDriver(
       );
       return found ? { id: String(found.id), body: found.body ?? undefined } : undefined;
     },
-    upsertCommand: (prepared, existing, body) =>
-      upsertGitHubIssueComment(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       await client.createReviewCommentReply({
         repo: prepared.change.repository.slug,
@@ -151,7 +153,7 @@ async function loadOwnedThreads(prepared: Prepared, actions: readonly ThreadActi
     }));
   }
   const threads = await prepared.client.listReviewThreads(reviewCoordinates(prepared));
-  return githubThreadContexts(owned, reviewComments, threads, ownerLogin);
+  return githubThreadContexts(owned, reviewComments, threads, ownerLogin, true);
 }
 
 async function loadOwnedMain(prepared: Prepared, mainMarker: string) {
@@ -168,6 +170,7 @@ async function loadOwnedMain(prepared: Prepared, mainMarker: string) {
 async function loadOwnedState(
   prepared: Prepared,
   mainMarker: string,
+  options?: { allReplies?: boolean },
 ): Promise<LoadedPublicationState> {
   const ownerLogin = await prepared.client.getAuthenticatedUserLogin();
   const [issueComments, reviewComments, threads] = await Promise.all([
@@ -188,41 +191,10 @@ async function loadOwnedState(
     inline: owned.map((comment) => ({
       body: comment.body ?? "",
       location: locationFromComment(comment),
-      resolved: threadByComment.get(comment.id)?.isResolved ?? false,
+      resolved: threadByComment.get(comment.id)?.isResolved,
     })),
-    threads: githubThreadContexts(owned, reviewComments, threads, ownerLogin),
+    threads: githubThreadContexts(owned, reviewComments, threads, ownerLogin, !options?.allReplies),
   };
-}
-
-function githubThreadContexts(
-  owned: GitHubReviewComment[],
-  reviewComments: GitHubReviewComment[],
-  threads: GitHubReviewThread[],
-  ownerLogin: string,
-) {
-  const threadByComment = reviewThreadByCommentId(threads);
-  const commentById = new Map(reviewComments.map((comment) => [comment.id, comment]));
-  return owned.flatMap((comment) => {
-    const marker = extractInlineFindingMarkerRecords([comment.body ?? ""])[0];
-    if (!marker) return [];
-    const thread = threadByComment.get(comment.id);
-    return [
-      {
-        findingId: marker.id,
-        findingHeadSha: marker.head,
-        parentCommentId: String(comment.id),
-        parentBody: comment.body ?? "",
-        threadId: thread?.id,
-        threadResolved: thread?.isResolved ?? false,
-        comments: (thread?.commentIds ?? [comment.id]).flatMap((id) => {
-          const item = commentById.get(id);
-          return item && item.authorLogin === ownerLogin
-            ? [{ id: String(item.id), body: item.body ?? "", authorLogin: item.authorLogin }]
-            : [];
-        }),
-      },
-    ];
-  });
 }
 
 function issueCoordinates(prepared: Prepared) {

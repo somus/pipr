@@ -189,26 +189,15 @@ function withoutCompressedFileFields(
   return rest;
 }
 
-function withoutCompressedRangeFields(
-  range: DiffManifest["files"][number]["commentableRanges"][number],
-  compressed: boolean,
-) {
-  if (!compressed) {
-    return range;
-  }
-  return range;
-}
-
 function rangeFieldsForOptions(
   range: DiffManifest["files"][number]["commentableRanges"][number],
   options: DiffManifestOptions,
 ): DiffManifest["files"][number]["commentableRanges"][number] {
-  const fields = withoutCompressedRangeFields(range, options.compressed === true);
   if (options.includePreviews === false) {
-    const { preview: _preview, ...rest } = fields;
+    const { preview: _preview, ...rest } = range;
     return rest;
   }
-  return fields;
+  return range;
 }
 
 function truncatePreview(
@@ -406,7 +395,7 @@ function ensureManifestFitsPrompt(
   return manifest;
 }
 
-function diffManifestFitsPrompt(
+export function diffManifestFitsPrompt(
   manifest: DiffManifest,
   config: DiffManifestLimitsConfig | undefined,
 ): boolean {

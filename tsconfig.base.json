@@ -15,10 +15,7 @@
       "@usepipr/runtime/internal/review-testing": [
         "./packages/runtime/src/internal/review-testing.ts"
       ],
-      "@usepipr/runtime/internal/testing": ["./packages/runtime/src/internal/testing.ts"],
-      "@usepipr/runtime/runtime-tools-extension": [
-        "./packages/runtime/src/pi/runtime-tools-extension.ts"
-      ]
+      "@usepipr/runtime/internal/testing": ["./packages/runtime/src/internal/testing.ts"]
     },
     "strict": true,
     "ignoreDeprecations": "6.0",

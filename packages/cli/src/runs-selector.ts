@@ -1,4 +1,4 @@
-import type { RunQuery } from "@usepipr/runtime";
+import { type CodeHostId, isCodeHostId, type RunQuery } from "@usepipr/runtime";
 import type { RunSelector } from "./runs-types.js";
 
 export async function resolveRunSelector(options: {
@@ -116,12 +116,12 @@ function giteaUrlSelector(
   return selector(host, parts.slice(0, pull).join("/"), parts[pull + 1]);
 }
 
+const giteaFamilyHosts = ["gitea", "forgejo", "codeberg"] as const;
+
 function explicitGiteaFamilyHost(
   explicitHost: string | undefined,
-): "gitea" | "forgejo" | "codeberg" | undefined {
-  return explicitHost === "gitea" || explicitHost === "forgejo" || explicitHost === "codeberg"
-    ? explicitHost
-    : undefined;
+): (typeof giteaFamilyHosts)[number] | undefined {
+  return giteaFamilyHosts.find((host) => host === explicitHost);
 }
 
 export async function selectorFromGitRemote(
@@ -206,18 +206,8 @@ function parseChangeNumber(value: string): number | undefined {
   return Number.isSafeInteger(number) && number > 0 ? number : undefined;
 }
 
-function parseHost(value: string): RunSelector["host"] {
-  if (
-    value === "github" ||
-    value === "gitlab" ||
-    value === "azure-devops" ||
-    value === "bitbucket" ||
-    value === "gitea" ||
-    value === "forgejo" ||
-    value === "codeberg"
-  ) {
-    return value;
-  }
+function parseHost(value: string): CodeHostId {
+  if (isCodeHostId(value)) return value;
   throw new Error(`Unsupported run host '${value}'`);
 }
 

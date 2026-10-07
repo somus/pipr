@@ -1,17 +1,16 @@
 import { describe, expect, it } from "bun:test";
+import type { PriorReviewState } from "../../publication/types.js";
 import { runtimeVersion } from "../../shared/version.js";
 import type { DiffManifest, ReviewFinding } from "../../types.js";
 import {
-  buildPublicationPlan,
-  prepareInlinePublicationItems,
-  publicationPlanForHostCapabilities,
-} from "../comment.js";
-import {
   applyInlineFindingMarkers,
-  buildPriorReviewState,
-  extractInlineFindingMarkers,
+  extractInlineFindingMarkerRecords,
   extractPriorReviewState,
-} from "../prior-state.js";
+} from "../comment-markers.js";
+import {
+  buildCommentPublishingPlan,
+  publicationPlanForHostCapabilities,
+} from "../publication-plan.js";
 
 const finding: ReviewFinding = {
   body: "This can fail.",
@@ -74,28 +73,28 @@ const event = {
 
 describe("comments", () => {
   it("adapts inline publication to host capabilities", () => {
-    const singleLine = prepareInlinePublicationItems({
-      validated: { validFindings: [finding] },
-      manifest,
-      reviewedHeadSha: "head",
+    const multilineFinding = {
+      ...finding,
+      path: "src/b.ts",
+      rangeId: "range-2",
+      startLine: 10,
+      endLine: 11,
+    };
+    const multilineFile = manifestWithRange(10, 11, "fail()\nrecover()").files.map((file) => ({
+      ...file,
+      path: "src/b.ts",
+      commentableRanges: file.commentableRanges.map((range) => ({
+        ...range,
+        id: "range-2",
+        path: "src/b.ts",
+      })),
+    }));
+    const { publicationPlan: plan } = publishingPlan({
+      validFindings: [finding, multilineFinding],
+      manifest: { ...manifest, files: [...manifest.files, ...multilineFile] },
     });
-    const multilineFinding = { ...finding, startLine: 10, endLine: 11 };
-    const multiline = prepareInlinePublicationItems({
-      validated: { validFindings: [multilineFinding] },
-      manifest: manifestWithRange(10, 11, "fail()\nrecover()"),
-      reviewedHeadSha: "head",
-    });
-    const plan = buildPublicationPlan({
-      event,
-      main: "Summary.",
-      inlineItems: [...singleLine, ...multiline],
-      reviewState: buildPriorReviewState({
-        findings: [{ finding }, { finding: multilineFinding }],
-        reviewedHeadSha: "head",
-        selectedTasks: ["review"],
-      }),
-      metadata: metadata(),
-    });
+
+    expect(plan.inlineItems).toHaveLength(2);
 
     const adapted = publicationPlanForHostCapabilities(plan, {
       multilineInlineComments: false,
@@ -111,16 +110,9 @@ describe("comments", () => {
   });
 
   it("renders one whole main comment body with review state", () => {
-    const plan = buildPublicationPlan({
-      event,
+    const { publicationPlan: plan } = publishingPlan({
       main: "Summary body.\n\nTests passed.",
-      inlineItems: [],
-      reviewState: buildPriorReviewState({
-        findings: [{ finding }],
-        reviewedHeadSha: "head",
-        selectedTasks: ["review"],
-      }),
-      metadata: metadata(),
+      validFindings: [finding],
     });
 
     expect(plan.mainComment).toContain("<!-- pipr:main-comment change=1 version=1 state=");
@@ -133,29 +125,6 @@ describe("comments", () => {
     );
     expect(plan.mainComment).not.toContain("pipr:contribution");
     expect(extractPriorReviewState(plan.mainComment, 1)?.findings[0]).not.toHaveProperty("body");
-  });
-
-  it("replaces the visible main comment body wholesale", () => {
-    const plan = buildPublicationPlan({
-      event,
-      main: "New summary.",
-      inlineItems: [],
-      metadata: metadata(),
-    });
-
-    expect(plan.mainComment).toContain("New summary.");
-    expect(plan.mainComment).not.toContain("Old summary.");
-  });
-
-  it("preserves the visible main comment body", () => {
-    const plan = buildPublicationPlan({
-      event,
-      main: "A hard-coded secret was committed: pipr_eval_secret_do_not_repeat_12345.",
-      inlineItems: [],
-      metadata: metadata(),
-    });
-
-    expect(plan.mainComment).toContain("pipr_eval_secret_do_not_repeat_12345");
   });
 
   it("dedupes inline drafts with hidden markers", () => {
@@ -195,9 +164,11 @@ describe("comments", () => {
 
     expect(first).toHaveLength(1);
     expect(second).toHaveLength(0);
-    expect(extractInlineFindingMarkers(first.map((draft) => draft.body))).toEqual(
-      new Set([`pipr:finding:${existing.findingId}:head`]),
-    );
+    expect(
+      extractInlineFindingMarkerRecords(first.map((draft) => draft.body)).map(
+        (record) => record.marker,
+      ),
+    ).toEqual([`pipr:finding:${existing.findingId}:head`]);
     expect(first[0]?.body).toContain("This can fail.");
     expect(first[0]?.body).toContain("**Issue**\n\nThis can fail.");
     expect(first[0]?.body).toContain(
@@ -224,14 +195,11 @@ describe("comments", () => {
     expect(item?.body).not.toContain("**Issue**");
   });
 
-  it("omits suggested-change blocks when suggestedFix is absent", () => {
+  it("publishes suggested-change blocks only when a suggestedFix is present", () => {
     const findingWithoutSuggestion = { ...finding };
     delete findingWithoutSuggestion.suggestedFix;
-
     expectSuggestedChangeOmitted({ finding: findingWithoutSuggestion });
-  });
 
-  it("publishes suggested-change blocks when one selected line expands to multiple replacement lines", () => {
     const [item] = prepareInlinePublicationItems({
       validated: {
         validFindings: [
@@ -249,6 +217,29 @@ describe("comments", () => {
     expect(item?.body).toContain("This can fail.");
     expect(item?.body).toContain("```suggestion\nif (failed) {\n  recover();\n}\n```");
   });
+
+  it.each([
+    ["three", 'const fence = "```";', "````"],
+    ["four", 'const fence = "````ts";', "`````"],
+  ])(
+    "fences suggested changes containing %s backticks with a longer closing fence",
+    (_label, suggestedFix, fence) => {
+      const [native] = prepareInlinePublicationItems({
+        validated: { validFindings: [{ ...finding, suggestedFix }] },
+        manifest,
+        reviewedHeadSha: "head",
+      });
+      const [plain] = publicationPlanForHostCapabilities(
+        publishingPlan({ validFindings: [{ ...finding, suggestedFix }] }).publicationPlan,
+        { multilineInlineComments: true, suggestedChanges: false },
+      ).inlineItems;
+
+      expect(native?.finding.suggestedFix).toBe(suggestedFix);
+      expect(native?.body.endsWith(`${fence}suggestion\n${suggestedFix}\n${fence}`)).toBe(true);
+      expect(plain?.body.endsWith(`${fence}\n${suggestedFix}\n${fence}`)).toBe(true);
+      expect(fencedBlockLines(native?.body ?? "", fence)).toEqual([suggestedFix]);
+    },
+  );
 
   it("omits broad suggested-change blocks while keeping the finding", () => {
     const selectedLines = [
@@ -406,21 +397,12 @@ describe("comments", () => {
       body: "The literal pipr_eval_secret_do_not_repeat_12345 should not be repeated.",
       suggestedFix: 'const apiKey = "pipr_eval_secret_do_not_repeat_12345";',
     };
-    const [item] = prepareInlinePublicationItems({
-      validated: { validFindings: [rawFinding] },
-      manifest,
-      reviewedHeadSha: "head",
-    });
+    const publishing = publishingPlan({ validFindings: [rawFinding] });
+    const [item] = publishing.inlineCommentDrafts;
     if (!item) {
       throw new Error("test fixture missing inline item");
     }
-    const plan = buildPublicationPlan({
-      event,
-      main: "Summary.",
-      inlineItems: [item],
-      metadata: metadata(),
-    });
-    const state = extractPriorReviewState(plan.mainComment, 1);
+    const state = extractPriorReviewState(publishing.publicationPlan.mainComment, 1);
     if (!state) {
       throw new Error("test fixture missing review state");
     }
@@ -463,6 +445,44 @@ function metadata() {
   };
 }
 
+/** Builds a publication plan through the public comment-publishing path. */
+function publishingPlan(options: {
+  validFindings: ReviewFinding[];
+  manifest?: DiffManifest;
+  main?: string;
+  reviewedHeadSha?: string;
+  reviewState?: PriorReviewState;
+}) {
+  const reviewedHeadSha = options.reviewedHeadSha ?? "head";
+  return buildCommentPublishingPlan({
+    event: { change: { ...event.change, head: { sha: reviewedHeadSha } } },
+    main: options.main ?? "Summary.",
+    validated: {
+      review: { summary: { body: "Summary." }, inlineFindings: [] },
+      validFindings: options.validFindings,
+      droppedFindings: [],
+    },
+    manifest: options.manifest ?? manifest,
+    metadata: metadata(),
+    priorReviewState: options.reviewState,
+  });
+}
+
+/** Prepares inline drafts through the public comment-publishing path. */
+function prepareInlinePublicationItems(options: {
+  validated: { validFindings: ReviewFinding[] };
+  manifest: DiffManifest;
+  reviewedHeadSha: string;
+  reviewState?: PriorReviewState;
+}) {
+  return publishingPlan({
+    validFindings: options.validated.validFindings,
+    manifest: options.manifest,
+    reviewedHeadSha: options.reviewedHeadSha,
+    reviewState: options.reviewState,
+  }).inlineCommentDrafts;
+}
+
 function expectSuggestedChangeOmitted(
   options: { finding?: ReviewFinding; manifest?: DiffManifest } = {},
 ): void {
@@ -475,6 +495,16 @@ function expectSuggestedChangeOmitted(
   expect(item?.finding.suggestedFix).toBeUndefined();
   expect(item?.body).toContain("This can fail.");
   expect(item?.body).not.toContain("```suggestion");
+}
+
+/** Returns the lines a CommonMark backtick fence encloses: it closes on the first line of at least as many backticks. */
+function fencedBlockLines(body: string, fence: string): string[] {
+  const lines = body.split("\n");
+  const opening = lines.findIndex((line) => line.startsWith(fence));
+  const closing = lines.findIndex(
+    (line, index) => index > opening && /^`+\s*$/.test(line) && line.trim().length >= fence.length,
+  );
+  return lines.slice(opening + 1, closing);
 }
 
 function manifestWithRange(startLine: number, endLine: number, preview = "fail()"): DiffManifest {

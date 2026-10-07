@@ -1,14 +1,16 @@
 import type { RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter } from "../hosts/types.js";
+import { recordArtifactSafely } from "../observability/capture-sinks.js";
 import type { RunObserver } from "../observability/types.js";
-import { publicationPlanForHostCapabilities } from "../review/comment.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
+import { publicationPlanForHostCapabilities } from "../review/publication-plan.js";
 import { PublicationError } from "../review/publication-result.js";
 import type { RuntimeCommandInvocation } from "../review/run-identity.js";
 import { runTaskRuntime } from "../review/task/task-runtime.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import type { HostRunServices } from "./composition.js";
+import { changeRequestPiStoreDir } from "./pi-store.js";
 import type { ReviewProgressReporter } from "./review-progress.js";
 import {
   finalizeRuntimeChecks,
@@ -78,7 +80,8 @@ async function executeTaskRuntime(
     commandInvocation: options.commandInvocation,
     trustedConfigSha: options.trustedRuntime.trustedConfigSha,
     trustedConfigHash: options.trustedRuntime.trustedConfigHash,
-    piExecutable: services.piExecutable,
+    piProviderModule: services.piProviderModule,
+    piStoreDir: changeRequestPiStoreDir(services.piStoreRoot, options.event),
     piRunner: services.piRunner,
     log: services.log,
     checkSink,
@@ -151,7 +154,7 @@ async function publishCompletedReview(
         progressLease: options.progress?.lease,
       });
       logPublicationResult(services.log, result);
-      await recordPublicationArtifact(services, {
+      await recordArtifactSafely(services, {
         kind: "publication-plan",
         name: "publication-result.json",
         mediaType: "application/json",
@@ -196,7 +199,7 @@ async function recordPublicationError(
   publicationError: PublicationError,
   cause: unknown,
 ): Promise<void> {
-  await recordPublicationArtifact(services, {
+  await recordArtifactSafely(services, {
     kind: "publication-plan",
     name: "publication-error.json",
     mediaType: "application/json",
@@ -234,18 +237,4 @@ async function finalizeFailedChecks(
       error: finalizeError instanceof Error ? finalizeError.message : String(finalizeError),
     });
   });
-}
-
-async function recordPublicationArtifact(
-  services: HostRunServices,
-  artifact: Parameters<NonNullable<RunObserver["recordArtifact"]>>[0],
-): Promise<void> {
-  try {
-    await services.runObserver?.recordArtifact?.(artifact);
-  } catch (error) {
-    services.log.warning("run capture artifact failed", {
-      kind: artifact.kind,
-      error: error instanceof Error ? error.message : "unknown capture error",
-    });
-  }
 }

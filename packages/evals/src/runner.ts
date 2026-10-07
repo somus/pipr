@@ -9,13 +9,17 @@ import { evalReviewEnv, evalSubprocessEnv } from "./env.js";
 
 type PiprEvalRunMode = "live" | "deterministic";
 
+/** Module whose default export receives `config` and returns replacement model providers. */
+type PiprEvalProviderModule = { path: string; config?: string };
+
 type PiprEvalRunOptions = {
   mode: PiprEvalRunMode;
-  piExecutable?: string;
+  /** Deterministic runs default to the packaged prompt eval provider; live runs must not set this. */
+  providerModule?: PiprEvalProviderModule;
   reviewInstructions?: string;
 };
 
-export const piprEvalModel = {
+const piprEvalModel = {
   provider: "deepseek",
   model: "deepseek-v4-pro",
 } as const;
@@ -94,20 +98,21 @@ export type PiprEvalOutput = {
   droppedFindings: EvalDroppedFinding[];
   diffRanges: EvalDiffRange[];
   piCalls: EvalPiCall[];
+  /** Whether raw (pre-sanitization) output contained an expected forbidden substring. */
+  forbiddenOutputLeaked: boolean;
 };
 
-type ForbiddenOutputSnapshot = Pick<
+type RawEvalText = Pick<
   PiprEvalOutput,
   "droppedFindings" | "error" | "inlineFindings" | "mainComment" | "reviewSummary"
 >;
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
-const packagedFakePi = fileURLToPath(new URL("./fake-pi.ts", import.meta.url));
+const packagedProviderModule = fileURLToPath(new URL("./scripted-provider.ts", import.meta.url));
 const defaultReviewInstructions = [
   "Review the pull request diff for correctness, security, and test coverage.",
   "Return only actionable findings that target valid diff ranges.",
 ].join("\n");
-const forbiddenOutputSnapshotKey = Symbol("piprEvalForbiddenOutputSnapshot");
 const textDecoder = new TextDecoder();
 
 export async function runPiprEvalCase(
@@ -135,18 +140,11 @@ async function runPreparedFixture(
   testCase: PiprEvalCase,
   options: PiprEvalRunOptions,
 ): Promise<PiprEvalOutput> {
-  const runOptions = evalRunOptions(options);
-  assertRunOptions(runOptions);
-  const { baseSha, headSha } = await prepareFixture(
-    rootDir,
-    testCase,
-    runOptions.reviewInstructions,
-  );
-  const result = runLocalReview(rootDir, baseSha, headSha, {
-    mode: runOptions.mode,
-    callsDir,
-    piExecutable: runOptions.piExecutable,
-  });
+  assertRunOptions(options);
+  const env = evalReviewEnv({ mode: options.mode });
+  const { baseSha, headSha } = await prepareFixture(rootDir, testCase, options.reviewInstructions);
+  const runOptions = await evalRunOptions(rootDir, callsDir, options);
+  const result = runLocalReview(rootDir, baseSha, headSha, env, runOptions.providerModule);
   const output = await successfulEvalOutput(
     rootDir,
     callsDir,
@@ -157,14 +155,24 @@ async function runPreparedFixture(
   return output;
 }
 
-function evalRunOptions(options: PiprEvalRunOptions): PiprEvalRunOptions {
-  if (options.mode === "live") {
+async function evalRunOptions(
+  rootDir: string,
+  callsDir: string | undefined,
+  options: PiprEvalRunOptions,
+): Promise<PiprEvalRunOptions> {
+  if (options.mode === "live" || options.providerModule) {
     return options;
   }
-  return {
-    ...options,
-    piExecutable: options.piExecutable ?? process.env.PIPR_EVAL_PI_EXECUTABLE ?? packagedFakePi,
-  };
+  const config = path.join(rootDir, ".pipr-eval-provider.json");
+  await writeFile(
+    config,
+    JSON.stringify({
+      provider: piprEvalModel.provider,
+      models: [piprEvalModel.model],
+      ...(callsDir ? { callsDir } : {}),
+    }),
+  );
+  return { ...options, providerModule: { path: packagedProviderModule, config } };
 }
 
 async function successfulEvalOutput(
@@ -173,78 +181,68 @@ async function successfulEvalOutput(
   result: LocalReviewEvalJson,
   forbiddenOutputSubstrings: string[],
 ): Promise<PiprEvalOutput> {
-  return withForbiddenOutputSnapshot(
-    {
-      reviewSummary: result.reviewSummary,
-      mainComment: result.mainComment,
-      inlineFindings: result.validated.validFindings,
-      droppedFindings: result.validated.droppedFindings,
-    },
-    {
-      ok: true,
-      kind: result.kind,
-      fixturePath: keepFixtures() ? rootDir : undefined,
-      reviewSummary: sanitizeEvalText(result.reviewSummary, forbiddenOutputSubstrings),
-      mainComment: sanitizeEvalText(result.mainComment, forbiddenOutputSubstrings),
-      inlineFindings: sanitizeEvalInlineFindings(
-        result.validated.validFindings,
-        forbiddenOutputSubstrings,
-      ),
-      publicationInlineFindings: sanitizeEvalInlineFindings(
-        result.inlineFindings.map((draft) => draft.finding),
-        forbiddenOutputSubstrings,
-      ),
-      droppedFindings: result.validated.droppedFindings.map((finding) => ({
-        ...finding,
-        body: sanitizeEvalText(finding.body, forbiddenOutputSubstrings),
-        reason: sanitizeEvalText(finding.reason, forbiddenOutputSubstrings),
-      })),
-      diffRanges: result.diffRanges.map((range) => ({
-        ...range,
-        preview: range.preview
-          ? sanitizeEvalText(range.preview, forbiddenOutputSubstrings)
-          : undefined,
-      })),
-      piCalls: await readPiCalls(callsDir),
-    } satisfies PiprEvalOutput,
-  );
+  return {
+    ok: true,
+    kind: result.kind,
+    fixturePath: keepFixtures() ? rootDir : undefined,
+    reviewSummary: sanitizeEvalText(result.reviewSummary, forbiddenOutputSubstrings),
+    mainComment: sanitizeEvalText(result.mainComment, forbiddenOutputSubstrings),
+    inlineFindings: sanitizeEvalInlineFindings(
+      result.validated.validFindings,
+      forbiddenOutputSubstrings,
+    ),
+    publicationInlineFindings: sanitizeEvalInlineFindings(
+      result.inlineFindings.map((draft) => draft.finding),
+      forbiddenOutputSubstrings,
+    ),
+    droppedFindings: result.validated.droppedFindings.map((finding) => ({
+      ...finding,
+      body: sanitizeEvalText(finding.body, forbiddenOutputSubstrings),
+      reason: sanitizeEvalText(finding.reason, forbiddenOutputSubstrings),
+    })),
+    diffRanges: result.diffRanges.map((range) => ({
+      ...range,
+      preview: range.preview
+        ? sanitizeEvalText(range.preview, forbiddenOutputSubstrings)
+        : undefined,
+    })),
+    piCalls: await readPiCalls(callsDir),
+    forbiddenOutputLeaked: forbiddenOutputLeaked(
+      {
+        reviewSummary: result.reviewSummary,
+        mainComment: result.mainComment,
+        inlineFindings: result.validated.validFindings,
+        droppedFindings: result.validated.droppedFindings,
+      },
+      forbiddenOutputSubstrings,
+    ),
+  };
 }
 
-export function piprEvalForbiddenOutputText(output: PiprEvalOutput): string {
-  const snapshot =
-    (
-      output as PiprEvalOutput & {
-        [forbiddenOutputSnapshotKey]?: ForbiddenOutputSnapshot;
-      }
-    )[forbiddenOutputSnapshotKey] ?? output;
-  return [
-    snapshot.reviewSummary ?? "",
-    snapshot.mainComment ?? "",
-    snapshot.error ?? "",
-    ...snapshot.inlineFindings.flatMap((finding) => [
+function forbiddenOutputLeaked(raw: RawEvalText, forbidden: string[]): boolean {
+  if (forbidden.length === 0) {
+    return false;
+  }
+  const text = [
+    raw.reviewSummary ?? "",
+    raw.mainComment ?? "",
+    raw.error ?? "",
+    ...raw.inlineFindings.flatMap((finding) => [
       finding.body,
       finding.path,
       finding.rangeId,
       finding.suggestedFix ?? "",
     ]),
-    ...snapshot.droppedFindings.flatMap((finding) => [
+    ...raw.droppedFindings.flatMap((finding) => [
       finding.body,
       finding.reason,
       finding.path,
       finding.rangeId,
     ]),
-  ].join("\n");
-}
-
-function withForbiddenOutputSnapshot(
-  snapshot: ForbiddenOutputSnapshot,
-  output: PiprEvalOutput,
-): PiprEvalOutput {
-  Object.defineProperty(output, forbiddenOutputSnapshotKey, {
-    enumerable: false,
-    value: snapshot,
-  });
-  return output;
+  ]
+    .join("\n")
+    .toLowerCase();
+  return forbidden.some((value) => text.includes(value.toLowerCase()));
 }
 
 function sanitizeEvalInlineFindings(
@@ -287,23 +285,20 @@ async function failedEvalOutput(
   const piCallsResult = await readPiCallsAfterFailure(callsDir);
   const originalError = error instanceof Error ? error.message : String(error);
   const rawError = piCallsResult.error ? `${originalError}; ${piCallsResult.error}` : originalError;
-  const output = withForbiddenOutputSnapshot(
-    {
-      error: rawError,
-      inlineFindings: [],
-      droppedFindings: [],
-    },
-    {
-      ok: false,
-      fixturePath: keepFixtures() ? rootDir : undefined,
-      error: sanitizeEvalText(rawError, forbiddenOutputSubstrings),
-      inlineFindings: [],
-      publicationInlineFindings: [],
-      droppedFindings: [],
-      diffRanges: [],
-      piCalls: piCallsResult.piCalls,
-    } satisfies PiprEvalOutput,
-  );
+  const output: PiprEvalOutput = {
+    ok: false,
+    fixturePath: keepFixtures() ? rootDir : undefined,
+    error: sanitizeEvalText(rawError, forbiddenOutputSubstrings),
+    inlineFindings: [],
+    publicationInlineFindings: [],
+    droppedFindings: [],
+    diffRanges: [],
+    piCalls: piCallsResult.piCalls,
+    forbiddenOutputLeaked: forbiddenOutputLeaked(
+      { error: rawError, inlineFindings: [], droppedFindings: [] },
+      forbiddenOutputSubstrings,
+    ),
+  };
   await cleanupFixture(rootDir);
   return output;
 }
@@ -367,10 +362,7 @@ function configTs(
   return `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: ${JSON.stringify(piprEvalModel.provider)},
-    model: ${JSON.stringify(piprEvalModel.model)},
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  const model = pipr.model(${JSON.stringify(`${piprEvalModel.provider}/${piprEvalModel.model}`)}, {
     thinking: "high",
   });
 
@@ -380,10 +372,8 @@ export default definePipr((pipr) => {
     id: "prompt-eval-review",
     model,
     paths: { include: ["src/**"] },
-    instructions: {
-      findings: ${JSON.stringify(reviewInstructions)},
-      summary: "Summarize changed behavior and risk using the merged findings.",
-    },
+    instructions: ${JSON.stringify(reviewInstructions)},
+    summary: { instructions: "Summarize changed behavior and risk using the merged findings." },
     timeout: "2m",
   });
 });
@@ -394,70 +384,45 @@ function customReviewConfigTs(reviewInstructions: string): string {
   return `import { definePipr, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: ${JSON.stringify(piprEvalModel.provider)},
-    model: ${JSON.stringify(piprEvalModel.model)},
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
+  const model = pipr.model(${JSON.stringify(`${piprEvalModel.provider}/${piprEvalModel.model}`)}, {
     thinking: "high",
   });
 
   pipr.config({ publication: { maxInlineComments: 3 } });
 
-  const output = pipr.schema({
-    id: "eval/categorized-review",
-    schema: z.strictObject({
-      summary: z.string(),
-      findings: z.array(z.strictObject({
-        title: z.string(),
-        severity: z.enum(["high", "medium", "low"]),
-        category: z.enum(["correctness", "security", "test-coverage"]),
-        rationale: z.string(),
-        body: z.string(),
-        path: z.string(),
-        rangeId: z.string(),
-        side: z.enum(["RIGHT", "LEFT"]),
-        startLine: z.number().int().positive(),
-        endLine: z.number().int().positive(),
-        suggestedFix: z.string().optional(),
-      })),
-    }),
+  const finding = pipr.finding({
+    title: z.string(),
+    severity: z.enum(["high", "medium", "low"]),
+    category: z.enum(["correctness", "security", "test-coverage"]),
+    rationale: z.string(),
   });
 
   const reviewer = pipr.agent({
     name: "prompt-eval-reviewer",
     model,
     instructions: ${JSON.stringify(reviewInstructions)},
-    output,
+    output: pipr.schema({
+      id: "eval/categorized-review",
+      schema: z.strictObject({ summary: z.string(), findings: z.array(finding) }),
+    }),
     tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "2m",
     prompt: () => "Review this change with category metadata.",
   });
 
-  const task = pipr.task({
+  pipr.task({
     name: "prompt-eval-review",
+    on: { changeRequest: ["opened", "updated"] },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({
+      const diff = await ctx.change.diff({
         compressed: true,
         paths: { include: ["src/**"] },
       });
-      const result = await ctx.pi.run(reviewer, { manifest });
-      await ctx.comment({
-        main: result.summary,
-        inlineFindings: result.findings.map((finding) => ({
-          body: finding.body,
-          path: finding.path,
-          rangeId: finding.rangeId,
-          side: finding.side,
-          startLine: finding.startLine,
-          endLine: finding.endLine,
-          ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
-        })),
-      });
+      const result = await ctx.pi.run(reviewer, { diff });
+      const { findings } = ctx.review.select(result.findings, { finding });
+      await ctx.comment({ main: result.summary, inlineFindings: findings });
     },
   });
-
-  pipr.on.changeRequest({ actions: ["opened", "updated"], task });
 });
 `;
 }
@@ -513,7 +478,8 @@ function runLocalReview(
   rootDir: string,
   baseSha: string,
   headSha: string,
-  options: { mode: PiprEvalRunMode; piExecutable?: string; callsDir?: string },
+  env: NodeJS.ProcessEnv,
+  providerModule: PiprEvalProviderModule | undefined,
 ): LocalReviewEvalJson {
   const helperPath = path.join(sourceDir, "run-local-review.ts");
   const result = spawnSync(
@@ -524,14 +490,13 @@ function runLocalReview(
         rootDir,
         baseSha,
         headSha,
-        piExecutable: options.piExecutable,
-        callsDir: options.callsDir,
+        providerModule,
       }),
     ],
     {
       cwd: rootDir,
       encoding: "buffer",
-      env: evalReviewEnv({ mode: options.mode }),
+      env,
     },
   );
   if (result.status !== 0) {
@@ -544,16 +509,10 @@ function runLocalReview(
 
 function assertRunOptions(options: PiprEvalRunOptions): void {
   if (options.mode === "deterministic") {
-    if (!options.piExecutable) {
-      throw new Error("deterministic prompt evals require a fake Pi executable");
-    }
     return;
   }
-  if (options.piExecutable || process.env.PIPR_EVAL_PI_EXECUTABLE) {
-    throw new Error("live prompt evals must not set Pi executable overrides");
-  }
-  if (!process.env.DEEPSEEK_API_KEY) {
-    throw new Error("DEEPSEEK_API_KEY is required for live prompt evals");
+  if (options.providerModule) {
+    throw new Error("live prompt evals must not set a provider module override");
   }
 }
 

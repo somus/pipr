@@ -5,6 +5,7 @@ import type {
   RuntimeAgentTool,
   RuntimeTask,
 } from "./runtime-contract.js";
+import { isSchema, zodOutputSchema } from "./schema.js";
 import type { Agent, AgentDefinition, AgentTool } from "./types/agent.js";
 import type { PluginToolDefinition, Task, TaskDefinition } from "./types/task.js";
 
@@ -106,13 +107,21 @@ function runtimeToolForHandle(tool: AgentTool): RuntimeAgentTool {
   return record;
 }
 
+function agentOutputSchema<Input, Output>(definition: AgentDefinition<Input, Output>) {
+  const output = definition.output;
+  if (isSchema(output)) {
+    return output;
+  }
+  return zodOutputSchema(`agent/${definition.name ?? "output"}`, output);
+}
+
 function runtimeAgentDefinition<Input, Output>(
   definition: AgentDefinition<Input, Output>,
 ): RuntimeAgentDefinition {
   return {
     ...definition,
     prompt: definition.prompt as RuntimeAgentDefinition["prompt"],
-    output: definition.output as RuntimeAgentDefinition["output"],
+    output: agentOutputSchema(definition) as RuntimeAgentDefinition["output"],
     tools: definition.tools?.map(runtimeToolForHandle),
   };
 }

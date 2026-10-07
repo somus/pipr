@@ -341,9 +341,12 @@ Options:
 | `--base <sha>` | required | Base commit, branch, or ref. |
 | `--head <sha>` | working tree | Head commit, branch, or ref. Omit to include staged and unstaged tracked-file edits. |
 | `--config-dir <dir>` | `.pipr` | Config directory to load. |
-| `--pi-executable <path>` | `pi` on PATH | Pi executable for local runs. |
 | `--trace [path]` | disabled | Capture a diagnostic bundle. A bare flag uses the platform Pipr state directory. |
-| `--pi-agent-dir <path>` | `PI_CODING_AGENT_DIR` or `$HOME/.pi/agent` | Pi agent directory for models without `apiKey`. |
+| `--pi-auth-file <path>` | `$PI_CODING_AGENT_DIR/auth.json` or `$HOME/.pi/agent/auth.json` | Pi auth file for models declared with `apiKey: "local"`. |
+| `--provider-module <path>` | none | Module whose default export returns replacement model providers. For scripted test fixtures only. |
+| `--provider-config <path>` | none | Path passed to the `--provider-module` default export. |
 | `--json` | false | Print structured local review output. |
+
+Exit codes: `0` when every task check passes or is neutral. `1` when a task check or gate concludes `failure`, after the text or JSON result is printed, or when the run itself fails.
 
 See [Local runs](/docs/guide/local-runs) for behavior differences between local and hosted change-request runs.

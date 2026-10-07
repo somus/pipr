@@ -1,13 +1,14 @@
+import { ciRunFromEnvironment } from "../hosts/ci-run.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
+import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import type { HostRunServices } from "./composition.js";
-import { dispatchRuntimeEntry } from "./entry-dispatch.js";
-import { logEventContext } from "./logging.js";
+import { ignore, logEventContext } from "./logging.js";
 import { startReviewProgress } from "./review-progress.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
 import type { HostRunCommandResult, TrustedReviewAndPublishResult } from "./types.js";
-import { failureActionFromEnvironment, workflowUrlFromEnvironment } from "./workflow-url.js";
+import { failureActionFromEnvironment } from "./workflow-url.js";
 
 export async function runChangeRequestHostRunCommand(
   services: HostRunServices,
@@ -23,20 +24,17 @@ export async function runChangeRequestHostRunCommand(
       configSource: trustedRuntime.settings.source,
     };
   }
-  const dispatch = dispatchRuntimeEntry({
-    kind: "change-request",
+  const selectedTasks = selectRuntimeTasks({
     plan: trustedRuntime.plan,
     event,
   });
-  const selectedTasks = dispatch.kind === "change-request" ? dispatch.tasks : [];
   services.log.notice("dispatch", {
     selectedTasks: selectedTasks.map((task) => task.name),
   });
   if (selectedTasks.length === 0) {
-    services.log.notice("event ignored", { reason: "No tasks matched the change request event" });
-    return { kind: "ignored", reason: "No tasks matched the change request event" };
+    return ignore(services.log, "No tasks matched the change request event");
   }
-  const workflowUrl = workflowUrlFromEnvironment(services.adapter.id, services.env);
+  const workflowUrl = ciRunFromEnvironment(services.adapter.id, services.env)?.runUrl;
   const progress = await startReviewProgress({
     adapter: services.adapter,
     event,
@@ -70,8 +68,7 @@ export async function runChangeRequestHostRunCommand(
     throw error;
   }
   if (completed.kind === "skipped") {
-    services.log.notice("event ignored", { reason: completed.reason });
-    return { kind: "ignored", reason: completed.reason };
+    return ignore(services.log, completed.reason);
   }
   if (completed.kind === "command-response") {
     throw new Error("command response result is only supported for issue_comment commands");

@@ -1,5 +1,6 @@
+import type { FindingFields, FindingSchema } from "../finding.js";
 import type { PiprRunContext } from "../result.js";
-import type { ReviewFinding, ReviewResult } from "../review-contract.js";
+import type { ReviewFinding, ReviewSummary } from "../review-contract.js";
 import type {
   Agent,
   AgentDefinition,
@@ -12,12 +13,21 @@ import type {
   DurationInput,
   ModelOptions,
   ModelProfile,
+  ModelRef,
   PiprConfigOptions,
+  ProviderOptions,
+  ProviderProfile,
   RepositoryPermission,
   SecretOptions,
   SecretRef,
 } from "./config.js";
-import type { ChangedFile, DiffManifest, DiffManifestOptions, PathFilter } from "./manifest.js";
+import type {
+  ChangedFile,
+  DiffContext,
+  DiffManifestOptions,
+  DiffSummary,
+  PathFilter,
+} from "./manifest.js";
 import type {
   JsonPromptOptions,
   Markdown,
@@ -25,7 +35,7 @@ import type {
   PromptText,
   PromptValue,
 } from "./prompt.js";
-import type { JsonSchemaDefinition, Schema, SchemaDefinition } from "./schema.js";
+import type { JsonSchemaDefinition, Schema, SchemaDefinition, ZodSchema } from "./schema.js";
 
 /** Final review comment value produced by a task or review recipe. */
 export type CommentValue =
@@ -52,7 +62,7 @@ export type PriorInlineFinding = {
 
 /** Prior pipr review state available to tasks through `ctx.review.prior()`. */
 export type PriorReview = {
-  main?: Markdown;
+  main?: string;
   reviewedHeadSha?: string;
   inlineFindings: readonly PriorInlineFinding[];
 };
@@ -78,6 +88,41 @@ export type ValidatedReviewFindings<T extends ReviewFinding = ReviewFinding> = {
   droppedFindings: readonly DroppedReviewFinding<T>[];
 };
 
+/** Options for `ctx.review.select`. */
+export type SelectFindingsOptions<T extends ReviewFinding> = {
+  /** Finding schema from `pipr.finding`; its enum fields rank findings in declaration order. */
+  finding?: ZodSchema<unknown>;
+  /** Facet keys to rank by, highest priority first. Defaults to every enum field in order. */
+  rank?: readonly string[];
+  /** Custom ordering; replaces facet ranking. Earlier findings win duplicates and the cap. */
+  compare?: (left: ValidatedReviewFinding<T>, right: ValidatedReviewFinding<T>) => number;
+  /** Maximum findings to keep. Defaults to `publication.maxInlineComments`. */
+  limit?: number;
+  paths?: PathFilter;
+  /** Drops findings whose `suggestedFix` is missing or cannot be published as an exact suggestion. */
+  requireSuggestedFix?: boolean;
+};
+
+/** Findings kept by `ctx.review.select`, plus every dropped finding with its reason. */
+export type SelectedReviewFindings<T extends ReviewFinding = ReviewFinding> = {
+  findings: readonly ValidatedReviewFinding<T>[];
+  dropped: readonly DroppedReviewFinding<T>[];
+};
+
+/** Options for `ctx.check.gate`. */
+export type CheckGateOptions<T extends ReviewFinding> = {
+  /** Facet values that block, such as `{ severity: ["critical", "high"] }`, or a predicate. */
+  failOn: Readonly<Record<string, readonly string[]>> | ((finding: T) => boolean);
+  /** Check summary; defaults to a count of blocking findings. */
+  summary?: (blocking: readonly T[]) => string;
+};
+
+/** Result of `ctx.check.gate`. */
+export type CheckGateResult<T extends ReviewFinding> = {
+  passed: boolean;
+  blocking: readonly T[];
+};
+
 /** Function run by a task entrypoint. */
 export type TaskHandler<Input> = (context: TaskContext, input: Input) => void | Promise<void>;
 
@@ -90,9 +135,20 @@ export type TaskCheckOptions =
       required?: boolean;
     };
 
+/** Command trigger: a pattern such as `@pipr review`, or a pattern with options. */
+export type CommandTrigger<Input> = string | (CommandOptions<Input> & { pattern: string });
+
+/** Events that start a task. */
+export type TaskTriggers<Input> = {
+  /** Change request actions; `true` uses opened, updated, reopened, and ready. */
+  changeRequest?: [Input] extends [void] ? readonly ChangeRequestAction[] | true : never;
+  command?: CommandTrigger<Input>;
+};
+
 /** Definition used to register a task. */
 export type TaskDefinition<Input> = {
   name: string;
+  on?: TaskTriggers<Input>;
   check?: TaskCheckOptions;
   local?: false;
   run: TaskHandler<Input>;
@@ -120,26 +176,7 @@ export type CommandRegistrationOptions<Input> = CommandOptions<Input> & {
   task: Task<Input>;
 };
 
-/** Role-specific policy for the two agents created by `pipr.review`. */
-export type ReviewInstructions = {
-  findings: PromptSource;
-  summary: PromptSource;
-};
-
-/** Entrypoints created by `pipr.review`. */
-export type ReviewEntrypoints = {
-  changeRequest?: readonly ChangeRequestAction[] | false;
-  command?:
-    | string
-    | false
-    | {
-        pattern?: string;
-        permission?: RepositoryPermission;
-        description?: string;
-      };
-};
-
-/** Default change-request actions used by `pipr.review`. */
+/** Default change-request actions for `on: { changeRequest: true }` and `pipr.review`. */
 export const defaultReviewActions = [
   "opened",
   "updated",
@@ -147,63 +184,62 @@ export const defaultReviewActions = [
   "ready",
 ] as const satisfies readonly ChangeRequestAction[];
 
-/** Default change-request and command entrypoints used by `pipr.review`. */
-export const defaultReviewEntrypoints = {
+/** Default triggers used by `pipr.review`. */
+export const defaultReviewTriggers = {
   changeRequest: defaultReviewActions,
   command: { pattern: "@pipr review", permission: "write" },
-} as const satisfies ReviewEntrypoints;
+} as const satisfies TaskTriggers<void>;
 
-type ReviewRecipeEntrypointOptions = {
+/** Input passed to the findings agent created by `pipr.review`. */
+export type ReviewFindingsInput = {
+  diff: DiffContext;
+  change: ChangeRequestInfo;
+};
+
+/** Input passed to a `pipr.review` summary agent. */
+export type ReviewSummaryInput<Finding extends ReviewFinding = ReviewFinding> = {
+  diff: DiffSummary;
+  change: ChangeRequestInfo;
+  findings: readonly Finding[];
+};
+
+/** Summary step for `pipr.review`: built-in agent instructions, or a custom agent. */
+export type ReviewSummaryOptions<Finding extends ReviewFinding, Summary> =
+  | { instructions: PromptSource; agent?: never }
+  | { agent: Agent<ReviewSummaryInput<Finding>, Summary>; instructions?: never };
+
+/** Values passed to a `pipr.review` renderer. */
+export type ReviewRenderInput<Finding extends ReviewFinding, Summary> = {
+  findings: readonly Finding[];
+  dropped: readonly DroppedReviewFinding<Finding>[];
+  summary?: Summary;
+};
+
+/** Options for `pipr.review`, a preset over `ctx.change.diff`, `ctx.pi.run`, `ctx.review.select`, and `ctx.comment`. */
+export type ReviewOptions<
+  Finding extends ReviewFinding = ReviewFinding,
+  Summary = ReviewSummary,
+> = {
   id: string;
-  model: ModelProfile;
+  /** Defaults to change request opened, updated, reopened, ready, and `@pipr review`. */
+  on?: TaskTriggers<void>;
+  /** Defaults to the first registered model. */
+  model?: ModelProfile;
   fallbacks?: readonly ModelProfile[];
-  instructions: ReviewInstructions;
   tools?: readonly AgentTool[];
-  entrypoints?: ReviewEntrypoints;
-  comment?:
-    | CommentValue
-    | ((
-        result: ReviewResult,
-        context: ReviewCommentContext,
-      ) => CommentValue | Promise<CommentValue>);
-  check?: TaskCheckOptions;
   timeout?: DurationInput;
+  check?: TaskCheckOptions;
   paths?: PathFilter;
-};
-
-/** Options for `pipr.review`, pipr's default review recipe. */
-export type ReviewRecipeOptions = ReviewRecipeEntrypointOptions;
-
-/** Default input passed to a reviewer created by `pipr.review`. */
-export type DefaultReviewInput = {
-  manifest: DiffManifest;
-  change: ChangeRequestInfo;
-};
-
-/** Bounded Diff Manifest projection passed to the summary agent created by `pipr.review`. */
-export type DefaultReviewSummaryManifest = {
-  baseSha: string;
-  headSha: string;
-  mergeBaseSha: string;
-  fileCount: number;
-  omittedFileCount: number;
-  files: readonly {
-    path: string;
-    previousPath?: string;
-    status: DiffManifest["files"][number]["status"];
-    language?: string;
-    additions: number;
-    deletions: number;
-    changedSymbols?: readonly string[];
-    excludedReason?: string;
-  }[];
-};
-
-/** Input passed to the summary agent created by `pipr.review`. */
-export type DefaultReviewSummaryInput = {
-  manifestSummary: DefaultReviewSummaryManifest;
-  change: ChangeRequestInfo;
-  inlineFindings: readonly ReviewFinding[];
+  /** Finding schema from `pipr.finding`; enum fields rank findings and label comments. */
+  finding?: ZodSchema<Finding>;
+  /** Findings-agent policy. */
+  instructions: PromptSource;
+  summary?: ReviewSummaryOptions<Finding, Summary>;
+  gate?: CheckGateOptions<Finding>;
+  render?: (
+    result: ReviewRenderInput<Finding, Summary>,
+    context: ReviewCommentContext,
+  ) => CommentValue | Promise<CommentValue>;
 };
 
 /** Context passed to a custom review comment renderer. */
@@ -237,31 +273,34 @@ export type ToolRunOptions<Input> = {
   signal?: AbortSignal;
 };
 
-/** Definition used to register an inputless task for change request actions. */
-export type ChangeRequestRegistrationOptions = {
-  actions: readonly ChangeRequestAction[];
-  task: Task<void>;
-};
-
 /** Handle for reporting task check status from inside a task. */
 export type CheckHandle = {
   pass(summary?: string): void;
   fail(summary?: string): void;
   neutral(summary?: string): void;
+  /** Fails the check when any finding matches `failOn`, otherwise passes it. */
+  gate<T extends ReviewFinding>(
+    findings: readonly T[],
+    options: CheckGateOptions<T>,
+  ): CheckGateResult<T>;
 };
 
 /** Builder API available inside `definePipr`. */
 export type PiprBuilder = {
   readonly tools: BuiltinToolCatalog;
   readonly schemas: BuiltinSchemaCatalog;
-  readonly on: {
-    changeRequest(options: ChangeRequestRegistrationOptions): void;
-  };
   secret(options: SecretOptions): SecretRef;
-  model(options: ModelOptions): ModelProfile;
+  /** `provider/model` reference; a provider declared with `provider()` supplies the default API key. */
+  model(ref: ModelRef, options?: ModelOptions): ModelProfile;
+  /** Declares an OpenAI-compatible provider, such as an LLM gateway, for `model()` references. */
+  provider(options: ProviderOptions): ProviderProfile;
+  /** Declares an inline finding schema; enum fields become rankable facets in declaration order. */
+  finding<const Fields extends FindingFields>(fields: Fields): FindingSchema<Fields>;
   agent<Input, Output>(definition: AgentDefinition<Input, Output>): Agent<Input, Output>;
   task<Input = void>(definition: TaskDefinition<Input>): Task<Input>;
-  review(options: ReviewRecipeOptions): void;
+  review<Finding extends ReviewFinding = ReviewFinding, Summary = ReviewSummary>(
+    options: ReviewOptions<Finding, Summary>,
+  ): Task;
   config(options: PiprConfigOptions): void;
   command<Input = void>(options: CommandRegistrationOptions<Input>): void;
   use<Handle>(plugin: PiprPlugin<Handle>): Handle;
@@ -301,7 +340,8 @@ export type PlatformInfo = {
 
 /** Change-request context available inside tasks. */
 export type ChangeRequestContext = ChangeRequestInfo & {
-  diffManifest(options?: DiffManifestOptions): Promise<DiffManifest>;
+  /** Returns the change's Diff Manifest as agent-ready context. */
+  diff(options?: DiffManifestOptions): Promise<DiffContext>;
   changedFiles(): Promise<readonly ChangedFile[]>;
 };
 
@@ -310,15 +350,45 @@ export type PiRunner = {
   run<Input, Output>(
     agent: Agent<Input, Output>,
     input: Input,
-    options?: {
-      model?: ModelProfile;
-      fallbacks?: readonly ModelProfile[];
-      instructions?: PromptSource;
-      timeout?: DurationInput;
-      paths?: PathFilter;
-      maxShards?: number;
-    },
+    options?: PiRunOptions,
   ): Promise<Output>;
+  /**
+   * Runs agents concurrently. The agent-run budget is reserved for every run before any starts,
+   * and runs that share a `DiffContext` share its prompt prefix.
+   */
+  all<const Runs extends readonly PiRunRequest[]>(
+    runs: Runs & CheckedPiRunRequests<Runs>,
+  ): Promise<PiRunOutputs<Runs>>;
+};
+
+/** Per-call overrides for `ctx.pi.run` and `ctx.pi.all`. */
+export type PiRunOptions = {
+  model?: ModelProfile;
+  fallbacks?: readonly ModelProfile[];
+  instructions?: PromptSource;
+  timeout?: DurationInput;
+  paths?: PathFilter;
+  maxShards?: number;
+};
+
+/** One run passed to `ctx.pi.all`. */
+export type PiRunRequest = {
+  agent: Agent<never, unknown>;
+  input: unknown;
+  options?: PiRunOptions;
+};
+
+type CheckedPiRunRequests<Runs extends readonly PiRunRequest[]> = {
+  [Index in keyof Runs]: Runs[Index] extends { agent: Agent<infer Input, unknown> }
+    ? { agent: Runs[Index]["agent"]; input: Input; options?: PiRunOptions }
+    : Runs[Index];
+};
+
+/** Outputs of `ctx.pi.all`, in request order. */
+export type PiRunOutputs<Runs extends readonly PiRunRequest[]> = {
+  -readonly [Index in keyof Runs]: Runs[Index] extends { agent: Agent<never, infer Output> }
+    ? Output
+    : never;
 };
 
 /** Command context available inside command-triggered tasks. */
@@ -345,6 +415,14 @@ export type TaskContext = {
       findings: readonly T[],
       options?: ValidateFindingsOptions,
     ): ValidatedReviewFindings<T>;
+    /**
+     * Validates findings against the Diff Manifest, drops duplicate locations, ranks, and caps
+     * them. Accepts one list or one list per agent.
+     */
+    select<T extends ReviewFinding>(
+      findings: readonly T[] | readonly (readonly T[])[],
+      options?: SelectFindingsOptions<T>,
+    ): SelectedReviewFindings<T>;
   };
   readonly check: CheckHandle;
   comment(value: CommentValue): Promise<void>;

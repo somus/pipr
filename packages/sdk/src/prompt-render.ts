@@ -15,8 +15,14 @@ export function renderPromptValue(value: PromptValue): string {
   if (typeof value === "boolean") {
     return String(value);
   }
-  if (typeof value === "object" && value !== null && Reflect.get(value, "kind") === "pipr.prompt") {
-    return (value as PromptText).value;
+  if (isPromptText(value)) {
+    return value.value;
   }
   return serializePromptJson(value, true);
+}
+
+/** Returns whether a value is a `pipr.prompt` or `pipr.markdown` text node. */
+export function isPromptText(value: unknown): value is PromptText {
+  const kind = typeof value === "object" && value !== null ? Reflect.get(value, "kind") : undefined;
+  return kind === "pipr.prompt" || kind === "pipr.markdown";
 }

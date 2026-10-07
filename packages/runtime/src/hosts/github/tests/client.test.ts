@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createGitHubCommandClient } from "../client.js";
+import { createGitHubCommandClient, createGitHubPublicationClient } from "../client.js";
 
 describe("GitHub client", () => {
   it("loads pull request details into provider-neutral change refs", async () => {
@@ -141,7 +141,114 @@ describe("GitHub client", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("concatenates paginated review threads", async () => {
+    const afters: Array<string | null> = [];
+    await withGraphqlPages(
+      afters,
+      (after) =>
+        after === null
+          ? reviewThreadsPage([{ id: "thread-1", commentId: 1 }], {
+              hasNextPage: true,
+              endCursor: "c1",
+            })
+          : reviewThreadsPage([{ id: "thread-2", commentId: 2 }], {
+              hasNextPage: false,
+              endCursor: null,
+            }),
+      async (client) => {
+        await expect(
+          client.listReviewThreads({ repo: "local/pipr", pullRequestNumber: 7 }),
+        ).resolves.toEqual([
+          { id: "thread-1", isResolved: false, viewerCanResolve: true, commentIds: [1] },
+          { id: "thread-2", isResolved: false, viewerCanResolve: true, commentIds: [2] },
+        ]);
+      },
+    );
+    expect(afters).toEqual([null, "c1"]);
+  });
+
+  it("rejects review thread pages that claim more pages without a cursor", async () => {
+    const afters: Array<string | null> = [];
+    await withGraphqlPages(
+      afters,
+      () =>
+        reviewThreadsPage([{ id: "thread-1", commentId: 1 }], {
+          hasNextPage: true,
+          endCursor: null,
+        }),
+      async (client) => {
+        await expect(
+          client.listReviewThreads({ repo: "local/pipr", pullRequestNumber: 7 }),
+        ).rejects.toThrow("without an end cursor");
+      },
+    );
+    expect(afters).toEqual([null]);
+  });
+
+  it("bounds review thread pagination when GitHub never returns a terminal page", async () => {
+    const afters: Array<string | null> = [];
+    await withGraphqlPages(
+      afters,
+      (_after, call) =>
+        reviewThreadsPage([{ id: `thread-${call}`, commentId: call }], {
+          hasNextPage: true,
+          endCursor: `c${call}`,
+        }),
+      async (client) => {
+        await expect(
+          client.listReviewThreads({ repo: "local/pipr", pullRequestNumber: 7 }),
+        ).rejects.toThrow("exceeded 100 pages");
+      },
+    );
+    expect(afters).toHaveLength(100);
+  });
 });
+
+async function withGraphqlPages(
+  afters: Array<string | null>,
+  page: (after: string | null, call: number) => unknown,
+  run: (client: ReturnType<typeof createGitHubPublicationClient>) => Promise<void>,
+): Promise<void> {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { variables: { after: string | null } };
+      afters.push(body.variables.after);
+      if (afters.length > 200) throw new Error("fixture exhausted");
+      return Response.json({ data: page(body.variables.after, afters.length) });
+    }) as unknown as typeof fetch;
+    await run(
+      createGitHubPublicationClient({
+        GITHUB_API_URL: "https://api.github.test",
+        GITHUB_TOKEN: "token",
+      }),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+function reviewThreadsPage(
+  threads: Array<{ id: string; commentId: number }>,
+  pageInfo: { hasNextPage: boolean; endCursor: string | null },
+) {
+  return {
+    repository: {
+      pullRequest: {
+        reviewThreads: {
+          pageInfo,
+          nodes: threads.map((thread) => ({
+            id: thread.id,
+            isResolved: false,
+            viewerCanResolve: true,
+            comments: { nodes: [{ databaseId: thread.commentId }] },
+          })),
+        },
+      },
+    },
+  };
+}
 
 function requestUrl(input: Parameters<typeof fetch>[0]): URL {
   if (typeof input === "string") {

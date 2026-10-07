@@ -9,17 +9,9 @@ import type {
   ValidatedReview,
 } from "../types.js";
 import { parseValidatedReview } from "../types.js";
-import {
-  parseReviewResult,
-  type ReviewFinding,
-  type ReviewResult,
-  reviewResultJsonSchema,
-  reviewResultSchemaId,
-  reviewSchemaExample,
-} from "./contract.js";
+import type { ReviewFinding, ReviewResult } from "./contract.js";
+import { findingContentHash } from "./prior-state.js";
 import { findingRangeMismatchReason } from "./range-validation.js";
-
-export { parseReviewResult, reviewResultJsonSchema, reviewResultSchemaId, reviewSchemaExample };
 
 export type ValidateReviewOptions = {
   expectedHeadSha?: string;
@@ -59,7 +51,7 @@ export function validateReviewFindings<T extends ReviewFinding>(
     const validatedFinding = findingRangeMismatchReason(finding, suppliedRange)
       ? canonicalizeFindingRangeId(finding, manifest)
       : findingWithRangeId(finding, finding.rangeId);
-    const fingerprint = findingFingerprint(validatedFinding);
+    const fingerprint = findingContentHash(validatedFinding);
     const rangeMatch = ranges.findRange(validatedFinding.rangeId);
     const reason = findingDropReason({
       finding: validatedFinding,
@@ -161,15 +153,4 @@ function validateDuplicateFingerprint(context: FindingValidationContext): string
   return context.seenFingerprints.has(context.fingerprint)
     ? "duplicate finding fingerprint"
     : undefined;
-}
-
-function findingFingerprint(finding: ReviewFinding): string {
-  const location = [
-    finding.path,
-    finding.rangeId,
-    finding.side,
-    `${finding.startLine}-${finding.endLine}`,
-  ];
-  const basis = [...location, finding.body].join("\n");
-  return new Bun.CryptoHasher("sha256").update(basis).digest("hex").slice(0, 16);
 }

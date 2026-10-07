@@ -42,6 +42,9 @@
     "//#check:conventional-commit:root": {
       "outputs": []
     },
+    "//#check:scripts:root": {
+      "outputs": []
+    },
     "//#typecheck:root": {
       "outputs": []
     },

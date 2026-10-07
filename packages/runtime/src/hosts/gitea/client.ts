@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { CodeHostHttpError, createCodeHostHttpClient } from "../http.js";
+import {
+  CodeHostHttpError,
+  collectNumberedPages,
+  createCodeHostHttpClient,
+  jsonRequest,
+  orNoneOn404,
+} from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
 
 export type GiteaFamilyHost = "gitea" | "forgejo" | "codeberg";
@@ -195,16 +201,14 @@ export function createGiteaClient(
         pullRequestSchema,
       ),
     async getRepositoryPermission(owner, repository, actor) {
-      try {
-        const result = await api.json(
-          `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/collaborators/${encodeURIComponent(actor)}/permission`,
-          repositoryPermissionSchema,
-        );
-        return result.permission === "owner" ? "admin" : result.permission;
-      } catch (error) {
-        if (error instanceof CodeHostHttpError && error.status === 404) return "none";
-        throw error;
-      }
+      return orNoneOn404(
+        api
+          .json(
+            `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/collaborators/${encodeURIComponent(actor)}/permission`,
+            repositoryPermissionSchema,
+          )
+          .then((result) => (result.permission === "owner" ? "admin" : result.permission)),
+      );
     },
     listIssueComments: (owner, repository, changeNumber) =>
       listAll(
@@ -320,7 +324,7 @@ function giteaToken(host: GiteaFamilyHost, env: NodeJS.ProcessEnv): string {
   if (!token) {
     const name =
       host === "gitea" ? "GITEA_TOKEN" : host === "forgejo" ? "FORGEJO_TOKEN" : "CODEBERG_TOKEN";
-    throw new Error(`${name} is required for ${displayName(host)} API calls`);
+    throw new Error(`${name} is required for ${giteaDisplayName(host)} API calls`);
   }
   return token;
 }
@@ -344,29 +348,31 @@ function serverApiUrl(serverUrl: string | undefined, provider: string): string {
   return `${serverUrl.replace(/\/$/, "")}/api/v1`;
 }
 
-function displayName(host: GiteaFamilyHost): string {
+export function giteaDisplayName(host: GiteaFamilyHost): string {
   return host === "gitea" ? "Gitea" : host === "forgejo" ? "Forgejo" : "Codeberg";
 }
 
-type JsonClient = ReturnType<typeof createCodeHostHttpClient>;
-
-async function listAll<T>(api: JsonClient, path: string, schema: z.ZodType<T>): Promise<T[]> {
-  const values: T[] = [];
-  for (let page = 1; page <= 100; page += 1) {
-    const separator = path.includes("?") ? "&" : "?";
-    const batch = await api.json(`${path}${separator}page=${page}&limit=50`, z.array(schema));
-    values.push(...batch);
-    if (batch.length < 50) return values;
+/** Parses an `OWNER/REPOSITORY` slug into Gitea coordinates. */
+export function parseGiteaRepositorySlug(slug: string): { owner: string; repository: string } {
+  const [owner, repository, ...rest] = slug.split("/");
+  if (!owner || !repository || rest.length > 0) {
+    throw new Error(`Invalid Gitea-compatible repository slug '${slug}'`);
   }
-  throw new Error(`Gitea-compatible pagination exceeded 100 pages for ${path}`);
+  return { owner, repository };
 }
 
-function jsonRequest(method: "POST" | "PATCH", body: Record<string, unknown>): RequestInit {
-  return {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  };
+function listAll<T>(
+  api: ReturnType<typeof createCodeHostHttpClient>,
+  path: string,
+  schema: z.ZodType<T>,
+): Promise<T[]> {
+  const separator = path.includes("?") ? "&" : "?";
+  return collectNumberedPages({
+    label: "Gitea-compatible",
+    path,
+    pageSize: 50,
+    loadPage: (page) => api.json(`${path}${separator}page=${page}&limit=50`, z.array(schema)),
+  });
 }
 
 function giteaStatusState(state: CodeHostStatusState): string {

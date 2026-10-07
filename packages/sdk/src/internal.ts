@@ -7,7 +7,6 @@ import type { RuntimeAgentTool } from "./runtime-contract.js";
 
 export type {
   RuntimeAgent,
-  RuntimeAgentDefinition,
   RuntimeAgentTool,
   RuntimePlan,
   RuntimeTask,
@@ -16,24 +15,17 @@ export { defaultMaxStoredFindings, maxStoredFindingsLimit } from "./types/config
 
 import type { RuntimePlan } from "./runtime-contract.js";
 
-export {
-  assertSupportedCommandRestCapture,
-  commandPatternParts,
-  isCommandCaptureToken,
-  isCommandRestCaptureToken,
-  isOptionalCommandPatternPart,
-  tokenizeCommandPattern,
-  unsupportedCommandRestCaptureError,
-} from "./command-grammar.js";
+export { commandPatternPrefixMatches, parseCommandPattern } from "./command-grammar.js";
+export { facetsForFindingSchema } from "./finding.js";
+export { isMarkdownText, markdownString } from "./markdown.js";
 export { renderPromptValue } from "./prompt-render.js";
+export { providerModelOptionsSchema } from "./provider-model.js";
+export { reviewOutputSchemaId, zodOutputSchema } from "./schema.js";
 export type { SdkDeclarationModule } from "./standalone-declaration.js";
 export {
   embeddedSdkDeclaration,
   readSdkDeclarationSourceWithChunk,
 } from "./standalone-declaration.js";
-
-/** Stable identifier for Pipr's built-in change request review output schema. */
-export const reviewOutputSchemaId = "core/pr-review";
 
 /** Returns whether a tool is one of pipr's built-in read-only tools. */
 export function isBuiltinReadOnlyTool(tool: RuntimeAgentTool): boolean {

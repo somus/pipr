@@ -3,7 +3,7 @@ import type { RuntimePlan, RuntimeTask } from "@usepipr/sdk/internal";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import type { BuildDiffManifestOptions } from "../../diff/diff.js";
 import type { RunObserver } from "../../observability/types.js";
-import type { PiRunner } from "../../pi/types.js";
+import type { PiProviderModule, PiRunner } from "../../pi/types.js";
 import type {
   InlineThreadContext,
   PriorReviewState,
@@ -27,8 +27,10 @@ export type DiffManifestBuilder = (options: BuildDiffManifestOptions) => DiffMan
 export type TaskRuntimePorts = {
   env?: NodeJS.ProcessEnv;
   providerOverride?: ProviderConfig;
-  piExecutable?: string;
-  piAgentDir?: string;
+  piProviderModule?: PiProviderModule;
+  piAuthFile?: string;
+  /** Keeps agent conversation stores across runs, so a redelivered event resumes instead of rerunning. */
+  piStoreDir?: string;
   piRunner?: PiRunner;
   structuralHeadRef?: string;
   diffManifestBuilder?: DiffManifestBuilder;

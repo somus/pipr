@@ -24,10 +24,10 @@ declare const pipr: PiprBuilder;
   ],
   [
     "pipr-review",
-    `import type { ModelProfile, PiprBuilder, ReviewInstructions } from "@usepipr/sdk";
+    `import type { ModelProfile, PiprBuilder } from "@usepipr/sdk";
 declare const pipr: PiprBuilder;
 declare const model: ModelProfile;
-declare const reviewInstructions: ReviewInstructions;
+declare const reviewInstructions: string;
 // ---cut---`,
   ],
   [
@@ -68,18 +68,18 @@ declare const ask: Task<{ question: string }>;
   ],
   [
     "pipr-security-agent",
-    `import type { Agent, ModelProfile, PiprBuilder, ReviewResult } from "@usepipr/sdk";
+    `import type { Agent, DiffContext, ModelProfile, PiprBuilder, ReviewResult } from "@usepipr/sdk";
 declare const pipr: PiprBuilder;
 declare const model: ModelProfile;
-declare const securityAgent: Agent<{ manifest: unknown }, ReviewResult>;
+declare const securityAgent: Agent<{ diff: DiffContext }, ReviewResult>;
 // ---cut---`,
   ],
   [
     "pipr-ask-agent",
-    `import type { Agent, PiprBuilder } from "@usepipr/sdk";
+    `import type { Agent, DiffContext, PiprBuilder } from "@usepipr/sdk";
 declare const pipr: PiprBuilder;
 declare const askAgent: Agent<
-  { question: string; manifest: unknown; prior?: unknown },
+  { question: string; diff: DiffContext; prior?: unknown },
   { body: string }
 >;
 // ---cut---`,
@@ -106,11 +106,11 @@ declare const result: ReviewResult;
   ],
   [
     "task-pi-review",
-    `import type { Agent, ModelProfile, ReviewResult, TaskContext } from "@usepipr/sdk";
+    `import type { Agent, DiffContext, ModelProfile, ReviewResult, TaskContext } from "@usepipr/sdk";
 declare const ctx: TaskContext;
 declare const reviewer: Agent<Record<string, unknown>, ReviewResult>;
 declare const backupModel: ModelProfile;
-declare const manifest: unknown;
+declare const diff: DiffContext;
 // ---cut---`,
   ],
 ]);

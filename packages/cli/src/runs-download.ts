@@ -1,15 +1,15 @@
 import { constants as fsConstants } from "node:fs";
-import { chmod, copyFile, mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
+import { chmod, copyFile } from "node:fs/promises";
 import path from "node:path";
 import { copyValidatedRunBundle, openRunBundlePackage } from "@usepipr/runtime";
 import { resolveIdentityContents } from "./runs-identity.js";
 import { resolveRepositorySelector } from "./runs-selector.js";
 import {
-  collectExactRecord,
+  requireAvailableRun,
   runSources,
-  unavailableRunMessage,
-  withLookupErrors,
+  selectRunByExecutionId,
+  validExecutionId,
+  withTemporaryRoot,
 } from "./runs-sources.js";
 import type { RunsDownloadOptions } from "./runs-types.js";
 
@@ -18,32 +18,17 @@ export async function runRunsDownload(
   options: RunsDownloadOptions,
   context: { env: NodeJS.ProcessEnv; cwd: string },
 ): Promise<void> {
-  if (!/^[a-f0-9]{32}$/.test(executionId)) {
-    throw new Error("Execution ID must be a 32-character lowercase hexadecimal trace ID");
-  }
+  validExecutionId(executionId);
   const destination = path.resolve(context.cwd, options.output ?? `pipr-run-${executionId}`);
   const selector = await resolveRepositorySelector({ ...options, cwd: context.cwd }).catch(
     () => undefined,
   );
-  const collected = await collectExactRecord(await runSources(options.store, context, selector), {
+  const selected = await selectRunByExecutionId(
     executionId,
-    kind: "all",
-    limit: 1000,
-  });
-  const selected = collected.records.find((record) => record.executionId === executionId);
-  if (!selected) {
-    throw new Error(
-      withLookupErrors(
-        `Pipr run ${executionId} was not found in local or GitHub storage`,
-        collected.errors,
-      ),
-    );
-  }
-  if (selected.state !== "available") {
-    throw new Error(unavailableRunMessage(selected, executionId));
-  }
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-runs-download-"));
-  try {
+    await runSources(options.store, context, selector),
+  );
+  requireAvailableRun(selected, executionId);
+  await withTemporaryRoot("pipr-runs-download-", async (temporaryRoot) => {
     const downloaded = await selected.archiveSource.download(
       { ...selected.ref, preserveArchive: options.archive },
       path.join(temporaryRoot, executionId),
@@ -73,7 +58,5 @@ export async function runRunsDownload(
       await chmod(archivePath, 0o600);
       console.log(archivePath);
     }
-  } finally {
-    await rm(temporaryRoot, { recursive: true, force: true });
-  }
+  });
 }

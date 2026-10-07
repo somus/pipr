@@ -16,6 +16,7 @@ const runtimeLayers = [
   "observability",
   "config",
   "diff",
+  "agent-worker",
   "pi",
   "review",
   "hosts",

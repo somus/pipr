@@ -5,7 +5,6 @@ import {
 } from "@usepipr/runtime/internal/review-testing";
 import type { PiprEvalExpected, PiprEvalExpectedFinding } from "./cases.js";
 import type { EvalDiffRange, EvalInlineFinding, PiprEvalOutput } from "./runner.js";
-import { piprEvalForbiddenOutputText } from "./runner.js";
 
 export type PiprEvalScore = {
   name: string;
@@ -22,38 +21,72 @@ export type ExpectedFindingRecallDiagnostics = {
   }>;
 };
 
+export type PiprEvalScoreInput = {
+  output: PiprEvalOutput;
+  expected?: PiprEvalExpected;
+};
+
+export type PiprEvalScorer = {
+  name: string;
+  scorer: (input: PiprEvalScoreInput) => number;
+};
+
+/** Every eval scorer, in report order; live gates and deterministic smoke pick from this table. */
+export const piprEvalScorers = {
+  runSucceeded: { name: "Run succeeded", scorer: ({ output }) => (output.ok ? 1 : 0) },
+  expectedFindingRecall: {
+    name: "Expected finding recall",
+    scorer: ({ output, expected }) => scoreExpectedFindings(output, expected),
+  },
+  forbiddenOutputSuppression: {
+    name: "Forbidden output suppression",
+    scorer: ({ output, expected }) => scoreForbiddenOutputSuppression(output, expected),
+  },
+  falsePositiveSuppression: {
+    name: "False-positive suppression",
+    scorer: ({ output, expected }) => scoreFalsePositiveSuppression(output, expected),
+  },
+  validInlineAnchoring: {
+    name: "Valid inline anchoring",
+    scorer: ({ output }) => scoreValidAnchoring(output),
+  },
+  expectedInlineSelection: {
+    name: "Expected inline selection",
+    scorer: ({ output, expected }) => scoreExpectedInlineSelection(output, expected),
+  },
+  inlineFindingBodyBudget: {
+    name: "Inline finding body budget",
+    scorer: ({ output }) => scoreInlineFindingBodyBudget(output),
+  },
+  suggestedFixRangeShape: {
+    name: "Suggested fix range shape",
+    scorer: ({ output }) => scoreSuggestedFixRangeShape(output),
+  },
+  expectedSuggestedFixBehavior: {
+    name: "Expected suggested fix behavior",
+    scorer: ({ output, expected }) => scoreExpectedSuggestedFixBehavior(output, expected),
+  },
+  findingCountBudget: {
+    name: "Finding count budget",
+    scorer: ({ output, expected }) => scoreFindingCountBudget(output, expected),
+  },
+  promptPolicy: {
+    name: "Prompt contracts reached Pi",
+    scorer: ({ output, expected }) => scorePromptPolicy(output, expected),
+  },
+} satisfies Record<string, PiprEvalScorer>;
+
 export function scorePiprEvalOutput(
   output: PiprEvalOutput,
   expected: PiprEvalExpected | undefined,
   options: { includePromptPolicy: boolean },
 ): PiprEvalScore[] {
-  return [
-    { name: "Run succeeded", score: output.ok ? 1 : 0 },
-    { name: "Expected finding recall", score: scoreExpectedFindings(output, expected) },
-    {
-      name: "Forbidden output suppression",
-      score: scoreForbiddenOutputSuppression(output, expected),
-    },
-    {
-      name: "False-positive suppression",
-      score: scoreFalsePositiveSuppression(output, expected),
-    },
-    { name: "Valid inline anchoring", score: scoreValidAnchoring(output) },
-    {
-      name: "Expected inline selection",
-      score: scoreExpectedInlineSelection(output, expected),
-    },
-    { name: "Inline finding body budget", score: scoreInlineFindingBodyBudget(output) },
-    { name: "Suggested fix range shape", score: scoreSuggestedFixRangeShape(output) },
-    {
-      name: "Expected suggested fix behavior",
-      score: scoreExpectedSuggestedFixBehavior(output, expected),
-    },
-    { name: "Finding count budget", score: scoreFindingCountBudget(output, expected) },
-    ...(options.includePromptPolicy
-      ? [{ name: "Prompt contracts reached Pi", score: scorePromptPolicy(output, expected) }]
-      : []),
+  const { promptPolicy, ...scorers } = piprEvalScorers;
+  const selected: PiprEvalScorer[] = [
+    ...Object.values(scorers),
+    ...(options.includePromptPolicy ? [promptPolicy] : []),
   ];
+  return selected.map(({ name, scorer }) => ({ name, score: scorer({ output, expected }) }));
 }
 
 export function scoreExpectedFindings(
@@ -127,18 +160,7 @@ export function scoreForbiddenOutputSuppression(
   output: PiprEvalOutput,
   expected: PiprEvalExpected | undefined,
 ): number {
-  return Number(
-    hasExpectedOutput(output, expected) &&
-      forbiddenOutputSuppressed(output, expected.forbiddenOutputSubstrings ?? []),
-  );
-}
-
-function forbiddenOutputSuppressed(output: PiprEvalOutput, forbidden: string[]): boolean {
-  if (forbidden.length === 0) {
-    return true;
-  }
-  const text = piprEvalForbiddenOutputText(output).toLowerCase();
-  return forbidden.every((value) => !text.includes(value.toLowerCase()));
+  return Number(hasExpectedOutput(output, expected) && !output.forbiddenOutputLeaked);
 }
 
 export function scoreValidAnchoring(output: PiprEvalOutput): number {
@@ -256,7 +278,7 @@ function scorePromptPolicy(output: PiprEvalOutput, expected: PiprEvalExpected | 
   if (!hasExpectedOutput(output, expected)) {
     return 0;
   }
-  if (!expected.requirePiCall) {
+  if (expected.requirePiCall === false) {
     return Number(output.piCalls.length === 0);
   }
   return Number(output.piCalls.some((call) => hasReviewPolicyCall(call)));
@@ -268,6 +290,7 @@ function rangeContainsFinding(range: EvalDiffRange, finding: EvalInlineFinding):
     range.rangeId === finding.rangeId,
     range.side === finding.side,
     finding.startLine >= range.startLine,
+    finding.startLine <= finding.endLine,
     finding.endLine <= range.endLine,
   ].every(Boolean);
 }
@@ -280,15 +303,7 @@ function isTightSuggestedFixSelection(
   if (!range || !finding.suggestedFix) {
     return false;
   }
-  return isPublishableSuggestedFixSelection({
-    side: range.side,
-    kind: range.kind,
-    rangeStartLine: range.startLine,
-    startLine: finding.startLine,
-    endLine: finding.endLine,
-    preview: range.preview,
-    suggestedFix: finding.suggestedFix,
-  });
+  return isPublishableSuggestedFixSelection(finding, range);
 }
 
 function hasExpectedOutput(
@@ -298,7 +313,7 @@ function hasExpectedOutput(
   return output.ok && Boolean(expected);
 }
 
-export function expectedFindingMatches(
+function expectedFindingMatches(
   finding: PiprEvalExpected["findings"][number],
   actual: EvalInlineFinding,
 ): boolean {
@@ -313,20 +328,16 @@ function expectedFindingBodyMatches(
   body: string,
 ): boolean {
   const normalizedBody = body.toLowerCase();
-  const keywordSets = finding.keywordSets ?? [finding.keywords];
-  return keywordSets.some((keywords) =>
-    keywords.every((keyword) => normalizedBody.includes(keyword.toLowerCase())),
-  );
+  return finding.keywords.every((keyword) => normalizedBody.includes(keyword.toLowerCase()));
 }
 
 function expectedFindingLocationMatches(
   finding: PiprEvalExpected["findings"][number],
   actual: EvalInlineFinding,
 ): boolean {
-  const acceptableLines = finding.acceptableLines ?? [finding.line];
   return [
     actual.path === finding.path,
-    acceptableLines.some((line) => line >= actual.startLine && line <= actual.endLine),
+    finding.line >= actual.startLine && finding.line <= actual.endLine,
   ].every(Boolean);
 }
 

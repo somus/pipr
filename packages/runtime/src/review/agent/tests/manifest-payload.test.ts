@@ -1,0 +1,321 @@
+import { describe, expect, it } from "bun:test";
+import { createDiffContext } from "../../../diff/diff-context.js";
+import {
+  condenseDiffManifest,
+  measureDiffManifestPrompt,
+  prepareDiffManifestPrompt,
+} from "../../../diff/manifest-projection.js";
+import { piRuntimeReadToolNames, piRuntimeStructuralToolNames } from "../../../pi/runtime-tools.js";
+import { reviewTestManifest } from "../../../tests/helpers/review-test-manifest.js";
+import { prepareDiffManifestContext } from "../diff-manifest-context.js";
+
+describe("Diff Manifest prompt payload", () => {
+  it("keeps small manifests full and unchanged", () => {
+    const manifest = reviewTestManifest();
+
+    const prepared = prepareDiffManifestPrompt(manifest, undefined);
+
+    expect(prepared.mode).toBe("full");
+    expect(prepared.manifest).toBe(manifest);
+    expect(prepared.metrics.full).toEqual(measureDiffManifestPrompt(manifest));
+  });
+
+  it("condenses when byte limits are exceeded and preserves mapping fields", () => {
+    const manifest = largeContextManifest();
+
+    const prepared = prepareDiffManifestPrompt(manifest, {
+      fullMaxBytes: 128,
+      fullMaxEstimatedTokens: 100_000,
+      condensedMaxBytes: 100_000,
+      condensedMaxEstimatedTokens: 100_000,
+    });
+
+    expect(prepared.mode).toBe("condensed");
+    expect(prepared.manifest.files[0]).toMatchObject({
+      path: "src/a.ts",
+      status: "modified",
+      additions: 1,
+      deletions: 0,
+      changedSymbols: ["changedSymbol"],
+      hunks: [
+        {
+          hunkIndex: 1,
+          header: "@@ -9,1 +10,3 @@",
+          contentHash: "deadbeefcafe",
+        },
+      ],
+      commentableRanges: [
+        {
+          id: "range-1",
+          path: "src/a.ts",
+          side: "RIGHT",
+          startLine: 10,
+          endLine: 12,
+          kind: "added",
+          hunkHeader: "@@ -9,1 +10,3 @@",
+          hunkContentHash: "deadbeefcafe",
+          summary: "large summary ".repeat(100),
+        },
+        {
+          id: "range-2",
+        },
+      ],
+    });
+    expect(JSON.stringify(prepared.manifest)).not.toContain("large preview");
+    expect(JSON.stringify(prepared.manifest)).not.toContain("large signal");
+    expect(JSON.stringify(prepared.manifest)).toContain("changedSymbol");
+  });
+
+  it("condenses when estimated token limits are exceeded", () => {
+    const prepared = prepareDiffManifestPrompt(reviewTestManifest(), {
+      fullMaxBytes: 100_000,
+      fullMaxEstimatedTokens: 1,
+      condensedMaxBytes: 100_000,
+      condensedMaxEstimatedTokens: 100_000,
+    });
+
+    expect(prepared.mode).toBe("condensed");
+  });
+
+  it("fails before Pi when the condensed payload still exceeds limits", () => {
+    expect(() =>
+      prepareDiffManifestPrompt(reviewTestManifest(), {
+        fullMaxBytes: 1,
+        fullMaxEstimatedTokens: 1,
+        condensedMaxBytes: 1,
+        condensedMaxEstimatedTokens: 1,
+      }),
+    ).toThrow("exceeds condensed limit before Pi execution");
+  });
+
+  it("does not mutate the source manifest while condensing", () => {
+    const manifest = largeContextManifest();
+
+    condenseDiffManifest(manifest);
+
+    expect(manifest.files[0]?.commentableRanges[0]?.preview).toContain("large preview");
+    expect(manifest.files[0]?.signals).toEqual(["large signal"]);
+  });
+
+  it("prepares full prompt context without runtime tools", () => {
+    const manifest = reviewTestManifest();
+
+    const context = prepareDiffManifestContext({
+      input: { diff: createDiffContext(manifest) },
+      toolMode: "read-only",
+    });
+
+    expect(context?.manifest).toEqual(manifest);
+    expect(context?.mode).toBe("full");
+    expect(context?.runtimeToolNames).toEqual([]);
+    expect(context?.runtimeToolRequest).toBeUndefined();
+    expect(context?.body).toContain('"mode": "full"');
+    expect(context?.body).not.toContain("pipr_read_diff");
+  });
+
+  it("prepares condensed prompt context with runtime read tools", () => {
+    const manifest = largeContextManifest();
+
+    const context = prepareDiffManifestContext({
+      input: { diff: createDiffContext(manifest) },
+      limits: {
+        fullMaxBytes: 128,
+        fullMaxEstimatedTokens: 100_000,
+        condensedMaxBytes: 100_000,
+        condensedMaxEstimatedTokens: 100_000,
+        toolResponseMaxBytes: 4096,
+      },
+      toolMode: "read-only",
+    });
+
+    expect(context?.mode).toBe("condensed");
+    expect(context?.runtimeToolNames).toEqual([...piRuntimeReadToolNames]);
+    expect(context?.runtimeToolRequest).toEqual({
+      manifest,
+      toolResponseMaxBytes: 4096,
+    });
+    expect(context?.body).toContain('"mode": "condensed"');
+    expect(context?.body).toContain("pipr_read_diff");
+    expect(context?.body).not.toContain("pipr_read_declaration");
+  });
+
+  it("advertises structural tools only when condensed structural capability is available", () => {
+    const manifest = largeContextManifest();
+    const context = prepareDiffManifestContext({
+      input: { diff: createDiffContext(manifest) },
+      limits: {
+        fullMaxBytes: 128,
+        fullMaxEstimatedTokens: 100_000,
+        condensedMaxBytes: 100_000,
+        condensedMaxEstimatedTokens: 100_000,
+      },
+      toolMode: "read-only",
+      structuralAnalysis: {
+        available: true,
+        version: "0.44.1",
+        headFiles: [],
+        baseFiles: [],
+        diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+      },
+    });
+
+    expect(context?.runtimeToolNames).toEqual([
+      ...piRuntimeReadToolNames,
+      ...piRuntimeStructuralToolNames,
+    ]);
+    expect(context?.runtimeToolRequest?.structuralAnalysis?.available).toBe(true);
+    expect(context?.body).toContain("pipr_read_declaration");
+    expect(context?.body).toContain("pipr_ast_grep");
+  });
+
+  it("keeps structural tool registration and prompt instructions in capability parity", () => {
+    const available = {
+      available: true as const,
+      version: "0.44.1",
+      headFiles: [],
+      baseFiles: [],
+      diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+    };
+    const unavailable = {
+      available: false as const,
+      reason: "missing-executable" as const,
+      diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+    };
+    const cases = [
+      {
+        name: "full available",
+        manifest: reviewTestManifest(),
+        limits: undefined,
+        toolMode: "read-only" as const,
+        structuralAnalysis: available,
+        expected: [],
+      },
+      {
+        name: "condensed unavailable",
+        manifest: largeContextManifest(),
+        limits: {
+          fullMaxBytes: 128,
+          fullMaxEstimatedTokens: 100_000,
+          condensedMaxBytes: 100_000,
+          condensedMaxEstimatedTokens: 100_000,
+        },
+        toolMode: "read-only" as const,
+        structuralAnalysis: unavailable,
+        expected: [...piRuntimeReadToolNames],
+      },
+      {
+        name: "condensed available",
+        manifest: largeContextManifest(),
+        limits: {
+          fullMaxBytes: 128,
+          fullMaxEstimatedTokens: 100_000,
+          condensedMaxBytes: 100_000,
+          condensedMaxEstimatedTokens: 100_000,
+        },
+        toolMode: "read-only" as const,
+        structuralAnalysis: available,
+        expected: [...piRuntimeReadToolNames, ...piRuntimeStructuralToolNames],
+      },
+      {
+        name: "none available",
+        manifest: largeContextManifest(),
+        limits: {
+          fullMaxBytes: 128,
+          fullMaxEstimatedTokens: 100_000,
+          condensedMaxBytes: 100_000,
+          condensedMaxEstimatedTokens: 100_000,
+        },
+        toolMode: "none" as const,
+        structuralAnalysis: available,
+        expected: [],
+      },
+    ];
+
+    for (const testCase of cases) {
+      const context = prepareDiffManifestContext({
+        input: { diff: createDiffContext(testCase.manifest) },
+        limits: testCase.limits,
+        toolMode: testCase.toolMode,
+        structuralAnalysis: testCase.structuralAnalysis,
+      });
+      const expectedToolNames: readonly string[] = testCase.expected;
+      expect(context?.runtimeToolNames, testCase.name).toEqual(testCase.expected);
+      expect(context?.body.includes("pipr_read_declaration"), testCase.name).toBe(
+        expectedToolNames.includes("pipr_read_declaration"),
+      );
+      expect(context?.body.includes("pipr_ast_grep"), testCase.name).toBe(
+        expectedToolNames.includes("pipr_ast_grep"),
+      );
+      expect(context?.runtimeToolRequest?.structuralAnalysis?.available, testCase.name).toBe(
+        expectedToolNames.includes("pipr_ast_grep") ? true : undefined,
+      );
+    }
+  });
+
+  it("does not attach runtime read tools when tool mode is none", () => {
+    const context = prepareDiffManifestContext({
+      input: { diff: createDiffContext(largeContextManifest()) },
+      limits: {
+        fullMaxBytes: 128,
+        fullMaxEstimatedTokens: 100_000,
+        condensedMaxBytes: 100_000,
+        condensedMaxEstimatedTokens: 100_000,
+      },
+      toolMode: "none",
+      structuralAnalysis: {
+        available: true,
+        version: "0.44.1",
+        headFiles: [],
+        baseFiles: [],
+        diagnostics: { durationMs: 1, fileCount: 0, declarationCount: 0 },
+      },
+    });
+
+    expect(context?.mode).toBe("condensed");
+    expect(context?.runtimeToolNames).toEqual([]);
+    expect(context?.runtimeToolRequest).toBeUndefined();
+    expect(context?.body).not.toContain("pipr_read_diff");
+    expect(context?.body).not.toContain("pipr_ast_grep");
+  });
+
+  it("only prepares context for a branded diff input value", () => {
+    expect(
+      prepareDiffManifestContext({
+        input: {},
+        toolMode: "read-only",
+      }),
+    ).toBeUndefined();
+    expect(
+      prepareDiffManifestContext({
+        input: { manifest: reviewTestManifest() },
+        toolMode: "read-only",
+      }),
+    ).toBeUndefined();
+    expect(() =>
+      prepareDiffManifestContext({
+        input: {
+          head: createDiffContext(reviewTestManifest()),
+          base: createDiffContext(reviewTestManifest()),
+        },
+        toolMode: "read-only",
+      }),
+    ).toThrow();
+  });
+});
+
+function largeContextManifest() {
+  const manifest = reviewTestManifest();
+  return {
+    ...manifest,
+    files: manifest.files.map((file) => ({
+      ...file,
+      signals: ["large signal"],
+      changedSymbols: ["changedSymbol"],
+      commentableRanges: file.commentableRanges.map((range) => ({
+        ...range,
+        summary: "large summary ".repeat(100),
+        preview: `large preview ${range.preview ?? ""}`.repeat(100),
+      })),
+    })),
+  };
+}

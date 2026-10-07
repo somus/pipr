@@ -12,7 +12,7 @@ export const findingIdSchema = z
   .min(1)
   .regex(/^[A-Za-z0-9_.-]+$/);
 
-const maxReviewStatsModels = 20;
+export const maxReviewStatsModels = 20;
 const maxReviewStatsModelLength = 200;
 
 export function sanitizeReviewStatsModel(model: string): string | undefined {
@@ -40,7 +40,7 @@ const diffContextCoverageSchema = z.strictObject({
   ranges: coverageCountsSchema,
 });
 
-export const reviewStatsSchema = z.strictObject({
+const reviewStatsSchema = z.strictObject({
   models: z.array(reviewStatsModelSchema).min(1).max(maxReviewStatsModels),
   agentRuns: z.number().int().positive(),
   durationMs: z.number().int().nonnegative(),
@@ -97,8 +97,34 @@ export const priorReviewStateSchema = z.strictObject({
   workflowUrls: z.array(workflowUrlSchema).optional(),
 });
 
-export const maxReviewStatsModelsLimit = maxReviewStatsModels;
+export const threadActionSchema = z.strictObject({
+  kind: z.enum(["resolve", "reply"]),
+  findingId: findingIdSchema,
+  findingHeadSha: z.string().min(1),
+  commentId: z.string().min(1),
+  threadId: z.string().min(1).optional(),
+  body: z.string().min(1),
+  responseKey: z.string().min(1),
+});
+
+export const publicationMetadataSchema = z.strictObject({
+  runtimeVersion: z.string().min(1),
+  configVersion: z.string().min(1).optional(),
+  trustedConfigSha: z.string().min(1).optional(),
+  trustedConfigHash: z.string().min(1).optional(),
+  reviewedHeadSha: z.string().min(1),
+  providerModels: z.array(z.string().min(1)).optional(),
+  selectedTasks: z.array(z.string().min(1)),
+  failedTasks: z.array(z.string().min(1)),
+  validFindings: z.number().int().min(0),
+  droppedFindings: z.number().int().min(0),
+  cappedInlineFindings: z.number().int().min(0),
+  stats: reviewStatsSchema.optional(),
+  workflowUrl: workflowUrlSchema.optional(),
+});
 
 export type ReviewStats = z.infer<typeof reviewStatsSchema>;
+export type ThreadAction = z.infer<typeof threadActionSchema>;
+export type PublicationMetadata = z.infer<typeof publicationMetadataSchema>;
 export type PriorFindingRecord = z.infer<typeof priorFindingRecordSchema>;
 export type PriorReviewState = z.infer<typeof priorReviewStateSchema>;

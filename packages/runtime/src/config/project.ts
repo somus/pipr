@@ -1,4 +1,4 @@
-import type { AutoResolveOptions, ModelProfile } from "@usepipr/sdk";
+import type { AutoResolveOptions, ModelProfile, ProviderProfile } from "@usepipr/sdk";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import type { AutoResolveConfig, ProviderConfig, RuntimeSettings } from "../types.js";
 import { parseProviderConfig, parseRuntimeSettings } from "../types.js";
@@ -8,6 +8,12 @@ import {
   type NormalizedTaskCheckSettings,
   taskCheckSettings,
 } from "./check-settings.js";
+import { assertProviderCredentials } from "./provider-credentials.js";
+import {
+  builtinProviderIds,
+  type ProviderEnvironment,
+  providerEnvironments,
+} from "./provider-env.js";
 import { loadTypescriptConfig } from "./ts-loader.js";
 import type { ConfigVersionCompatibility } from "./version-compat.js";
 
@@ -20,7 +26,6 @@ export type LoadRuntimeProjectOptions = {
 };
 
 export type LoadedRuntimeProject = {
-  kind: "typescript";
   plan: RuntimePlan;
   settings: RuntimeSettings;
   versionCompatibility: ConfigVersionCompatibility;
@@ -67,11 +72,19 @@ export async function loadRuntimeProject(
   options: LoadRuntimeProjectOptions,
 ): Promise<LoadedRuntimeProject> {
   const loaded = await loadTypescriptConfig(options);
+  assertCustomProviderIds(loaded.plan.providers, loaded.source);
+  const customProviders = new Map(loaded.plan.providers.map((provider) => [provider.id, provider]));
+  const providerEnvs = await providerEnvironments(
+    loaded.plan.models
+      .filter((model) => model.apiKey !== "local" && !customProviders.has(model.provider))
+      .map((model) => model.provider),
+  );
   return {
-    kind: "typescript",
     plan: loaded.plan,
     settings: planToRuntimeSettings(loaded.plan, {
       source: loaded.source,
+      providerEnvs,
+      customProviders,
       env: options.env,
       requireProviderEnv: options.requireProviderEnv,
       warnings: [loaded.versionCompatibility.warning].filter(
@@ -114,10 +127,7 @@ export function inspectRuntimePlan(plan: RuntimePlan, source: string): InspectRu
       ...(plan.publication.maxStoredFindings === undefined
         ? {}
         : { maxStoredFindings: plan.publication.maxStoredFindings }),
-      showHeader: plan.publication.showHeader ?? true,
-      showFooter: plan.publication.showFooter ?? true,
-      showStats: plan.publication.showStats ?? true,
-      showProgress: plan.publication.showProgress ?? true,
+      ...publicationDisplaySettings(plan.publication),
       autoResolve: {
         enabled: autoResolve.enabled,
         ...(autoResolve.model === undefined ? {} : { model: autoResolve.model }),
@@ -143,18 +153,24 @@ function planToRuntimeSettings(
   plan: RuntimePlan,
   options: {
     source: string;
+    providerEnvs: ReadonlyMap<string, ProviderEnvironment>;
+    customProviders: ReadonlyMap<string, ProviderProfile>;
     env?: NodeJS.ProcessEnv;
     requireProviderEnv?: boolean;
     warnings?: string[];
   },
 ): RuntimeSettings {
-  const providers = plan.models.map(modelToProvider);
+  const providers = plan.models.map((model) =>
+    modelToProvider(model, options.providerEnvs, options.customProviders, options.source),
+  );
   const defaultProvider = providers[0];
   if (!defaultProvider) {
     throw new Error(`${options.source}: at least one pipr.model() is required`);
   }
   assertUniqueProviders(providers, options.source);
-  assertRequiredProviderEnv(providers, options);
+  if (options.requireProviderEnv) {
+    assertProviderCredentials(providers, options.env ?? process.env);
+  }
   return parseRuntimeSettings({
     source: options.source,
     config: {
@@ -164,15 +180,22 @@ function planToRuntimeSettings(
         maxInlineComments: plan.publication.maxInlineComments,
         maxStoredFindings: plan.publication.maxStoredFindings,
         autoResolve: normalizeAutoResolveConfig(plan.publication.autoResolve, defaultProvider.id),
-        showHeader: plan.publication.showHeader ?? true,
-        showFooter: plan.publication.showFooter ?? true,
-        showStats: plan.publication.showStats ?? true,
-        showProgress: plan.publication.showProgress ?? true,
+        ...publicationDisplaySettings(plan.publication),
       },
       limits: plan.limits,
     },
     warnings: options.warnings ?? [],
   });
+}
+
+/** Header, footer, stats, and progress default to shown. */
+function publicationDisplaySettings(publication: RuntimePlan["publication"]) {
+  return {
+    showHeader: publication.showHeader ?? true,
+    showFooter: publication.showFooter ?? true,
+    showStats: publication.showStats ?? true,
+    showProgress: publication.showProgress ?? true,
+  };
 }
 
 function normalizeAutoResolveConfig(
@@ -182,24 +205,13 @@ function normalizeAutoResolveConfig(
   if (options === false) {
     return disabledAutoResolveConfig();
   }
-  if (!options) {
-    return enabledAutoResolveConfig(defaultProvider);
-  }
-  return enabledAutoResolveConfig(defaultProvider, options);
+  return enabledAutoResolveConfig(defaultProvider, options ?? {});
 }
 
 function enabledAutoResolveConfig(
   defaultProvider: string,
-  options?: Exclude<AutoResolveOptions, false>,
+  options: Exclude<AutoResolveOptions, false>,
 ): AutoResolveConfig {
-  if (!options) {
-    return {
-      enabled: true,
-      model: defaultProvider,
-      synchronize: true,
-      userReplies: normalizeUserReplyAutoResolveConfig(undefined),
-    };
-  }
   if (options.enabled === false && options.model) {
     throw new Error("publication.autoResolve.model cannot be set when autoResolve is disabled");
   }
@@ -225,9 +237,9 @@ function disabledAutoResolveConfig(): AutoResolveConfig {
 }
 
 function normalizeUserReplyAutoResolveConfig(
-  options: Exclude<AutoResolveOptions, false> | undefined,
+  options: Exclude<AutoResolveOptions, false>,
 ): AutoResolveConfig["userReplies"] {
-  const userReplies = options?.userReplies;
+  const userReplies = options.userReplies;
   if (typeof userReplies === "boolean") {
     return {
       enabled: userReplies,
@@ -242,14 +254,69 @@ function normalizeUserReplyAutoResolveConfig(
   };
 }
 
-function modelToProvider(model: ModelProfile): ProviderConfig {
+function modelToProvider(
+  model: ModelProfile,
+  providerEnvs: ReadonlyMap<string, ProviderEnvironment>,
+  customProviders: ReadonlyMap<string, ProviderProfile>,
+  source: string,
+): ProviderConfig {
+  const custom = customProviders.get(model.provider);
+  const environment = custom
+    ? { apiKeyEnv: custom.apiKey.name, companions: [], alternatives: [] }
+    : providerEnvs.get(model.provider);
   return parseProviderConfig({
     id: model.id,
     provider: model.provider,
     model: model.model,
-    apiKeyEnv: model.apiKey?.name,
+    ...modelProviderEnv(model, environment, source),
     thinking: model.thinking,
+    ...(custom ? { endpoint: customModelEndpoint(custom, model.model) } : {}),
   });
+}
+
+/** The endpoint a custom provider model runs against, with any metadata the provider declares for it. */
+function customModelEndpoint(provider: ProviderProfile, modelId: string) {
+  const metadata = provider.models?.[modelId];
+  return { api: provider.api, baseUrl: provider.baseUrl, ...(metadata ? { metadata } : {}) };
+}
+
+function assertCustomProviderIds(providers: readonly ProviderProfile[], source: string): void {
+  const builtinIds = builtinProviderIds();
+  for (const provider of providers) {
+    if (builtinIds.has(provider.id)) {
+      throw new Error(
+        `${source}: pipr.provider '${provider.id}' collides with the built-in Pi provider '${provider.id}'. Choose another id.`,
+      );
+    }
+  }
+}
+
+/**
+ * A model without `apiKey` uses its provider's standard key or any fallback credential source the provider supports.
+ * An explicit `apiKey` must be set, and still gets the variables the provider reads alongside its key.
+ */
+function modelProviderEnv(
+  model: ModelProfile,
+  environment: ProviderEnvironment | undefined,
+  source: string,
+): Pick<ProviderConfig, "apiKeyEnv" | "providerEnv" | "credentialEnv"> {
+  if (model.apiKey === "local") {
+    return {};
+  }
+  const companions = environment?.companions.length ? { providerEnv: environment.companions } : {};
+  if (model.apiKey) {
+    return { apiKeyEnv: model.apiKey.name, ...companions };
+  }
+  if (!environment) {
+    throw new Error(
+      `${source}: model '${model.id}' uses provider '${model.provider}', which has no standard API key environment variable. Declare the provider with pipr.provider({ id: "${model.provider}", ... }), or pass apiKey: pipr.secret({ name }) or apiKey: "local".`,
+    );
+  }
+  return {
+    apiKeyEnv: environment.apiKeyEnv,
+    ...companions,
+    ...(environment.alternatives.length ? { credentialEnv: environment.alternatives } : {}),
+  };
 }
 
 function assertUniqueProviders(providers: ProviderConfig[], source: string): void {
@@ -259,24 +326,5 @@ function assertUniqueProviders(providers: ProviderConfig[], source: string): voi
       throw new Error(`${source}: duplicate model id '${provider.id}'`);
     }
     seen.add(provider.id);
-  }
-}
-
-function assertRequiredProviderEnv(
-  providers: ProviderConfig[],
-  options: { env?: NodeJS.ProcessEnv; requireProviderEnv?: boolean },
-): void {
-  if (!options.requireProviderEnv) {
-    return;
-  }
-  const env = options.env ?? process.env;
-  const missing = providers.filter(
-    (provider): provider is ProviderConfig & { apiKeyEnv: string } =>
-      provider.apiKeyEnv !== undefined && !env[provider.apiKeyEnv],
-  );
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing provider env vars: ${missing.map((provider) => provider.apiKeyEnv).join(", ")}`,
-    );
   }
 }

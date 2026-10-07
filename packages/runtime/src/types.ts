@@ -202,7 +202,7 @@ const diffManifestFileSchema: z.ZodType<DiffManifestFile> = z.strictObject({
   excludedReason: nonEmptyStringSchema.optional(),
 });
 
-const diffManifestSchema: z.ZodType<DiffManifest> = z.strictObject({
+export const diffManifestSchema: z.ZodType<DiffManifest> = z.strictObject({
   baseSha: nonEmptyStringSchema,
   headSha: nonEmptyStringSchema,
   mergeBaseSha: nonEmptyStringSchema,
@@ -232,7 +232,6 @@ export type DiffManifestLimitsConfig = z.infer<typeof diffManifestLimitsConfigSc
 export type AutoResolveConfig = z.infer<typeof autoResolveConfigSchema>;
 export type PiprConfig = z.infer<typeof piprConfigSchema>;
 export type RuntimeSettings = z.infer<typeof runtimeSettingsSchema>;
-export type PlatformInfo = z.infer<typeof platformInfoSchema>;
 export type RepositoryRef = z.infer<typeof repositoryRefSchema>;
 export type CodeHostCoordinates = z.infer<typeof codeHostCoordinatesSchema>;
 export type ChangeRequestRef = z.infer<typeof changeRequestRefSchema>;

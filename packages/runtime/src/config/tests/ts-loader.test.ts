@@ -6,7 +6,8 @@ import path from "node:path";
 import { runtimeVersion } from "../../shared/version.js";
 import { installConfigDependencies } from "../config-deps.js";
 import { defaultTypesBunVersion, defaultTypescriptVersion } from "../scaffold-versions.js";
-import { loadTypescriptConfig, prepareConfigDirectory } from "../ts-loader.js";
+import { loadTypescriptConfig } from "../ts-loader.js";
+import type { ConfigVersionCompatibility } from "../version-compat.js";
 import {
   initOfficialMinimalProjectWithLocalDependencies as initOfficialMinimalProject,
   useLocalInitSdk,
@@ -38,7 +39,7 @@ describe("loadTypescriptConfig installable deps", () => {
     await writeThirdPartyPiprProject(rootDir, { instructions: "Review this change." });
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: false })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -49,11 +50,7 @@ describe("loadTypescriptConfig installable deps", () => {
       path.join(rootDir, ".pipr", "config.ts"),
       `import { definePipr } from "@usepipr/sdk";
 export default definePipr((pipr) => {
-  pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
 });
 `,
     );
@@ -73,18 +70,12 @@ import { reviewSchemaExample } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const example = reviewSchemaExample();
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: \`Review. Example summary: \${example.summary.body}\`,
-      summary: "Summarize this change.",
-    },
+    instructions: \`Review. Example summary: \${example.summary.body}\`,
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -102,15 +93,12 @@ export default definePipr((pipr) => {
       `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+    instructions: "Review this change.",
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -119,7 +107,7 @@ export default definePipr((pipr) => {
     const loaded = await loadTypescriptConfig({ rootDir, typecheck: true });
 
     expect(loaded).toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
       versionCompatibility: {
         kind: "unknown",
         runtimeVersion,
@@ -127,83 +115,66 @@ export default definePipr((pipr) => {
     });
   });
 
-  it("captures a matching exact config SDK version without warning", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
-    await initOfficialMinimalProject({ rootDir, adapters: [] });
-    await writeSdkDependency(rootDir, runtimeVersion);
-
-    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
-
-    expect(loaded.versionCompatibility).toEqual({
-      kind: "matched",
+  it.each<[string, string | null, ConfigVersionCompatibility | { rejects: string }]>([
+    [
+      "matches an exact pin without warning",
       runtimeVersion,
-      configVersion: runtimeVersion,
-    });
-  });
-
-  it("warns when the config SDK pin is behind the runtime", async () => {
+      { kind: "matched", runtimeVersion, configVersion: runtimeVersion },
+    ],
+    [
+      "warns when the pin is behind the runtime",
+      "0.1.0",
+      {
+        kind: "runtime-newer",
+        runtimeVersion,
+        configVersion: "0.1.0",
+        warning: `.pipr/package.json pins @usepipr/sdk 0.1.0, but this Pipr runtime is ${runtimeVersion}. Run \`pipr init --force\` or update .pipr/package.json and .pipr/bun.lock when ready.`,
+      },
+    ],
+    [
+      "fails before config execution when the pin is newer than the runtime",
+      "999.0.0",
+      {
+        rejects: `.pipr/package.json pins @usepipr/sdk 999.0.0, but this Pipr runtime is ${runtimeVersion}. Upgrade Pipr before running this config.`,
+      },
+    ],
+    [
+      "skips comparison for non-exact specs",
+      "^0.3.3",
+      {
+        kind: "uncomparable",
+        runtimeVersion,
+        warning:
+          '.pipr/package.json declares @usepipr/sdk as "^0.3.3"; use an exact version to enable Pipr config version checks.',
+      },
+    ],
+    [
+      "escapes non-exact specs in warnings",
+      "^0.3.3\nerror: forged",
+      {
+        kind: "uncomparable",
+        runtimeVersion,
+        warning:
+          '.pipr/package.json declares @usepipr/sdk as "^0.3.3\\nerror: forged"; use an exact version to enable Pipr config version checks.',
+      },
+    ],
+    ["treats a non-object manifest as unknown", null, { kind: "unknown", runtimeVersion }],
+  ])("config SDK version compatibility %s", async (_name, version, expected) => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
     await initOfficialMinimalProject({ rootDir, adapters: [] });
-    await writeSdkDependency(rootDir, "0.1.0");
+    if (version === null) {
+      await Bun.write(path.join(rootDir, ".pipr", "package.json"), "null\n");
+    } else {
+      await writeSdkDependency(rootDir, version);
+    }
 
-    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
+    const loading = loadTypescriptConfig({ rootDir, typecheck: false });
 
-    expect(loaded.versionCompatibility).toEqual({
-      kind: "runtime-newer",
-      runtimeVersion,
-      configVersion: "0.1.0",
-      warning: `.pipr/package.json pins @usepipr/sdk 0.1.0, but this Pipr runtime is ${runtimeVersion}. Run \`pipr init --force\` or update .pipr/package.json and .pipr/bun.lock when ready.`,
-    });
-  });
-
-  it("treats non-object package manifests as unknown config versions", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
-    await initOfficialMinimalProject({ rootDir, adapters: [] });
-    await Bun.write(path.join(rootDir, ".pipr", "package.json"), "null\n");
-
-    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
-
-    expect(loaded.versionCompatibility).toEqual({
-      kind: "unknown",
-      runtimeVersion,
-    });
-  });
-
-  it("fails before config execution when the config SDK pin is newer than the runtime", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
-    await initOfficialMinimalProject({ rootDir, adapters: [] });
-    await writeSdkDependency(rootDir, "999.0.0");
-
-    await expect(loadTypescriptConfig({ rootDir, typecheck: false })).rejects.toThrow(
-      `.pipr/package.json pins @usepipr/sdk 999.0.0, but this Pipr runtime is ${runtimeVersion}. Upgrade Pipr before running this config.`,
-    );
-  });
-
-  it("warns and skips comparison for non-exact config SDK specs", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
-    await initOfficialMinimalProject({ rootDir, adapters: [] });
-    await writeSdkDependency(rootDir, "^0.3.3");
-
-    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
-
-    expect(loaded.versionCompatibility).toEqual({
-      kind: "uncomparable",
-      runtimeVersion,
-      warning:
-        '.pipr/package.json declares @usepipr/sdk as "^0.3.3"; use an exact version to enable Pipr config version checks.',
-    });
-  });
-
-  it("escapes non-exact config SDK specs in version warnings", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-deps-"));
-    await initOfficialMinimalProject({ rootDir, adapters: [] });
-    await writeSdkDependency(rootDir, "^0.3.3\nerror: forged");
-
-    const loaded = await loadTypescriptConfig({ rootDir, typecheck: false });
-
-    expect(loaded.versionCompatibility.warning).toBe(
-      '.pipr/package.json declares @usepipr/sdk as "^0.3.3\\nerror: forged"; use an exact version to enable Pipr config version checks.',
-    );
+    if ("rejects" in expected) {
+      await expect(loading).rejects.toThrow(expected.rejects);
+    } else {
+      expect((await loading).versionCompatibility).toEqual(expected);
+    }
   });
 
   it("uses the selected config directory in version mismatch remediation", async () => {
@@ -234,25 +205,19 @@ export default definePipr((pipr) => {
 import { file } from "bun";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: \`Review this change. Bun version: \${Bun.version}. Config exists: \${file(".pipr/config.ts").exists()}\`,
-      summary: "Summarize this change.",
-    },
+    instructions: \`Review this change. Bun version: \${Bun.version}. Config exists: \${file(".pipr/config.ts").exists()}\`,
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -283,25 +248,19 @@ export default definePipr((pipr) => {
 export default definePipr((pipr) => {
   type LocalTypescriptSentinel = typeof __piprLocalTypeScriptLibSentinel;
   const sentinel = "ok" satisfies LocalTypescriptSentinel;
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: \`Review this change. Local TS lib sentinel: \${sentinel}\`,
-      summary: "Summarize this change.",
-    },
+    instructions: \`Review this change. Local TS lib sentinel: \${sentinel}\`,
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -324,22 +283,19 @@ export default definePipr((pipr) => {
       `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+    instructions: "Review this change.",
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -352,25 +308,19 @@ export default definePipr((pipr) => {
 import * as ts from "typescript";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: \`Review this change. TS target: \${ts.ScriptTarget.Latest}\`,
-      summary: "Summarize this change.",
-    },
+    instructions: \`Review this change. TS target: \${ts.ScriptTarget.Latest}\`,
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -404,15 +354,12 @@ export default definePipr((pipr) => {
       `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model: string = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model: string = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+    instructions: "Review this change.",
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -424,7 +371,7 @@ export default definePipr((pipr) => {
   });
 });
 
-describe("prepareConfigDirectory", () => {
+describe("config directory preparation", () => {
   it("installs from a frozen verified projection without resolving runtime-provided deps", async () => {
     const originalSpawn = Bun.spawn;
     const observedInstalls: Array<{ command: string[]; packageJson: string; bunLock: string }> = [];
@@ -656,49 +603,30 @@ describe("prepareConfigDirectory", () => {
   });
 
   it("writes a typed SDK stub without running install for runtime-provided deps", async () => {
-    const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
-    await Bun.write(
-      path.join(configDir, "package.json"),
-      `${JSON.stringify(
-        {
-          private: true,
-          dependencies: { "@usepipr/sdk": "0.3.3" },
-          devDependencies: { "@types/bun": defaultTypesBunVersion },
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    const rootDir = await writeSdkStubProject({
+      private: true,
+      dependencies: { "@usepipr/sdk": "0.3.3" },
+      devDependencies: { "@types/bun": defaultTypesBunVersion },
+    });
 
-    await prepareConfigDirectory(configDir);
-
-    expect(
-      await Bun.file(
-        path.join(configDir, "node_modules", "@usepipr", "sdk", "index.d.ts"),
-      ).exists(),
-    ).toBe(true);
-    expect(
-      await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
-    ).toBe(true);
+    // Typechecking resolves the stub's declarations; loading imports its module.
+    await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
+      source: ".pipr/config.ts",
+    });
   });
 
   it("ignores malformed dependency maps when deciding whether install is required", async () => {
-    const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
-    await Bun.write(
-      path.join(configDir, "package.json"),
-      `${JSON.stringify({
-        dependencies: "lodash-es",
-        devDependencies: {
-          "@usepipr/sdk": runtimeVersion,
-          "not-a-version": 1,
-        },
-      })}\n`,
-    );
+    const rootDir = await writeSdkStubProject({
+      dependencies: "lodash-es",
+      devDependencies: {
+        "@usepipr/sdk": runtimeVersion,
+        "not-a-version": 1,
+      },
+    });
 
-    await expect(prepareConfigDirectory(configDir)).resolves.toBeUndefined();
-    expect(
-      await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
-    ).toBe(true);
+    await expect(loadTypescriptConfig({ rootDir, typecheck: false })).resolves.toMatchObject({
+      source: ".pipr/config.ts",
+    });
   });
 });
 
@@ -824,6 +752,20 @@ async function installPiprConfigDependencies(configDir: string): Promise<void> {
   if (exitCode !== 0) {
     throw new Error(stderr);
   }
+}
+
+async function writeSdkStubProject(manifest: Record<string, unknown>): Promise<string> {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
+  await Bun.write(path.join(rootDir, ".pipr", "package.json"), `${JSON.stringify(manifest)}\n`);
+  await Bun.write(
+    path.join(rootDir, ".pipr", "config.ts"),
+    `import { definePipr } from "@usepipr/sdk";
+export default definePipr((pipr) => {
+  pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
+});
+`,
+  );
+  return rootDir;
 }
 
 async function writePackageForInstallTest(manifest: {

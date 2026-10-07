@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { changeRequestEvent, draftEvent } from "../change-request.js";
 import { positiveIntegerHostEnv, requiredHostEnv } from "../env.js";
 import type { CodeHostEvent, LoadedChangeRequest } from "../types.js";
 import { bitbucketRepositorySchema } from "./schema.js";
@@ -87,19 +88,13 @@ async function dataCenterEvent(options: BitbucketEventParseOptions): Promise<Cod
     repository: hook.repository.slug,
     changeNumber: hook.pullRequest.id,
   });
-  return {
-    kind: "change-request",
-    change: {
-      eventName: eventKey,
-      action,
-      rawAction: eventKey,
-      platform: { id: "bitbucket", host: baseUrl },
-      repository: loaded.repository,
-      coordinates: loaded.coordinates,
-      change: loaded.change,
-      workspace: options.workspace,
-    },
-  };
+  return changeRequestEvent(loaded, {
+    eventName: eventKey,
+    action,
+    rawAction: eventKey,
+    platform: { id: "bitbucket", host: baseUrl },
+    workspace: options.workspace,
+  });
 }
 
 function dataCenterCommentEvent(
@@ -136,19 +131,13 @@ async function pipelineEvent(options: BitbucketEventParseOptions): Promise<CodeH
   const changeNumber = positiveIntegerHostEnv(options.env, "BITBUCKET_PR_ID", "Bitbucket");
   const loaded = await options.loadChangeRequest({ workspace, repository, changeNumber });
   if (loaded.change.isDraft) return draftEvent();
-  return {
-    kind: "change-request",
-    change: {
-      eventName: "bitbucket_pipeline",
-      action: options.env.PIPR_CHANGE_ACTION ?? "updated",
-      rawAction: options.env.PIPR_CHANGE_ACTION,
-      platform: { id: "bitbucket", host: "https://bitbucket.org" },
-      repository: loaded.repository,
-      coordinates: loaded.coordinates,
-      change: loaded.change,
-      workspace: options.workspace,
-    },
-  };
+  return changeRequestEvent(loaded, {
+    eventName: "bitbucket_pipeline",
+    action: options.env.PIPR_CHANGE_ACTION ?? "updated",
+    rawAction: options.env.PIPR_CHANGE_ACTION,
+    platform: { id: "bitbucket", host: "https://bitbucket.org" },
+    workspace: options.workspace,
+  });
 }
 
 async function webhookEvent(options: BitbucketEventParseOptions): Promise<CodeHostEvent> {
@@ -199,19 +188,13 @@ async function pullRequestEvent(
     repository: hook.repository.slug,
     changeNumber: hook.pullrequest.id,
   });
-  return {
-    kind: "change-request",
-    change: {
-      eventName: eventKey,
-      action,
-      rawAction: eventKey,
-      platform: { id: "bitbucket", host: "https://bitbucket.org" },
-      repository: loaded.repository,
-      coordinates: loaded.coordinates,
-      change: loaded.change,
-      workspace: options.workspace,
-    },
-  };
+  return changeRequestEvent(loaded, {
+    eventName: eventKey,
+    action,
+    rawAction: eventKey,
+    platform: { id: "bitbucket", host: "https://bitbucket.org" },
+    workspace: options.workspace,
+  });
 }
 
 function pullRequestAction(eventKey: string): "opened" | "updated" | "closed" {
@@ -231,8 +214,4 @@ function dataCenterPullRequestAction(eventKey: string): "opened" | "updated" | "
     return "closed";
   }
   throw new Error(`Unsupported Bitbucket Data Center event: ${eventKey}`);
-}
-
-function draftEvent(): CodeHostEvent {
-  return { kind: "ignored", reason: "pull request is a draft" };
 }

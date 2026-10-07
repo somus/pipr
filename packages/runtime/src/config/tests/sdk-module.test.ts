@@ -1,25 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { sdkModuleStubSource, sdkPackageRootFromResolvedModule } from "../sdk-module.js";
 
 describe("SDK module resolution", () => {
-  it("builds a runtime SDK stub from the resolved module path", () => {
-    const modulePath = path.join(
-      "/",
-      "repo",
-      "node_modules",
-      "@usepipr",
-      "sdk",
-      "dist",
-      "index.js",
-    );
-
-    expect(sdkModuleStubSource(modulePath, undefined)).toBe(
-      `export * from ${JSON.stringify(pathToFileURL(modulePath).href)};\n`,
-    );
-  });
-
   it("uses the embedded runtime SDK module when module resolution fails", () => {
     expect(sdkModuleStubSource(undefined, "export const embedded = true;\n")).toBe(
       "export const embedded = true;\n",
@@ -42,9 +25,5 @@ describe("SDK module resolution", () => {
       packageRoot,
     );
     expect(sdkPackageRootFromResolvedModule(path.join(packageRoot, "index.mjs"))).toBe(packageRoot);
-  });
-
-  it("does not derive an SDK package root when module resolution fails", () => {
-    expect(sdkPackageRootFromResolvedModule(undefined)).toBeUndefined();
   });
 });

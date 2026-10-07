@@ -1,13 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { parseReviewResult, reviewResultSchema } from "@usepipr/sdk";
+import { z } from "zod";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest, ReviewResult } from "../../types.js";
-import {
-  parseReviewResult,
-  reviewResultJsonSchema,
-  reviewSchemaExample,
-  validateReviewFindings,
-  validateReviewResult,
-} from "../review.js";
+import { reviewSchemaExample } from "../contract.js";
+import { validateReviewFindings, validateReviewResult } from "../review.js";
 
 const manifest = reviewTestManifest({ includeExcludedLock: true });
 
@@ -60,29 +57,16 @@ describe("validateReviewFindings", () => {
       { finding, reason: "finding path is outside configured paths" },
     ]);
   });
-
-  it("rejects a stale manifest before validating generic findings", () => {
-    expect(() =>
-      validateReviewFindings([{ ...baseFinding, severity: "high" as const }], manifest, {
-        expectedHeadSha: "new-head",
-      }),
-    ).toThrow("does not match expected head SHA");
-  });
 });
 
 describe("validateReviewResult", () => {
-  it("uses one Review Output for examples and runtime schema", () => {
-    const example = parseReviewResult(reviewSchemaExample());
+  it("reviewSchemaExample() validates against the published review JSON Schema", () => {
+    const published = z.fromJSONSchema(z.toJSONSchema(reviewResultSchema));
 
-    expect(example.summary.body).toBe("Concise change request review summary.");
-    expect(example.inlineFindings[0]?.suggestedFix).toBe("return safeValue;");
-    expect(reviewResultJsonSchema).toMatchObject({
-      type: "object",
-      properties: {
-        inlineFindings: { type: "array" },
-      },
-    });
-    expect(reviewResultJsonSchema).not.toHaveProperty(["properties", "nonInlineFindings"]);
+    expect(published.parse(reviewSchemaExample())).toEqual(reviewSchemaExample());
+    expect(published.safeParse({ ...reviewSchemaExample(), nonInlineFindings: [] }).success).toBe(
+      false,
+    );
   });
 
   it("rejects reviewer output outside the published schema contract", () => {
@@ -110,16 +94,6 @@ describe("validateReviewResult", () => {
         inlineFindings: [{ ...baseFinding, suggestedFix: "" }],
       }),
     ).toThrow();
-  });
-
-  it("rejects non-inline findings in the MVP", () => {
-    expect(() =>
-      parseReviewResult({
-        summary: { body: "Looks fine." },
-        inlineFindings: [],
-        nonInlineFindings: [],
-      }),
-    ).toThrow();
     expect(() =>
       parseReviewResult({
         summary: { body: "Looks fine." },
@@ -127,15 +101,6 @@ describe("validateReviewResult", () => {
         nonInlineFindings: [{ title: "Later" }],
       }),
     ).toThrow();
-  });
-
-  it("keeps findings inside a commentable range", () => {
-    const validated = validateReviewResult(baseReview, manifest, {
-      expectedHeadSha: "head",
-    });
-
-    expect(validated.validFindings).toHaveLength(1);
-    expect(validated.droppedFindings).toHaveLength(0);
   });
 
   it("canonicalizes an unusable range ID when the finding anchor matches one range", () => {
@@ -275,6 +240,11 @@ describe("validateReviewResult", () => {
   it("fails validation when the Diff Manifest head is stale", () => {
     expect(() =>
       validateReviewResult(baseReview, manifest, {
+        expectedHeadSha: "new-head",
+      }),
+    ).toThrow("does not match expected head SHA");
+    expect(() =>
+      validateReviewFindings([{ ...baseFinding, severity: "high" as const }], manifest, {
         expectedHeadSha: "new-head",
       }),
     ).toThrow("does not match expected head SHA");

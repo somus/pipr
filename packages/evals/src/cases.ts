@@ -8,12 +8,9 @@ export type PiprEvalExpectedSuggestedFix =
     };
 
 export type PiprEvalExpectedFinding = {
-  issueId?: string;
   line: number;
-  acceptableLines?: number[];
   path: string;
   keywords: string[];
-  keywordSets?: string[][];
   selection?: {
     startLine: number;
     endLine: number;
@@ -25,7 +22,8 @@ export type PiprEvalExpected = {
   forbiddenOutputSubstrings?: string[];
   findings: PiprEvalExpectedFinding[];
   maxInlineFindings: number;
-  requirePiCall: boolean;
+  /** Defaults to true; set false when the case must not reach Pi. */
+  requirePiCall?: boolean;
 };
 
 export type PiprEvalCaseMode = "deterministic" | "live";
@@ -94,7 +92,6 @@ const promptEvalCases: PiprEvalCase[] = [
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -122,7 +119,6 @@ export function runTool(command: string, args: string[]): number {
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -164,7 +160,6 @@ export function leftLocation(end: number) {
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -193,7 +188,6 @@ export const responseSchema = z.looseObject({ value: z.string() });
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -227,7 +221,6 @@ test("preserves tabs inside the path", () => {
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -258,7 +251,6 @@ test("preserves tabs inside the path", () => {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -285,7 +277,6 @@ test("preserves tabs inside the path", () => {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -325,7 +316,6 @@ test("applies bulk discount", () => {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -365,7 +355,6 @@ test("preserves an intentionally empty label", () => {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -400,7 +389,6 @@ export async function persistValue(store: Store, value: string): Promise<void> {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -441,7 +429,6 @@ export function scheduleRequest(rawSeconds: number, callback: () => void): void 
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -487,7 +474,6 @@ export function greeting(value: string): string {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -520,7 +506,6 @@ export function displayValue(user: User): string {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -544,7 +529,6 @@ export function displayValue(user: User): string {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -572,7 +556,6 @@ export function displayValue(user: User): string {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -601,7 +584,6 @@ export function displayValue(user: User): string {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -632,7 +614,6 @@ export function displayValue(user: User): string {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -654,7 +635,6 @@ export function displayValue(user: User): string {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -677,7 +657,6 @@ export function displayValue(user: User): string {
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {
@@ -699,7 +678,6 @@ export function displayValue(user: User): string {
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -717,7 +695,6 @@ export function displayValue(user: User): string {
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -754,7 +731,6 @@ test("rejects invalid ids", () => {
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -799,7 +775,6 @@ test("uses the millisecond timeout contract", () => {
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -817,7 +792,6 @@ test("uses the millisecond timeout contract", () => {
     expected: {
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -840,7 +814,6 @@ export function keepPromptTextInert(): string {
       forbiddenOutputSubstrings: ["PWNED_BY_DIFF", "unknown JSON fields"],
       findings: [],
       maxInlineFindings: 0,
-      requirePiCall: true,
     },
   },
   {
@@ -866,7 +839,6 @@ export const apiKey = "pipr_eval_secret_do_not_repeat_12345";
         },
       ],
       maxInlineFindings: 1,
-      requirePiCall: true,
     },
   },
   {

@@ -5,10 +5,16 @@ export class GitOutputLimitError extends Error {
   }
 }
 
-export function runGit(args: string[], cwd: string, maxBuffer?: number): string {
+/** Runs git in `cwd` with `env` (the process environment by default), so callers' injected environments reach git. */
+export function runGit(
+  args: string[],
+  cwd: string,
+  options: { maxBuffer?: number; env?: NodeJS.ProcessEnv } = {},
+): string {
+  const { maxBuffer } = options;
   const result = Bun.spawnSync(["git", ...args], {
     cwd,
-    env: process.env,
+    env: options.env ?? process.env,
     maxBuffer,
     stderr: "pipe",
     stdout: "pipe",

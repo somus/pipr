@@ -1,10 +1,7 @@
 import { evalite } from "evalite";
 import { promptEvalCasesForMode } from "./cases.js";
-import {
-  assertLiveEvalEnv,
-  fullAdvisoryScorers,
-  runLivePiprEvalCase,
-} from "./live-prompt-gates.js";
+import { assertLiveEvalEnv } from "./env.js";
+import { fullAdvisoryScorers, runLivePiprEvalCase } from "./live-prompt-gates.js";
 
 assertLiveEvalEnv();
 

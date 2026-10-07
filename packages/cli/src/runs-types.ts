@@ -1,5 +1,16 @@
+import type { CodeHostId } from "@usepipr/runtime";
+
+export type RunProtection = "plaintext" | "metadata" | "age";
+
+export type RunDiagnosticState =
+  | "available"
+  | "locked"
+  | "not-captured"
+  | "encryption-failed"
+  | "size-limit";
+
 export type RunSelector = {
-  host: "github" | "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg";
+  host: CodeHostId;
   repository: string;
   changeNumber: number;
 };

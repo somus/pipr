@@ -1,6 +1,8 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { ciRunFromEnvironment, isNativeCiEnvironment } from "../hosts/ci-run.js";
+import { type CodeHostId, codeHostIds } from "../hosts/selection.js";
 import type { CodeHostAdapter, CodeHostEvent } from "../hosts/types.js";
 import { startFileRunRecorder } from "../observability/file-run-recorder.js";
 import {
@@ -8,20 +10,24 @@ import {
   validateRunBundleRecipients,
 } from "../observability/protected-package.js";
 import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
+import { resolveRunStoreDirectory } from "../observability/retention-store.js";
+import { publishRunBundle } from "../observability/run-bundle-publication.js";
 import { combineRuntimeLogSinks } from "../observability/runtime-log-sinks.js";
 import { maximumRunBundleBytes } from "../observability/types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { createRuntimeLog, type RuntimeLog } from "../shared/logging.js";
 import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
+import { createHostRunAdapter } from "./adapter.js";
 import { runChangeRequestHostRunCommand } from "./change-request-entry.js";
 import { runIssueCommentHostRunCommand } from "./command-entry.js";
-import { classifyRunFailure, finishRecorderSafely } from "./commands-shared.js";
 import {
-  composeHostRunPorts,
-  composeHostRunServices,
-  composeHostRunWorkspace,
-  type HostRunServices,
-} from "./composition.js";
+  classifyRunFailure,
+  finishRecorderSafely,
+  parseRunCaptureSetting,
+  warnRunCaptureUnavailable,
+} from "./commands-shared.js";
+import type { HostRunServices } from "./composition.js";
+import { resolveHostRunLocation } from "./host-run-location.js";
 import { logPhase } from "./logging.js";
 import type {
   HostRunCommandDependencyOptions,
@@ -40,20 +46,41 @@ export async function runHostRunCommand(
   });
 }
 
+type ResolvedHostRunOptions = HostRunCommandDependencyOptions & { rootDir: string };
+
 export async function runHostRunCommandWithDependencies(
-  options: HostRunCommandDependencyOptions,
+  input: HostRunCommandDependencyOptions,
 ): Promise<HostRunCommandResult> {
-  const recorder = await startHostedRecorder(options);
-  const workspace = composeHostRunWorkspace(options);
-  const ports = composeHostRunPorts(options, {
-    ...(recorder ? { runObserver: recorder.observer } : {}),
+  const options: ResolvedHostRunOptions = {
+    ...input,
+    ...resolveHostRunLocation({ ...input, env: input.env ?? process.env }),
+  };
+  const capture = await startHostedRecorder(options);
+  const recorder = capture?.recorder;
+  const adapter = createHostRunAdapter({
+    env: options.env,
+    host: options.host,
+    hostAdapter: options.hostAdapter,
   });
   const log = createRuntimeLog({
     logSink: combineRuntimeLogSinks(options.logSink, recorder?.logSink),
     env: options.env,
     writesToSink: options.logSink !== undefined,
   });
-  const services = composeHostRunServices({ workspace, ports, log });
+  const services: HostRunServices = {
+    rootDir: options.rootDir,
+    configDir: options.configDir,
+    env: options.env ?? process.env,
+    dryRun: options.dryRun,
+    adapter,
+    log,
+    eventPath: options.eventPath,
+    piProviderModule: options.piProviderModule,
+    piStoreRoot: options.piStoreRoot,
+    piRunner: options.piRunner,
+    secretRedactor: options.secretRedactor,
+    runObserver: recorder ? recorder.observer : options.runObserver,
+  };
   const state: HostRunState = { failureCategory: "startup", adapter: services.adapter };
   try {
     const result = await log.group("pipr host run", async () => executeHostRun(services, state));
@@ -62,10 +89,10 @@ export async function runHostRunCommandWithDependencies(
       return result;
     }
     await captureHostedArtifacts(recorder, result);
-    await finishSuccessfulHostedRecorder(recorder, log, options, result, services.adapter);
+    await finishSuccessfulHostedRecorder(capture, log, options, result, services.adapter);
     return result;
   } catch (error) {
-    const superseded = await finishFailedHostedRecorder(recorder, log, options, state, error);
+    const superseded = await finishFailedHostedRecorder(capture, log, options, state, error);
     if (superseded) return { kind: "ignored", reason: superseded.message };
     throw error;
   }
@@ -122,14 +149,14 @@ async function executeHostRun(
 }
 
 async function finishSuccessfulHostedRecorder(
-  recorder: RunRecorder | undefined,
+  capture: HostedCapture | undefined,
   log: RuntimeLog,
   options: HostRunCommandDependencyOptions,
   result: ObservableHostResult,
   adapter: CodeHostAdapter,
 ): Promise<void> {
   await finishRecorderSafely(
-    recorder,
+    capture?.recorder,
     log,
     {
       kind: hostResultKind(result),
@@ -142,14 +169,14 @@ async function finishSuccessfulHostedRecorder(
           }
         : {}),
       repository: bundleRepository(result.event, adapter.id),
-      provider: providerRun(options.env ?? process.env, adapter.id, result.event.repository.slug),
+      provider: ciRunFromEnvironment(adapter.id, options.env ?? process.env),
     },
-    options.onRunBundleFinalized,
+    capture?.onFinalized,
   );
 }
 
 async function finishFailedHostedRecorder(
-  recorder: RunRecorder | undefined,
+  capture: HostedCapture | undefined,
   log: RuntimeLog,
   options: HostRunCommandDependencyOptions,
   state: HostRunState,
@@ -167,9 +194,9 @@ async function finishFailedHostedRecorder(
   }
   const repository = failedBundleRepository(state);
   if (repository) result.repository = repository;
-  const provider = failedBundleProvider(options, state);
+  const provider = ciRunFromEnvironment(state.adapter.id, options.env ?? process.env);
   if (provider) result.provider = provider;
-  await finishRecorderSafely(recorder, log, result, options.onRunBundleFinalized);
+  await finishRecorderSafely(capture?.recorder, log, result, capture?.onFinalized);
   return superseded;
 }
 
@@ -180,42 +207,38 @@ function failedBundleRepository(
   return partialBundleRepository(state.event, state.adapter.id);
 }
 
-function failedBundleProvider(
-  options: HostRunCommandDependencyOptions,
-  state: HostRunState,
-): import("@usepipr/sdk").RunBundleManifest["provider"] | undefined {
-  return providerRun(options.env ?? process.env, state.adapter.id);
-}
+type HostedCapture = {
+  recorder: RunRecorder;
+  onFinalized: NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>;
+};
 
 async function startHostedRecorder(
-  options: HostRunCommandDependencyOptions,
-): Promise<RunRecorder | undefined> {
+  options: ResolvedHostRunOptions,
+): Promise<HostedCapture | undefined> {
   if (options.dryRun) return undefined;
+  // A misspelled capture mode is operator error; fail before the run instead of silently dropping capture.
+  parseRunCaptureSetting(options.env ?? process.env);
   try {
     return await createHostedRecorder(options);
   } catch (error) {
-    options.logSink?.log({
-      level: "warning",
-      event: "run capture unavailable",
-      fields: { error: error instanceof Error ? error.message : "unknown capture error" },
-    });
+    warnRunCaptureUnavailable(options.logSink, error);
     return undefined;
   }
 }
 
 async function createHostedRecorder(
-  options: HostRunCommandDependencyOptions,
-): Promise<RunRecorder | undefined> {
+  options: ResolvedHostRunOptions,
+): Promise<HostedCapture | undefined> {
   const env = options.env ?? process.env;
-  const nativeCi = isNativeCi(env);
+  const nativeCi = isNativeCiEnvironment(env);
   const githubActions = env.GITHUB_ACTIONS === "true";
   const capture = await requestedHostedCaptureMode(env, nativeCi);
   if (!capture.mode) return undefined;
   publishCaptureProtectionWarning(options, capture.warning);
   const rootDirectory = nativeCi
     ? await mkdtemp(path.join(os.tmpdir(), "pipr-run-capture-"))
-    : (env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"));
-  return await startFileRunRecorder({
+    : resolveRunStoreDirectory({ env, mode: "workspace", rootDir: options.rootDir });
+  const recorder = await startFileRunRecorder({
     rootDirectory,
     env,
     mode: capture.mode,
@@ -224,6 +247,41 @@ async function createHostedRecorder(
       ? { maxBytes: maximumRunBundleBytes - 4 * 1024 * 1024 }
       : {}),
   });
+  return {
+    recorder,
+    onFinalized: finalizedRunBundleHandler(options, env, nativeCi ? rootDirectory : undefined),
+  };
+}
+
+/** Reports the raw bundle, then publishes a native-CI capture and removes its temporary root. */
+function finalizedRunBundleHandler(
+  options: ResolvedHostRunOptions,
+  env: NodeJS.ProcessEnv,
+  temporaryRoot: string | undefined,
+): NonNullable<HostRunCommandOptions["onRunBundleFinalized"]> {
+  const onPublished = options.onRunBundlePublished;
+  const publishedRoot = onPublished ? temporaryRoot : undefined;
+  return async (bundle) => {
+    try {
+      await options.onRunBundleFinalized?.(bundle);
+      if (!publishedRoot || !onPublished) return;
+      await onPublished(
+        await publishRunBundle({
+          bundleDirectory: bundle.directory,
+          executionId: bundle.executionId,
+          ...(bundle.repository?.changeNumber
+            ? { changeNumber: bundle.repository.changeNumber }
+            : {}),
+          rootDir: options.rootDir,
+          env,
+        }),
+      );
+    } finally {
+      if (publishedRoot) {
+        await rm(publishedRoot, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
+  };
 }
 
 function publishCaptureProtectionWarning(
@@ -245,12 +303,9 @@ async function requestedHostedCaptureMode(
   mode: "metadata" | "diagnostic" | undefined;
   warning?: "recipients-missing" | "recipients-invalid";
 }> {
-  const value = env.PIPR_RUN_CAPTURE;
+  const value = parseRunCaptureSetting(env);
   if (value === "off") return { mode: undefined };
   if (value === "metadata") return { mode: "metadata" };
-  if (value !== undefined && value !== "diagnostic") {
-    throw new Error("PIPR_RUN_CAPTURE must be off, metadata, or diagnostic");
-  }
   if (!nativeCi) return { mode: "diagnostic" };
   const recipients = parseRunBundleRecipients(env.PIPR_RUN_AGE_RECIPIENTS);
   if (recipients.length === 0) {
@@ -322,133 +377,17 @@ function partialBundleRepository(
   };
 }
 
-function bundleHost(
-  host: string | undefined,
-): "github" | "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg" | "local" {
-  if (
-    host === "gitlab" ||
-    host === "azure-devops" ||
-    host === "bitbucket" ||
-    host === "gitea" ||
-    host === "forgejo" ||
-    host === "codeberg" ||
-    host === "local"
-  ) {
-    return host;
-  }
-  return "github";
-}
-
-function providerRun(
-  env: NodeJS.ProcessEnv,
-  host: string,
-  repository?: string,
-): import("@usepipr/sdk").RunBundleManifest["provider"] | undefined {
-  switch (host) {
-    case "github":
-      return githubProviderRun(env, repository);
-    case "gitlab":
-      return gitlabProviderRun(env);
-    case "azure-devops":
-      return azureProviderRun(env);
-    case "bitbucket":
-      return bitbucketProviderRun(env);
-    case "gitea":
-      return giteaProviderRun(env, "GITHUB", repository);
-    case "forgejo":
-    case "codeberg":
-      return giteaProviderRun(env, "FORGEJO", repository);
-    default:
-      return undefined;
-  }
-}
-
-function giteaProviderRun(
-  env: NodeJS.ProcessEnv,
-  prefix: "GITHUB" | "FORGEJO",
-  repository: string | undefined,
-) {
-  const runId = env[`${prefix}_RUN_ID`];
-  const serverUrl = env[`${prefix}_SERVER_URL`];
-  const runUrl =
-    runId && repository && serverUrl
-      ? `${serverUrl.replace(/\/+$/, "")}/${repository}/actions/runs/${runId}`
-      : undefined;
-  return compactProviderRun({
-    runId,
-    jobId: env[`${prefix}_JOB`],
-    runUrl,
-  });
-}
-
-function githubProviderRun(env: NodeJS.ProcessEnv, repository: string | undefined) {
-  const runId = env.GITHUB_RUN_ID;
-  const runUrl =
-    runId && repository && env.GITHUB_SERVER_URL
-      ? `${env.GITHUB_SERVER_URL}/${repository}/actions/runs/${runId}`
-      : undefined;
-  return compactProviderRun({ runId, jobId: env.GITHUB_JOB, runUrl });
-}
-
-function gitlabProviderRun(env: NodeJS.ProcessEnv) {
-  return compactProviderRun({
-    runId: env.CI_PIPELINE_ID,
-    jobId: env.CI_JOB_ID,
-    runUrl: env.CI_PIPELINE_URL,
-    jobUrl: env.CI_JOB_URL,
-  });
-}
-
-function azureProviderRun(env: NodeJS.ProcessEnv) {
-  const runId = env.BUILD_BUILDID;
-  const runUrl =
-    runId && env.SYSTEM_COLLECTIONURI && env.SYSTEM_TEAMPROJECT
-      ? `${env.SYSTEM_COLLECTIONURI}${encodeURIComponent(env.SYSTEM_TEAMPROJECT)}/_build/results?buildId=${runId}`
-      : undefined;
-  return compactProviderRun({ runId, jobId: env.SYSTEM_JOBID, runUrl });
-}
-
-function bitbucketProviderRun(env: NodeJS.ProcessEnv) {
-  const runUrl =
-    env.BITBUCKET_GIT_HTTP_ORIGIN && env.BITBUCKET_BUILD_NUMBER
-      ? `${env.BITBUCKET_GIT_HTTP_ORIGIN}/pipelines/results/${env.BITBUCKET_BUILD_NUMBER}`
-      : undefined;
-  return compactProviderRun({
-    runId: env.BITBUCKET_PIPELINE_UUID ?? env.BITBUCKET_BUILD_NUMBER,
-    jobId: env.BITBUCKET_STEP_UUID,
-    runUrl,
-  });
-}
-
-function compactProviderRun(
-  value: NonNullable<import("@usepipr/sdk").RunBundleManifest["provider"]>,
-): import("@usepipr/sdk").RunBundleManifest["provider"] | undefined {
-  const compact = Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  );
-  return Object.keys(compact).length > 0 ? compact : undefined;
-}
-
-function isNativeCi(env: NodeJS.ProcessEnv): boolean {
-  return (
-    env.GITHUB_ACTIONS === "true" ||
-    env.GITLAB_CI === "true" ||
-    env.TF_BUILD === "True" ||
-    env.TF_BUILD === "true" ||
-    env.BITBUCKET_BUILD_NUMBER !== undefined ||
-    env.GITEA_ACTIONS === "true" ||
-    env.FORGEJO_ACTIONS === "true"
-  );
+function bundleHost(host: string | undefined): CodeHostId | "local" {
+  return host === "local" || codeHostIds.some((id) => id === host)
+    ? (host as CodeHostId | "local")
+    : "github";
 }
 
 async function captureHostedArtifacts(
   recorder: RunRecorder | undefined,
   result: Extract<HostRunCommandResult, { kind: "review" | "command-response" | "verifier" }>,
 ): Promise<void> {
-  if (!recorder) return;
-  if (result.kind === "review") {
-    return;
-  }
+  if (!recorder || result.kind === "review") return;
   await recorder.addArtifact({
     kind: "output",
     name: result.kind === "verifier" ? "verifier-output.json" : "command-output.json",
