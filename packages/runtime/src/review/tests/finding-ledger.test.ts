@@ -40,7 +40,9 @@ function reviewRun(options: {
   maxInlineComments?: number;
   executionId?: string;
   publish?: (findingIds: string[]) => string[];
+  attribution?: FindingAttribution;
 }) {
+  const attribution = options.attribution ?? security;
   const validated = validateReviewResult(
     { summary: { body: "Review." }, inlineFindings: options.findings },
     manifest,
@@ -63,12 +65,12 @@ function reviewRun(options: {
     priorReviewState: options.priorReviewState,
     findingOutcomes: (dispositions) =>
       deriveReviewFindingOutcomes({
-        valid: validated.validFindings.map((item) => ({ finding: item, attribution: security })),
+        valid: validated.validFindings.map((item) => ({ finding: item, attribution })),
         dispositions,
         dropped: validated.droppedFindings.map((item) => ({
           finding: item.finding,
           code: item.code,
-          attribution: security,
+          attribution,
         })),
         priorReviewState: options.priorReviewState,
         verdicts: options.verdicts ?? [],
@@ -314,6 +316,48 @@ describe("finding outcome ledger", () => {
     ]);
 
     expect(rebuilt.events()[0]?.eventId).toBe(acted.events()[0]?.eventId);
+  });
+
+  it("emits schema-valid events and review state for unbounded attribution", () => {
+    const unbounded: FindingAttribution = {
+      agent: `Security\nreviewer ${"a".repeat(300)}`,
+      model: "custom provider/model id",
+      facets: { severity: "high\nurgent", "not a key": "x", area: "v".repeat(150) },
+    };
+    const opened = reviewRun({
+      headSha: "head-1",
+      findings: [finding("Unbounded attribution.", 10)],
+      attribution: unbounded,
+    });
+
+    const events = opened.ledger.events();
+    expect(events.length).toBeGreaterThan(0);
+    for (const event of events) {
+      expect(findingOutcomeEventSchema.safeParse(event).success).toBe(true);
+      expect(event).toMatchObject({
+        model: "custom-provider/model-id",
+        facets: { severity: "high urgent", area: "v".repeat(100) },
+      });
+      expect(event.agent).toHaveLength(200);
+    }
+    expect(opened.state?.findings[0]).toMatchObject({
+      a: events[0]?.agent,
+      m: "custom-provider/model-id",
+      f: { severity: "high urgent", area: "v".repeat(100) },
+    });
+  });
+
+  it("normalizes attribution carried by stored review state", () => {
+    const ledger = createFindingLedger({ executionId: "0123456789abcdef0123456789abcdef" });
+    ledger.record(context("head-1"), [
+      {
+        kind: "outdated",
+        findingId: "fnd_0123456789abcdef",
+        attribution: { agent: "a\tb", model: "m o", facets: { k: "x\ny" } },
+      },
+    ]);
+
+    expect(ledger.events()[0]).toMatchObject({ agent: "a b", model: "m-o", facets: { k: "x y" } });
   });
 
   it("records the host's thread resolution support in the ledger document", () => {

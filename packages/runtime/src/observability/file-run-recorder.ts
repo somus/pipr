@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   diagnosticFindingLedgerSchema,
   findingLedgerSchema,
+  findingOutcomeEventSchema,
   type RunBundleArtifact,
   type RunBundleManifest,
   type RunLogRecord,
@@ -399,15 +400,25 @@ export async function startFileRunRecorder(options: {
       await addRecorderArtifact(artifact);
     },
     async recordLedger(ledger) {
-      if (ledger.events.length === 0) return;
+      // One invalid event costs only itself; the rest of the ledger is still recorded.
+      const events = ledger.events.filter(
+        (event) => findingOutcomeEventSchema.safeParse(event).success,
+      );
+      const dropped = ledger.events.length - events.length;
+      if (dropped > 0) {
+        captureErrors.push(
+          `finding ledger dropped ${dropped} invalid event${dropped === 1 ? "" : "s"}`,
+        );
+      }
+      if (events.length === 0) return;
       const metadataOnly = options.mode === "metadata";
       const document = metadataOnly
         ? findingLedgerSchema.parse({
             formatVersion: ledger.formatVersion,
             threadResolution: ledger.threadResolution,
-            events: ledger.events,
+            events,
           })
-        : diagnosticFindingLedgerSchema.parse(ledger);
+        : diagnosticFindingLedgerSchema.parse({ ...ledger, events });
       await storeArtifact({
         kind: "ledger",
         name: "ledger.json",

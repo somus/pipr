@@ -61,17 +61,60 @@ export type FindingThreadResolution = (typeof findingThreadResolutions)[number];
 
 const count = z.number().int().nonnegative();
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
+const tokenPattern = /^[\w.:/@+-]+$/;
 const token = (max: number) =>
-  z
-    .string()
-    .min(1)
-    .max(max)
-    .regex(/^[\w.:/@+-]+$/, "must be a single token without whitespace");
-const facetValue = z
+  z.string().min(1).max(max).regex(tokenPattern, "must be a single token without whitespace");
+const singleLinePattern = /^[^\p{Cc}]+$/u;
+const singleLine = (max: number) =>
+  z.string().min(1).max(max).regex(singleLinePattern, "must be a single line");
+/** Provider model ids such as `deepseek/deepseek-v4.1-flash` or `claude-opus-5-5[1m]`. */
+const modelPattern = /^[^\s\p{Cc}]+$/u;
+
+const attributionLimits = { agent: 200, model: 200, facetKey: 100, facetValue: 100, facets: 32 };
+
+const agentName = singleLine(attributionLimits.agent);
+const modelName = z
   .string()
   .min(1)
-  .max(100)
-  .regex(/^[^\n\r\t]+$/, "facet values must be single-line enum values");
+  .max(attributionLimits.model)
+  .regex(modelPattern, "must be one line without whitespace");
+const facetKey = token(attributionLimits.facetKey);
+const facetValue = singleLine(attributionLimits.facetValue);
+
+/**
+ * Bounds attribution to what a public event accepts: agent and facet values become single lines,
+ * the model loses whitespace, values are truncated to their limits, and facets with invalid keys
+ * or empty values are dropped. Normalizing the same input always yields the same values.
+ */
+export function normalizeFindingAttribution(attribution: {
+  agent?: string;
+  model?: string;
+  facets?: Readonly<Record<string, string>>;
+}): { agent?: string; model?: string; facets: Record<string, string> } {
+  const agent = boundedLine(attribution.agent ?? "", attributionLimits.agent);
+  const model = bounded(
+    (attribution.model ?? "").trim().replace(/[\s\p{Cc}]+/gu, "-"),
+    attributionLimits.model,
+  );
+  const facets = Object.entries(attribution.facets ?? {}).flatMap(([key, value]) => {
+    const line = boundedLine(value, attributionLimits.facetValue);
+    return facetKey.safeParse(key).success && line ? [[key, line] as const] : [];
+  });
+  return {
+    ...(agent ? { agent } : {}),
+    ...(model ? { model } : {}),
+    facets: Object.fromEntries(facets.slice(0, attributionLimits.facets)),
+  };
+}
+
+function boundedLine(value: string, max: number): string {
+  return bounded(value.replace(/[\s\p{Cc}]+/gu, " ").trim(), max).trimEnd();
+}
+
+/** Truncates to `max` UTF-16 units without leaving half a surrogate pair. */
+function bounded(value: string, max: number): string {
+  return value.slice(0, max).replace(/[\uD800-\uDBFF]$/, "");
+}
 
 /** Same identifier the inline comment marker carries, normally `fnd_` plus 16 hex digits. */
 const findingIdSchema = z
@@ -103,18 +146,16 @@ export const findingOutcomeEventSchema = z
       .regex(/^[A-Za-z0-9._-]+$/),
     configHash: sha256.optional(),
     /** Name of the agent that produced the finding. */
-    agent: z
-      .string()
-      .min(1)
-      .max(200)
-      .regex(/^[^\n\r\t]+$/)
-      .optional(),
+    agent: agentName.optional(),
     /** Model that produced the finding. */
-    model: token(200).optional(),
+    model: modelName.optional(),
     /** Declared enum field values of the finding. */
     facets: z
-      .record(token(100), facetValue)
-      .refine((facets) => Object.keys(facets).length <= 32, "at most 32 facets"),
+      .record(facetKey, facetValue)
+      .refine(
+        (facets) => Object.keys(facets).length <= attributionLimits.facets,
+        "at most 32 facets",
+      ),
     at: z.string().datetime({ offset: true }),
     /** Emission order within one execution. */
     sequence: count,
@@ -200,9 +241,9 @@ export const findingDatasetCaseSchema = z
       baseSha: z.string().min(1),
       headSha: z.string().min(1),
       configHash: sha256.optional(),
-      agent: z.string().min(1).max(200).optional(),
-      model: token(200).optional(),
-      facets: z.record(token(100), facetValue),
+      agent: agentName.optional(),
+      model: modelName.optional(),
+      facets: z.record(facetKey, facetValue),
     }),
     finding: z.strictObject({
       path: z.string().min(1),

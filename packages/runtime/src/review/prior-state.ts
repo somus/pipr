@@ -1,4 +1,5 @@
 import type { FindingOutcomeKind, ReviewFinding } from "@usepipr/sdk";
+import { normalizeFindingAttribution } from "@usepipr/sdk/internal";
 import {
   type FindingHistoryCode,
   findingHistoryCodes,
@@ -199,21 +200,13 @@ function withAttribution(
   attribution: FindingHistoryAttribution,
 ): PriorFindingRecord {
   const { f: _f, a: _a, m: _m, ...rest } = record;
-  const facets = Object.entries(attribution.facets)
-    .filter(([key, value]) => isBoundedText(key, 100) && isBoundedText(value, 100))
-    .slice(0, 32);
-  const agent = attribution.agent?.slice(0, 200);
-  const model = attribution.model?.slice(0, 200);
+  const { agent, model, facets } = normalizeFindingAttribution(attribution);
   return {
     ...rest,
-    ...(facets.length > 0 ? { f: Object.fromEntries(facets) } : {}),
+    ...(Object.keys(facets).length > 0 ? { f: facets } : {}),
     ...(agent ? { a: agent } : {}),
     ...(model ? { m: model } : {}),
   };
-}
-
-function isBoundedText(value: string, max: number): boolean {
-  return value.length > 0 && value.length <= max;
 }
 
 function selectPriorFindingRecord(options: BuildFindingRecordOptions): {

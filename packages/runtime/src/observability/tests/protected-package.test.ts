@@ -188,6 +188,25 @@ describe("protected Run Bundle packages", () => {
     ).resolves.toMatchObject({ diagnostic: "not-captured" });
   });
 
+  it("drops only the ledger events that fail the public schema", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await startFileRunRecorder({
+      rootDirectory: path.join(root, "capture"),
+      mode: "metadata",
+    });
+    const [valid] = ledger.events;
+    if (!valid) throw new Error("expected a ledger event");
+    const invalid = { ...valid, eventId: "b".repeat(64), agent: "line\nbreak" };
+    await recorder.recordLedger({ ...ledger, events: [valid, invalid] });
+    await recorder.finish({ kind: "review", outcome: "succeeded" });
+
+    expect(
+      JSON.parse(await readFile(path.join(recorder.directory, "artifacts/ledger.json"), "utf8")),
+    ).toEqual({ formatVersion: 1, events: [valid] });
+    const manifest = JSON.parse(await readFile(path.join(recorder.directory, "run.json"), "utf8"));
+    expect(manifest.capture.errors).toEqual(["finding ledger dropped 1 invalid event"]);
+  });
+
   it.each([
     ["path", { path: "src/private.ts" }],
     ["body", { body: "private source body" }],

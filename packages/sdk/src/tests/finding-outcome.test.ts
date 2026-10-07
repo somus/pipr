@@ -7,6 +7,7 @@ import {
   findingLedgerSchema,
   findingOutcomeEventSchema,
 } from "../index.js";
+import { normalizeFindingAttribution } from "../internal.js";
 
 const event: FindingOutcomeEvent = {
   eventId: "a".repeat(64),
@@ -59,6 +60,42 @@ describe("Finding Outcome events", () => {
     ]) {
       expect(() => findingOutcomeEventSchema.parse(unsafe)).toThrow();
     }
+  });
+
+  it("accepts provider model ids and rejects models with whitespace", () => {
+    for (const model of [
+      "deepseek/deepseek-v4.1-flash",
+      "us.anthropic.claude-sonnet:0",
+      "openai/gpt-5@2026-01-01",
+      "claude-opus-5-5[1m]",
+    ]) {
+      expect(findingOutcomeEventSchema.parse({ ...event, model }).model).toBe(model);
+    }
+    for (const model of ["my model", "line\nbreak", "x".repeat(201)]) {
+      expect(() => findingOutcomeEventSchema.parse({ ...event, model })).toThrow();
+    }
+  });
+
+  it("normalizes attribution into values every event accepts", () => {
+    const normalized = normalizeFindingAttribution({
+      agent: `  Security\nreviewer\t${"a".repeat(300)}`,
+      model: " provider/my model\n",
+      facets: {
+        severity: "high\r\nurgent",
+        long: "v".repeat(150),
+        "bad key": "dropped",
+        empty: "\n",
+      },
+    });
+
+    expect(normalized.agent).toStartWith("Security reviewer a");
+    expect(normalized.agent).toHaveLength(200);
+    expect(normalized.model).toBe("provider/my-model");
+    expect(normalized.facets).toEqual({ severity: "high urgent", long: "v".repeat(100) });
+    expect(findingOutcomeEventSchema.parse({ ...event, ...normalized })).toMatchObject(normalized);
+    expect(normalizeFindingAttribution({ agent: " \n ", model: "\t", facets: {} })).toEqual({
+      facets: {},
+    });
   });
 
   it("separates the public ledger from diagnostic evidence", () => {

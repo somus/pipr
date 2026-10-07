@@ -9,6 +9,7 @@ import type {
   FindingThreadResolution,
   ReviewFinding,
 } from "@usepipr/sdk";
+import { normalizeFindingAttribution } from "@usepipr/sdk/internal";
 import type { PriorReviewState } from "../publication/types.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import { findingIdFor, matchFindingRecord, priorFindingAttribution } from "./prior-state.js";
@@ -202,7 +203,7 @@ export function createFindingLedger(options: {
   const record = (context: FindingLedgerContext, emissions: readonly FindingOutcomeEmission[]) => {
     for (const item of emissions) {
       if (item.attribution) {
-        attributions.set(item.findingId, item.attribution);
+        attributions.set(item.findingId, normalizeFindingAttribution(item.attribution));
       }
       if (item.finding && !evidence[item.findingId]) {
         evidence[item.findingId] = findingEvidence(item.finding, context);
