@@ -1,12 +1,6 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type { InlineThreadContext } from "../../publication/types.js";
-import {
-  applyInlineFindingMarkers,
-  applyResolvedFindingMarkers,
-  extractPriorReviewState,
-  mainCommentMarker,
-  parseInlineFindingMarker,
-} from "../../review/prior-state.js";
+import { parseInlineFindingMarker } from "../../review/prior-state.js";
 import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { requireCoordinates } from "../change-request.js";
@@ -30,48 +24,6 @@ export async function assertCurrentGiteaHead(
       undefined,
     );
   }
-}
-
-export async function loadGiteaPriorMainComment(options: {
-  client: GiteaClient;
-  change: ChangeRequestEventContext;
-}): Promise<string | undefined> {
-  const coordinates = giteaCoordinates(options.change);
-  const owner = await options.client.currentUser();
-  const comments = await options.client.listIssueComments(
-    coordinates.owner,
-    coordinates.repository,
-    options.change.change.number,
-  );
-  return findGiteaMainComment(
-    comments,
-    owner.login,
-    mainCommentMarker,
-    options.change.change.number,
-  )?.body;
-}
-
-export async function loadGiteaPriorReviewState(options: {
-  client: GiteaClient;
-  change: ChangeRequestEventContext;
-}) {
-  const mainComment = await loadGiteaPriorMainComment(options);
-  const state = extractPriorReviewState(mainComment, options.change.change.number);
-  if (!state) return undefined;
-  const owner = await options.client.currentUser();
-  const inlineBodies = (await loadGiteaReviewComments(options.client, options.change))
-    .filter((comment) => comment.authorLogin === owner.login)
-    .map((comment) => comment.body);
-  return applyResolvedFindingMarkers(applyInlineFindingMarkers(state, inlineBodies), inlineBodies);
-}
-
-export async function loadGiteaInlineThreadContexts(options: {
-  client: GiteaClient;
-  change: ChangeRequestEventContext;
-}): Promise<InlineThreadContext[]> {
-  const owner = await options.client.currentUser();
-  const comments = await loadGiteaReviewComments(options.client, options.change);
-  return giteaThreadContexts(comments, owner.login, false);
 }
 
 export function giteaThreadContexts(
@@ -118,14 +70,6 @@ export function findGiteaMainComment(
       comment.authorLogin === ownerLogin &&
       isMainCommentLine(firstNonEmptyLine(comment.body), marker, changeNumber),
   );
-}
-
-function loadGiteaReviewComments(
-  client: GiteaClient,
-  change: ChangeRequestEventContext,
-): Promise<GiteaReviewComment[]> {
-  const coordinates = giteaCoordinates(change);
-  return client.listReviewComments(coordinates.owner, coordinates.repository, change.change.number);
 }
 
 export function giteaCoordinates(change: ChangeRequestEventContext) {

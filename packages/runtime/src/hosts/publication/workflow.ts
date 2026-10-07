@@ -6,7 +6,11 @@ import type {
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import { inlinePublicationDecision } from "../../review/inline-publication-policy.js";
 import {
+  applyInlineFindingMarkers,
+  applyNativeThreadResolutions,
+  applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
+  extractPriorReviewState,
   extractResolvedFindingMarkerRecords,
   extractVerifierResponseMarkers,
   inlineFindingMarker,
@@ -20,12 +24,13 @@ import {
 import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { commandResponseBody, commandStatusText, threadActionReply } from "../publication.js";
-import type { CodeHostPublication } from "../types.js";
+import type { CodeHostComments, CodeHostPublication } from "../types.js";
 export type OwnedMainComment = { id: string; body?: string };
 export type OwnedInlineComment = {
   body: string;
   location?: InlinePublicationLocation;
-  resolved: boolean;
+  /** Native thread resolution; undefined when the host reports no native thread state. */
+  resolved?: boolean;
 };
 export type LoadedPublicationState = {
   main?: OwnedMainComment;
@@ -35,9 +40,22 @@ export type LoadedPublicationState = {
 
 export interface PublicationDriver<Prepared> {
   readonly provider: string;
+  /**
+   * Whether owned inline state costs reads beyond the main comment. Such hosts read the main comment first, so a first
+   * review, which has no prior state, loads no inline comments or threads.
+   */
+  readonly inlineStateNeedsExtraReads?: boolean;
   prepare(change: ChangeRequestEventContext, expectedHeadSha: string): Promise<Prepared>;
   assertCurrent(prepared: Prepared, expectedHeadSha: string): Promise<void>;
-  loadOwnedState(prepared: Prepared, mainMarker: string): Promise<LoadedPublicationState>;
+  /**
+   * Loads owned comments in one snapshot. Threads keep only owned replies unless
+   * `allReplies` is set.
+   */
+  loadOwnedState(
+    prepared: Prepared,
+    mainMarker: string,
+    options?: { allReplies?: boolean },
+  ): Promise<LoadedPublicationState>;
   loadOwnedThreads?(
     prepared: Prepared,
     actions: readonly ThreadAction[],
@@ -72,6 +90,52 @@ export function createPublicationWorkflow<Prepared>(
         allowHeadDrift: true,
       }),
     publishThreadActions: (options) => publishThreadActions(driver, options),
+  };
+}
+
+/** Reads prior Pipr comments through the same owned-state loaders publication uses. */
+export function createCommentsReader<Prepared>(
+  driver: PublicationDriver<Prepared>,
+): Required<CodeHostComments> {
+  const prepare = (change: ChangeRequestEventContext) =>
+    driver.prepare(change, change.change.head.sha);
+  return {
+    async loadPriorMainComment({ change }) {
+      return (await driver.loadOwnedMain(await prepare(change), mainCommentMarker))?.body;
+    },
+    async loadPriorReviewState({ change }) {
+      const prepared = await prepare(change);
+      if (driver.inlineStateNeedsExtraReads) {
+        const main = await driver.loadOwnedMain(prepared, mainCommentMarker);
+        if (!extractPriorReviewState(main?.body, change.change.number)) return undefined;
+      }
+      const state = await driver.loadOwnedState(prepared, mainCommentMarker);
+      const prior = extractPriorReviewState(state.main?.body, change.change.number);
+      if (!prior) return undefined;
+      const bodies = [
+        ...state.inline.map((item) => item.body),
+        ...state.threads.flatMap((thread) =>
+          thread.comments.flatMap((comment) =>
+            comment.id === thread.parentCommentId ? [] : [comment.body],
+          ),
+        ),
+      ];
+      return applyNativeThreadResolutions(
+        applyResolvedFindingMarkers(applyInlineFindingMarkers(prior, bodies), bodies),
+        state.inline.flatMap(({ body, resolved }) => {
+          const marker = resolved === undefined ? undefined : parseInlineFindingMarker(body);
+          return marker && resolved !== undefined
+            ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved }]
+            : [];
+        }),
+      );
+    },
+    async loadInlineThreadContexts({ change }) {
+      const state = await driver.loadOwnedState(await prepare(change), mainCommentMarker, {
+        allReplies: true,
+      });
+      return [...state.threads];
+    },
   };
 }
 

@@ -1,15 +1,10 @@
 import { requireCoordinates, withEventRef } from "../change-request.js";
-import { createPublicationWorkflow } from "../publication/workflow.js";
+import { createCommentsReader, createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import { bitbucketStatusState, createBitbucketClient } from "./client.js";
 import { parseBitbucketEvent } from "./event.js";
 import type { BitbucketClient } from "./models.js";
-import {
-  assertCurrentBitbucketEndpoints,
-  loadBitbucketInlineThreadContexts,
-  loadBitbucketPriorMainComment,
-  loadBitbucketPriorReviewState,
-} from "./publication.js";
+import { assertCurrentBitbucketEndpoints } from "./publication.js";
 import { createBitbucketPublicationDriver } from "./publication-driver.js";
 import { ensureBitbucketHeadCheckout } from "./workspace.js";
 
@@ -17,7 +12,8 @@ export function createBitbucketHostAdapter(
   options: { env?: NodeJS.ProcessEnv; client?: BitbucketClient } = {},
 ): CodeHostAdapter {
   const client = options.client ?? createBitbucketClient(options.env);
-  const publication = createPublicationWorkflow(createBitbucketPublicationDriver(client));
+  const driver = createBitbucketPublicationDriver(client);
+  const publication = createPublicationWorkflow(driver);
   return {
     id: "bitbucket",
     capabilities: {
@@ -57,12 +53,7 @@ export function createBitbucketHostAdapter(
       },
     },
     publication,
-    comments: {
-      loadPriorReviewState: ({ change }) => loadBitbucketPriorReviewState({ client, change }),
-      loadPriorMainComment: ({ change }) => loadBitbucketPriorMainComment({ client, change }),
-      loadInlineThreadContexts: ({ change }) =>
-        loadBitbucketInlineThreadContexts({ client, change }),
-    },
+    comments: createCommentsReader(driver),
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {

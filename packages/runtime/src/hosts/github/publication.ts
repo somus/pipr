@@ -1,13 +1,6 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
-import type { InlineThreadContext, PriorReviewState } from "../../publication/types.js";
-import {
-  applyInlineFindingMarkers,
-  applyNativeThreadResolutions,
-  applyResolvedFindingMarkers,
-  extractPriorReviewState,
-  mainCommentMarker,
-  parseInlineFindingMarker,
-} from "../../review/prior-state.js";
+import type { InlineThreadContext } from "../../publication/types.js";
+import { parseInlineFindingMarker } from "../../review/prior-state.js";
 import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { isMainCommentLine } from "../publication.js";
@@ -83,43 +76,6 @@ export function findMainComment(
   );
 }
 
-export async function loadGitHubPriorReviewState(options: {
-  client: GitHubPublicationClient;
-  change: ChangeRequestEventContext;
-}): Promise<PriorReviewState | undefined> {
-  const ownerLogin = await options.client.getAuthenticatedUserLogin();
-  const mainComment = await loadGitHubPriorMainComment({ ...options, ownerLogin });
-  const state = extractPriorReviewState(mainComment, options.change.change.number);
-  if (!state) {
-    return undefined;
-  }
-  const { ownerComments, threadByCommentId } = await loadOwnedReviewThreads(options, ownerLogin);
-  const inlineBodies = ownerComments.map((comment) => comment.body ?? "");
-  const markerState = applyResolvedFindingMarkers(
-    applyInlineFindingMarkers(state, inlineBodies),
-    inlineBodies,
-  );
-  return applyNativeThreadResolutions(
-    markerState,
-    ownerComments.flatMap((comment) => {
-      const marker = parseInlineFindingMarker(comment.body ?? "");
-      const thread = threadByCommentId.get(comment.id);
-      return marker && thread
-        ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved: thread.isResolved }]
-        : [];
-    }),
-  );
-}
-
-export async function loadGitHubInlineThreadContexts(options: {
-  client: GitHubPublicationClient;
-  change: ChangeRequestEventContext;
-}): Promise<InlineThreadContext[]> {
-  const ownerLogin = await options.client.getAuthenticatedUserLogin();
-  const { comments, ownerComments, threads } = await loadOwnedReviewThreads(options, ownerLogin);
-  return githubThreadContexts(ownerComments, comments, threads, ownerLogin, false);
-}
-
 /**
  * Builds thread contexts rooted at owned finding comments. With `ownedRepliesOnly`,
  * only owned replies are kept and an unthreaded root still lists itself.
@@ -164,43 +120,4 @@ function githubThreadContext(
     threadResolved: thread?.isResolved ?? false,
     comments,
   };
-}
-
-async function loadOwnedReviewThreads(
-  options: {
-    client: GitHubPublicationClient;
-    change: ChangeRequestEventContext;
-  },
-  ownerLogin: string,
-) {
-  const coordinates = {
-    repo: options.change.repository.slug,
-    pullRequestNumber: options.change.change.number,
-  };
-  const comments = await options.client.listReviewComments(coordinates);
-  const threads = await options.client.listReviewThreads(coordinates);
-  return {
-    comments,
-    threads,
-    ownerComments: comments.filter((comment) => comment.authorLogin === ownerLogin),
-    threadByCommentId: reviewThreadByCommentId(threads),
-  };
-}
-
-export async function loadGitHubPriorMainComment(options: {
-  client: GitHubPublicationClient;
-  change: ChangeRequestEventContext;
-  ownerLogin?: string;
-}): Promise<string | undefined> {
-  const ownerLogin = options.ownerLogin ?? (await options.client.getAuthenticatedUserLogin());
-  const mainComment = findMainComment(
-    await options.client.listIssueComments({
-      repo: options.change.repository.slug,
-      issueNumber: options.change.change.number,
-    }),
-    mainCommentMarker,
-    options.change.change.number,
-    ownerLogin,
-  );
-  return mainComment?.body ?? undefined;
 }

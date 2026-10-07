@@ -1,5 +1,5 @@
 import { withEventRef } from "../change-request.js";
-import { createPublicationWorkflow } from "../publication/workflow.js";
+import { createCommentsReader, createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import {
   createGiteaClient,
@@ -8,13 +8,7 @@ import {
   parseGiteaRepositorySlug,
 } from "./client.js";
 import { parseGiteaEvent } from "./event.js";
-import {
-  assertCurrentGiteaHead,
-  giteaCoordinates,
-  loadGiteaInlineThreadContexts,
-  loadGiteaPriorMainComment,
-  loadGiteaPriorReviewState,
-} from "./publication.js";
+import { assertCurrentGiteaHead, giteaCoordinates } from "./publication.js";
 import { createGiteaPublicationDriver } from "./publication-driver.js";
 import { ensureGiteaHeadCheckout } from "./workspace.js";
 
@@ -24,7 +18,8 @@ export function createGiteaHostAdapter(options: {
   client?: GiteaClient;
 }): CodeHostAdapter {
   const client = options.client ?? createGiteaClient({ host: options.host, env: options.env });
-  const publication = createPublicationWorkflow(createGiteaPublicationDriver(client));
+  const driver = createGiteaPublicationDriver(client);
+  const publication = createPublicationWorkflow(driver);
   return {
     id: options.host,
     capabilities: {
@@ -58,11 +53,7 @@ export function createGiteaHostAdapter(options: {
       },
     },
     publication,
-    comments: {
-      loadPriorReviewState: ({ change }) => loadGiteaPriorReviewState({ client, change }),
-      loadPriorMainComment: ({ change }) => loadGiteaPriorMainComment({ client, change }),
-      loadInlineThreadContexts: ({ change }) => loadGiteaInlineThreadContexts({ client, change }),
-    },
+    comments: createCommentsReader(driver),
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {

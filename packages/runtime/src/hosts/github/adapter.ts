@@ -1,5 +1,5 @@
 import { githubCoordinates } from "../../shared/github.js";
-import { createPublicationWorkflow } from "../publication/workflow.js";
+import { createCommentsReader, createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import {
   createGitHubCommandClient,
@@ -12,11 +12,6 @@ import {
   loadGitHubPullRequestEventContext,
   loadGitHubReviewCommentReplyEvent,
 } from "./event.js";
-import {
-  loadGitHubInlineThreadContexts,
-  loadGitHubPriorMainComment,
-  loadGitHubPriorReviewState,
-} from "./publication.js";
 import { createGitHubPublicationDriver } from "./publication-driver.js";
 import { ensureGitHubHeadCheckout, ensureGitHubWorkspaceSafeDirectory } from "./workspace.js";
 
@@ -30,7 +25,8 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
   const env = options.env ?? process.env;
   const commandClient = options.commandClient ?? createGitHubCommandClient(env);
   const publicationClient = options.publicationClient ?? createGitHubPublicationClient(env);
-  const publication = createPublicationWorkflow(createGitHubPublicationDriver(publicationClient));
+  const driver = createGitHubPublicationDriver(publicationClient);
+  const publication = createPublicationWorkflow(driver);
 
   return {
     id: "github",
@@ -91,26 +87,7 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
       },
     },
     publication,
-    comments: {
-      loadPriorReviewState(options) {
-        return loadGitHubPriorReviewState({
-          client: publicationClient,
-          change: options.change,
-        });
-      },
-      loadPriorMainComment(options) {
-        return loadGitHubPriorMainComment({
-          client: publicationClient,
-          change: options.change,
-        });
-      },
-      loadInlineThreadContexts(options) {
-        return loadGitHubInlineThreadContexts({
-          client: publicationClient,
-          change: options.change,
-        });
-      },
-    },
+    comments: createCommentsReader(driver),
     statuses: {
       isAvailable(change) {
         return change.eventName === "pull_request";

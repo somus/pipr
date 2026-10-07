@@ -1,18 +1,7 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
-import type {
-  InlinePublicationItem,
-  InlineThreadContext,
-  PriorReviewState,
-} from "../../publication/types.js";
+import type { InlinePublicationItem, InlineThreadContext } from "../../publication/types.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
-import {
-  applyInlineFindingMarkers,
-  applyNativeThreadResolutions,
-  applyResolvedFindingMarkers,
-  extractPriorReviewState,
-  mainCommentMarker,
-  parseInlineFindingMarker,
-} from "../../review/prior-state.js";
+import { mainCommentMarker, parseInlineFindingMarker } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { isMainCommentLine, nativeInlineLocation } from "../publication.js";
 import { normalizeBitbucketMarkdown } from "./markdown.js";
@@ -33,66 +22,6 @@ export function bitbucketInlineLocationFromComment(
     leftStart: inline.start_from ?? undefined,
     leftEnd: inline.from ?? undefined,
   });
-}
-
-export async function loadBitbucketPriorReviewState(options: {
-  client: BitbucketClient;
-  change: ChangeRequestEventContext;
-}): Promise<PriorReviewState | undefined> {
-  const comments = await loadBitbucketOwnedComments(options);
-  const body = findBitbucketMainComment(comments, options.change.change.number)?.content.raw;
-  const normalizedBody = body ? normalizeBitbucketMarkdown(body) : undefined;
-  const state = extractPriorReviewState(normalizedBody, options.change.change.number);
-  if (!state) return undefined;
-  const bodies = comments.map((comment) => normalizeBitbucketMarkdown(comment.content.raw));
-  const markerState = applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
-  return applyNativeThreadResolutions(
-    markerState,
-    comments.flatMap((comment) => {
-      const marker = !comment.parent
-        ? parseInlineFindingMarker(normalizeBitbucketMarkdown(comment.content.raw))
-        : undefined;
-      return marker
-        ? [
-            {
-              findingId: marker.id,
-              findingHeadSha: marker.head,
-              resolved: comment.resolution !== undefined,
-            },
-          ]
-        : [];
-    }),
-  );
-}
-
-export async function loadBitbucketPriorMainComment(options: {
-  client: BitbucketClient;
-  change: ChangeRequestEventContext;
-}) {
-  const body = findBitbucketMainComment(
-    await loadBitbucketOwnedComments(options),
-    options.change.change.number,
-  )?.content.raw;
-  return body ? normalizeBitbucketMarkdown(body) : undefined;
-}
-
-async function loadBitbucketOwnedComments(options: {
-  client: BitbucketClient;
-  change: ChangeRequestEventContext;
-}) {
-  const owner = await authenticatedBitbucketOwner(options.client);
-  return (await options.client.listComments(options.change.change.number)).filter(
-    (comment) => comment.user?.uuid === owner.uuid,
-  );
-}
-
-export async function loadBitbucketInlineThreadContexts(options: {
-  client: BitbucketClient;
-  change: ChangeRequestEventContext;
-}): Promise<InlineThreadContext[]> {
-  const owner = await authenticatedBitbucketOwner(options.client);
-  const comments = await options.client.listComments(options.change.change.number);
-  return bitbucketThreadContexts(comments, owner.uuid, false);
 }
 
 export function bitbucketThreadContexts(

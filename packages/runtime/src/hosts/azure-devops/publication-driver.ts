@@ -40,7 +40,7 @@ export function createAzureDevOpsPublicationDriver(
     async assertCurrent(prepared, expectedHeadSha) {
       await assertCurrentAzurePullRequest(client, prepared.change, expectedHeadSha);
     },
-    async loadOwnedState(prepared): Promise<LoadedPublicationState> {
+    async loadOwnedState(prepared, _mainMarker, options): Promise<LoadedPublicationState> {
       const threads = await loadAzureThreads(client, prepared);
       return {
         main: azureOwnedMain(threads, prepared),
@@ -55,7 +55,7 @@ export function createAzureDevOpsPublicationDriver(
             },
           ];
         }),
-        threads: azureThreadContexts(threads, prepared.ownerUniqueName, true),
+        threads: azureThreadContexts(threads, prepared.ownerUniqueName, !options?.allReplies),
       };
     },
     async loadOwnedMain(prepared) {

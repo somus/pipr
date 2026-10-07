@@ -1,19 +1,8 @@
-import type {
-  InlinePublicationItem,
-  InlineThreadContext,
-  PriorReviewState,
-} from "../../publication/types.js";
+import type { InlinePublicationItem, InlineThreadContext } from "../../publication/types.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
-import {
-  applyInlineFindingMarkers,
-  applyNativeThreadResolutions,
-  applyResolvedFindingMarkers,
-  extractPriorReviewState,
-  parseInlineFindingMarker,
-} from "../../review/prior-state.js";
+import { parseInlineFindingMarker } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { requireCoordinates } from "../change-request.js";
-import { mainCommentPrefix } from "../publication.js";
 import type {
   GitLabClient,
   GitLabDiffRefs,
@@ -21,59 +10,6 @@ import type {
   GitLabNote,
   GitLabPosition,
 } from "./client.js";
-
-export async function loadGitLabPriorReviewState(options: {
-  client: GitLabClient;
-  change: ChangeRequestEventContext;
-}): Promise<PriorReviewState | undefined> {
-  const body = await loadGitLabPriorMainComment(options);
-  const state = extractPriorReviewState(body, options.change.change.number);
-  if (!state) return undefined;
-  const owner = await options.client.currentUser();
-  const discussions = await options.client.listDiscussions(
-    gitLabCoordinates(options.change).projectId,
-    options.change.change.number,
-  );
-  const bodies = discussionNotes(discussions)
-    .filter((note) => note.author?.username === owner.username)
-    .map((note) => note.body);
-  const markerState = applyResolvedFindingMarkers(applyInlineFindingMarkers(state, bodies), bodies);
-  return applyNativeThreadResolutions(
-    markerState,
-    discussions.flatMap((discussion) => {
-      const root = discussion.notes[0];
-      const marker = root ? parseInlineFindingMarker(root.body) : undefined;
-      return root && marker && root.author?.username === owner.username
-        ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved: root.resolved ?? false }]
-        : [];
-    }),
-  );
-}
-
-export async function loadGitLabPriorMainComment(options: {
-  client: GitLabClient;
-  change: ChangeRequestEventContext;
-}): Promise<string | undefined> {
-  const owner = await options.client.currentUser();
-  const notes = await options.client.listNotes(
-    gitLabCoordinates(options.change).projectId,
-    options.change.change.number,
-  );
-  return ownedGitLabNote(notes, owner.username, mainCommentPrefix(options.change.change.number))
-    ?.body;
-}
-
-export async function loadGitLabInlineThreadContexts(options: {
-  client: GitLabClient;
-  change: ChangeRequestEventContext;
-}): Promise<InlineThreadContext[]> {
-  const owner = await options.client.currentUser();
-  const discussions = await options.client.listDiscussions(
-    gitLabCoordinates(options.change).projectId,
-    options.change.change.number,
-  );
-  return gitLabThreadContexts(discussions, owner.username, false);
-}
 
 export function gitLabThreadContexts(
   discussions: GitLabDiscussion[],
@@ -176,10 +112,6 @@ export function ownedGitLabNote(notes: GitLabNote[], username: string, marker: s
   return notes.find(
     (note) => note.author?.username === username && note.body.trimStart().startsWith(marker),
   );
-}
-
-function discussionNotes(discussions: GitLabDiscussion[]) {
-  return discussions.flatMap((discussion) => discussion.notes);
 }
 
 function lineRangePoint(path: string, type: "old" | "new", line: number) {

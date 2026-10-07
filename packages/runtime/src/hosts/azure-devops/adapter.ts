@@ -1,5 +1,5 @@
 import { withEventRef } from "../change-request.js";
-import { createPublicationWorkflow } from "../publication/workflow.js";
+import { createCommentsReader, createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import {
   type AzureDevOpsClient,
@@ -7,13 +7,7 @@ import {
   createAzureDevOpsClient,
 } from "./client.js";
 import { parseAzureDevOpsEvent } from "./event.js";
-import {
-  azureCoordinates,
-  currentAzureNativeChange,
-  loadAzureDevOpsInlineThreadContexts,
-  loadAzureDevOpsPriorMainComment,
-  loadAzureDevOpsPriorReviewState,
-} from "./publication.js";
+import { azureCoordinates, currentAzureNativeChange } from "./publication.js";
 import { createAzureDevOpsPublicationDriver } from "./publication-driver.js";
 import { ensureAzureDevOpsHeadCheckout } from "./workspace.js";
 
@@ -21,7 +15,8 @@ export function createAzureDevOpsHostAdapter(
   options: { env?: NodeJS.ProcessEnv; client?: AzureDevOpsClient } = {},
 ): CodeHostAdapter {
   const client = options.client ?? createAzureDevOpsClient(options.env);
-  const publication = createPublicationWorkflow(createAzureDevOpsPublicationDriver(client));
+  const driver = createAzureDevOpsPublicationDriver(client);
+  const publication = createPublicationWorkflow(driver);
   return {
     id: "azure-devops",
     capabilities: {
@@ -60,12 +55,7 @@ export function createAzureDevOpsHostAdapter(
       },
     },
     publication,
-    comments: {
-      loadPriorReviewState: ({ change }) => loadAzureDevOpsPriorReviewState({ client, change }),
-      loadPriorMainComment: ({ change }) => loadAzureDevOpsPriorMainComment({ client, change }),
-      loadInlineThreadContexts: ({ change }) =>
-        loadAzureDevOpsInlineThreadContexts({ client, change }),
-    },
+    comments: createCommentsReader(driver),
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {

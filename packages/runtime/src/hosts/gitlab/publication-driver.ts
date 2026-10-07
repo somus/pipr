@@ -23,6 +23,7 @@ type Prepared = {
 export function createGitLabPublicationDriver(client: GitLabClient): PublicationDriver<Prepared> {
   return {
     provider: "GitLab",
+    inlineStateNeedsExtraReads: true,
     async prepare(change) {
       const owner = await client.currentUser();
       return { client, change, ownerUsername: owner.username };
@@ -31,7 +32,7 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       const current = await assertCurrentGitLabHead(client, prepared.change, expectedHeadSha);
       prepared.refs = current.diff_refs;
     },
-    async loadOwnedState(prepared): Promise<LoadedPublicationState> {
+    async loadOwnedState(prepared, _mainMarker, options): Promise<LoadedPublicationState> {
       const coordinates = gitLabCoordinates(prepared.change);
       const [notes, discussions] = await Promise.all([
         client.listNotes(coordinates.projectId, prepared.change.change.number),
@@ -55,7 +56,7 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
             },
           ];
         }),
-        threads: gitLabThreadContexts(discussions, prepared.ownerUsername, true),
+        threads: gitLabThreadContexts(discussions, prepared.ownerUsername, !options?.allReplies),
       };
     },
     async loadOwnedMain(prepared) {

@@ -22,6 +22,7 @@ export function createGitHubPublicationDriver(
 ): PublicationDriver<Prepared> {
   return {
     provider: "GitHub",
+    inlineStateNeedsExtraReads: true,
     async prepare(change) {
       return { client, change };
     },
@@ -166,6 +167,7 @@ async function loadOwnedMain(prepared: Prepared, mainMarker: string) {
 async function loadOwnedState(
   prepared: Prepared,
   mainMarker: string,
+  options?: { allReplies?: boolean },
 ): Promise<LoadedPublicationState> {
   const ownerLogin = await prepared.client.getAuthenticatedUserLogin();
   const [issueComments, reviewComments, threads] = await Promise.all([
@@ -186,9 +188,9 @@ async function loadOwnedState(
     inline: owned.map((comment) => ({
       body: comment.body ?? "",
       location: locationFromComment(comment),
-      resolved: threadByComment.get(comment.id)?.isResolved ?? false,
+      resolved: threadByComment.get(comment.id)?.isResolved,
     })),
-    threads: githubThreadContexts(owned, reviewComments, threads, ownerLogin, true),
+    threads: githubThreadContexts(owned, reviewComments, threads, ownerLogin, !options?.allReplies),
   };
 }
 

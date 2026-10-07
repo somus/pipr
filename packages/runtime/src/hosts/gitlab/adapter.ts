@@ -1,14 +1,9 @@
 import { withEventRef } from "../change-request.js";
-import { createPublicationWorkflow } from "../publication/workflow.js";
+import { createCommentsReader, createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import { createGitLabClient, type GitLabClient } from "./client.js";
 import { parseGitLabEvent } from "./event.js";
-import {
-  gitLabCoordinates,
-  loadGitLabInlineThreadContexts,
-  loadGitLabPriorMainComment,
-  loadGitLabPriorReviewState,
-} from "./publication.js";
+import { gitLabCoordinates } from "./publication.js";
 import { createGitLabPublicationDriver } from "./publication-driver.js";
 import { ensureGitLabHeadCheckout } from "./workspace.js";
 
@@ -16,7 +11,8 @@ export function createGitLabHostAdapter(
   options: { env?: NodeJS.ProcessEnv; client?: GitLabClient } = {},
 ): CodeHostAdapter {
   const client = options.client ?? createGitLabClient(options.env);
-  const publication = createPublicationWorkflow(createGitLabPublicationDriver(client));
+  const driver = createGitLabPublicationDriver(client);
+  const publication = createPublicationWorkflow(driver);
   return {
     id: "gitlab",
     capabilities: {
@@ -55,11 +51,7 @@ export function createGitLabHostAdapter(
       },
     },
     publication,
-    comments: {
-      loadPriorReviewState: ({ change }) => loadGitLabPriorReviewState({ client, change }),
-      loadPriorMainComment: ({ change }) => loadGitLabPriorMainComment({ client, change }),
-      loadInlineThreadContexts: ({ change }) => loadGitLabInlineThreadContexts({ client, change }),
-    },
+    comments: createCommentsReader(driver),
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {

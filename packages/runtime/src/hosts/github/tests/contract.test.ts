@@ -40,6 +40,29 @@ describe("GitHub host adapter contract", () => {
     expect(calls).toEqual(["getPullRequestHeadSha"]);
   });
 
+  it("loads no review comments or threads for prior state before a main comment exists", async () => {
+    const calls: string[] = [];
+    const client = publicationClient(calls);
+    client.listReviewThreads = async () => {
+      throw new Error("review threads should not be loaded");
+    };
+    const adapter = createGitHubHostAdapter({
+      env: {},
+      commandClient: commandClient(),
+      publicationClient: client,
+    });
+    const change = changeEvent(
+      await commandClient().getPullRequest({
+        repository: { slug: "local/pipr" },
+        changeNumber: 7,
+      }),
+    );
+
+    await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toBeUndefined();
+    expect(calls).not.toContain("listReviewComments");
+    expect(calls).not.toContain("listReviewThreads");
+  });
+
   it("publishes a summary without loading review comments or threads", async () => {
     const calls: string[] = [];
     const client = publicationClient(calls);

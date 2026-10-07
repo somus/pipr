@@ -27,7 +27,7 @@ export function createBitbucketPublicationDriver(
     assertCurrent(prepared, expectedHeadSha) {
       return assertCurrentBitbucketEndpoints(client, prepared.change, expectedHeadSha);
     },
-    async loadOwnedState(prepared, mainMarker): Promise<LoadedPublicationState> {
+    async loadOwnedState(prepared, mainMarker, options): Promise<LoadedPublicationState> {
       const owner = await authenticatedBitbucketOwner(client);
       const comments = await client.listComments(prepared.change.change.number);
       const owned = comments.filter((comment) => comment.user?.uuid === owner.uuid);
@@ -47,7 +47,7 @@ export function createBitbucketPublicationDriver(
                 },
               ],
         ),
-        threads: bitbucketThreadContexts(comments, owner.uuid, true),
+        threads: bitbucketThreadContexts(comments, owner.uuid, !options?.allReplies),
       };
     },
     async loadOwnedMain(prepared, mainMarker) {

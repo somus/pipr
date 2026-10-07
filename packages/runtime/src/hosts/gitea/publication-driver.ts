@@ -17,13 +17,14 @@ type Prepared = { client: GiteaClient; change: ChangeRequestEventContext };
 export function createGiteaPublicationDriver(client: GiteaClient): PublicationDriver<Prepared> {
   return {
     provider: giteaDisplayName(client.host),
+    inlineStateNeedsExtraReads: true,
     async prepare(change) {
       return { client, change };
     },
     assertCurrent(prepared, expectedHeadSha) {
       return assertCurrentGiteaHead(client, prepared.change, expectedHeadSha);
     },
-    async loadOwnedState(prepared, mainMarker): Promise<LoadedPublicationState> {
+    async loadOwnedState(prepared, mainMarker, options): Promise<LoadedPublicationState> {
       const coordinates = giteaCoordinates(prepared.change);
       const owner = await client.currentUser();
       const [comments, reviewComments] = await Promise.all([
@@ -44,6 +45,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
         mainMarker,
         prepared.change.change.number,
       );
+      // Gitea-family hosts have no native thread resolution, so inline comments carry none.
       const owned = reviewComments.filter((comment) => comment.authorLogin === owner.login);
       return {
         main: main ? { id: main.id, body: main.body } : undefined,
@@ -54,11 +56,10 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
                 {
                   body: comment.body,
                   location: giteaReviewCommentLocation(comment),
-                  resolved: false,
                 },
               ],
         ),
-        threads: giteaThreadContexts(reviewComments, owner.login, true),
+        threads: giteaThreadContexts(reviewComments, owner.login, !options?.allReplies),
       };
     },
     async loadOwnedMain(prepared, mainMarker) {
