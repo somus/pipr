@@ -3,11 +3,12 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { FindingOutcomeEvent } from "@usepipr/sdk";
+import type { FindingOutcomeEvent, FindingThreadResolution } from "@usepipr/sdk";
 import type { HostRunCommandResult } from "../types.js";
 import {
   processNextWebhookDelivery,
   readFindingEvents,
+  readWebhookDeliveryStatus,
   SqliteWebhookDeliveryStore,
 } from "../webhook-server.js";
 
@@ -89,9 +90,23 @@ async function deliver(
   store: SqliteWebhookDeliveryStore,
   id: string,
   result: HostRunCommandResult,
+  options: { threadResolution?: FindingThreadResolution; error?: Error } = {},
 ): Promise<void> {
   expect(store.enqueue({ id, host: "gitlab", payload: "{}" })).toBe("created");
-  await processNextWebhookDelivery({ store, run: async () => result });
+  await processNextWebhookDelivery({
+    store,
+    run: async (_delivery, onFindingEvents) => {
+      if (result.kind === "verifier" && result.findingEvents.length > 0) {
+        onFindingEvents({
+          repository: result.event.repository.slug,
+          threadResolution: options.threadResolution ?? "available",
+          events: result.findingEvents,
+        });
+      }
+      if (options.error) throw options.error;
+      return result;
+    },
+  });
 }
 
 function ageEvents(database: string, days: number): void {
@@ -120,6 +135,36 @@ describe("webhook finding events", () => {
       repository: "somus/pipr",
       deliveryId: "delivery-1",
     });
+  });
+
+  it("stores the events a delivery recorded before it failed", async () => {
+    const database = await databasePath();
+    const store = new SqliteWebhookDeliveryStore(database);
+    const events = [findingEvent(1, { kind: "proposed" }), findingEvent(2)];
+    await deliver(store, "delivery-1", verifierResult(events), {
+      error: new Error("gitlab inline comment publication failed"),
+    });
+    store.close();
+
+    expect(readFindingEvents(database).map((record) => record.event)).toEqual(events.toReversed());
+    expect(readWebhookDeliveryStatus(database)[0]).toMatchObject({ status: "pending" });
+  });
+
+  it("keeps each event's thread resolution support", async () => {
+    const database = await databasePath();
+    const store = new SqliteWebhookDeliveryStore(database);
+    await deliver(store, "delivery-1", verifierResult([findingEvent(1)]), {
+      threadResolution: "unavailable",
+    });
+    await deliver(store, "delivery-2", verifierResult([findingEvent(2)]));
+    store.close();
+
+    expect(
+      readFindingEvents(database).map((record) => [record.event.sequence, record.threadResolution]),
+    ).toEqual([
+      [2, "available"],
+      [1, "unavailable"],
+    ]);
   });
 
   it("does not double count events from redelivered work", async () => {

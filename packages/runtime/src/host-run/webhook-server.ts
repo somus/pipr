@@ -5,10 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import {
   type FindingOutcomeEvent,
+  type FindingThreadResolution,
   findingOutcomeEventSchema,
   type PiprResult,
   parsePiprResult,
 } from "@usepipr/sdk";
+import { z } from "zod";
 import type { WebhookHost } from "../hosts/selection.js";
 import { createCodeHostWebhookProtocol } from "../hosts/webhook.js";
 import { enforceRunStoreRetention } from "../observability/retention.js";
@@ -19,7 +21,7 @@ import {
 import type { RuntimeLogSink } from "../shared/logging.js";
 import { runHostRunCommand } from "./commands-hosted.js";
 import { toPiprErrorResult, toPiprResult } from "./pipr-result.js";
-import type { HostRunCommandResult } from "./types.js";
+import type { HostRunCommandResult, HostRunFindingEvents } from "./types.js";
 
 const MAX_WEBHOOK_PAYLOAD_BYTES = 2 * 1024 * 1024;
 
@@ -33,21 +35,24 @@ export type WebhookDelivery = {
 export type WebhookDeliveryStore = {
   enqueue(delivery: WebhookDelivery): "created" | "duplicate" | "full";
   next(): WebhookDelivery | undefined;
-  complete(id: string, result: PiprResult, findings?: WebhookFindingEvents): void;
-  fail(id: string, result: PiprResult): void;
+  complete(id: string, result: PiprResult, findings?: HostRunFindingEvents): void;
+  /** Records a failed attempt, keeping the Finding Outcome events it recorded before failing. */
+  fail(id: string, result: PiprResult, findings?: HostRunFindingEvents): void;
 };
 
-/** Finding Outcome events one delivery's host run recorded, with the repository they belong to. */
-type WebhookFindingEvents = {
-  repository: string;
-  events: readonly FindingOutcomeEvent[];
-};
+/** Runs one delivery, handing the Finding Outcome events it records to `onFindingEvents`. */
+type WebhookDeliveryRunner = (
+  delivery: WebhookDelivery,
+  onFindingEvents: (findings: HostRunFindingEvents) => void,
+) => Promise<HostRunCommandResult>;
 
 /** One stored Finding Outcome event with the delivery identity that recorded it. */
 export type WebhookFindingEventRecord = {
   host: string;
   repository: string;
   deliveryId: string;
+  /** Whether the delivery's code host reports native thread resolution. */
+  threadResolution: FindingThreadResolution;
   event: FindingOutcomeEvent;
 };
 
@@ -60,6 +65,7 @@ export type FindingEventQuery = {
 };
 
 const MAX_FINDING_EVENT_READ_LIMIT = 100_000;
+const findingThreadResolutionSchema = z.enum(["available", "unavailable"]);
 
 /** Reads stored Finding Outcome events newest first, opening the delivery database read-only. */
 export function readFindingEvents(
@@ -84,8 +90,17 @@ export function readFindingEvents(
       .all(query.repository ?? null, query.since?.toISOString() ?? null, limit);
     return rows.flatMap((row) => {
       const event = storedFindingEvent(row);
-      return event
-        ? [{ host: row.host, repository: row.repository, deliveryId: row.deliveryId, event }]
+      const threadResolution = findingThreadResolutionSchema.safeParse(row.threadResolution);
+      return event && threadResolution.success
+        ? [
+            {
+              host: row.host,
+              repository: row.repository,
+              deliveryId: row.deliveryId,
+              threadResolution: threadResolution.data,
+              event,
+            },
+          ]
         : [];
     });
   } finally {
@@ -97,6 +112,7 @@ type FindingEventRow = {
   host: string;
   repository: string;
   deliveryId: string;
+  threadResolution: string;
   eventId: string;
   findingId: string;
   kind: string;
@@ -117,6 +133,7 @@ const findingEventColumns = [
   "host",
   "repository",
   "delivery_id AS deliveryId",
+  "thread_resolution AS threadResolution",
   "event_id AS eventId",
   "finding_id AS findingId",
   "kind",
@@ -304,21 +321,20 @@ async function readAuthenticatedWebhookPayload(
 
 export async function processNextWebhookDelivery(options: {
   store: WebhookDeliveryStore;
-  run: (delivery: WebhookDelivery) => Promise<HostRunCommandResult>;
+  run: WebhookDeliveryRunner;
   log?: (message: string) => void;
 }): Promise<boolean> {
   const delivery = options.store.next();
   if (!delivery) return false;
+  let findings: HostRunFindingEvents | undefined;
   try {
-    const result = await options.run(delivery);
-    options.store.complete(
-      delivery.id,
-      toPiprResult({ source: "host", result }),
-      deliveryFindingEvents(result),
-    );
+    const result = await options.run(delivery, (recorded) => {
+      findings = recorded;
+    });
+    options.store.complete(delivery.id, toPiprResult({ source: "host", result }), findings);
     options.log?.(`webhook delivery completed: ${delivery.id.slice(0, 200)}`);
   } catch (error) {
-    options.store.fail(delivery.id, toPiprErrorResult(error));
+    options.store.fail(delivery.id, toPiprErrorResult(error), findings);
     options.log?.(
       `webhook delivery failed and was retained for retry or inspection: ${delivery.id.slice(0, 200)}`,
     );
@@ -326,15 +342,9 @@ export async function processNextWebhookDelivery(options: {
   return true;
 }
 
-function deliveryFindingEvents(result: HostRunCommandResult): WebhookFindingEvents | undefined {
-  if (result.kind !== "review" && result.kind !== "verifier") return undefined;
-  if (result.findingEvents.length === 0) return undefined;
-  return { repository: result.event.repository.slug, events: result.findingEvents };
-}
-
 export function createWebhookQueueProcessor(options: {
   store: WebhookDeliveryStore;
-  run: (delivery: WebhookDelivery) => Promise<HostRunCommandResult>;
+  run: WebhookDeliveryRunner;
   log?: (message: string) => void;
 }) {
   let active: Promise<void> | undefined;
@@ -408,12 +418,13 @@ export async function runWebhookServer(options: {
   });
   const processor = createWebhookQueueProcessor({
     store,
-    run: async (delivery) => {
+    run: async (delivery, onFindingEvents) => {
       try {
         return await runWebhookDelivery(delivery, {
           ...options,
           env,
           runStoreDirectory,
+          onFindingEvents,
         });
       } finally {
         try {
@@ -520,6 +531,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           host TEXT NOT NULL,
           repository TEXT NOT NULL,
           delivery_id TEXT NOT NULL,
+          thread_resolution TEXT NOT NULL,
           finding_id TEXT NOT NULL,
           kind TEXT NOT NULL,
           reason_code TEXT,
@@ -607,7 +619,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
     })();
   }
 
-  complete(id: string, result: PiprResult, findings?: WebhookFindingEvents): void {
+  complete(id: string, result: PiprResult, findings?: HostRunFindingEvents): void {
     this.database.transaction(() => {
       const stored = this.storedResult(result);
       this.database
@@ -621,7 +633,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
     })();
   }
 
-  fail(id: string, result: PiprResult): void {
+  fail(id: string, result: PiprResult, findings?: HostRunFindingEvents): void {
     this.database.transaction(() => {
       const stored = this.storedResult(result);
       const message = "message" in result ? result.message : "Pipr failed; see logs for details.";
@@ -630,6 +642,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           "UPDATE webhook_deliveries SET status = CASE WHEN attempts < 3 THEN 'pending' ELSE 'failed' END, payload = CASE WHEN attempts < 3 THEN payload ELSE NULL END, error = ?, run_id = ?, result_kind = ?, result_json = ?, result_omitted_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .run(message, stored.runId, result.kind, stored.json, stored.omittedReason, id);
+      if (findings) this.insertFindingEvents(id, findings);
       this.enforceResultRetention();
       this.pruneTerminalDeliveries();
     })();
@@ -639,14 +652,14 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
     this.database.close();
   }
 
-  private insertFindingEvents(deliveryId: string, findings: WebhookFindingEvents): void {
+  private insertFindingEvents(deliveryId: string, findings: HostRunFindingEvents): void {
     const delivery = this.database
       .query<{ host: string }, [string]>("SELECT host FROM webhook_deliveries WHERE id = ?")
       .get(deliveryId);
     if (!delivery) return;
     const insert = this.database.query(
-      `INSERT OR IGNORE INTO finding_events (event_id, host, repository, delivery_id, finding_id, kind, reason_code, actor_permission, work_id, execution_id, head_sha, config_hash, agent, model, facets_json, at, sequence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO finding_events (event_id, host, repository, delivery_id, thread_resolution, finding_id, kind, reason_code, actor_permission, work_id, execution_id, head_sha, config_hash, agent, model, facets_json, at, sequence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const candidate of findings.events) {
       // Re-validate so only the strict public projection reaches the store, never paths or bodies.
@@ -658,6 +671,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
         delivery.host,
         findings.repository,
         deliveryId,
+        findings.threadResolution,
         event.findingId,
         event.kind,
         event.reasonCode ?? null,
@@ -748,6 +762,7 @@ export async function runWebhookDelivery(
     configDir: string;
     env?: NodeJS.ProcessEnv;
     runStoreDirectory?: string;
+    onFindingEvents?: (findings: HostRunFindingEvents) => void;
   },
   runHostRun: typeof runHostRunCommand = runHostRunCommand,
 ): Promise<HostRunCommandResult> {
@@ -776,6 +791,7 @@ export async function runWebhookDelivery(
       dryRun: false,
       piStoreRoot: path.join(runStoreDirectory, agentStoresDirectoryName),
       logSink: consoleRuntimeLogSink,
+      ...(options.onFindingEvents ? { onFindingEvents: options.onFindingEvents } : {}),
     });
   } finally {
     await rm(directory, { recursive: true, force: true });

@@ -9,6 +9,7 @@ import { extractPriorReviewState } from "../../review/comment-markers.js";
 import type { RuntimeLogSink } from "../../shared/logging.js";
 import { runtimeVersion } from "../../shared/version.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
+import type { HostRunFindingEvents } from "../types.js";
 import type { FakeCheckRuns } from "./commands-fixtures.js";
 import {
   clearGitConfigEnv,
@@ -1531,6 +1532,67 @@ describe("runHostRunCommand finding outcomes", () => {
         synchronized.findingEvents.map((event) => [event.kind, event.findingId, event.headSha]),
       ).toEqual([["fixed", publishedId, workspace.headSha]]);
       expect(synchronized.findingEvents[0]?.eventId).not.toBe(opened.findingEvents[0]?.eventId);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+});
+
+describe("runHostRunCommand finding outcomes after a failure", () => {
+  it("reports the outcomes recorded before a partial publication failure", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const github = statefulGitHubPublicationClient(workspace);
+    const createReviewComment = github.client.createReviewComment.bind(github.client);
+    let inlineWrites = 0;
+    github.client.createReviewComment = async (options) => {
+      inlineWrites += 1;
+      if (inlineWrites === 2) throw new Error("inline comment rejected");
+      return await createReviewComment(options);
+    };
+    const reported: HostRunFindingEvents[] = [];
+    const eventPath = path.join(workspace.rootDir, "opened.json");
+    await writeChangeRequestEvent(eventPath, workspace, "opened");
+    try {
+      await workspace.pi.answer(
+        JSON.stringify({
+          summary: { body: "Two issues." },
+          inlineFindings: [
+            { ...changedLineFinding, body: "First issue." },
+            {
+              ...changedLineFinding,
+              path: ".pipr/config.ts",
+              startLine: 3,
+              endLine: 3,
+              body: "Second issue.",
+            },
+          ],
+        }),
+      );
+      await expect(
+        runTestHostCommand({
+          rootDir: workspace.rootDir,
+          configDir: ".pipr",
+          eventPath,
+          dryRun: false,
+          env: pullRequestEnv(workspace.rootDir, eventPath),
+          githubPublicationClient: github.client,
+          piProviderModule: workspace.pi.providerModule,
+          onFindingEvents(findings) {
+            reported.push(findings);
+          },
+        }),
+      ).rejects.toThrow("inline comment publication failed");
+
+      expect(reported).toHaveLength(1);
+      expect(reported[0]).toMatchObject({
+        repository: "local/pipr",
+        threadResolution: "available",
+      });
+      expect(reported[0]?.events.map((event) => event.kind)).toEqual([
+        "proposed",
+        "proposed",
+        "published",
+      ]);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

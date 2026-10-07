@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { FindingThreadResolution } from "@usepipr/sdk";
 import { ciRunFromEnvironment, isNativeCiEnvironment } from "../hosts/ci-run.js";
 import { type CodeHostId, codeHostIds } from "../hosts/selection.js";
 import type { CodeHostAdapter, CodeHostEvent } from "../hosts/types.js";
@@ -85,12 +86,13 @@ export async function runHostRunCommandWithDependencies(
     runObserver: recorder ? recorder.observer : options.runObserver,
     findingLedger: createFindingLedger({
       executionId: recorder?.executionId ?? randomBytes(16).toString("hex"),
-      threadResolution: adapter.capabilities.threadResolution ? "available" : "unavailable",
+      threadResolution: threadResolution(adapter),
     }),
   };
   const state: HostRunState = { failureCategory: "startup", adapter: services.adapter };
   try {
     const result = await log.group("pipr host run", async () => executeHostRun(services, state));
+    reportFindingEvents(options, services, state);
     if (!isObservableHostResult(result)) {
       await recorder?.discard();
       return result;
@@ -100,10 +102,44 @@ export async function runHostRunCommandWithDependencies(
     await finishSuccessfulHostedRecorder(capture, log, options, result, services.adapter);
     return result;
   } catch (error) {
+    reportFindingEvents(options, services, state);
     await recordFindingLedgerSafely(recorder, services.findingLedger, log);
     const superseded = await finishFailedHostedRecorder(capture, log, options, state, error);
     if (superseded) return { kind: "ignored", reason: superseded.message };
     throw error;
+  }
+}
+
+/** Hands recorded Finding Outcome events to the caller, whether or not the run succeeded. */
+function reportFindingEvents(
+  options: ResolvedHostRunOptions,
+  services: HostRunServices,
+  state: HostRunState,
+): void {
+  const events = services.findingLedger.events();
+  const repository = state.event ? hostEventRepository(state.event) : undefined;
+  if (!options.onFindingEvents || events.length === 0 || !repository) return;
+  options.onFindingEvents({
+    repository,
+    threadResolution: threadResolution(services.adapter),
+    events,
+  });
+}
+
+function threadResolution(adapter: CodeHostAdapter): FindingThreadResolution {
+  return adapter.capabilities.threadResolution ? "available" : "unavailable";
+}
+
+function hostEventRepository(event: CodeHostEvent): string | undefined {
+  switch (event.kind) {
+    case "change-request":
+      return event.change.repository.slug;
+    case "command-comment":
+      return event.comment.repository.slug;
+    case "review-comment-reply":
+      return event.reply.repository.slug;
+    default:
+      return undefined;
   }
 }
 

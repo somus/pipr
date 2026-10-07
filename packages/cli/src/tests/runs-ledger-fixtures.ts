@@ -6,6 +6,7 @@ import type {
   DiagnosticFindingLedger,
   FindingOutcomeEvent,
   FindingOutcomeKind,
+  FindingThreadResolution,
 } from "@usepipr/sdk";
 
 export const secretPath = "src/secret-billing.ts";
@@ -114,33 +115,44 @@ export async function writeLedgerBundle(
   );
 }
 
-/** Creates a webhook delivery database holding `finding_events` rows like `pipr webhook serve`. */
+/**
+ * Creates a webhook delivery database holding `finding_events` rows like `pipr webhook serve`.
+ * Keep the table in sync with `SqliteWebhookDeliveryStore` in the runtime webhook server.
+ */
 export function writeWebhookFindingEvents(
   databasePath: string,
-  rows: Array<{ host: string; repository: string; event: FindingOutcomeEvent }>,
+  rows: Array<{
+    host: string;
+    repository: string;
+    threadResolution?: FindingThreadResolution;
+    event: FindingOutcomeEvent;
+  }>,
 ): void {
   const database = new Database(databasePath, { create: true, strict: true });
   try {
     database.run(`CREATE TABLE finding_events (
       id INTEGER PRIMARY KEY, event_id TEXT NOT NULL UNIQUE, host TEXT NOT NULL,
-      repository TEXT NOT NULL, delivery_id TEXT NOT NULL, finding_id TEXT NOT NULL,
+      repository TEXT NOT NULL, delivery_id TEXT NOT NULL, thread_resolution TEXT NOT NULL,
+      finding_id TEXT NOT NULL,
       kind TEXT NOT NULL, reason_code TEXT, actor_permission TEXT, work_id TEXT NOT NULL,
       execution_id TEXT NOT NULL, head_sha TEXT NOT NULL, config_hash TEXT, agent TEXT,
       model TEXT, facets_json TEXT NOT NULL, at TEXT NOT NULL, sequence INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
     const insert = database.query(
-      `INSERT INTO finding_events (event_id, host, repository, delivery_id, finding_id, kind,
-        reason_code, actor_permission, work_id, execution_id, head_sha, config_hash, agent, model,
-        facets_json, at, sequence)
-       VALUES ($eventId, $host, $repository, 'delivery-1', $findingId, $kind, $reasonCode,
+      `INSERT INTO finding_events (event_id, host, repository, delivery_id, thread_resolution,
+        finding_id, kind, reason_code, actor_permission, work_id, execution_id, head_sha,
+        config_hash, agent, model, facets_json, at, sequence)
+       VALUES ($eventId, $host, $repository, 'delivery-1', $threadResolution, $findingId, $kind,
+        $reasonCode,
         $actorPermission, $workId, $executionId, $headSha, $configHash, $agent, $model, $facets,
         $at, $sequence)`,
     );
-    for (const { host, repository, event } of rows) {
+    for (const { host, repository, threadResolution, event } of rows) {
       insert.run({
         eventId: event.eventId,
         host,
         repository,
+        threadResolution: threadResolution ?? "available",
         findingId: event.findingId,
         kind: event.kind,
         reasonCode: event.reasonCode ?? null,

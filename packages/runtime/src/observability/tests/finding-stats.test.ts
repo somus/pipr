@@ -219,18 +219,16 @@ describe("finding outcome labels", () => {
 });
 
 describe("webhook finding outcome sources", () => {
-  it("derives thread resolution support from each row's host", () => {
-    const record = (host: string, findingId: string) => ({
-      host,
-      repository: "acme/app",
-      deliveryId: "delivery",
+  it("groups rows by the thread resolution support stored with each row", () => {
+    const record = (threadResolution: "available" | "unavailable", findingId: string) => ({
+      threadResolution,
       event: outcome(findingId, "published"),
     });
     const sources = webhookFindingOutcomeSources([
-      record("github", "fnd_a"),
-      record("gitea", "fnd_b"),
-      record("gitlab", "fnd_c"),
-      record("codeberg", "fnd_d"),
+      record("available", "fnd_a"),
+      record("unavailable", "fnd_b"),
+      record("available", "fnd_c"),
+      record("unavailable", "fnd_d"),
     ]);
 
     expect(

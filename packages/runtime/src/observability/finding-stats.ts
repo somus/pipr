@@ -165,22 +165,16 @@ export function labelFindingOutcomes(
   });
 }
 
-/**
- * Hosts whose adapters report native thread resolution (the `threadResolution` capability). Rows
- * of the webhook `finding_events` table carry the host but not the ledger's resolution field.
- */
-const threadResolutionHosts = new Set(["github", "gitlab", "bitbucket", "azure-devops"]);
-
-/** Groups webhook `finding_events` rows into sources by their host's thread resolution support. */
+/** Groups webhook `finding_events` rows into sources by their stored thread resolution support. */
 export function webhookFindingOutcomeSources(
-  records: readonly { host: string; event: FindingOutcomeEvent }[],
+  records: readonly { threadResolution: FindingThreadResolution; event: FindingOutcomeEvent }[],
 ): FindingOutcomeSource[] {
   const groups: Record<FindingThreadResolution, FindingOutcomeEvent[]> = {
     available: [],
     unavailable: [],
   };
   for (const record of records) {
-    groups[threadResolutionHosts.has(record.host) ? "available" : "unavailable"].push(record.event);
+    groups[record.threadResolution].push(record.event);
   }
   return (["available", "unavailable"] as const)
     .filter((threadResolution) => groups[threadResolution].length > 0)
