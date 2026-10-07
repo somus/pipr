@@ -202,7 +202,7 @@ const diffManifestFileSchema: z.ZodType<DiffManifestFile> = z.strictObject({
   excludedReason: nonEmptyStringSchema.optional(),
 });
 
-const diffManifestSchema: z.ZodType<DiffManifest> = z.strictObject({
+export const diffManifestSchema: z.ZodType<DiffManifest> = z.strictObject({
   baseSha: nonEmptyStringSchema,
   headSha: nonEmptyStringSchema,
   mergeBaseSha: nonEmptyStringSchema,

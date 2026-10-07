@@ -1,8 +1,5 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { findEnclosingDeclaration } from "../diff/manifest-structure.js";
-import type { DiffStructuralAnalysis } from "../diff/structural-analysis.js";
-import type { DiffManifest } from "../types.js";
 import {
   type BaseDeclarationSnapshot,
   type BaseRangeSnapshot,
@@ -12,7 +9,10 @@ import {
   type RuntimeToolData,
   resolveReadAtRefRequest,
   unavailableReadAtRefResult,
-} from "./runtime-tools-core.js";
+} from "../agent-worker/runtime-tool-data.js";
+import { findEnclosingDeclaration } from "../diff/manifest-structure.js";
+import type { DiffStructuralAnalysis } from "../diff/structural-analysis.js";
+import type { DiffManifest } from "../types.js";
 
 export const piRuntimeReadToolNames = ["pipr_read_diff", "pipr_read_at_ref"] as const;
 export const piRuntimeStructuralToolNames = ["pipr_read_declaration", "pipr_ast_grep"] as const;

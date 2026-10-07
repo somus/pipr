@@ -2,56 +2,54 @@ import path from "node:path";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ToolRegistration } from "@earendil-works/pi-durable";
 import { z } from "zod";
+import { findEnclosingDeclaration } from "../diff/manifest-structure.js";
+import { createDiffRangeIndex } from "../diff/ranges.js";
+import type { StructuralDeclaration } from "../diff/structural-analysis.js";
+import { isRecord } from "../shared/record.js";
+import type { DiffManifestFile } from "../types.js";
+import { astGrepSearchParams, runAstGrepSearch } from "./ast-grep-search.js";
 import {
-  assertNoSymlinkPath,
-  assertSerializedToolResponseFits,
-  astGrepSearchParams,
   type BaseDeclarationSnapshot,
   type BaseRangeSnapshot,
   boundedLineSlice,
-  boundToolResponseContent,
+  parseManifestPath,
   type ReadAtRefParams,
   type RuntimeToolData,
-  readAtRefParams,
-  readDeclarationParams,
-  readDiffFromRuntimeData,
-  readDiffParams,
-  resolveAllowedPath,
-  resolveDeclarationRequest,
+  readRuntimeToolData,
   resolveReadAtRefRequest,
-  runAstGrepSearch,
   unavailableReadAtRefResult,
-} from "../pi/runtime-tools-core.js";
-import { jsonToolResult } from "./tool-result.js";
+} from "./runtime-tool-data.js";
+import {
+  assertSerializedToolResponseFits,
+  boundToolResponseContent,
+  jsonToolResult,
+} from "./tool-result.js";
+import { assertNoSymlinkPath, resolveAllowedPath } from "./workspace-paths.js";
 
-const readableBaseSnapshotSchema = z.looseObject({
-  path: z.string(),
-  ref: z.enum(["base", "head"]),
-  sourcePath: z.string(),
-  rangeId: z.string(),
-  startLine: z.number(),
-  endLine: z.number(),
-  available: z.literal(true),
-  relativePath: z.string(),
-  bytes: z.number().optional(),
-  truncated: z.boolean().optional(),
-});
-const readableBaseDeclarationSnapshotSchema = z.looseObject({
-  path: z.string(),
-  ref: z.literal("base"),
-  sourcePath: z.string(),
-  rangeId: z.string(),
-  declaration: z.looseObject({
-    qualifiedName: z.string(),
-    kind: z.string(),
-    startLine: z.number(),
-    endLine: z.number(),
+const readDiffParamsSchema = z.preprocess(
+  (params) => {
+    const record = isRecord(params) ? params : {};
+    return {
+      path: typeof record.path === "string" ? record.path : undefined,
+      rangeId: typeof record.rangeId === "string" ? record.rangeId : undefined,
+    };
+  },
+  z.object({
+    path: z.string().optional(),
+    rangeId: z.string().optional(),
   }),
-  available: z.literal(true),
-  relativePath: z.string(),
-  bytes: z.number().optional(),
-  truncated: z.boolean().optional(),
-});
+);
+
+const readAtRefParamsSchema = z.preprocess(
+  (params) => (isRecord(params) ? params : {}),
+  z.object({
+    path: z.unknown(),
+    ref: z.enum(["base", "head"], {
+      error: (issue) => `Unsupported ref '${String(issue.input)}'`,
+    }),
+    rangeId: z.string({ error: "rangeId must be a string" }),
+  }),
+);
 
 const rangeReadParameters = Type.Object(
   {
@@ -71,7 +69,7 @@ export async function createRuntimeReadTools(
   cwd: string,
 ): Promise<ToolRegistration[]> {
   const dataRoot = path.dirname(dataPath);
-  const data = (await Bun.file(dataPath).json()) as RuntimeToolData;
+  const data = await readRuntimeToolData(dataPath);
   const tools = [
     defineTool({
       name: "pipr_read_diff",
@@ -81,7 +79,8 @@ export async function createRuntimeReadTools(
         { path: Type.Optional(Type.String()), rangeId: Type.Optional(Type.String()) },
         { additionalProperties: false },
       ),
-      execute: async (args) => jsonToolResult(readDiffFromRuntimeData(data, readDiffParams(args))),
+      execute: async (args) =>
+        jsonToolResult(readDiffFromRuntimeData(data, readDiffParamsSchema.parse(args))),
     }),
     defineTool({
       name: "pipr_read_at_ref",
@@ -104,7 +103,7 @@ export async function createRuntimeReadTools(
       replay: "safe",
       parameters: rangeReadParameters,
       execute: async (args) =>
-        jsonToolResult(await readDeclaration(dataRoot, data, readDeclarationParams(args), cwd)),
+        jsonToolResult(await readDeclaration(dataRoot, data, readAtRefParams(args), cwd)),
     }),
     defineTool({
       name: "pipr_ast_grep",
@@ -130,6 +129,114 @@ export async function createRuntimeReadTools(
   ] as unknown as ToolRegistration[];
 }
 
+function readDiffFromRuntimeData(
+  data: RuntimeToolData,
+  params: z.infer<typeof readDiffParamsSchema>,
+): unknown {
+  const { rangeId } = params;
+  const filePath = params.path === undefined ? undefined : parseManifestPath(params.path);
+  const ranges = createDiffRangeIndex(data.manifest);
+  if (filePath !== undefined) {
+    ranges.requireFile(filePath);
+  }
+  if (rangeId !== undefined && !ranges.findRange(rangeId)) {
+    throw new Error(`Unknown Diff Manifest range '${rangeId}'`);
+  }
+  const files = data.manifest.files
+    .filter((file) => filePath === undefined || file.path === filePath)
+    .map((file) => filterManifestFileRanges(file, rangeId))
+    .filter((file) => rangeId === undefined || file.commentableRanges.length > 0);
+  return boundedJson({ files }, data.toolResponseMaxBytes);
+}
+
+function boundedJson(value: unknown, maxBytes: number): unknown {
+  const text = JSON.stringify(value, null, 2);
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes <= maxBytes) {
+    return { truncated: false, bytes, value };
+  }
+  return {
+    truncated: true,
+    bytes,
+    maxBytes,
+    text: Buffer.from(text, "utf8").subarray(0, maxBytes).toString("utf8"),
+  };
+}
+
+function filterManifestFileRanges(
+  file: DiffManifestFile,
+  rangeId: string | undefined,
+): DiffManifestFile {
+  if (rangeId === undefined) {
+    return file;
+  }
+  return {
+    ...file,
+    commentableRanges: file.commentableRanges.filter((range) => range.id === rangeId),
+  };
+}
+
+function readAtRefParams(params: unknown): ReadAtRefParams {
+  const parsed = readAtRefParamsSchema.parse(params);
+  return { path: parseManifestPath(parsed.path), ref: parsed.ref, rangeId: parsed.rangeId };
+}
+
+function resolveDeclarationRequest(
+  data: RuntimeToolData,
+  params: ReadAtRefParams,
+):
+  | {
+      available: true;
+      path: string;
+      sourcePath: string;
+      ref: "base" | "head";
+      rangeId: string;
+      declaration: StructuralDeclaration;
+    }
+  | {
+      available: false;
+      path: string;
+      sourcePath: string;
+      ref: "base" | "head";
+      rangeId: string;
+    } {
+  const filePath = parseManifestPath(params.path);
+  const ranges = createDiffRangeIndex(data.manifest);
+  const file = ranges.requireFile(filePath);
+  const range = ranges.requireRangeInFile(file, params.rangeId);
+  const sourcePath = parseManifestPath(
+    params.ref === "base" ? (file.previousPath ?? file.path) : file.path,
+  );
+  const expectedSide = params.ref === "base" ? "LEFT" : "RIGHT";
+  if (!data.structuralAnalysis || range.side !== expectedSide) {
+    return {
+      available: false,
+      path: file.path,
+      sourcePath,
+      ref: params.ref,
+      rangeId: range.id,
+    };
+  }
+  const owner = findEnclosingDeclaration(file, range, data.structuralAnalysis);
+  if (!owner || owner.ref !== params.ref) {
+    return {
+      available: false,
+      path: file.path,
+      sourcePath,
+      ref: params.ref,
+      rangeId: range.id,
+    };
+  }
+  return {
+    available: true,
+    path: file.path,
+    sourcePath: owner.sourcePath,
+    ref: params.ref,
+    rangeId: range.id,
+    declaration: owner.declaration,
+  };
+}
+
 async function readAtRef(
   dataRoot: string,
   data: RuntimeToolData,
@@ -149,7 +256,7 @@ async function readAtRef(
 async function readDeclaration(
   dataRoot: string,
   data: RuntimeToolData,
-  params: ReturnType<typeof readDeclarationParams>,
+  params: ReadAtRefParams,
   cwd: string,
 ): Promise<unknown> {
   const request = resolveDeclarationRequest(data, params);
@@ -194,8 +301,7 @@ async function readBaseDeclarationSnapshot(
   request: Extract<ReturnType<typeof resolveDeclarationRequest>, { available: true }>,
   maxBytes: number,
 ): Promise<unknown> {
-  const readable = readableBaseDeclarationSnapshotSchema.safeParse(snapshot);
-  if (!readable.success) {
+  if (!snapshot) {
     const { declaration: _declaration, ...unavailable } = request;
     return assertSerializedToolResponseFits(
       { ...unavailable, available: false },
@@ -211,9 +317,9 @@ async function readBaseDeclarationSnapshot(
       rangeId: request.rangeId,
       declaration: declarationResult(request.declaration),
       available: true,
-      content: await Bun.file(path.join(dataRoot, readable.data.relativePath)).text(),
-      bytes: readable.data.bytes,
-      truncated: readable.data.truncated,
+      content: await Bun.file(path.join(dataRoot, snapshot.relativePath)).text(),
+      bytes: snapshot.bytes,
+      truncated: snapshot.truncated,
     },
     maxBytes,
     "pipr_read_declaration response limit is too small",
@@ -240,22 +346,20 @@ async function readBaseSnapshot(
   params: ReadAtRefParams,
   request: ReturnType<typeof resolveReadAtRefRequest>,
 ): Promise<unknown> {
-  const readable = readableBaseSnapshotSchema.safeParse(snapshot);
-  if (!readable.success) {
+  if (!snapshot?.available) {
     return snapshot ?? unavailableReadAtRefResult(request);
   }
-  const snapshotData = readable.data;
   return {
     path: params.path,
     ref: params.ref,
     sourcePath: request.sourcePath,
     rangeId: params.rangeId,
-    startLine: snapshotData.startLine,
-    endLine: snapshotData.endLine,
+    startLine: snapshot.startLine,
+    endLine: snapshot.endLine,
     available: true,
-    content: await Bun.file(path.join(dataRoot, snapshotData.relativePath)).text(),
-    bytes: snapshotData.bytes,
-    truncated: snapshotData.truncated,
+    content: await Bun.file(path.join(dataRoot, snapshot.relativePath)).text(),
+    bytes: snapshot.bytes,
+    truncated: snapshot.truncated,
   };
 }
 

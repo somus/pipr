@@ -1,13 +1,10 @@
 import { readdir } from "node:fs/promises";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ToolRegistration } from "@earendil-works/pi-durable";
-import {
-  assertNoSymlinkPath,
-  parseManifestPath,
-  resolveAllowedPath,
-} from "../pi/runtime-tools-core.js";
 import { runBoundedProcess } from "../shared/bounded-process.js";
 import type { AgentWorkspaceToolName } from "./protocol.js";
+import { parseManifestPath } from "./runtime-tool-data.js";
+import { assertNoSymlinkPath, resolveAllowedPath } from "./workspace-paths.js";
 
 const maxReadLines = 2000;
 const maxOutputBytes = 50 * 1024;

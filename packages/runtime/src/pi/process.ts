@@ -1,7 +1,7 @@
 import { chmod, chown, cp, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { PiProcessIdentity } from "./types.js";
+import type { PiProcessIdentity } from "../agent-worker/client.js";
 
 export type PiRunSandbox = {
   root: string;

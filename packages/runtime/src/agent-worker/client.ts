@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import type { PiProcessIdentity } from "../pi/types.js";
 import { agentWorkerEntryPath } from "./entry-paths.js";
 import {
   type AgentRunOutcome,
@@ -29,6 +28,12 @@ export type AgentWorkerClient = {
   /** Ends the worker at once, rejecting its active runs with `error`. */
   kill(error: Error): void;
   close(): Promise<void>;
+};
+
+/** Unprivileged uid/gid the worker process drops to when the supervisor runs as root. */
+export type PiProcessIdentity = {
+  uid: number;
+  gid: number;
 };
 
 export type StartAgentWorkerOptions = {

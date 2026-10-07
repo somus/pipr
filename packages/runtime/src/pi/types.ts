@@ -51,10 +51,5 @@ export type PiRunUsage = {
   cacheUsageStatus?: "complete" | "partial" | "unavailable";
 };
 
-export type PiProcessIdentity = {
-  uid: number;
-  gid: number;
-};
-
 /** Runs one model call; failures throw `ProviderExecutionError`. */
 export type PiRunner = (options: PiRunOptions) => Promise<PiRunResult>;

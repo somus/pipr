@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { chmod, chown, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { type AgentWorkerClient, startAgentWorker } from "../agent-worker/client.js";
+import {
+  type AgentWorkerClient,
+  type PiProcessIdentity,
+  startAgentWorker,
+} from "../agent-worker/client.js";
 import {
   type AgentRunOutcome,
   type AgentRunRequest,
@@ -23,7 +27,7 @@ import {
 } from "./process.js";
 import { classifyProviderFailure, ProviderExecutionError } from "./provider-failure.js";
 import { preparePiRuntimeReadTools } from "./runtime-tools.js";
-import type { PiProcessIdentity, PiRunner, PiRunOptions, PiRunResult } from "./types.js";
+import type { PiRunner, PiRunOptions, PiRunResult } from "./types.js";
 
 const piprJsonSystemPrompt = [
   "You are a strict JSON API for pipr.",
