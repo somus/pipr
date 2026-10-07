@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { type PiprRunSummary, parsePiprResult } from "@usepipr/sdk";
+import type { HostRunCommandResult } from "../../host-run/types.js";
+import { PublicationError } from "../../review/publication-result.js";
 import {
   presentGitHubActionError,
   presentGitHubActionPublicationError,
   presentGitHubActionResult,
-} from "../../internal/action-result.js";
-import { PublicationError } from "../../review/publication-result.js";
-import type { HostRunCommandResult } from "../types.js";
+} from "../action-result.js";
 
 type ResultOf<Kind extends HostRunCommandResult["kind"]> = Extract<
   HostRunCommandResult,
