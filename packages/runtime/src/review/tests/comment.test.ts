@@ -1,11 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import type { PriorReviewState } from "../../publication/types.js";
 import { runtimeVersion } from "../../shared/version.js";
 import type { DiffManifest, ReviewFinding } from "../../types.js";
-import {
-  buildPublicationPlan,
-  prepareInlinePublicationItems,
-  publicationPlanForHostCapabilities,
-} from "../comment.js";
+import { buildPublicationPlan, publicationPlanForHostCapabilities } from "../comment.js";
+import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import {
   applyInlineFindingMarkers,
   buildPriorReviewState,
@@ -463,6 +461,27 @@ function metadata() {
     validFindings: 1,
     droppedFindings: 0,
   };
+}
+
+/** Prepares inline drafts through the public comment-publishing path. */
+function prepareInlinePublicationItems(options: {
+  validated: { validFindings: ReviewFinding[] };
+  manifest: DiffManifest;
+  reviewedHeadSha: string;
+  reviewState?: PriorReviewState;
+}) {
+  return buildCommentPublishingPlan({
+    event: { change: { ...event.change, head: { sha: options.reviewedHeadSha } } },
+    main: "Summary.",
+    validated: {
+      review: { summary: { body: "Summary." }, inlineFindings: [] },
+      validFindings: options.validated.validFindings,
+      droppedFindings: [],
+    },
+    manifest: options.manifest,
+    metadata: metadata(),
+    priorReviewState: options.reviewState,
+  }).inlineCommentDrafts;
 }
 
 function expectSuggestedChangeOmitted(

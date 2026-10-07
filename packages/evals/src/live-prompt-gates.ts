@@ -134,12 +134,6 @@ export const safetyHygieneLivePromptGate = {
   scorers: safetyHygieneGateScorers,
 } satisfies LivePromptGateDefinition;
 
-export function assertLiveEvalEnv(): void {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    throw new Error("DEEPSEEK_API_KEY is required for live prompt evals");
-  }
-}
-
 function livePromptEvalCases(ids: readonly string[], label: string): PiprEvalCase[] {
   const idSet = new Set(ids);
   const cases = promptEvalCasesForMode("live").filter((testCase) => idSet.has(testCase.id));

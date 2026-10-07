@@ -3,7 +3,8 @@ import { createDiffRangeIndex } from "../diff/ranges.js";
 import {
   findingIdSchema,
   priorReviewStateSchema,
-  reviewStatsSchema,
+  publicationMetadataSchema,
+  threadActionSchema,
 } from "../publication/schemas.js";
 import type {
   InlinePublicationItem,
@@ -83,8 +84,6 @@ const inlinePublicationItemSchema = z
     }
   });
 
-const inlinePublicationItemsSchema = z.array(inlinePublicationItemSchema);
-
 export type InlineCommentDraft = InlinePublicationItem;
 export type PublishableInlineFinding = {
   finding: ReviewFinding;
@@ -94,42 +93,13 @@ export type PublishableInlineFinding = {
   issueFingerprint?: string;
 };
 
-const threadActionSchema = z.strictObject({
-  kind: z.enum(["resolve", "reply"]),
-  findingId: findingIdSchema,
-  findingHeadSha: z.string().min(1),
-  commentId: z.string().min(1),
-  threadId: z.string().min(1).optional(),
-  body: z.string().min(1),
-  responseKey: z.string().min(1),
-});
-
-const threadActionsSchema = z.array(threadActionSchema);
-
-const publicationMetadataSchema = z.strictObject({
-  runtimeVersion: z.string().min(1),
-  configVersion: z.string().min(1).optional(),
-  trustedConfigSha: z.string().min(1).optional(),
-  trustedConfigHash: z.string().min(1).optional(),
-  reviewedHeadSha: z.string().min(1),
-  providerModels: z.array(z.string().min(1)).optional(),
-  selectedTasks: z.array(z.string().min(1)),
-  failedTasks: z.array(z.string().min(1)),
-  validFindings: z.number().int().min(0),
-  droppedFindings: z.number().int().min(0),
-  cappedInlineFindings: z.number().int().min(0),
-  stats: reviewStatsSchema.optional(),
-  workflowUrl: z.string().url().max(2_048).optional(),
-});
-
-const publicationPlanSchema = z.strictObject({
-  mainComment: z.string().min(1),
-  mainMarker: z.string().min(1),
+/** Validated plan inputs; the rendered main comment and marker are added after parsing. */
+const publicationPlanInputSchema = z.strictObject({
   changeNumber: z.number().int().positive(),
-  inlineItems: inlinePublicationItemsSchema,
+  inlineItems: z.array(inlinePublicationItemSchema),
   metadata: publicationMetadataSchema,
   reviewState: priorReviewStateSchema,
-  threadActions: threadActionsSchema,
+  threadActions: z.array(threadActionSchema),
 });
 
 export function publicationPlanForHostCapabilities(
@@ -181,50 +151,38 @@ export function buildPublicationPlan(options: BuildPublicationPlanOptions): Publ
       reviewedHeadSha: options.metadata.reviewedHeadSha,
       selectedTasks: options.metadata.selectedTasks,
     });
-  const cappedInlineItems =
+  const publishedCount =
     options.maxInlineComments === undefined
-      ? options.inlineItems
-      : options.inlineItems.slice(0, options.maxInlineComments);
-  const metadata = publicationMetadataSchema.parse({
-    ...options.metadata,
-    cappedInlineFindings: options.inlineItems.length - cappedInlineItems.length,
+      ? options.inlineItems.length
+      : options.inlineItems.slice(0, options.maxInlineComments).length;
+  const input = publicationPlanInputSchema.parse({
+    changeNumber: options.event.change.number,
+    inlineItems: options.inlineItems,
+    metadata: {
+      ...options.metadata,
+      cappedInlineFindings: options.inlineItems.length - publishedCount,
+    },
+    reviewState,
+    threadActions: options.threadActions ?? [],
   });
-  return publicationPlanSchema.parse({
+  return {
     mainComment: renderMainComment({
       event: options.event,
       reviewState,
       maxStoredFindings: options.maxStoredFindings,
       main: options.main,
-      metadata,
+      metadata: input.metadata,
       showHeader: options.showHeader ?? true,
       showFooter: options.showFooter ?? true,
       showStats: options.showStats ?? true,
     }),
     mainMarker: mainCommentMarker,
-    changeNumber: options.event.change.number,
-    inlineItems: cappedInlineItems,
-    metadata,
-    reviewState,
-    threadActions: options.threadActions ?? [],
-  });
-}
-
-export function prepareInlinePublicationItems(options: {
-  validated: {
-    validFindings: ReviewFinding[];
+    changeNumber: input.changeNumber,
+    inlineItems: input.inlineItems.slice(0, publishedCount),
+    metadata: input.metadata,
+    reviewState: input.reviewState,
+    threadActions: input.threadActions,
   };
-  manifest: DiffManifest;
-  reviewedHeadSha: string;
-  reviewState?: PriorReviewState;
-}): InlinePublicationItem[] {
-  return prepareInlinePublicationItemsForPublishableFindings({
-    publishableFindings: preparePublishableInlineFindings({
-      validated: options.validated,
-      manifest: options.manifest,
-    }),
-    reviewedHeadSha: options.reviewedHeadSha,
-    reviewState: options.reviewState,
-  });
 }
 
 export function preparePublishableInlineFindings(options: {
@@ -261,55 +219,46 @@ export function prepareInlinePublicationItemsForPublishableFindings(options: {
 }): InlinePublicationItem[] {
   const seenFindingIds = new Set<string>();
   const fingerprintCounts = countFindingFingerprints(options.publishableFindings);
-  return inlinePublicationItemsSchema.parse(
-    options.publishableFindings.flatMap(
-      ({
-        finding: publishableFinding,
-        range,
-        previousPath,
-        anchorFingerprint,
-        issueFingerprint,
-      }) => {
-        const findingId = findingIdFor(publishableFinding, options.reviewState);
-        const stateRecord = options.reviewState
-          ? matchFindingRecord(options.reviewState, publishableFinding)
-          : undefined;
-        const resolvedRecord = options.reviewState
-          ? matchResolvedFindingRecord(
-              options.reviewState.findings,
-              publishableFinding,
-              anchorFingerprint,
-              issueFingerprint,
-              fingerprintCounts,
-              previousPath,
-            )
-          : undefined;
-        if (
-          seenFindingIds.has(findingId) ||
-          resolvedRecord !== undefined ||
-          stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha
-        ) {
-          return [];
-        }
-        seenFindingIds.add(findingId);
-        const marker = inlineFindingMarker(findingId, options.reviewedHeadSha);
-        return [
-          inlinePublicationItemSchema.parse({
-            finding: publishableFinding,
-            range,
-            path: publishableFinding.path,
+  return options.publishableFindings.flatMap(
+    ({ finding: publishableFinding, range, previousPath, anchorFingerprint, issueFingerprint }) => {
+      const stateRecord = options.reviewState
+        ? matchFindingRecord(options.reviewState, publishableFinding)
+        : undefined;
+      const findingId = findingIdFor(publishableFinding, stateRecord);
+      const resolvedRecord = options.reviewState
+        ? matchResolvedFindingRecord(
+            options.reviewState.findings,
+            publishableFinding,
+            anchorFingerprint,
+            issueFingerprint,
+            fingerprintCounts,
             previousPath,
-            side: publishableFinding.side,
-            startLine: publishableFinding.startLine,
-            endLine: publishableFinding.endLine,
-            marker,
-            findingId,
-            reviewedHeadSha: options.reviewedHeadSha,
-            body: renderInlineBody(publishableFinding, findingId, options.reviewedHeadSha),
-          }),
-        ];
-      },
-    ),
+          )
+        : undefined;
+      if (
+        seenFindingIds.has(findingId) ||
+        resolvedRecord !== undefined ||
+        stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha
+      ) {
+        return [];
+      }
+      seenFindingIds.add(findingId);
+      return [
+        {
+          finding: publishableFinding,
+          range,
+          path: publishableFinding.path,
+          previousPath,
+          side: publishableFinding.side,
+          startLine: publishableFinding.startLine,
+          endLine: publishableFinding.endLine,
+          marker: inlineFindingMarker(findingId, options.reviewedHeadSha),
+          findingId,
+          reviewedHeadSha: options.reviewedHeadSha,
+          body: renderInlineBody(publishableFinding, findingId, options.reviewedHeadSha),
+        },
+      ];
+    },
   );
 }
 

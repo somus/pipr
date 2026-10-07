@@ -141,12 +141,10 @@ async function runPreparedFixture(
   options: PiprEvalRunOptions,
 ): Promise<PiprEvalOutput> {
   assertRunOptions(options);
+  const env = evalReviewEnv({ mode: options.mode });
   const { baseSha, headSha } = await prepareFixture(rootDir, testCase, options.reviewInstructions);
   const runOptions = await evalRunOptions(rootDir, callsDir, options);
-  const result = runLocalReview(rootDir, baseSha, headSha, {
-    mode: runOptions.mode,
-    providerModule: runOptions.providerModule,
-  });
+  const result = runLocalReview(rootDir, baseSha, headSha, env, runOptions.providerModule);
   const output = await successfulEvalOutput(
     rootDir,
     callsDir,
@@ -480,7 +478,8 @@ function runLocalReview(
   rootDir: string,
   baseSha: string,
   headSha: string,
-  options: { mode: PiprEvalRunMode; providerModule?: PiprEvalProviderModule },
+  env: NodeJS.ProcessEnv,
+  providerModule: PiprEvalProviderModule | undefined,
 ): LocalReviewEvalJson {
   const helperPath = path.join(sourceDir, "run-local-review.ts");
   const result = spawnSync(
@@ -491,13 +490,13 @@ function runLocalReview(
         rootDir,
         baseSha,
         headSha,
-        providerModule: options.providerModule,
+        providerModule,
       }),
     ],
     {
       cwd: rootDir,
       encoding: "buffer",
-      env: evalReviewEnv({ mode: options.mode }),
+      env,
     },
   );
   if (result.status !== 0) {
@@ -514,9 +513,6 @@ function assertRunOptions(options: PiprEvalRunOptions): void {
   }
   if (options.providerModule) {
     throw new Error("live prompt evals must not set a provider module override");
-  }
-  if (!process.env.DEEPSEEK_API_KEY) {
-    throw new Error("DEEPSEEK_API_KEY is required for live prompt evals");
   }
 }
 

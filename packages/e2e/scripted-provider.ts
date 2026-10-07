@@ -4,13 +4,17 @@ import path from "node:path";
 import {
   type AssistantMessage,
   fauxAssistantMessage,
-  fauxProvider,
   fauxToolCall,
   type Message,
   type Provider,
   type ToolResultMessage,
 } from "@earendil-works/pi-ai";
-import { messageText, offeredToolNames } from "@usepipr/runtime/internal/testing";
+import {
+  messageText,
+  offeredToolNames,
+  parsePromptJson,
+  scriptedFauxProvider,
+} from "@usepipr/runtime/internal/testing";
 
 export type ActProviderConfig = {
   /** Directory that receives one JSONL telemetry file per model call. */
@@ -59,21 +63,11 @@ export default async function actProviders(configPath: unknown): Promise<Provide
   if (config.expectSandboxIdentity) {
     await assertSandboxIdentity();
   }
-  const faux = fauxProvider({
+  return scriptedFauxProvider({
     provider: "deepseek",
-    models: [{ id: primaryModel }, { id: "deepseek-v4-fallback" }],
+    models: [primaryModel, "deepseek-v4-fallback"],
+    respond: (context, modelId) => respond(config, modelCall(context.messages), modelId),
   });
-  faux.setResponses(
-    Array.from({ length: 1000 }, () => async (context, _options, _state, model) => {
-      try {
-        return await respond(config, modelCall(context.messages), model.id);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return fauxAssistantMessage([], { stopReason: "error", errorMessage: message });
-      }
-    }),
-  );
-  return faux.provider;
 }
 
 async function respond(
@@ -406,15 +400,6 @@ function review(title: string, body: string) {
 
 function json(value: unknown): AssistantMessage {
   return fauxAssistantMessage(JSON.stringify(value));
-}
-
-/** Parses the pretty-printed JSON object after a prompt label; it ends at the first unindented `}`. */
-function parsePromptJson<T>(prompt: string, label: string): T {
-  const start = prompt.indexOf(label);
-  assert(start !== -1, `prompt missing ${label.trim()}`);
-  const end = prompt.indexOf("\n}", start);
-  assert(end !== -1, `prompt JSON after ${label.trim()} is incomplete`);
-  return JSON.parse(prompt.slice(start + label.length, end + 2)) as T;
 }
 
 /** Re-serializes JSON tool output without whitespace so checks do not depend on formatting. */

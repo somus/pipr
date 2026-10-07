@@ -4,23 +4,19 @@ import {
   actionFixtureScript,
   envValue,
   fixtureRootPath,
+  isPublicationScenario,
   type PreparedScenario,
   prepareScenarioWorktree,
+  publicationFixtureEnv,
   run,
   runOutput,
   type Scenario,
-  type ScenarioAssertion,
   scenarioFromName,
   scenarioNames,
   scenarios,
   sourceRoot,
-  writeWorktreeFile,
+  writePublicationFixture,
 } from "./scenarios.ts";
-
-type PublicationScenario = Scenario & {
-  assertion: ScenarioAssertion;
-  publicationFixture: string;
-};
 
 const actionImage = envValue("PIPR_ACTION_IMAGE") ?? "pipr-action:e2e";
 const scenarioArg = process.argv[2];
@@ -58,13 +54,10 @@ async function runContainerScenario(scenario: Scenario): Promise<void> {
 
 function runDryRunContainer(prepared: PreparedScenario): void {
   const env = {
+    ...containerGitHubEnv(prepared.scenario),
     DEEPSEEK_API_KEY: "local-fixture-key",
     GITHUB_ACTIONS: "true",
-    GITHUB_EVENT_NAME: "pull_request",
-    GITHUB_EVENT_PATH: `/workspace/${prepared.scenario.eventFile}`,
-    GITHUB_REPOSITORY: "local/pipr",
     GITHUB_TOKEN: "local-fixture-token",
-    GITHUB_WORKSPACE: "/workspace",
     PIPR_DRY_RUN: "1",
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "safe.directory",
@@ -100,9 +93,16 @@ function runDryRunContainer(prepared: PreparedScenario): void {
 }
 
 async function runFixtureContainer(prepared: PreparedScenario): Promise<void> {
-  const scenario = publicationScenario(prepared.scenario);
-  await prepareFixtureFiles(prepared, scenario);
-  const env = fixtureEnv(scenario);
+  const scenario = prepared.scenario;
+  if (!isPublicationScenario(scenario)) {
+    throw new Error(`scenario '${scenario.name}' is missing publication assertion metadata`);
+  }
+  await writePublicationFixture(prepared, scenario);
+  const env = {
+    ...containerGitHubEnv(scenario),
+    GITHUB_OUTPUT: `/workspace/${fixtureRootPath}/github-output-${scenario.name}.txt`,
+    ...publicationFixtureEnv(scenario, "/workspace"),
+  };
   run(
     "docker",
     [
@@ -126,73 +126,14 @@ async function runFixtureContainer(prepared: PreparedScenario): Promise<void> {
   console.log(`container ${scenario.name} ok`);
 }
 
-async function prepareFixtureFiles(
-  prepared: PreparedScenario,
-  scenario: PublicationScenario,
-): Promise<void> {
-  await writeWorktreeFile(
-    prepared.worktree,
-    `${fixtureRootPath}/${scenario.publicationFixture}`,
-    `${JSON.stringify(
-      {
-        ownerLogin: "github-actions[bot]",
-        headSha: prepared.headSha,
-        issueComments: [],
-        reviewComments: [],
-        reviewThreads: [],
-        reviewCommentPayloads: [],
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  if (scenario.telemetryDir) {
-    run(
-      "mkdir",
-      ["-p", join(prepared.worktree, fixtureRootPath, scenario.telemetryDir)],
-      sourceRoot,
-    );
-  }
-  run("chmod", ["-R", "a+rwX", join(prepared.worktree, fixtureRootPath)], sourceRoot);
-}
-
-function publicationScenario(scenario: Scenario): PublicationScenario {
-  if (!scenario.publicationFixture || !scenario.assertion) {
-    throw new Error(`scenario '${scenario.name}' is missing publication assertion metadata`);
-  }
-  return scenario as PublicationScenario;
-}
-
-function fixtureEnv(scenario: PublicationScenario): Record<string, string> {
+/** The GitHub Actions variables a pull request run sees, for a worktree mounted at `/workspace`. */
+function containerGitHubEnv(scenario: Scenario): Record<string, string> {
   return {
-    DEEPSEEK_API_KEY: "local-fixture-key",
     GITHUB_EVENT_NAME: "pull_request",
     GITHUB_EVENT_PATH: `/workspace/${scenario.eventFile}`,
-    GITHUB_OUTPUT: `/workspace/${fixtureRootPath}/github-output-${scenario.name}.txt`,
     GITHUB_REPOSITORY: "local/pipr",
-    GITHUB_TOKEN: "local-fixture-token",
     GITHUB_WORKSPACE: "/workspace",
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "safe.directory",
-    GIT_CONFIG_VALUE_0: "/workspace",
-    PIPR_ACT_ASSERTION: scenario.assertion,
-    PIPR_ACT_GITHUB_FIXTURE_PATH: `/workspace/${fixtureRootPath}/${scenario.publicationFixture}`,
-    ...fixtureScenarioEnv(scenario),
   };
-}
-
-function fixtureScenarioEnv(scenario: PublicationScenario): Record<string, string> {
-  const env: Record<string, string> = {};
-  if (scenario.invalidFirstOutput) {
-    env.PIPR_ACT_INVALID_FIRST_OUTPUT = "1";
-    env.PIPR_ACT_FAIL_PRIMARY_PROVIDER = "1";
-  }
-  if (scenario.telemetryDir) {
-    const telemetryPath = `/workspace/${fixtureRootPath}/${scenario.telemetryDir}`;
-    env.PIPR_ACT_TELEMETRY_PATH = telemetryPath;
-    env.PIPR_ACT_MODEL_CALL_DIR = telemetryPath;
-  }
-  return env;
 }
 
 function assertDockerImageExists(image: string): void {

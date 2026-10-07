@@ -2,6 +2,7 @@
 import { appendFileSync } from "node:fs";
 import {
   type AssistantMessage,
+  type FauxResponseFactory,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
@@ -79,17 +80,52 @@ export default async function scriptedProviders(configPath: unknown): Promise<Pr
     callIndex += 1;
     return await scriptedMessage(response, signal);
   };
-  return [...modelsByProvider(script.models)].map(([provider, models]) => {
-    const faux = fauxProvider({ provider, models: models.map((id) => ({ id })) });
-    faux.setResponses(
-      Array.from(
-        { length: 1000 },
-        () => (context, options, _state, model) =>
-          respond(context, `${provider}/${model.id}`, options?.signal),
-      ),
-    );
-    return faux.provider;
+  return [...modelsByProvider(script.models)].map(([provider, models]) =>
+    scriptedFauxProvider({
+      provider,
+      models,
+      respond: (context, modelId, signal) => respond(context, `${provider}/${modelId}`, signal),
+    }),
+  );
+}
+
+/**
+ * A faux provider serving `models` under `provider` whose every call (up to 1000) is answered by `respond`. A thrown
+ * error becomes an assistant message with `stopReason: "error"` carrying the error message.
+ */
+export function scriptedFauxProvider(options: {
+  provider: string;
+  models: readonly string[];
+  respond: (
+    context: Parameters<FauxResponseFactory>[0],
+    modelId: string,
+    signal: AbortSignal | undefined,
+  ) => AssistantMessage | Promise<AssistantMessage>;
+}): Provider {
+  const faux = fauxProvider({
+    provider: options.provider,
+    models: options.models.map((id) => ({ id })),
   });
+  faux.setResponses(
+    Array.from({ length: 1000 }, () => async (context, streamOptions, _state, model) => {
+      try {
+        return await options.respond(context, model.id, streamOptions?.signal);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return fauxAssistantMessage([], { stopReason: "error", errorMessage: message });
+      }
+    }),
+  );
+  return faux.provider;
+}
+
+/** Parses the pretty-printed JSON object after a prompt label; it ends at the first unindented `}`. */
+export function parsePromptJson<T = unknown>(prompt: string, label: string): T {
+  const start = prompt.indexOf(label);
+  if (start === -1) throw new Error(`prompt missing ${label.trim()}`);
+  const end = prompt.indexOf("\n}", start + label.length);
+  if (end === -1) throw new Error(`prompt JSON after ${label.trim()} is incomplete`);
+  return JSON.parse(prompt.slice(start + label.length, end + 2)) as T;
 }
 
 function modelsByProvider(refs: readonly string[]): Map<string, string[]> {

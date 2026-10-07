@@ -15,19 +15,11 @@ export { defaultMaxStoredFindings, maxStoredFindingsLimit } from "./types/config
 
 import type { RuntimePlan } from "./runtime-contract.js";
 
-export {
-  assertSupportedCommandRestCapture,
-  commandPatternParts,
-  isCommandCaptureToken,
-  isCommandRestCaptureToken,
-  isOptionalCommandPatternPart,
-  tokenizeCommandPattern,
-  unsupportedCommandRestCaptureError,
-} from "./command-grammar.js";
+export { commandPatternPrefixMatches, parseCommandPattern } from "./command-grammar.js";
 export { facetsForFindingSchema } from "./finding.js";
 export { isMarkdownText, markdownString } from "./markdown.js";
 export { renderPromptValue } from "./prompt-render.js";
-export { reviewOutputSchemaId } from "./schema.js";
+export { reviewOutputSchemaId, zodOutputSchema } from "./schema.js";
 export type { SdkDeclarationModule } from "./standalone-declaration.js";
 export {
   embeddedSdkDeclaration,

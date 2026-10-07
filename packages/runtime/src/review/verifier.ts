@@ -1,5 +1,5 @@
 import type { ModelProfile, PiprRunContext, Schema } from "@usepipr/sdk";
-import type { RuntimeAgent } from "@usepipr/sdk/internal";
+import { type RuntimeAgent, zodOutputSchema } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import { createDiffContext } from "../diff/diff-context.js";
 import type { RunObserver } from "../observability/types.js";
@@ -141,7 +141,7 @@ async function verifyCandidates(
       },
     });
     const output = outputSchema.parse(result.value);
-    return applyVerifierOutput(options, candidates, output, result.providerModels);
+    return applyVerifierOutput(options, prior, candidates, output, result.providerModels);
   } catch (error) {
     if (error instanceof AgentRunBudgetExhaustedError) {
       throw error;
@@ -219,6 +219,7 @@ function verifierCandidates(
 
 function applyVerifierOutput(
   options: RunVerifierOptions,
+  prior: PriorReviewState,
   candidates: Array<{ finding: PriorFindingRecord; thread: InlineThreadContext }>,
   output: VerifierOutput,
   providerModels: string[],
@@ -228,24 +229,18 @@ function applyVerifierOutput(
   const threadActions: ThreadAction[] = [];
 
   for (const item of output.findings) {
-    const candidate = candidateById.get(item.id);
-    const action = verifierThreadAction(options, candidate, item);
-    if (!candidate || item.status === "unknown") {
+    const action = verifierThreadAction(options, candidateById.get(item.id), item);
+    if (!action) {
       continue;
     }
-    if (item.status === "fixed" && action?.kind === "resolve") {
+    if (action.kind === "resolve") {
       resolvedIds.push(item.id);
     }
-    if (action) {
-      threadActions.push(action);
-    }
+    threadActions.push(action);
   }
 
   return {
-    priorReviewState:
-      resolvedIds.length > 0
-        ? resolvePriorFindings(options.priorReviewState as PriorReviewState, resolvedIds)
-        : options.priorReviewState,
+    priorReviewState: resolvedIds.length > 0 ? resolvePriorFindings(prior, resolvedIds) : prior,
     threadActions,
     providerModels,
   };
@@ -381,20 +376,7 @@ function verifierSchemaForCandidates(candidateIds: readonly string[]): Schema<Ve
         seenIds.add(finding.id);
       }
     });
-  return {
-    kind: "pipr.schema",
-    id: "core/prior-finding-verification",
-    jsonSchema: z.toJSONSchema(outputSchema) as Schema<VerifierOutput>["jsonSchema"],
-    parse(value) {
-      return outputSchema.parse(value);
-    },
-    safeParse(value) {
-      const parsed = outputSchema.safeParse(value);
-      return parsed.success
-        ? { success: true, data: parsed.data }
-        : { success: false, error: parsed.error };
-    },
-  };
+  return zodOutputSchema("core/prior-finding-verification", outputSchema);
 }
 
 function modelProfile(provider: ProviderConfig): ModelProfile {

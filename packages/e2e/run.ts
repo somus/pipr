@@ -5,13 +5,15 @@ import { actArguments, containerArchitecture } from "./action-run-plan.ts";
 import {
   actionFixtureScript,
   envValue,
-  fixtureRootPath,
+  isPublicationScenario,
   prepareScenarioWorktree,
+  publicationFixtureEnv,
   run,
   type Scenario,
   scenarioFromName,
   scenarioNames,
   sourceRoot,
+  writePublicationFixture,
   writeWorktreeFile,
 } from "./scenarios.ts";
 
@@ -19,7 +21,6 @@ const actionImage = envValue("PIPR_ACTION_IMAGE") ?? "pipr-action:act";
 const runnerImage = envValue("PIPR_ACT_RUNNER_IMAGE") ?? "catthehacker/ubuntu:act-latest";
 const githubToken = githubExpression("github.token");
 const githubWorkspace = githubExpression("github.workspace");
-const githubHeadSha = githubExpression("github.event.pull_request.head.sha");
 
 const scenario = scenarioFromName(process.argv[2]);
 if (!scenario) {
@@ -35,6 +36,9 @@ const prepared = await prepareScenarioWorktree(scenario, {
 });
 
 try {
+  if (isPublicationScenario(scenario)) {
+    await writePublicationFixture(prepared, scenario);
+  }
   ensureActRunnerImage();
   run(
     "act",
@@ -64,22 +68,28 @@ async function writeWorkflow(worktree: string, item: Scenario): Promise<void> {
 }
 
 function workflowFor(item: Scenario): string {
-  if (!item.publicationFixture || !item.assertion) {
-    return dryRunWorkflow(item);
+  if (isPublicationScenario(item)) {
+    return workflow(item, ["  pull_request:"], publicationFixtureEnv(item, githubWorkspace));
   }
-  return fixtureWorkflow(item);
+  return workflow(
+    item,
+    [
+      "  pull_request:",
+      "  issue_comment:",
+      "    types: [created]",
+      "  pull_request_review_comment:",
+      "    types: [created]",
+    ],
+    { DEEPSEEK_API_KEY: "local-fixture-key", GITHUB_TOKEN: githubToken, PIPR_DRY_RUN: "1" },
+  );
 }
 
-function dryRunWorkflow(item: Scenario): string {
+function workflow(item: Scenario, triggers: string[], env: Record<string, string>): string {
   return [
     `name: ${item.title}`,
     "",
     "on:",
-    "  pull_request:",
-    "  issue_comment:",
-    "    types: [created]",
-    "  pull_request_review_comment:",
-    "    types: [created]",
+    ...triggers,
     "",
     "permissions:",
     "  contents: write",
@@ -98,79 +108,7 @@ function dryRunWorkflow(item: Scenario): string {
     '        run: chmod -R a+rX "$GITHUB_WORKSPACE"',
     "      - uses: ./.github/act",
     "        env:",
-    "          DEEPSEEK_API_KEY: local-fixture-key",
-    `          GITHUB_TOKEN: ${githubToken}`,
-    '          PIPR_DRY_RUN: "1"',
-    "        with:",
-    "          config-dir: .pipr",
-    "",
-  ].join("\n");
-}
-
-function fixtureWorkflow(item: Scenario): string {
-  return [
-    `name: ${item.title}`,
-    "",
-    "on:",
-    "  pull_request:",
-    "",
-    "permissions:",
-    "  contents: write",
-    "  pull-requests: write",
-    "  issues: write",
-    "",
-    "jobs:",
-    "  pipr:",
-    "    runs-on: ubuntu-latest",
-    "    steps:",
-    "      - uses: actions/checkout@v7",
-    "        with:",
-    "          fetch-depth: 0",
-    "      - name: Prepare act workspace permissions",
-    "        shell: bash",
-    '        run: chmod -R a+rX "$GITHUB_WORKSPACE"',
-    "      - name: Prepare fake GitHub fixture",
-    "        shell: bash",
-    "        run: |",
-    `          mkdir -p ${fixtureRootPath}`,
-    `          cat > ${fixtureRootPath}/${item.publicationFixture} <<JSON`,
-    "          {",
-    '            "ownerLogin": "github-actions[bot]",',
-    `            "headSha": "${githubHeadSha}",`,
-    '            "issueComments": [],',
-    '            "reviewComments": [],',
-    '            "reviewThreads": [],',
-    '            "reviewCommentPayloads": []',
-    "          }",
-    "          JSON",
-    `          chmod 666 ${fixtureRootPath}/${item.publicationFixture}`,
-    ...(item.telemetryDir
-      ? [
-          `          mkdir -p ${fixtureRootPath}/${item.telemetryDir}`,
-          `          chmod 777 ${fixtureRootPath}/${item.telemetryDir}`,
-        ]
-      : []),
-    "      - uses: ./.github/act",
-    "        env:",
-    "          DEEPSEEK_API_KEY: local-fixture-key",
-    "          GITHUB_TOKEN: local-fixture-token",
-    '          GIT_CONFIG_COUNT: "1"',
-    "          GIT_CONFIG_KEY_0: safe.directory",
-    `          GIT_CONFIG_VALUE_0: ${githubWorkspace}`,
-    `          PIPR_ACT_GITHUB_FIXTURE_PATH: ${githubWorkspace}/${fixtureRootPath}/${item.publicationFixture}`,
-    `          PIPR_ACT_ASSERTION: ${item.assertion}`,
-    ...(item.invalidFirstOutput
-      ? [
-          '          PIPR_ACT_INVALID_FIRST_OUTPUT: "1"',
-          '          PIPR_ACT_FAIL_PRIMARY_PROVIDER: "1"',
-        ]
-      : []),
-    ...(item.telemetryDir
-      ? [
-          `          PIPR_ACT_MODEL_CALL_DIR: ${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`,
-          `          PIPR_ACT_TELEMETRY_PATH: ${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`,
-        ]
-      : []),
+    ...Object.entries(env).map(([key, value]) => `          ${key}: ${JSON.stringify(value)}`),
     "        with:",
     "          config-dir: .pipr",
     "",

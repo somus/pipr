@@ -1,17 +1,20 @@
 /**
  * Leaf publication contract types shared by review core and host adapters.
- * Schema-backed types (`ReviewStats`, `PriorFindingRecord`, `PriorReviewState`)
+ * Schema-backed types (`ReviewStats`, `PriorFindingRecord`, `PriorReviewState`,
+ * `ThreadAction`, `PublicationMetadata`)
  * are derived via `z.infer` in `./schemas.js` so they cannot drift from
  * runtime validation. This module may import from shared/ and external
  * packages only — never review/, hosts/, or host-run/.
  */
 import type { CommentableRange, ReviewFinding, ReviewSide } from "@usepipr/sdk";
-import type { PriorReviewState, ReviewStats } from "./schemas.js";
+import type { PriorReviewState, PublicationMetadata, ThreadAction } from "./schemas.js";
 
 export type {
   PriorFindingRecord,
   PriorReviewState,
+  PublicationMetadata,
   ReviewStats,
+  ThreadAction,
 } from "./schemas.js";
 
 export type NativeId = string;
@@ -28,32 +31,6 @@ export type InlineThreadContext = {
     body: string;
     authorLogin?: string;
   }>;
-};
-
-export type ThreadAction = {
-  kind: "resolve" | "reply";
-  findingId: string;
-  findingHeadSha: string;
-  commentId: string;
-  threadId?: string;
-  body: string;
-  responseKey: string;
-};
-
-export type PublicationMetadata = {
-  runtimeVersion: string;
-  configVersion?: string;
-  trustedConfigSha?: string;
-  trustedConfigHash?: string;
-  reviewedHeadSha: string;
-  providerModels?: string[];
-  selectedTasks: string[];
-  failedTasks: string[];
-  validFindings: number;
-  droppedFindings: number;
-  cappedInlineFindings: number;
-  stats?: ReviewStats;
-  workflowUrl?: string;
 };
 
 export type InlinePublicationItem = {

@@ -6,7 +6,11 @@ export {
   offeredToolNames,
   systemPromptTexts,
 } from "../agent-worker/model-context.js";
-export type { ScriptedProviderScript } from "../agent-worker/scripted-provider.js";
+export {
+  parsePromptJson,
+  type ScriptedProviderScript,
+  scriptedFauxProvider,
+} from "../agent-worker/scripted-provider.js";
 export { runHostRunCommandWithDependencies } from "../host-run/commands-hosted.js";
 export { createGitHubHostAdapter } from "../hosts/github/adapter.js";
 export type { GitHubPublicationClient } from "../hosts/github/client.js";

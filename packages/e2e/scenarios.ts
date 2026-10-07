@@ -23,6 +23,11 @@ export type Scenario = {
   invalidFirstOutput?: boolean;
 };
 
+export type PublicationScenario = Scenario & {
+  assertion: ScenarioAssertion;
+  publicationFixture: string;
+};
+
 export type PreparedScenario = {
   scenario: Scenario;
   tmpRoot: string;
@@ -436,6 +441,63 @@ async function commitScenarioHead(worktree: string, scenario: Scenario): Promise
 
 export function scenarioFromName(name: string | undefined): Scenario | undefined {
   return name && isScenarioName(name) ? scenarios[name] : undefined;
+}
+
+export function isPublicationScenario(scenario: Scenario): scenario is PublicationScenario {
+  return scenario.publicationFixture !== undefined && scenario.assertion !== undefined;
+}
+
+/** Environment the action fixture wrapper reads, with fixture paths under the container's `workspace` mount. */
+export function publicationFixtureEnv(
+  scenario: PublicationScenario,
+  workspace: string,
+): Record<string, string> {
+  const fixtureRoot = `${workspace}/${fixtureRootPath}`;
+  return {
+    DEEPSEEK_API_KEY: "local-fixture-key",
+    GITHUB_TOKEN: "local-fixture-token",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "safe.directory",
+    GIT_CONFIG_VALUE_0: workspace,
+    PIPR_ACT_ASSERTION: scenario.assertion,
+    PIPR_ACT_GITHUB_FIXTURE_PATH: `${fixtureRoot}/${scenario.publicationFixture}`,
+    ...(scenario.invalidFirstOutput
+      ? { PIPR_ACT_INVALID_FIRST_OUTPUT: "1", PIPR_ACT_FAIL_PRIMARY_PROVIDER: "1" }
+      : {}),
+    ...(scenario.telemetryDir
+      ? { PIPR_ACT_MODEL_CALL_DIR: `${fixtureRoot}/${scenario.telemetryDir}` }
+      : {}),
+  };
+}
+
+/**
+ * Writes the empty GitHub publication fixture and the model-call directory. Both stay world-writable because the
+ * container (and its UID-1000 agent worker) writes into them.
+ */
+export async function writePublicationFixture(
+  prepared: PreparedScenario,
+  scenario: PublicationScenario,
+): Promise<void> {
+  await writeWorktreeFile(
+    prepared.worktree,
+    `${fixtureRootPath}/${scenario.publicationFixture}`,
+    `${JSON.stringify(
+      {
+        ownerLogin: "github-actions[bot]",
+        headSha: prepared.headSha,
+        issueComments: [],
+        reviewComments: [],
+        reviewThreads: [],
+        reviewCommentPayloads: [],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  if (scenario.telemetryDir) {
+    mkdirSync(join(prepared.worktree, fixtureRootPath, scenario.telemetryDir), { recursive: true });
+  }
+  run("chmod", ["-R", "a+rwX", join(prepared.worktree, fixtureRootPath)], sourceRoot);
 }
 
 export function envValue(name: string): string | undefined {

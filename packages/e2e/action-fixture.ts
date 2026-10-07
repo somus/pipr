@@ -115,7 +115,7 @@ async function assertConfiguredFixture(fixturePath: string): Promise<void> {
   await assertActFixture({
     fixturePath,
     mode,
-    telemetryPath: envValue("PIPR_ACT_TELEMETRY_PATH"),
+    telemetryPath: envValue("PIPR_ACT_MODEL_CALL_DIR"),
   });
 }
 

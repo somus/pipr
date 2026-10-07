@@ -434,8 +434,8 @@ export function applyInlineFindingMarkers(
   };
 }
 
-export function findingIdFor(finding: ReviewFinding, state?: PriorReviewState): string {
-  const matched = state ? matchFindingRecord(state, finding) : undefined;
+/** Returns the matched prior record's id, or the deterministic id for a new finding. */
+export function findingIdFor(finding: ReviewFinding, matched?: PriorFindingRecord): string {
   return matched?.id ?? newFindingId(finding);
 }
 

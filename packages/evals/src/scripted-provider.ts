@@ -4,11 +4,15 @@ import path from "node:path";
 import {
   type AssistantMessage,
   fauxAssistantMessage,
-  fauxProvider,
   type Message,
   type Provider,
 } from "@earendil-works/pi-ai";
-import { messageText, systemPromptTexts } from "@usepipr/runtime/internal/testing";
+import {
+  messageText,
+  parsePromptJson,
+  scriptedFauxProvider,
+  systemPromptTexts,
+} from "@usepipr/runtime/internal/testing";
 import * as z from "zod";
 
 const promptEvalProviderConfigSchema = z.strictObject({
@@ -27,23 +31,16 @@ export default async function promptEvalProviders(configPath: unknown): Promise<
     throw new Error("prompt eval provider module requires a --provider-config path");
   }
   const config = promptEvalProviderConfigSchema.parse(await Bun.file(configPath).json());
-  const respond = async (messages: readonly Message[]): Promise<AssistantMessage> => {
-    const call = modelCall(messages);
-    try {
+  return scriptedFauxProvider({
+    provider: config.provider,
+    models: config.models,
+    respond: async (context): Promise<AssistantMessage> => {
+      const call = modelCall(context.messages);
       assertPromptEvalPrompt(call);
       await recordPromptEvalCall(config.callsDir, call);
       return fauxAssistantMessage(JSON.stringify(promptEvalReview(call.prompt)));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return fauxAssistantMessage([], { stopReason: "error", errorMessage: message });
-    }
-  };
-  const faux = fauxProvider({
-    provider: config.provider,
-    models: config.models.map((id) => ({ id })),
+    },
   });
-  faux.setResponses(Array.from({ length: 1000 }, () => (context) => respond(context.messages)));
-  return faux.provider;
 }
 
 /** The prompt is the latest user turn; the system prompt joins every system message's text and sections. */
@@ -270,7 +267,7 @@ function promptEvalReview(prompt: string): unknown {
     const hasFindings = prompt.indexOf('"body":', findingsStart) !== -1;
     return { body: hasFindings ? findingsSummary : noFindingsSummary };
   }
-  const manifest = parsePromptJson(prompt, "\nManifest:");
+  const manifest = diffManifestPromptSchema.parse(parsePromptJson(prompt, "\nManifest:"));
   const findings = markerReviews.flatMap((review) => promptEvalFinding(manifest, review));
   const summary = findings.length === 0 ? noFindingsSummary : findingsSummary;
   if (prompt.includes("Schema ID: eval/categorized-review.")) {
@@ -363,16 +360,6 @@ async function recordPromptEvalCall(
       2,
     ),
   );
-}
-
-/** Reads the pretty-printed JSON object after a prompt label; its closing brace is the first unindented `}`. */
-function parsePromptJson(prompt: string, startLabel: string): DiffManifestPrompt {
-  const start = prompt.indexOf(startLabel);
-  assert(start !== -1, `prompt missing ${startLabel}`);
-  const contentStart = start + startLabel.length;
-  const end = prompt.indexOf("\n}", contentStart);
-  assert(end !== -1, `prompt JSON after ${startLabel} is incomplete`);
-  return diffManifestPromptSchema.parse(JSON.parse(prompt.slice(contentStart, end + 2)));
 }
 
 function isBuiltInSummaryPrompt(prompt: string): boolean {
