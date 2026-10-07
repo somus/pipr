@@ -180,29 +180,24 @@ describe("deterministic run diagnosis", () => {
         cacheUsageStatus: "complete",
       },
     });
-    recorder.logSink.log({
-      level: "info",
-      event: "pi start",
-      fields: {
-        attemptId: "model-retry",
-        attemptType: "retry",
-        attemptNumber: 3,
-        agent: "reviewer",
-        provider: "openai",
-        model: "gpt-test",
-        task: "review",
-        shardIndex: 2,
-        shardCount: 2,
-        authMode: "subscription",
-      },
+    const retry = await recorder.observer.beginAgentAttempt({
+      attemptType: "retry",
+      attemptNumber: 3,
+      agent: "reviewer",
+      provider: "openai",
+      model: "gpt-test",
+      task: "review",
+      shardIndex: 2,
+      shardCount: 2,
+      authMode: "subscription",
+      prompt: "prompt",
     });
-    recorder.logSink.log({
-      level: "info",
-      event: "pi run",
-      fields: {
-        attemptId: "model-retry",
-        exitCode: 0,
-        durationMs: 10,
+    await retry.finish({
+      output: "output",
+      exitCode: 0,
+      durationMs: 10,
+      usage: {
+        status: "complete",
         inputTokens: 7,
         outputTokens: 3,
         cacheReadTokens: 5,
@@ -229,12 +224,12 @@ describe("deterministic run diagnosis", () => {
     expect(diagnosis.toolDurations[0]).toMatchObject({ name: "read", status: "ok" });
     expect(diagnosis.timeToFirstTokenMs).toBeNumber();
     expect(diagnosis.usage).toEqual({
-      inputTokens: 7,
-      outputTokens: 3,
+      inputTokens: 107,
+      outputTokens: 23,
       cacheReadTokens: 5,
       cacheWriteTokens: 2,
       cacheUsageStatus: "complete",
-      costUsd: 0.002,
+      costUsd: expect.closeTo(0.012, 10),
     });
     expect(diagnosis.validationDrops).toBe(2);
     expect(diagnosis.publicationFailures).toBe(1);
@@ -264,14 +259,14 @@ describe("deterministic run diagnosis", () => {
     ]);
   });
 
-  it("classifies cache status across every model attempt", async () => {
+  it("classifies cache status across every agent attempt", async () => {
     const root = await temporaryDirectory();
     const recorder = await completedReview(root, 46);
     const bundle = await loadValidatedRunBundle(recorder.directory);
     const modelSpan = {
       formatVersion: 1 as const,
       traceId: recorder.executionId,
-      category: "model" as const,
+      category: "agent" as const,
       startedAt: "2026-07-20T00:00:00.000Z",
       status: "ok" as const,
     };
@@ -279,7 +274,7 @@ describe("deterministic run diagnosis", () => {
       {
         ...modelSpan,
         spanId: "a".repeat(16),
-        name: "gen_ai.chat",
+        name: "gen_ai.invoke_agent",
         attributes: {
           "pipr.usage.cache_read_tokens": 5,
           "pipr.usage.cache_write_tokens": 2,
@@ -289,7 +284,7 @@ describe("deterministic run diagnosis", () => {
       {
         ...modelSpan,
         spanId: "b".repeat(16),
-        name: "gen_ai.chat",
+        name: "gen_ai.invoke_agent",
         attributes: {},
       },
     ];
@@ -311,7 +306,7 @@ describe("deterministic run diagnosis", () => {
       {
         ...modelSpan,
         spanId: "c".repeat(16),
-        name: "gen_ai.chat",
+        name: "gen_ai.invoke_agent",
         attributes: {
           "pipr.usage.cache_read_tokens": 0,
           "pipr.usage.cache_write_tokens": 0,
@@ -325,7 +320,7 @@ describe("deterministic run diagnosis", () => {
       {
         ...modelSpan,
         spanId: "d".repeat(16),
-        name: "gen_ai.chat",
+        name: "gen_ai.invoke_agent",
         attributes: {
           "pipr.usage.cache_read_tokens": Number.MAX_SAFE_INTEGER,
           "pipr.usage.cache_write_tokens": 1,
@@ -335,7 +330,7 @@ describe("deterministic run diagnosis", () => {
       {
         ...modelSpan,
         spanId: "e".repeat(16),
-        name: "gen_ai.chat",
+        name: "gen_ai.invoke_agent",
         attributes: {
           "pipr.usage.cache_read_tokens": 1,
           "pipr.usage.cache_write_tokens": 2,

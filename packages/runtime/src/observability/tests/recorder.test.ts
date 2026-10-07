@@ -59,56 +59,218 @@ describe("file run recorder", () => {
     }
   });
 
-  it("correlates concurrent model spans by attempt ID", async () => {
+  it("records agent, model, and task spans from harness events without model logs", async () => {
     const recorder = await startFileRunRecorder({
       rootDirectory: await temporaryDirectory(),
       env: {},
     });
-    for (const attemptId of ["first", "second"]) {
-      recorder.logSink.log({
-        level: "info",
-        event: "pi start",
-        fields: {
-          attemptId,
-          agent: "reviewer",
-          provider: "test",
-          model: "same-model",
-          attemptType: "initial",
-          attemptNumber: 1,
-        },
-      });
-    }
-    recorder.logSink.log({
-      level: "info",
-      event: "pi run",
-      fields: { attemptId: "second", exitCode: 0, durationMs: 20 },
+    const task = recorder.observer.beginTask?.({ name: "review", order: 0 });
+    const attempt = await recorder.observer.beginAgentAttempt({
+      attemptType: "initial",
+      attemptNumber: 1,
+      agent: "reviewer",
+      task: "review",
+      provider: "openai",
+      model: "gpt-test",
+      authMode: "subscription",
+      shardIndex: 2,
+      shardCount: 2,
+      conversation: { kind: "fork", parentKey: "a".repeat(64) },
+      prompt: "prompt",
     });
-    recorder.logSink.log({
-      level: "info",
-      event: "pi run",
-      fields: { attemptId: "first", exitCode: 1, durationMs: 100 },
+    attempt.event({ kind: "turn-start" });
+    attempt.event({
+      kind: "turn-end",
+      model: "gpt-test-2026",
+      stopReason: "toolUse",
+      usage: turnUsage(10, 2),
+      entryKinds: ["pi.system", "pi.assistant", "pi.tool-result"],
     });
-    await recorder.finish({ kind: "review", outcome: "failed" });
+    attempt.event({ kind: "turn-start" });
+    attempt.event({
+      kind: "turn-end",
+      model: "gpt-test-2026",
+      stopReason: "stop",
+      usage: turnUsage(20, 3),
+      entryKinds: ["pi.assistant"],
+    });
+    attempt.event({
+      kind: "conversation",
+      conversationId: 7,
+      entries: conversationEntries("visible answer"),
+      truncated: false,
+    });
+    await attempt.finish({
+      output: "visible answer",
+      exitCode: 0,
+      durationMs: 10,
+      usage: {
+        status: "complete",
+        inputTokens: 30,
+        outputTokens: 5,
+        cacheReadTokens: 90,
+        cacheWriteTokens: 9,
+        cacheUsageStatus: "complete",
+        costUsd: 0.5,
+      },
+    });
+    task?.finish({ status: "ok", findings: 2, repairAttempted: false });
+    await recorder.finish({ kind: "review", outcome: "succeeded" });
 
-    const spans = (await readFile(path.join(recorder.directory, "spans.jsonl"), "utf8"))
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
+    const { spans, manifest } = await loadValidatedRunBundle(recorder.directory);
+    expect(spans.filter((span) => span.name === "gen_ai.invoke_agent")).toEqual([
+      expect.objectContaining({
+        category: "agent",
+        status: "ok",
+        attributes: expect.objectContaining({
+          "gen_ai.agent.name": "reviewer",
+          "gen_ai.request.model": "gpt-test",
+          "pipr.attempt.id": "001-initial",
+          "pipr.task.name": "review",
+          "pipr.auth.mode": "subscription",
+          "pipr.shard.index": 2,
+          "pipr.shard.count": 2,
+          "gen_ai.usage.input_tokens": 30,
+          "pipr.usage.cache_read_tokens": 90,
+          "pipr.usage.cache_status": "complete",
+          "pipr.conversation.id": 7,
+          "pipr.turn.count": 2,
+        }),
+      }),
+    ]);
     expect(
       spans
         .filter((span) => span.name === "gen_ai.chat")
         .map((span) => ({
-          attemptId: span.attributes["pipr.attempt.id"],
-          durationMs: span.durationMs,
-          status: span.status,
+          category: span.category,
+          model: span.attributes["gen_ai.response.model"],
+          stopReason: span.attributes["pipr.turn.stop_reason"],
+          input: span.attributes["gen_ai.usage.input_tokens"],
+          turn: span.attributes["pipr.turn.index"],
         })),
     ).toEqual([
-      { attemptId: "second", durationMs: 20, status: "ok" },
-      { attemptId: "first", durationMs: 100, status: "error" },
+      { category: "model", model: "gpt-test-2026", stopReason: "toolUse", input: 10, turn: 1 },
+      { category: "model", model: "gpt-test-2026", stopReason: "stop", input: 20, turn: 2 },
     ]);
+    expect(spans.find((span) => span.name === "pipr.task")).toMatchObject({
+      status: "ok",
+      attributes: { "pipr.task.name": "review", "pipr.task.order": 0, "pipr.task.findings": 2 },
+    });
+
+    const conversation = manifest.artifacts.find((artifact) => artifact.kind === "conversation");
+    expect(conversation).toMatchObject({
+      path: "artifacts/conversation-001-initial.jsonl",
+      sensitive: true,
+      counts: {
+        entries: 4,
+        byKind: { "pi.user": 1, "pi.assistant": 2, "pi.tool-result": 1 },
+        tools: { read: 1 },
+      },
+    });
+    const lines = (await readFile(path.join(recorder.directory, conversation?.path ?? ""), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { kind: string });
+    expect(lines.map((line) => line.kind)).toEqual([
+      "pi.user",
+      "pi.assistant",
+      "pi.tool-result",
+      "pi.assistant",
+    ]);
+
+    const usage = JSON.parse(
+      await readFile(path.join(recorder.directory, "artifacts/usage.json"), "utf8"),
+    );
+    expect(usage).toMatchObject({
+      formatVersion: 1,
+      totals: { inputTokens: 30, outputTokens: 5, cacheReadTokens: 90, costUsd: 0.5 },
+      byModel: { "gpt-test-2026": { inputTokens: 30, outputTokens: 5, turns: 2 } },
+      attempts: [
+        {
+          attempt: "001-initial",
+          agent: "reviewer",
+          task: "review",
+          model: "gpt-test",
+          responseModels: ["gpt-test-2026"],
+          turns: 2,
+          status: "ok",
+          usage: { inputTokens: 30 },
+        },
+      ],
+    });
+    const taskGraph = JSON.parse(
+      await readFile(path.join(recorder.directory, "artifacts/task-graph.json"), "utf8"),
+    );
+    expect(taskGraph).toEqual({
+      formatVersion: 1,
+      tasks: [
+        {
+          name: "review",
+          order: 0,
+          status: "ok",
+          agents: [
+            {
+              name: "reviewer",
+              attempts: [
+                {
+                  attempt: "001-initial",
+                  attemptType: "initial",
+                  provider: "openai",
+                  model: "gpt-test",
+                  status: "ok",
+                  conversationId: 7,
+                  conversation: { kind: "fork", parentKey: "a".repeat(64) },
+                  shardIndex: 2,
+                  shardCount: 2,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(
+      manifest.artifacts
+        .filter((artifact) => artifact.kind === "usage" || artifact.kind === "task-graph")
+        .map((artifact) => artifact.sensitive),
+    ).toEqual([false, false]);
   });
 
-  it("records structural analysis, sharding, budgets, and attributed model attempts", async () => {
+  it("never writes a registered or environment secret into the conversation artifact", async () => {
+    const environmentKey = "sk-env-provider-key-0123456789";
+    const recorder = await startFileRunRecorder({
+      rootDirectory: await temporaryDirectory(),
+      env: { OPENAI_API_KEY: environmentKey },
+    });
+    const registered = "registered-runtime-token-value";
+    recorder.observer.registerSecret?.(registered);
+    const attempt = await recorder.observer.beginAgentAttempt({
+      attemptType: "initial",
+      attemptNumber: 1,
+      agent: "reviewer",
+      provider: "openai",
+      model: "gpt-test",
+      prompt: "prompt",
+    });
+    attempt.event({
+      kind: "conversation",
+      conversationId: 1,
+      entries: conversationEntries(`assistant saw ${registered}`, `tool read ${environmentKey}`),
+      truncated: false,
+    });
+    await attempt.finish({ output: "{}", exitCode: 0 });
+    await recorder.finish({ kind: "review", outcome: "succeeded" });
+
+    const { manifest } = await loadValidatedRunBundle(recorder.directory);
+    const conversation = manifest.artifacts.find((artifact) => artifact.kind === "conversation");
+    const text = await readFile(path.join(recorder.directory, conversation?.path ?? ""), "utf8");
+    expect(text).toContain("assistant saw");
+    expect(text).not.toContain(registered);
+    expect(text).not.toContain(environmentKey);
+    expect(await readBundleText(recorder.directory)).not.toContain(registered);
+  });
+
+  it("records structural analysis, sharding, budgets, and attributed agent attempts", async () => {
     const recorder = await startFileRunRecorder({
       rootDirectory: await temporaryDirectory(),
       env: {},
@@ -142,34 +304,6 @@ describe("file run recorder", () => {
         contextFilesCovered: 3,
         contextRangesTotal: 10,
         contextRangesCovered: 8,
-      },
-    });
-    recorder.logSink.log({
-      level: "info",
-      event: "pi start",
-      fields: {
-        attemptId: "attributed",
-        agent: "reviewer",
-        task: "review",
-        provider: "openai",
-        model: "gpt-test",
-        authMode: "subscription",
-        shardIndex: 2,
-        shardCount: 2,
-        attemptType: "initial",
-        attemptNumber: 1,
-      },
-    });
-    recorder.logSink.log({
-      level: "info",
-      event: "pi run",
-      fields: {
-        attemptId: "attributed",
-        exitCode: 0,
-        durationMs: 10,
-        cacheReadTokens: 90,
-        cacheWriteTokens: 9,
-        cacheUsageStatus: "complete",
       },
     });
     const attempt = await recorder.observer.beginAgentAttempt({
@@ -216,14 +350,7 @@ describe("file run recorder", () => {
         "pipr.contextRangesCovered": 8,
       },
     });
-    expect(spans.find((span) => span.name === "gen_ai.chat")).toMatchObject({
-      attributes: {
-        "pipr.usage.cache_read_tokens": 90,
-        "pipr.usage.cache_write_tokens": 9,
-        "pipr.usage.cache_status": "complete",
-      },
-    });
-    for (const spanName of ["gen_ai.chat", "pipr.agent.attempt_resources"]) {
+    for (const spanName of ["gen_ai.invoke_agent", "pipr.agent.attempt_resources"]) {
       expect(spans.find((span) => span.name === spanName)).toMatchObject({
         attributes: {
           "pipr.task.name": "review",
@@ -637,6 +764,39 @@ describe("file run recorder", () => {
     });
   });
 });
+
+function turnUsage(inputTokens: number, outputTokens: number) {
+  return { inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
+}
+
+/** Harness entries of a short conversation with one `read` tool call. */
+function conversationEntries(answer: string, toolOutput = "tool output") {
+  return [
+    { id: 1, kind: "pi.user", model: [{ role: "user", content: "Review the change." }] },
+    {
+      id: 2,
+      kind: "pi.assistant",
+      model: [
+        {
+          role: "assistant",
+          content: [{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "a" } }],
+        },
+      ],
+    },
+    {
+      id: 3,
+      kind: "pi.tool-result",
+      model: [
+        { role: "toolResult", toolName: "read", content: [{ type: "text", text: toolOutput }] },
+      ],
+    },
+    {
+      id: 4,
+      kind: "pi.assistant",
+      model: [{ role: "assistant", content: [{ type: "text", text: answer }] }],
+    },
+  ];
+}
 
 async function temporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-run-recorder-"));

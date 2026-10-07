@@ -77,6 +77,7 @@ describe("runLocalReviewCommand", () => {
         "artifacts/diff-manifest.json",
         "artifacts/publication-plan.json",
         "artifacts/review-output.json",
+        "artifacts/task-graph.json",
         "artifacts/validation.json",
       ]);
       const contents = await Promise.all(

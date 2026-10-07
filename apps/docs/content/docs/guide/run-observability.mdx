@@ -7,7 +7,7 @@ Pipr captures structured evidence for hosted reviews, commands, and verifier run
 
 ## Understand capture protection
 
-GitHub Actions uploads content-free metadata by default. When you configure age recipients, it also uploads encrypted diagnostics containing redacted prompts, visible model output, diffs, and validation evidence.
+GitHub Actions uploads content-free metadata by default. When you configure age recipients, it also uploads encrypted diagnostics containing redacted prompts, visible model output, agent conversations, diffs, and validation evidence.
 
 GitHub access permits artifact discovery and download. A matching local age identity is required to decrypt diagnostic content. Other code hosts can use local or webhook stores, or pass a protected package to `pipr runs inspect`.
 
@@ -60,6 +60,22 @@ The diagnosis is deterministic and does not call a model. It reports phase timin
 Use `--json` for automation. The JSON output remains content-free; download the validated bundle when an authorized process needs prompt, output, or diff files.
 
 Public telemetry exposes only aggregate diff-context file and range counts. Encrypted diagnostics can also contain the bounded `diff-context-coverage` artifact with exact covered and uncovered paths and range IDs.
+
+## Understand run evidence
+
+Agent and model spans come from the agent harness. Each agent attempt records one `gen_ai.invoke_agent` span with its usage totals. Each model turn records one `gen_ai.chat` span with the answering model, stop reason, and turn usage. Each task records one `pipr.task` span.
+
+A diagnostic bundle can contain these artifacts:
+
+| Kind | Contents | Sensitive |
+| --- | --- | --- |
+| `prompt`, `output`, `stderr` | Each attempt's redacted prompt, visible output, and failure detail | Yes |
+| `conversation` | Each attempt's redacted agent conversation, one harness entry per line | Yes |
+| `usage` | Token and cost totals per run, response model, and attempt | No |
+| `task-graph` | Tasks, their agents, and each attempt's conversation ID and fork | No |
+| `diff-manifest`, `diff-context-coverage`, `validation`, `publication-plan` | Review evidence | Yes |
+
+Conversations are the first evidence dropped when a bundle reaches its size limit. Public metadata keeps only artifact descriptors. A `conversation` descriptor also keeps its entry, entry kind, and tool call counts, never the entries themselves.
 
 ## Inspect an existing package
 

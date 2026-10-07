@@ -4,13 +4,22 @@ import {
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_TOOL_NAME,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
 } from "@opentelemetry/semantic-conventions/incubating";
 import type { RunSpanRecord } from "@usepipr/sdk";
 import type { RuntimeLogRecord } from "../shared/logging.js";
-import type { RunAgentEvent, RunObserver } from "./types.js";
+import type { RunAgentEvent, RunAgentUsage, RunObserver } from "./types.js";
+
+/** What the recorder learns about one agent attempt from its harness events. */
+export type AttemptRecord = {
+  turns: number;
+  /** Per response model: summed turn usage and turn count. */
+  models: Map<string, RunAgentUsage & { turns: number }>;
+  conversation?: Extract<RunAgentEvent, { kind: "conversation" }>;
+};
 
 export function observeAttemptEvent(
   event: RunAgentEvent,
@@ -33,14 +42,28 @@ export function observeAttemptEvent(
       durationMs?: number,
       attributes?: RunSpanRecord["attributes"],
     ) => void;
+    hasOpenSpan(key: string): boolean;
     queueSpan(span: RunSpanRecord): void;
     executionId: string;
     rootSpanId: string;
+    record: AttemptRecord;
   },
 ): void {
   switch (event.kind) {
     case "first-response":
       observeFirstResponse(context);
+      return;
+    case "turn-start":
+      context.openSpan(modelSpanKey(context.suffix), "gen_ai.chat", "model", {
+        ...agentSpanAttributes(context.attempt, context.suffix, "chat"),
+        "pipr.turn.index": context.record.turns + 1,
+      });
+      return;
+    case "turn-end":
+      observeTurnEnd(event, context);
+      return;
+    case "conversation":
+      context.record.conversation = event;
       return;
     case "tool-start":
       observeToolStart(event, context);
@@ -54,6 +77,91 @@ export function observeAttemptEvent(
 }
 
 type AttemptEventContext = Parameters<typeof observeAttemptEvent>[1];
+
+type AttemptOptions = Parameters<RunObserver["beginAgentAttempt"]>[0];
+
+function modelSpanKey(suffix: string): string {
+  return `model:${suffix}`;
+}
+
+/** Attributes shared by an attempt's agent span and its per-turn model spans. */
+export function agentSpanAttributes(
+  attempt: AttemptOptions,
+  suffix: string,
+  operation: "invoke_agent" | "chat",
+): RunSpanRecord["attributes"] {
+  const attributes: RunSpanRecord["attributes"] = {
+    [ATTR_GEN_AI_OPERATION_NAME]: operation,
+    [ATTR_GEN_AI_AGENT_NAME]: attempt.agent.slice(0, 200),
+    [ATTR_GEN_AI_PROVIDER_NAME]: attempt.provider,
+    [ATTR_GEN_AI_REQUEST_MODEL]: attempt.model,
+    "pipr.attempt.type": attempt.attemptType,
+    "pipr.attempt.number": attempt.attemptNumber,
+    "pipr.attempt.id": suffix,
+  };
+  setDefined(attributes, "pipr.task.name", attempt.task);
+  setDefined(attributes, "pipr.auth.mode", attempt.authMode);
+  setDefined(attributes, "pipr.shard.index", attempt.shardIndex);
+  setDefined(attributes, "pipr.shard.count", attempt.shardCount);
+  return attributes;
+}
+
+export function usageAttributes(usage: Partial<RunAgentUsage>): RunSpanRecord["attributes"] {
+  const attributes: RunSpanRecord["attributes"] = {};
+  setDefined(attributes, ATTR_GEN_AI_USAGE_INPUT_TOKENS, usage.inputTokens);
+  setDefined(attributes, ATTR_GEN_AI_USAGE_OUTPUT_TOKENS, usage.outputTokens);
+  setDefined(attributes, "pipr.usage.cache_read_tokens", usage.cacheReadTokens);
+  setDefined(attributes, "pipr.usage.cache_write_tokens", usage.cacheWriteTokens);
+  setDefined(attributes, "pipr.usage.cost_usd", usage.costUsd);
+  return attributes;
+}
+
+function observeTurnEnd(
+  event: Extract<RunAgentEvent, { kind: "turn-end" }>,
+  context: AttemptEventContext,
+): void {
+  const key = modelSpanKey(context.suffix);
+  // A turn that began before this attempt observed the conversation, as on resume, still records its end.
+  context.record.turns += 1;
+  const attributes: RunSpanRecord["attributes"] = {
+    ...(event.usage ? usageAttributes(event.usage) : {}),
+    "pipr.turn.entry_kinds": event.entryKinds.join(",").slice(0, 2000),
+  };
+  setDefined(attributes, ATTR_GEN_AI_RESPONSE_MODEL, event.model);
+  setDefined(attributes, "pipr.turn.stop_reason", event.stopReason);
+  if (event.model) addModelUsage(context.record, event.model, event.usage);
+  if (!context.hasOpenSpan(key)) {
+    context.openSpan(key, "gen_ai.chat", "model", {
+      ...agentSpanAttributes(context.attempt, context.suffix, "chat"),
+      "pipr.turn.index": context.record.turns,
+    });
+  }
+  context.closeSpan(key, event.stopReason === "error" ? "error" : "ok", undefined, attributes);
+}
+
+function addModelUsage(
+  record: AttemptRecord,
+  model: string,
+  usage: RunAgentUsage | undefined,
+): void {
+  const total = record.models.get(model) ?? {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    costUsd: 0,
+    turns: 0,
+  };
+  total.turns += 1;
+  if (usage) {
+    total.inputTokens += usage.inputTokens;
+    total.outputTokens += usage.outputTokens;
+    total.cacheReadTokens += usage.cacheReadTokens;
+    total.cacheWriteTokens += usage.cacheWriteTokens;
+    total.costUsd += usage.costUsd;
+  }
+  record.models.set(model, total);
+}
 
 function observeFirstResponse(context: AttemptEventContext): void {
   if (context.firstResponseRecorded) return;
@@ -172,49 +280,6 @@ export function phaseSpanName(name: string): string {
   return phaseSpanNames[name] ?? `pipr.phase.${name.replaceAll(" ", "_")}`;
 }
 
-export function modelSpanKey(record: RuntimeLogRecord): string {
-  const attemptId = stringField(record, "attemptId");
-  if (attemptId) return `model:${attemptId}`;
-  return `model:${stringField(record, "agent")}:${stringField(record, "provider")}:${stringField(record, "model")}:${numberField(record, "attemptNumber") ?? 0}`;
-}
-
-export function modelSpanAttributes(record: RuntimeLogRecord): RunSpanRecord["attributes"] {
-  const attributes: RunSpanRecord["attributes"] = {
-    [ATTR_GEN_AI_OPERATION_NAME]: "chat",
-    [ATTR_GEN_AI_AGENT_NAME]: stringField(record, "agent"),
-    [ATTR_GEN_AI_PROVIDER_NAME]: stringField(record, "provider"),
-    [ATTR_GEN_AI_REQUEST_MODEL]: stringField(record, "model"),
-    "pipr.attempt.type": stringField(record, "attemptType"),
-    "pipr.attempt.number": numberField(record, "attemptNumber") ?? 0,
-    "pipr.attempt.id": stringField(record, "attemptId"),
-    "pipr.prompt.bytes": numberField(record, "promptBytes") ?? 0,
-  };
-  setDefined(attributes, "pipr.task.name", optionalStringField(record, "task"));
-  setDefined(attributes, "pipr.auth.mode", optionalStringField(record, "authMode"));
-  setDefined(attributes, "pipr.shard.index", numberField(record, "shardIndex"));
-  setDefined(attributes, "pipr.shard.count", numberField(record, "shardCount"));
-  return attributes;
-}
-
-export function modelResultAttributes(record: RuntimeLogRecord): RunSpanRecord["attributes"] {
-  const attributes: RunSpanRecord["attributes"] = {
-    "pipr.response.stdout_bytes": numberField(record, "stdoutBytes") ?? 0,
-    "pipr.response.stderr_bytes": numberField(record, "stderrBytes") ?? 0,
-    "pipr.process.exit_code": numberField(record, "exitCode") ?? -1,
-  };
-  setDefined(attributes, ATTR_GEN_AI_USAGE_INPUT_TOKENS, numberField(record, "inputTokens"));
-  setDefined(attributes, ATTR_GEN_AI_USAGE_OUTPUT_TOKENS, numberField(record, "outputTokens"));
-  setDefined(attributes, "pipr.usage.cache_read_tokens", numberField(record, "cacheReadTokens"));
-  setDefined(attributes, "pipr.usage.cache_write_tokens", numberField(record, "cacheWriteTokens"));
-  setDefined(
-    attributes,
-    "pipr.usage.cache_status",
-    optionalStringField(record, "cacheUsageStatus"),
-  );
-  setDefined(attributes, "pipr.usage.cost_usd", numberField(record, "costUsd"));
-  return attributes;
-}
-
 export function instantLogSpanName(event: string): string | undefined {
   return {
     "diff manifest": "pipr.diff.construct",
@@ -268,11 +333,6 @@ function optionalStringField(record: RuntimeLogRecord, name: string): string | u
 export function numberField(record: RuntimeLogRecord, name: string): number | undefined {
   const value = record.fields[name];
   return typeof value === "number" ? value : undefined;
-}
-
-export function booleanField(record: RuntimeLogRecord, name: string): boolean | undefined {
-  const value = record.fields[name];
-  return typeof value === "boolean" ? value : undefined;
 }
 
 export function numericLogAttributes(record: RuntimeLogRecord): RunSpanRecord["attributes"] {

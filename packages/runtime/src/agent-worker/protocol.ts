@@ -67,6 +67,18 @@ const agentRunUsageSchema = z.strictObject({
   costUsd: z.number().nonnegative(),
 });
 
+/** One committed harness entry; its content is diagnostic and stays out of public telemetry. */
+const conversationEntrySchema = z.looseObject({
+  id: z.number().int().positive(),
+  kind: z.string().min(1).max(200),
+});
+
+/** The conversation's committed entries at settle time, oldest first; the newest entries are kept when truncated. */
+const agentRunConversationRecordSchema = z.strictObject({
+  entries: z.array(conversationEntrySchema),
+  truncated: z.boolean(),
+});
+
 const agentRunOutcomeSchema = z.discriminatedUnion("status", [
   z.strictObject({
     status: z.literal("done"),
@@ -74,6 +86,7 @@ const agentRunOutcomeSchema = z.discriminatedUnion("status", [
     text: z.string(),
     models: z.array(z.string().min(1)),
     usage: agentRunUsageSchema,
+    conversation: agentRunConversationRecordSchema,
   }),
   z.strictObject({
     status: z.literal("failed"),
@@ -82,6 +95,7 @@ const agentRunOutcomeSchema = z.discriminatedUnion("status", [
     error: z.string(),
     models: z.array(z.string().min(1)),
     usage: agentRunUsageSchema.optional(),
+    conversation: agentRunConversationRecordSchema.optional(),
   }),
 ]);
 
@@ -109,6 +123,16 @@ const agentWorkerEventSchema = z.discriminatedUnion("type", [
     delayMs: z.number().nonnegative().optional(),
   }),
   z.strictObject({ type: z.literal("auto_retry_end") }),
+  z.strictObject({ type: z.literal("turn_start") }),
+  z.strictObject({
+    type: z.literal("turn_end"),
+    /** Model that answered the turn, as the provider reported it. */
+    model: z.string().min(1).max(200).optional(),
+    stopReason: z.string().min(1).max(64).optional(),
+    usage: agentRunUsageSchema.optional(),
+    /** Kinds of the entries the turn committed, in order. */
+    entryKinds: z.array(z.string().min(1).max(200)).max(1000),
+  }),
   z.strictObject({ type: z.literal("compaction_start") }),
   z.strictObject({ type: z.literal("compaction_end") }),
 ]);
@@ -148,6 +172,7 @@ export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
 export type CustomModelEndpoint = z.infer<typeof customModelEndpointSchema>;
 export type AgentRunUsage = z.infer<typeof agentRunUsageSchema>;
 export type AgentRunOutcome = z.infer<typeof agentRunOutcomeSchema>;
+export type AgentRunConversationRecord = z.infer<typeof agentRunConversationRecordSchema>;
 export type AgentWorkerEvent = z.infer<typeof agentWorkerEventSchema>;
 export type AgentWorkerToolSpec = z.infer<typeof agentWorkerToolSpecSchema>;
 export type ToolCallResult = z.infer<typeof toolCallResultSchema>;

@@ -23,8 +23,41 @@ export type RunAgentAttemptObserver = {
   finish(result: RunAgentAttemptResult): Promise<void>;
 };
 
+/** Token and cost totals of one model turn or agent attempt. */
+export type RunAgentUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUsd: number;
+};
+
+/** One committed harness entry; its content is diagnostic and stays in sensitive artifacts. */
+export type RunConversationEntry = { id: number; kind: string } & Record<string, unknown>;
+
+/** How an attempt's conversation began; content such as a fork's shared prompt is never included. */
+export type RunAgentConversationStart =
+  | { kind: "new" }
+  | { kind: "continue"; conversationId: number }
+  | { kind: "fork"; parentKey: string };
+
 export type RunAgentEvent =
   | { kind: "first-response" }
+  | { kind: "turn-start" }
+  | {
+      kind: "turn-end";
+      model?: string;
+      stopReason?: string;
+      usage?: RunAgentUsage;
+      entryKinds: string[];
+    }
+  /** The attempt's committed conversation, read from the harness store when the attempt settled. */
+  | {
+      kind: "conversation";
+      conversationId: number;
+      entries: RunConversationEntry[];
+      truncated: boolean;
+    }
   | {
       kind: "tool-start" | "tool-end";
       id: string;
@@ -36,8 +69,13 @@ export type RunAgentEvent =
   | { kind: "retry-start"; delayMs?: number }
   | { kind: "retry-end" | "compaction-start" | "compaction-end" };
 
+export type RunTaskObserver = {
+  finish(result: { status: "ok" | "error"; findings?: number; repairAttempted?: boolean }): void;
+};
+
 export type RunObserver = {
   registerSecret?(value: string): void;
+  beginTask?(task: { name: string; order: number }): RunTaskObserver;
   recordArtifact?(artifact: {
     kind: RunBundleArtifact["kind"];
     name: string;
@@ -55,6 +93,7 @@ export type RunObserver = {
     authMode?: "api-key" | "subscription";
     shardIndex?: number;
     shardCount?: number;
+    conversation?: RunAgentConversationStart;
     prompt: string;
   }): Promise<RunAgentAttemptObserver>;
 };

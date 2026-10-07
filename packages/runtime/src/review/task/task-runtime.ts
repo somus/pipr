@@ -478,6 +478,10 @@ async function executeSelectedTasks(options: {
       const started = Date.now();
       const taskId = String(taskOrder);
       options.runtimeOptions.log?.info("task start", { task: task.name, order: taskOrder });
+      const observedTask = options.runtimeOptions.runObserver?.beginTask?.({
+        name: task.name,
+        order: taskOrder,
+      });
       options.runtimeOptions.progress?.work({
         type: "task-started",
         taskId,
@@ -503,6 +507,11 @@ async function executeSelectedTasks(options: {
           providerModels: output.providerModels,
           repairAttempted: output.repairAttempted,
         });
+        observedTask?.finish({
+          status: "ok",
+          findings: output.findings.length,
+          repairAttempted: output.repairAttempted,
+        });
         options.runtimeOptions.progress?.work({
           type: "task-finished",
           taskId,
@@ -520,6 +529,7 @@ async function executeSelectedTasks(options: {
           durationMs: Date.now() - started,
           error: error instanceof Error ? error.message : String(error),
         });
+        observedTask?.finish({ status: "error" });
         if (options.runtimeOptions.log?.debugEnabled && error instanceof Error && error.stack) {
           options.runtimeOptions.log.text("debug", "error stack", error.stack);
         }

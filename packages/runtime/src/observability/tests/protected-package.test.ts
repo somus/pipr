@@ -60,7 +60,22 @@ describe("protected Run Bundle packages", () => {
     });
     expect(metadataView.diagnostic).toBe("locked");
     expect(metadataView.bundle.manifest.capture.mode).toBe("metadata");
-    expect(metadataView.bundle.manifest.artifacts[0]?.path).toBe("artifacts/prompt-1.omitted");
+    expect(metadataView.bundle.manifest.artifacts[0]?.path).toBe(
+      "artifacts/conversation-1.omitted",
+    );
+    expect(metadataView.bundle.manifest.artifacts[0]).toMatchObject({
+      kind: "conversation",
+      omitted: true,
+      sizeBytes: 0,
+      counts: {
+        entries: 3,
+        byKind: { "pi.user": 1, "pi.assistant": 1, "pi.tool-result": 1 },
+        tools: { grep: 1 },
+      },
+    });
+    expect(
+      metadataView.bundle.manifest.artifacts.every((artifact) => artifact.omitted === true),
+    ).toBe(true);
     expect(
       metadataView.bundle.manifest.artifacts.some(
         (artifact) => artifact.kind === "diff-context-coverage",
@@ -95,6 +110,25 @@ describe("protected Run Bundle packages", () => {
         "utf8",
       ),
     ).toBe("private source body");
+  });
+
+  it("rejects conversation counts on any other artifact kind", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await diagnosticBundle(root);
+    const manifestPath = path.join(recorder.directory, "run.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const output = manifest.artifacts.find(
+      (artifact: { kind: string }) => artifact.kind === "output",
+    );
+    output.counts = { entries: 1, byKind: { "pi.user": 1 }, tools: {} };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    await expect(
+      prepareRunBundlePackage({
+        bundleDirectory: recorder.directory,
+        destinationRoot: path.join(root, "published"),
+      }),
+    ).rejects.toThrow("only conversation artifacts carry counts");
   });
 
   it("supports multiple recipients and rejects a non-matching identity", async () => {
@@ -212,13 +246,15 @@ async function diagnosticBundle(root: string, artifactName = "prompt-001-initial
     text: "private stderr",
   });
   await recorder.logSink.group("private source body", async () => undefined);
-  await recorder.addArtifact({
-    kind: "prompt",
-    name: artifactName,
-    mediaType: "text/markdown",
-    content: "private source body",
-    sensitive: true,
-  });
+  if (artifactName !== "prompt-001-initial.md") {
+    await recorder.addArtifact({
+      kind: "prompt",
+      name: artifactName,
+      mediaType: "text/markdown",
+      content: "private source body",
+      sensitive: true,
+    });
+  }
   await recorder.addArtifact({
     kind: "diff-context-coverage",
     name: "diff-context-coverage.json",
@@ -228,25 +264,56 @@ async function diagnosticBundle(root: string, artifactName = "prompt-001-initial
     }),
     sensitive: true,
   });
-  recorder.logSink.log({
-    level: "info",
-    event: "pi start",
-    fields: {
-      attemptId: "cache-attempt",
-      attemptType: "initial",
-      attemptNumber: 1,
-      agent: "reviewer",
-      provider: "openai",
-      model: "gpt-test",
-    },
+  const attempt = await recorder.observer.beginAgentAttempt({
+    attemptType: "initial",
+    attemptNumber: 1,
+    agent: "reviewer",
+    provider: "openai",
+    model: "gpt-test",
+    prompt: "private source body",
   });
-  recorder.logSink.log({
-    level: "info",
-    event: "pi run",
-    fields: {
-      attemptId: "cache-attempt",
-      exitCode: 0,
-      durationMs: 10,
+  attempt.event({ kind: "turn-start" });
+  attempt.event({
+    kind: "turn-end",
+    model: "gpt-test",
+    stopReason: "toolUse",
+    entryKinds: ["pi.assistant", "pi.tool-result"],
+  });
+  attempt.event({
+    kind: "conversation",
+    conversationId: 3,
+    entries: [
+      { id: 1, kind: "pi.user", model: [{ role: "user", content: "private source body" }] },
+      {
+        id: 2,
+        kind: "pi.assistant",
+        model: [
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "private reasoning" },
+              { type: "toolCall", id: "c1", name: "grep", arguments: { q: "private_source_body" } },
+            ],
+          },
+        ],
+      },
+      {
+        id: 3,
+        kind: "pi.tool-result",
+        model: [{ role: "toolResult", content: [{ type: "text", text: "private tool payload" }] }],
+      },
+    ],
+    truncated: false,
+  });
+  await attempt.finish({
+    output: "private source body",
+    exitCode: 0,
+    durationMs: 10,
+    usage: {
+      status: "complete",
+      inputTokens: 10,
+      outputTokens: 2,
+      costUsd: 0,
       cacheReadTokens: 90,
       cacheWriteTokens: 9,
       cacheUsageStatus: "complete",

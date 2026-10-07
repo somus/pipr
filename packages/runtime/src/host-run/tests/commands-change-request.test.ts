@@ -315,6 +315,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           "pipr.review.validate",
           "pipr.publish.review_progress",
           "pipr.publish.review",
+          "gen_ai.invoke_agent",
           "gen_ai.chat",
           "pipr.agent.attempt_resources",
           "pipr.run",
@@ -374,7 +375,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
-  it("records tool timing and first response without retaining Pi event payloads", async () => {
+  it("records tool timing and first response, keeping Pi payloads only in the conversation", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const traceDirectory = path.join(workspace.rootDir, "traces");
     let bundleDirectory: string | undefined;
@@ -430,16 +431,17 @@ describe("runHostRunCommand pull_request dispatch", () => {
           expect.objectContaining({ name: "gen_ai.time_to_first_token" }),
         ]),
       );
-      const bundleText = (
-        await Promise.all(
-          (
-            await readdir(bundleDirectory, { recursive: true, withFileTypes: true })
-          )
-            .filter((entry) => entry.isFile())
-            .map((entry) => readFile(path.join(entry.parentPath, entry.name), "utf8")),
-        )
-      ).join("\n");
-      expect(bundleText).not.toContain("do-not-store");
+      const files = (await readdir(bundleDirectory, { recursive: true, withFileTypes: true }))
+        .filter((entry) => entry.isFile())
+        .map((entry) => path.join(entry.parentPath, entry.name));
+      const conversations = files.filter((file) => path.basename(file).startsWith("conversation-"));
+      const readAll = async (paths: string[]) =>
+        (await Promise.all(paths.map((file) => readFile(file, "utf8")))).join("\n");
+      expect(conversations.length).toBeGreaterThan(0);
+      expect(await readAll(conversations)).toContain("do-not-store");
+      expect(await readAll(files.filter((file) => !conversations.includes(file)))).not.toContain(
+        "do-not-store",
+      );
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

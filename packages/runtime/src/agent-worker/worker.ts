@@ -27,6 +27,7 @@ import { openBunSqliteStorage } from "./bun-sqlite.js";
 import { type AgentWorkerCredentials, createAgentWorkerCredentials } from "./credentials.js";
 import { type CustomProviderModel, createCustomProviders } from "./custom-providers.js";
 import {
+  type AgentRunConversationRecord,
   type AgentRunOutcome,
   type AgentRunRequest,
   type AgentRunUsage,
@@ -241,7 +242,7 @@ async function executeRun(
     sections: [section("pipr", () => request.systemPrompt, { tag: false })],
   });
   worker.registry.install(extension);
-  const observed = { models: new Set<string>(), firstResponse: false };
+  const observed: ObservedRun = { models: new Set<string>(), firstResponse: false };
   let stopEvents: (() => Promise<unknown>) | undefined;
   try {
     const submissionRequestId = await currentRequestId(worker.harness, request.requestId, context);
@@ -286,7 +287,11 @@ async function executeRun(
     } catch (error) {
       if (!cancellation.reason) throw error;
       await recordFailure(worker.harness, request.requestId, context);
-      return failedOutcome(cancellation.reason, cancellationMessage(cancellation.reason, request));
+      return {
+        ...failedOutcome(cancellation.reason, cancellationMessage(cancellation.reason, request)),
+        conversationId: conversation.id,
+        conversation: await conversationRecord(conversation),
+      };
     }
     if (settled.status !== "done" || settled.answer === undefined) {
       await recordFailure(worker.harness, request.requestId, context);
@@ -462,6 +467,8 @@ async function settledOutcome(options: {
   request: AgentRunRequest;
 }): Promise<AgentRunOutcome> {
   const { settled, conversation } = options;
+  // Read at settle time from the store, so a resumed or answered-again request includes every committed entry.
+  const record = await conversationRecord(conversation);
   if (settled.status === "done" && settled.answer !== undefined) {
     const answer = await findEntry(conversation, settled.answer);
     const message = answer?.model?.[0] as AssistantMessage | undefined;
@@ -472,6 +479,7 @@ async function settledOutcome(options: {
       text: message ? assistantText(message) : "",
       models: [...options.observed.models],
       usage: options.usage,
+      conversation: record,
     };
   }
   const reason =
@@ -485,7 +493,31 @@ async function settledOutcome(options: {
       : unansweredMessage(settled),
     models: [...options.observed.models],
     usage: options.usage,
+    conversation: record,
   };
+}
+
+/** Bound on the serialized entries a run outcome carries; the oldest entries are dropped first. */
+const maxConversationBytes = 8 * 1024 * 1024;
+const conversationPageSize = 100;
+
+/** The conversation's committed, fork-aware history, oldest first, bounded to `maxConversationBytes`. */
+async function conversationRecord(conversation: Conversation): Promise<AgentRunConversationRecord> {
+  const newestFirst: AgentRunConversationRecord["entries"] = [];
+  let bytes = 0;
+  let cursor: Parameters<Conversation["entries"]>[2];
+  do {
+    const page = await conversation.entries({}, conversationPageSize, cursor, BACKGROUND_CONTEXT);
+    for (const entry of page.items) {
+      bytes += Buffer.byteLength(JSON.stringify(entry), "utf8");
+      if (bytes > maxConversationBytes) {
+        return { entries: newestFirst.reverse(), truncated: true };
+      }
+      newestFirst.push(entry as unknown as AgentRunConversationRecord["entries"][number]);
+    }
+    cursor = page.next;
+  } while (cursor !== undefined);
+  return { entries: newestFirst.reverse(), truncated: false };
 }
 
 async function findEntry(
@@ -506,9 +538,16 @@ function observeModel(models: Set<string>, message: AssistantMessage): void {
   if (model) models.add(model);
 }
 
+type ObservedRun = {
+  models: Set<string>;
+  firstResponse: boolean;
+  /** The open model turn: kinds of the entries it committed and its answer. */
+  turn?: { entryKinds: string[]; answer?: AssistantMessage };
+};
+
 function forwardEvents(
   events: readonly AgentEvent[],
-  observed: { models: Set<string>; firstResponse: boolean },
+  observed: ObservedRun,
   emit: (event: AgentWorkerEvent) => void,
 ): void {
   for (const event of events) {
@@ -516,9 +555,52 @@ function forwardEvents(
       observed.firstResponse = true;
       emit({ type: "first_response" });
     }
-    const forwarded = forwardedEvent(event, observed);
+    observeEntry(event, observed);
+    const forwarded = turnEvent(event, observed) ?? forwardedEvent(event);
     if (forwarded) emit(forwarded);
   }
+}
+
+/** Records the answering models and the open turn's entries from committed entries. */
+function observeEntry(event: AgentEvent, observed: ObservedRun): void {
+  if (event.type !== "message_end" && event.type !== "entry_appended") return;
+  const message = event.entry.model?.[0];
+  if (event.entry.kind === "pi.assistant" && message?.role === "assistant") {
+    observeModel(observed.models, message);
+  }
+  observeTurnEntry(observed, event.entry);
+}
+
+function turnEvent(event: AgentEvent, observed: ObservedRun): AgentWorkerEvent | undefined {
+  if (event.type === "turn_start") {
+    observed.turn = { entryKinds: [] };
+    return { type: "turn_start" };
+  }
+  return event.type === "turn_end" ? turnEndEvent(observed) : undefined;
+}
+
+/** Tracks entries committed during a turn; a turn end carries its model, usage, and stop reason, never content. */
+function observeTurnEntry(observed: ObservedRun, entry: EntryRecord): void {
+  if (!observed.turn) return;
+  observed.turn.entryKinds.push(entry.kind);
+  const message = entry.model?.[0];
+  if (entry.kind === "pi.assistant" && message?.role === "assistant") {
+    observed.turn.answer = message;
+  }
+}
+
+function turnEndEvent(observed: ObservedRun): AgentWorkerEvent {
+  const turn = observed.turn ?? { entryKinds: [] };
+  observed.turn = undefined;
+  const answer = turn.answer;
+  const model = answer ? (answer.responseModel || answer.model)?.trim() : undefined;
+  return {
+    type: "turn_end",
+    ...(model ? { model: model.slice(0, 200) } : {}),
+    ...(answer?.stopReason ? { stopReason: answer.stopReason } : {}),
+    ...(answer?.usage ? { usage: usageTotals({ models: { turn: answer.usage } }) } : {}),
+    entryKinds: turn.entryKinds.slice(0, 1000),
+  };
 }
 
 function isAssistantProgress(event: AgentEvent): boolean {
@@ -536,18 +618,8 @@ const markerEvents: Partial<Record<AgentEvent["type"], AgentWorkerEvent>> = {
   compaction_end: { type: "compaction_end" },
 };
 
-function forwardedEvent(
-  event: AgentEvent,
-  observed: { models: Set<string> },
-): AgentWorkerEvent | undefined {
+function forwardedEvent(event: AgentEvent): AgentWorkerEvent | undefined {
   switch (event.type) {
-    case "message_end": {
-      const message = event.entry.model?.[0] as AssistantMessage | undefined;
-      if (event.entry.kind === "pi.assistant" && message) {
-        observeModel(observed.models, message);
-      }
-      return undefined;
-    }
     case "tool_execution_start":
       return {
         type: "tool_execution_start",
@@ -626,7 +698,7 @@ async function conversationUsage(
   return usageTotals(await harness.snapshot(UsageDoc, conversationId, context));
 }
 
-function usageTotals(state: Readonly<UsageState> | undefined): AgentRunUsage {
+function usageTotals(state: Pick<UsageState, "models"> | undefined): AgentRunUsage {
   const totals = {
     inputTokens: 0,
     outputTokens: 0,

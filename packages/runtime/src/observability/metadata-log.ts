@@ -49,7 +49,6 @@ const publicLogPhases = new Set([
 
 const publicStringLogFields = new Set([
   "agent",
-  "attemptId",
   "attemptType",
   "authMode",
   "failureCategory",

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ScriptedProviderScript } from "../../agent-worker/scripted-provider.js";
+import type { RunAgentEvent } from "../../observability/types.js";
 import { startFakeOpenAIGateway } from "../../tests/helpers/fake-openai-gateway.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import { createScriptedPi, type ScriptedPi } from "../../tests/helpers/scripted-pi.js";
@@ -41,6 +42,32 @@ describe("durable Pi runner", () => {
     });
     expect(result.usage.inputTokens).toBeGreaterThan(0);
     expect(await pi.prompts()).toEqual(["Review this diff."]);
+  });
+
+  it("observes model turns and the settled conversation of answered and failed runs", async () => {
+    const { runOptions } = await fixture({
+      responses: [{ text: '{"ok":true}' }, { error: "400 invalid request" }],
+    });
+    const answered: RunAgentEvent[] = [];
+    const failed: RunAgentEvent[] = [];
+
+    await withPiRunWorkspace({ workspace: runOptions().workspace }, async (runner) => {
+      await runner(runOptions({ eventObserver: (event) => answered.push(event) }));
+      await expect(
+        runner(runOptions({ prompt: "Fail.", eventObserver: (event) => failed.push(event) })),
+      ).rejects.toBeInstanceOf(ProviderExecutionError);
+    });
+
+    expect(answered.map((event) => event.kind)).toEqual(
+      expect.arrayContaining(["turn-start", "turn-end", "conversation"]),
+    );
+    expect(answered.find((event) => event.kind === "turn-end")).toMatchObject({
+      model: "deepseek-v4-pro",
+      stopReason: "stop",
+    });
+    const conversation = answered.find((event) => event.kind === "conversation");
+    expect(JSON.stringify(conversation)).toContain('{\\"ok\\":true}');
+    expect(failed.at(-1)).toMatchObject({ kind: "conversation", truncated: false });
   });
 
   it("runs a model of a custom OpenAI-compatible provider against its base URL", async () => {

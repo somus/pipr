@@ -13,6 +13,8 @@ export function truncateUtf8(contents: Buffer, maxBytes: number): Buffer {
 }
 
 export function artifactPriority(kind: RunBundleArtifact["kind"], name: string): number {
+  // Conversations repeat prompts and outputs at length, so they are the first evidence to go.
+  if (kind === "conversation") return 0;
   if (kind === "validation") return 1_000_000;
   if (kind === "publication-plan") {
     return /publication-(?:result|error)\.json$/.test(name) ? 1_010_000 : 990_000;
