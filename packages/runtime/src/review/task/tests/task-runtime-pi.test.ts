@@ -196,6 +196,27 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(merged.map((item) => item.body)).toEqual(["Defect 0.", "Defect 2."]);
   });
 
+  it("asks the runner for the conversation only when the attempt observer captures it", async () => {
+    const captured: Array<boolean | undefined> = [];
+    for (const capturesConversation of [true, false]) {
+      await runRuntime({
+        plan: defaultReviewPlan(),
+        runObserver: {
+          async beginAgentAttempt() {
+            return { capturesConversation, event() {}, async finish() {} };
+          },
+        },
+        piRunner: async (options) => {
+          captured.push(options.captureConversation);
+          return noFindingsPiResult();
+        },
+      });
+    }
+
+    expect(new Set(captured.slice(0, captured.length / 2))).toEqual(new Set([true]));
+    expect(new Set(captured.slice(captured.length / 2))).toEqual(new Set([undefined]));
+  });
+
   it("schedules oversized core reviews into bounded manifest units", async () => {
     const prompts: string[] = [];
     const observedAttempts: Array<Parameters<RunObserver["beginAgentAttempt"]>[0]> = [];

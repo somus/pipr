@@ -24,6 +24,7 @@ import {
   watchEvents,
 } from "@earendil-works/pi-durable";
 import { openBunSqliteStorage } from "./bun-sqlite.js";
+import { captureConversation } from "./conversation-capture.js";
 import { type AgentWorkerCredentials, createAgentWorkerCredentials } from "./credentials.js";
 import { type CustomProviderModel, createCustomProviders } from "./custom-providers.js";
 import {
@@ -290,7 +291,7 @@ async function executeRun(
       return {
         ...failedOutcome(cancellation.reason, cancellationMessage(cancellation.reason, request)),
         conversationId: conversation.id,
-        conversation: await conversationRecord(conversation),
+        ...(await requestedConversation(conversation, request)),
       };
     }
     if (settled.status !== "done" || settled.answer === undefined) {
@@ -468,7 +469,7 @@ async function settledOutcome(options: {
 }): Promise<AgentRunOutcome> {
   const { settled, conversation } = options;
   // Read at settle time from the store, so a resumed or answered-again request includes every committed entry.
-  const record = await conversationRecord(conversation);
+  const record = await requestedConversation(conversation, options.request);
   if (settled.status === "done" && settled.answer !== undefined) {
     const answer = await findEntry(conversation, settled.answer);
     const message = answer?.model?.[0] as AssistantMessage | undefined;
@@ -479,7 +480,7 @@ async function settledOutcome(options: {
       text: message ? assistantText(message) : "",
       models: [...options.observed.models],
       usage: options.usage,
-      conversation: record,
+      ...record,
     };
   }
   const reason =
@@ -493,31 +494,18 @@ async function settledOutcome(options: {
       : unansweredMessage(settled),
     models: [...options.observed.models],
     usage: options.usage,
-    conversation: record,
+    ...record,
   };
 }
 
-/** Bound on the serialized entries a run outcome carries; the oldest entries are dropped first. */
-const maxConversationBytes = 8 * 1024 * 1024;
-const conversationPageSize = 100;
-
-/** The conversation's committed, fork-aware history, oldest first, bounded to `maxConversationBytes`. */
-async function conversationRecord(conversation: Conversation): Promise<AgentRunConversationRecord> {
-  const newestFirst: AgentRunConversationRecord["entries"] = [];
-  let bytes = 0;
-  let cursor: Parameters<Conversation["entries"]>[2];
-  do {
-    const page = await conversation.entries({}, conversationPageSize, cursor, BACKGROUND_CONTEXT);
-    for (const entry of page.items) {
-      bytes += Buffer.byteLength(JSON.stringify(entry), "utf8");
-      if (bytes > maxConversationBytes) {
-        return { entries: newestFirst.reverse(), truncated: true };
-      }
-      newestFirst.push(entry as unknown as AgentRunConversationRecord["entries"][number]);
-    }
-    cursor = page.next;
-  } while (cursor !== undefined);
-  return { entries: newestFirst.reverse(), truncated: false };
+/** The conversation when the request captures it; capture failures leave it out. */
+async function requestedConversation(
+  conversation: Conversation,
+  request: AgentRunRequest,
+): Promise<{ conversation?: AgentRunConversationRecord }> {
+  if (!request.captureConversation) return {};
+  const record = await captureConversation(conversation);
+  return record ? { conversation: record } : {};
 }
 
 async function findEntry(

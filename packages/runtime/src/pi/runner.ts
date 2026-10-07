@@ -232,6 +232,7 @@ async function agentRunRequest(
     ...(options.timeoutSeconds !== undefined
       ? { timeoutMs: Math.max(1, Math.round(options.timeoutSeconds * 1000)) }
       : {}),
+    ...(options.captureConversation ? { captureConversation: true } : {}),
   };
 }
 

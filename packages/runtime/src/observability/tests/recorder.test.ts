@@ -236,6 +236,30 @@ describe("file run recorder", () => {
     ).toEqual([false, false]);
   });
 
+  it("asks for the conversation only in diagnostic capture", async () => {
+    const captures: Array<boolean | undefined> = [];
+    for (const mode of ["diagnostic", "metadata"] as const) {
+      const recorder = await startFileRunRecorder({
+        rootDirectory: await temporaryDirectory(),
+        env: {},
+        mode,
+      });
+      const attempt = await recorder.observer.beginAgentAttempt({
+        attemptType: "initial",
+        attemptNumber: 1,
+        agent: "reviewer",
+        provider: "openai",
+        model: "gpt-test",
+        prompt: "prompt",
+      });
+      captures.push(attempt.capturesConversation);
+      await attempt.finish({ output: "{}", exitCode: 0 });
+      await recorder.finish({ kind: "review", outcome: "succeeded" });
+    }
+
+    expect(captures).toEqual([true, false]);
+  });
+
   it("never writes a registered or environment secret into the conversation artifact", async () => {
     const environmentKey = "sk-env-provider-key-0123456789";
     const recorder = await startFileRunRecorder({

@@ -82,6 +82,7 @@ export async function runPiAttempt(
         : {}),
       timeoutSeconds,
       eventObserver: observedAttempt ? (event) => observedAttempt.event(event) : undefined,
+      ...(observedAttempt?.capturesConversation ? { captureConversation: true } : {}),
     });
   } catch (error) {
     options.runtime.piRunSink?.({ models: [provider.model] });

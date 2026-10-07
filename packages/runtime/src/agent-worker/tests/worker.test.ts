@@ -192,15 +192,15 @@ describe("agent worker", () => {
     directories.push(directory);
     const storePath = path.join(directory, "store.sqlite");
     const first = start([fauxAssistantMessage([fauxText("stored answer")])], storePath);
-    const answered = await run(first.worker, "run-1", request());
+    const answered = await run(first.worker, "run-1", request({ captureConversation: true }));
     await first.worker.close();
     workers.splice(workers.indexOf(first.worker), 1);
 
     const second = start([fauxAssistantMessage([fauxText("rerun")])], storePath);
-    const resumed = await run(second.worker, "run-1", request());
+    const resumed = await run(second.worker, "run-1", request({ captureConversation: true }));
 
     for (const outcome of [answered, resumed]) {
-      if (outcome.status !== "done") throw new Error("expected done");
+      if (outcome.status !== "done" || !outcome.conversation) throw new Error("expected capture");
       expect(outcome.conversation.truncated).toBe(false);
       const kinds = outcome.conversation.entries.map((entry) => entry.kind);
       expect(kinds).toContain("pi.user");
@@ -217,11 +217,26 @@ describe("agent worker", () => {
       fauxAssistantMessage([], { stopReason: "error", errorMessage: "invalid request" }),
     ]);
 
-    const outcome = await run(worker, "run-1", request());
+    const outcome = await run(worker, "run-1", request({ captureConversation: true }));
 
     expect(outcome).toMatchObject({ status: "failed", reason: "model_error" });
     if (outcome.status !== "failed") throw new Error("expected failed");
     expect(outcome.conversation?.entries.map((entry) => entry.kind)).toContain("pi.user");
+  });
+
+  it("leaves the conversation out unless the request captures it", async () => {
+    const { worker } = start([
+      fauxAssistantMessage([fauxText("answer")]),
+      fauxAssistantMessage([], { stopReason: "error", errorMessage: "invalid request" }),
+    ]);
+
+    const done = await run(worker, "run-1", request());
+    const failed = await run(worker, "run-2", request({ requestId: "work-1:task:agent:1" }));
+
+    expect(done).toMatchObject({ status: "done", text: "answer" });
+    expect(failed).toMatchObject({ status: "failed", reason: "model_error" });
+    expect(done).not.toHaveProperty("conversation");
+    expect(failed).not.toHaveProperty("conversation");
   });
 
   it("serves custom provider models with default metadata and declared overrides", async () => {

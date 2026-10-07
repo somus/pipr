@@ -44,19 +44,34 @@ describe("durable Pi runner", () => {
     expect(await pi.prompts()).toEqual(["Review this diff."]);
   });
 
-  it("observes model turns and the settled conversation of answered and failed runs", async () => {
+  it("observes model turns, and the settled conversation of runs that capture it", async () => {
     const { runOptions } = await fixture({
-      responses: [{ text: '{"ok":true}' }, { error: "400 invalid request" }],
+      responses: [{ text: '{"ok":true}' }, { error: "400 invalid request" }, { text: "{}" }],
     });
     const answered: RunAgentEvent[] = [];
     const failed: RunAgentEvent[] = [];
+    const uncaptured: RunAgentEvent[] = [];
 
     await withPiRunWorkspace({ workspace: runOptions().workspace }, async (runner) => {
-      await runner(runOptions({ eventObserver: (event) => answered.push(event) }));
+      await runner(
+        runOptions({ captureConversation: true, eventObserver: (event) => answered.push(event) }),
+      );
       await expect(
-        runner(runOptions({ prompt: "Fail.", eventObserver: (event) => failed.push(event) })),
+        runner(
+          runOptions({
+            prompt: "Fail.",
+            captureConversation: true,
+            eventObserver: (event) => failed.push(event),
+          }),
+        ),
       ).rejects.toBeInstanceOf(ProviderExecutionError);
+      await runner(
+        runOptions({ prompt: "Plain.", eventObserver: (event) => uncaptured.push(event) }),
+      );
     });
+
+    expect(uncaptured.map((event) => event.kind)).toContain("turn-end");
+    expect(uncaptured.map((event) => event.kind)).not.toContain("conversation");
 
     expect(answered.map((event) => event.kind)).toEqual(
       expect.arrayContaining(["turn-start", "turn-end", "conversation"]),

@@ -57,6 +57,8 @@ export const agentRunRequestSchema = z.strictObject({
     bridged: z.array(agentWorkerToolSpecSchema),
   }),
   timeoutMs: z.number().int().positive().optional(),
+  /** Return the conversation's committed entries with the outcome, for diagnostic capture. */
+  captureConversation: z.boolean().optional(),
 });
 
 const agentRunUsageSchema = z.strictObject({
@@ -86,7 +88,8 @@ const agentRunOutcomeSchema = z.discriminatedUnion("status", [
     text: z.string(),
     models: z.array(z.string().min(1)),
     usage: agentRunUsageSchema,
-    conversation: agentRunConversationRecordSchema,
+    /** Present when the request captures the conversation and the store could read it. */
+    conversation: agentRunConversationRecordSchema.optional(),
   }),
   z.strictObject({
     status: z.literal("failed"),

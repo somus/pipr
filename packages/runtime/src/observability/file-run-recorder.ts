@@ -361,6 +361,8 @@ export async function startFileRunRecorder(options: {
         });
         let attemptFinished = false;
         return {
+          // Conversation artifacts are diagnostic; metadata capture would drop them unread.
+          capturesConversation: options.mode !== "metadata",
           event(event) {
             observeAttemptEvent(event, {
               suffix,

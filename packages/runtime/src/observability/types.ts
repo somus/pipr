@@ -19,6 +19,8 @@ export type RunAgentAttemptResult = {
 };
 
 export type RunAgentAttemptObserver = {
+  /** Whether the attempt's settled conversation should be read and handed to `event`. */
+  capturesConversation?: boolean;
   event(event: RunAgentEvent): void;
   finish(result: RunAgentAttemptResult): Promise<void>;
 };
