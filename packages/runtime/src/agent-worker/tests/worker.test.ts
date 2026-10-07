@@ -122,6 +122,22 @@ describe("agent worker", () => {
     expect(faux.state.callCount).toBe(2);
   });
 
+  it("settles a timed-out run on a repeated cancel when the provider ignores abort", async () => {
+    const { worker } = start([() => new Promise<never>(() => {})]);
+    // The stuck generation never ends, so closing this worker would wait forever; its process owner kills it instead.
+    workers.splice(workers.indexOf(worker), 1);
+    worker.send({ type: "run", runId: "run-1", request: request({ timeoutMs: 50 }) });
+    await Bun.sleep(150);
+
+    worker.send({ type: "cancel", runId: "run-1" });
+    const message = await worker.next(resultFor("run-1"));
+
+    expect(message.type === "result" && message.outcome).toMatchObject({
+      status: "failed",
+      reason: "timeout",
+    });
+  });
+
   it("resumes a request from a durable store after the worker restarts", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-worker-store-"));
     directories.push(directory);

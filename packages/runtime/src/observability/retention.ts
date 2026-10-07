@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import { readStoredRuns } from "./retention-store.js";
+import { readAgentStores, readStoredRuns } from "./retention-store.js";
 
 const dayMilliseconds = 24 * 60 * 60 * 1000;
 
@@ -20,7 +20,11 @@ export async function enforceRunStoreRetention(options: {
   }
   const rootDirectory = path.resolve(options.rootDirectory);
   const cutoff = (options.now ?? new Date()).getTime() - retentionDays * dayMilliseconds;
-  const runs = await readStoredRuns(rootDirectory);
+  // Agent conversation stores hold transcripts with diffs and file contents, so they follow the same retention.
+  const runs = [
+    ...(await readStoredRuns(rootDirectory)),
+    ...(await readAgentStores(rootDirectory)),
+  ];
   const expired: string[] = [];
   for (const run of runs) {
     if (run.active || run.completedAt >= cutoff) continue;

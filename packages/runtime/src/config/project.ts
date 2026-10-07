@@ -8,7 +8,8 @@ import {
   type NormalizedTaskCheckSettings,
   taskCheckSettings,
 } from "./check-settings.js";
-import { providerDefaultApiKeyEnvs } from "./provider-env.js";
+import { missingProviderCredential } from "./provider-credentials.js";
+import { type ProviderEnvironment, providerEnvironments } from "./provider-env.js";
 import { loadTypescriptConfig } from "./ts-loader.js";
 import type { ConfigVersionCompatibility } from "./version-compat.js";
 
@@ -68,15 +69,15 @@ export async function loadRuntimeProject(
   options: LoadRuntimeProjectOptions,
 ): Promise<LoadedRuntimeProject> {
   const loaded = await loadTypescriptConfig(options);
-  const defaultApiKeyEnvs = await providerDefaultApiKeyEnvs(
-    loaded.plan.models.filter((model) => model.apiKey === undefined).map((model) => model.provider),
+  const providerEnvs = await providerEnvironments(
+    loaded.plan.models.filter((model) => model.apiKey !== "local").map((model) => model.provider),
   );
   return {
     kind: "typescript",
     plan: loaded.plan,
     settings: planToRuntimeSettings(loaded.plan, {
       source: loaded.source,
-      defaultApiKeyEnvs,
+      providerEnvs,
       env: options.env,
       requireProviderEnv: options.requireProviderEnv,
       warnings: [loaded.versionCompatibility.warning].filter(
@@ -148,14 +149,14 @@ function planToRuntimeSettings(
   plan: RuntimePlan,
   options: {
     source: string;
-    defaultApiKeyEnvs: ReadonlyMap<string, string>;
+    providerEnvs: ReadonlyMap<string, ProviderEnvironment>;
     env?: NodeJS.ProcessEnv;
     requireProviderEnv?: boolean;
     warnings?: string[];
   },
 ): RuntimeSettings {
   const providers = plan.models.map((model) =>
-    modelToProvider(model, options.defaultApiKeyEnvs, options.source),
+    modelToProvider(model, options.providerEnvs, options.source),
   );
   const defaultProvider = providers[0];
   if (!defaultProvider) {
@@ -252,36 +253,44 @@ function normalizeUserReplyAutoResolveConfig(
 
 function modelToProvider(
   model: ModelProfile,
-  defaultApiKeyEnvs: ReadonlyMap<string, string>,
+  providerEnvs: ReadonlyMap<string, ProviderEnvironment>,
   source: string,
 ): ProviderConfig {
   return parseProviderConfig({
     id: model.id,
     provider: model.provider,
     model: model.model,
-    apiKeyEnv: modelApiKeyEnv(model, defaultApiKeyEnvs, source),
+    ...modelProviderEnv(model, providerEnvs.get(model.provider), source),
     thinking: model.thinking,
   });
 }
 
-function modelApiKeyEnv(
+/**
+ * A model without `apiKey` uses its provider's standard key or any fallback credential source the provider supports.
+ * An explicit `apiKey` must be set, and still gets the variables the provider reads alongside its key.
+ */
+function modelProviderEnv(
   model: ModelProfile,
-  defaultApiKeyEnvs: ReadonlyMap<string, string>,
+  environment: ProviderEnvironment | undefined,
   source: string,
-): string | undefined {
+): Pick<ProviderConfig, "apiKeyEnv" | "providerEnv" | "credentialEnv"> {
   if (model.apiKey === "local") {
-    return undefined;
+    return {};
   }
+  const companions = environment?.companions.length ? { providerEnv: environment.companions } : {};
   if (model.apiKey) {
-    return model.apiKey.name;
+    return { apiKeyEnv: model.apiKey.name, ...companions };
   }
-  const apiKeyEnv = defaultApiKeyEnvs.get(model.provider);
-  if (!apiKeyEnv) {
+  if (!environment) {
     throw new Error(
       `${source}: model '${model.id}' uses provider '${model.provider}', which has no standard API key environment variable. Pass apiKey: pipr.secret({ name }) or apiKey: "local".`,
     );
   }
-  return apiKeyEnv;
+  return {
+    apiKeyEnv: environment.apiKeyEnv,
+    ...companions,
+    ...(environment.alternatives.length ? { credentialEnv: environment.alternatives } : {}),
+  };
 }
 
 function assertUniqueProviders(providers: ProviderConfig[], source: string): void {
@@ -302,13 +311,8 @@ function assertRequiredProviderEnv(
     return;
   }
   const env = options.env ?? process.env;
-  const missing = providers.filter(
-    (provider): provider is ProviderConfig & { apiKeyEnv: string } =>
-      provider.apiKeyEnv !== undefined && !env[provider.apiKeyEnv],
-  );
+  const missing = providers.flatMap((provider) => missingProviderCredential(provider, env) ?? []);
   if (missing.length > 0) {
-    throw new Error(
-      `Missing provider env vars: ${missing.map((provider) => provider.apiKeyEnv).join(", ")}`,
-    );
+    throw new Error(`Missing provider env vars: ${missing.join(", ")}`);
   }
 }

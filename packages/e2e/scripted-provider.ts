@@ -10,6 +10,7 @@ import {
   type Provider,
   type ToolResultMessage,
 } from "@earendil-works/pi-ai";
+import { messageText, offeredToolNames } from "@usepipr/runtime/internal/testing";
 
 export type ActProviderConfig = {
   /** Directory that receives one JSONL telemetry file per model call. */
@@ -114,7 +115,7 @@ const answers: Record<
 
 function modelCall(messages: readonly Message[]): ModelCall {
   const userTexts = messages.flatMap((message) =>
-    message.role === "user" ? [textOf(message.content)] : [],
+    message.role === "user" ? [messageText(message.content)] : [],
   );
   const prompt = userTexts.join("\n\n");
   const latest = userTexts.at(-1) ?? "";
@@ -370,7 +371,7 @@ function assertCondensedToolResults(checks: ToolCheck[], results: ToolResultMess
   for (const check of checks) {
     const result = results.find((item) => item.toolCallId === check.id);
     assert(result, `${check.name} (${check.id}) returned no result`);
-    const text = compactJsonText(textOf(result.content));
+    const text = compactJsonText(messageText(result.content));
     assert(
       text.includes(check.expect),
       `${check.name} (${check.id}) result missing '${check.expect}': ${text.slice(0, 400)}`,
@@ -390,12 +391,6 @@ function fixtureRanges(manifest: Manifest, label: string) {
   assert(right, `${label} manifest missing RIGHT range`);
   assert(left || label !== "condensed", `${label} manifest missing LEFT range for base reads`);
   return { file, right, left: left as Range };
-}
-
-function offeredToolNames(messages: readonly Message[]): string[] {
-  return messages.flatMap((message) =>
-    message.role === "system" ? (message.toolsAdded ?? []).map((tool) => tool.name) : [],
-  );
 }
 
 function toolResultsSinceLatestUser(messages: readonly Message[]): ToolResultMessage[] {
@@ -429,12 +424,6 @@ function compactJsonText(text: string): string {
   } catch {
     return text;
   }
-}
-
-/** Joins a message's text parts; user and tool-result content may be a plain string or typed parts. */
-function textOf(content: string | ReadonlyArray<{ type: string; text?: string }>): string {
-  if (typeof content === "string") return content;
-  return content.map((part) => (part.type === "text" ? (part.text ?? "") : "")).join("");
 }
 
 /** Appends a `start` event now and returns a function that appends the matching `end` event. */

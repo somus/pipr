@@ -8,6 +8,7 @@ import {
   type AgentWorkerEvent,
   agentWorkspaceToolNames,
 } from "../agent-worker/protocol.js";
+import { missingProviderCredential, providerEnvNames } from "../config/provider-credentials.js";
 import type { RunAgentEvent } from "../observability/types.js";
 import type { ProviderConfig } from "../types.js";
 import { callCustomTool, customToolSpecs } from "./custom-tools.js";
@@ -123,14 +124,6 @@ export async function withPiRunWorkspace<T>(
   }
 }
 
-/** One model call in its own runner; use `withPiRunWorkspace` to share a worker and store across calls. */
-export async function runPi(options: PiRunOptions): Promise<PiRunResult> {
-  return await withPiRunWorkspace(
-    { workspace: options.workspace, env: options.env },
-    async (runner) => await runner(options),
-  );
-}
-
 type RunnerScope = {
   env: NodeJS.ProcessEnv;
   sandbox: PiRunSandbox;
@@ -198,12 +191,14 @@ async function agentRunRequest(
   return {
     requestId: options.requestId ?? randomUUID(),
     conversation: options.conversation ?? { kind: "new" },
-    model: modelSelection(options.provider),
+    model: modelSelection(options.provider, options.env ?? scope.env),
     systemPrompt: piprJsonSystemPrompt,
     prompt: options.prompt,
     cwd: scope.sandbox.workspace,
     tools: await agentRunTools(scope, options, callDir),
-    ...(options.timeoutSeconds !== undefined ? { timeoutMs: options.timeoutSeconds * 1000 } : {}),
+    ...(options.timeoutSeconds !== undefined
+      ? { timeoutMs: Math.max(1, Math.round(options.timeoutSeconds * 1000)) }
+      : {}),
   };
 }
 
@@ -236,12 +231,16 @@ async function agentRunTools(
   };
 }
 
-function modelSelection(provider: ProviderConfig): AgentRunRequest["model"] {
+/** Without its key variable, a provider authenticates from a fallback credential source in the worker environment. */
+function modelSelection(
+  provider: ProviderConfig,
+  env: NodeJS.ProcessEnv,
+): AgentRunRequest["model"] {
   return {
     provider: provider.provider,
     modelId: provider.model,
     thinking: provider.thinking ?? "high",
-    ...(provider.apiKeyEnv ? { apiKeyEnv: provider.apiKeyEnv } : {}),
+    ...(provider.apiKeyEnv && env[provider.apiKeyEnv] ? { apiKeyEnv: provider.apiKeyEnv } : {}),
   };
 }
 
@@ -314,7 +313,7 @@ function supervisorDeadline(
 
 function workerKey(options: PiRunOptions): string {
   return JSON.stringify([
-    options.provider.apiKeyEnv ?? null,
+    providerEnvNames(options.provider),
     options.provider.apiKeyEnv ? null : (options.authFile ?? null),
     options.providerModule?.path ?? null,
     options.providerModule?.config ?? null,
@@ -327,7 +326,7 @@ function workerEnv(
   provider: ProviderConfig,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { HOME: sandbox.home, TMPDIR: sandbox.tmp, USER: "pipr" };
-  for (const key of [...workerEnvKeys, ...(provider.apiKeyEnv ? [provider.apiKeyEnv] : [])]) {
+  for (const key of [...workerEnvKeys, ...providerEnvNames(provider)]) {
     if (sourceEnv[key] !== undefined) env[key] = sourceEnv[key];
   }
   return env;
@@ -345,10 +344,10 @@ async function prepareStoreDir(
 }
 
 function assertPiAuthentication(options: PiRunOptions, env: NodeJS.ProcessEnv): void {
-  const apiKeyEnv = options.provider.apiKeyEnv;
-  if (apiKeyEnv) {
-    if (!env[apiKeyEnv]) {
-      throw new Error(`Missing provider env var for model '${options.provider.id}': ${apiKeyEnv}`);
+  if (options.provider.apiKeyEnv) {
+    const missing = missingProviderCredential(options.provider, env);
+    if (missing) {
+      throw new Error(`Missing provider env var for model '${options.provider.id}': ${missing}`);
     }
     return;
   }

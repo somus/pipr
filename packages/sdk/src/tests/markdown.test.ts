@@ -32,6 +32,17 @@ describe("md", () => {
     ).toBe("## Title\n\nBody");
   });
 
+  it("keeps whitespace inside interpolated content", () => {
+    const body = "Fix this:\n\n```make\nbuild:\n\tgo build\n\n\n\tgo vet\n```\n\n    indented code";
+    expect(
+      String(md`
+        **Finding:**
+
+        ${body}
+      `),
+    ).toBe(`**Finding:**\n\n${body}`);
+  });
+
   it("renders lists, tables, details, labels, callouts, and blocks", () => {
     expect(String(md.list(["one\ntwo", "<x>"]))).toBe("- one two\n- &lt;x>");
     expect(String(md.list(["a", "b"], { ordered: true }))).toBe("1. a\n2. b");

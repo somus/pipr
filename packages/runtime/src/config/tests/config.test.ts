@@ -207,6 +207,39 @@ describe("loadRuntimeProject", () => {
     ).rejects.toThrow("Missing provider env vars: DEEPSEEK_API_KEY");
   });
 
+  it("accepts a provider's fallback credentials and keeps an explicit key required", async () => {
+    const config = (apiKey: string) => `import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  pipr.review({
+    id: "review",
+    model: pipr.model("amazon-bedrock/claude"${apiKey}),
+    instructions: "Review this change.",
+  });
+});
+`;
+    const defaultKey = await newConfigProject(config(""));
+    const explicitKey = await newConfigProject(
+      config(', { apiKey: pipr.secret({ name: "BEDROCK_TOKEN" }) }'),
+    );
+    const env = { AWS_ACCESS_KEY_ID: "id", AWS_SECRET_ACCESS_KEY: "secret" };
+
+    const runtime = await loadRuntimeProject({
+      rootDir: defaultKey,
+      env,
+      requireProviderEnv: true,
+    });
+
+    expect(runtime.settings.config.providers[0]).toMatchObject({
+      apiKeyEnv: "AWS_BEARER_TOKEN_BEDROCK",
+      providerEnv: expect.arrayContaining(["AWS_SECRET_ACCESS_KEY", "AWS_REGION"]),
+      credentialEnv: expect.arrayContaining(["AWS_ACCESS_KEY_ID", "AWS_PROFILE"]),
+    });
+    await expect(
+      loadRuntimeProject({ rootDir: explicitKey, env, requireProviderEnv: true }),
+    ).rejects.toThrow("Missing provider env vars: BEDROCK_TOKEN");
+  });
+
   it("allows a local Pi authenticated model alongside an API-key model", async () => {
     const rootDir = await newConfigProject(`import { definePipr } from "@usepipr/sdk";
 

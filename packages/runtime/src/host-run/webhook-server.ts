@@ -7,6 +7,7 @@ import { type PiprResult, parsePiprResult } from "@usepipr/sdk";
 import { createCodeHostWebhookProtocol } from "../hosts/webhook.js";
 import type { WebhookHost } from "../hosts/webhook-types.js";
 import { enforceRunStoreRetention } from "../observability/retention.js";
+import { agentStoresDirectoryName } from "../observability/retention-store.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
 import { runHostRunCommand } from "./commands-hosted.js";
 import { toPiprErrorResult, toPiprResult } from "./pipr-result.js";
@@ -544,7 +545,7 @@ export async function runWebhookDelivery(
         ...protocol.runtimeEnv?.(delivery.eventName),
       },
       dryRun: false,
-      piStoreRoot: path.join(runStoreDirectory, "agent-stores"),
+      piStoreRoot: path.join(runStoreDirectory, agentStoresDirectoryName),
       logSink: consoleRuntimeLogSink,
     });
   } finally {

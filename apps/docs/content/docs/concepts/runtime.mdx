@@ -63,7 +63,7 @@ For large changes, Pipr can reduce the manifest and attach bounded read tools. C
 
 Tasks run typed agents through `ctx.pi.run(...)`. Pipr selects the call override first, then the agent model and fallbacks, then the configured default provider.
 
-Agent output must match its declared schema. Invalid output can use the configured repair policy, while transient retries and fallbacks follow the agent settings. Every provider call counts toward `limits.maxAgentRuns` when that limit is set.
+Agent output must match its declared schema. Invalid output gets one repair attempt as a follow-up turn in the same conversation. Transient provider failures retry inside the agent harness before Pipr moves to the next fallback model. Each initial call, shard, repair, and fallback counts toward `limits.maxAgentRuns` when that limit is set.
 
 ## Final output
 

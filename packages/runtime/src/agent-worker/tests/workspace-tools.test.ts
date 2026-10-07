@@ -56,6 +56,21 @@ describe("workspace tools", () => {
     );
   });
 
+  it("reads a window of a large file and bounds an oversized line", async () => {
+    const lines = Array.from(
+      { length: 200_000 },
+      (_, index) => `line ${index + 1} ${"é".repeat(20)}`,
+    );
+    await writeFile(path.join(workspace, "big.txt"), `${"x".repeat(200_000)}\n${lines.join("\n")}`);
+
+    const tail = await call("read", { path: "big.txt", offset: 200_000, limit: 2 });
+    const head = await call("read", { path: "big.txt", limit: 1 });
+
+    expect(tail).toBe(`line 199999 ${"é".repeat(20)}\nline 200000 ${"é".repeat(20)}`);
+    expect(Buffer.byteLength(head.split("\n\n[")[0] ?? "", "utf8")).toBe(50 * 1024);
+    expect(head).toContain("[Showing lines 1-1 of 200001. Use offset=2 to continue.]");
+  });
+
   it("searches contents and paths without entering .git", async () => {
     expect(await call("grep", { pattern: "answer|helper" })).toBe(
       [

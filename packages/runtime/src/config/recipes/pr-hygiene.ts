@@ -7,6 +7,7 @@ export const prHygieneRecipe = {
   description: "Change request hygiene checks for tests, docs, lockfiles, and size.",
   sourceTools: ["Danger JS"],
   configTs: `import { defaultReviewActions, definePipr, md, z } from "@usepipr/sdk";
+import type { ChangedFile, DiffContext } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "medium" });
@@ -45,7 +46,17 @@ export default definePipr((pipr) => {
     }),
     tools: pipr.tools.readOnly,
     timeout: "6m",
-    prompt: () => "Check this change request for repository hygiene and merge readiness.",
+    prompt: (input: { diff: DiffContext; changedFiles: readonly ChangedFile[] }) => pipr.prompt\`
+      Check this change request for repository hygiene and merge readiness.
+
+      \${pipr.section(
+        "Changed files",
+        pipr.json({
+          count: input.changedFiles.length,
+          files: input.changedFiles.slice(0, 200).map((file) => file.status + " " + file.path),
+        }),
+      )}
+    \`,
   });
 
   pipr.task({

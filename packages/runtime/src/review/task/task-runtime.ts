@@ -1,6 +1,7 @@
 import type { PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
 import type { RuntimeTask } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
+import { providerSecretEnvNames } from "../../config/provider-credentials.js";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import { buildDiffManifest } from "../../diff/diff.js";
 import { enrichDiffManifestWithStructure } from "../../diff/manifest-structure.js";
@@ -8,6 +9,7 @@ import { createDiffStructuralAnalysisLoader } from "../../diff/structural-analys
 import type { RunObserver } from "../../observability/types.js";
 import { diffContextCoverageArtifact } from "../../pi/diff-context-coverage.js";
 import { withPiRunWorkspace } from "../../pi/runner.js";
+import type { PiRunner } from "../../pi/types.js";
 import type { PriorReviewState, PublicationPlan } from "../../publication/types.js";
 import { runLoggedPhase } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
@@ -96,7 +98,7 @@ export type ReviewRuntimeResult =
 
 export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<ReviewRuntimeResult> {
   if (options.piRunner) {
-    return await runTaskRuntimeWithPiRunner(options);
+    return await runTaskRuntimeWithPiRunner({ ...options, piRunner: options.piRunner });
   }
   return await withPiRunWorkspace(
     { workspace: options.workspace, env: options.env, storeDir: options.piStoreDir },
@@ -181,7 +183,7 @@ function asError(error: unknown): Error {
 }
 
 async function runTaskRuntimeWithPiRunner(
-  options: RunTaskRuntimeOptions,
+  options: RunTaskRuntimeOptions & { piRunner: PiRunner },
 ): Promise<ReviewRuntimeResult> {
   const runtimeStarted = Date.now();
   const config = parsePiprConfig(options.config);
@@ -420,12 +422,13 @@ async function runTaskRuntimeWithPiRunner(
 function registerProviderSecrets(config: PiprConfig, options: RunTaskRuntimeOptions): void {
   const env = options.env ?? process.env;
   for (const provider of config.providers) {
-    if (!provider.apiKeyEnv) continue;
-    const value = env[provider.apiKeyEnv];
-    if (!value) continue;
-    options.log?.addSecret(value);
-    options.secretRedactor?.addSecret(value);
-    options.runObserver?.registerSecret?.(value);
+    for (const name of providerSecretEnvNames(provider)) {
+      const value = env[name];
+      if (!value) continue;
+      options.log?.addSecret(value);
+      options.secretRedactor?.addSecret(value);
+      options.runObserver?.registerSecret?.(value);
+    }
   }
 }
 

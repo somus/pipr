@@ -32,7 +32,7 @@ Use the built-in reviewer, start from a recipe, or compose custom tasks and agen
    pipr check
    ```
 
-2. Add the model-provider secret named by the generated config. For the default GitHub setup:
+2. Add the API key for the generated config's model provider. For the default GitHub setup:
 
    ```bash
    gh secret set DEEPSEEK_API_KEY
@@ -44,7 +44,7 @@ See the [quickstart](https://pipr.run/docs/guide/quickstart) for model selection
 
 ## What you can configure
 
-- Select models, fallbacks, reasoning levels, timeouts, and retries.
+- Select models, fallbacks, reasoning levels, and timeouts.
 - Limit reviews by path or change-request event.
 - Add `@pipr` commands and custom TypeScript tasks.
 - Control inline-comment limits and summary publication.

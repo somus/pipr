@@ -14,6 +14,10 @@ export const piProviderProfileSchema = z.strictObject({
   provider: nonEmptyStringSchema,
   model: nonEmptyStringSchema,
   apiKeyEnv: piApiKeyEnvNameSchema.optional(),
+  /** Other variables the provider reads, such as an account id, forwarded to the agent worker. */
+  providerEnv: z.array(piApiKeyEnvNameSchema).optional(),
+  /** Variables that authenticate the provider in place of `apiKeyEnv`, for models using the provider's default key. */
+  credentialEnv: z.array(piApiKeyEnvNameSchema).optional(),
   thinking: piThinkingLevelSchema.optional(),
 });
 

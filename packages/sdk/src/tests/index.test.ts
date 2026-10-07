@@ -538,6 +538,30 @@ describe("definePipr", () => {
     ).toThrow("reserved");
   });
 
+  it("rejects custom tool names and descriptions a model provider cannot accept", () => {
+    const define = (name: string, description: string) => () =>
+      buildPiprPlan(
+        definePipr((pipr) => {
+          pipr.tool({
+            name,
+            description,
+            input: pipr.schemas.summary,
+            output: pipr.schemas.summary,
+            async run({ input }) {
+              return input;
+            },
+          });
+        }),
+      );
+
+    expect(define("lookup.owner", "Owner.")).toThrow(
+      "Tool name 'lookup.owner' must be 1-64 letters, digits, underscores, or hyphens",
+    );
+    expect(define("lookup_owner", "x".repeat(4097))).toThrow(
+      "Tool 'lookup_owner' description exceeds 4096 characters",
+    );
+  });
+
   it("expands the review recipe into one runnable review plan", () => {
     const factory = definePipr((pipr) => {
       const model = pipr.model("deepseek/deepseek-v4-pro", {

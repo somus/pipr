@@ -6,6 +6,7 @@ import {
   type AgentRunOutcome,
   type AgentRunRequest,
   type AgentWorkerEvent,
+  agentRunRequestSchema,
   createAgentWorkerLineDecoder,
   encodeAgentWorkerMessage,
   type SupervisorMessage,
@@ -158,6 +159,14 @@ export async function startAgentWorker(
   return {
     run(request, handlers = {}) {
       if (failure) return Promise.reject(failure);
+      // The worker treats an invalid message as fatal, so a bad request must fail here, alone.
+      const checked = agentRunRequestSchema.safeParse(request);
+      if (!checked.success) {
+        const issue = checked.error.issues[0];
+        return Promise.reject(
+          new Error(`Invalid agent run request at '${issue?.path.join(".")}': ${issue?.message}`),
+        );
+      }
       const runId = randomUUID();
       return new Promise<AgentRunOutcome>((resolve, reject) => {
         const onAbort = () => {

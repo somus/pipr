@@ -70,7 +70,7 @@ The versioned, redacted diagnostic record for one Pipr process, identified by an
 _Avoid_: Pipr Result, Review Run ID, raw session dump
 
 **Built-in Review**:
-The quick `pipr.review()` preset that runs one shardable review agent returning a summary and findings, optionally followed by a summary agent, over the same helpers custom tasks use.
+The quick `pipr.review()` preset that runs one shardable findings agent, optionally followed by a summary agent, over the same helpers custom tasks use.
 _Avoid_: configurable built-in prompt, injected reviewer
 
 **Finding Schema**:

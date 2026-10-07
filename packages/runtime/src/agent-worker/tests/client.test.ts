@@ -100,6 +100,16 @@ describe("agent worker client", () => {
     expect(client.failed).toBe(false);
   });
 
+  it("rejects an invalid run request without failing the worker", async () => {
+    const client = await start();
+
+    await expect(client.run(request("hello", { timeoutMs: 0 }))).rejects.toThrow(
+      "Invalid agent run request at 'timeoutMs'",
+    );
+    expect(client.failed).toBe(false);
+    expect(await client.run(request("hello"))).toMatchObject({ status: "done" });
+  });
+
   it("kills the worker and rejects its runs", async () => {
     const client = await start();
     const pending = client.run(

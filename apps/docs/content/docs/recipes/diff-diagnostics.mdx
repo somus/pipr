@@ -123,12 +123,12 @@ Add `--adapters none` when you only want the `.pipr` files.
 
 ## Expected output
 
-Pipr maps structured diagnostics into validated Inline Review Comments and publishes dropped-finding metadata when a diagnostic cannot anchor to the diff.
+Pipr maps structured diagnostics into validated Inline Review Comments and drops any diagnostic that cannot anchor to the diff.
 
 ## Sample output
 
 <img
-  alt="GitHub pull request showing Diff Diagnostics. Pipr maps structured diagnostics into validated Inline Review Comments and publishes dropped-finding metadata when a diagnostic cannot anchor to the diff."
+  alt="GitHub pull request showing Diff Diagnostics. Pipr maps structured diagnostics into validated Inline Review Comments and drops any diagnostic that cannot anchor to the diff."
   src="/images/pipr/recipes/diff-diagnostics.png"
 />
 
@@ -139,7 +139,7 @@ Diff Diagnostics models reviewdog-style output: the agent emits diagnostics as `
 - Keep the diagnostic schema small and deterministic so invalid-output repair stays cheap.
 - Use `suggestedFix` only when the replacement is exact for the selected range.
 - Add path filters to `ctx.change.diff(...)` when diagnostics must apply to only one language or subsystem.
-- Invalid and duplicate anchors are removed before the summary and inline output are built.
+- Invalid and duplicate anchors are removed before inline output is built.
 
 ## Next steps
 

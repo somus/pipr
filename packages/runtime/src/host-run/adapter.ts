@@ -1,4 +1,5 @@
 import { match } from "ts-pattern";
+import { missingProviderCredential } from "../config/provider-credentials.js";
 import { createAzureDevOpsHostAdapter } from "../hosts/azure-devops/adapter.js";
 import { createBitbucketHostAdapter } from "../hosts/bitbucket/adapter.js";
 import { createGiteaHostAdapter } from "../hosts/gitea/adapter.js";
@@ -13,12 +14,9 @@ export function assertTrustedHostRunProviderEnv(
   trustedConfig: PiprConfig,
 ): void {
   const resolvedEnv = env ?? process.env;
-  const missing: string[] = [];
-  for (const provider of trustedConfig.providers) {
-    if (provider.apiKeyEnv && !resolvedEnv[provider.apiKeyEnv]) {
-      missing.push(provider.apiKeyEnv);
-    }
-  }
+  const missing = trustedConfig.providers.flatMap(
+    (provider) => missingProviderCredential(provider, resolvedEnv) ?? [],
+  );
   if (missing.length > 0) {
     throw new Error(`Missing provider env vars: ${missing.join(", ")}`);
   }

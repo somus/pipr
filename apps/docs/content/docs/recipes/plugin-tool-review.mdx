@@ -83,7 +83,7 @@ export default definePipr((pipr) => {
       const review = await ctx.pi.run(reviewer, { diff, prior });
       const { findings } = ctx.review.select(review.inlineFindings);
       await ctx.comment({
-        main: md.blocks(md`## 🧭 Summary`, md.raw(review.summary.body)),
+        main: md.blocks(md`## 🧭 Summary`, review.summary.body),
         inlineFindings: findings,
       });
     },

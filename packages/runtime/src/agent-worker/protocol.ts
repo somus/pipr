@@ -33,7 +33,7 @@ const agentRunConversationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("fork"), parentKey: idSchema, parentPrompt: z.string() }),
 ]);
 
-const agentRunRequestSchema = z.strictObject({
+export const agentRunRequestSchema = z.strictObject({
   requestId: idSchema,
   conversation: agentRunConversationSchema,
   model: agentWorkerModelSchema,

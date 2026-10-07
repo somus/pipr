@@ -6,9 +6,11 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
+  type Message,
   type Provider,
 } from "@earendil-works/pi-ai";
 import { z } from "zod";
+import { messageText, offeredToolNames, systemPromptTexts } from "./model-context.js";
 
 const scriptedResponseSchema = z.union([
   z.strictObject({ text: z.string(), delayMs: z.number().int().nonnegative().optional() }),
@@ -50,8 +52,6 @@ export type ScriptedModelCall = {
   messages: Array<{ role: string; text: string }>;
 };
 
-type ContextMessage = { role: string; content?: unknown; sections?: unknown; toolsAdded?: unknown };
-
 export default async function scriptedProviders(configPath: unknown): Promise<Provider[]> {
   if (typeof configPath !== "string") {
     throw new Error("scripted provider module requires a --provider-config script path");
@@ -59,7 +59,7 @@ export default async function scriptedProviders(configPath: unknown): Promise<Pr
   const script = scriptedProviderScriptSchema.parse(await Bun.file(configPath).json());
   let callIndex = 0;
   const respond = async (
-    context: { messages: readonly ContextMessage[] },
+    context: { messages: readonly Message[] },
     modelRef: string,
     signal: AbortSignal | undefined,
   ) => {
@@ -152,49 +152,13 @@ function withEnv(text: string): string {
   );
 }
 
-function modelCall(messages: readonly ContextMessage[], model: string): ScriptedModelCall {
+function modelCall(messages: readonly Message[], model: string): ScriptedModelCall {
   return {
     model,
-    system: messages.flatMap((message) =>
-      message.role === "system" ? sectionTexts(message.sections) : [],
-    ),
-    tools: messages.flatMap((message) =>
-      message.role === "system" ? toolNames(message.toolsAdded) : [],
-    ),
+    system: systemPromptTexts(messages),
+    tools: offeredToolNames(messages),
     messages: messages
       .filter((message) => message.role !== "system")
-      .map((message) => ({ role: message.role, text: contentText(message.content) })),
+      .map((message) => ({ role: message.role, text: messageText(message.content) })),
   };
-}
-
-function toolNames(tools: unknown): string[] {
-  if (!Array.isArray(tools)) return [];
-  return tools.flatMap((tool) =>
-    typeof tool === "object" && tool !== null && typeof Reflect.get(tool, "name") === "string"
-      ? [Reflect.get(tool, "name") as string]
-      : [],
-  );
-}
-
-function sectionTexts(sections: unknown): string[] {
-  if (!Array.isArray(sections)) return [];
-  return sections.flatMap((section) =>
-    typeof section === "object" &&
-    section !== null &&
-    typeof Reflect.get(section, "content") === "string"
-      ? [Reflect.get(section, "content") as string]
-      : [],
-  );
-}
-
-function contentText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((part) =>
-      typeof part === "object" && part !== null && typeof Reflect.get(part, "text") === "string"
-        ? (Reflect.get(part, "text") as string)
-        : "",
-    )
-    .join("");
 }

@@ -14,6 +14,7 @@ import { facetsForFindingSchema, isMarkdownText, markdownString } from "@usepipr
 import { createDiffContext } from "../../diff/diff-context.js";
 import { cloneDiffManifest, projectDiffManifest } from "../../diff/manifest-projection.js";
 import type { DiffStructuralAnalysisLoader } from "../../diff/structural-analysis.js";
+import type { PiRunner } from "../../pi/types.js";
 import type { DiffManifest, PiprConfig, ProviderConfig } from "../../types.js";
 import { type AgentRunBudget, assertAgentRunCapacity } from "../agent/agent-run-budget.js";
 import { runReviewAgent } from "../agent/review-run.js";
@@ -38,6 +39,7 @@ export type CreateTaskContextOptions = TaskRuntimeRequest &
   TaskRuntimePorts & {
     config: PiprConfig;
     provider: ProviderConfig;
+    piRunner: PiRunner;
     diffManifest: DiffManifest;
     manifestCache: Map<string, DiffManifest>;
     output: OutputState;

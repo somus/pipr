@@ -3,6 +3,7 @@ import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import { createDiffContext } from "../diff/diff-context.js";
 import type { RunObserver } from "../observability/types.js";
+import { withPiRunWorkspace } from "../pi/runner.js";
 import type { PiProviderModule, PiRunner } from "../pi/types.js";
 import type {
   InlineThreadContext,
@@ -96,7 +97,21 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
   if (candidates.length === 0) {
     return { priorReviewState: prior, threadActions: [], providerModels: [] };
   }
+  if (options.piRunner) {
+    return await verifyCandidates(options, options.piRunner, prior, candidates);
+  }
+  return await withPiRunWorkspace(
+    { workspace: options.workspace, env: options.env, storeDir: options.piStoreDir },
+    async (piRunner) => await verifyCandidates(options, piRunner, prior, candidates),
+  );
+}
 
+async function verifyCandidates(
+  options: RunVerifierOptions,
+  piRunner: PiRunner,
+  prior: PriorReviewState,
+  candidates: Array<{ finding: PriorFindingRecord; thread: InlineThreadContext }>,
+): Promise<VerifierResult> {
   try {
     const outputSchema = verifierSchemaForCandidates(
       candidates.map((candidate) => candidate.finding.id),
@@ -117,7 +132,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         piProviderModule: options.piProviderModule,
         piAuthFile: options.piAuthFile,
         piStoreDir: options.piStoreDir,
-        piRunner: options.piRunner,
+        piRunner,
         run: options.run,
         log: options.log,
         runObserver: options.runObserver,

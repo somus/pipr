@@ -77,7 +77,7 @@ export default definePipr((pipr) => {
     render: ({ findings, summary }, context) => ({
       main: md.blocks(
         md`## 🧭 Summary`,
-        md.raw(summary?.body ?? ""),
+        summary?.body,
         findings.length > 0 ? md`## ⚠️ Findings` : "",
         findings.length === 0
           ? ""
@@ -156,7 +156,7 @@ Pipr publishes bug-focused review output with bounded inline comments. Use the c
 
 ## Recipe notes
 
-Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by default. It also declares a fallback model profile so transient provider failures can retry without changing the task.
+Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by default. It also declares a fallback model profile that Pipr uses when the primary model still fails after the agent harness retries transient provider errors.
 
 - Expand `paths.exclude` for generated files, snapshots, vendored code, or fixtures that produce noisy findings.
 - Keep the `@pipr bugs` command trigger for manual reruns on risky PRs that did not need a full review.

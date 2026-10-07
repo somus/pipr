@@ -57,7 +57,7 @@ const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
 Pipr passes provider and model IDs to Pi. [Browse Pi's Model Catalog](https://pi.dev/models) for current identifiers, providers, context limits, and pricing. Use `id` only when you configure the same provider and model with different API keys or thinking levels. `pipr.secret({ name })` stores only the environment variable name. It does not read or serialize the secret during plan creation.
 
-Omit `apiKey` only for a model that a local Review Task selects through local Pi authentication. Hosted runs don't receive your Pi agent directory, so hosted model selections must declare `apiKey`.
+Omit `apiKey` to read the provider's standard environment variable, such as `DEEPSEEK_API_KEY` for `deepseek/...`. Pass `apiKey: pipr.secret({ name })` to read a different variable. Config loading fails when you omit `apiKey` for a provider without a standard API-key variable. Pass `apiKey: "local"` only for a model that local runs select through local Pi login credentials. Hosted runs don't receive your Pi agent directory, so hosted model selections must not use `"local"`.
 
 ## Review preset
 
@@ -426,12 +426,12 @@ Each selected run must emit exactly one final output. Use `ctx.comment(value)` f
 Use `ctx.comment(...)` for Main Review Comment markdown. Build Markdown with `md`: interpolated values are escaped so model-authored text cannot inject raw HTML or hidden Pipr markers, while values produced by `md` are inserted as-is.
 
 ```ts
-await ctx.comment(md.blocks(md`## Security review`, md`${result.summary}`, md.list(result.notes)));
+await ctx.comment(md.blocks(md`## Security review`, result.summary.body, md.list(notes)));
 ```
 
 | Helper | Output |
 | --- | --- |
-| ``md`...` `` | Dedented Markdown with escaped interpolations. |
+| ``md`...` `` | Markdown with escaped interpolations. The template is dedented; interpolated text keeps its own whitespace. |
 | `md.raw(value)` | Trusted Markdown, inserted without escaping. |
 | `md.line(value)` | One escaped line. |
 | `md.label(value)` | `test-coverage` as `Test coverage`. |
@@ -472,7 +472,7 @@ Subjective labels such as severity, confidence, or category are not part of the 
 
 ## Tools
 
-`pipr.tool(...)` defines typed model-facing tools.
+`pipr.tool(...)` defines typed model-facing tools. Names use 1-64 letters, digits, underscores, or hyphens, and descriptions are at most 4096 characters; other values fail when the config loads.
 
 ```ts
 const lookupOwner = pipr.tool({
@@ -613,7 +613,7 @@ These limits control runtime timeout, provider-call count, and Diff Manifest pro
 
 `ctx.pi.run(agent, input, { maxShards })` overrides `limits.diffManifest.maxShards` for that invocation. Omit it to inherit the global value; set it to `1` to disable splitting for only that call.
 
-Each shard, output repair, retry, and fallback consumes one agent run. Increase `maxShards` only when a reduced unit still exceeds the provider context limit.
+Each shard, output repair, and fallback consumes one agent run. Transient provider retries inside the agent harness do not. Increase `maxShards` only when a reduced unit still exceeds the provider context limit.
 
 ## Results and run bundles
 

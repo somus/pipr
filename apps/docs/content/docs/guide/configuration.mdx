@@ -1,6 +1,6 @@
 ---
 title: "Configuration"
-description: "Configure Pipr models, review scope, publication, limits, and retries."
+description: "Configure Pipr models, review scope, publication, limits, and fallbacks."
 ---
 
 Pipr loads repository-owned policy from `.pipr/config.ts`. Start with `pipr.review(...)`; move to custom agents and tasks only when the default review cannot express the workflow.
@@ -37,7 +37,7 @@ Run `pipr check` after editing the config and `pipr inspect` to review the resol
 
 ## Models and secrets
 
-Model profiles select a Pi provider and model. `pipr.secret(...)` records an environment-variable name; pass the value through the local process, CI secret store, or webhook worker environment.
+Model profiles select a Pi provider and model. Without `apiKey`, Pipr reads the provider's standard environment variable, such as `DEEPSEEK_API_KEY`. Providers with other credential sources also accept those, such as AWS access keys for Amazon Bedrock, and providers that need more settings read them from their standard variables too, such as `CLOUDFLARE_ACCOUNT_ID`. Pass `apiKey: pipr.secret({ name })` to read a different variable; that variable must then be set. `pipr.secret(...)` records only the variable name; pass the value through the local process, CI secret store, or webhook worker environment.
 
 ```ts twoslash
 // @include: pipr-builder
@@ -48,7 +48,7 @@ Use an explicit `id` only when multiple profiles use the same provider and model
 
 ### Use local Pi authentication
 
-For local-only subscription authentication, omit `apiKey` and select that model only when `ctx.run.trigger === "local"`. Hosted runs do not receive your local Pi agent directory, so they must select a profile with an environment-backed key.
+For local-only subscription authentication, pass `apiKey: "local"` and select that model only when `ctx.run.trigger === "local"`. Hosted runs do not receive your local Pi agent directory, so they must select a profile with an environment-backed key.
 
 See [Local runs](/docs/guide/local-runs#model-authentication) for directory resolution and trust behavior.
 
@@ -113,9 +113,9 @@ pipr.config({
 });
 ```
 
-`maxAgentRuns` counts initial calls, large-diff shards, retries, repairs, and fallbacks. `maxShards: 1` disables automatic splitting for review-schema agents.
+`maxAgentRuns` counts initial calls, large-diff shards, repairs, and fallbacks. Transient provider retries inside the agent harness are not counted. `maxShards: 1` disables automatic splitting for review-schema agents.
 
-## Configure fallback and retry
+## Configure fallback models
 
 An agent can declare fallback models:
 

@@ -40,11 +40,11 @@ Reference provider credentials by environment-variable name:
 const model = pipr.model("deepseek/deepseek-v4-pro");
 ```
 
-Pass the value from the CI or worker secret store. Do not place credentials or private operational notes in config values, prompts, schema metadata, examples, or generated documentation.
+Without `apiKey`, this model reads `DEEPSEEK_API_KEY`, the provider's standard variable. Use `apiKey: pipr.secret({ name })` to read a different variable. Pass the value from the CI or worker secret store. Do not place credentials or private operational notes in config values, prompts, schema metadata, examples, or generated documentation.
 
 ## Model workspace
 
-Pi receives read-only tools and a read-only copy of the reviewed workspace. Bounded diff tools can read manifest ranges and base or head snapshots when a reduced manifest needs more context. They do not expose shell or write operations.
+Agents run in a separate low-privilege `pipr agent-worker` process over a read-only copy of the reviewed workspace. The worker receives only the selected model's API key, never code-host tokens. It installs only Pipr-owned read-only tools: path-scoped `read`, `grep`, `find`, and `ls`, plus bounded diff tools that read manifest ranges and base or head snapshots when a reduced manifest needs more context. Plugin tools run in the Pipr supervisor process. No shell or write tools are installed.
 
 Path filters limit changed-code context and publishable findings. They are not a repository-access sandbox, so the model can still inspect related files through allowed read tools.
 

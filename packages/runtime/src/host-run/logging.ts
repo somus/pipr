@@ -1,3 +1,4 @@
+import { providerSecretEnvNames } from "../config/provider-credentials.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import { runLoggedPhase, shortSha } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
@@ -51,8 +52,8 @@ export function addProviderSecrets(
   env: NodeJS.ProcessEnv | undefined,
 ): void {
   for (const provider of config.providers) {
-    if (provider.apiKeyEnv) {
-      log.addSecret((env ?? process.env)[provider.apiKeyEnv]);
+    for (const name of providerSecretEnvNames(provider)) {
+      log.addSecret((env ?? process.env)[name]);
     }
   }
 }

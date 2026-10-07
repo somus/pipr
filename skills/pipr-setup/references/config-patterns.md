@@ -201,10 +201,14 @@ Use required checks only when the user wants merge-gate behavior. Use comments f
 
 ## Secrets
 
-Use only secret names in config:
+A model without `apiKey` reads its provider's standard variable, such as `DEEPSEEK_API_KEY` for `deepseek/...`. Use `pipr.secret(...)` only to read a different variable name, and use only secret names in config:
 
 ```ts
-apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" });
+const model = pipr.model("deepseek/deepseek-v4-pro", {
+  apiKey: pipr.secret({ name: "PIPR_DEEPSEEK_API_KEY" }),
+});
 ```
+
+Config loading fails for a provider without a standard API-key variable unless the model sets `apiKey`. `apiKey: "local"` uses local Pi login credentials and works only for `pipr review`.
 
 Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab CI uses masked CI/CD variables, while a GitLab Self-Managed webhook runner also sets `GITLAB_API_URL` to its REST v4 root. Azure DevOps Server webhook runners set `AZURE_DEVOPS_COLLECTION_URL` and the matching `AZURE_DEVOPS_API_VERSION`; Azure DevOps Services, Bitbucket, Gitea, Forgejo, and Codeberg webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.

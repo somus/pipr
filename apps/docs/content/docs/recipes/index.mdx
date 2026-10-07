@@ -20,7 +20,7 @@ Choose the smallest workflow that matches the review job.
 
 | Recipe | Purpose |
 | --- | --- |
-| [Default Review](/docs/recipes/default-review) | Start with one general change request review that runs a findings agent and an optional summary agent from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded. |
+| [Default Review](/docs/recipes/default-review) | Start with one general change request review that runs a findings agent and a summary agent from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded. |
 | [Bug Hunter](/docs/recipes/bug-hunter) | Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with findings and summary agents tuned for actionable bug reports. |
 | [Structured Review](/docs/recipes/rich-review) | Run a general review that captures severity and category metadata before publishing validated inline comments. |
 | [Fix Suggestions](/docs/recipes/fix-suggestions) | Run a command-triggered improvement pass that publishes only exact suggested fixes maintainers can apply from review. |
@@ -34,7 +34,7 @@ Choose the smallest workflow that matches the review job.
 | [Plugin Tool Review](/docs/recipes/plugin-tool-review) | Define a typed R2-backed memory plugin, let reviewers search durable project context, and let maintainers explicitly curate bounded lessons with `@pipr remember`. |
 | [PR Briefing](/docs/recipes/pr-briefing) | Generate a PR-Agent describe-style overview that summarizes intent, changed areas, reviewer risks, and walkthrough notes as a main comment. |
 | [Interactive Ask](/docs/recipes/interactive-ask) | Add a free-form `@pipr` command that answers maintainer questions using the diff, prior Pipr review state, and bounded repository context. |
-| [Changelog Draft](/docs/recipes/changelog-draft) | Draft release-note style changelog entries from change request changes and publish them as a command response comment. |
+| [Changelog Draft](/docs/recipes/changelog-draft) | Draft a release-note style changelog entry from change request changes and publish it as a Main Review Comment. |
 
 ## Common setup
 
@@ -47,7 +47,7 @@ npm install -D @usepipr/sdk
 
 Tune the generated config before enabling automatic review:
 
-- Change the model provider and `apiKey` secret name before committing the config.
+- Change the model provider before committing the config. Pipr reads the provider's standard API key variable, such as `DEEPSEEK_API_KEY`, unless the model sets `apiKey`; keep the workflow environment in sync.
 - Run `pipr inspect` after edits to confirm models, tasks, commands, and tools.
 - Use `--adapters none` when you want only the `.pipr` config files.
 - Run `pipr review --base <ref>` before publishing.

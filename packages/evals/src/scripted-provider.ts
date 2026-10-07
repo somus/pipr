@@ -8,6 +8,7 @@ import {
   type Message,
   type Provider,
 } from "@earendil-works/pi-ai";
+import { messageText, systemPromptTexts } from "@usepipr/runtime/internal/testing";
 import * as z from "zod";
 
 const promptEvalProviderConfigSchema = z.strictObject({
@@ -48,21 +49,10 @@ export default async function promptEvalProviders(configPath: unknown): Promise<
 /** The prompt is the latest user turn; the system prompt joins every system message's text and sections. */
 function modelCall(messages: readonly Message[]): ModelCall {
   const prompt = messages.findLast((message) => message.role === "user");
-  const system = messages.flatMap((message) =>
-    message.role === "system"
-      ? [
-          textOf(message.content),
-          ...Object.values(message.sections ?? {}).filter((text) => text !== null),
-        ]
-      : [],
-  );
-  return { prompt: prompt ? textOf(prompt.content) : "", systemPrompt: system.join("\n") };
-}
-
-function textOf(content: string | ReadonlyArray<{ type: string; text?: string }>): string {
-  return typeof content === "string"
-    ? content
-    : content.flatMap((part) => (part.type === "text" && part.text ? [part.text] : [])).join("");
+  return {
+    prompt: prompt ? messageText(prompt.content) : "",
+    systemPrompt: systemPromptTexts(messages).join("\n"),
+  };
 }
 
 const markerReviews: MarkerReview[] = [

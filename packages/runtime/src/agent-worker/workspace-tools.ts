@@ -47,28 +47,28 @@ function readTool(cwd: string): ToolRegistration {
     }),
     execute: async (args) => {
       const target = await workspaceTarget(cwd, args.path);
-      const lines = (await Bun.file(target).text()).split("\n");
       const start = (args.offset ?? 1) - 1;
-      if (start >= lines.length) {
+      const window = await readLineWindow(
+        target,
+        start,
+        Math.min(args.limit ?? maxReadLines, maxReadLines),
+      );
+      if (start >= window.totalLines) {
         throw new Error(
-          `Offset ${args.offset} is beyond end of file (${lines.length} lines total)`,
+          `Offset ${args.offset} is beyond end of file (${window.totalLines} lines total)`,
         );
       }
-      const end = Math.min(
-        lines.length,
-        start + Math.min(args.limit ?? maxReadLines, maxReadLines),
-      );
-      const { text, shownLines } = boundLines(lines.slice(start, end));
+      const { text, shownLines } = boundLines(window.lines);
       const lastShown = start + shownLines;
       const remark =
-        lastShown < lines.length
-          ? `\n\n[Showing lines ${start + 1}-${lastShown} of ${lines.length}. Use offset=${lastShown + 1} to continue.]`
+        lastShown < window.totalLines
+          ? `\n\n[Showing lines ${start + 1}-${lastShown} of ${window.totalLines}. Use offset=${lastShown + 1} to continue.]`
           : "";
       return textResult(`${text}${remark}`, {
         path: args.path,
         startLine: start + 1,
         endLine: lastShown,
-        totalLines: lines.length,
+        totalLines: window.totalLines,
       });
     },
   }) as unknown as ToolRegistration;
@@ -210,6 +210,43 @@ function limitedListResult(output: string, limit: number, empty: string): TextRe
     ? `\n\n[Showing ${shownLines} of ${lines.length} lines. Narrow the search to see more.]`
     : "";
   return textResult(`${text}${remark}`, { count: lines.length, truncated });
+}
+
+/**
+ * Streams a file and keeps only lines `[start, start + count)`, so a huge file costs a scan rather than its size in
+ * memory. Kept text stops growing past the output limit; `boundLines` cuts it to that limit anyway.
+ */
+async function readLineWindow(
+  target: string,
+  start: number,
+  count: number,
+): Promise<{ lines: string[]; totalLines: number }> {
+  const lines: string[] = [];
+  let kept = 0;
+  let lineIndex = 0;
+  let current = "";
+  const take = (text: string) => {
+    if (lineIndex < start || lineIndex >= start + count || kept >= maxOutputBytes) return;
+    const piece = text.slice(0, maxOutputBytes - kept);
+    current += piece;
+    kept += piece.length;
+  };
+  const endLine = () => {
+    if (lineIndex >= start && lineIndex < start + count) lines.push(current);
+    current = "";
+    lineIndex += 1;
+  };
+  const decoder = new TextDecoder();
+  for await (const chunk of Bun.file(target).stream()) {
+    const parts = decoder.decode(chunk, { stream: true }).split("\n");
+    for (let index = 0; index < parts.length; index += 1) {
+      if (index > 0) endLine();
+      take(parts[index] ?? "");
+    }
+  }
+  take(decoder.decode());
+  endLine();
+  return { lines, totalLines: lineIndex };
 }
 
 function boundLines(lines: string[]): { text: string; shownLines: number } {

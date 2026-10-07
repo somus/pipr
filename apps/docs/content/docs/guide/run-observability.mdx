@@ -34,7 +34,7 @@ pipr runs list --pr 123
 Outside a checkout, pass the full change-request URL:
 
 ```bash
-pipr runs list --url "$GITHUB_CHANGE_REQUEST_URL"
+pipr runs list --pr "$GITHUB_CHANGE_REQUEST_URL"
 ```
 
 Set `PIPR_GITHUB_TOKEN` or `GITHUB_TOKEN` with Actions read access when the artifact is not anonymously readable.
@@ -73,11 +73,10 @@ Pass `--identity <path>` for encrypted diagnostics. Pipr rejects invalid package
 
 ## Download a validated bundle
 
-Download and unpack a GitHub Actions package:
+Download and unpack a GitHub Actions package by execution ID, as reported by `pipr runs list` or `pipr runs show`:
 
 ```bash
-pipr runs download \
-  --pr 123 \
+pipr runs download 0123456789abcdef0123456789abcdef \
   --identity ~/.local/state/pipr/keys/run-observability.agekey \
   --output .pipr-runs/downloaded
 ```
@@ -104,8 +103,8 @@ Operational settings stay outside `.pipr/config.ts`:
 | `PIPR_RUN_AGE_RECIPIENTS` | Encrypt GitHub diagnostics for one or more recipients |
 | `PIPR_RUN_AGE_IDENTITY` | Select the default local identity |
 | `PIPR_RUN_STORE_DIR` | Select the local or webhook store |
-| `PIPR_RUN_RETENTION_DAYS` | Set webhook retention |
-| `PIPR_RUN_MAX_BYTES` | Set the webhook store quota |
+| `PIPR_RUN_RETENTION_DAYS` | Set webhook retention, for run bundles and per-change-request agent conversation stores |
+| `PIPR_RUN_MAX_BYTES` | Set the webhook store quota, counting both |
 
 Recipient rotation affects future runs only. Keep old identities through the provider retention period when older diagnostics remain useful.
 

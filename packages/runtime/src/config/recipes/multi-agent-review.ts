@@ -100,7 +100,7 @@ export default definePipr((pipr) => {
       const { findings } = ctx.review.select(result.inlineFindings);
       ctx.check.pass("Multi-agent review completed.");
       await ctx.comment({
-        main: md.blocks(md\`## 🧭 Summary\`, md.raw(result.summary.body)),
+        main: md.blocks(md\`## 🧭 Summary\`, result.summary.body),
         inlineFindings: findings,
       });
     },

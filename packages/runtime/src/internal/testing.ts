@@ -2,6 +2,11 @@
 
 export { scriptedProviderModulePath } from "../agent-worker/entry-paths.js";
 export {
+  messageText,
+  offeredToolNames,
+  systemPromptTexts,
+} from "../agent-worker/model-context.js";
+export {
   agentWorkerProtocolVersion,
   agentWorkspaceToolNames,
 } from "../agent-worker/protocol.js";

@@ -97,19 +97,27 @@ function tableCell(value: unknown): string {
   return oneLine(value).replaceAll("|", "\\|");
 }
 
+const placeholder = (index: number) => `\uE000${index}\uE000`;
+
+/**
+ * Indentation, blank-line, and edge whitespace cleanup applies to the template only: interpolated values stand in as
+ * placeholders until it is done, so tabs, indented code, and blank lines inside model-authored text survive. Empty
+ * values are dropped first so an omitted optional value does not leave a gap.
+ */
 const tag = (strings: TemplateStringsArray, ...values: unknown[]): MarkdownText => {
-  let text = "";
+  const rendered = values.map(interpolate);
+  let template = "";
   for (let index = 0; index < strings.length; index += 1) {
-    text += strings[index] ?? "";
-    if (index < values.length) {
-      text += interpolate(values[index]);
+    template += strings[index] ?? "";
+    if (index < rendered.length && rendered[index]) {
+      template += placeholder(index);
     }
   }
-  return markdownText(
-    stripCommonIndent(text)
-      .replace(/\n{3,}/g, "\n\n")
-      .trim(),
-  );
+  const text = stripCommonIndent(template)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .replace(/\uE000(\d+)\uE000/g, (_match, index: string) => rendered[Number(index)] ?? "");
+  return markdownText(text);
 };
 
 /** Markdown template tag that escapes interpolated values, with structural helpers. */

@@ -44,7 +44,7 @@ export default definePipr((pipr) => {
       const diff = await ctx.change.diff({ compressed: true });
       const prior = await ctx.review.prior();
       const answer = await ctx.pi.run(askAgent, { question: input.question, diff, prior });
-      await ctx.command.reply(md.blocks(md\`## ℹ️ Answer\`, md.raw(answer.body)));
+      await ctx.command.reply(md.blocks(md\`## ℹ️ Answer\`, answer.body));
     },
   });
 });

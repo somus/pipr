@@ -10,7 +10,6 @@ import {
 import type { AgentAttemptType, RunAgentAttemptObserver } from "../../observability/types.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
 import { ProviderExecutionError } from "../../pi/provider-failure.js";
-import { runPi } from "../../pi/runner.js";
 import type { PiConversation, PiRunOptions, PiRunResult } from "../../pi/types.js";
 import { boundedLogSnippet, type RuntimeLog } from "../../shared/logging.js";
 import type { ProviderConfig } from "../../types.js";
@@ -62,7 +61,7 @@ export async function runPiAttempt(
   logPiStart(options, provider, call.prompt, tools, attempt);
   let result: PiRunResult;
   try {
-    result = await (options.runtime.piRunner ?? runPi)({
+    result = await options.runtime.piRunner({
       workspace: options.runtime.workspace,
       provider,
       prompt: call.prompt,
@@ -311,7 +310,12 @@ function effectiveTimeoutSeconds(
   timeout: DurationInput | undefined,
   fallback: number | undefined,
 ): number | undefined {
-  return timeout === undefined ? fallback : parseDurationSeconds(timeout);
+  if (timeout === undefined) return fallback;
+  const seconds = parseDurationSeconds(timeout);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(`Agent timeout '${timeout}' must be greater than zero`);
+  }
+  return seconds;
 }
 
 function parseDurationSeconds(value: DurationInput): number {

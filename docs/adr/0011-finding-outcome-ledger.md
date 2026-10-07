@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Amends [ADR 0009](./0009-protected-public-repository-run-observability.md).
+Accepted, not yet implemented. Amends
+[ADR 0009](./0009-protected-public-repository-run-observability.md).
 
 ## Context
 

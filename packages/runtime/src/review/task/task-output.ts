@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   CheckHandle,
   DroppedReviewFinding,
@@ -524,13 +525,14 @@ export function recordFindingFacets(
     return;
   }
   for (const finding of findings) {
-    state.findingFacets.set(findingLocationKey(finding), findingFacetValues(finding, facets));
+    state.findingFacets.set(findingFacetKey(finding), findingFacetValues(finding, facets));
   }
 }
 
-/** Location key shared by facet tracking and outcome events. */
-function findingLocationKey(finding: ReviewFinding): string {
-  return [finding.path, finding.side, finding.startLine, finding.endLine].join(":");
+/** Identifies one finding for facet tracking and outcome events; findings on the same lines differ by body. */
+function findingFacetKey(finding: ReviewFinding): string {
+  const body = createHash("sha256").update(finding.body).digest("hex").slice(0, 16);
+  return [finding.path, finding.side, finding.startLine, finding.endLine, body].join(":");
 }
 
 function canonicalFindingProjection(finding: ReviewFinding): ReviewFinding {

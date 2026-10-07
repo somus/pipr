@@ -342,7 +342,7 @@ Options:
 | `--head <sha>` | working tree | Head commit, branch, or ref. Omit to include staged and unstaged tracked-file edits. |
 | `--config-dir <dir>` | `.pipr` | Config directory to load. |
 | `--trace [path]` | disabled | Capture a diagnostic bundle. A bare flag uses the platform Pipr state directory. |
-| `--pi-auth-file <path>` | `$PI_CODING_AGENT_DIR/auth.json` or `$HOME/.pi/agent/auth.json` | Pi auth file for models without `apiKey`. |
+| `--pi-auth-file <path>` | `$PI_CODING_AGENT_DIR/auth.json` or `$HOME/.pi/agent/auth.json` | Pi auth file for models declared with `apiKey: "local"`. |
 | `--provider-module <path>` | none | Module whose default export returns replacement model providers. For scripted test fixtures only. |
 | `--provider-config <path>` | none | Path passed to the `--provider-module` default export. |
 | `--json` | false | Print structured local review output. |

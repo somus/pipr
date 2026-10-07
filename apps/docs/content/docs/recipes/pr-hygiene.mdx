@@ -33,6 +33,7 @@ These are the complete files written by `pipr init --recipe pr-hygiene`:
 
 ```ts title=".pipr/config.ts"
 import { defaultReviewActions, definePipr, md, z } from "@usepipr/sdk";
+import type { ChangedFile, DiffContext } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "medium" });
@@ -71,7 +72,17 @@ export default definePipr((pipr) => {
     }),
     tools: pipr.tools.readOnly,
     timeout: "6m",
-    prompt: () => "Check this change request for repository hygiene and merge readiness.",
+    prompt: (input: { diff: DiffContext; changedFiles: readonly ChangedFile[] }) => pipr.prompt`
+      Check this change request for repository hygiene and merge readiness.
+
+      ${pipr.section(
+        "Changed files",
+        pipr.json({
+          count: input.changedFiles.length,
+          files: input.changedFiles.slice(0, 200).map((file) => file.status + " " + file.path),
+        }),
+      )}
+    `,
   });
 
   pipr.task({
@@ -196,7 +207,7 @@ Pipr publishes file-level hygiene status plus exact-line findings and returns a 
 
 ## Recipe notes
 
-PR Hygiene reviews the shape of the change request: tests, docs, lockfiles, generated files, and size. It reads both `changedFiles` and the Diff Manifest so it can reason about file-level signals and changed code.
+PR Hygiene reviews the shape of the change request: tests, docs, lockfiles, generated files, and size. It passes both `changedFiles` and the Diff Manifest to the agent so it can reason about file-level signals and changed code.
 
 - Customize the instructions with your repository's release-note, migration, generated-code, and test expectations.
 - Keep the check non-required until maintainers agree which hygiene findings must block merge.

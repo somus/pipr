@@ -7,8 +7,17 @@ import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js"
 import { createScriptedPi, type ScriptedPi } from "../../tests/helpers/scripted-pi.js";
 import { parsePiProviderProfile } from "../contract.js";
 import { ProviderExecutionError } from "../provider-failure.js";
-import { createDurablePiRunner, runPi, withPiRunWorkspace } from "../runner.js";
-import type { PiRunOptions } from "../types.js";
+import { createDurablePiRunner, withPiRunWorkspace } from "../runner.js";
+
+/** One model call in a runner of its own. */
+async function runPi(options: PiRunOptions): Promise<PiRunResult> {
+  return await withPiRunWorkspace(
+    { workspace: options.workspace, env: options.env },
+    async (runner) => await runner(options),
+  );
+}
+
+import type { PiRunOptions, PiRunResult } from "../types.js";
 
 const directories: string[] = [];
 

@@ -50,7 +50,7 @@ export default definePipr((pipr) => {
     render: ({ findings, summary }, context) => ({
       main: md.blocks(
         md\`## 🧭 Summary\`,
-        md.raw(summary?.body ?? ""),
+        summary?.body,
         findings.length > 0 ? md\`## ⚠️ Findings\` : "",
         findings.length === 0
           ? ""

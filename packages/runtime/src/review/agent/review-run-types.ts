@@ -35,7 +35,8 @@ export type RunReviewAgentOptions = {
     piProviderModule?: PiProviderModule;
     piAuthFile?: string;
     piStoreDir?: string;
-    piRunner?: PiRunner;
+    /** Shares one worker and conversation store across a run, so repair can continue a conversation. */
+    piRunner: PiRunner;
     /** Fork from a parent conversation holding the shared change context, so sibling calls share its cache prefix. */
     forkSharedContext?: boolean;
     taskContext?: TaskContext;

@@ -110,7 +110,7 @@ export default definePipr((pipr) => {
         inlineFindings: accepted.map((suggestion) => ({
           ...suggestion,
           body: String(
-            md\`**\${md.label(suggestion.category)}:** \${suggestion.title}. \${md.raw(suggestion.body)}\`,
+            md\`**\${md.label(suggestion.category)}:** \${suggestion.title}. \${suggestion.body}\`,
           ),
         })),
       });

@@ -46,9 +46,9 @@ The top-level `formatVersion` is currently `2`. Check it before reading other fi
 
 ## Model authentication
 
-Models with `apiKey` read the declared secret from the local process environment. Bun also loads standard environment files from the working directory.
+Models read their API key from the local process environment: the variable named by `apiKey: pipr.secret({ name })`, or the provider's standard variable, such as `DEEPSEEK_API_KEY`, when `apiKey` is omitted. Bun also loads standard environment files from the working directory.
 
-Models without `apiKey` use the Pi auth file from:
+Models declared with `apiKey: "local"` use the Pi auth file from:
 
 1. `--pi-auth-file`
 2. `$PI_CODING_AGENT_DIR/auth.json`

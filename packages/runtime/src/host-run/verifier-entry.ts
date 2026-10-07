@@ -1,4 +1,5 @@
 import type { PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
+import { providerSecretEnvNames } from "../config/provider-credentials.js";
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
 import { resolveProvider } from "../review/agent/prompt-assembly.js";
@@ -257,12 +258,13 @@ function registerVerifierProviderSecrets(
   log: RuntimeLog,
 ): void {
   for (const provider of config.providers) {
-    if (!provider.apiKeyEnv) continue;
-    const value = ports.env[provider.apiKeyEnv];
-    if (!value) continue;
-    log.addSecret(value);
-    ports.secretRedactor?.addSecret(value);
-    ports.runObserver?.registerSecret?.(value);
+    for (const name of providerSecretEnvNames(provider)) {
+      const value = ports.env[name];
+      if (!value) continue;
+      log.addSecret(value);
+      ports.secretRedactor?.addSecret(value);
+      ports.runObserver?.registerSecret?.(value);
+    }
   }
 }
 

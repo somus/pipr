@@ -37,6 +37,9 @@ import type { DiffManifestLimits, RuntimeLimits } from "./types/manifest.js";
 import type { PiprBuilder, PiprPlugin } from "./types/task.js";
 import { defaultReviewActions } from "./types/task.js";
 
+/** Longest tool description a model provider is sent. */
+const maxToolDescriptionLength = 4096;
+
 /** Defines a synchronous pipr configuration factory. */
 export function definePipr(configure: (pipr: PiprBuilder) => void): {
   readonly kind: "pipr.config-factory";
@@ -181,6 +184,16 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
     tool(definition) {
       if (definition.name === "readOnly") {
         throw new Error("Tool name 'readOnly' is reserved for pipr built-in tools");
+      }
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(definition.name)) {
+        throw new Error(
+          `Tool name '${definition.name}' must be 1-64 letters, digits, underscores, or hyphens`,
+        );
+      }
+      if ((definition.description?.length ?? 0) > maxToolDescriptionLength) {
+        throw new Error(
+          `Tool '${definition.name}' description exceeds ${maxToolDescriptionLength} characters`,
+        );
       }
       const run = definition.run;
       if (!run) {

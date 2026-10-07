@@ -170,13 +170,24 @@ function handleMessage(
   void run.done.finally(() => runs.delete(message.runId));
 }
 
+type Cancellation = {
+  reason?: "aborted" | "timeout";
+  conversation?: Conversation;
+  /** Context of the submission; cancelled when a second cancel finds the run still waiting. */
+  context: Context;
+};
+
 function startRun(worker: WorkerState, runId: string, request: AgentRunRequest): ActiveRun {
   const started = Date.now();
-  const cancellation: { reason?: "aborted" | "timeout"; conversation?: Conversation } = {};
+  const waiting = withCancel(BACKGROUND_CONTEXT);
+  const cancellation: Cancellation = { context: waiting.context };
+  // The first cancel aborts the conversation; a repeated cancel, such as the supervisor's backstop after the worker's
+  // own timeout, also stops waiting so the run settles even when the provider ignores the abort.
   const cancel = (reason: "aborted" | "timeout") => {
-    if (cancellation.reason) return;
-    cancellation.reason = reason;
+    const repeated = cancellation.reason !== undefined;
+    cancellation.reason ??= reason;
     void cancellation.conversation?.abort(BACKGROUND_CONTEXT).catch(() => undefined);
+    if (repeated) waiting.cancel(new Error(cancellationMessage(cancellation.reason, request)));
   };
   const timer =
     request.timeoutMs === undefined
@@ -197,7 +208,7 @@ async function executeRun(
   worker: WorkerState,
   runId: string,
   request: AgentRunRequest,
-  cancellation: { reason?: "aborted" | "timeout"; conversation?: Conversation },
+  cancellation: Cancellation,
   started: number,
 ): Promise<AgentRunOutcome> {
   const context = BACKGROUND_CONTEXT;
@@ -251,12 +262,24 @@ async function executeRun(
         started,
       );
     }
-    const { context: runContext } = withCancel(context);
-    const submission = await conversation.submit(
-      { type: "input", content: request.prompt, requestId: submissionRequestId },
-      runContext,
-    );
-    const settled = await submission.wait(runContext);
+    let settled: SettledSubmissionRecord;
+    try {
+      const submission = await conversation.submit(
+        { type: "input", content: request.prompt, requestId: submissionRequestId },
+        cancellation.context,
+      );
+      // A cancel that arrived while submitting found no running work to abort.
+      if (cancellation.reason) await conversation.abort(context).catch(() => undefined);
+      settled = await submission.wait(cancellation.context);
+    } catch (error) {
+      if (!cancellation.reason) throw error;
+      await recordFailure(worker.harness, request.requestId, context);
+      return failedOutcome(
+        cancellation.reason,
+        cancellationMessage(cancellation.reason, request),
+        started,
+      );
+    }
     if (settled.status !== "done" || settled.answer === undefined) {
       await recordFailure(worker.harness, request.requestId, context);
     }

@@ -13,6 +13,9 @@ export type StoredRun = {
   removed?: boolean;
 };
 
+/** Run store subdirectory holding per-change-request agent conversation stores (`<host>/<repo>/<number>`). */
+export const agentStoresDirectoryName = "agent-stores";
+
 export async function readStoredRuns(rootDirectory: string): Promise<StoredRun[]> {
   await ensureRealDirectory(rootDirectory);
   const entries = await readdir(rootDirectory, { withFileTypes: true, encoding: "utf8" });
@@ -20,6 +23,56 @@ export async function readStoredRuns(rootDirectory: string): Promise<StoredRun[]
     (entry) => entry.isDirectory() && /^[a-f0-9]{32}$/.test(entry.name),
   );
   return await Promise.all(runEntries.map((entry) => readStoredRun(rootDirectory, entry.name)));
+}
+
+/**
+ * Agent conversation stores, one retention unit per change request. Their age is their last write, so a change request
+ * that keeps receiving pushes keeps its conversations.
+ */
+export async function readAgentStores(rootDirectory: string): Promise<StoredRun[]> {
+  const storesRoot = path.join(rootDirectory, agentStoresDirectoryName);
+  const units: StoredRun[] = [];
+  for (const host of await subdirectories(storesRoot)) {
+    for (const repository of await subdirectories(path.join(storesRoot, host))) {
+      for (const change of await subdirectories(path.join(storesRoot, host, repository))) {
+        const directory = path.join(storesRoot, host, repository, change);
+        const [bytes, lastWrite] = await Promise.all([
+          directoryBytes(directory),
+          latestModification(directory),
+        ]);
+        units.push({
+          executionId: path.posix.join(agentStoresDirectoryName, host, repository, change),
+          directory,
+          active: false,
+          completedAt: lastWrite,
+          bytes,
+        });
+      }
+    }
+  }
+  return units;
+}
+
+async function subdirectories(directory: string): Promise<string[]> {
+  try {
+    const entries = await readdir(directory, { withFileTypes: true, encoding: "utf8" });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch (error) {
+    if (isMissingFileError(error)) return [];
+    throw error;
+  }
+}
+
+async function latestModification(directory: string): Promise<number> {
+  let latest = (await stat(directory)).mtimeMs;
+  for (const entry of await readdir(directory, { withFileTypes: true, encoding: "utf8" })) {
+    const target = path.join(directory, entry.name);
+    const modified = entry.isDirectory()
+      ? await latestModification(target)
+      : (await lstat(target)).mtimeMs;
+    latest = Math.max(latest, modified);
+  }
+  return latest;
 }
 
 async function readStoredRun(rootDirectory: string, executionId: string): Promise<StoredRun> {

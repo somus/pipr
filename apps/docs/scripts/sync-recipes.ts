@@ -15,7 +15,7 @@ const expected = new Map<string, string>();
 const recipeDescriptions = new Map([
   [
     "default-review",
-    "Start with one general change request review that runs a findings agent and an optional summary agent from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
+    "Start with one general change request review that runs a findings agent and a summary agent from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
   ],
   [
     "bug-hunter",
@@ -71,7 +71,7 @@ const recipeDescriptions = new Map([
   ],
   [
     "changelog-draft",
-    "Draft release-note style changelog entries from change request changes and publish them as a command response comment.",
+    "Draft a release-note style changelog entry from change request changes and publish it as a Main Review Comment.",
   ],
 ] satisfies Array<[string, string]>);
 
@@ -110,7 +110,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "diff-diagnostics",
-    "Pipr maps structured diagnostics into validated Inline Review Comments and publishes dropped-finding metadata when a diagnostic cannot anchor to the diff.",
+    "Pipr maps structured diagnostics into validated Inline Review Comments and drops any diagnostic that cannot anchor to the diff.",
   ],
   [
     "pr-hygiene",
@@ -134,7 +134,7 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "changelog-draft",
-    "Pipr replies to the source command comment with a changelog draft. It does not edit changelog files.",
+    "Pipr publishes a changelog draft as a Main Review Comment when a change request opens or updates, or from `@pipr changelog`. It does not edit changelog files.",
   ],
 ] satisfies Array<[string, string]>);
 
@@ -171,7 +171,7 @@ This is the baseline setup for repositories that want one trusted review path be
     "bug-hunter",
     `## Recipe notes
 
-Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by default. It also declares a fallback model profile so transient provider failures can retry without changing the task.
+Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by default. It also declares a fallback model profile that Pipr uses when the primary model still fails after the agent harness retries transient provider errors.
 
 - Expand \`paths.exclude\` for generated files, snapshots, vendored code, or fixtures that produce noisy findings.
 - Keep the \`@pipr bugs\` command trigger for manual reruns on risky PRs that did not need a full review.
@@ -236,14 +236,14 @@ Diff Diagnostics models reviewdog-style output: the agent emits diagnostics as \
 - Keep the diagnostic schema small and deterministic so invalid-output repair stays cheap.
 - Use \`suggestedFix\` only when the replacement is exact for the selected range.
 - Add path filters to \`ctx.change.diff(...)\` when diagnostics must apply to only one language or subsystem.
-- Invalid and duplicate anchors are removed before the summary and inline output are built.
+- Invalid and duplicate anchors are removed before inline output is built.
 `,
   ],
   [
     "pr-hygiene",
     `## Recipe notes
 
-PR Hygiene reviews the shape of the change request: tests, docs, lockfiles, generated files, and size. It reads both \`changedFiles\` and the Diff Manifest so it can reason about file-level signals and changed code.
+PR Hygiene reviews the shape of the change request: tests, docs, lockfiles, generated files, and size. It passes both \`changedFiles\` and the Diff Manifest to the agent so it can reason about file-level signals and changed code.
 
 - Customize the instructions with your repository's release-note, migration, generated-code, and test expectations.
 - Keep the check non-required until maintainers agree which hygiene findings must block merge.
@@ -438,7 +438,7 @@ npm install -D @usepipr/sdk
 
 Tune the generated config before enabling automatic review:
 
-- Change the model provider and \`apiKey\` secret name before committing the config.
+- Change the model provider before committing the config. Pipr reads the provider's standard API key variable, such as \`DEEPSEEK_API_KEY\`, unless the model sets \`apiKey\`; keep the workflow environment in sync.
 - Run \`pipr inspect\` after edits to confirm models, tasks, commands, and tools.
 - Use \`--adapters none\` when you want only the \`.pipr\` config files.
 - Run \`pipr review --base <ref>\` before publishing.
