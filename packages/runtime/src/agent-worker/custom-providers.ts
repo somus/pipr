@@ -31,8 +31,16 @@ const defaultMetadata = {
  */
 export function createCustomProviders(models: MutableModels) {
   const builtinIds = new Set(models.getProviders().map((provider) => provider.id));
-  const catalog: CatalogLookup = (providerId, modelId) =>
-    builtinIds.has(providerId) ? models.getModel(providerId, modelId) : undefined;
+  const catalog: Catalog = {
+    model: (providerId, modelId) =>
+      builtinIds.has(providerId) ? models.getModel(providerId, modelId) : undefined,
+    vendorCompat: (providerId) =>
+      builtinIds.has(providerId)
+        ? models
+            .getModels(providerId)
+            .find((model) => model.api === "openai-completions" && model.compat)?.compat
+        : undefined,
+  };
   const registered = new Map<string, Map<string, CustomProviderModel>>();
   return {
     /** Registers the model's provider, or returns why it cannot be registered. */
@@ -59,9 +67,13 @@ function sameEndpoint(left: CustomProviderModel, right: CustomProviderModel): bo
   );
 }
 
-type CatalogLookup = (providerId: string, modelId: string) => Model<Api> | undefined;
+type Catalog = {
+  model(providerId: string, modelId: string): Model<Api> | undefined;
+  /** Request-format settings the vendor's own Chat Completions models use. */
+  vendorCompat(providerId: string): Model<"openai-completions">["compat"] | undefined;
+};
 
-function customProvider(catalog: CatalogLookup, entries: readonly CustomProviderModel[]) {
+function customProvider(catalog: Catalog, entries: readonly CustomProviderModel[]) {
   const [first] = entries as [CustomProviderModel, ...CustomProviderModel[]];
   return createProvider({
     id: first.providerId,
@@ -79,19 +91,20 @@ function customProvider(catalog: CatalogLookup, entries: readonly CustomProvider
 }
 
 /**
- * A gateway model id such as `anthropic/claude-sonnet-5-5` names a vendor and its model. When the built-in catalog
- * knows that model, its capabilities, limits, cost, and thinking levels apply; the endpoint's metadata overrides them,
+ * A gateway model id such as `anthropic/claude-sonnet-5-5` names a vendor and its model. A vendor whose own models
+ * use Chat Completions lends its request format (for example DeepSeek's `thinking` field and reasoning replay), since
+ * the gateway forwards to that vendor. When the built-in catalog knows that model, its capabilities, limits, cost, and
+ * thinking levels apply; the endpoint's metadata overrides them,
  * and a declared cost replaces the catalog price, including any pricing tiers.
  */
 function customProviderModel(
-  catalog: CatalogLookup,
+  catalog: Catalog,
   entry: CustomProviderModel,
 ): Model<"openai-completions"> {
   const separator = entry.modelId.indexOf("/");
-  const known =
-    separator > 0
-      ? catalog(entry.modelId.slice(0, separator), entry.modelId.slice(separator + 1))
-      : undefined;
+  const vendor = separator > 0 ? entry.modelId.slice(0, separator) : undefined;
+  const known = vendor ? catalog.model(vendor, entry.modelId.slice(separator + 1)) : undefined;
+  const compat = vendor ? catalog.vendorCompat(vendor) : undefined;
   const metadata = known
     ? {
         reasoning: known.reasoning,
@@ -109,6 +122,7 @@ function customProviderModel(
     api: "openai-completions",
     provider: entry.providerId,
     baseUrl: entry.endpoint.baseUrl,
+    ...(compat ? { compat } : {}),
     ...metadata,
     ...overrides,
     ...(cost ? { cost: { cacheRead: 0, cacheWrite: 0, ...cost } } : {}),

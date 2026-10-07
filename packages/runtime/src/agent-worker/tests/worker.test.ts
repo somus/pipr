@@ -239,6 +239,41 @@ describe("agent worker", () => {
     expect(failed).not.toHaveProperty("conversation");
   });
 
+  it("sends gateway models of a known vendor in that vendor's request format", async () => {
+    const gateway = startFakeOpenAIGateway({ reply: () => "answer" });
+    try {
+      const worker = startInProcessWorker({ providers: [], env: { GATEWAY_KEY: "gw-key" } });
+      workers.push(worker);
+      const gatewayModel = (modelId: string): AgentRunRequest["model"] => ({
+        provider: "gateway",
+        modelId,
+        thinking: "high",
+        apiKeyEnv: "GATEWAY_KEY",
+        endpoint: { api: "openai-completions", baseUrl: gateway.baseUrl },
+      });
+
+      await run(
+        worker,
+        "run-1",
+        request({ requestId: "vendor", model: gatewayModel("deepseek/deepseek-v9-gateway") }),
+      );
+      await run(
+        worker,
+        "run-2",
+        request({ requestId: "unknown", model: gatewayModel("acme/house-model") }),
+      );
+
+      const [vendor, unknown] = gateway.requests.map((call) => call.body);
+      expect(vendor).toMatchObject({ thinking: { type: "enabled" } });
+      expect(vendor).toHaveProperty("max_tokens");
+      expect(vendor).not.toHaveProperty("max_completion_tokens");
+      expect(unknown).not.toHaveProperty("thinking");
+      expect(unknown).toHaveProperty("max_completion_tokens");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
   it("serves custom provider models with default metadata and declared overrides", async () => {
     const gateway = startFakeOpenAIGateway({ reply: (_request, index) => `answer ${index}` });
     try {
