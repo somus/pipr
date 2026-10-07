@@ -472,7 +472,7 @@ export function priorReviewStateForTasks(
   selectedTasks: string[],
 ): NonNullable<RunTaskRuntimeOptions["priorReviewState"]> {
   return {
-    version: 1,
+    version: 2,
     reviewedHeadSha: "head",
     selectedTasks,
     findings: [

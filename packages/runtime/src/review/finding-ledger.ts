@@ -6,11 +6,12 @@ import type {
   FindingEvidence,
   FindingOutcomeEvent,
   FindingOutcomeKind,
+  FindingThreadResolution,
   ReviewFinding,
 } from "@usepipr/sdk";
 import type { PriorReviewState } from "../publication/types.js";
 import type { ChangeRequestEventContext } from "../types.js";
-import { findingIdFor, matchFindingRecord } from "./prior-state.js";
+import { findingIdFor, matchFindingRecord, priorFindingAttribution } from "./prior-state.js";
 import type { PlannedFindingDisposition } from "./publication-plan.js";
 import type { VerifierVerdict } from "./verifier.js";
 
@@ -49,9 +50,46 @@ export type FindingOutcomeEmission = {
   reasonCode?: FindingDropCode;
   actorPermission?: FindingActorPermission;
   attribution?: FindingAttribution;
+  /**
+   * Host marker the outcome is tied to (see {@link findingOutcomeAnchors}). It replaces the head
+   * and work in the eventId, so the run that acted and a later run that rebuilds the outcome
+   * from the marker record one event.
+   */
+  anchor?: string;
   /** Diagnostic location and content; kept out of public events. */
   finding?: ReviewFinding;
 };
+
+/** Anchors for outcomes that leave a marker on the code host. */
+export const findingOutcomeAnchors = {
+  /** A `pipr:resolved` reply on the thread of the finding commented at `findingHeadSha`. */
+  piprResolution: (findingHeadSha: string) => `pipr-resolved:${findingHeadSha}`,
+  /** A `pipr:verifier-response` reply with `responseKey`. */
+  verifierResponse: (responseKey: string) => `verifier-response:${responseKey}`,
+  /** A human reply comment on the finding's thread. */
+  reply: (commentId: string) => `reply:${commentId}`,
+  /** A native resolution, without a Pipr resolution, of the finding commented at `findingHeadSha`. */
+  humanResolution: (findingHeadSha: string) => `human-resolved:${findingHeadSha}`,
+};
+
+/** Outcome of a verifier verdict, anchored to the marker its thread action leaves. */
+export function verifierVerdictOutcome(
+  verdict: VerifierVerdict,
+  attribution: FindingAttribution | undefined,
+): FindingOutcomeEmission {
+  const anchor =
+    verdict.action?.kind === "resolve"
+      ? findingOutcomeAnchors.piprResolution(verdict.action.findingHeadSha)
+      : verdict.action
+        ? findingOutcomeAnchors.verifierResponse(verdict.action.responseKey)
+        : undefined;
+  return {
+    kind: verdict.status,
+    findingId: verdict.findingId,
+    ...(attribution ? { attribution } : {}),
+    ...(anchor ? { anchor } : {}),
+  };
+}
 
 type AttributedFinding = { finding: ReviewFinding; attribution: FindingAttribution };
 
@@ -103,13 +141,21 @@ export function deriveReviewFindingOutcomes(input: {
   }
   const reported = new Set([...validIds, ...droppedIds]);
   const judged = new Set(input.verdicts.map((verdict) => verdict.findingId));
+  const priorRecords = new Map(prior?.findings.map((record) => [record.id, record]));
   for (const record of prior?.findings ?? []) {
     if (record.status === "open" && !reported.has(record.id) && !judged.has(record.id)) {
-      emissions.push({ kind: "outdated", findingId: record.id });
+      const attribution = priorFindingAttribution(record);
+      emissions.push({
+        kind: "outdated",
+        findingId: record.id,
+        ...(attribution ? { attribution } : {}),
+      });
     }
   }
   for (const verdict of input.verdicts) {
-    emissions.push({ kind: verdict.status, findingId: verdict.findingId });
+    emissions.push(
+      verifierVerdictOutcome(verdict, priorFindingAttribution(priorRecords.get(verdict.findingId))),
+    );
   }
   return emissions;
 }
@@ -143,6 +189,8 @@ export type FindingLedger = {
 
 export function createFindingLedger(options: {
   executionId: string;
+  /** Thread resolution support of the code host; omitted for local runs. */
+  threadResolution?: FindingThreadResolution;
   now?: () => Date;
 }): FindingLedger {
   const now = options.now ?? (() => new Date());
@@ -153,7 +201,7 @@ export function createFindingLedger(options: {
 
   const record = (context: FindingLedgerContext, emissions: readonly FindingOutcomeEmission[]) => {
     for (const item of emissions) {
-      if (item.attribution && !attributions.has(item.findingId)) {
+      if (item.attribution) {
         attributions.set(item.findingId, item.attribution);
       }
       if (item.finding && !evidence[item.findingId]) {
@@ -200,19 +248,22 @@ export function createFindingLedger(options: {
     events: () => events.map((event) => ({ ...event, facets: { ...event.facets } })),
     document: () => ({
       formatVersion: 1,
+      ...(options.threadResolution ? { threadResolution: options.threadResolution } : {}),
       events: events.map((event) => ({ ...event, facets: { ...event.facets } })),
       evidence: { ...evidence },
     }),
   };
 }
 
-/** sha256 of `findingId|kind|headSha|workId|reasonCode`, so reruns of the same work dedupe. */
+/**
+ * sha256 of `findingId|kind|headSha|workId|reasonCode`, so reruns of the same work dedupe, or of
+ * `findingId|kind|anchor:<anchor>` for outcomes tied to a host marker.
+ */
 function findingOutcomeEventId(item: FindingOutcomeEmission, context: FindingLedgerContext) {
-  return createHash("sha256")
-    .update(
-      [item.findingId, item.kind, context.headSha, context.workId, item.reasonCode ?? ""].join("|"),
-    )
-    .digest("hex");
+  const basis = item.anchor
+    ? [item.findingId, item.kind, `anchor:${item.anchor}`]
+    : [item.findingId, item.kind, context.headSha, context.workId, item.reasonCode ?? ""];
+  return createHash("sha256").update(basis.join("|")).digest("hex");
 }
 
 function findingEvidence(finding: ReviewFinding, context: FindingLedgerContext): FindingEvidence {

@@ -142,7 +142,7 @@ describe("comments", () => {
       manifest,
       reviewedHeadSha: "head",
       reviewState: {
-        version: 1,
+        version: 2,
         reviewedHeadSha: "head",
         selectedTasks: ["review"],
         findings: [
@@ -359,7 +359,7 @@ describe("comments", () => {
     }
     const state = applyInlineFindingMarkers(
       {
-        version: 1,
+        version: 2,
         reviewedHeadSha: "head",
         selectedTasks: ["review"],
         findings: [

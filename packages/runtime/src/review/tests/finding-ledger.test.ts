@@ -9,6 +9,8 @@ import {
   deriveReviewFindingOutcomes,
   type FindingAttribution,
   type FindingLedgerContext,
+  findingOutcomeAnchors,
+  verifierVerdictOutcome,
 } from "../finding-ledger.js";
 import { buildCommentPublishingPlan } from "../publication-plan.js";
 import { validateReviewResult } from "../review.js";
@@ -59,6 +61,18 @@ function reviewRun(options: {
     manifest,
     maxInlineComments: options.maxInlineComments,
     priorReviewState: options.priorReviewState,
+    findingOutcomes: (dispositions) =>
+      deriveReviewFindingOutcomes({
+        valid: validated.validFindings.map((item) => ({ finding: item, attribution: security })),
+        dispositions,
+        dropped: validated.droppedFindings.map((item) => ({
+          finding: item.finding,
+          code: item.code,
+          attribution: security,
+        })),
+        priorReviewState: options.priorReviewState,
+        verdicts: options.verdicts ?? [],
+      }),
     metadata: {
       runtimeVersion,
       reviewedHeadSha: options.headSha,
@@ -72,20 +86,7 @@ function reviewRun(options: {
   const ledger = createFindingLedger({
     executionId: options.executionId ?? "0123456789abcdef0123456789abcdef",
   });
-  ledger.record(
-    context(options.headSha),
-    deriveReviewFindingOutcomes({
-      valid: validated.validFindings.map((item) => ({ finding: item, attribution: security })),
-      dispositions: publishing.findingDispositions,
-      dropped: validated.droppedFindings.map((item) => ({
-        finding: item.finding,
-        code: item.code,
-        attribution: security,
-      })),
-      priorReviewState: options.priorReviewState,
-      verdicts: options.verdicts ?? [],
-    }),
-  );
+  ledger.record(context(options.headSha), publishing.findingOutcomes);
   const planned = publishing.inlineCommentDrafts.map((draft) => draft.findingId);
   ledger.recordPublished(context(options.headSha), options.publish?.(planned) ?? planned);
   const state = extractPriorReviewState(publishing.publicationPlan.mainComment, 1);
@@ -237,6 +238,94 @@ describe("finding outcome ledger", () => {
     });
 
     expect(ledger.events().filter((event) => event.kind === "published")).toHaveLength(1);
+  });
+
+  it("keeps each finding's outcome history, agent, model, and facets in review state", () => {
+    const opened = reviewRun({
+      headSha: "head-1",
+      findings: [finding("Still reported.", 10), finding("No longer reported.", 11)],
+    });
+    const [kept, gone] = opened.state?.findings ?? [];
+    expect(kept).toMatchObject({
+      a: "security-reviewer",
+      m: "deepseek-v4-pro",
+      f: { severity: "high" },
+      h: [["p", "head-1"]],
+    });
+
+    const synchronized = reviewRun({
+      headSha: "head-2",
+      findings: [finding("Still reported.", 10)],
+      priorReviewState: committedState(opened.state, "head-1"),
+    });
+    const history = new Map(synchronized.state?.findings.map((record) => [record.id, record.h]));
+    expect(history.get(kept?.id ?? "")).toEqual([
+      ["p", "head-1"],
+      ["c", "head-2"],
+      ["p", "head-2"],
+    ]);
+    expect(history.get(gone?.id ?? "")).toEqual([
+      ["p", "head-1"],
+      ["o", "head-2"],
+    ]);
+  });
+
+  it("attributes outcomes of findings not seen this run from the stored state", () => {
+    const opened = reviewRun({
+      headSha: "head-1",
+      findings: [finding("Outdated.", 10), finding("Fixed.", 11)],
+    });
+    const fixedId = opened.publishing.inlineCommentDrafts[1]?.findingId ?? "";
+    const synchronized = reviewRun({
+      headSha: "head-2",
+      findings: [],
+      priorReviewState: committedState(opened.state, "head-1"),
+      verdicts: [{ findingId: fixedId, status: "fixed" }],
+    });
+
+    const events = synchronized.ledger.events();
+    expect(events.map((event) => event.kind)).toEqual(["outdated", "fixed"]);
+    for (const { agent, model, facets } of events) {
+      expect({ agent, model, facets }).toEqual({
+        agent: security.agent,
+        model: security.model,
+        facets: security.facets,
+      });
+    }
+  });
+
+  it("gives verdicts and replies anchored to host markers one event across runs", () => {
+    const findingId = "fnd_0123456789abcdef";
+    const action = {
+      kind: "resolve" as const,
+      findingId,
+      findingHeadSha: "head-1",
+      commentId: "10",
+      body: "Fixed.",
+      responseKey: "head-2:fixed:fnd_0123456789abcdef",
+    };
+    const acted = createFindingLedger({ executionId: "0123456789abcdef0123456789abcdef" });
+    acted.record(context("head-2"), [
+      verifierVerdictOutcome({ findingId, status: "fixed", action }, undefined),
+    ]);
+    const rebuilt = createFindingLedger({ executionId: "fedcba9876543210fedcba9876543210" });
+    rebuilt.record(context("head-3"), [
+      { kind: "fixed", findingId, anchor: findingOutcomeAnchors.piprResolution("head-1") },
+    ]);
+
+    expect(rebuilt.events()[0]?.eventId).toBe(acted.events()[0]?.eventId);
+  });
+
+  it("records the host's thread resolution support in the ledger document", () => {
+    const ledger = createFindingLedger({
+      executionId: "0123456789abcdef0123456789abcdef",
+      threadResolution: "unavailable",
+    });
+
+    expect(ledger.document()).toMatchObject({ threadResolution: "unavailable" });
+    expect(
+      createFindingLedger({ executionId: "0123456789abcdef0123456789abcdef" }).document(),
+    ).not.toHaveProperty("threadResolution");
   });
 
   it("records replies with the actor permission and deduplicates repeated events", () => {

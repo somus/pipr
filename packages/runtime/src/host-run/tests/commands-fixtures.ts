@@ -1,5 +1,4 @@
 import { expect } from "bun:test";
-import { Buffer } from "node:buffer";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +11,11 @@ import type {
   CodeHostCapabilities,
   RepositoryPermission,
 } from "../../hosts/types.js";
-import { renderInlineFindingMarker } from "../../review/comment-markers.js";
+import {
+  mainCommentMarker,
+  renderInlineFindingMarker,
+  renderMainCommentMarker,
+} from "../../review/comment-markers.js";
 import type { RuntimeLogSink } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
 import { writeAggregateReviewablePatchOver16MiB } from "../../tests/helpers/aggregate-reviewable-patch.js";
@@ -839,16 +842,17 @@ export function verifierPublicationClient(
 }
 
 export function priorMainCommentBody(): string {
-  const state = Buffer.from(
-    JSON.stringify({
-      version: 1,
-      reviewedHeadSha: "old-head",
-      selectedTasks: ["old-task"],
-      findings: [],
-    }),
-  ).toString("base64url");
   return [
-    `<!-- pipr:main-comment change=1 version=1 state=${state} -->`,
+    renderMainCommentMarker({
+      marker: mainCommentMarker,
+      changeNumber: 1,
+      reviewState: {
+        version: 2,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["old-task"],
+        findings: [],
+      },
+    }),
     "",
     "# pipr Review",
     "",
@@ -858,29 +862,30 @@ export function priorMainCommentBody(): string {
 }
 
 function priorMainCommentWithFindingBody(): string {
-  const state = Buffer.from(
-    JSON.stringify({
-      version: 1,
-      reviewedHeadSha: "old-head",
-      selectedTasks: ["review"],
-      findings: [
-        {
-          id: "fnd_existing",
-          status: "open",
-          path: "src/a.ts",
-          rangeId: "range-1",
-          side: "RIGHT",
-          startLine: 1,
-          endLine: 1,
-          firstSeenHeadSha: "old-head",
-          lastSeenHeadSha: "old-head",
-          lastCommentedHeadSha: "old-head",
-        },
-      ],
-    }),
-  ).toString("base64url");
   return [
-    `<!-- pipr:main-comment change=1 version=1 state=${state} -->`,
+    renderMainCommentMarker({
+      marker: mainCommentMarker,
+      changeNumber: 1,
+      reviewState: {
+        version: 2,
+        reviewedHeadSha: "old-head",
+        selectedTasks: ["review"],
+        findings: [
+          {
+            id: "fnd_existing",
+            status: "open",
+            path: "src/a.ts",
+            rangeId: "range-1",
+            side: "RIGHT",
+            startLine: 1,
+            endLine: 1,
+            firstSeenHeadSha: "old-head",
+            lastSeenHeadSha: "old-head",
+            lastCommentedHeadSha: "old-head",
+          },
+        ],
+      },
+    }),
     "",
     "# pipr Review",
     "",

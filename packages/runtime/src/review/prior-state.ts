@@ -1,4 +1,11 @@
-import type { ReviewFinding } from "@usepipr/sdk";
+import type { FindingOutcomeKind, ReviewFinding } from "@usepipr/sdk";
+import {
+  type FindingHistoryCode,
+  findingHistoryCodes,
+  findingHistoryHeadLength,
+  maxFindingHistoryEntries,
+  oldestTrimmableHistoryIndex,
+} from "../publication/schemas.js";
 import type { PriorFindingRecord, PriorReviewState, ReviewStats } from "../publication/types.js";
 import { accumulateReviewStats } from "./review-stats.js";
 
@@ -65,7 +72,7 @@ export function buildPriorReviewState(options: {
   addHistoricalFindings(nextFindings, priorFindings.values());
 
   return {
-    version: 1,
+    version: 2,
     reviewedHeadSha: options.reviewedHeadSha,
     selectedTasks: options.selectedTasks,
     findings: [...nextFindings.values()],
@@ -88,7 +95,125 @@ function buildFindingRecord(options: BuildFindingRecordOptions): PriorFindingRec
     startLine: options.finding.startLine,
     endLine: options.finding.endLine,
     ...findingHistory(prior, options.reviewedHeadSha),
+    ...findingOutcomeFields(prior),
   };
+}
+
+function findingOutcomeFields(
+  prior: PriorFindingRecord | undefined,
+): Pick<PriorFindingRecord, "f" | "a" | "m" | "h"> {
+  return {
+    ...(prior?.f ? { f: prior.f } : {}),
+    ...(prior?.a ? { a: prior.a } : {}),
+    ...(prior?.m ? { m: prior.m } : {}),
+    ...(prior?.h ? { h: prior.h } : {}),
+  };
+}
+
+/** Agent, model, and facets stored with a finding, or undefined when none were stored. */
+export function priorFindingAttribution(
+  record: PriorFindingRecord | undefined,
+): FindingHistoryAttribution | undefined {
+  if (!record || (!record.a && !record.m && !record.f)) return undefined;
+  return {
+    ...(record.a ? { agent: record.a } : {}),
+    ...(record.m ? { model: record.m } : {}),
+    facets: { ...record.f },
+  };
+}
+
+type FindingHistoryAttribution = {
+  agent?: string;
+  model?: string;
+  facets: Record<string, string>;
+};
+
+/** One Finding Outcome to keep in the finding's review state history. */
+export type FindingHistoryUpdate = {
+  findingId: string;
+  kind: FindingOutcomeKind;
+  headSha: string;
+  attribution?: FindingHistoryAttribution;
+};
+
+/**
+ * Appends outcomes to the history of stored findings and refreshes their agent, model, and
+ * facets. Kinds without a history code only refresh attribution; repeated `[code, head]` entries
+ * are kept once, and each history keeps its newest entries within the bound.
+ */
+export function recordFindingOutcomeHistory(
+  state: PriorReviewState,
+  updates: readonly FindingHistoryUpdate[],
+): PriorReviewState {
+  const updatesById = new Map<string, FindingHistoryUpdate[]>();
+  for (const update of updates) {
+    updatesById.set(update.findingId, [...(updatesById.get(update.findingId) ?? []), update]);
+  }
+  return {
+    ...state,
+    findings: state.findings.map((record) =>
+      (updatesById.get(record.id) ?? []).reduce(withFindingOutcome, record),
+    ),
+  };
+}
+
+/** Whether the finding's history holds `kind`, at `headSha` when given. */
+export function findingHistoryHas(
+  record: PriorFindingRecord,
+  kind: keyof typeof findingHistoryCodes,
+  headSha?: string,
+): boolean {
+  const code = findingHistoryCodes[kind];
+  const head = headSha?.slice(0, findingHistoryHeadLength);
+  return (record.h ?? []).some(
+    ([entryCode, entryHead]) => entryCode === code && (head === undefined || entryHead === head),
+  );
+}
+
+function withFindingOutcome(
+  record: PriorFindingRecord,
+  update: FindingHistoryUpdate,
+): PriorFindingRecord {
+  const attributed = update.attribution ? withAttribution(record, update.attribution) : record;
+  const code = historyCode(update.kind);
+  if (!code) return attributed;
+  const head = update.headSha.slice(0, findingHistoryHeadLength);
+  if (attributed.h?.some(([entryCode, entryHead]) => entryCode === code && entryHead === head)) {
+    return attributed;
+  }
+  const history: NonNullable<PriorFindingRecord["h"]> = [...(attributed.h ?? []), [code, head]];
+  while (history.length > maxFindingHistoryEntries) {
+    history.splice(oldestTrimmableHistoryIndex(history), 1);
+  }
+  return { ...attributed, h: history };
+}
+
+function historyCode(kind: FindingOutcomeKind): FindingHistoryCode | undefined {
+  return kind in findingHistoryCodes
+    ? findingHistoryCodes[kind as keyof typeof findingHistoryCodes]
+    : undefined;
+}
+
+function withAttribution(
+  record: PriorFindingRecord,
+  attribution: FindingHistoryAttribution,
+): PriorFindingRecord {
+  const { f: _f, a: _a, m: _m, ...rest } = record;
+  const facets = Object.entries(attribution.facets)
+    .filter(([key, value]) => isBoundedText(key, 100) && isBoundedText(value, 100))
+    .slice(0, 32);
+  const agent = attribution.agent?.slice(0, 200);
+  const model = attribution.model?.slice(0, 200);
+  return {
+    ...rest,
+    ...(facets.length > 0 ? { f: Object.fromEntries(facets) } : {}),
+    ...(agent ? { a: agent } : {}),
+    ...(model ? { m: model } : {}),
+  };
+}
+
+function isBoundedText(value: string, max: number): boolean {
+  return value.length > 0 && value.length <= max;
 }
 
 function selectPriorFindingRecord(options: BuildFindingRecordOptions): {

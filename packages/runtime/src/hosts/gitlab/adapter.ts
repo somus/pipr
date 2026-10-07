@@ -13,16 +13,18 @@ export function createGitLabHostAdapter(
   const client = options.client ?? createGitLabClient(options.env);
   const driver = createGitLabPublicationDriver(client);
   const publication = createPublicationWorkflow(driver);
+  const capabilities = {
+    commandComments: true,
+    reviewCommentReplies: true,
+    threadResolution: true,
+    multilineInlineComments: true,
+    suggestedChanges: true,
+    statuses: true,
+  };
+  const comments = createCommentsReader(driver, capabilities);
   return {
     id: "gitlab",
-    capabilities: {
-      commandComments: true,
-      reviewCommentReplies: true,
-      threadResolution: true,
-      multilineInlineComments: true,
-      suggestedChanges: true,
-      statuses: true,
-    },
+    capabilities,
     events: {
       parseEvent(parseOptions) {
         return parseGitLabEvent({
@@ -51,7 +53,7 @@ export function createGitLabHostAdapter(
       },
     },
     publication,
-    comments: createCommentsReader(driver),
+    comments,
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {

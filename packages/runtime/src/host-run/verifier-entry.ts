@@ -3,10 +3,17 @@ import { registerProviderSecrets } from "../config/provider-credentials.js";
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
 import { recordArtifactSafely } from "../observability/capture-sinks.js";
+import type { PriorReviewState } from "../publication/types.js";
 import { resolveProvider } from "../review/agent/prompt-assembly.js";
 import type { PiRunStats } from "../review/agent/review-run-types.js";
 import { isPiprThreadActionReplyBody } from "../review/comment-markers.js";
-import { type FindingOutcomeEmission, findingLedgerContext } from "../review/finding-ledger.js";
+import {
+  type FindingOutcomeEmission,
+  findingLedgerContext,
+  findingOutcomeAnchors,
+  verifierVerdictOutcome,
+} from "../review/finding-ledger.js";
+import { priorFindingAttribution } from "../review/prior-state.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { reviewStatsForRuns, runSummaryStatsFields } from "../review/review-stats.js";
 import { stableReviewRunId } from "../review/run-identity.js";
@@ -186,6 +193,9 @@ async function runReviewCommentVerifier(
     content: JSON.stringify(diffManifest, null, 2),
     sensitive: true,
   });
+  const priorReviewState = (
+    await services.adapter.comments?.loadPriorReviewState?.({ change: event })
+  )?.state;
   const result = await runInternalVerifier({
     workspace: services.rootDir,
     config,
@@ -200,7 +210,7 @@ async function runReviewCommentVerifier(
     log: services.log,
     runObserver: services.runObserver,
     diffManifest,
-    priorReviewState: await services.adapter.comments?.loadPriorReviewState?.({ change: event }),
+    priorReviewState,
     threadContexts,
     mode: {
       kind: "user-reply",
@@ -222,7 +232,13 @@ async function runReviewCommentVerifier(
       { event, trustedConfigHash: trustedRuntime.trustedConfigHash },
       runContext,
     ),
-    replyOutcomes(threadContexts, reply.parentCommentId, prepared.actorPermission, result.verdicts),
+    replyOutcomes({
+      threadContexts,
+      reply,
+      actorPermission: prepared.actorPermission,
+      verdicts: result.verdicts,
+      priorReviewState,
+    }),
   );
   const durationMs = Date.now() - started;
   const stats = reviewStatsForRuns(piRuns, durationMs);
@@ -282,19 +298,41 @@ function runnableReviewCommentReply(
   return { kind: "runnable" };
 }
 
-/** The reply's outcome on the replied-to finding, then the verifier's verdicts. */
-function replyOutcomes(
-  threadContexts: readonly { findingId: string; parentCommentId: string }[],
-  parentCommentId: string,
-  actorPermission: FindingActorPermission,
-  verdicts: Awaited<ReturnType<typeof runInternalVerifier>>["verdicts"],
-): FindingOutcomeEmission[] {
-  const findingId = threadContexts.find(
-    (thread) => thread.parentCommentId === parentCommentId,
+/**
+ * The reply's outcome on the replied-to finding, then the verifier's verdicts. Both are anchored
+ * to the reply and the markers Pipr leaves, so the next review run rebuilding them from those
+ * markers records the same events.
+ */
+function replyOutcomes(options: {
+  threadContexts: readonly { findingId: string; parentCommentId: string }[];
+  reply: ReviewCommentReplyEvent & { parentCommentId: string };
+  actorPermission: FindingActorPermission;
+  verdicts: Awaited<ReturnType<typeof runInternalVerifier>>["verdicts"];
+  priorReviewState: PriorReviewState | undefined;
+}): FindingOutcomeEmission[] {
+  const records = new Map(options.priorReviewState?.findings.map((record) => [record.id, record]));
+  const attribution = (findingId: string) => {
+    const stored = priorFindingAttribution(records.get(findingId));
+    return stored ? { attribution: stored } : {};
+  };
+  const findingId = options.threadContexts.find(
+    (thread) => thread.parentCommentId === options.reply.parentCommentId,
   )?.findingId;
   return [
-    ...(findingId ? [{ kind: "replied" as const, findingId, actorPermission }] : []),
-    ...verdicts.map((verdict) => ({ kind: verdict.status, findingId: verdict.findingId })),
+    ...(findingId
+      ? [
+          {
+            kind: "replied" as const,
+            findingId,
+            actorPermission: options.actorPermission,
+            anchor: findingOutcomeAnchors.reply(options.reply.commentId),
+            ...attribution(findingId),
+          },
+        ]
+      : []),
+    ...options.verdicts.map((verdict) =>
+      verifierVerdictOutcome(verdict, priorFindingAttribution(records.get(verdict.findingId))),
+    ),
   ];
 }
 

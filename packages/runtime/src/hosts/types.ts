@@ -1,12 +1,12 @@
 import type {
   InlineThreadContext,
   NativeId,
-  PriorReviewState,
   PublicationPlan,
   PublicationResult,
   ReviewProgressLease,
   ThreadAction,
 } from "../publication/types.js";
+import type { LoadedPriorReviewState } from "../review/prior-review-state-load.js";
 import type {
   ChangeRequestEventContext,
   ChangeRequestRef,
@@ -146,9 +146,10 @@ export type CodeHostPublication = {
 };
 
 export type CodeHostComments = {
+  /** Undefined when no Pipr-owned main comment carries current-version review state. */
   loadPriorReviewState?(options: {
     change: ChangeRequestEventContext;
-  }): Promise<PriorReviewState | undefined>;
+  }): Promise<LoadedPriorReviewState | undefined>;
   loadPriorMainComment?(options: {
     change: ChangeRequestEventContext;
   }): Promise<string | undefined>;

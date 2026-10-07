@@ -402,7 +402,11 @@ export async function startFileRunRecorder(options: {
       if (ledger.events.length === 0) return;
       const metadataOnly = options.mode === "metadata";
       const document = metadataOnly
-        ? findingLedgerSchema.parse({ formatVersion: ledger.formatVersion, events: ledger.events })
+        ? findingLedgerSchema.parse({
+            formatVersion: ledger.formatVersion,
+            threadResolution: ledger.threadResolution,
+            events: ledger.events,
+          })
         : diagnosticFindingLedgerSchema.parse(ledger);
       await storeArtifact({
         kind: "ledger",

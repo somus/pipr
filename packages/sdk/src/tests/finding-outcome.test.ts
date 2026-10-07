@@ -80,4 +80,15 @@ describe("Finding Outcome events", () => {
       findingLedgerSchema.parse({ formatVersion: 1, events: [event], evidence }),
     ).toThrow();
   });
+
+  it("records the host's thread resolution support once per ledger", () => {
+    for (const threadResolution of ["available", "unavailable"] as const) {
+      expect(
+        findingLedgerSchema.parse({ formatVersion: 1, threadResolution, events: [event] }),
+      ).toMatchObject({ threadResolution });
+    }
+    expect(() =>
+      findingLedgerSchema.parse({ formatVersion: 1, threadResolution: "partial", events: [] }),
+    ).toThrow();
+  });
 });

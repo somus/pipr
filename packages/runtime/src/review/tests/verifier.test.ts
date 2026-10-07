@@ -76,7 +76,7 @@ const diffManifest: DiffManifest = {
 };
 
 const priorReviewState: PriorReviewState = {
-  version: 1,
+  version: 2,
   reviewedHeadSha: "old-head",
   selectedTasks: ["review"],
   findings: [
@@ -161,8 +161,22 @@ describe("runInternalVerifier", () => {
       output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
     });
 
-    expect(fixed.verdicts).toEqual([{ findingId: "fnd_existing", status: "fixed" }]);
+    expect(fixed.verdicts).toEqual([
+      { findingId: "fnd_existing", status: "fixed", action: fixed.threadActions[0] },
+    ]);
+    expect(fixed.threadActions[0]).toMatchObject({ kind: "resolve", findingHeadSha: "old-head" });
     expect(stillValid.verdicts).toEqual([{ findingId: "fnd_existing", status: "still-valid" }]);
+    const repliedStillValid = await runVerifier({
+      output: { findings: [{ id: "fnd_existing", status: "still-valid", response: "Still." }] },
+    });
+    expect(repliedStillValid.verdicts).toEqual([
+      {
+        findingId: "fnd_existing",
+        status: "still-valid",
+        action: repliedStillValid.threadActions[0],
+      },
+    ]);
+    expect(repliedStillValid.threadActions[0]?.kind).toBe("reply");
     expect(silentFix.verdicts).toEqual([]);
     expect(unknown.verdicts).toEqual([]);
   });

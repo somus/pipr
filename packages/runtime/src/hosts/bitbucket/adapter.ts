@@ -18,16 +18,18 @@ export function createBitbucketHostAdapter(
   const client = options.client ?? createBitbucketClient(options.env);
   const driver = createBitbucketPublicationDriver(client);
   const publication = createPublicationWorkflow(driver);
+  const capabilities = {
+    commandComments: true,
+    reviewCommentReplies: true,
+    threadResolution: true,
+    multilineInlineComments: true,
+    suggestedChanges: false,
+    statuses: true,
+  };
+  const comments = createCommentsReader(driver, capabilities);
   return {
     id: "bitbucket",
-    capabilities: {
-      commandComments: true,
-      reviewCommentReplies: true,
-      threadResolution: true,
-      multilineInlineComments: true,
-      suggestedChanges: false,
-      statuses: true,
-    },
+    capabilities,
     events: {
       parseEvent: (parseOptions) =>
         parseBitbucketEvent({
@@ -57,7 +59,7 @@ export function createBitbucketHostAdapter(
       },
     },
     publication,
-    comments: createCommentsReader(driver),
+    comments,
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {

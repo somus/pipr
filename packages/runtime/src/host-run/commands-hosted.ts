@@ -85,6 +85,7 @@ export async function runHostRunCommandWithDependencies(
     runObserver: recorder ? recorder.observer : options.runObserver,
     findingLedger: createFindingLedger({
       executionId: recorder?.executionId ?? randomBytes(16).toString("hex"),
+      threadResolution: adapter.capabilities.threadResolution ? "available" : "unavailable",
     }),
   };
   const state: HostRunState = { failureCategory: "startup", adapter: services.adapter };

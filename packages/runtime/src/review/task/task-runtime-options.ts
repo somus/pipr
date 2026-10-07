@@ -18,6 +18,7 @@ import type {
   ProviderConfig,
 } from "../../types.js";
 import type { FindingLedger } from "../finding-ledger.js";
+import type { LoadedPriorReviewState } from "../prior-review-state-load.js";
 import type { ReviewProgressSink } from "../progress.js";
 import type { RuntimeCommandInvocation } from "../run-identity.js";
 import type { RuntimeCheckSink } from "./task-output.js";
@@ -37,7 +38,7 @@ export type TaskRuntimePorts = {
   diffManifestBuilder?: DiffManifestBuilder;
   priorReviewState?: PriorReviewState;
   priorMainComment?: string;
-  loadPriorReviewState?: () => Promise<PriorReviewState | undefined>;
+  loadPriorReviewState?: () => Promise<LoadedPriorReviewState | undefined>;
   loadPriorMainComment?: () => Promise<string | undefined>;
   loadInlineThreadContexts?: () => Promise<InlineThreadContext[]>;
   checkSink?: RuntimeCheckSink;

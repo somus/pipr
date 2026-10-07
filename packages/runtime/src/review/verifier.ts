@@ -63,7 +63,12 @@ export type RunVerifierOptions = {
 };
 
 /** A verifier decision that took effect, reported as a Finding Outcome. */
-export type VerifierVerdict = { findingId: string; status: "fixed" | "still-valid" };
+export type VerifierVerdict = {
+  findingId: string;
+  status: "fixed" | "still-valid";
+  /** Thread action that leaves the verdict's marker on the host, if any. */
+  action?: ThreadAction;
+};
 
 export type VerifierResult = {
   priorReviewState?: PriorReviewState;
@@ -235,17 +240,15 @@ function applyVerifierOutput(
 
   for (const item of output.findings) {
     const candidate = candidateById.get(item.id);
-    if (candidate && item.status === "still-valid") {
-      verdicts.push({ findingId: item.id, status: "still-valid" });
-    }
     const action = verifierThreadAction(options, candidate, item);
+    if (candidate && item.status === "still-valid") {
+      verdicts.push({ findingId: item.id, status: "still-valid", ...(action ? { action } : {}) });
+    }
     if (!action) {
       continue;
     }
     if (action.kind === "resolve") {
-      verdicts.push({ findingId: item.id, status: "fixed" });
-    }
-    if (action.kind === "resolve") {
+      verdicts.push({ findingId: item.id, status: "fixed", action });
       resolvedIds.push(item.id);
     }
     threadActions.push(action);

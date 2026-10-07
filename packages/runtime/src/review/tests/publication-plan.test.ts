@@ -258,7 +258,7 @@ describe("buildCommentPublishingPlan", () => {
       manifest,
       maxStoredFindings: 3,
       priorReviewState: {
-        version: 1,
+        version: 2,
         reviewedHeadSha: "old-head",
         selectedTasks: ["review"],
         findings: historicalFindings,
@@ -416,7 +416,7 @@ describe("buildCommentPublishingPlan", () => {
       validated: { ...validated, validFindings: [currentFinding] },
       manifest: changedManifest,
       priorReviewState: {
-        version: 1,
+        version: 2,
         reviewedHeadSha: "old-head",
         selectedTasks: ["review"],
         findings: [
@@ -455,7 +455,7 @@ describe("buildCommentPublishingPlan", () => {
       validated: { ...validated, validFindings: [currentFinding] },
       manifest: otherPathManifest,
       priorReviewState: {
-        version: 1,
+        version: 2,
         reviewedHeadSha: "old-head",
         selectedTasks: ["review"],
         findings: [
@@ -485,7 +485,7 @@ describe("buildCommentPublishingPlan", () => {
       validated: { ...validated, validFindings: [currentFinding] },
       manifest,
       priorReviewState: {
-        version: 1,
+        version: 2,
         reviewedHeadSha: "old-head",
         selectedTasks: ["review"],
         findings: [
@@ -518,7 +518,7 @@ describe("buildCommentPublishingPlan", () => {
       validated: { ...validated, validFindings: currentFindings },
       manifest,
       priorReviewState: {
-        version: 1,
+        version: 2,
         reviewedHeadSha: "old-head",
         selectedTasks: ["review"],
         findings: [
@@ -555,7 +555,7 @@ describe("buildCommentPublishingPlan", () => {
       validated: { ...validated, validFindings: [currentFinding] },
       manifest,
       priorReviewState: {
-        version: 1,
+        version: 2,
         reviewedHeadSha: "old-head",
         selectedTasks: ["review"],
         findings: [resolvedFinding, { ...resolvedFinding, id: "fnd_prior_2" }],
@@ -659,7 +659,7 @@ function priorState(options: {
   lastCommentedHeadSha?: string;
 }): PriorReviewState {
   return {
-    version: 1,
+    version: 2,
     reviewedHeadSha: options.reviewedHeadSha,
     selectedTasks: ["review"],
     findings: [
@@ -675,7 +675,7 @@ function priorState(options: {
 
 function ambiguousPriorState(): PriorReviewState {
   return {
-    version: 1,
+    version: 2,
     reviewedHeadSha: "old-head",
     selectedTasks: ["review"],
     findings: [priorFindingRecord("fnd_prior_a"), priorFindingRecord("fnd_prior_b")],

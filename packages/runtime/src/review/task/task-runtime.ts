@@ -132,12 +132,24 @@ function runtimeTasks(options: RunTaskRuntimeOptions) {
   ];
 }
 
-async function loadPriorReview(options: RunTaskRuntimeOptions, selectedTasks: string[]) {
-  const loadedPriorReviewState =
-    options.priorReviewState ??
-    (await runLoggedPhase(options.log, "load prior review state", async () =>
-      options.loadPriorReviewState?.(),
-    ));
+/**
+ * Loads prior review state and records the outcomes observed on the host since it was written
+ * (Pipr resolutions and verifier replies from reply runs, human thread resolutions).
+ */
+async function loadPriorReview(
+  options: RunTaskRuntimeOptions,
+  selectedTasks: string[],
+  run: PiprRunContext,
+) {
+  const loaded = options.priorReviewState
+    ? undefined
+    : await runLoggedPhase(options.log, "load prior review state", async () =>
+        options.loadPriorReviewState?.(),
+      );
+  if (loaded?.events.length) {
+    options.findingLedger?.record(findingLedgerContext(options, run), loaded.events);
+  }
+  const loadedPriorReviewState = options.priorReviewState ?? loaded?.state;
   const priorMainComment =
     options.priorMainComment ??
     (await runLoggedPhase(options.log, "load prior main comment", async () =>
@@ -235,7 +247,7 @@ async function runTaskRuntimeWithPiRunner(
     id: runId,
     trigger: taskRunTrigger(options),
   });
-  const { priorReviewState, priorMainComment } = await loadPriorReview(options, selectedTasks);
+  const { priorReviewState, priorMainComment } = await loadPriorReview(options, selectedTasks, run);
   const piRuns: PiRunStats[] = [];
   const agentRunBudget = createAgentRunBudget(config.limits?.maxAgentRuns);
   const { structuralAnalysis, structuralManifest } = structuralContext(options, diffManifest);
@@ -353,6 +365,24 @@ async function runTaskRuntimeWithPiRunner(
     showStats: config.publication.showStats,
     priorReviewState: verifier.priorReviewState,
     threadActions: redactedPublication.threadActions,
+    findingOutcomes: (dispositions) =>
+      deriveReviewFindingOutcomes({
+        valid: redactedPublication.validated.validFindings.map((finding, index) => ({
+          finding,
+          attribution: findingAttribution(output, validated.validFindings[index] ?? finding),
+        })),
+        dispositions,
+        dropped: redactedPublication.validated.droppedFindings.map((dropped, index) => ({
+          finding: dropped.finding,
+          code: dropped.code,
+          attribution: findingAttribution(
+            output,
+            validated.droppedFindings[index]?.finding ?? dropped.finding,
+          ),
+        })),
+        priorReviewState,
+        verdicts: verifier.verdicts,
+      }),
     metadata: {
       runtimeVersion,
       configVersion: options.versionCompatibility?.configVersion,
@@ -369,26 +399,7 @@ async function runTaskRuntimeWithPiRunner(
     },
   });
   const publicationPlan = publishing.publicationPlan;
-  options.findingLedger?.record(
-    findingLedgerContext(options, run),
-    deriveReviewFindingOutcomes({
-      valid: redactedPublication.validated.validFindings.map((finding, index) => ({
-        finding,
-        attribution: findingAttribution(output, validated.validFindings[index] ?? finding),
-      })),
-      dispositions: publishing.findingDispositions,
-      dropped: redactedPublication.validated.droppedFindings.map((dropped, index) => ({
-        finding: dropped.finding,
-        code: dropped.code,
-        attribution: findingAttribution(
-          output,
-          validated.droppedFindings[index]?.finding ?? dropped.finding,
-        ),
-      })),
-      priorReviewState,
-      verdicts: verifier.verdicts,
-    }),
-  );
+  options.findingLedger?.record(findingLedgerContext(options, run), publishing.findingOutcomes);
   publishTaskChecks(options.checkSink, redactedPublication.taskChecks);
   options.log?.info("review validated", {
     validFindings: validated.validFindings.length,

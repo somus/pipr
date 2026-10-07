@@ -434,7 +434,7 @@ function plan(suffix = "") {
     main: "Summary.",
     inlineItems,
     reviewState: {
-      version: 1,
+      version: 2,
       reviewedHeadSha: "head",
       selectedTasks: ["review"],
       findings: inlineItems.map((item) => ({

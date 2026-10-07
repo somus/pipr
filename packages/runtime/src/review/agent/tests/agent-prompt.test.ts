@@ -251,7 +251,7 @@ describe("renderAgentPrompt", () => {
 
   it("treats prior finding locations as hints rather than current evidence", async () => {
     const priorReviewState: PriorReviewState = {
-      version: 1,
+      version: 2,
       reviewedHeadSha: "prior-head",
       selectedTasks: ["review"],
       findings: [

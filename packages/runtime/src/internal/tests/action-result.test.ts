@@ -386,7 +386,7 @@ function reviewResult(overrides: Omit<Partial<ResultOf<"review">>, "kind"> = {})
         inlineItems: [inlineDraft],
         metadata,
         reviewState: {
-          version: 1,
+          version: 2,
           reviewedHeadSha: "head",
           selectedTasks: ["review"],
           findings: [],

@@ -355,15 +355,21 @@ async function publicLedgerProjection(bundle: ValidatedRunBundle): Promise<
     (artifact) => artifact.kind === "ledger" && !artifact.omitted && !artifact.truncated,
   );
   if (!source) return undefined;
-  let events: unknown;
+  let ledger: z.infer<typeof sourceLedgerSchema>;
   try {
     const parsed = JSON.parse(await readFile(path.join(bundle.directory, source.path), "utf8"));
-    events = sourceLedgerSchema.parse(parsed).events;
+    ledger = sourceLedgerSchema.parse(parsed);
   } catch {
     return undefined;
   }
   const contents = Buffer.from(
-    `${JSON.stringify(findingLedgerSchema.parse({ formatVersion: 1, events }))}\n`,
+    `${JSON.stringify(
+      findingLedgerSchema.parse({
+        formatVersion: 1,
+        threadResolution: ledger.threadResolution,
+        events: ledger.events,
+      }),
+    )}\n`,
   );
   return {
     source,

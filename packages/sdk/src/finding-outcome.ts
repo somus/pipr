@@ -51,6 +51,14 @@ export type FindingOutcomeKind = (typeof findingOutcomeKinds)[number];
 export type FindingDropCode = (typeof findingDropCodes)[number];
 export type FindingActorPermission = (typeof findingActorPermissions)[number];
 
+/**
+ * Whether the execution's code host reports native thread resolution. Only hosts where it is
+ * `available` can observe `resolved-by-human`; stats leave the others out of dismissal rates.
+ */
+const findingThreadResolutions = ["available", "unavailable"] as const;
+
+export type FindingThreadResolution = (typeof findingThreadResolutions)[number];
+
 const count = z.number().int().nonnegative();
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const token = (max: number) =>
@@ -75,7 +83,12 @@ const findingIdSchema = z
 /** One content-free Finding Outcome event; safe for public metadata. */
 export const findingOutcomeEventSchema = z
   .strictObject({
-    /** sha256 of `findingId|kind|headSha|workId|reasonCode`; stable across reruns of the same work. */
+    /**
+     * sha256 of `findingId|kind|headSha|workId|reasonCode`, stable across reruns of the same work.
+     * Outcomes tied to a host marker (Pipr resolutions, verifier replies, human resolutions) hash
+     * `findingId|kind|anchor:<anchor>` instead, so a later run that rebuilds the outcome from the
+     * marker produces the same eventId as the run that acted.
+     */
     eventId: sha256,
     findingId: findingIdSchema,
     kind: z.enum(findingOutcomeKinds),
@@ -133,10 +146,13 @@ const findingEvidenceSchema = z.strictObject({
 export type FindingEvidence = z.infer<typeof findingEvidenceSchema>;
 
 const ledgerEvents = z.array(findingOutcomeEventSchema).max(10_000);
+/** Thread resolution support of the execution's code host; absent for local runs. */
+const ledgerThreadResolution = z.enum(findingThreadResolutions).optional();
 
 /** Public `ledger` artifact: Finding Outcome events without diagnostic content. */
 export const findingLedgerSchema = z.strictObject({
   formatVersion: z.literal(1),
+  threadResolution: ledgerThreadResolution,
   events: ledgerEvents,
 });
 
@@ -145,6 +161,7 @@ export type FindingLedger = z.infer<typeof findingLedgerSchema>;
 /** Diagnostic `ledger` artifact: the public events plus evidence for each finding. */
 export const diagnosticFindingLedgerSchema = z.strictObject({
   formatVersion: z.literal(1),
+  threadResolution: ledgerThreadResolution,
   events: ledgerEvents,
   evidence: z.record(findingIdSchema, findingEvidenceSchema),
 });

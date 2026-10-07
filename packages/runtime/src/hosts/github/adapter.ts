@@ -28,16 +28,18 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
   const driver = createGitHubPublicationDriver(publicationClient);
   const publication = createPublicationWorkflow(driver);
 
+  const capabilities = {
+    commandComments: true,
+    reviewCommentReplies: true,
+    threadResolution: true,
+    multilineInlineComments: true,
+    suggestedChanges: true,
+    statuses: true,
+  };
+  const comments = createCommentsReader(driver, capabilities);
   return {
     id: "github",
-    capabilities: {
-      commandComments: true,
-      reviewCommentReplies: true,
-      threadResolution: true,
-      multilineInlineComments: true,
-      suggestedChanges: true,
-      statuses: true,
-    },
+    capabilities,
     events: {
       async parseEvent(parseOptions) {
         const eventPath = parseOptions.eventPath;
@@ -87,7 +89,7 @@ export function createGitHubHostAdapter(options: GitHubHostAdapterOptions = {}):
       },
     },
     publication,
-    comments: createCommentsReader(driver),
+    comments,
     statuses: {
       isAvailable(change) {
         return change.eventName === "pull_request";

@@ -78,7 +78,9 @@ A diagnostic bundle can contain these artifacts:
 
 Conversations are the first evidence dropped when a bundle reaches its size limit. Public metadata keeps only artifact descriptors. A `conversation` descriptor also keeps its entry, entry kind, and tool call counts, never the entries themselves.
 
-The `ledger` is the one artifact public metadata keeps a body for. Its public form holds only the content-free outcome events: finding ID, outcome kind, drop reason code, work and execution IDs, head SHA, config hash, agent, model, and enum field values. Paths, ranges, and bodies stay in the diagnostic ledger. Metadata-only captures record the public ledger directly.
+The `ledger` is the one artifact public metadata keeps a body for. Its public form holds only the content-free outcome events: finding ID, outcome kind, drop reason code, work and execution IDs, head SHA, config hash, agent, model, and enum field values. Paths, ranges, and bodies stay in the diagnostic ledger. Metadata-only captures record the public ledger directly. The ledger also records whether the code host reports thread resolution: GitHub, GitLab, Bitbucket, and Azure DevOps do, so a thread a maintainer resolves without a Pipr resolution becomes `resolved-by-human`. Gitea, Forgejo, and Codeberg do not, so their ledgers never contain that outcome.
+
+The main review comment also keeps each finding's agent, model, enum field values, and its last six outcomes, so outcomes continue across pushes in ephemeral CI. Pipr rebuilds outcomes that reply runs and maintainers leave on the host (Pipr resolutions, verifier replies, resolved threads) when the next review loads that state, with the same event IDs the original run recorded. The stored state is compressed and capped at 24,000 characters to fit the smallest host comment limit; Pipr trims the oldest outcomes first, then resolved and earlier findings, then the oldest open findings. Review state written before this format is ignored once, so the first review after upgrading starts fresh.
 
 ## Inspect an existing package
 

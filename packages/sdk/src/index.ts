@@ -10,6 +10,7 @@ export type {
   FindingLedger,
   FindingOutcomeEvent,
   FindingOutcomeKind,
+  FindingThreadResolution,
 } from "./finding-outcome.js";
 export {
   diagnosticFindingLedgerSchema,

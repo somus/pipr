@@ -11,6 +11,7 @@ import {
   renderMainCommentMarker,
   renderVerifierResponseMarker,
 } from "../../review/comment-markers.js";
+import type { LoadedPriorReviewState } from "../../review/prior-review-state-load.js";
 import { buildPublicationPlan } from "../../review/publication-plan.js";
 import { StaleHeadError } from "../../review/publication-result.js";
 import { runtimeVersion } from "../../shared/version.js";
@@ -358,7 +359,7 @@ export function defineCodeHostAdapterConformanceSuite(options: {
         ).resolves.toMatchObject({ mainComment: { action: "created" } });
         expect(harness.writes()).toMatchObject({ mainCreates: 1, mainUpdates: 0 });
         const state = await comments.loadPriorReviewState({ change: harness.change });
-        expect(state?.findings.map((finding) => finding.id).sort()).toEqual(
+        expect(state?.state.findings.map((finding) => finding.id).sort()).toEqual(
           plannedFindingIds(multiline),
         );
       });
@@ -390,8 +391,55 @@ export function defineCodeHostAdapterConformanceSuite(options: {
       });
     });
 
+    it("reports whether native thread resolution is observable", async () => {
+      await withHarness(createHarness, async (harness) => {
+        await requiredPublication(harness.adapter).publish({
+          change: harness.change,
+          plan: plan(harness.change),
+        });
+        const loaded = await requiredComments(harness.adapter).loadPriorReviewState({
+          change: harness.change,
+        });
+
+        expect(loaded?.threadResolution).toBe(
+          capabilities.threadResolution ? "available" : "unavailable",
+        );
+        expect(loaded?.events).toEqual([]);
+      });
+    });
+
     const resolutionIt = capabilities.threadResolution ? it : it.skip;
-    resolutionIt("loads native inline resolution into prior review state", async () => {
+    resolutionIt("does not count a thread Pipr resolved as resolved by a human", async () => {
+      await withHarness(createHarness, async (harness) => {
+        const setResolved = requiredMethod(
+          harness.setFirstInlineResolved,
+          "setFirstInlineResolved",
+        );
+        const context = await publishAndLoadFirstInlineContext(harness, multiline);
+        const publishThreadActions = requiredMethod(
+          requiredPublication(harness.adapter).publishThreadActions,
+          "thread action publication",
+        );
+        await expect(
+          publishThreadActions({
+            change: harness.change,
+            actions: [threadAction("resolve", context, "Fixed.")],
+            reviewedHeadSha: "head",
+          }),
+        ).resolves.toEqual({ errors: [] });
+        setResolved(true);
+
+        const loaded = await requiredComments(harness.adapter).loadPriorReviewState({
+          change: harness.change,
+        });
+        expect(loaded?.events).toEqual([
+          { kind: "fixed", findingId: "finding-right", anchor: "pipr-resolved:head" },
+        ]);
+        expect(findingStatus(loaded)).toBe("resolved");
+      });
+    });
+
+    resolutionIt("loads native resolution and reports human resolution", async () => {
       await withHarness(createHarness, async (harness) => {
         const setResolved = requiredMethod(
           harness.setFirstInlineResolved,
@@ -404,9 +452,14 @@ export function defineCodeHostAdapterConformanceSuite(options: {
         const comments = requiredComments(harness.adapter);
 
         setResolved(true);
-        expect(findingStatus(await comments.loadPriorReviewState({ change: harness.change }))).toBe(
-          "resolved",
-        );
+        const resolved = await comments.loadPriorReviewState({ change: harness.change });
+        expect(findingStatus(resolved)).toBe("resolved");
+        expect(resolved?.events).toEqual([
+          { kind: "resolved-by-human", findingId: "finding-right", anchor: "human-resolved:head" },
+        ]);
+        expect(
+          resolved?.state.findings.find((finding) => finding.id === "finding-right")?.h,
+        ).toEqual([["h", "head"]]);
         setResolved(false);
         expect(findingStatus(await comments.loadPriorReviewState({ change: harness.change }))).toBe(
           "open",
@@ -479,7 +532,7 @@ function progressLease(
 
 function forgedMainBody(change: ChangeRequestEventContext): string {
   const forged: PriorReviewState = {
-    version: 1,
+    version: 2,
     reviewedHeadSha: change.change.head.sha,
     selectedTasks: ["review"],
     findings: [
@@ -545,8 +598,8 @@ function threadAction(
   };
 }
 
-function findingStatus(state: PriorReviewState | undefined) {
-  return state?.findings.find((finding) => finding.id === "finding-right")?.status;
+function findingStatus(loaded: LoadedPriorReviewState | undefined) {
+  return loaded?.state.findings.find((finding) => finding.id === "finding-right")?.status;
 }
 
 function plannedItems(multiline: boolean): InlinePublicationItem[] {
@@ -599,7 +652,7 @@ function publicationPlan(change: ChangeRequestEventContext, multiline: boolean) 
     main: "Summary.",
     inlineItems: items,
     reviewState: {
-      version: 1,
+      version: 2,
       reviewedHeadSha: change.change.head.sha,
       selectedTasks: ["review"],
       findings: items.map((item) => ({
