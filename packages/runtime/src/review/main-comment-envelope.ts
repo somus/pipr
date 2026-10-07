@@ -10,20 +10,8 @@ import {
 } from "./comment-branding.js";
 import { reviewProgressRange } from "./progress.js";
 
-const generatedReviewStatsShape = [
-  /^$/,
-  /^\| Metric \| Total \|$/,
-  /^\| --- \| ---: \|$/,
-  /^\| Models \| .+ \|$/,
-  /^\| Agent runs \| \d+ \|$/,
-  /^\| (?:Elapsed|Combined runtime) \| .+ \|$/,
-  /^\| Input tokens \| (?:Unavailable|[\d,]+(?: \(reported\))?) \|$/,
-  /^\| Output tokens \| (?:Unavailable|[\d,]+(?: \(reported\))?) \|$/,
-  /^\| Cost \(USD\) \| (?:Unavailable|\$\d+(?:\.\d+)?(?:e[+-]?\d+)?(?: \(reported\))?) \|$/,
-  /^$/,
-  /^<\/details>$/,
-  /^<!-- pipr:stats:end -->$/,
-];
+/** A rendered stats table row: a metric label and its value, as produced by `renderReviewStatsTable`. */
+const generatedReviewStatsRow = /^\| [^|]+ \| .+ \|$/;
 
 export type GeneratedMainCommentEnvelope = {
   mainMarkerIndex: number;
@@ -110,18 +98,18 @@ function isGeneratedReviewStatsEnvelope(lines: string[], start: number, end: num
   );
 }
 
+/** Blank line, metric table with at least one row, blank line, `</details>`, end marker. */
 function matchesGeneratedReviewStatsShape(lines: string[], start: number, end: number): boolean {
-  const generatedShape = lines.slice(start + 3, end + 1);
-  const workflowIndex = generatedShape.findIndex((line) =>
-    /^(?:\| Workflow \| \[View workflow\]\(<https?:\/\/[^>]+>\) \||\| Workflow runs \| \[Run 1\]\(<https?:\/\/[^>]+>\)(?:, \[Run \d+\]\(<https?:\/\/[^>]+>\))* \|)$/.test(
-      line,
-    ),
-  );
-  if (workflowIndex >= 0) {
-    generatedShape.splice(workflowIndex, 1);
-  }
+  const body = lines.slice(start + 3, end + 1);
+  const rows = body.slice(3, -3);
   return (
-    generatedShape.length === generatedReviewStatsShape.length &&
-    generatedReviewStatsShape.every((pattern, index) => pattern.test(generatedShape[index] ?? ""))
+    body[0] === "" &&
+    body[1] === "| Metric | Total |" &&
+    body[2] === "| --- | ---: |" &&
+    rows.length > 0 &&
+    rows.every((row) => generatedReviewStatsRow.test(row)) &&
+    body.at(-3) === "" &&
+    body.at(-2) === "</details>" &&
+    body.at(-1) === reviewStatsEndMarker
   );
 }
