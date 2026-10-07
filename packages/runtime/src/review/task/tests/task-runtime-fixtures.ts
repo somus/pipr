@@ -512,6 +512,7 @@ function expectDroppedOutsideConfiguredPaths(result: ReviewOnlyRuntimeResult): v
   expect(result.validated.droppedFindings).toEqual([
     {
       finding: expect.objectContaining({ body: "outside body" }),
+      code: "path-scope",
       reason: "finding path is outside configured paths",
     },
   ]);

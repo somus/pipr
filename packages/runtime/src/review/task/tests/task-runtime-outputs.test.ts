@@ -138,6 +138,7 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
     expect(result.validated.droppedFindings).toEqual([
       {
         finding: finding("invalid", "missing-range", 99),
+        code: "unknown-range",
         reason: "unknown rangeId 'missing-range'",
       },
     ]);

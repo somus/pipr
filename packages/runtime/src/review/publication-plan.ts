@@ -71,7 +71,19 @@ const inlinePublicationItemSchema = z
   });
 
 export type InlineCommentDraft = InlinePublicationItem;
+
+/** What publication planning decided for one valid finding, in `validFindings` order. */
+export type PlannedFindingDisposition =
+  /** Scheduled as an inline comment. */
+  | { kind: "planned"; findingId: string }
+  /** Already commented at this head or resolved earlier; not posted again. */
+  | { kind: "carried"; findingId: string }
+  | { kind: "dropped"; code: "empty-body" }
+  | { kind: "dropped"; code: "duplicate" | "inline-cap"; findingId: string };
+
 type PublishableInlineFinding = {
+  /** Index in `validFindings`. */
+  index: number;
   finding: ReviewFinding;
   range: CommentableRange;
   previousPath?: string;
@@ -176,9 +188,10 @@ function preparePublishableInlineFindings(options: {
     validFindings: ReviewFinding[];
   };
   manifest: DiffManifest;
+  dispositions: PlannedFindingDisposition[];
 }): PublishableInlineFinding[] {
   const ranges = createDiffRangeIndex(options.manifest);
-  return options.validated.validFindings.flatMap((finding) => {
+  return options.validated.validFindings.flatMap((finding, index) => {
     const match = ranges.findRange(finding.rangeId);
     if (!match) {
       throw new Error(`Validated finding range '${finding.rangeId}' is missing from Diff Manifest`);
@@ -186,10 +199,12 @@ function preparePublishableInlineFindings(options: {
     const { file, range } = match;
     const findingWithBody = findingWithPublishableBody(finding);
     if (!findingWithBody) {
+      options.dispositions[index] = { kind: "dropped", code: "empty-body" };
       return [];
     }
     return [
       {
+        index,
         finding: findingWithPublishableSuggestedFix(findingWithBody, range),
         range,
         previousPath: file.previousPath,
@@ -202,11 +217,19 @@ function prepareInlinePublicationItemsForPublishableFindings(options: {
   publishableFindings: PublishableInlineFinding[];
   reviewedHeadSha: string;
   reviewState?: PriorReviewState;
-}): InlinePublicationItem[] {
+  dispositions: PlannedFindingDisposition[];
+}): Array<InlinePublicationItem & { index: number }> {
   const seenFindingIds = new Set<string>();
   const fingerprintCounts = countFindingFingerprints(options.publishableFindings);
   return options.publishableFindings.flatMap(
-    ({ finding: publishableFinding, range, previousPath, anchorFingerprint, issueFingerprint }) => {
+    ({
+      index,
+      finding: publishableFinding,
+      range,
+      previousPath,
+      anchorFingerprint,
+      issueFingerprint,
+    }) => {
       const stateRecord = options.reviewState
         ? matchFindingRecord(options.reviewState, publishableFinding)
         : undefined;
@@ -221,16 +244,21 @@ function prepareInlinePublicationItemsForPublishableFindings(options: {
             previousPath,
           )
         : undefined;
+      if (seenFindingIds.has(findingId)) {
+        options.dispositions[index] = { kind: "dropped", code: "duplicate", findingId };
+        return [];
+      }
       if (
-        seenFindingIds.has(findingId) ||
         resolvedRecord !== undefined ||
         stateRecord?.lastCommentedHeadSha === options.reviewedHeadSha
       ) {
+        options.dispositions[index] = { kind: "carried", findingId };
         return [];
       }
       seenFindingIds.add(findingId);
       return [
         {
+          index,
           finding: publishableFinding,
           range,
           path: publishableFinding.path,
@@ -294,14 +322,18 @@ export type BuildCommentPublishingPlanOptions = {
 export type CommentPublishingPlan = {
   publicationPlan: PublicationPlan;
   inlineCommentDrafts: InlineCommentDraft[];
+  /** One disposition per `validated.validFindings` entry, for Finding Outcome events. */
+  findingDispositions: PlannedFindingDisposition[];
 };
 
 export function buildCommentPublishingPlan(
   options: BuildCommentPublishingPlanOptions,
 ): CommentPublishingPlan {
+  const findingDispositions: PlannedFindingDisposition[] = [];
   const publishableInlineFindings = preparePublishableInlineFindings({
     validated: options.validated,
     manifest: options.manifest,
+    dispositions: findingDispositions,
   }).map((item) => {
     const fingerprint = selectedCodeFingerprint(item.finding, item.range);
     return fingerprint
@@ -320,15 +352,16 @@ export function buildCommentPublishingPlan(
     stats: options.metadata.stats,
     workflowUrl: options.metadata.workflowUrl,
   });
-  const inlineCommentDrafts = prepareInlinePublicationItemsForPublishableFindings({
+  const indexedDrafts = prepareInlinePublicationItemsForPublishableFindings({
     publishableFindings: publishableInlineFindings,
     reviewedHeadSha: options.event.change.head.sha,
     reviewState,
+    dispositions: findingDispositions,
   });
   const publicationPlan = buildPublicationPlan({
     event: options.event,
     main: options.main,
-    inlineItems: inlineCommentDrafts,
+    inlineItems: indexedDrafts.map(({ index: _index, ...item }) => item),
     maxInlineComments: options.maxInlineComments,
     maxStoredFindings: options.maxStoredFindings,
     showHeader: options.showHeader,
@@ -341,9 +374,16 @@ export function buildCommentPublishingPlan(
     reviewState,
     threadActions: options.threadActions,
   });
+  for (const [position, { index, findingId }] of indexedDrafts.entries()) {
+    findingDispositions[index] =
+      position < publicationPlan.inlineItems.length
+        ? { kind: "planned", findingId }
+        : { kind: "dropped", code: "inline-cap", findingId };
+  }
   return {
     publicationPlan,
     inlineCommentDrafts: publicationPlan.inlineItems,
+    findingDispositions,
   };
 }
 

@@ -321,7 +321,7 @@ async function publishInlineItems<Prepared>(
     item.resolved || !item.location || !parseInlineFindingMarker(item.body) ? [] : [item.location],
   );
   const errors: string[] = [];
-  let posted = 0;
+  const postedFindingIds: string[] = [];
   let skipped = 0;
   for (const item of items) {
     let location: InlinePublicationLocation;
@@ -345,14 +345,14 @@ async function publishInlineItems<Prepared>(
     await beforeWrite();
     try {
       await driver.createInline(prepared, item);
-      posted += 1;
+      postedFindingIds.push(item.findingId);
       markers.add(marker);
       locations.push(location);
     } catch (error) {
       errors.push(errorMessage(error));
     }
   }
-  return { posted, skipped, errors };
+  return { postedFindingIds, skipped, errors };
 }
 
 async function runThreadActions<Prepared>(
@@ -469,12 +469,13 @@ function progressWasSuperseded(main: OwnedMainComment | undefined, token: string
 
 function publicationPartial(
   metadata: Parameters<CodeHostPublication["publish"]>[0]["plan"]["metadata"],
-  inline: { posted: number; skipped: number; errors: string[] },
+  inline: { postedFindingIds: string[]; skipped: number; errors: string[] },
   resolutionErrors: string[],
 ) {
   return {
+    postedFindingIds: inline.postedFindingIds,
     inlineComments: {
-      posted: inline.posted,
+      posted: inline.postedFindingIds.length,
       skipped: inline.skipped,
       failed: inline.errors.length,
     },

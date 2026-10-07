@@ -17,6 +17,7 @@ import type {
   PiprConfig,
   ProviderConfig,
 } from "../../types.js";
+import type { FindingLedger } from "../finding-ledger.js";
 import type { ReviewProgressSink } from "../progress.js";
 import type { RuntimeCommandInvocation } from "../run-identity.js";
 import type { RuntimeCheckSink } from "./task-output.js";
@@ -44,6 +45,8 @@ export type TaskRuntimePorts = {
   taskLog?: TaskContext["log"];
   secretRedactor?: SecretRedactor;
   runObserver?: RunObserver;
+  /** Receives Finding Outcome events decided by this run. */
+  findingLedger?: FindingLedger;
   progress?: ReviewProgressSink & {
     recordStats(stats: ReviewStats | undefined): void;
   };

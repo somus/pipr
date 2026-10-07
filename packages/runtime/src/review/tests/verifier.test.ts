@@ -145,6 +145,28 @@ describe("runInternalVerifier", () => {
     expect(observedPrompt).not.toContain("private reviewer context that should not leak");
   });
 
+  it("reports fixed and still-valid verdicts that took effect, ignoring unknown", async () => {
+    const fixed = await runVerifier({
+      mode: { kind: "synchronize" },
+      output: { findings: [{ id: "fnd_existing", status: "fixed" }] },
+    });
+    const stillValid = await runVerifier({
+      respondWhenStillValid: false,
+      output: { findings: [{ id: "fnd_existing", status: "still-valid", response: "Still." }] },
+    });
+    const silentFix = await runVerifier({
+      output: { findings: [{ id: "fnd_existing", status: "fixed" }] },
+    });
+    const unknown = await runVerifier({
+      output: { findings: [{ id: "fnd_existing", status: "unknown" }] },
+    });
+
+    expect(fixed.verdicts).toEqual([{ findingId: "fnd_existing", status: "fixed" }]);
+    expect(stillValid.verdicts).toEqual([{ findingId: "fnd_existing", status: "still-valid" }]);
+    expect(silentFix.verdicts).toEqual([]);
+    expect(unknown.verdicts).toEqual([]);
+  });
+
   it("instructs the verifier to respect valid user explanations", async () => {
     let observedPrompt = "";
     await runVerifier({

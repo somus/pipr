@@ -1,17 +1,25 @@
 import { describe, expect, it } from "bun:test";
 import type { ReviewFinding } from "@usepipr/sdk";
-import { createCheckHandle, createOutputState, recordFindingFacets } from "../task-output.js";
+import {
+  createCheckHandle,
+  createOutputState,
+  findingAttribution,
+  mergeTaskOutputs,
+  recordAgentFindingProvenance,
+  recordFindingFacets,
+} from "../task-output.js";
 
-describe("recordFindingFacets", () => {
+describe("finding attribution", () => {
+  const location = {
+    path: "src/a.ts",
+    rangeId: "rng_1",
+    side: "RIGHT",
+    startLine: 3,
+    endLine: 3,
+  };
+
   it("keeps facets for distinct findings on the same lines", () => {
     const state = createOutputState();
-    const location = {
-      path: "src/a.ts",
-      rangeId: "rng_1",
-      side: "RIGHT",
-      startLine: 3,
-      endLine: 3,
-    };
     const findings = [
       { ...location, body: "SQL injection.", severity: "high" },
       { ...location, body: "Rename this variable.", severity: "low" },
@@ -19,7 +27,35 @@ describe("recordFindingFacets", () => {
 
     recordFindingFacets(state, findings, { severity: ["high", "low"] });
 
-    expect([...state.findingFacets.values()]).toEqual([{ severity: "high" }, { severity: "low" }]);
+    expect(findings.map((finding) => findingAttribution(state, finding).facets)).toEqual([
+      { severity: "high" },
+      { severity: "low" },
+    ]);
+  });
+
+  it("remembers the producing agent and model for copies of a finding across tasks", () => {
+    const security = createOutputState();
+    const style = createOutputState();
+    const finding = { ...location, body: "SQL injection.", severity: "high" } as ReviewFinding;
+    recordAgentFindingProvenance(
+      security,
+      { summary: { body: "Found one." }, inlineFindings: [finding] },
+      { agent: "security", model: "deepseek-v4" },
+    );
+    recordFindingFacets(security, [finding], { severity: ["high", "low"] });
+
+    const merged = mergeTaskOutputs([
+      { taskName: "security", output: security },
+      { taskName: "style", output: style },
+    ]);
+
+    expect(findingAttribution(merged, { ...finding, rangeId: "rng_canonical" })).toEqual({
+      agent: "security",
+      model: "deepseek-v4",
+      facets: { severity: "high" },
+    });
+    expect(findingAttribution(merged, { ...finding, body: "Other." })).toEqual({ facets: {} });
+    expect(Object.keys(finding)).not.toContain("agent");
   });
 });
 

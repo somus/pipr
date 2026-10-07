@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { PriorReviewState } from "../../publication/types.js";
 import type { ReviewResult } from "../../types.js";
 import { mainCommentTitles } from "../comment-branding.js";
+import type { FindingAttribution } from "../finding-ledger.js";
 import {
   type GeneratedMainCommentEnvelope,
   parseGeneratedMainCommentEnvelope,
@@ -34,8 +35,8 @@ export type OutputState = {
   findings: FindingContribution[];
   droppedFindings: DroppedReviewFinding[];
   findingScopes: WeakMap<readonly ReviewFinding[], PathFilter>;
-  /** Facet values of selected findings keyed by finding location. */
-  findingFacets: Map<string, Record<string, string>>;
+  /** Producing agent, model, and facet values keyed by finding location and body. */
+  findingAttributions: Map<string, FindingAttribution>;
   providerModels: string[];
   repairAttempted: boolean;
   check?: Omit<RuntimeTaskCheckResult, "taskName">;
@@ -98,7 +99,7 @@ export function createOutputState(): OutputState {
     findings: [],
     droppedFindings: [],
     findingScopes: new WeakMap(),
-    findingFacets: new Map(),
+    findingAttributions: new Map(),
     providerModels: [],
     repairAttempted: false,
   };
@@ -111,6 +112,13 @@ export function mergeTaskOutputs(results: TaskRunResult[]): OutputState {
     mergeCommandResponseContribution(merged, output.commandResponse);
     merged.findings.push(...output.findings);
     merged.droppedFindings.push(...output.droppedFindings);
+    for (const [key, attribution] of output.findingAttributions) {
+      merged.findingAttributions.set(key, {
+        ...merged.findingAttributions.get(key),
+        ...attribution,
+        facets: { ...merged.findingAttributions.get(key)?.facets, ...attribution.facets },
+      });
+    }
     merged.providerModels.push(...output.providerModels);
     merged.repairAttempted ||= output.repairAttempted;
   }
@@ -332,8 +340,9 @@ export function recordDroppedFindings(
   droppedFindings: readonly DroppedReviewFinding[],
 ): void {
   state.droppedFindings.push(
-    ...droppedFindings.map(({ finding, reason }) => ({
+    ...droppedFindings.map(({ finding, code, reason }) => ({
       finding: canonicalFindingProjection(finding),
+      code,
       reason,
     })),
   );
@@ -348,12 +357,48 @@ export function recordFindingFacets(
     return;
   }
   for (const finding of findings) {
-    state.findingFacets.set(findingFacetKey(finding), findingFacetValues(finding, facets));
+    updateAttribution(state, finding, { facets: findingFacetValues(finding, facets) });
   }
 }
 
-/** Identifies one finding for facet tracking and outcome events; findings on the same lines differ by body. */
-function findingFacetKey(finding: ReviewFinding): string {
+/** Remembers which agent and model produced the inline findings an agent returned. */
+export function recordAgentFindingProvenance(
+  state: OutputState,
+  value: unknown,
+  provenance: { agent?: string; model?: string },
+): void {
+  const parsed = agentInlineFindingsOutputSchema.safeParse(value);
+  if (!parsed.success) {
+    return;
+  }
+  for (const finding of parsed.data.inlineFindings) {
+    updateAttribution(state, finding, {
+      ...(provenance.agent ? { agent: provenance.agent } : {}),
+      ...(provenance.model ? { model: provenance.model } : {}),
+    });
+  }
+}
+
+export function findingAttribution(state: OutputState, finding: ReviewFinding): FindingAttribution {
+  return state.findingAttributions.get(findingAttributionKey(finding)) ?? { facets: {} };
+}
+
+function updateAttribution(
+  state: OutputState,
+  finding: ReviewFinding,
+  update: Partial<FindingAttribution>,
+): void {
+  const key = findingAttributionKey(finding);
+  const current = state.findingAttributions.get(key) ?? { facets: {} };
+  state.findingAttributions.set(key, {
+    ...current,
+    ...update,
+    facets: { ...current.facets, ...update.facets },
+  });
+}
+
+/** Identifies one finding across copies; findings on the same lines differ by body. */
+function findingAttributionKey(finding: ReviewFinding): string {
   const body = createHash("sha256").update(finding.body).digest("hex").slice(0, 16);
   return [finding.path, finding.side, finding.startLine, finding.endLine, body].join(":");
 }

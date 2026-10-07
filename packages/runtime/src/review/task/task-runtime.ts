@@ -27,6 +27,7 @@ import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../t
 import { type AgentRunBudget, createAgentRunBudget } from "../agent/agent-run-budget.js";
 import { resolveProvider } from "../agent/prompt-assembly.js";
 import type { PiRunStats } from "../agent/review-run-types.js";
+import { deriveReviewFindingOutcomes, findingLedgerContext } from "../finding-ledger.js";
 import { priorReviewStateForSelectedTasks } from "../prior-state.js";
 import { buildCommentPublishingPlan, type InlineCommentDraft } from "../publication-plan.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
@@ -39,6 +40,7 @@ import { createTaskContext } from "./task-context.js";
 import {
   collectedReview,
   createOutputState,
+  findingAttribution,
   mergeTaskOutputs,
   type OutputState,
   type OutputStateWithComment,
@@ -367,6 +369,26 @@ async function runTaskRuntimeWithPiRunner(
     },
   });
   const publicationPlan = publishing.publicationPlan;
+  options.findingLedger?.record(
+    findingLedgerContext(options, run),
+    deriveReviewFindingOutcomes({
+      valid: redactedPublication.validated.validFindings.map((finding, index) => ({
+        finding,
+        attribution: findingAttribution(output, validated.validFindings[index] ?? finding),
+      })),
+      dispositions: publishing.findingDispositions,
+      dropped: redactedPublication.validated.droppedFindings.map((dropped, index) => ({
+        finding: dropped.finding,
+        code: dropped.code,
+        attribution: findingAttribution(
+          output,
+          validated.droppedFindings[index]?.finding ?? dropped.finding,
+        ),
+      })),
+      priorReviewState,
+      verdicts: verifier.verdicts,
+    }),
+  );
   publishTaskChecks(options.checkSink, redactedPublication.taskChecks);
   options.log?.info("review validated", {
     validFindings: validated.validFindings.length,
@@ -607,6 +629,7 @@ async function runSynchronizeVerifier(options: {
     return {
       priorReviewState: options.priorReviewState,
       threadActions: [],
+      verdicts: [],
       providerModels: [],
     };
   }

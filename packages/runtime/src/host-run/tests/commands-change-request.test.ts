@@ -1431,3 +1431,166 @@ function supersedeProgressComment(
     "token=00000000-0000-4000-8000-000000000000",
   );
 }
+
+describe("runHostRunCommand finding outcomes", () => {
+  it("returns Finding Outcome events from an opened review and its synchronize follow-up", async () => {
+    const workspace = await createCommandWorkspace({
+      checkoutBaseBeforeRun: true,
+      baseConfigTs: reviewConfigTs().replace(
+        'changeRequest: ["opened"]',
+        'changeRequest: ["opened", "updated"]',
+      ),
+    });
+    const traceDirectory = path.join(workspace.rootDir, "traces");
+    const github = statefulGitHubPublicationClient(workspace);
+    const bundles: string[] = [];
+    const run = async (action: "opened" | "synchronize") => {
+      const eventPath = path.join(workspace.rootDir, `${action}.json`);
+      await writeChangeRequestEvent(eventPath, workspace, action);
+      const result = await runTestHostCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: {
+          ...pullRequestEnv(workspace.rootDir, eventPath),
+          PIPR_RUN_STORE_DIR: traceDirectory,
+        },
+        githubPublicationClient: github.client,
+        piProviderModule: workspace.pi.providerModule,
+        onRunBundleFinalized(bundle) {
+          bundles.push(bundle.directory);
+        },
+      });
+      if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
+      return result;
+    };
+    try {
+      await workspace.pi.answer(
+        JSON.stringify({
+          summary: { body: "One issue." },
+          inlineFindings: [
+            { ...changedLineFinding, body: "Unchecked value." },
+            {
+              ...changedLineFinding,
+              path: "src/missing.ts",
+              rangeId: "missing",
+              body: "Phantom.",
+            },
+          ],
+        }),
+      );
+      const opened = await run("opened");
+      const publishedId = opened.publication.postedFindingIds[0];
+      expect(opened.findingEvents.map((event) => [event.kind, event.reasonCode])).toEqual([
+        ["proposed", undefined],
+        ["proposed", undefined],
+        ["dropped", "unknown-range"],
+        ["published", undefined],
+      ]);
+      expect(opened.findingEvents.at(-1)).toMatchObject({
+        findingId: publishedId,
+        workId: opened.review.run.id,
+        headSha: workspace.headSha,
+        agent: "reviewer",
+        configHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(github.reviewComments[0]?.body).toContain(`id=${publishedId}`);
+      expect(JSON.stringify(opened.findingEvents)).not.toContain("src/missing.ts");
+      const ledger = JSON.parse(
+        await readFile(path.join(bundles[0] ?? "", "artifacts", "ledger.json"), "utf8"),
+      );
+      expect(ledger.events).toEqual(opened.findingEvents);
+      expect(Object.values(ledger.evidence).map((item) => (item as { path: string }).path)).toEqual(
+        ["src/a.ts", "src/missing.ts"],
+      );
+
+      runGitCommand(["checkout", "--detach", workspace.headSha], workspace.rootDir);
+      await Bun.write(path.join(workspace.rootDir, "src", "a.ts"), "export const value = 3;\n");
+      runGitCommand(["commit", "--no-verify", "-am", "fix"], workspace.rootDir);
+      workspace.headSha = currentGitHead(workspace.rootDir);
+      runGitCommand(["checkout", "--detach", workspace.baseSha], workspace.rootDir);
+      await workspace.pi.script({
+        responses: [{ text: '{"summary":{"body":"No findings."},"inlineFindings":[]}' }],
+        rules: [
+          {
+            when: { promptIncludes: "currentHeadSha" },
+            response: {
+              text: JSON.stringify({ findings: [{ id: publishedId, status: "fixed" }] }),
+            },
+          },
+        ],
+      });
+      const synchronized = await run("synchronize");
+
+      expect(
+        synchronized.findingEvents.map((event) => [event.kind, event.findingId, event.headSha]),
+      ).toEqual([["fixed", publishedId, workspace.headSha]]);
+      expect(synchronized.findingEvents[0]?.eventId).not.toBe(opened.findingEvents[0]?.eventId);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+});
+
+const changedLineFinding = {
+  path: "src/a.ts",
+  rangeId: "unknown",
+  side: "RIGHT",
+  startLine: 1,
+  endLine: 1,
+} as const;
+
+async function writeChangeRequestEvent(
+  eventPath: string,
+  workspace: Awaited<ReturnType<typeof createCommandWorkspace>>,
+  action: "opened" | "synchronize",
+): Promise<void> {
+  await Bun.write(
+    eventPath,
+    JSON.stringify({
+      action,
+      number: 1,
+      repository: { full_name: "local/pipr" },
+      pull_request: {
+        number: 1,
+        title: "Test PR",
+        body: "Test body",
+        base: { sha: workspace.baseSha, repo: { full_name: "local/pipr" } },
+        head: { sha: workspace.headSha },
+      },
+    }),
+  );
+}
+
+/** A GitHub publication fake that keeps posted inline comments and threads across runs. */
+function statefulGitHubPublicationClient(
+  workspace: Awaited<ReturnType<typeof createCommandWorkspace>>,
+) {
+  const client = fakeGitHubPublicationClient(workspace);
+  const reviewComments: Awaited<ReturnType<typeof client.listReviewComments>> = [];
+  client.listReviewComments = async () => reviewComments;
+  client.listReviewThreads = async () =>
+    reviewComments.map((comment) => ({
+      id: `thread-${comment.id}`,
+      isResolved: false,
+      viewerCanResolve: true,
+      commentIds: [comment.id],
+    }));
+  client.createReviewComment = async (options) => {
+    const id = 100 + reviewComments.length;
+    reviewComments.push({
+      id,
+      body: options.body,
+      authorLogin: "github-actions[bot]",
+      path: options.path,
+      commitId: options.commit_id,
+      line: options.line,
+      startLine: options.start_line,
+      side: options.side,
+      startSide: options.start_side,
+    });
+    return { id };
+  };
+  return { client, reviewComments };
+}

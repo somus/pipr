@@ -1,33 +1,40 @@
+import type { FindingDropCode } from "@usepipr/sdk";
 import type { CommentableRange, ReviewFinding } from "../types.js";
 
+/** Why a finding was dropped: a content-free code for outcome events and a message for logs. */
+export type FindingDropReason = { code: FindingDropCode; message: string };
+
 export function assertFindingMatchesRange(finding: ReviewFinding, range: CommentableRange): void {
-  const reason = findingRangeMismatchReason(finding, range);
-  if (reason) {
-    throw new Error(reason);
+  const mismatch = findingRangeMismatch(finding, range);
+  if (mismatch) {
+    throw new Error(mismatch.message);
   }
 }
 
-export function findingRangeMismatchReason(
+export function findingRangeMismatch(
   finding: ReviewFinding,
   range: CommentableRange | undefined,
-): string | undefined {
+): FindingDropReason | undefined {
   if (!range) {
-    return `unknown rangeId '${finding.rangeId}'`;
+    return { code: "unknown-range", message: `unknown rangeId '${finding.rangeId}'` };
   }
   if (finding.rangeId !== range.id) {
-    return "finding rangeId does not match range";
+    return { code: "range-mismatch", message: "finding rangeId does not match range" };
   }
   if (finding.path !== range.path) {
-    return "finding path does not match range path";
+    return { code: "path-mismatch", message: "finding path does not match range path" };
   }
   if (finding.side !== range.side) {
-    return "finding side does not match range side";
+    return { code: "side-mismatch", message: "finding side does not match range side" };
   }
   if (finding.startLine > finding.endLine) {
-    return "finding startLine is after endLine";
+    return { code: "inverted-lines", message: "finding startLine is after endLine" };
   }
   if (finding.startLine < range.startLine || finding.endLine > range.endLine) {
-    return "finding lines fall outside the commentable range";
+    return {
+      code: "out-of-range",
+      message: "finding lines fall outside the commentable range",
+    };
   }
   return undefined;
 }

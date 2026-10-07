@@ -2,6 +2,22 @@ import { z } from "zod";
 
 export { definePipr, definePlugin } from "./builder.js";
 export type { FindingFacets, FindingFields, FindingSchema } from "./finding.js";
+export type {
+  DiagnosticFindingLedger,
+  FindingActorPermission,
+  FindingDropCode,
+  FindingEvidence,
+  FindingLedger,
+  FindingOutcomeEvent,
+  FindingOutcomeKind,
+} from "./finding-outcome.js";
+export {
+  diagnosticFindingLedgerSchema,
+  findingDropCodes,
+  findingLedgerSchema,
+  findingOutcomeEventSchema,
+  findingOutcomeKinds,
+} from "./finding-outcome.js";
 export type { MarkdownBuilder, MarkdownText } from "./markdown.js";
 export { escapeMarkdown, md } from "./markdown.js";
 export type {

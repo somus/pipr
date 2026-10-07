@@ -11,7 +11,7 @@ import type {
 import { parseValidatedReview } from "../types.js";
 import type { ReviewFinding, ReviewResult } from "./contract.js";
 import { findingContentHash } from "./prior-state.js";
-import { findingRangeMismatchReason } from "./range-validation.js";
+import { type FindingDropReason, findingRangeMismatch } from "./range-validation.js";
 
 export type ValidateReviewOptions = {
   expectedHeadSha?: string;
@@ -48,12 +48,12 @@ export function validateReviewFindings<T extends ReviewFinding>(
 
   for (const [index, finding] of findings.entries()) {
     const suppliedRange = ranges.findRange(finding.rangeId)?.range;
-    const validatedFinding = findingRangeMismatchReason(finding, suppliedRange)
+    const validatedFinding = findingRangeMismatch(finding, suppliedRange)
       ? canonicalizeFindingRangeId(finding, manifest)
       : findingWithRangeId(finding, finding.rangeId);
     const fingerprint = findingContentHash(validatedFinding);
     const rangeMatch = ranges.findRange(validatedFinding.rangeId);
-    const reason = findingDropReason({
+    const drop = findingDropReason({
       finding: validatedFinding,
       fingerprint,
       pathScope: options.pathScopeForFinding?.(validatedFinding, index),
@@ -63,8 +63,8 @@ export function validateReviewFindings<T extends ReviewFinding>(
       seenFingerprints,
     });
 
-    if (reason) {
-      droppedFindings.push({ finding: validatedFinding, reason });
+    if (drop) {
+      droppedFindings.push({ finding: validatedFinding, code: drop.code, reason: drop.message });
       continue;
     }
 
@@ -113,26 +113,26 @@ type FindingValidationContext = {
   seenFingerprints: Set<string>;
 };
 
-type FindingValidator = (context: FindingValidationContext) => string | undefined;
+type FindingValidator = (context: FindingValidationContext) => FindingDropReason | undefined;
 
 const findingValidators: FindingValidator[] = [
   validatePathScope,
   validateExcludedFile,
-  (context) => findingRangeMismatchReason(context.finding, context.range),
+  (context) => findingRangeMismatch(context.finding, context.range),
   validateDuplicateFingerprint,
 ];
 
-function findingDropReason(context: FindingValidationContext): string | undefined {
+function findingDropReason(context: FindingValidationContext): FindingDropReason | undefined {
   for (const validator of findingValidators) {
-    const reason = validator(context);
-    if (reason) {
-      return reason;
+    const drop = validator(context);
+    if (drop) {
+      return drop;
     }
   }
   return undefined;
 }
 
-function validatePathScope(context: FindingValidationContext): string | undefined {
+function validatePathScope(context: FindingValidationContext): FindingDropReason | undefined {
   if (!context.pathScope) {
     return undefined;
   }
@@ -140,17 +140,24 @@ function validatePathScope(context: FindingValidationContext): string | undefine
     context.file && context.finding.path === context.file.path
       ? diffFileMatchesPathFilter(context.file, context.pathScope)
       : pathMatchesFilter(context.finding.path, context.pathScope);
-  return matches ? undefined : "finding path is outside configured paths";
+  return matches
+    ? undefined
+    : { code: "path-scope", message: "finding path is outside configured paths" };
 }
 
-function validateExcludedFile(context: FindingValidationContext): string | undefined {
+function validateExcludedFile(context: FindingValidationContext): FindingDropReason | undefined {
   return context.excludedReason
-    ? `file excluded from inline comments: ${context.excludedReason}`
+    ? {
+        code: "excluded-file",
+        message: `file excluded from inline comments: ${context.excludedReason}`,
+      }
     : undefined;
 }
 
-function validateDuplicateFingerprint(context: FindingValidationContext): string | undefined {
+function validateDuplicateFingerprint(
+  context: FindingValidationContext,
+): FindingDropReason | undefined {
   return context.seenFingerprints.has(context.fingerprint)
-    ? "duplicate finding fingerprint"
+    ? { code: "duplicate", message: "duplicate finding fingerprint" }
     : undefined;
 }

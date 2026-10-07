@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import { appendFile, chmod, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import type {
-  RunBundleArtifact,
-  RunBundleManifest,
-  RunLogRecord,
-  RunMetricsSnapshot,
-  RunSpanRecord,
+import {
+  diagnosticFindingLedgerSchema,
+  findingLedgerSchema,
+  type RunBundleArtifact,
+  type RunBundleManifest,
+  type RunLogRecord,
+  type RunMetricsSnapshot,
+  type RunSpanRecord,
 } from "@usepipr/sdk";
 import type { RuntimeLogRecord } from "../shared/logging.js";
 import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
@@ -396,6 +398,20 @@ export async function startFileRunRecorder(options: {
     async addArtifact(artifact) {
       await addRecorderArtifact(artifact);
     },
+    async recordLedger(ledger) {
+      if (ledger.events.length === 0) return;
+      const metadataOnly = options.mode === "metadata";
+      const document = metadataOnly
+        ? findingLedgerSchema.parse({ formatVersion: ledger.formatVersion, events: ledger.events })
+        : diagnosticFindingLedgerSchema.parse(ledger);
+      await storeArtifact({
+        kind: "ledger",
+        name: "ledger.json",
+        mediaType: "application/json",
+        content: `${JSON.stringify(document)}\n`,
+        sensitive: !metadataOnly,
+      });
+    },
     async discard() {
       if (finished) return;
       finished = true;
@@ -719,15 +735,22 @@ export async function startFileRunRecorder(options: {
     await rm(activePath, { force: true });
   }
 
-  async function addRecorderArtifact(artifact: {
+  type RecorderArtifact = {
     kind: RunBundleArtifact["kind"];
     name: string;
     mediaType: string;
     content: string;
     sensitive: boolean;
     counts?: RunBundleArtifact["counts"];
-  }): Promise<void> {
+  };
+
+  /** Metadata capture keeps no artifact bodies; only the public ledger bypasses this. */
+  async function addRecorderArtifact(artifact: RecorderArtifact): Promise<void> {
     if (options.mode === "metadata") return;
+    await storeArtifact(artifact);
+  }
+
+  async function storeArtifact(artifact: RecorderArtifact): Promise<void> {
     try {
       if (!/^[a-z0-9][a-z0-9._-]*$/i.test(artifact.name)) {
         throw new Error(`Invalid run artifact name: ${artifact.name}`);

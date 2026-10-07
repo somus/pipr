@@ -102,6 +102,44 @@ describe("buildCommentPublishingPlan", () => {
     expect(publishing.inlineCommentDrafts[0]?.finding.body).toBe("First finding.");
   });
 
+  it("reports each valid finding's planned, carried, or dropped disposition with drop codes", () => {
+    const first = finding("First finding.", "range-1", 10);
+    const initial = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: { ...validated, validFindings: [first] },
+      manifest,
+      metadata: metadata({ validFindings: 1 }),
+    });
+    const firstId = initial.inlineCommentDrafts[0]?.findingId;
+    expect(initial.findingDispositions).toEqual([{ kind: "planned", findingId: firstId }]);
+
+    const rerun = buildCommentPublishingPlan({
+      event,
+      main: "Review completed.",
+      validated: {
+        ...validated,
+        validFindings: [first, finding("   ", "range-2", 11), finding("Second.", "range-2", 11)],
+      },
+      manifest,
+      maxInlineComments: 0,
+      priorReviewState: {
+        ...initial.publicationPlan.reviewState,
+        findings: initial.publicationPlan.reviewState.findings.map((record) => ({
+          ...record,
+          lastCommentedHeadSha: "head",
+        })),
+      },
+      metadata: metadata({ validFindings: 3 }),
+    });
+
+    expect(rerun.findingDispositions).toEqual([
+      { kind: "carried", findingId: firstId },
+      { kind: "dropped", code: "empty-body" },
+      { kind: "dropped", code: "inline-cap", findingId: expect.stringMatching(/^fnd_/) },
+    ]);
+  });
+
   it.each([
     [undefined, 50],
     [100, 100],

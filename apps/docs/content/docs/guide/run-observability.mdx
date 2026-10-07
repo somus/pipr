@@ -74,8 +74,11 @@ A diagnostic bundle can contain these artifacts:
 | `usage` | Token and cost totals per run, response model, and attempt | No |
 | `task-graph` | Tasks, their agents, and each attempt's conversation ID and fork | No |
 | `diff-manifest`, `diff-context-coverage`, `validation`, `publication-plan` | Review evidence | Yes |
+| `ledger` | Finding Outcome events, plus each finding's path, range, and body as evidence | Yes |
 
 Conversations are the first evidence dropped when a bundle reaches its size limit. Public metadata keeps only artifact descriptors. A `conversation` descriptor also keeps its entry, entry kind, and tool call counts, never the entries themselves.
+
+The `ledger` is the one artifact public metadata keeps a body for. Its public form holds only the content-free outcome events: finding ID, outcome kind, drop reason code, work and execution IDs, head SHA, config hash, agent, model, and enum field values. Paths, ranges, and bodies stay in the diagnostic ledger. Metadata-only captures record the public ledger directly.
 
 ## Inspect an existing package
 

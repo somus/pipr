@@ -95,6 +95,60 @@ describe("runLocalReviewCommand", () => {
     }
   });
 
+  it("captures the finding ledger for local reviews", async () => {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs(),
+      headConfigTs: reviewConfigTs(),
+    });
+    const traceDirectory = path.join(workspace.rootDir, "traces");
+    try {
+      await workspace.pi.answer(
+        JSON.stringify({
+          summary: { body: "One issue." },
+          inlineFindings: [
+            {
+              body: "Unchecked value.",
+              path: "src/a.ts",
+              rangeId: "unknown",
+              side: "RIGHT",
+              startLine: 1,
+              endLine: 1,
+            },
+          ],
+        }),
+      );
+      const result = await runLocalReviewCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        env: { DEEPSEEK_API_KEY: "provider-key" },
+        baseSha: workspace.baseSha,
+        headSha: workspace.headSha,
+        piProviderModule: workspace.pi.providerModule,
+        traceDirectory,
+      });
+      if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
+
+      const [executionId] = await readdir(traceDirectory);
+      const ledger = JSON.parse(
+        await readFile(
+          path.join(traceDirectory, executionId ?? "", "artifacts", "ledger.json"),
+          "utf8",
+        ),
+      );
+      expect(ledger.events).toEqual([
+        expect.objectContaining({
+          kind: "proposed",
+          findingId: result.inlineCommentDrafts[0]?.findingId,
+          executionId,
+          workId: result.run.id,
+          agent: "reviewer",
+        }),
+      ]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("reads the Pi auth file from the process agent directory when env is omitted", async () => {
     const config = reviewConfigTs({ subscriptionModel: true });
     const workspace = await createCommandWorkspace({

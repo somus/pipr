@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   appendFile,
   mkdtemp,
@@ -11,7 +12,10 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { type DiagnosticFindingLedger, findingLedgerSchema } from "@usepipr/sdk";
 import { diagnoseRunBundle } from "../archive.js";
+import { extractRunArchiveFiles } from "../archive-extraction.js";
+import { createRunBundleTarGz } from "../bundle-archive.js";
 import { startFileRunRecorder } from "../file-run-recorder.js";
 import {
   generateRunBundleIdentity,
@@ -74,7 +78,9 @@ describe("protected Run Bundle packages", () => {
       },
     });
     expect(
-      metadataView.bundle.manifest.artifacts.every((artifact) => artifact.omitted === true),
+      metadataView.bundle.manifest.artifacts.every(
+        (artifact) => artifact.omitted === true || artifact.kind === "ledger",
+      ),
     ).toBe(true);
     expect(
       metadataView.bundle.manifest.artifacts.some(
@@ -110,6 +116,99 @@ describe("protected Run Bundle packages", () => {
         "utf8",
       ),
     ).toBe("private source body");
+  });
+
+  it("projects the ledger's public events as the only metadata artifact with a body", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await diagnosticBundle(root);
+    const key = await generateRunBundleIdentity();
+    const prepared = await prepareRunBundlePackage({
+      bundleDirectory: recorder.directory,
+      destinationRoot: path.join(root, "published"),
+      recipients: [key.recipient],
+    });
+
+    const metadataView = await openRunBundlePackage({
+      packageDirectory: prepared.directory,
+      destination: path.join(root, "metadata-view"),
+    });
+    const bodies = metadataView.bundle.manifest.artifacts.filter((artifact) => !artifact.omitted);
+    expect(bodies).toEqual([
+      expect.objectContaining({
+        kind: "ledger",
+        path: "artifacts/ledger.json",
+        sensitive: false,
+        truncated: false,
+      }),
+    ]);
+    const publicLedger = findingLedgerSchema.parse(
+      JSON.parse(
+        await readFile(path.join(metadataView.bundle.directory, "artifacts/ledger.json"), "utf8"),
+      ),
+    );
+    expect(publicLedger).toEqual({ formatVersion: 1, events: ledger.events });
+
+    const diagnosticView = await openRunBundlePackage({
+      packageDirectory: prepared.directory,
+      destination: path.join(root, "diagnostic-view"),
+      identities: [key.identity],
+    });
+    expect(
+      JSON.parse(
+        await readFile(path.join(diagnosticView.bundle.directory, "artifacts/ledger.json"), "utf8"),
+      ),
+    ).toEqual(ledger);
+  });
+
+  it("records public ledger events in metadata capture", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await startFileRunRecorder({
+      rootDirectory: path.join(root, "capture"),
+      mode: "metadata",
+    });
+    await recorder.recordLedger(ledger);
+    await recorder.finish({ kind: "review", outcome: "succeeded" });
+
+    const manifest = JSON.parse(await readFile(path.join(recorder.directory, "run.json"), "utf8"));
+    expect(manifest.artifacts).toEqual([
+      expect.objectContaining({ kind: "ledger", sensitive: false, path: "artifacts/ledger.json" }),
+    ]);
+    expect(
+      JSON.parse(await readFile(path.join(recorder.directory, "artifacts/ledger.json"), "utf8")),
+    ).toEqual({ formatVersion: 1, events: ledger.events });
+    const prepared = await prepareRunBundlePackage({
+      bundleDirectory: recorder.directory,
+      destinationRoot: path.join(root, "published"),
+    });
+    await expect(
+      openRunBundlePackage({
+        packageDirectory: prepared.directory,
+        destination: path.join(root, "metadata-view"),
+      }),
+    ).resolves.toMatchObject({ diagnostic: "not-captured" });
+  });
+
+  it.each([
+    ["path", { path: "src/private.ts" }],
+    ["body", { body: "private source body" }],
+  ])("rejects public metadata whose ledger contains a finding %s", async (_name, leak) => {
+    const root = await temporaryDirectory();
+    const recorder = await diagnosticBundle(root);
+    const prepared = await prepareRunBundlePackage({
+      bundleDirectory: recorder.directory,
+      destinationRoot: path.join(root, "published"),
+    });
+    await rewriteMetadataLedger(prepared.directory, root, (ledger) => ({
+      ...ledger,
+      events: ledger.events.map((event) => ({ ...event, ...leak })),
+    }));
+
+    await expect(
+      openRunBundlePackage({
+        packageDirectory: prepared.directory,
+        destination: path.join(root, "metadata-view"),
+      }),
+    ).rejects.toThrow("ledger contains diagnostic content");
   });
 
   it("rejects conversation counts on any other artifact kind", async () => {
@@ -319,6 +418,7 @@ async function diagnosticBundle(root: string, artifactName = "prompt-001-initial
       cacheUsageStatus: "complete",
     },
   });
+  await recorder.recordLedger(ledger);
   await recorder.finish({
     kind: "review",
     outcome: "succeeded",
@@ -329,6 +429,76 @@ async function diagnosticBundle(root: string, artifactName = "prompt-001-initial
     },
   });
   return recorder;
+}
+
+const ledger: DiagnosticFindingLedger = {
+  formatVersion: 1,
+  events: [
+    {
+      eventId: "a".repeat(64),
+      findingId: "fnd_0123456789abcdef",
+      kind: "dropped",
+      reasonCode: "out-of-range",
+      workId: "pipr-work",
+      executionId: "0123456789abcdef0123456789abcdef",
+      headSha: "b".repeat(40),
+      agent: "reviewer",
+      model: "gpt-test",
+      facets: { severity: "high" },
+      at: "2026-10-07T00:00:00.000Z",
+      sequence: 0,
+    },
+  ],
+  evidence: {
+    fnd_0123456789abcdef: {
+      path: "/Users/private/project",
+      rangeId: "private-range",
+      side: "RIGHT",
+      startLine: 1,
+      endLine: 1,
+      body: "private source body",
+      baseSha: "c".repeat(40),
+      headSha: "b".repeat(40),
+    },
+  },
+};
+
+/** Replaces the ledger inside a packaged metadata archive, keeping every hash consistent. */
+async function rewriteMetadataLedger(
+  packageDirectory: string,
+  root: string,
+  update: (ledger: { formatVersion: 1; events: Record<string, unknown>[] }) => unknown,
+): Promise<void> {
+  const extracted = path.join(root, "tampered-metadata");
+  await extractRunArchiveFiles({
+    archive: await readFile(path.join(packageDirectory, "metadata.tar.gz")),
+    format: "tar.gz",
+    destination: extracted,
+  });
+  const ledgerPath = path.join(extracted, "artifacts/ledger.json");
+  const contents = Buffer.from(
+    `${JSON.stringify(update(JSON.parse(await readFile(ledgerPath, "utf8"))))}\n`,
+  );
+  await writeFile(ledgerPath, contents);
+  const manifestPath = path.join(extracted, "run.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const descriptor = manifest.artifacts.find(
+    (artifact: { kind: string }) => artifact.kind === "ledger",
+  );
+  descriptor.sizeBytes = contents.byteLength;
+  descriptor.sha256 = sha256(contents);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const archive = await createRunBundleTarGz(extracted);
+  await writeFile(path.join(packageDirectory, "metadata.tar.gz"), archive);
+  const envelopePath = path.join(packageDirectory, "envelope.json");
+  const envelope = JSON.parse(await readFile(envelopePath, "utf8"));
+  envelope.metadata.sizeBytes = archive.byteLength;
+  envelope.metadata.sha256 = sha256(archive);
+  await writeFile(envelopePath, JSON.stringify(envelope));
+}
+
+function sha256(contents: Uint8Array): string {
+  return createHash("sha256").update(contents).digest("hex");
 }
 
 async function temporaryDirectory(): Promise<string> {

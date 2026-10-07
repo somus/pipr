@@ -1,4 +1,4 @@
-import type { PiprRunSummary } from "@usepipr/sdk";
+import type { FindingOutcomeEvent, PiprRunSummary } from "@usepipr/sdk";
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
 import type { PublishedRunBundle } from "../observability/run-bundle-publication.js";
@@ -127,6 +127,8 @@ export type HostRunCommandResult =
       command?: string;
       review: PublishedReviewRuntimeResult;
       publication: PublicationResult;
+      /** Content-free Finding Outcome events this execution recorded. */
+      findingEvents: FindingOutcomeEvent[];
     }
   | {
       kind: "command-response";
@@ -145,6 +147,8 @@ export type HostRunCommandResult =
       event: ChangeRequestEventContext;
       configSource: string;
       errors: string[];
+      /** Content-free Finding Outcome events this execution recorded. */
+      findingEvents: FindingOutcomeEvent[];
     };
 
 export type TrustedRuntimeProject = LoadedRuntimeProject & {

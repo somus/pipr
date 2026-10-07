@@ -62,6 +62,8 @@ export type PublicationResult = {
     action: "created" | "updated";
     id: string;
   };
+  /** Finding IDs whose inline comments this publication actually posted. */
+  postedFindingIds: string[];
   inlineComments: {
     posted: number;
     skipped: number;

@@ -62,9 +62,13 @@ export type RunVerifierOptions = {
   agentRunBudget?: AgentRunBudget;
 };
 
+/** A verifier decision that took effect, reported as a Finding Outcome. */
+export type VerifierVerdict = { findingId: string; status: "fixed" | "still-valid" };
+
 export type VerifierResult = {
   priorReviewState?: PriorReviewState;
   threadActions: ThreadAction[];
+  verdicts: VerifierVerdict[];
   providerModels: string[];
 };
 
@@ -84,7 +88,7 @@ const maxVerifierInputText = 4000;
 export async function runInternalVerifier(options: RunVerifierOptions): Promise<VerifierResult> {
   const prior = options.priorReviewState;
   if (!prior || !autoResolveEnabled(options.config, options.mode)) {
-    return { priorReviewState: prior, threadActions: [], providerModels: [] };
+    return { priorReviewState: prior, threadActions: [], verdicts: [], providerModels: [] };
   }
 
   const candidates = verifierCandidates(prior, options.threadContexts, options.mode);
@@ -95,7 +99,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
     threadContexts: options.threadContexts.length,
   });
   if (candidates.length === 0) {
-    return { priorReviewState: prior, threadActions: [], providerModels: [] };
+    return { priorReviewState: prior, threadActions: [], verdicts: [], providerModels: [] };
   }
   if (options.piRunner) {
     return await verifyCandidates(options, options.piRunner, prior, candidates);
@@ -149,7 +153,7 @@ async function verifyCandidates(
     options.log?.warning("verifier failed closed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return { priorReviewState: prior, threadActions: [], providerModels: [] };
+    return { priorReviewState: prior, threadActions: [], verdicts: [], providerModels: [] };
   }
 }
 
@@ -227,11 +231,19 @@ function applyVerifierOutput(
   const candidateById = new Map(candidates.map((candidate) => [candidate.finding.id, candidate]));
   const resolvedIds: string[] = [];
   const threadActions: ThreadAction[] = [];
+  const verdicts: VerifierVerdict[] = [];
 
   for (const item of output.findings) {
-    const action = verifierThreadAction(options, candidateById.get(item.id), item);
+    const candidate = candidateById.get(item.id);
+    if (candidate && item.status === "still-valid") {
+      verdicts.push({ findingId: item.id, status: "still-valid" });
+    }
+    const action = verifierThreadAction(options, candidate, item);
     if (!action) {
       continue;
+    }
+    if (action.kind === "resolve") {
+      verdicts.push({ findingId: item.id, status: "fixed" });
     }
     if (action.kind === "resolve") {
       resolvedIds.push(item.id);
@@ -242,6 +254,7 @@ function applyVerifierOutput(
   return {
     priorReviewState: resolvedIds.length > 0 ? resolvePriorFindings(prior, resolvedIds) : prior,
     threadActions,
+    verdicts,
     providerModels,
   };
 }

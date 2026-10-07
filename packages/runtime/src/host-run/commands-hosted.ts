@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +15,7 @@ import { resolveRunStoreDirectory } from "../observability/retention-store.js";
 import { publishRunBundle } from "../observability/run-bundle-publication.js";
 import { combineRuntimeLogSinks } from "../observability/runtime-log-sinks.js";
 import { maximumRunBundleBytes } from "../observability/types.js";
+import { createFindingLedger } from "../review/finding-ledger.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { createRuntimeLog, type RuntimeLog } from "../shared/logging.js";
 import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
@@ -24,6 +26,7 @@ import {
   classifyRunFailure,
   finishRecorderSafely,
   parseRunCaptureSetting,
+  recordFindingLedgerSafely,
   warnRunCaptureUnavailable,
 } from "./commands-shared.js";
 import type { HostRunServices } from "./composition.js";
@@ -80,6 +83,9 @@ export async function runHostRunCommandWithDependencies(
     piRunner: options.piRunner,
     secretRedactor: options.secretRedactor,
     runObserver: recorder ? recorder.observer : options.runObserver,
+    findingLedger: createFindingLedger({
+      executionId: recorder?.executionId ?? randomBytes(16).toString("hex"),
+    }),
   };
   const state: HostRunState = { failureCategory: "startup", adapter: services.adapter };
   try {
@@ -89,9 +95,11 @@ export async function runHostRunCommandWithDependencies(
       return result;
     }
     await captureHostedArtifacts(recorder, result);
+    await recordFindingLedgerSafely(recorder, services.findingLedger, log);
     await finishSuccessfulHostedRecorder(capture, log, options, result, services.adapter);
     return result;
   } catch (error) {
+    await recordFindingLedgerSafely(recorder, services.findingLedger, log);
     const superseded = await finishFailedHostedRecorder(capture, log, options, state, error);
     if (superseded) return { kind: "ignored", reason: superseded.message };
     throw error;

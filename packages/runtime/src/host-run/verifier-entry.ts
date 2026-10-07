@@ -1,4 +1,4 @@
-import type { PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
+import type { FindingActorPermission, PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
 import { registerProviderSecrets } from "../config/provider-credentials.js";
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
@@ -6,6 +6,7 @@ import { recordArtifactSafely } from "../observability/capture-sinks.js";
 import { resolveProvider } from "../review/agent/prompt-assembly.js";
 import type { PiRunStats } from "../review/agent/review-run-types.js";
 import { isPiprThreadActionReplyBody } from "../review/comment-markers.js";
+import { type FindingOutcomeEmission, findingLedgerContext } from "../review/finding-ledger.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { reviewStatsForRuns, runSummaryStatsFields } from "../review/review-stats.js";
 import { stableReviewRunId } from "../review/run-identity.js";
@@ -57,6 +58,7 @@ export async function runReviewCommentReplyHostRunCommand(
     event: prepared.event,
     configSource: prepared.trustedRuntime.settings.source,
     errors: publication?.errors ?? [],
+    findingEvents: services.findingLedger.events(),
   };
 }
 
@@ -93,6 +95,7 @@ type PreparedReviewCommentVerifier =
       reply: ReviewCommentReplyEvent & { parentCommentId: string };
       event: ChangeRequestEventContext;
       trustedRuntime: TrustedRuntimeProject;
+      actorPermission: FindingActorPermission;
     };
 
 async function prepareReviewCommentVerifier(
@@ -111,7 +114,13 @@ async function prepareReviewCommentVerifier(
   if (!config.publication.autoResolve.userReplies.enabled) {
     return { kind: "ignored", reason: "publication.autoResolve.userReplies is disabled" };
   }
-  if (!(await verifierActorAllowed(services.adapter, event, reply, config))) {
+  const actorPermission = await allowedVerifierActorPermission(
+    services.adapter,
+    event,
+    reply,
+    config,
+  );
+  if (!actorPermission) {
     return { kind: "ignored", reason: "review comment reply actor is not allowed" };
   }
   await prepareTrustedHeadCheckout(
@@ -126,6 +135,7 @@ async function prepareReviewCommentVerifier(
     reply: { ...reply, parentCommentId: reply.parentCommentId },
     event,
     trustedRuntime,
+    actorPermission,
   };
 }
 
@@ -207,6 +217,13 @@ async function runReviewCommentVerifier(
       piRuns.push(run);
     },
   });
+  services.findingLedger.record(
+    findingLedgerContext(
+      { event, trustedConfigHash: trustedRuntime.trustedConfigHash },
+      runContext,
+    ),
+    replyOutcomes(threadContexts, reply.parentCommentId, prepared.actorPermission, result.verdicts),
+  );
   const durationMs = Date.now() - started;
   const stats = reviewStatsForRuns(piRuns, durationMs);
   const run = verifierRunSummary({
@@ -265,22 +282,42 @@ function runnableReviewCommentReply(
   return { kind: "runnable" };
 }
 
-async function verifierActorAllowed(
+/** The reply's outcome on the replied-to finding, then the verifier's verdicts. */
+function replyOutcomes(
+  threadContexts: readonly { findingId: string; parentCommentId: string }[],
+  parentCommentId: string,
+  actorPermission: FindingActorPermission,
+  verdicts: Awaited<ReturnType<typeof runInternalVerifier>>["verdicts"],
+): FindingOutcomeEmission[] {
+  const findingId = threadContexts.find(
+    (thread) => thread.parentCommentId === parentCommentId,
+  )?.findingId;
+  return [
+    ...(findingId ? [{ kind: "replied" as const, findingId, actorPermission }] : []),
+    ...verdicts.map((verdict) => ({ kind: verdict.status, findingId: verdict.findingId })),
+  ];
+}
+
+/**
+ * The permission that allowed the reply's actor to run the verifier: `unchecked` when any actor
+ * is allowed, `author` for the change author, otherwise the host permission; undefined if denied.
+ */
+async function allowedVerifierActorPermission(
   adapter: CodeHostAdapter,
   event: ChangeRequestEventContext,
   reply: ReviewCommentReplyEvent,
   config: PiprConfig,
-): Promise<boolean> {
+): Promise<FindingActorPermission | undefined> {
   const allowed = config.publication.autoResolve.userReplies.allowedActors;
   if (allowed === "any") {
-    return true;
+    return "unchecked";
   }
   if (allowed === "author-or-write" && event.change.author?.login === reply.actor) {
-    return true;
+    return "author";
   }
   const permission = await adapter.permissions.getRepositoryPermission({
     change: event,
     actor: reply.actor,
   });
-  return hasRequiredRepositoryPermission(permission, "write");
+  return hasRequiredRepositoryPermission(permission, "write") ? permission : undefined;
 }
