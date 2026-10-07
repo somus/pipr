@@ -34,21 +34,24 @@ export type BuildDiffManifestOptions = {
   baseSha: string;
   headSha: string;
   includeWorkingTree?: boolean;
+  env?: NodeJS.ProcessEnv;
 };
 
+type Git = (args: string[], maxBuffer?: number) => string;
+
 export function buildDiffManifest(options: BuildDiffManifestOptions): DiffManifest {
-  const mergeBaseSha = runGit(["merge-base", options.baseSha, options.headSha], options.cwd).trim();
+  const git: Git = (args, maxBuffer) => runGit(args, options.cwd, { maxBuffer, env: options.env });
+  const mergeBaseSha = git(["merge-base", options.baseSha, options.headSha]).trim();
   const diffHead = options.includeWorkingTree ? undefined : options.headSha;
-  const nameStatus = runGit(
+  const nameStatus = git(
     buildDiffArgs(["--name-status", "-z", "--find-renames"], mergeBaseSha, diffHead),
-    options.cwd,
   );
   const files = parseNameStatus(nameStatus);
-  const diffStats = getDiffStats(options.cwd, mergeBaseSha, diffHead);
+  const diffStats = getDiffStats(git, mergeBaseSha, diffHead);
   const preExcludedFiles = getPreExcludedFiles(files, diffStats);
   const rawPatch = loadRawPatch(
     buildUnifiedDiffArgs(mergeBaseSha, diffHead, preExcludedFiles),
-    options.cwd,
+    git,
   );
 
   const parsedDiff = parseUnifiedDiff(rawPatch.patch, rawPatch.filePaths);
@@ -76,9 +79,9 @@ export function buildDiffManifest(options: BuildDiffManifestOptions): DiffManife
   });
 }
 
-function loadRawPatch(args: string[], cwd: string): ReturnType<typeof parseRawPatch> {
+function loadRawPatch(args: string[], git: Git): ReturnType<typeof parseRawPatch> {
   try {
-    return parseRawPatch(runGit(args, cwd, maxAggregatePatchBytes));
+    return parseRawPatch(git(args, maxAggregatePatchBytes));
   } catch (error) {
     if (error instanceof GitOutputLimitError) {
       throw new Error(
@@ -125,14 +128,11 @@ export function parseUnifiedDiff(
 }
 
 function getDiffStats(
-  cwd: string,
+  git: Git,
   baseSha: string,
   headSha: string | undefined,
 ): Map<string, DiffStat> {
-  const output = runGit(
-    buildDiffArgs(["--numstat", "-z", "--find-renames"], baseSha, headSha),
-    cwd,
-  );
+  const output = git(buildDiffArgs(["--numstat", "-z", "--find-renames"], baseSha, headSha));
   const stats = new Map<string, DiffStat>();
   for (const stat of parseNumstat(output)) {
     if (stat.binary) {

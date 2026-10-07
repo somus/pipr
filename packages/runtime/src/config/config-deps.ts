@@ -4,7 +4,10 @@ import { normalizePackageManifest, type PackageManifest } from "./package-manife
 
 const runtimeProvidedPackages = new Set(["@usepipr/sdk", "@types/bun"]);
 
-export async function installConfigDependencies(configDir: string): Promise<void> {
+export async function installConfigDependencies(
+  configDir: string,
+  env?: NodeJS.ProcessEnv,
+): Promise<void> {
   const packageJsonPath = path.join(configDir, "package.json");
   if (!(await Bun.file(packageJsonPath).exists())) {
     return;
@@ -24,21 +27,20 @@ export async function installConfigDependencies(configDir: string): Promise<void
         "Run `bun install` in .pipr/ and commit bun.lock.",
     );
   }
-  await assertBunAvailable();
+  await assertBunAvailable(env);
   await withSanitizedConfigInstallInputs(
     { packageJsonPath, originalPackageJson, bunLockPath, originalBunLock },
     async () => {
       if (hasRuntimeProvidedDependencies(manifest)) {
-        await runBunInstall(configDir, ["install", "--ignore-scripts", "--lockfile-only"]);
+        await runBunInstall(configDir, ["install", "--ignore-scripts", "--lockfile-only"], { env });
         const projectedBunLock = await Bun.file(bunLockPath).text();
         assertTrustedLockProjection(configDir, originalBunLock, projectedBunLock);
       }
-      await runBunInstall(configDir, [
-        "install",
-        "--ignore-scripts",
-        "--no-save",
-        "--frozen-lockfile",
-      ]);
+      await runBunInstall(
+        configDir,
+        ["install", "--ignore-scripts", "--no-save", "--frozen-lockfile"],
+        { env },
+      );
     },
   );
 }
@@ -68,11 +70,16 @@ async function withSanitizedConfigInstallInputs(
   }
 }
 
-/** Runs `bun <args>` in `cwd`; failures name `label` (the config directory by default). */
-export async function runBunInstall(cwd: string, args: string[], label = cwd): Promise<void> {
+/** Runs `bun <args>` in `cwd` with `env` (the process environment by default); failures name `label`. */
+export async function runBunInstall(
+  cwd: string,
+  args: string[],
+  options: { label?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<void> {
+  const label = options.label ?? cwd;
   const proc = Bun.spawn(["bun", ...args], {
     cwd,
-    env: process.env,
+    env: options.env ?? process.env,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -255,11 +262,11 @@ function firstRecordProjectionChange(
   return undefined;
 }
 
-export async function assertBunAvailable(): Promise<void> {
+export async function assertBunAvailable(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   let exitCode: number | undefined;
   try {
     exitCode = await Bun.spawn(["bun", "--version"], {
-      env: process.env,
+      env,
       stdout: "pipe",
       stderr: "pipe",
     }).exited;

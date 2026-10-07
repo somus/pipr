@@ -56,7 +56,9 @@ export async function runLocalReviewCommand(
     reviewStarted = true;
     const selectedTasks = selectLocalReviewTasks(runtime.plan);
     const includeWorkingTree = options.headSha === undefined;
-    const headSha = options.headSha ?? runGitCommand(["rev-parse", "HEAD"], options.rootDir).trim();
+    const headSha =
+      options.headSha ??
+      runGitCommand(["rev-parse", "HEAD"], options.rootDir, { env: options.env }).trim();
     localRepository = {
       host: "local",
       repository: path.basename(options.rootDir),

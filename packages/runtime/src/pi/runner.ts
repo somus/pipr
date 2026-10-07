@@ -222,6 +222,7 @@ async function agentRunTools(
         root: callDir,
         sourceWorkspace: options.workspace,
         request: options.runtimeTools,
+        env: options.env ?? scope.env,
       })
     : undefined;
   if (runtimeTools && scope.processIdentity) {

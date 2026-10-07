@@ -167,6 +167,7 @@ async function runReviewCommentVerifier(
     cwd: services.rootDir,
     baseSha: event.change.base.sha,
     headSha: event.change.head.sha,
+    env: services.env,
   });
   await recordArtifactSafely(services, {
     kind: "diff-manifest",

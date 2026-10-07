@@ -207,6 +207,18 @@ describe("diff manifest parsing", () => {
     });
   });
 
+  it("runs git with the injected environment, not the process environment", async () => {
+    await withGitRepo(async (repo) => {
+      const baseSha = await commitFile(repo, "a.txt", "one\n", "base");
+      const headSha = await commitFile(repo, "a.txt", "two\n", "head");
+      const env = { ...process.env, GIT_DIR: path.join(repo, "missing-git-dir") };
+
+      expect(() => buildDiffManifest({ cwd: repo, baseSha, headSha, env })).toThrow(
+        "git merge-base",
+      );
+    });
+  });
+
   it("parses a Markdown --- removal from a real git diff without shifting lines", async () => {
     await withGitRepo(async (repo) => {
       const baseSha = await commitFile(

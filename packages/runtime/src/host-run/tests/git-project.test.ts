@@ -20,6 +20,17 @@ describe("loadRuntimeProjectFromGitCommit", () => {
     expect(runtime.plan.agents[0]?.definition.instructions).toBe("Review with deps.");
   });
 
+  it("reads the base commit with the injected environment", async () => {
+    const rootDir = await initGitRepoRoot();
+    await writeThirdPartyPiprProject(rootDir);
+    const baseSha = commitGitProjectBase(rootDir);
+    const env = { ...process.env, GIT_DIR: path.join(rootDir, "missing-git-dir") };
+
+    await expect(
+      loadRuntimeProjectFromGitCommit({ rootDir, commitSha: baseSha, env }),
+    ).rejects.toThrow("git ls-tree");
+  });
+
   it("loads trusted TypeScript config imports whose git paths contain tabs", async () => {
     const rootDir = await initGitRepoRoot();
     await mkdir(path.join(rootDir, ".pipr", "prompts"), { recursive: true });

@@ -196,6 +196,7 @@ async function runTaskRuntimeWithPiRunner(
       cwd: options.workspace,
       baseSha: options.event.change.base.sha,
       headSha: options.event.change.head.sha,
+      env: options.env,
     }),
   );
   logDiffManifest(options, diffManifest);

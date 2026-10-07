@@ -18,6 +18,8 @@ export type LoadTypescriptConfigOptions = {
   rootDir: string;
   configDir?: string;
   typecheck?: boolean;
+  /** Environment for config dependency installs; the process environment by default. */
+  env?: NodeJS.ProcessEnv;
 };
 
 export type LoadedTypescriptConfig = {
@@ -55,7 +57,7 @@ export async function loadTypescriptConfig(
     configDir: relativeConfigDir,
   });
   if (options.typecheck) {
-    await typecheckTypescriptConfig(path.resolve(options.rootDir), relativeConfigDir);
+    await typecheckTypescriptConfig(path.resolve(options.rootDir), relativeConfigDir, options.env);
   }
 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-config-"));
@@ -70,7 +72,7 @@ export async function loadTypescriptConfig(
         return relative !== "node_modules" && !relative.startsWith(`node_modules${path.sep}`);
       },
     });
-    await prepareConfigDirectory(tempConfigDir);
+    await prepareConfigDirectory(tempConfigDir, options.env);
 
     const configPath = path.join(tempConfigDir, "config.ts");
     const imported = await import(`${pathToFileURL(configPath).href}?pipr=${Date.now()}`);
@@ -88,14 +90,18 @@ export async function loadTypescriptConfig(
   }
 }
 
-async function prepareConfigDirectory(configDir: string): Promise<void> {
-  await installConfigDependencies(configDir);
+async function prepareConfigDirectory(
+  configDir: string,
+  env: NodeJS.ProcessEnv | undefined,
+): Promise<void> {
+  await installConfigDependencies(configDir, env);
   await installTypedSdkStub(configDir);
 }
 
 async function typecheckTypescriptConfig(
   rootDir: string,
   relativeConfigDir: string,
+  env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-config-check-"));
   try {
@@ -116,7 +122,7 @@ async function typecheckTypescriptConfig(
         );
       },
     });
-    await prepareConfigDirectory(tempConfigDir);
+    await prepareConfigDirectory(tempConfigDir, env);
     const tsconfigPath = path.join(tempConfigDir, "tsconfig.json");
     if (!(await Bun.file(tsconfigPath).exists())) {
       await mkdir(tempConfigDir, { recursive: true });

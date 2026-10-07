@@ -17,7 +17,8 @@ export async function loadRuntimeProjectFromGitCommit(options: {
   env?: NodeJS.ProcessEnv;
 }): Promise<LoadedRuntimeProject & { trustedConfigSha: string; trustedConfigHash: string }> {
   const configDir = resolveContainedConfigDir(options);
-  const files = listConfigFilesAtCommit(options.rootDir, options.commitSha, configDir.gitPath);
+  const git = (args: string[]) => runGit(args, options.rootDir, { env: options.env });
+  const files = listConfigFilesAtCommit(git, options.commitSha, configDir.gitPath);
   const configPath = configDir.gitPath === "." ? "config.ts" : `${configDir.gitPath}/config.ts`;
   if (files.length === 0 || !files.some((file) => file.path === configPath)) {
     throw new Error(
@@ -37,7 +38,7 @@ export async function loadRuntimeProjectFromGitCommit(options: {
         configDir.relativeConfigDir,
         ...relativePath.split("/"),
       );
-      const contents = showFileAtCommit(options.rootDir, options.commitSha, file.path);
+      const contents = showFileAtCommit(git, options.commitSha, file.path);
       hash.update(relativePath);
       hash.update("\0");
       hash.update(contents);
@@ -60,11 +61,11 @@ export async function loadRuntimeProjectFromGitCommit(options: {
 }
 
 function listConfigFilesAtCommit(
-  rootDir: string,
+  git: (args: string[]) => string,
   commitSha: string,
   gitPath: string,
 ): GitTreeEntry[] {
-  const output = runGit(["ls-tree", "-r", "-z", commitSha, "--", gitPath], rootDir);
+  const output = git(["ls-tree", "-r", "-z", commitSha, "--", gitPath]);
   return output
     .split("\0")
     .filter(Boolean)
@@ -109,6 +110,10 @@ function assertRelativeGitPath(root: string, filePath: string, relative: string)
   }
 }
 
-function showFileAtCommit(rootDir: string, commitSha: string, filePath: string): string {
-  return runGit(["show", `${commitSha}:${filePath}`], rootDir);
+function showFileAtCommit(
+  git: (args: string[]) => string,
+  commitSha: string,
+  filePath: string,
+): string {
+  return git(["show", `${commitSha}:${filePath}`]);
 }

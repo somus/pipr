@@ -179,7 +179,7 @@ async function installStarterDependencies(options: {
   created: string[];
 }): Promise<void> {
   await assertBunAvailable();
-  await runBunInstall(options.projectDir, initInstallArgs(), options.configDir);
+  await runBunInstall(options.projectDir, initInstallArgs(), { label: options.configDir });
   if (!(await Bun.file(path.join(options.projectDir, "bun.lock")).exists())) return;
   const lockRelative = path.join(options.relativeConfigDir, "bun.lock");
   if (!options.existing.includes(lockRelative) && !options.created.includes(lockRelative)) {

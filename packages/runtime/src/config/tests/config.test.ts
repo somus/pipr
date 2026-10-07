@@ -192,9 +192,11 @@ describe("loadRuntimeProject", () => {
 
   it("checks provider env vars only when requested", async () => {
     const rootDir = await newInitializedProject();
+    // No provider keys; PATH stays so config dependency installs can find bun.
+    const env = { PATH: process.env.PATH };
 
     await expect(
-      loadRuntimeProject({ rootDir, env: {}, requireProviderEnv: false }),
+      loadRuntimeProject({ rootDir, env, requireProviderEnv: false }),
     ).resolves.toMatchObject({
       settings: {
         config: {
@@ -202,9 +204,9 @@ describe("loadRuntimeProject", () => {
         },
       },
     });
-    await expect(
-      loadRuntimeProject({ rootDir, env: {}, requireProviderEnv: true }),
-    ).rejects.toThrow("Missing provider env vars: DEEPSEEK_API_KEY");
+    await expect(loadRuntimeProject({ rootDir, env, requireProviderEnv: true })).rejects.toThrow(
+      "Missing provider env vars: DEEPSEEK_API_KEY",
+    );
   });
 
   it("accepts a provider's fallback credentials and keeps an explicit key required", async () => {

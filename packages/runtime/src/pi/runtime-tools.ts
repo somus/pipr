@@ -50,6 +50,7 @@ export async function preparePiRuntimeReadTools(options: {
   root: string;
   sourceWorkspace: string;
   request: PiRuntimeReadToolRequest;
+  env?: NodeJS.ProcessEnv;
 }): Promise<PreparedPiRuntimeReadTools> {
   const toolRoot = path.join(options.root, "runtime-tools");
   const baseRoot = path.join(toolRoot, "base");
@@ -61,6 +62,7 @@ export async function preparePiRuntimeReadTools(options: {
   const writeSnapshot = createBaseSnapshotWriter({
     baseRoot,
     sourceWorkspace: options.sourceWorkspace,
+    env: options.env,
     mergeBaseSha: options.request.manifest.mergeBaseSha,
     snapshotBudget,
   });
@@ -219,6 +221,7 @@ type BaseSnapshotWriter = (
 function createBaseSnapshotWriter(options: {
   baseRoot: string;
   sourceWorkspace: string;
+  env: NodeJS.ProcessEnv | undefined;
   mergeBaseSha: string;
   snapshotBudget: SnapshotBudget;
 }): BaseSnapshotWriter {
@@ -227,7 +230,7 @@ function createBaseSnapshotWriter(options: {
     if (cached?.sourcePath !== sourcePath) {
       cached = {
         sourcePath,
-        content: readGitBlob(options.sourceWorkspace, options.mergeBaseSha, sourcePath),
+        content: readGitBlob(options, sourcePath),
       };
     }
     if (cached.content === undefined) {
@@ -256,10 +259,13 @@ function consumeSnapshotBudget(budget: SnapshotBudget, bytes: number): boolean {
 }
 
 /** Returns the blob at `ref`, or undefined when git cannot read it. */
-function readGitBlob(cwd: string, ref: string, filePath: string): string | undefined {
-  const result = Bun.spawnSync(["git", "show", `${ref}:${filePath}`], {
-    cwd,
-    env: process.env,
+function readGitBlob(
+  source: { sourceWorkspace: string; mergeBaseSha: string; env: NodeJS.ProcessEnv | undefined },
+  filePath: string,
+): string | undefined {
+  const result = Bun.spawnSync(["git", "show", `${source.mergeBaseSha}:${filePath}`], {
+    cwd: source.sourceWorkspace,
+    env: source.env ?? process.env,
     maxBuffer: 16 * 1024 * 1024,
     stderr: "pipe",
     stdout: "pipe",
