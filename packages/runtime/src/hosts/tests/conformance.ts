@@ -12,6 +12,7 @@ import {
   renderVerifierResponseMarker,
 } from "../../review/comment-markers.js";
 import { buildPublicationPlan } from "../../review/publication-plan.js";
+import { StaleHeadError } from "../../review/publication-result.js";
 import { runtimeVersion } from "../../shared/version.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type {
@@ -65,6 +66,8 @@ export type CodeHostAdapterConformanceHarness = {
   setPermission(permission: RepositoryPermission): void;
   permissionRequests(): Array<{ actor: string }>;
   setCurrentHead(headSha: string): void;
+  /** Moves the target commit; required when the host rejects base drift before publication. */
+  setCurrentBase?(baseSha: string): void;
   /** Moves the head after the next comment listing read. */
   advanceHeadDuringPreflight(): void;
   /** Replaces the owned main comment body after the next comment listing read. */
@@ -94,7 +97,6 @@ type HarnessFactory = () =>
 
 const progressToken = "11111111-1111-4111-8111-111111111111";
 const newerProgressToken = "22222222-2222-4222-8222-222222222222";
-const staleHeadError = /head changed|endpoints changed/i;
 
 export function defineCodeHostAdapterConformanceSuite(options: {
   name: string;
@@ -209,11 +211,35 @@ export function defineCodeHostAdapterConformanceSuite(options: {
               change: harness.change,
               plan: plan(harness.change),
             }),
-          ).rejects.toThrow(staleHeadError);
+          ).rejects.toBeInstanceOf(StaleHeadError);
           expect(harness.writes()).toEqual(zeroWrites());
         });
       });
     }
+
+    it("rejects a moved base before publication writes when the host tracks the base", async () => {
+      await withHarness(createHarness, async (harness) => {
+        if (!harness.setCurrentBase) return;
+        harness.setCurrentBase("new-base");
+        await expect(
+          requiredPublication(harness.adapter).publish({
+            change: harness.change,
+            plan: plan(harness.change),
+          }),
+        ).rejects.toBeInstanceOf(StaleHeadError);
+        if (capabilities.statuses) {
+          await expect(
+            requiredStatuses(harness.adapter).upsert({
+              change: harness.change,
+              name: "review",
+              state: "pending",
+            }),
+          ).rejects.toBeInstanceOf(StaleHeadError);
+          expect(harness.statuses()).toEqual([]);
+        }
+        expect(harness.writes()).toEqual(zeroWrites());
+      });
+    });
 
     it("rechecks the head after preflight reads and before a progress write", async () => {
       await withHarness(createHarness, async (harness) => {
@@ -224,7 +250,7 @@ export function defineCodeHostAdapterConformanceSuite(options: {
             reviewedHeadSha: harness.change.change.head.sha,
             renderBody: () => progressBody(harness.change, progressToken),
           }),
-        ).rejects.toThrow(staleHeadError);
+        ).rejects.toBeInstanceOf(StaleHeadError);
         expect(harness.writes()).toEqual(zeroWrites());
       });
     });

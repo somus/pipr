@@ -1,29 +1,23 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type { InlineThreadContext } from "../../publication/types.js";
 import { parseInlineFindingMarker } from "../../review/comment-markers.js";
-import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { requireCoordinates } from "../change-request.js";
+import type { ChangeRequestEndpoints } from "../publication/workflow.js";
 import { isMainCommentLine, nativeInlineLocation } from "../publication.js";
 import type { GiteaClient, GiteaComment, GiteaReviewComment } from "./client.js";
 
-export async function assertCurrentGiteaHead(
+export async function currentGiteaEndpoints(
   client: GiteaClient,
   change: ChangeRequestEventContext,
-  reviewedHeadSha: string,
-): Promise<void> {
+): Promise<ChangeRequestEndpoints> {
   const coordinates = giteaCoordinates(change);
   const pullRequest = await client.getPullRequest(
     coordinates.owner,
     coordinates.repository,
     change.change.number,
   );
-  if (pullRequest.head.sha !== reviewedHeadSha) {
-    throw new PublicationError(
-      `Change request head changed from '${reviewedHeadSha}' to '${pullRequest.head.sha}' before publication`,
-      undefined,
-    );
-  }
+  return { headSha: pullRequest.head.sha };
 }
 
 export function giteaThreadContexts(

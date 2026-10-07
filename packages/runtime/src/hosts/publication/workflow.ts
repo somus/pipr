@@ -21,7 +21,7 @@ import {
   extractReviewProgressToken,
   ReviewProgressSupersededError,
 } from "../../review/progress.js";
-import { PublicationError } from "../../review/publication-result.js";
+import { PublicationError, StaleHeadError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { commandResponseBody, commandStatusText, threadActionReply } from "../publication.js";
 import type { CodeHostComments, CodeHostPublication } from "../types.js";
@@ -38,6 +38,31 @@ export type LoadedPublicationState = {
   threads: readonly InlineThreadContext[];
 };
 
+/** Commits the host currently reports for a change request; `baseSha` only where the host pins the base. */
+export type ChangeRequestEndpoints = { headSha: string; baseSha?: string };
+
+/**
+ * Throws {@link StaleHeadError} when the host's current endpoints moved away from the reviewed
+ * head (defaults to the change head) or, when the host reports one, the change's base.
+ */
+export function assertEndpointsCurrent(
+  provider: string,
+  current: ChangeRequestEndpoints,
+  change: ChangeRequestEventContext,
+  options: { headSha?: string; stage?: string } = {},
+): void {
+  const expectedHeadSha = options.headSha ?? change.change.head.sha;
+  const expectedBaseSha = change.change.base.sha;
+  const stale = (endpoint: "head" | "base", expectedSha: string, currentSha: string) =>
+    new StaleHeadError({ provider, endpoint, expectedSha, currentSha, stage: options.stage });
+  if (current.headSha !== expectedHeadSha) {
+    throw stale("head", expectedHeadSha, current.headSha);
+  }
+  if (current.baseSha !== undefined && current.baseSha !== expectedBaseSha) {
+    throw stale("base", expectedBaseSha, current.baseSha);
+  }
+}
+
 export interface PublicationDriver<Prepared> {
   readonly provider: string;
   /**
@@ -46,7 +71,8 @@ export interface PublicationDriver<Prepared> {
    */
   readonly inlineStateNeedsExtraReads?: boolean;
   prepare(change: ChangeRequestEventContext, expectedHeadSha: string): Promise<Prepared>;
-  assertCurrent(prepared: Prepared, expectedHeadSha: string): Promise<void>;
+  /** Reads the change request's current endpoints; the workflow compares them to the reviewed commits. */
+  currentEndpoints(prepared: Prepared): Promise<ChangeRequestEndpoints>;
   /**
    * Loads owned comments in one snapshot. Threads keep only owned replies unless
    * `allReplies` is set.
@@ -145,13 +171,15 @@ async function publishReview<Prepared>(
 ) {
   const expectedHeadSha = options.plan.metadata.reviewedHeadSha;
   const prepared = await driver.prepare(options.change, expectedHeadSha);
-  await driver.assertCurrent(prepared, expectedHeadSha);
+  const assertCurrent = () =>
+    assertCurrentEndpoints(driver, prepared, options.change, expectedHeadSha);
+  await assertCurrent();
   const initial = await loadReviewState(driver, prepared, options.plan);
   assertProgressLease(initial.main, options.progressLease);
-  await driver.assertCurrent(prepared, expectedHeadSha);
+  await assertCurrent();
 
   const beforeWrite = async () => {
-    await driver.assertCurrent(prepared, expectedHeadSha);
+    await assertCurrent();
     if (!options.progressLease) return;
     const currentMain = await driver.loadOwnedMain(prepared, options.plan.mainMarker);
     assertProgressLease(currentMain, options.progressLease);
@@ -175,7 +203,7 @@ async function publishReview<Prepared>(
     throw new PublicationError(`${driver.provider} inline comment publication failed`, partial);
   }
 
-  await driver.assertCurrent(prepared, expectedHeadSha);
+  await assertCurrent();
   const currentMain = await driver.loadOwnedMain(prepared, options.plan.mainMarker);
   assertProgressLease(currentMain, options.progressLease);
   const main = await driver.upsertComment(prepared, currentMain, options.plan.mainComment, "main");
@@ -211,10 +239,12 @@ async function publishProgress<Prepared>(
   options: Parameters<NonNullable<CodeHostPublication["publishReviewProgress"]>>[0],
 ) {
   const prepared = await driver.prepare(options.change, options.reviewedHeadSha);
-  await driver.assertCurrent(prepared, options.reviewedHeadSha);
+  const assertCurrent = () =>
+    assertCurrentEndpoints(driver, prepared, options.change, options.reviewedHeadSha);
+  await assertCurrent();
   let main = await driver.loadOwnedMain(prepared, mainCommentMarker);
   if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
-  await driver.assertCurrent(prepared, options.reviewedHeadSha);
+  await assertCurrent();
   main = await driver.loadOwnedMain(prepared, mainCommentMarker);
   if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
   if (!main && options.expectedToken) return { status: "superseded" as const };
@@ -231,7 +261,12 @@ async function publishCommand<Prepared>(
 ) {
   const expectedHeadSha = options.change.change.head.sha;
   const prepared = await driver.prepare(options.change, expectedHeadSha);
-  if (!options.allowHeadDrift) await driver.assertCurrent(prepared, expectedHeadSha);
+  const assertCurrent = async () => {
+    if (!options.allowHeadDrift) {
+      await assertCurrentEndpoints(driver, prepared, options.change, expectedHeadSha);
+    }
+  };
+  await assertCurrent();
   const response = commandResponseBody({
     changeNumber: options.change.change.number,
     sourceCommentId: options.sourceCommentId,
@@ -239,7 +274,7 @@ async function publishCommand<Prepared>(
     body: options.body,
   });
   const existing = await driver.loadOwnedCommand(prepared, response.marker);
-  if (!options.allowHeadDrift) await driver.assertCurrent(prepared, expectedHeadSha);
+  await assertCurrent();
   return driver.upsertComment(prepared, existing, response.body, "command");
 }
 
@@ -249,14 +284,25 @@ async function publishThreadActions<Prepared>(
 ) {
   if (options.actions.length === 0) return { errors: [] };
   const prepared = await driver.prepare(options.change, options.reviewedHeadSha);
-  await driver.assertCurrent(prepared, options.reviewedHeadSha);
+  const assertCurrent = () =>
+    assertCurrentEndpoints(driver, prepared, options.change, options.reviewedHeadSha);
+  await assertCurrent();
   const threads = driver.loadOwnedThreads
     ? await driver.loadOwnedThreads(prepared, options.actions)
     : (await driver.loadOwnedState(prepared, mainCommentMarker)).threads;
-  await driver.assertCurrent(prepared, options.reviewedHeadSha);
-  return runThreadActions(driver, prepared, options.actions, threads, () =>
-    driver.assertCurrent(prepared, options.reviewedHeadSha),
-  );
+  await assertCurrent();
+  return runThreadActions(driver, prepared, options.actions, threads, assertCurrent);
+}
+
+async function assertCurrentEndpoints<Prepared>(
+  driver: PublicationDriver<Prepared>,
+  prepared: Prepared,
+  change: ChangeRequestEventContext,
+  expectedHeadSha: string,
+): Promise<void> {
+  assertEndpointsCurrent(driver.provider, await driver.currentEndpoints(prepared), change, {
+    headSha: expectedHeadSha,
+  });
 }
 
 async function publishInlineItems<Prepared>(

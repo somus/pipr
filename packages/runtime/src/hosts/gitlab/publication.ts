@@ -87,23 +87,6 @@ export function gitLabInlineBody(item: InlinePublicationItem): string {
   return item.body.replaceAll(/(`{3,})suggestion(\r?\n)/g, `$1suggestion:-${offset}+0$2`);
 }
 
-export async function assertCurrentGitLabHead(
-  client: GitLabClient,
-  change: ChangeRequestEventContext,
-  reviewedHeadSha = change.change.head.sha,
-) {
-  const current = await client.getMergeRequest(
-    gitLabCoordinates(change).projectId,
-    change.change.number,
-  );
-  if (current.diff_refs.head_sha !== reviewedHeadSha) {
-    throw new Error(
-      `GitLab merge request head changed from ${reviewedHeadSha} to ${current.diff_refs.head_sha}`,
-    );
-  }
-  return current;
-}
-
 export function gitLabCoordinates(change: Pick<ChangeRequestEventContext, "coordinates">) {
   return requireCoordinates(change, "gitlab", "GitLab");
 }

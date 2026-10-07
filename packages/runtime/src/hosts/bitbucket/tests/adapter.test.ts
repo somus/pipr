@@ -550,6 +550,12 @@ async function createBitbucketConformanceHarness(): Promise<CodeHostAdapterConfo
         source: { ...client.pullRequest.source, commit: { hash: headSha } },
       };
     },
+    setCurrentBase(baseSha) {
+      client.pullRequest = {
+        ...client.pullRequest,
+        destination: { ...client.pullRequest.destination, commit: { hash: baseSha } },
+      };
+    },
     advanceHeadDuringPreflight() {
       client.afterListComments = () => {
         client.afterListComments = undefined;

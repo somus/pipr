@@ -874,7 +874,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           githubPublicationClient: client,
           piProviderModule: workspace.pi.providerModule,
         }),
-      ).rejects.toThrow("Change request head changed");
+      ).rejects.toThrow("change request head changed");
 
       const [executionId] = await readdir(traceDirectory);
       const manifest = parseRunBundleManifest(

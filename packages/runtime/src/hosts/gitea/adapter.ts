@@ -1,5 +1,9 @@
 import { withEventRef } from "../change-request.js";
-import { createCommentsReader, createPublicationWorkflow } from "../publication/workflow.js";
+import {
+  assertEndpointsCurrent,
+  createCommentsReader,
+  createPublicationWorkflow,
+} from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import {
   createGiteaClient,
@@ -8,7 +12,7 @@ import {
   parseGiteaRepositorySlug,
 } from "./client.js";
 import { parseGiteaEvent } from "./event.js";
-import { assertCurrentGiteaHead, giteaCoordinates } from "./publication.js";
+import { currentGiteaEndpoints, giteaCoordinates } from "./publication.js";
 import { createGiteaPublicationDriver } from "./publication-driver.js";
 import { ensureGiteaHeadCheckout } from "./workspace.js";
 
@@ -57,7 +61,8 @@ export function createGiteaHostAdapter(options: {
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {
-        await assertCurrentGiteaHead(client, change, change.change.head.sha);
+        const current = await currentGiteaEndpoints(client, change);
+        assertEndpointsCurrent(driver.provider, current, change, { stage: "status publication" });
         const coordinates = giteaCoordinates(change);
         const id = await client.setStatus(
           coordinates.owner,

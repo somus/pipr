@@ -8,13 +8,14 @@ import type {
 import { mainCommentPrefix, planInlineLocation } from "../publication.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
 import {
-  assertCurrentAzurePullRequest,
   authenticatedAzureOwner,
   azureCoordinates,
+  azureDevOpsProvider,
   azureInlineLocationFromThread,
   azureInlineThread,
   azureThreadContexts,
-  currentAzureNativeChange,
+  currentAzureEndpoints,
+  currentAzureIterationId,
   isAzureThreadResolved,
   ownedAzureRootThread,
   unpositionedAzureThread,
@@ -32,14 +33,12 @@ export function createAzureDevOpsPublicationDriver(
   client: AzureDevOpsClient,
 ): PublicationDriver<Prepared> {
   return {
-    provider: "Azure DevOps",
+    provider: azureDevOpsProvider,
     async prepare(change) {
       const owner = await authenticatedAzureOwner(client);
       return { client, change, ownerUniqueName: owner.uniqueName };
     },
-    async assertCurrent(prepared, expectedHeadSha) {
-      await assertCurrentAzurePullRequest(client, prepared.change, expectedHeadSha);
-    },
+    currentEndpoints: (prepared) => currentAzureEndpoints(client, prepared.change),
     async loadOwnedState(prepared, _mainMarker, options): Promise<LoadedPublicationState> {
       const threads = await loadAzureThreads(client, prepared);
       return {
@@ -73,9 +72,11 @@ export function createAzureDevOpsPublicationDriver(
     async createInline(prepared, item: InlinePublicationItem) {
       const coordinates = azureCoordinates(prepared.change);
       if (!prepared.iterationId) {
-        prepared.iterationId = (
-          await currentAzureNativeChange(client, prepared.change, item.reviewedHeadSha)
-        ).iterationId;
+        prepared.iterationId = await currentAzureIterationId(
+          client,
+          prepared.change,
+          item.reviewedHeadSha,
+        );
       }
       prepared.changes ??= await client.listIterationChanges(
         coordinates.repositoryId,

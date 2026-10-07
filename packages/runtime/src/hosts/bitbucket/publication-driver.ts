@@ -5,11 +5,11 @@ import { planInlineLocation } from "../publication.js";
 import { normalizeBitbucketMarkdown, renderBitbucketMarkdown } from "./markdown.js";
 import type { BitbucketClient } from "./models.js";
 import {
-  assertCurrentBitbucketEndpoints,
   authenticatedBitbucketOwner,
   bitbucketInline,
   bitbucketInlineLocationFromComment,
   bitbucketThreadContexts,
+  currentBitbucketEndpoints,
   findBitbucketMainComment,
   findBitbucketTopLevelComment,
 } from "./publication.js";
@@ -24,9 +24,7 @@ export function createBitbucketPublicationDriver(
     async prepare(change) {
       return { client, change };
     },
-    assertCurrent(prepared, expectedHeadSha) {
-      return assertCurrentBitbucketEndpoints(client, prepared.change, expectedHeadSha);
-    },
+    currentEndpoints: (prepared) => currentBitbucketEndpoints(client, prepared.change),
     async loadOwnedState(prepared, mainMarker, options): Promise<LoadedPublicationState> {
       const owner = await authenticatedBitbucketOwner(client);
       const comments = await client.listComments(prepared.change.change.number);

@@ -5,7 +5,7 @@ import type { LoadedPublicationState, PublicationDriver } from "../publication/w
 import { inlineItemPath, planInlineLocation } from "../publication.js";
 import { type GiteaClient, giteaDisplayName } from "./client.js";
 import {
-  assertCurrentGiteaHead,
+  currentGiteaEndpoints,
   findGiteaMainComment,
   giteaCoordinates,
   giteaReviewCommentLocation,
@@ -21,9 +21,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
     async prepare(change) {
       return { client, change };
     },
-    assertCurrent(prepared, expectedHeadSha) {
-      return assertCurrentGiteaHead(client, prepared.change, expectedHeadSha);
-    },
+    currentEndpoints: (prepared) => currentGiteaEndpoints(client, prepared.change),
     async loadOwnedState(prepared, mainMarker, options): Promise<LoadedPublicationState> {
       const coordinates = giteaCoordinates(prepared.change);
       const owner = await client.currentUser();

@@ -1,40 +1,8 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type { InlineThreadContext } from "../../publication/types.js";
 import { parseInlineFindingMarker } from "../../review/comment-markers.js";
-import { PublicationError } from "../../review/publication-result.js";
-import type { ChangeRequestEventContext } from "../../types.js";
 import { isMainCommentLine } from "../publication.js";
-import type {
-  GitHubIssueComment,
-  GitHubPublicationClient,
-  GitHubReviewComment,
-  GitHubReviewThread,
-} from "./client.js";
-
-export async function assertCurrentHeadSha(
-  client: GitHubPublicationClient,
-  change: ChangeRequestEventContext,
-  reviewedHeadSha: string,
-): Promise<void> {
-  const headMismatch = await currentHeadShaMismatch(client, change, reviewedHeadSha);
-  if (headMismatch) {
-    throw new PublicationError(headMismatch, undefined);
-  }
-}
-
-async function currentHeadShaMismatch(
-  client: GitHubPublicationClient,
-  change: ChangeRequestEventContext,
-  reviewedHeadSha: string,
-): Promise<string | undefined> {
-  const currentHeadSha = await client.getPullRequestHeadSha({
-    repo: change.repository.slug,
-    pullRequestNumber: change.change.number,
-  });
-  return currentHeadSha === reviewedHeadSha
-    ? undefined
-    : `Change request head changed from '${reviewedHeadSha}' to '${currentHeadSha}' before publication`;
-}
+import type { GitHubIssueComment, GitHubReviewComment, GitHubReviewThread } from "./client.js";
 
 export function reviewThreadByCommentId(
   threads: GitHubReviewThread[],

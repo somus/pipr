@@ -3,6 +3,7 @@ import type { InlinePublicationItem, InlineThreadContext } from "../../publicati
 import { mainCommentMarker, parseInlineFindingMarker } from "../../review/comment-markers.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import type { ChangeRequestEventContext } from "../../types.js";
+import type { ChangeRequestEndpoints } from "../publication/workflow.js";
 import { isMainCommentLine, nativeInlineLocation } from "../publication.js";
 import { normalizeBitbucketMarkdown } from "./markdown.js";
 import type { BitbucketClient, BitbucketComment, BitbucketInlineRequest } from "./models.js";
@@ -77,19 +78,15 @@ export function bitbucketInline(
       };
 }
 
-export async function assertCurrentBitbucketEndpoints(
+export async function currentBitbucketEndpoints(
   client: BitbucketClient,
   change: ChangeRequestEventContext,
-  reviewedHeadSha = change.change.head.sha,
-  stage = "publication",
-) {
+): Promise<ChangeRequestEndpoints> {
   const pullRequest = await client.getPullRequest(change.change.number);
-  if (
-    pullRequest.source.commit.hash !== reviewedHeadSha ||
-    pullRequest.destination.commit.hash !== change.change.base.sha
-  ) {
-    throw new Error(`Bitbucket pull request endpoints changed before ${stage}`);
-  }
+  return {
+    headSha: pullRequest.source.commit.hash,
+    baseSha: pullRequest.destination.commit.hash,
+  };
 }
 
 export async function authenticatedBitbucketOwner(

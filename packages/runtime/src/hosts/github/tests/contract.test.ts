@@ -36,7 +36,7 @@ describe("GitHub host adapter contract", () => {
           },
         }),
       }),
-    ).rejects.toThrow("Change request head changed");
+    ).rejects.toThrow("change request head changed");
     expect(calls).toEqual(["getPullRequestHeadSha"]);
   });
 

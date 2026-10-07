@@ -7,7 +7,7 @@ import {
   createAzureDevOpsClient,
 } from "./client.js";
 import { parseAzureDevOpsEvent } from "./event.js";
-import { azureCoordinates, currentAzureNativeChange } from "./publication.js";
+import { azureCoordinates, currentAzureIterationId } from "./publication.js";
 import { createAzureDevOpsPublicationDriver } from "./publication-driver.js";
 import { ensureAzureDevOpsHeadCheckout } from "./workspace.js";
 
@@ -59,11 +59,11 @@ export function createAzureDevOpsHostAdapter(
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {
-        const { iterationId } = await currentAzureNativeChange(
+        const iterationId = await currentAzureIterationId(
           client,
           change,
           change.change.head.sha,
-          "Azure DevOps pull request endpoints changed before status publication",
+          "status publication",
         );
         const id = await client.createStatus(
           azureCoordinates(change).repositoryId,

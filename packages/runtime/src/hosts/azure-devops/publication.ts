@@ -4,8 +4,11 @@ import { parseInlineFindingMarker } from "../../review/comment-markers.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { requireCoordinates } from "../change-request.js";
+import { assertEndpointsCurrent, type ChangeRequestEndpoints } from "../publication/workflow.js";
 import { inlineItemPath, nativeInlineLocation } from "../publication.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
+
+export const azureDevOpsProvider = "Azure DevOps";
 
 export function azureInlineLocationFromThread(
   thread: AzureDevOpsThread,
@@ -119,51 +122,35 @@ async function lineEndOffset(
   return content.length + 1;
 }
 
-/**
- * Asserts the pull request still matches the change and returns the head iteration.
- * `endpointsChangedMessage` replaces the specific head/base drift messages.
- */
-export async function currentAzureNativeChange(
+export async function currentAzureEndpoints(
   client: AzureDevOpsClient,
   change: ChangeRequestEventContext,
-  reviewedHeadSha = change.change.head.sha,
-  endpointsChangedMessage?: string,
-) {
-  const pullRequest = await assertCurrentAzurePullRequest(
-    client,
-    change,
-    reviewedHeadSha,
-    endpointsChangedMessage,
-  );
+): Promise<ChangeRequestEndpoints> {
+  const coordinates = azureCoordinates(change);
+  const pullRequest = await client.getPullRequest(coordinates.repositoryId, change.change.number);
+  return {
+    headSha: pullRequest.lastMergeSourceCommit.commitId,
+    baseSha: pullRequest.lastMergeTargetCommit.commitId,
+  };
+}
+
+/** Asserts the pull request still matches the reviewed commits and returns the head iteration id. */
+export async function currentAzureIterationId(
+  client: AzureDevOpsClient,
+  change: ChangeRequestEventContext,
+  reviewedHeadSha: string,
+  stage?: string,
+): Promise<number> {
+  assertEndpointsCurrent(azureDevOpsProvider, await currentAzureEndpoints(client, change), change, {
+    headSha: reviewedHeadSha,
+    stage,
+  });
   const coordinates = azureCoordinates(change);
   const iterations = await client.listIterations(coordinates.repositoryId, change.change.number);
   const iteration = iterations.findLast((candidate) => candidate.headSha === reviewedHeadSha);
   if (!iteration)
     throw new Error(`Azure DevOps has no pull request iteration for head ${reviewedHeadSha}`);
-  return { pullRequest, iterationId: iteration.id };
-}
-
-export async function assertCurrentAzurePullRequest(
-  client: AzureDevOpsClient,
-  change: ChangeRequestEventContext,
-  reviewedHeadSha = change.change.head.sha,
-  endpointsChangedMessage?: string,
-) {
-  const coordinates = azureCoordinates(change);
-  const pullRequest = await client.getPullRequest(coordinates.repositoryId, change.change.number);
-  if (pullRequest.lastMergeSourceCommit.commitId !== reviewedHeadSha) {
-    throw new Error(
-      endpointsChangedMessage ??
-        `Azure DevOps pull request head changed from ${reviewedHeadSha} to ${pullRequest.lastMergeSourceCommit.commitId}`,
-    );
-  }
-  if (pullRequest.lastMergeTargetCommit.commitId !== change.change.base.sha) {
-    throw new Error(
-      endpointsChangedMessage ??
-        `Azure DevOps pull request base changed from ${change.change.base.sha} to ${pullRequest.lastMergeTargetCommit.commitId}`,
-    );
-  }
-  return pullRequest;
+  return iteration.id;
 }
 
 export function azureCoordinates(change: Pick<ChangeRequestEventContext, "coordinates">) {

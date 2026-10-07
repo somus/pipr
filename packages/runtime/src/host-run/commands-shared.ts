@@ -1,7 +1,7 @@
 import { CodeHostHttpError } from "../hosts/http.js";
 import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
-import { PublicationError } from "../review/publication-result.js";
+import { PublicationError, StaleHeadError } from "../review/publication-result.js";
 import type { createRuntimeLog, RuntimeLogSink } from "../shared/logging.js";
 import type { HostRunCommandOptions } from "./types.js";
 
@@ -54,11 +54,12 @@ export function classifyRunFailure(
   error: unknown,
   fallback: RunFailureCategory,
 ): RunFailureCategory {
-  if (error instanceof ReviewProgressSupersededError) return "stale-head";
+  if (error instanceof ReviewProgressSupersededError || error instanceof StaleHeadError) {
+    return "stale-head";
+  }
   if (isAuthenticationFailure(error)) return "auth";
-  const message = error instanceof Error ? error.message : String(error);
-  if (/head changed|stale head/i.test(message)) return "stale-head";
   if (error instanceof PublicationError) return "publication";
+  const message = error instanceof Error ? error.message : String(error);
   return messageFailureCategory(message) ?? fallback;
 }
 

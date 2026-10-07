@@ -5,7 +5,6 @@ import type { LoadedPublicationState, PublicationDriver } from "../publication/w
 import type { GitHubPublicationClient, GitHubReviewComment, GitHubReviewThread } from "./client.js";
 import { mapFindingToGithubReviewCommentLocation } from "./inline.js";
 import {
-  assertCurrentHeadSha,
   findMainComment,
   findOwnedIssueComment,
   githubThreadContexts,
@@ -26,8 +25,12 @@ export function createGitHubPublicationDriver(
     async prepare(change) {
       return { client, change };
     },
-    assertCurrent(prepared, expectedHeadSha) {
-      return assertCurrentHeadSha(client, prepared.change, expectedHeadSha);
+    async currentEndpoints(prepared) {
+      const headSha = await client.getPullRequestHeadSha({
+        repo: prepared.change.repository.slug,
+        pullRequestNumber: prepared.change.change.number,
+      });
+      return { headSha };
     },
     loadOwnedState,
     loadOwnedThreads,

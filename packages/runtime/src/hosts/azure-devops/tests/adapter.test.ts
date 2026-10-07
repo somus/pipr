@@ -101,11 +101,13 @@ describe("Azure DevOps host adapter", () => {
     const adapter = createAzureDevOpsHostAdapter({ client });
 
     await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
-      "base changed",
+      "Azure DevOps change request base changed from 'base' to 'new-base' before publication",
     );
     await expect(
       adapter.statuses?.upsert({ change, name: "review", state: "success" }),
-    ).rejects.toThrow("endpoints changed");
+    ).rejects.toThrow(
+      "Azure DevOps change request base changed from 'base' to 'new-base' before status publication",
+    );
     expect(client.threads).toEqual([]);
     expect(client.statusBodies).toEqual([]);
   });
@@ -777,6 +779,12 @@ async function createAzureDevOpsConformanceHarness(): Promise<CodeHostAdapterCon
       client.pullRequest = {
         ...client.pullRequest,
         lastMergeSourceCommit: { commitId: headSha },
+      };
+    },
+    setCurrentBase(baseSha) {
+      client.pullRequest = {
+        ...client.pullRequest,
+        lastMergeTargetCommit: { commitId: baseSha },
       };
     },
     advanceHeadDuringPreflight() {

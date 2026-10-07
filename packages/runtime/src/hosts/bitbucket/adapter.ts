@@ -1,10 +1,14 @@
 import { requireCoordinates, withEventRef } from "../change-request.js";
-import { createCommentsReader, createPublicationWorkflow } from "../publication/workflow.js";
+import {
+  assertEndpointsCurrent,
+  createCommentsReader,
+  createPublicationWorkflow,
+} from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import { bitbucketStatusState, createBitbucketClient } from "./client.js";
 import { parseBitbucketEvent } from "./event.js";
 import type { BitbucketClient } from "./models.js";
-import { assertCurrentBitbucketEndpoints } from "./publication.js";
+import { currentBitbucketEndpoints } from "./publication.js";
 import { createBitbucketPublicationDriver } from "./publication-driver.js";
 import { ensureBitbucketHeadCheckout } from "./workspace.js";
 
@@ -57,12 +61,8 @@ export function createBitbucketHostAdapter(
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {
-        await assertCurrentBitbucketEndpoints(
-          client,
-          change,
-          change.change.head.sha,
-          "status publication",
-        );
+        const current = await currentBitbucketEndpoints(client, change);
+        assertEndpointsCurrent(driver.provider, current, change, { stage: "status publication" });
         const key = `pipr-${name}`.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 40);
         const id = await client.setStatus(change.change.head.sha, key, {
           state: bitbucketStatusState(state),

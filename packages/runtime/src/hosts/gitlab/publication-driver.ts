@@ -4,7 +4,6 @@ import type { LoadedPublicationState, PublicationDriver } from "../publication/w
 import { mainCommentPrefix, planInlineLocation } from "../publication.js";
 import type { GitLabClient, GitLabDiffRefs } from "./client.js";
 import {
-  assertCurrentGitLabHead,
   gitLabCoordinates,
   gitLabInlineBody,
   gitLabInlineLocationFromDiscussion,
@@ -28,9 +27,13 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       const owner = await client.currentUser();
       return { client, change, ownerUsername: owner.username };
     },
-    async assertCurrent(prepared, expectedHeadSha) {
-      const current = await assertCurrentGitLabHead(client, prepared.change, expectedHeadSha);
+    async currentEndpoints(prepared) {
+      const current = await client.getMergeRequest(
+        gitLabCoordinates(prepared.change).projectId,
+        prepared.change.change.number,
+      );
       prepared.refs = current.diff_refs;
+      return { headSha: current.diff_refs.head_sha };
     },
     async loadOwnedState(prepared, _mainMarker, options): Promise<LoadedPublicationState> {
       const coordinates = gitLabCoordinates(prepared.change);

@@ -51,8 +51,8 @@ class MemoryDriver implements PublicationDriver<Prepared> {
     return { change: input };
   }
 
-  async assertCurrent(_prepared: Prepared, expectedHeadSha: string): Promise<void> {
-    if (this.currentHead !== expectedHeadSha) throw new Error("head changed");
+  async currentEndpoints(): Promise<{ headSha: string }> {
+    return { headSha: this.currentHead };
   }
 
   async loadOwnedState(): Promise<LoadedPublicationState> {
