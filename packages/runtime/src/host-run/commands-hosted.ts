@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ciRunFromEnvironment, isNativeCiEnvironment } from "../hosts/ci-run.js";
@@ -10,6 +10,7 @@ import {
   validateRunBundleRecipients,
 } from "../observability/protected-package.js";
 import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
+import { publishRunBundle } from "../observability/run-bundle-publication.js";
 import { combineRuntimeLogSinks } from "../observability/runtime-log-sinks.js";
 import { maximumRunBundleBytes } from "../observability/types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
@@ -46,7 +47,8 @@ export async function runHostRunCommand(
 export async function runHostRunCommandWithDependencies(
   options: HostRunCommandDependencyOptions,
 ): Promise<HostRunCommandResult> {
-  const recorder = await startHostedRecorder(options);
+  const capture = await startHostedRecorder(options);
+  const recorder = capture?.recorder;
   const adapter = createHostRunAdapter({
     env: options.env,
     host: options.host,
@@ -79,10 +81,10 @@ export async function runHostRunCommandWithDependencies(
       return result;
     }
     await captureHostedArtifacts(recorder, result);
-    await finishSuccessfulHostedRecorder(recorder, log, options, result, services.adapter);
+    await finishSuccessfulHostedRecorder(capture, log, options, result, services.adapter);
     return result;
   } catch (error) {
-    const superseded = await finishFailedHostedRecorder(recorder, log, options, state, error);
+    const superseded = await finishFailedHostedRecorder(capture, log, options, state, error);
     if (superseded) return { kind: "ignored", reason: superseded.message };
     throw error;
   }
@@ -139,14 +141,14 @@ async function executeHostRun(
 }
 
 async function finishSuccessfulHostedRecorder(
-  recorder: RunRecorder | undefined,
+  capture: HostedCapture | undefined,
   log: RuntimeLog,
   options: HostRunCommandDependencyOptions,
   result: ObservableHostResult,
   adapter: CodeHostAdapter,
 ): Promise<void> {
   await finishRecorderSafely(
-    recorder,
+    capture?.recorder,
     log,
     {
       kind: hostResultKind(result),
@@ -161,12 +163,12 @@ async function finishSuccessfulHostedRecorder(
       repository: bundleRepository(result.event, adapter.id),
       provider: ciRunFromEnvironment(adapter.id, options.env ?? process.env),
     },
-    options.onRunBundleFinalized,
+    capture?.onFinalized,
   );
 }
 
 async function finishFailedHostedRecorder(
-  recorder: RunRecorder | undefined,
+  capture: HostedCapture | undefined,
   log: RuntimeLog,
   options: HostRunCommandDependencyOptions,
   state: HostRunState,
@@ -186,7 +188,7 @@ async function finishFailedHostedRecorder(
   if (repository) result.repository = repository;
   const provider = ciRunFromEnvironment(state.adapter.id, options.env ?? process.env);
   if (provider) result.provider = provider;
-  await finishRecorderSafely(recorder, log, result, options.onRunBundleFinalized);
+  await finishRecorderSafely(capture?.recorder, log, result, capture?.onFinalized);
   return superseded;
 }
 
@@ -197,9 +199,14 @@ function failedBundleRepository(
   return partialBundleRepository(state.event, state.adapter.id);
 }
 
+type HostedCapture = {
+  recorder: RunRecorder;
+  onFinalized: NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>;
+};
+
 async function startHostedRecorder(
   options: HostRunCommandDependencyOptions,
-): Promise<RunRecorder | undefined> {
+): Promise<HostedCapture | undefined> {
   if (options.dryRun) return undefined;
   // A misspelled capture mode is operator error; fail before the run instead of silently dropping capture.
   parseRunCaptureSetting(options.env ?? process.env);
@@ -213,7 +220,7 @@ async function startHostedRecorder(
 
 async function createHostedRecorder(
   options: HostRunCommandDependencyOptions,
-): Promise<RunRecorder | undefined> {
+): Promise<HostedCapture | undefined> {
   const env = options.env ?? process.env;
   const nativeCi = isNativeCiEnvironment(env);
   const githubActions = env.GITHUB_ACTIONS === "true";
@@ -223,7 +230,7 @@ async function createHostedRecorder(
   const rootDirectory = nativeCi
     ? await mkdtemp(path.join(os.tmpdir(), "pipr-run-capture-"))
     : (env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"));
-  return await startFileRunRecorder({
+  const recorder = await startFileRunRecorder({
     rootDirectory,
     env,
     mode: capture.mode,
@@ -232,6 +239,41 @@ async function createHostedRecorder(
       ? { maxBytes: maximumRunBundleBytes - 4 * 1024 * 1024 }
       : {}),
   });
+  return {
+    recorder,
+    onFinalized: finalizedRunBundleHandler(options, env, nativeCi ? rootDirectory : undefined),
+  };
+}
+
+/** Reports the raw bundle, then publishes a native-CI capture and removes its temporary root. */
+function finalizedRunBundleHandler(
+  options: HostRunCommandDependencyOptions,
+  env: NodeJS.ProcessEnv,
+  temporaryRoot: string | undefined,
+): NonNullable<HostRunCommandOptions["onRunBundleFinalized"]> {
+  const onPublished = options.onRunBundlePublished;
+  const publishedRoot = onPublished ? temporaryRoot : undefined;
+  return async (bundle) => {
+    try {
+      await options.onRunBundleFinalized?.(bundle);
+      if (!publishedRoot || !onPublished) return;
+      await onPublished(
+        await publishRunBundle({
+          bundleDirectory: bundle.directory,
+          executionId: bundle.executionId,
+          ...(bundle.repository?.changeNumber
+            ? { changeNumber: bundle.repository.changeNumber }
+            : {}),
+          rootDir: options.rootDir,
+          env,
+        }),
+      );
+    } finally {
+      if (publishedRoot) {
+        await rm(publishedRoot, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
+  };
 }
 
 function publishCaptureProtectionWarning(

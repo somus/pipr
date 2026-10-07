@@ -1,6 +1,7 @@
 import type { PiprRunSummary } from "@usepipr/sdk";
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
+import type { PublishedRunBundle } from "../observability/run-bundle-publication.js";
 import type { RunObserver } from "../observability/types.js";
 import type { PiProviderModule, PiRunner } from "../pi/types.js";
 import type { PublicationResult } from "../publication/types.js";
@@ -46,6 +47,11 @@ export type HostRunCommandOptions = RuntimeCommandOptions & {
     outcome: "in-progress" | "succeeded" | "failed" | "partial";
     repository?: import("@usepipr/sdk").RunBundleManifest["repository"];
   }) => void | Promise<void>;
+  /**
+   * Opts into publishing native-CI captures: runtime packages the temporary capture into the
+   * run store, removes the temporary directory, and reports the package for artifact upload.
+   */
+  onRunBundlePublished?: (bundle: PublishedRunBundle) => void | Promise<void>;
 };
 
 /** Injection bag accepted only at the host-run composition root. */

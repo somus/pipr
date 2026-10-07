@@ -9,7 +9,7 @@ import {
   scriptedProviderModulePath,
 } from "@usepipr/runtime/internal/testing";
 import cliPackage from "../../package.json" with { type: "json" };
-import { publishRunBundleMetadata, runMain } from "../runner.js";
+import { runMain } from "../runner.js";
 import { containedSkillFilePath, readBundledSkillCatalog } from "../skill-catalog.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
@@ -18,52 +18,6 @@ const repoRoot = path.resolve(cliProjectDir, "../..");
 const cliPath = path.join(cliProjectDir, "src", "main.ts");
 
 describe("pipr CLI", () => {
-  it("publishes finalized run metadata only for GitHub", async () => {
-    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-run-metadata-"));
-    const outputPath = path.join(workspace, "github-output.txt");
-    await Bun.write(outputPath, "");
-    const originalOutput = process.env.GITHUB_OUTPUT;
-    process.env.GITHUB_OUTPUT = outputPath;
-    try {
-      await publishRunBundleMetadata(
-        {
-          executionId: "0123456789abcdef0123456789abcdef",
-          directory: path.join(workspace, "bundle;%]\n"),
-          kind: "review",
-          outcome: "succeeded",
-          protection: "age",
-          repository: { host: "bitbucket", repository: "pipr", changeNumber: 42 },
-        },
-        {
-          rootDir: workspace,
-          env: { GITHUB_ACTIONS: "true", TF_BUILD: "True", BITBUCKET_BUILD_NUMBER: "7" },
-        },
-      );
-      const output = await Bun.file(outputPath).text();
-      expect(parseGitHubOutputRecords(output)).toEqual({
-        "execution-id": "0123456789abcdef0123456789abcdef",
-        "run-bundle-path": "bundle;%]\n",
-        "run-artifact-name": "pipr-run-v1-age-pr-42-0123456789abcdef0123456789abcdef",
-      });
-
-      await Bun.write(outputPath, "");
-      await publishRunBundleMetadata(
-        {
-          executionId: "fedcba9876543210fedcba9876543210",
-          directory: path.join(workspace, "bundle"),
-          kind: "review",
-          outcome: "succeeded",
-        },
-        { rootDir: workspace, env: {} },
-      );
-      expect(await Bun.file(outputPath).text()).toBe("");
-    } finally {
-      if (originalOutput === undefined) delete process.env.GITHUB_OUTPUT;
-      else process.env.GITHUB_OUTPUT = originalOutput;
-      await removeWorkspace(workspace);
-    }
-  });
-
   it("maps update-notice policy before command execution", async () => {
     const requests: string[] = [];
     const notices: string[] = [];
@@ -396,23 +350,6 @@ describe("pipr CLI", () => {
     expect(result.piCalled).toBe(false);
   });
 });
-
-function parseGitHubOutputRecords(source: string): Record<string, string> {
-  const lines = source.split("\n");
-  const records: Record<string, string> = {};
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = /^(?<name>[^<]+)<<(?<delimiter>.+)$/.exec(lines[index] ?? "");
-    if (!match?.groups) continue;
-    const values: string[] = [];
-    index += 1;
-    while (index < lines.length && lines[index] !== match.groups.delimiter) {
-      values.push(lines[index] ?? "");
-      index += 1;
-    }
-    records[match.groups.name ?? ""] = values.join("\n");
-  }
-  return records;
-}
 
 async function initializeWorkspace(workspace: string): Promise<void> {
   const result = await runCli(["init"], {}, workspace);

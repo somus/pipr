@@ -17,6 +17,7 @@ import {
 } from "../../observability/archive-extraction.js";
 import { setDefined } from "../../observability/event-observation.js";
 import { copyRunBundlePackage } from "../../observability/protected-package.js";
+import { parseRunArtifactName } from "../../observability/run-artifact-name.js";
 import { maximumRunBundleBytes } from "../../observability/types.js";
 import { githubApiVersion } from "../../shared/github.js";
 
@@ -35,9 +36,6 @@ type GitHubClient = {
 };
 
 type GitHubFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
-const pullRequestArtifactPattern = /^pipr-run-v1-(?:(metadata|age)-)?pr-(\d+)-([a-f0-9]{32})$/;
-const genericArtifactPattern = /^pipr-run-v1-(?:(metadata|age)-)?([a-f0-9]{32})$/;
 
 const githubArtifactSchema = z.object({
   id: z.union([z.number(), z.string()]),
@@ -322,29 +320,12 @@ function parseArtifactName(
   name: string | undefined,
   expectedChangeNumber?: number,
 ): ArtifactIdentity | undefined {
-  if (!name) return undefined;
-  const pullRequestMatch = pullRequestArtifactPattern.exec(name);
-  if (pullRequestMatch) return pullRequestArtifactIdentity(pullRequestMatch, expectedChangeNumber);
-  if (expectedChangeNumber !== undefined) return undefined;
-  const genericMatch = genericArtifactPattern.exec(name);
-  return genericMatch ? artifactIdentity(genericMatch[2], genericMatch[1]) : undefined;
-}
-
-function pullRequestArtifactIdentity(
-  match: RegExpExecArray,
-  expectedChangeNumber: number | undefined,
-): ArtifactIdentity | undefined {
-  if (expectedChangeNumber !== undefined && Number(match[2]) !== expectedChangeNumber) {
+  const identity = name ? parseRunArtifactName(name) : undefined;
+  if (!identity) return undefined;
+  if (expectedChangeNumber !== undefined && identity.changeNumber !== expectedChangeNumber) {
     return undefined;
   }
-  return artifactIdentity(match[3], match[1]);
-}
-
-function artifactIdentity(executionId: string, protection: string | undefined): ArtifactIdentity {
-  return {
-    executionId,
-    protection: protection === "metadata" || protection === "age" ? protection : "unknown",
-  };
+  return { executionId: identity.executionId, protection: identity.protection ?? "unknown" };
 }
 
 function nextLink(header: string | null): string | undefined {

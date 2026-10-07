@@ -1,12 +1,7 @@
-import { rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
-  type HostRunCommandOptions,
-  parseRunBundleRecipients,
-  prepareRunBundlePackage,
   type RuntimeLogRecord,
   type RuntimeLogSink,
   readWebhookDeliveryStatus,
@@ -326,8 +321,11 @@ async function runHostRun(options: CliOptions, context: CliExecutionContext): Pr
     env,
     dryRun: env.PIPR_DRY_RUN === "1",
     logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
-    onRunBundleFinalized: async (bundle) => {
-      await prepareAndPublishRunBundle(bundle, { env, rootDir });
+    onRunBundlePublished(bundle) {
+      if (!isGitHubAction) return;
+      core.setOutput("execution-id", bundle.executionId);
+      core.setOutput("run-bundle-path", bundle.bundlePath);
+      core.setOutput("run-artifact-name", bundle.artifactName);
     },
   });
   if (isGitHubAction) {
@@ -345,59 +343,6 @@ async function runHostRun(options: CliOptions, context: CliExecutionContext): Pr
     return;
   }
   console.log(`pipr ${result.kind} completed for change #${result.event.change.number}`);
-}
-
-async function prepareAndPublishRunBundle(
-  bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0],
-  options: { env: NodeJS.ProcessEnv; rootDir: string },
-): Promise<void> {
-  const captureRoot = path.dirname(bundle.directory);
-  try {
-    const prepared = await prepareRunBundlePackage({
-      bundleDirectory: bundle.directory,
-      destinationRoot: options.env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"),
-      recipients: parseRunBundleRecipients(options.env.PIPR_RUN_AGE_RECIPIENTS),
-    });
-    await publishRunBundleMetadata(
-      { ...bundle, directory: prepared.directory, protection: prepared.envelope.protection },
-      options,
-    );
-  } finally {
-    if (
-      path.dirname(captureRoot) === path.resolve(os.tmpdir()) &&
-      path.basename(captureRoot).startsWith("pipr-run-capture-")
-    ) {
-      await rm(captureRoot, { recursive: true, force: true }).catch(() => undefined);
-    }
-  }
-}
-
-export async function publishRunBundleMetadata(
-  bundle: Parameters<NonNullable<HostRunCommandOptions["onRunBundleFinalized"]>>[0] & {
-    protection?: "metadata" | "age";
-  },
-  options: { env: NodeJS.ProcessEnv; rootDir: string },
-): Promise<void> {
-  const relative = path.relative(options.rootDir, bundle.directory);
-  const bundlePath = relative && !relative.startsWith("..") ? relative : bundle.directory;
-  const changeNumber = bundle.repository?.changeNumber;
-  const protection = bundle.protection ?? "unknown";
-  const artifactName = changeNumber
-    ? `pipr-run-v1-${protection}-pr-${changeNumber}-${bundle.executionId}`
-    : `pipr-run-v1-${protection}-${bundle.executionId}`;
-  publishGitHubRunMetadata(options.env, bundle.executionId, bundlePath, artifactName);
-}
-
-function publishGitHubRunMetadata(
-  env: NodeJS.ProcessEnv,
-  executionId: string,
-  bundlePath: string,
-  artifactName: string,
-): void {
-  if (env.GITHUB_ACTIONS !== "true") return;
-  core.setOutput("execution-id", executionId);
-  core.setOutput("run-bundle-path", bundlePath);
-  core.setOutput("run-artifact-name", artifactName);
 }
 
 function resolveCliPath(cwd: string, value: string | undefined): string | undefined {
