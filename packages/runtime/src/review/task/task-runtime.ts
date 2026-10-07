@@ -32,6 +32,7 @@ import { buildCommentPublishingPlan } from "../comment-publishing.js";
 import { priorReviewStateForSelectedTasks } from "../prior-state.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
 import { validateReviewResult } from "../review.js";
+import { reviewStatsForRuns, runSummaryStatsFields } from "../review-stats.js";
 import { type RuntimeCommandInvocation, stableReviewRunId } from "../run-identity.js";
 import { runInternalVerifier } from "../verifier.js";
 import { selectRuntimeTasks } from "./select-runtime-tasks.js";
@@ -44,8 +45,6 @@ import {
   type OutputStateWithComment,
   type RuntimeCheckSink,
   type RuntimeTaskCheckResult,
-  reviewStatsForRuns,
-  runSummaryStatsFields,
   runtimeTaskCheckResult,
   type TaskRunResult,
 } from "./task-output.js";

@@ -1,5 +1,8 @@
-import { maxReviewStatsModels } from "../publication/schemas.js";
+import type { PiprRunSummary } from "@usepipr/sdk";
+import { summarizeDiffContextCoverage } from "../pi/diff-context-coverage.js";
+import { maxReviewStatsModels, sanitizeReviewStatsModel } from "../publication/schemas.js";
 import type { ReviewStats } from "../publication/types.js";
+import type { PiRunStats } from "./agent/review-run-types.js";
 
 export function accumulateReviewStats(
   prior: ReviewStats | undefined,
@@ -55,7 +58,7 @@ export function accumulateReviewStats(
 }
 
 /** Adds a usage value, keeping the prior total when the sum is invalid or negative. */
-export function addUsageTotal(
+function addUsageTotal(
   prior: number,
   current: number,
   isValid: (value: number) => boolean,
@@ -64,4 +67,141 @@ export function addUsageTotal(
   return isValid(total) && total >= 0
     ? { total, complete: true }
     : { total: prior, complete: false };
+}
+
+export function reviewStatsForRuns(
+  runs: PiRunStats[],
+  durationMs: number,
+): ReviewStats | undefined {
+  if (runs.length === 0) {
+    return undefined;
+  }
+  const usage = aggregateReviewUsage(runs);
+  const coverage = runs.map((run) => run.diffContextCoverage).filter((item) => item !== undefined);
+  return {
+    models: collectReviewModels(runs),
+    agentRuns: runs.length,
+    durationMs,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    costUsd: usage.costUsd,
+    usageStatus: usage.status,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    cacheUsageStatus: usage.cacheStatus,
+    ...(coverage.length > 0 ? { diffContextCoverage: summarizeDiffContextCoverage(coverage) } : {}),
+  };
+}
+
+export function runSummaryStatsFields(
+  stats: ReviewStats | undefined,
+): Pick<
+  PiprRunSummary,
+  | "agentRuns"
+  | "inputTokens"
+  | "outputTokens"
+  | "costUsd"
+  | "usageStatus"
+  | "cacheReadTokens"
+  | "cacheWriteTokens"
+  | "cacheUsageStatus"
+  | "diffContextCoverage"
+> {
+  return {
+    agentRuns: stats?.agentRuns ?? 0,
+    inputTokens: stats?.inputTokens ?? 0,
+    outputTokens: stats?.outputTokens ?? 0,
+    costUsd: stats?.costUsd ?? 0,
+    usageStatus: stats?.usageStatus ?? "unavailable",
+    cacheReadTokens: stats?.cacheReadTokens ?? 0,
+    cacheWriteTokens: stats?.cacheWriteTokens ?? 0,
+    cacheUsageStatus: stats?.cacheUsageStatus ?? "unavailable",
+    ...(stats?.diffContextCoverage ? { diffContextCoverage: stats.diffContextCoverage } : {}),
+  };
+}
+
+function collectReviewModels(runs: PiRunStats[]): string[] {
+  const models: string[] = [];
+  for (const model of runs.flatMap((run) => run.models)) {
+    const sanitized = sanitizeReviewStatsModel(model);
+    if (sanitized && models.length < maxReviewStatsModels && !models.includes(sanitized)) {
+      models.push(sanitized);
+    }
+  }
+  return models.length > 0 ? models : ["[invalid model]"];
+}
+
+function aggregateReviewUsage(runs: PiRunStats[]): {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  status: ReviewStats["usageStatus"];
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cacheStatus: NonNullable<ReviewStats["cacheUsageStatus"]>;
+} {
+  const core = sumReportedUsage(
+    runs.map((run) => run.usage && { values: run.usage, partial: run.usage.status === "partial" }),
+    {
+      inputTokens: Number.isSafeInteger,
+      outputTokens: Number.isSafeInteger,
+      costUsd: Number.isFinite,
+    },
+  );
+  const cache = sumReportedUsage(
+    runs.map((run) =>
+      hasReportedCacheUsage(run)
+        ? { values: run.usage, partial: run.usage.cacheUsageStatus === "partial" }
+        : undefined,
+    ),
+    { cacheReadTokens: Number.isSafeInteger, cacheWriteTokens: Number.isSafeInteger },
+  );
+  return { ...core.totals, status: core.status, ...cache.totals, cacheStatus: cache.status };
+}
+
+/** Sums usage fields across runs; runs without a report, partial reports, or overflow make it partial. */
+function sumReportedUsage<K extends string>(
+  reports: ({ values: Record<NoInfer<K>, number>; partial: boolean } | undefined)[],
+  fields: Record<K, (value: number) => boolean>,
+): { totals: Record<K, number>; status: "complete" | "partial" | "unavailable" } {
+  const keys = Object.keys(fields) as K[];
+  const totals = Object.fromEntries(keys.map((key) => [key, 0])) as Record<K, number>;
+  let reportedRuns = 0;
+  let partialUsage = false;
+  for (const report of reports) {
+    if (!report) continue;
+    reportedRuns += 1;
+    let complete = true;
+    for (const key of keys) {
+      const sum = addUsageTotal(totals[key], report.values[key], fields[key]);
+      totals[key] = sum.total;
+      complete &&= sum.complete;
+    }
+    partialUsage ||= report.partial || !complete;
+  }
+  return { totals, status: aggregateUsageStatus(reportedRuns, reports.length, partialUsage) };
+}
+
+function hasReportedCacheUsage(run: PiRunStats): run is PiRunStats & {
+  usage: PiRunStats["usage"] & {
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    cacheUsageStatus: "complete" | "partial";
+  };
+} {
+  return (
+    run.usage?.cacheReadTokens !== undefined &&
+    run.usage.cacheWriteTokens !== undefined &&
+    run.usage.cacheUsageStatus !== undefined &&
+    run.usage.cacheUsageStatus !== "unavailable"
+  );
+}
+
+function aggregateUsageStatus(
+  reported: number,
+  total: number,
+  partial: boolean,
+): "complete" | "partial" | "unavailable" {
+  if (reported === 0) return "unavailable";
+  return reported < total || partial ? "partial" : "complete";
 }
