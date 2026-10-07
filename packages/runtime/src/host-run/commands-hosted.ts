@@ -1,6 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { ciRunFromEnvironment, isNativeCiEnvironment } from "../hosts/ci-run.js";
 import { type CodeHostId, codeHostIds } from "../hosts/selection.js";
 import type { CodeHostAdapter, CodeHostEvent } from "../hosts/types.js";
 import { startFileRunRecorder } from "../observability/file-run-recorder.js";
@@ -158,7 +159,7 @@ async function finishSuccessfulHostedRecorder(
           }
         : {}),
       repository: bundleRepository(result.event, adapter.id),
-      provider: providerRun(options.env ?? process.env, adapter.id, result.event.repository.slug),
+      provider: ciRunFromEnvironment(adapter.id, options.env ?? process.env),
     },
     options.onRunBundleFinalized,
   );
@@ -183,7 +184,7 @@ async function finishFailedHostedRecorder(
   }
   const repository = failedBundleRepository(state);
   if (repository) result.repository = repository;
-  const provider = providerRun(options.env ?? process.env, state.adapter.id);
+  const provider = ciRunFromEnvironment(state.adapter.id, options.env ?? process.env);
   if (provider) result.provider = provider;
   await finishRecorderSafely(recorder, log, result, options.onRunBundleFinalized);
   return superseded;
@@ -214,7 +215,7 @@ async function createHostedRecorder(
   options: HostRunCommandDependencyOptions,
 ): Promise<RunRecorder | undefined> {
   const env = options.env ?? process.env;
-  const nativeCi = isNativeCi(env);
+  const nativeCi = isNativeCiEnvironment(env);
   const githubActions = env.GITHUB_ACTIONS === "true";
   const capture = await requestedHostedCaptureMode(env, nativeCi);
   if (!capture.mode) return undefined;
@@ -330,108 +331,6 @@ function bundleHost(host: string | undefined): CodeHostId | "local" {
   return host === "local" || codeHostIds.some((id) => id === host)
     ? (host as CodeHostId | "local")
     : "github";
-}
-
-function providerRun(
-  env: NodeJS.ProcessEnv,
-  host: string,
-  repository?: string,
-): import("@usepipr/sdk").RunBundleManifest["provider"] | undefined {
-  switch (host) {
-    case "github":
-      return githubProviderRun(env, repository);
-    case "gitlab":
-      return gitlabProviderRun(env);
-    case "azure-devops":
-      return azureProviderRun(env);
-    case "bitbucket":
-      return bitbucketProviderRun(env);
-    case "gitea":
-      return giteaProviderRun(env, "GITHUB", repository);
-    case "forgejo":
-    case "codeberg":
-      return giteaProviderRun(env, "FORGEJO", repository);
-    default:
-      return undefined;
-  }
-}
-
-function giteaProviderRun(
-  env: NodeJS.ProcessEnv,
-  prefix: "GITHUB" | "FORGEJO",
-  repository: string | undefined,
-) {
-  const runId = env[`${prefix}_RUN_ID`];
-  const serverUrl = env[`${prefix}_SERVER_URL`];
-  const runUrl =
-    runId && repository && serverUrl
-      ? `${serverUrl.replace(/\/+$/, "")}/${repository}/actions/runs/${runId}`
-      : undefined;
-  return compactProviderRun({
-    runId,
-    jobId: env[`${prefix}_JOB`],
-    runUrl,
-  });
-}
-
-function githubProviderRun(env: NodeJS.ProcessEnv, repository: string | undefined) {
-  const runId = env.GITHUB_RUN_ID;
-  const runUrl =
-    runId && repository && env.GITHUB_SERVER_URL
-      ? `${env.GITHUB_SERVER_URL}/${repository}/actions/runs/${runId}`
-      : undefined;
-  return compactProviderRun({ runId, jobId: env.GITHUB_JOB, runUrl });
-}
-
-function gitlabProviderRun(env: NodeJS.ProcessEnv) {
-  return compactProviderRun({
-    runId: env.CI_PIPELINE_ID,
-    jobId: env.CI_JOB_ID,
-    runUrl: env.CI_PIPELINE_URL,
-    jobUrl: env.CI_JOB_URL,
-  });
-}
-
-function azureProviderRun(env: NodeJS.ProcessEnv) {
-  const runId = env.BUILD_BUILDID;
-  const runUrl =
-    runId && env.SYSTEM_COLLECTIONURI && env.SYSTEM_TEAMPROJECT
-      ? `${env.SYSTEM_COLLECTIONURI}${encodeURIComponent(env.SYSTEM_TEAMPROJECT)}/_build/results?buildId=${runId}`
-      : undefined;
-  return compactProviderRun({ runId, jobId: env.SYSTEM_JOBID, runUrl });
-}
-
-function bitbucketProviderRun(env: NodeJS.ProcessEnv) {
-  const runUrl =
-    env.BITBUCKET_GIT_HTTP_ORIGIN && env.BITBUCKET_BUILD_NUMBER
-      ? `${env.BITBUCKET_GIT_HTTP_ORIGIN}/pipelines/results/${env.BITBUCKET_BUILD_NUMBER}`
-      : undefined;
-  return compactProviderRun({
-    runId: env.BITBUCKET_PIPELINE_UUID ?? env.BITBUCKET_BUILD_NUMBER,
-    jobId: env.BITBUCKET_STEP_UUID,
-    runUrl,
-  });
-}
-
-function compactProviderRun(
-  value: NonNullable<import("@usepipr/sdk").RunBundleManifest["provider"]>,
-): import("@usepipr/sdk").RunBundleManifest["provider"] | undefined {
-  const compact = Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  );
-  return Object.keys(compact).length > 0 ? compact : undefined;
-}
-
-function isNativeCi(env: NodeJS.ProcessEnv): boolean {
-  return (
-    env.GITHUB_ACTIONS === "true" ||
-    env.GITLAB_CI === "true" ||
-    env.TF_BUILD === "True" ||
-    env.TF_BUILD === "true" ||
-    env.BITBUCKET_BUILD_NUMBER !== undefined ||
-    env.GITEA_ACTIONS === "true" ||
-    env.FORGEJO_ACTIONS === "true"
-  );
 }
 
 async function captureHostedArtifacts(

@@ -1,3 +1,4 @@
+import { ciRunFromEnvironment } from "../hosts/ci-run.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { ChangeRequestEventContext } from "../types.js";
@@ -7,7 +8,7 @@ import { startReviewProgress } from "./review-progress.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
 import type { HostRunCommandResult, TrustedReviewAndPublishResult } from "./types.js";
-import { failureActionFromEnvironment, workflowUrlFromEnvironment } from "./workflow-url.js";
+import { failureActionFromEnvironment } from "./workflow-url.js";
 
 export async function runChangeRequestHostRunCommand(
   services: HostRunServices,
@@ -33,7 +34,7 @@ export async function runChangeRequestHostRunCommand(
   if (selectedTasks.length === 0) {
     return ignore(services.log, "No tasks matched the change request event");
   }
-  const workflowUrl = workflowUrlFromEnvironment(services.adapter.id, services.env);
+  const workflowUrl = ciRunFromEnvironment(services.adapter.id, services.env)?.runUrl;
   const progress = await startReviewProgress({
     adapter: services.adapter,
     event,

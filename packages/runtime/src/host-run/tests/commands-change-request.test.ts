@@ -122,6 +122,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
         FORGEJO_ACTIONS: "true",
         FORGEJO_RUN_ID: "201",
         FORGEJO_JOB: "review",
+        FORGEJO_REPOSITORY: "local/pipr",
         FORGEJO_SERVER_URL: "https://codeberg.org",
       },
       expectedProvider: {
