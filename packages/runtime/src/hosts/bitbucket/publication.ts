@@ -1,7 +1,7 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type { InlinePublicationItem, InlineThreadContext } from "../../publication/types.js";
+import { mainCommentMarker, parseInlineFindingMarker } from "../../review/comment-markers.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
-import { mainCommentMarker, parseInlineFindingMarker } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { isMainCommentLine, nativeInlineLocation } from "../publication.js";
 import { normalizeBitbucketMarkdown } from "./markdown.js";

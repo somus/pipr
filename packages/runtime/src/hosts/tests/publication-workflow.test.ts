@@ -7,7 +7,7 @@ import type {
 import {
   renderInlineFindingMarker,
   renderVerifierResponseMarker,
-} from "../../review/prior-state.js";
+} from "../../review/comment-markers.js";
 import { buildPublicationPlan } from "../../review/publication-plan.js";
 import { PublicationError } from "../../review/publication-result.js";
 import { runtimeVersion } from "../../shared/version.js";

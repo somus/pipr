@@ -4,9 +4,9 @@ import { runtimeVersion } from "../../shared/version.js";
 import type { DiffManifest, ReviewFinding } from "../../types.js";
 import {
   applyInlineFindingMarkers,
-  extractInlineFindingMarkers,
+  extractInlineFindingMarkerRecords,
   extractPriorReviewState,
-} from "../prior-state.js";
+} from "../comment-markers.js";
 import {
   buildCommentPublishingPlan,
   publicationPlanForHostCapabilities,
@@ -164,9 +164,11 @@ describe("comments", () => {
 
     expect(first).toHaveLength(1);
     expect(second).toHaveLength(0);
-    expect(extractInlineFindingMarkers(first.map((draft) => draft.body))).toEqual(
-      new Set([`pipr:finding:${existing.findingId}:head`]),
-    );
+    expect(
+      extractInlineFindingMarkerRecords(first.map((draft) => draft.body)).map(
+        (record) => record.marker,
+      ),
+    ).toEqual([`pipr:finding:${existing.findingId}:head`]);
     expect(first[0]?.body).toContain("This can fail.");
     expect(first[0]?.body).toContain("**Issue**\n\nThis can fail.");
     expect(first[0]?.body).toContain(

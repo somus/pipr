@@ -1,6 +1,6 @@
 import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type { InlineThreadContext } from "../../publication/types.js";
-import { parseInlineFindingMarker } from "../../review/prior-state.js";
+import { parseInlineFindingMarker } from "../../review/comment-markers.js";
 import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { isMainCommentLine } from "../publication.js";

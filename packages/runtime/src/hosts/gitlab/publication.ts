@@ -1,6 +1,6 @@
 import type { InlinePublicationItem, InlineThreadContext } from "../../publication/types.js";
+import { parseInlineFindingMarker } from "../../review/comment-markers.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
-import { parseInlineFindingMarker } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { requireCoordinates } from "../change-request.js";
 import type {

@@ -22,13 +22,12 @@ import type {
 } from "../types.js";
 import { commentableRangeSchema, reviewSideSchema } from "../types.js";
 import { renderInlineBody, renderMainComment, renderSuggestedChange } from "./comment.js";
+import { inlineFindingMarker, mainCommentMarker } from "./comment-markers.js";
 import { reviewFindingSchema } from "./contract.js";
 import {
   buildPriorReviewState,
   countFindingFingerprints,
   findingIdFor,
-  inlineFindingMarker,
-  mainCommentMarker,
   matchFindingRecord,
   matchResolvedFindingRecord,
 } from "./prior-state.js";

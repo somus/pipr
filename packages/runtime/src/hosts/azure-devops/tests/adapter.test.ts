@@ -5,10 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import type { InlinePublicationItem } from "../../../publication/types.js";
 import {
-  buildPriorReviewState,
   renderInlineFindingMarker,
   renderVerifierResponseMarker,
-} from "../../../review/prior-state.js";
+} from "../../../review/comment-markers.js";
+import { buildPriorReviewState } from "../../../review/prior-state.js";
 import { buildPublicationPlan } from "../../../review/publication-plan.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import {

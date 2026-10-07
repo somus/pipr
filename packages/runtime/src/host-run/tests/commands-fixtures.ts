@@ -12,7 +12,7 @@ import type {
   CodeHostCapabilities,
   RepositoryPermission,
 } from "../../hosts/types.js";
-import { renderInlineFindingMarker } from "../../review/prior-state.js";
+import { renderInlineFindingMarker } from "../../review/comment-markers.js";
 import type { RuntimeLogSink } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
 import { writeAggregateReviewablePatchOver16MiB } from "../../tests/helpers/aggregate-reviewable-patch.js";

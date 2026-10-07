@@ -5,7 +5,7 @@ import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js
 import { recordArtifactSafely } from "../observability/capture-sinks.js";
 import { resolveProvider } from "../review/agent/prompt-assembly.js";
 import type { PiRunStats } from "../review/agent/review-run-types.js";
-import { isPiprThreadActionReplyBody } from "../review/prior-state.js";
+import { isPiprThreadActionReplyBody } from "../review/comment-markers.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { reviewStatsForRuns, runSummaryStatsFields } from "../review/review-stats.js";
 import { stableReviewRunId } from "../review/run-identity.js";

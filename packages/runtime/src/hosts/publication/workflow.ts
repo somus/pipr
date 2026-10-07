@@ -3,11 +3,8 @@ import type {
   InlineThreadContext,
   ThreadAction,
 } from "../../publication/types.js";
-import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
-import { inlinePublicationDecision } from "../../review/inline-publication-policy.js";
 import {
   applyInlineFindingMarkers,
-  applyNativeThreadResolutions,
   applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
   extractPriorReviewState,
@@ -16,7 +13,10 @@ import {
   inlineFindingMarker,
   mainCommentMarker,
   parseInlineFindingMarker,
-} from "../../review/prior-state.js";
+} from "../../review/comment-markers.js";
+import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
+import { inlinePublicationDecision } from "../../review/inline-publication-policy.js";
+import { applyNativeThreadResolutions } from "../../review/prior-state.js";
 import {
   extractReviewProgressToken,
   ReviewProgressSupersededError,

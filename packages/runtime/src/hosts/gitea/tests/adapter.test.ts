@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { InlinePublicationItem, ThreadAction } from "../../../publication/types.js";
-import { buildPriorReviewState, renderInlineFindingMarker } from "../../../review/prior-state.js";
+import { renderInlineFindingMarker } from "../../../review/comment-markers.js";
+import { buildPriorReviewState } from "../../../review/prior-state.js";
 import { buildPublicationPlan } from "../../../review/publication-plan.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import { createGiteaHostAdapter } from "../adapter.js";

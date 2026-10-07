@@ -1,10 +1,10 @@
 import type { InlinePublicationItem, ThreadAction } from "../publication/types.js";
-import type { InlinePublicationLocation } from "../review/inline-publication-policy.js";
 import {
   parseMainCommentIdentity,
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
-} from "../review/prior-state.js";
+} from "../review/comment-markers.js";
+import type { InlinePublicationLocation } from "../review/inline-publication-policy.js";
 import type { CommandLifecycleState } from "./types.js";
 
 export function nativeInlineLocation(options: {

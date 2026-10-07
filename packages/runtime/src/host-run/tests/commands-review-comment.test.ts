@@ -4,7 +4,7 @@ import path from "node:path";
 import {
   renderResolvedFindingMarker,
   renderVerifierResponseMarker,
-} from "../../review/prior-state.js";
+} from "../../review/comment-markers.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import {
   createCommandWorkspace,

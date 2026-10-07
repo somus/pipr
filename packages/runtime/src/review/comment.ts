@@ -16,7 +16,7 @@ import {
   mainCommentMarker,
   renderInlineFindingMarker,
   renderMainCommentMarker,
-} from "./prior-state.js";
+} from "./comment-markers.js";
 
 export function renderMainComment(options: {
   event: Pick<ChangeRequestEventContext, "change">;
