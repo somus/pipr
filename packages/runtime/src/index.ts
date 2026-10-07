@@ -26,6 +26,7 @@ export type {
 } from "./host-run/types.js";
 export type { WebhookDeliveryStatus } from "./host-run/webhook-server.js";
 export { readWebhookDeliveryStatus, runWebhookServer } from "./host-run/webhook-server.js";
+export { GitHubRunArchiveSource } from "./hosts/github/run-archive-source.js";
 export type { WebhookHost } from "./hosts/webhook-types.js";
 export type {
   DownloadedBundle,
@@ -43,7 +44,6 @@ export {
   FileSystemRunArchiveSource,
   loadValidatedRunBundle,
 } from "./observability/archive.js";
-export { GitHubRunArchiveSource } from "./observability/github-run-archive-source.js";
 export type {
   OpenedRunBundlePackage,
   PreparedRunBundlePackage,

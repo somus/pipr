@@ -4,11 +4,21 @@ import { chmod, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import type { DownloadedBundle, RunArchiveSource, RunQuery, RunRecord, RunRef } from "./archive.js";
-import { extractRunArchive, extractRunArchiveFiles } from "./archive-extraction.js";
-import { setDefined } from "./event-observation.js";
-import { copyRunBundlePackage } from "./protected-package.js";
-import { maximumRunBundleBytes } from "./types.js";
+import type {
+  DownloadedBundle,
+  RunArchiveSource,
+  RunQuery,
+  RunRecord,
+  RunRef,
+} from "../../observability/archive.js";
+import {
+  extractRunArchive,
+  extractRunArchiveFiles,
+} from "../../observability/archive-extraction.js";
+import { setDefined } from "../../observability/event-observation.js";
+import { copyRunBundlePackage } from "../../observability/protected-package.js";
+import { maximumRunBundleBytes } from "../../observability/types.js";
+import { githubApiVersion } from "../../shared/github.js";
 
 type GitHubSourceOptions = {
   repository: string;
@@ -66,7 +76,7 @@ export class GitHubRunArchiveSource implements RunArchiveSource {
       options,
       {
         Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2026-03-10",
+        "X-GitHub-Api-Version": githubApiVersion,
         ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
       },
       options.apiBaseUrl ?? "https://api.github.com",
