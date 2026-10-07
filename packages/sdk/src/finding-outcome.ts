@@ -167,3 +167,71 @@ export const diagnosticFindingLedgerSchema = z.strictObject({
 });
 
 export type DiagnosticFindingLedger = z.infer<typeof diagnosticFindingLedgerSchema>;
+
+/** Learning label of an exported finding: fixed and still-valid are positive, dismissed negative. */
+const findingDatasetLabels = ["fixed", "still-valid", "dismissed"] as const;
+
+const datasetExpectedFindingSchema = z.strictObject({
+  path: z.string().min(1),
+  line: z.number().int().positive(),
+  keywords: z.array(z.string().min(1)),
+  selection: z
+    .strictObject({
+      startLine: z.number().int().positive(),
+      endLine: z.number().int().positive(),
+    })
+    .optional(),
+});
+
+/**
+ * One labeled evaluation case exported by `pipr runs export --dataset`. It is diagnostic data: it
+ * holds the finding's path, body, and file contents at the reviewed base and head.
+ */
+export const findingDatasetCaseSchema = z
+  .strictObject({
+    formatVersion: z.literal(1),
+    id: z.string().min(1).max(200),
+    description: z.string().min(1),
+    label: z.enum(findingDatasetLabels),
+    source: z.strictObject({
+      findingId: findingIdSchema,
+      executionId: z.string().regex(/^[a-f0-9]{32}$/),
+      workId: token(200),
+      baseSha: z.string().min(1),
+      headSha: z.string().min(1),
+      configHash: sha256.optional(),
+      agent: z.string().min(1).max(200).optional(),
+      model: token(200).optional(),
+      facets: z.record(token(100), facetValue),
+    }),
+    finding: z.strictObject({
+      path: z.string().min(1),
+      side: z.enum(["LEFT", "RIGHT"]),
+      startLine: z.number().int().positive(),
+      endLine: z.number().int().positive(),
+      body: z.string(),
+      suggestedFix: z.string().optional(),
+    }),
+    baseFiles: z.record(z.string().min(1), z.string()),
+    headFiles: z.record(z.string().min(1), z.string()),
+    deletedFiles: z.array(z.string().min(1)).optional(),
+    expected: z.strictObject({
+      findings: z.array(datasetExpectedFindingSchema),
+      maxInlineFindings: z.number().int().nonnegative(),
+    }),
+    modes: z.array(z.literal("live")).min(1),
+  })
+  .superRefine((value, context) => {
+    const positive = value.label !== "dismissed";
+    if (positive !== value.expected.findings.length > 0) {
+      context.addIssue({
+        code: "custom",
+        message: "positive labels expect the finding; dismissed expects none",
+      });
+    }
+    if (!positive && value.expected.maxInlineFindings !== 0) {
+      context.addIssue({ code: "custom", message: "dismissed cases allow no inline findings" });
+    }
+  });
+
+export type FindingDatasetCase = z.infer<typeof findingDatasetCaseSchema>;

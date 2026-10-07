@@ -5,6 +5,7 @@ export type { FindingFacets, FindingFields, FindingSchema } from "./finding.js";
 export type {
   DiagnosticFindingLedger,
   FindingActorPermission,
+  FindingDatasetCase,
   FindingDropCode,
   FindingEvidence,
   FindingLedger,
@@ -14,6 +15,7 @@ export type {
 } from "./finding-outcome.js";
 export {
   diagnosticFindingLedgerSchema,
+  findingDatasetCaseSchema,
   findingDropCodes,
   findingLedgerSchema,
   findingOutcomeEventSchema,

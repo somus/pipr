@@ -42,6 +42,16 @@ The eval package separates fixtures, live suite selection, and scoring.
 | `src/scoring.ts` | The scorer table and deterministic scoring functions used by live and deterministic evals. |
 | `src/scripted-provider.ts` | Agent worker model provider for deterministic evals: checks the prompt contract and answers from the rendered Diff Manifest. |
 
+## Exported datasets
+
+`pipr runs export --dataset <dir>` turns Finding Outcomes from decrypted Run
+Bundles into labeled cases: fixed and still-valid findings expect the finding at
+its line range, and dismissed findings expect no inline findings. Set
+`PIPR_EVAL_DATASET=<dir>` to add them to `eval:full`; `datasetEvalCases` in
+`src/cases.ts` validates each file against the SDK dataset schema. Exported
+cases contain file contents and finding bodies, so keep them out of the
+repository.
+
 ## Gate design
 
 Keep hard gates small and stable. Add a case to `livePromptGateCaseIds` only

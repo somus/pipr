@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
   diagnosticFindingLedgerSchema,
+  type FindingDatasetCase,
   type FindingOutcomeEvent,
+  findingDatasetCaseSchema,
   findingLedgerSchema,
   findingOutcomeEventSchema,
 } from "../index.js";
@@ -90,5 +92,60 @@ describe("Finding Outcome events", () => {
     expect(() =>
       findingLedgerSchema.parse({ formatVersion: 1, threadResolution: "partial", events: [] }),
     ).toThrow();
+  });
+});
+
+describe("Finding dataset cases", () => {
+  const datasetCase: FindingDatasetCase = {
+    formatVersion: 1,
+    id: "fnd_0123456789abcdef",
+    description: "Maintainers fixed this finding.",
+    label: "fixed",
+    source: {
+      findingId: "fnd_0123456789abcdef",
+      executionId: event.executionId,
+      workId: event.workId,
+      baseSha: "d".repeat(40),
+      headSha: event.headSha,
+      agent: event.agent,
+      model: event.model,
+      facets: event.facets,
+    },
+    finding: { path: "src/a.ts", side: "RIGHT", startLine: 2, endLine: 3, body: "Bug" },
+    baseFiles: { "src/a.ts": "one\n" },
+    headFiles: { "src/a.ts": "one\ntwo\nthree\n" },
+    expected: {
+      findings: [
+        { path: "src/a.ts", line: 2, keywords: [], selection: { startLine: 2, endLine: 3 } },
+      ],
+      maxInlineFindings: 1,
+    },
+    modes: ["live"],
+  };
+
+  it("accepts positive and negative labeled cases", () => {
+    expect(findingDatasetCaseSchema.parse(datasetCase)).toEqual(datasetCase);
+    const negative: FindingDatasetCase = {
+      ...datasetCase,
+      label: "dismissed",
+      expected: { findings: [], maxInlineFindings: 0 },
+    };
+    expect(findingDatasetCaseSchema.parse(negative)).toEqual(negative);
+  });
+
+  it("rejects cases whose expectations disagree with the label", () => {
+    expect(() =>
+      findingDatasetCaseSchema.parse({
+        ...datasetCase,
+        label: "dismissed",
+      }),
+    ).toThrow();
+    expect(() =>
+      findingDatasetCaseSchema.parse({
+        ...datasetCase,
+        expected: { findings: [], maxInlineFindings: 0 },
+      }),
+    ).toThrow();
+    expect(() => findingDatasetCaseSchema.parse({ ...datasetCase, extra: true })).toThrow();
   });
 });

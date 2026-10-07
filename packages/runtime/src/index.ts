@@ -50,6 +50,16 @@ export {
   loadValidatedRunBundle,
 } from "./observability/archive.js";
 export type {
+  FindingOutcomeSource,
+  FindingOutcomeStats,
+  FindingStatsGroupBy,
+} from "./observability/finding-stats.js";
+export {
+  findingOutcomeStats,
+  labelFindingOutcomes,
+  webhookFindingOutcomeSources,
+} from "./observability/finding-stats.js";
+export type {
   OpenedRunBundlePackage,
   PreparedRunBundlePackage,
 } from "./observability/protected-package.js";

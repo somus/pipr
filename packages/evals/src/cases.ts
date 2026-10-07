@@ -1,3 +1,8 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { findingDatasetCaseSchema } from "@usepipr/sdk";
+import { z } from "zod";
+
 export type PiprEvalExpectedSuggestedFix =
   | {
       mode: "absent";
@@ -868,4 +873,36 @@ export const apiKey = "pipr_eval_secret_do_not_repeat_12345";
 
 export function promptEvalCasesForMode(mode: PiprEvalCaseMode): PiprEvalCase[] {
   return promptEvalCases.filter((testCase) => testCase.modes?.includes(mode) ?? true);
+}
+
+const datasetIndexSchema = z.looseObject({
+  formatVersion: z.literal(1),
+  cases: z.array(z.looseObject({ file: z.string().regex(/^[A-Za-z0-9_.-]+\.json$/) })),
+});
+
+/**
+ * Live eval cases from a dataset written by `pipr runs export --dataset`. Each case is validated
+ * against the SDK dataset schema; fixed and still-valid findings expect the finding, dismissed
+ * findings expect no inline findings.
+ */
+export async function datasetEvalCases(directory: string): Promise<PiprEvalCase[]> {
+  const index = datasetIndexSchema.parse(
+    JSON.parse(await readFile(path.join(directory, "index.json"), "utf8")),
+  );
+  return await Promise.all(
+    index.cases.map(async (entry) => {
+      const exported = findingDatasetCaseSchema.parse(
+        JSON.parse(await readFile(path.join(directory, entry.file), "utf8")),
+      );
+      return {
+        id: `dataset-${exported.id}`,
+        description: exported.description,
+        baseFiles: exported.baseFiles,
+        headFiles: exported.headFiles,
+        ...(exported.deletedFiles ? { deletedFiles: exported.deletedFiles } : {}),
+        expected: exported.expected,
+        modes: exported.modes,
+      } satisfies PiprEvalCase;
+    }),
+  );
 }
