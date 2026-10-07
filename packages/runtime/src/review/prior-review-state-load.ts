@@ -145,7 +145,7 @@ function observedOutcomes(
           {
             kind: "replied" as const,
             actorPermission: "unknown" as const,
-            anchor: findingOutcomeAnchors.reply(marker.replyCommentId),
+            anchor: findingOutcomeAnchors.reply(marker.threadKey, marker.replyCommentId),
           },
           {
             kind: "still-valid" as const,

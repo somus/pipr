@@ -360,6 +360,19 @@ describe("finding outcome ledger", () => {
     expect(ledger.events()[0]).toMatchObject({ agent: "a b", model: "m-o", facets: { k: "x y" } });
   });
 
+  it("keeps replies apart that share a comment id in different threads", () => {
+    const ledger = createFindingLedger({ executionId: "0123456789abcdef0123456789abcdef" });
+    const reply = (threadKey: string) => ({
+      kind: "replied" as const,
+      findingId: "fnd_0123456789abcdef",
+      actorPermission: "write" as const,
+      anchor: findingOutcomeAnchors.reply(threadKey, "2"),
+    });
+    ledger.record(context("head-1"), [reply("7"), reply("9"), reply("9")]);
+
+    expect(ledger.events()).toHaveLength(2);
+  });
+
   it("records the host's thread resolution support in the ledger document", () => {
     const ledger = createFindingLedger({
       executionId: "0123456789abcdef0123456789abcdef",

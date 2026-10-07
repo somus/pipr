@@ -265,8 +265,48 @@ describe("runInternalVerifier", () => {
         commentId: "10",
         threadId: "thread-1",
         body: "This still applies because the unsafe path remains.",
-        responseKey: "reply-11:still-valid:fnd_existing",
+        responseKey: "reply-11:thread-1:still-valid:fnd_existing",
       },
+    ]);
+  });
+
+  it("verifies only the thread of a reply when comment ids repeat across threads", async () => {
+    const otherFinding = { ...priorReviewState.findings[0], id: "fnd_other" } as const;
+    const azureThread = (findingId: string, threadId: string): InlineThreadContext => ({
+      ...threadContext,
+      findingId,
+      parentBody: `<!-- pipr:finding id=${findingId} head=old-head -->\nThis can fail.`,
+      parentCommentId: "1",
+      threadId,
+      comments: [
+        { id: "1", body: "This can fail.", authorLogin: "pipr" },
+        { id: "2", body: "Handled elsewhere.", authorLogin: "octo-dev" },
+      ],
+    });
+    let prompt = "";
+    const result = await runVerifier({
+      priorReviewState: {
+        ...priorReviewState,
+        findings: [...priorReviewState.findings, otherFinding],
+      },
+      threadContexts: [azureThread("fnd_existing", "7"), azureThread("fnd_other", "9")],
+      reply: { commentId: "2", parentCommentId: "1", threadId: "9" },
+      observePrompt: (value) => {
+        prompt = value;
+      },
+      output: {
+        findings: [{ id: "fnd_other", status: "still-valid", response: "Still applies." }],
+      },
+    });
+
+    expect(prompt).toContain("fnd_other");
+    expect(prompt).not.toContain("fnd_existing");
+    expect(result.threadActions).toEqual([
+      expect.objectContaining({
+        findingId: "fnd_other",
+        threadId: "9",
+        responseKey: "reply-2:9:still-valid:fnd_other",
+      }),
     ]);
   });
 
@@ -621,6 +661,7 @@ async function runVerifier(options: {
   priorReviewState?: PriorReviewState;
   threadContexts?: InlineThreadContext[];
   parentCommentId?: string;
+  reply?: { commentId: string; parentCommentId: string; threadId?: string };
   respondWhenStillValid?: boolean;
   parentBody?: string;
   replyBody?: string;
@@ -686,6 +727,7 @@ function verifierThreadContexts(options: {
 
 function verifierMode(options: {
   mode?: { kind: "synchronize" };
+  reply?: { commentId: string; parentCommentId: string; threadId?: string };
   parentCommentId?: string;
   replyBody?: string;
   respondWhenStillValid?: boolean;
@@ -696,6 +738,7 @@ function verifierMode(options: {
       reply: {
         commentId: "11",
         parentCommentId: options.parentCommentId ?? "10",
+        ...options.reply,
         body: options.replyBody ?? "The caller validates this earlier.",
         actor: "octo-dev",
       },

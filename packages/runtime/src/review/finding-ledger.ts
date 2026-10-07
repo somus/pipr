@@ -67,8 +67,11 @@ export const findingOutcomeAnchors = {
   piprResolution: (findingHeadSha: string) => `pipr-resolved:${findingHeadSha}`,
   /** A `pipr:verifier-response` reply with `responseKey`. */
   verifierResponse: (responseKey: string) => `verifier-response:${responseKey}`,
-  /** A human reply comment on the finding's thread. */
-  reply: (commentId: string) => `reply:${commentId}`,
+  /**
+   * A human reply comment on the finding's thread. Comment ids repeat across threads on some hosts,
+   * so the thread key from `replyThreadKey` is part of the anchor.
+   */
+  reply: (threadKey: string, commentId: string) => `reply:${threadKey}:${commentId}`,
   /** A native resolution, without a Pipr resolution, of the finding commented at `findingHeadSha`. */
   humanResolution: (findingHeadSha: string) => `human-resolved:${findingHeadSha}`,
 };

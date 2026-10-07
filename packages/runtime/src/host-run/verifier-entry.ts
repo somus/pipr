@@ -3,7 +3,7 @@ import { registerProviderSecrets } from "../config/provider-credentials.js";
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
 import { recordArtifactSafely } from "../observability/capture-sinks.js";
-import type { PriorReviewState } from "../publication/types.js";
+import type { InlineThreadContext, PriorReviewState } from "../publication/types.js";
 import { resolveProvider } from "../review/agent/prompt-assembly.js";
 import type { PiRunStats } from "../review/agent/review-run-types.js";
 import { isPiprThreadActionReplyBody } from "../review/comment-markers.js";
@@ -17,7 +17,7 @@ import { priorFindingAttribution } from "../review/prior-state.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { reviewStatsForRuns, runSummaryStatsFields } from "../review/review-stats.js";
 import { stableReviewRunId } from "../review/run-identity.js";
-import { runInternalVerifier } from "../review/verifier.js";
+import { replyThreadContext, replyThreadKey, runInternalVerifier } from "../review/verifier.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
 import type { HostRunPorts, HostRunServices } from "./composition.js";
@@ -169,6 +169,7 @@ async function runReviewCommentVerifier(
       mode: "user-reply",
       commentId: reply.commentId,
       parentCommentId: reply.parentCommentId,
+      ...(reply.threadId ? { threadId: reply.threadId } : {}),
     },
   });
   const runContext: PiprRunContext = Object.freeze({ id: runId, trigger: "verifier" });
@@ -217,6 +218,7 @@ async function runReviewCommentVerifier(
       reply: {
         commentId: reply.commentId,
         parentCommentId: reply.parentCommentId,
+        ...(reply.threadId ? { threadId: reply.threadId } : {}),
         body: reply.body,
         actor: reply.actor,
       },
@@ -304,7 +306,7 @@ function runnableReviewCommentReply(
  * markers records the same events.
  */
 function replyOutcomes(options: {
-  threadContexts: readonly { findingId: string; parentCommentId: string }[];
+  threadContexts: readonly InlineThreadContext[];
   reply: ReviewCommentReplyEvent & { parentCommentId: string };
   actorPermission: FindingActorPermission;
   verdicts: Awaited<ReturnType<typeof runInternalVerifier>>["verdicts"];
@@ -315,18 +317,16 @@ function replyOutcomes(options: {
     const stored = priorFindingAttribution(records.get(findingId));
     return stored ? { attribution: stored } : {};
   };
-  const findingId = options.threadContexts.find(
-    (thread) => thread.parentCommentId === options.reply.parentCommentId,
-  )?.findingId;
+  const thread = replyThreadContext(options.threadContexts, options.reply);
   return [
-    ...(findingId
+    ...(thread
       ? [
           {
             kind: "replied" as const,
-            findingId,
+            findingId: thread.findingId,
             actorPermission: options.actorPermission,
-            anchor: findingOutcomeAnchors.reply(options.reply.commentId),
-            ...attribution(findingId),
+            anchor: findingOutcomeAnchors.reply(replyThreadKey(thread), options.reply.commentId),
+            ...attribution(thread.findingId),
           },
         ]
       : []),

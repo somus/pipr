@@ -122,7 +122,7 @@ describe("reconcilePriorReviewState", () => {
   });
 
   it("rebuilds still-valid verifier replies as replied by an unknown actor and still-valid", () => {
-    const responseKey = `reply-42:still-valid:${findingId}`;
+    const responseKey = `reply-42:thread-7:still-valid:${findingId}`;
     const replyBodies = [
       "The caller validates this.",
       `${renderVerifierResponseMarker(findingId, responseKey)}\n\nStill applies.`,
@@ -139,7 +139,7 @@ describe("reconcilePriorReviewState", () => {
         kind: "replied",
         findingId,
         actorPermission: "unknown",
-        anchor: "reply:42",
+        anchor: "reply:thread-7:42",
         attribution,
       },
       {

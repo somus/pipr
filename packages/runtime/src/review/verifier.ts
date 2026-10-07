@@ -33,6 +33,8 @@ export type VerifierMode =
       reply: {
         commentId: string;
         parentCommentId: string;
+        /** Present for hosts whose comment ids repeat across threads. */
+        threadId?: string;
         body: string;
         actor: string;
       };
@@ -207,6 +209,7 @@ function verifierCandidates(
   contexts: InlineThreadContext[],
   mode: VerifierMode,
 ) {
+  const replied = mode.kind === "user-reply" ? replyThreadContext(contexts, mode.reply) : undefined;
   return prior.findings
     .filter((finding) => finding.status === "open")
     .flatMap((finding) => {
@@ -219,7 +222,7 @@ function verifierCandidates(
       if (!context || context.threadResolved) {
         return [];
       }
-      if (mode.kind === "user-reply" && context.parentCommentId !== mode.reply.parentCommentId) {
+      if (mode.kind === "user-reply" && context !== replied) {
         return [];
       }
       return [{ finding, thread: context }];
@@ -323,8 +326,28 @@ function stillValidReplyAction(
     commentId: candidate.thread.parentCommentId,
     threadId: candidate.thread.threadId,
     body,
-    responseKey: `reply-${options.mode.reply.commentId}:still-valid:${item.id}`,
+    responseKey: `reply-${options.mode.reply.commentId}:${replyThreadKey(candidate.thread)}:still-valid:${item.id}`,
   };
+}
+
+type ReplyThread = Pick<InlineThreadContext, "threadId" | "parentCommentId">;
+
+/** The thread a user reply belongs to: by thread id when the host reports one, else by parent comment. */
+export function replyThreadContext<Thread extends ReplyThread>(
+  contexts: readonly Thread[],
+  reply: { parentCommentId: string; threadId?: string },
+): Thread | undefined {
+  return reply.threadId === undefined
+    ? contexts.find((context) => context.parentCommentId === reply.parentCommentId)
+    : contexts.find((context) => context.threadId === reply.threadId);
+}
+
+/**
+ * A thread's key in reply markers and Finding Outcome anchors: its host thread id, else its root
+ * comment id, URI-encoded so it never contains `:`.
+ */
+export function replyThreadKey(thread: ReplyThread): string {
+  return encodeURIComponent(thread.threadId ?? thread.parentCommentId);
 }
 
 function verifierResponseBody(response: string | undefined): string | undefined {

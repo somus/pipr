@@ -282,7 +282,7 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
       expect(output).toContain('"event":"verifier start"');
       expect(output).toContain('"event":"verifier publication"');
       expect(publication.reviewReplies[0]?.body).toContain(
-        renderVerifierResponseMarker("fnd_existing", "reply-11:still-valid:fnd_existing"),
+        renderVerifierResponseMarker("fnd_existing", "reply-11:thread-1:still-valid:fnd_existing"),
       );
       expect(currentGitHead(workspace.rootDir)).toBe(workspace.headSha);
       const [executionId] = await readdir(path.join(workspace.rootDir, ".pipr-runs"));

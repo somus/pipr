@@ -39,9 +39,24 @@ const commentResourceSchema = z.looseObject({
     parentCommentId: z.number().int().nonnegative().default(0),
     content: z.string(),
     author: z.looseObject({ uniqueName: z.string().min(1) }),
+    _links: z
+      .looseObject({
+        self: z.looseObject({ href: z.string() }).optional(),
+        threads: z.looseObject({ href: z.string() }).optional(),
+      })
+      .optional(),
   }),
   pullRequest: pullRequestResourceSchema,
 });
+
+/** Azure DevOps comment ids count from 1 in every thread, so a reply is identified within its thread. */
+function commentThreadId(links: z.infer<typeof commentResourceSchema>["comment"]["_links"]) {
+  for (const href of [links?.threads?.href, links?.self?.href]) {
+    const threadId = href ? /\/threads\/(\d+)(?:\/|$)/.exec(href)?.[1] : undefined;
+    if (threadId) return threadId;
+  }
+  return undefined;
+}
 
 export type AzureDevOpsEventParseOptions = HostEventParseOptions & {
   loadChangeRequest: (ref: {
@@ -112,10 +127,15 @@ async function serviceHookEvent(options: AzureDevOpsEventParseOptions): Promise<
       actor: resource.comment.author.uniqueName,
       workspace: options.workspace,
     };
+    const threadId = commentThreadId(resource.comment._links);
     return resource.comment.parentCommentId > 0
       ? {
           kind: "review-comment-reply",
-          reply: { ...common, parentCommentId: String(resource.comment.parentCommentId) },
+          reply: {
+            ...common,
+            parentCommentId: String(resource.comment.parentCommentId),
+            ...(threadId ? { threadId } : {}),
+          },
         }
       : { kind: "command-comment", comment: { ...common, isChangeRequest: true } };
   }

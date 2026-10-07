@@ -194,15 +194,28 @@ export function applyResolvedFindingMarkers(
   };
 }
 
-/** Verifier replies that told a human their finding still applies: finding ID, key, reply ID. */
+/**
+ * Verifier replies that told a human their finding still applies: finding ID, key, and the reply's
+ * comment ID and thread key.
+ */
 export function extractStillValidReplyMarkers(
   commentBodies: readonly string[],
-): Array<{ id: string; responseKey: string; replyCommentId: string }> {
+): Array<{ id: string; responseKey: string; replyCommentId: string; threadKey: string }> {
   return extractMarkerRecords([...commentBodies], verifierResponseMarkerPrefix).flatMap(
     (record) => {
-      const replyCommentId = /^reply-(?<comment>[^:]+):still-valid:/.exec(record.head)?.groups
-        ?.comment;
-      return replyCommentId ? [{ id: record.id, responseKey: record.head, replyCommentId }] : [];
+      const groups = /^reply-(?<comment>[^:]+):(?<thread>[^:]+):still-valid:/.exec(
+        record.head,
+      )?.groups;
+      return groups?.comment && groups.thread
+        ? [
+            {
+              id: record.id,
+              responseKey: record.head,
+              replyCommentId: groups.comment,
+              threadKey: groups.thread,
+            },
+          ]
+        : [];
     },
   );
 }

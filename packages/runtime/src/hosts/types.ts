@@ -49,6 +49,8 @@ export type ReviewCommentReplyEvent = {
   changeNumber: number;
   commentId: NativeId;
   parentCommentId?: NativeId;
+  /** Thread of the reply, for hosts whose comment ids repeat across threads (Azure DevOps). */
+  threadId?: NativeId;
   body: string;
   actor: string;
   workspace: string;
