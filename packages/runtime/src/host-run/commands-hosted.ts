@@ -27,6 +27,7 @@ import {
   warnRunCaptureUnavailable,
 } from "./commands-shared.js";
 import type { HostRunServices } from "./composition.js";
+import { resolveHostRunLocation } from "./host-run-location.js";
 import { logPhase } from "./logging.js";
 import type {
   HostRunCommandDependencyOptions,
@@ -45,9 +46,15 @@ export async function runHostRunCommand(
   });
 }
 
+type ResolvedHostRunOptions = HostRunCommandDependencyOptions & { rootDir: string };
+
 export async function runHostRunCommandWithDependencies(
-  options: HostRunCommandDependencyOptions,
+  input: HostRunCommandDependencyOptions,
 ): Promise<HostRunCommandResult> {
+  const options: ResolvedHostRunOptions = {
+    ...input,
+    ...resolveHostRunLocation({ ...input, env: input.env ?? process.env }),
+  };
   const capture = await startHostedRecorder(options);
   const recorder = capture?.recorder;
   const adapter = createHostRunAdapter({
@@ -206,7 +213,7 @@ type HostedCapture = {
 };
 
 async function startHostedRecorder(
-  options: HostRunCommandDependencyOptions,
+  options: ResolvedHostRunOptions,
 ): Promise<HostedCapture | undefined> {
   if (options.dryRun) return undefined;
   // A misspelled capture mode is operator error; fail before the run instead of silently dropping capture.
@@ -220,7 +227,7 @@ async function startHostedRecorder(
 }
 
 async function createHostedRecorder(
-  options: HostRunCommandDependencyOptions,
+  options: ResolvedHostRunOptions,
 ): Promise<HostedCapture | undefined> {
   const env = options.env ?? process.env;
   const nativeCi = isNativeCiEnvironment(env);
@@ -248,7 +255,7 @@ async function createHostedRecorder(
 
 /** Reports the raw bundle, then publishes a native-CI capture and removes its temporary root. */
 function finalizedRunBundleHandler(
-  options: HostRunCommandDependencyOptions,
+  options: ResolvedHostRunOptions,
   env: NodeJS.ProcessEnv,
   temporaryRoot: string | undefined,
 ): NonNullable<HostRunCommandOptions["onRunBundleFinalized"]> {

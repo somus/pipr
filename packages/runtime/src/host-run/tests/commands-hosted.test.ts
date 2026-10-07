@@ -5,6 +5,8 @@ import { validateRunBundlePackage } from "../../observability/protected-package.
 import type { PublishedRunBundle } from "../../observability/run-bundle-publication.js";
 import {
   createCommandWorkspace,
+  expectPiNotCalled,
+  failingGitHubPublishingClient,
   fakeGitHubPublicationClient,
   pullRequestEnv,
   removeWorkspace,
@@ -57,4 +59,45 @@ describe("runHostRunCommand run bundle publication", () => {
       await removeWorkspace(workspace.rootDir);
     }
   });
+});
+
+describe("runHostRunCommand CI environment fallbacks", () => {
+  it.each([
+    { name: "a CI workspace variable", workspaceVariable: "GITHUB_WORKSPACE" },
+    { name: "the working directory", workspaceVariable: undefined },
+  ])(
+    "resolves the workspace from $name and the event path from env",
+    async ({ workspaceVariable }) => {
+      const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: false });
+      try {
+        const eventPath = path.join(workspace.rootDir, "event.json");
+        await writePullRequestEvent(eventPath, workspace);
+        const {
+          GITHUB_EVENT_PATH: _eventPath,
+          GITHUB_WORKSPACE: _workspace,
+          ...env
+        } = pullRequestEnv(workspace.rootDir, eventPath);
+
+        const result = await runTestHostCommand({
+          cwd: workspaceVariable ? path.dirname(workspace.rootDir) : workspace.rootDir,
+          configDir: ".pipr",
+          dryRun: true,
+          env: {
+            ...env,
+            ...(workspaceVariable ? { [workspaceVariable]: workspace.rootDir } : {}),
+            PIPR_EVENT_PATH: workspaceVariable
+              ? path.join(path.basename(workspace.rootDir), "event.json")
+              : "event.json",
+          },
+          githubPublicationClient: failingGitHubPublishingClient(),
+          piProviderModule: workspace.pi.providerModule,
+        });
+
+        expect(result).toMatchObject({ kind: "dry-run", event: { change: { number: 1 } } });
+        await expectPiNotCalled(workspace);
+      } finally {
+        await removeWorkspace(workspace.rootDir);
+      }
+    },
+  );
 });

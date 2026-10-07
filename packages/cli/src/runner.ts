@@ -305,19 +305,11 @@ Prefer it over guessing commands or config shape from memory.
 async function runHostRun(options: CliOptions, context: CliExecutionContext): Promise<void> {
   const { env } = context;
   const isGitHubAction = env.GITHUB_ACTIONS === "true";
-  const rootDir = hostRunRootDir(context);
   const result = await runHostRunCommand({
-    rootDir,
+    cwd: context.cwd,
     configDir: options.configDir,
     host: options.host,
-    eventPath: resolveCliPath(
-      context.cwd,
-      options.event ??
-        env.PIPR_EVENT_PATH ??
-        env.GITEA_EVENT_PATH ??
-        env.FORGEJO_EVENT_PATH ??
-        env.GITHUB_EVENT_PATH,
-    ),
+    eventPath: options.event,
     env,
     dryRun: env.PIPR_DRY_RUN === "1",
     logSink: isGitHubAction ? githubActionsLogSink : localConsoleLogSink,
@@ -347,18 +339,6 @@ async function runHostRun(options: CliOptions, context: CliExecutionContext): Pr
 
 function resolveCliPath(cwd: string, value: string | undefined): string | undefined {
   return value === undefined ? undefined : path.resolve(cwd, value);
-}
-
-function hostRunRootDir(context: CliExecutionContext): string {
-  return (
-    context.env.GITEA_WORKSPACE ??
-    context.env.FORGEJO_WORKSPACE ??
-    context.env.GITHUB_WORKSPACE ??
-    context.env.CI_PROJECT_DIR ??
-    context.env.BITBUCKET_CLONE_DIR ??
-    context.env.BUILD_SOURCESDIRECTORY ??
-    context.cwd
-  );
 }
 
 async function runWebhookServe(options: CliOptions, context: CliExecutionContext): Promise<void> {

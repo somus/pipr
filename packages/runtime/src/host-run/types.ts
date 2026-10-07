@@ -33,8 +33,13 @@ export type DryRunCommandOptions = RuntimeCommandOptions & {
   eventPath: string;
 };
 
-export type HostRunCommandOptions = RuntimeCommandOptions & {
+export type HostRunCommandOptions = Omit<RuntimeCommandOptions, "rootDir"> & {
+  /** Workspace root; defaults to the CI checkout directory from env, then `cwd`. */
+  rootDir?: string;
+  /** Base for relative event paths and the workspace fallback; defaults to `process.cwd()`. */
+  cwd?: string;
   host?: string;
+  /** Native event payload; defaults to `PIPR_EVENT_PATH` or the CI event path from env. */
   eventPath?: string;
   dryRun: boolean;
   logSink?: RuntimeLogSink;
