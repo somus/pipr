@@ -28,7 +28,7 @@ Use `--config-dir <path>` for a nonstandard config directory.
 
 ## Select local tasks
 
-Local review runs each unique task registered through `pipr.on.changeRequest(...)`. It ignores hosted action filters and skips tasks declared with `local: false`.
+Local review runs each unique task with an `on.changeRequest` trigger. It ignores hosted action filters and skips tasks declared with `local: false`.
 
 Use `ctx.run.trigger === "local"` when a task should run in both environments but render different output.
 
@@ -48,13 +48,13 @@ The top-level `formatVersion` is currently `2`. Check it before reading other fi
 
 Models with `apiKey` read the declared secret from the local process environment. Bun also loads standard environment files from the working directory.
 
-Models without `apiKey` use Pi authentication from:
+Models without `apiKey` use the Pi auth file from:
 
-1. `--pi-agent-dir`
-2. `PI_CODING_AGENT_DIR`
-3. `$HOME/.pi/agent`
+1. `--pi-auth-file`
+2. `$PI_CODING_AGENT_DIR/auth.json`
+3. `$HOME/.pi/agent/auth.json`
 
-Pipr still uses the provider and model declared in config. Hosted runs do not receive this local directory, so select an environment-backed model outside local runs.
+Pipr still uses the provider and model declared in config. Hosted runs do not receive this local file, so select an environment-backed model outside local runs.
 
 ## Trust local config
 

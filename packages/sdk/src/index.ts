@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 export { definePipr, definePlugin } from "./builder.js";
-export { md } from "./prompt.js";
+export type { FindingFacets, FindingFields, FindingSchema } from "./finding.js";
+export type { MarkdownBuilder, MarkdownText } from "./markdown.js";
+export { escapeMarkdown, md } from "./markdown.js";
 export type {
   PiprDiffContextCoverage,
   PiprResult,
@@ -66,8 +68,10 @@ export type {
   ChangeRequestAction,
   ChecksOptions,
   DurationInput,
+  ModelApiKey,
   ModelOptions,
   ModelProfile,
+  ModelRef,
   ModelThinkingLevel,
   PiprConfigOptions,
   PublicationOptions,
@@ -79,11 +83,13 @@ export { modelThinkingLevels } from "./types/config.js";
 export type {
   ChangedFile,
   CommentableRange,
+  DiffContext,
   DiffHunk,
   DiffManifest,
   DiffManifestFile,
   DiffManifestLimits,
   DiffManifestOptions,
+  DiffSummary,
   FileStatus,
   PathFilter,
   RangeKind,
@@ -111,40 +117,47 @@ export type {
 export type {
   ChangeRequestContext,
   ChangeRequestInfo,
-  ChangeRequestRegistrationOptions,
+  CheckGateOptions,
+  CheckGateResult,
   CheckHandle,
   CommandContext,
   CommandOptions,
   CommandRegistrationOptions,
+  CommandTrigger,
   CommentValue,
-  DefaultReviewInput,
-  DefaultReviewSummaryInput,
-  DefaultReviewSummaryManifest,
   DroppedReviewFinding,
   PiprBuilder,
   PiprPlugin,
   PiRunner,
+  PiRunOptions,
+  PiRunOutputs,
+  PiRunRequest,
   PlatformInfo,
   PluginToolDefinition,
   PriorInlineFinding,
   PriorReview,
   RepositoryInfo,
   ReviewCommentContext,
-  ReviewEntrypoints,
-  ReviewInstructions,
-  ReviewRecipeOptions,
+  ReviewFindingsInput,
+  ReviewOptions,
+  ReviewRenderInput,
+  ReviewSummaryInput,
+  ReviewSummaryOptions,
+  SelectedReviewFindings,
+  SelectFindingsOptions,
   Task,
   TaskCheckOptions,
   TaskContext,
   TaskDefinition,
   TaskHandler,
+  TaskTriggers,
   ToolRunOptions,
   ValidatedReviewFindings,
   ValidateFindingsOptions,
 } from "./types/task.js";
 export {
   defaultReviewActions,
-  defaultReviewEntrypoints,
+  defaultReviewTriggers,
 } from "./types/task.js";
 
 export { z };

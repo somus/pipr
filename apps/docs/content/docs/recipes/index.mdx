@@ -20,8 +20,8 @@ Choose the smallest workflow that matches the review job.
 
 | Recipe | Purpose |
 | --- | --- |
-| [Default Review](/docs/recipes/default-review) | Start with one general change request review that runs separate findings and summary agents from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded. |
-| [Bug Hunter](/docs/recipes/bug-hunter) | Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with separate findings and summary agents tuned for actionable bug reports. |
+| [Default Review](/docs/recipes/default-review) | Start with one general change request review that runs a findings agent and an optional summary agent from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded. |
+| [Bug Hunter](/docs/recipes/bug-hunter) | Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with findings and summary agents tuned for actionable bug reports. |
 | [Structured Review](/docs/recipes/rich-review) | Run a general review that captures severity and category metadata before publishing validated inline comments. |
 | [Fix Suggestions](/docs/recipes/fix-suggestions) | Run a command-triggered improvement pass that publishes only exact suggested fixes maintainers can apply from review. |
 | [Security SAST](/docs/recipes/security-sast) | Review change request changes for concrete security risks, severity, category, and attack path before publishing validated inline findings. |
@@ -60,4 +60,4 @@ Tune the generated config before enabling automatic review:
 | Narrower review scope | Add `paths.include` and `paths.exclude` to the recipe config. |
 | More actionable findings | Make instructions require impact, evidence, and a valid changed-code range. |
 | Less style feedback | Say which categories are out of scope instead of asking for a broad review. |
-| Manual-only review | Use a command recipe or remove change request entrypoints. |
+| Manual-only review | Use a command recipe or remove the task's `on.changeRequest` trigger. |

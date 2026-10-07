@@ -35,16 +35,12 @@ These are the complete files written by `pipr init --recipe plugin-tool-review`:
 <RecipeFilePane path=".pipr/config.ts">
 
 ```ts title=".pipr/config.ts"
-import { definePipr } from "@usepipr/sdk";
+import { definePipr, md } from "@usepipr/sdk";
+import type { DiffContext, PriorReview } from "@usepipr/sdk";
 import { memoryLimits, r2MemoryPlugin } from "./r2-memory";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   const memory = pipr.use(
     r2MemoryPlugin({
@@ -70,26 +66,39 @@ export default definePipr((pipr) => {
       secrets, credentials, API keys, or tokens. Return only actionable review
       findings with validated diff ranges and current repository evidence.
     `,
-    prompt: (input: { manifest: unknown; prior: unknown }) => pipr.prompt`
+    prompt: (input: { diff: DiffContext; prior: PriorReview }) => pipr.prompt`
       ${pipr.section("Prior Pipr review", pipr.json(input.prior, { maxCharacters: 20000 }))}
     `,
   });
 
-  const task = pipr.task({
+  pipr.task({
     name: "memory-assisted-review",
+    on: {
+      changeRequest: ["opened", "updated"],
+      command: { pattern: "@pipr memory-review", permission: "write" },
+    },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
+      const diff = await ctx.change.diff({ compressed: true });
       const prior = await ctx.review.prior();
-      const review = await ctx.pi.run(reviewer, { manifest, prior });
+      const review = await ctx.pi.run(reviewer, { diff, prior });
+      const { findings } = ctx.review.select(review.inlineFindings);
       await ctx.comment({
-        main: ["## 🧭 Summary", "", review.summary.body].join("\n"),
-        inlineFindings: review.inlineFindings,
+        main: md.blocks(md`## 🧭 Summary`, md.raw(review.summary.body)),
+        inlineFindings: findings,
       });
     },
   });
 
-  const rememberTask = pipr.task<{ lesson: string }>({
+  pipr.task<{ lesson: string }>({
     name: "remember-review-memory",
+    on: {
+      command: {
+        pattern: "@pipr remember <lesson...>",
+        permission: "write",
+        description: "Store an explicit maintainer-curated reviewer lesson.",
+        parse: (args) => ({ lesson: args.lesson ?? "" }),
+      },
+    },
     async run(ctx, input) {
       if (!ctx.command) {
         throw new Error("remember-review-memory is a command-only task");
@@ -115,16 +124,6 @@ export default definePipr((pipr) => {
       );
       await ctx.command.reply("Stored reviewer memory `" + stored.id + "`.");
     },
-  });
-
-  pipr.on.changeRequest({ actions: ["opened", "updated"], task });
-  pipr.command({ pattern: "@pipr memory-review", permission: "write", task });
-  pipr.command({
-    pattern: "@pipr remember <lesson...>",
-    permission: "write",
-    description: "Store an explicit maintainer-curated reviewer lesson.",
-    parse: (args) => ({ lesson: args.lesson ?? "" }),
-    task: rememberTask,
   });
 });
 ```

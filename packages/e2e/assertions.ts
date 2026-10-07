@@ -18,15 +18,14 @@ type PublicationFixture = {
   droppedFindings?: Array<{ reason?: string; finding?: { body?: string } }>;
 };
 
+/** One scripted-provider model call; `start` events carry the call details. */
 type TelemetryEvent = {
   phase?: string;
   promptKind?: string;
   time: number;
+  model?: string;
+  repair?: boolean;
   workspace?: string;
-  home?: string;
-  sessionDir?: string;
-  tmp?: string;
-  providerId?: string;
 };
 
 const mainCommentMarkerPrefix = "<!-- pipr:main-comment change=1 version=1 state=";
@@ -45,7 +44,7 @@ export async function assertActFixture(options: {
   if (options.mode === "condensed") {
     assertActCondensedFixture(fixture);
     if (options.telemetryPath) {
-      await assertCondensedPiWorkspace(options.telemetryPath);
+      await assertCondensedModelCalls(options.telemetryPath);
     }
     return;
   }
@@ -77,31 +76,29 @@ export function assertActCondensedFixture(fixture: PublicationFixture): void {
   assertEqual((fixture.reviewComments ?? []).length, 0, "unexpected inline comments");
 }
 
-export async function assertCondensedPiWorkspace(telemetryPath: string): Promise<void> {
+/**
+ * The condensed fixture fails the primary model, so the fallback model reads the diff through tools, answers with
+ * invalid JSON, and repairs it in the same conversation. Every call shares one sandbox workspace, removed afterwards.
+ */
+export async function assertCondensedModelCalls(telemetryPath: string): Promise<void> {
   const starts = (await readTelemetryEvents(telemetryPath))
     .filter((event) => event.phase === "start" && event.promptKind === "condensed")
     .toSorted((left, right) => left.time - right.time);
-  assertEqual(starts.length, 4, "unexpected condensed Pi attempt count");
   assertEqual(
-    starts.map((event) => event.providerId).join(","),
+    starts.map((event) => `${event.model}${event.repair ? ":repair" : ""}`).join(","),
     [
       "deepseek/deepseek-v4-pro",
-      "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-v4-fallback",
       "deepseek/deepseek-v4-fallback",
+      "deepseek/deepseek-v4-fallback:repair",
     ].join(","),
-    "unexpected retry, fallback, and repair provider order",
+    "unexpected fallback, tool, and repair model call order",
   );
-  const first = starts[0];
-  assert(first !== undefined, "condensed Pi telemetry missing attempts");
-  const workspace = requiredTelemetryPath(first, "workspace");
-  const workspaces = starts.map((event) => requiredTelemetryPath(event, "workspace"));
-  assertEqual(new Set(workspaces).size, 1, "Pi retry, fallback, or repair workspace changed");
-  for (const key of ["home", "sessionDir", "tmp"] as const) {
-    const paths = starts.map((event) => requiredTelemetryPath(event, key));
-    assertEqual(new Set(paths).size, starts.length, `Pi attempts reused ${key}`);
+  const workspaces = new Set(starts.map((event) => requiredWorkspace(event)));
+  assertEqual(workspaces.size, 1, "fallback or repair model calls changed sandbox workspace");
+  for (const workspace of workspaces) {
+    assert(!(await pathExists(workspace)), "sandbox workspace was not cleaned up");
   }
-  assert(!(await pathExists(workspace)), "shared Pi workspace was not cleaned up");
 }
 
 export function assertActOrchestratorFixture(fixture: PublicationFixture): void {
@@ -199,12 +196,8 @@ async function assertParallelPiCalls(telemetryPath: string): Promise<void> {
   const fullStarts = events.filter(
     (event) => event.phase === "start" && event.promptKind === "full",
   );
-  assert(fullStarts.length >= 2, `expected at least 2 full Pi calls, got ${fullStarts.length}`);
-  assert(
-    new Set(fullStarts.map((event) => requiredTelemetryPath(event, "workspace"))).size >= 2,
-    "parallel task Pi calls reused a workspace",
-  );
-  assert(maxActiveCalls(events) >= 2, "task Pi calls did not overlap");
+  assert(fullStarts.length >= 2, `expected at least 2 full model calls, got ${fullStarts.length}`);
+  assert(maxActiveCalls(events) >= 2, "parallel task model calls did not overlap");
 }
 
 async function readTelemetryEvents(telemetryPath: string): Promise<TelemetryEvent[]> {
@@ -244,12 +237,9 @@ function maxActiveCalls(events: TelemetryEvent[]): number {
   return maxActive;
 }
 
-function requiredTelemetryPath(
-  event: TelemetryEvent,
-  key: "workspace" | "home" | "sessionDir" | "tmp",
-): string {
-  const value = event[key];
-  assert(typeof value === "string" && value.length > 0, `Pi telemetry missing ${key}`);
+function requiredWorkspace(event: TelemetryEvent): string {
+  const value = event.workspace;
+  assert(typeof value === "string" && value.length > 0, "model call telemetry missing workspace");
   return value;
 }
 

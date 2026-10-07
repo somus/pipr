@@ -32,16 +32,10 @@ These are the complete files written by `pipr init --recipe quality-gate`:
 <RecipeFilePane path=".pipr/config.ts">
 
 ```ts title=".pipr/config.ts"
-import { definePipr, z } from "@usepipr/sdk";
-import type { ReviewFinding } from "@usepipr/sdk";
+import { defaultReviewActions, definePipr, md, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   pipr.config({
     publication: {
@@ -67,27 +61,10 @@ export default definePipr((pipr) => {
     },
   });
 
-  const blockerSchema = z.strictObject({
-    title: z.string(),
+  const blocker = pipr.finding({
+    title: z.string().min(1).max(160),
     category: z.enum(["correctness", "security", "reliability", "test-coverage"]),
-    impact: z.string(),
-    body: z.string(),
-    path: z.string(),
-    rangeId: z.string(),
-    side: z.enum(["RIGHT", "LEFT"]),
-    startLine: z.number().int().positive(),
-    endLine: z.number().int().positive(),
-    suggestedFix: z.string().optional(),
-  });
-
-  type QualityBlocker = z.infer<typeof blockerSchema>;
-
-  const qualityGateOutput = pipr.schema({
-    id: "review/quality-gate",
-    schema: z.strictObject({
-      summary: z.string(),
-      blockers: z.array(blockerSchema),
-    }),
+    impact: z.string().min(1).max(1000),
   });
 
   const reviewer = pipr.agent({
@@ -100,144 +77,81 @@ export default definePipr((pipr) => {
       verify through the changed contract, relevant callers, or tests. If no
       blocking issue exists, return an empty blockers array.
     `,
-    output: qualityGateOutput,
+    output: z.strictObject({ summary: z.string(), blockers: z.array(blocker) }),
     tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "7m",
     prompt: () => "Run the required quality gate for this change request.",
   });
 
-  const task = pipr.task({
+  pipr.task({
     name: "quality-gate",
+    on: {
+      changeRequest: defaultReviewActions,
+      command: { pattern: "@pipr quality", permission: "write" },
+    },
     check: { enabled: true, name: "quality gate", required: true },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
-      const result = await ctx.pi.run(reviewer, { manifest });
-      const { validFindings: commentableBlockers, droppedFindings } =
-        ctx.review.validateFindings(result.blockers);
-      const droppedBlockerCount = droppedFindings.length;
-      const inlineFindings: ReviewFinding[] = commentableBlockers.map((blocker) => {
-        const category = blocker.category
-          .replaceAll("-", " ")
-          .replace(/^./, (char) => char.toUpperCase());
-        return {
-          body: `**${category} blocker:** ${blocker.title}. ${blocker.body}`,
-          path: blocker.path,
-          rangeId: blocker.rangeId,
-          side: blocker.side,
-          startLine: blocker.startLine,
-          endLine: blocker.endLine,
-          ...(blocker.suggestedFix ? { suggestedFix: blocker.suggestedFix } : {}),
-        };
+      const diff = await ctx.change.diff({ compressed: true });
+      const result = await ctx.pi.run(reviewer, { diff });
+      const { findings: blockers, dropped } = ctx.review.select(result.blockers, {
+        finding: blocker,
+        limit: result.blockers.length,
+      });
+      const gate = ctx.check.gate(blockers, {
+        failOn: () => true,
+        summary: (blocking) =>
+          blocking.length === 0
+            ? "No blocking quality issues found."
+            : `${blocking.length} blocking quality ${blocking.length === 1 ? "issue" : "issues"} found.`,
       });
 
-      if (commentableBlockers.length > 0) {
-        const issueNoun = commentableBlockers.length === 1 ? "issue" : "issues";
-        ctx.check.fail(`${commentableBlockers.length} blocking quality ${issueNoun} found.`);
-      } else {
-        ctx.check.pass("No blocking quality issues found.");
-      }
-
-      const sections = [
-        qualityGateCallout(commentableBlockers),
-        "",
-        "## 🧭 Summary",
-        "",
-        result.summary,
-      ];
-      if (droppedBlockerCount > 0) {
-        sections.push("", droppedBlockersNote(droppedBlockerCount));
-      }
-      if (commentableBlockers.length > 0) {
-        sections.push(
-          "",
-          "## ⚠️ Blocking Findings",
-          "",
-          blockersTable(commentableBlockers),
-          "",
-          categoryBreakdownBlock(commentableBlockers),
-        );
-      }
       await ctx.comment({
-        main: sections.join("\n"),
-        inlineFindings,
+        main: md.blocks(
+          gate.passed
+            ? md.callout({ icon: "✅", title: "Quality gate passed", body: "No blocking findings." })
+            : md.callout({
+                icon: "❌",
+                title: "Quality gate failed",
+                body: `${blockers.length} blocking ${blockers.length === 1 ? "finding requires" : "findings require"} attention.`,
+              }),
+          md`## 🧭 Summary`,
+          md`${result.summary}`,
+          dropped.length > 0
+            ? md`<sub>${dropped.length} model-reported ${dropped.length === 1 ? "blocker was" : "blockers were"} ignored because ${dropped.length === 1 ? "it does" : "they do"} not match a commentable diff range or duplicates another blocker.</sub>`
+            : "",
+          blockers.length > 0 ? md`## ⚠️ Blocking Findings` : "",
+          md.table(
+            blockers.map((item) => ({
+              category: md.label(item.category),
+              title: item.title,
+              impact: item.impact,
+            })),
+            { category: "Category", title: "Title", impact: "Impact" },
+          ),
+          blockers.length > 0
+            ? md.details(
+                "Category breakdown",
+                md.table(categoryCounts(blockers), { category: "Category", count: "Count" }),
+              )
+            : "",
+        ),
+        inlineFindings: blockers.map((item) => ({
+          ...item,
+          body: String(md`**${md.label(item.category)} blocker:** ${item.title}. ${item.body}`),
+        })),
       });
     },
   });
-
-  pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
-  pipr.command({ pattern: "@pipr quality", permission: "write", task });
 });
 
-function qualityGateCallout(blockers: QualityBlocker[]): string {
-  if (blockers.length === 0) {
-    return "> ✅ **Quality gate passed:** No blocking findings.";
-  }
-  const noun = blockers.length === 1 ? "finding requires" : "findings require";
-  return `> ❌ **Quality gate failed:** ${blockers.length} blocking ${noun} attention.`;
-}
-
-function blockersTable(blockers: QualityBlocker[]): string {
-  return [
-    "| Category | Title | Impact |",
-    "| --- | --- | --- |",
-    ...blockers.map((blocker) => {
-      const category = blocker.category
-        .replaceAll("-", " ")
-        .replace(/^./, (char) => char.toUpperCase());
-      const title = blocker.title.replaceAll("\n", " ").replaceAll("|", "\\|");
-      const impact = blocker.impact.replaceAll("\n", " ").replaceAll("|", "\\|");
-      return `| ${category} | ${title} | ${impact} |`;
-    }),
-  ].join("\n");
-}
-
-function droppedBlockersNote(count: number): string {
-  if (count === 0) {
-    return "";
-  }
-  const blockerNoun = count === 1 ? "blocker" : "blockers";
-  const verb = count === 1 ? "was" : "were";
-  const pronoun = count === 1 ? "it does" : "they do";
-  return [
-    "<sub>",
-    count,
-    " model-reported ",
-    blockerNoun,
-    " ",
-    verb,
-    " ignored because ",
-    pronoun,
-    " not match a commentable diff range or duplicates another blocker.",
-    "</sub>",
-  ].join("");
-}
-
-function categoryBreakdownBlock(blockers: QualityBlocker[]): string {
-  const counts = categoryCounts(blockers);
-  return [
-    "<details>",
-    "<summary>Category breakdown</summary>",
-    "",
-    "| Category | Count |",
-    "| --- | ---: |",
-    ...counts.map(([category, count]) => {
-      const categoryLabel = category
-        .replaceAll("-", " ")
-        .replace(/^./, (char) => char.toUpperCase());
-      return `| ${categoryLabel} | ${count} |`;
-    }),
-    "",
-    "</details>",
-  ].join("\n");
-}
-
-function categoryCounts(blockers: QualityBlocker[]): Array<[string, number]> {
+function categoryCounts(blockers: readonly { category: string }[]) {
   const counts = new Map<string, number>();
   for (const blocker of blockers) {
     counts.set(blocker.category, (counts.get(blocker.category) ?? 0) + 1);
   }
-  return [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([category, count]) => ({ category: md.label(category), count }));
 }
 ```
 

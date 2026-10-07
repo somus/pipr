@@ -2,6 +2,7 @@ import { expect } from "bun:test";
 import { type Agent, definePipr, type ReviewResult, type TaskHandler } from "@usepipr/sdk";
 import { buildPiprPlan } from "@usepipr/sdk/internal";
 import type { PiRunner } from "../../pi/types.js";
+import { piRunFailure, piRunResult } from "../../tests/helpers/pi-run-result.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest, PiprConfig, ProviderConfig, ReviewFinding } from "../../types.js";
 import { priorReviewForTask } from "../task/task-output.js";
@@ -85,7 +86,7 @@ export function eventContext(
 }
 
 export type PiprApi = Parameters<Parameters<typeof definePipr>[0]>[0];
-export type ReviewAgent = Agent<{ manifest: unknown }, ReviewResult>;
+export type ReviewAgent = Agent<{ diff: unknown }, ReviewResult>;
 export type RunRuntimeOptions = Omit<
   RunTaskRuntimeOptions,
   "workspace" | "config" | "event" | "diffManifestBuilder"
@@ -110,11 +111,11 @@ export function singleTaskPlan(options: {
 }) {
   return testPlan((pipr) => {
     const task = pipr.task({
+      on: { changeRequest: ["opened"] },
       name: options.name ?? "review",
       check: options.check,
       run: options.run,
     });
-    pipr.on.changeRequest({ actions: ["opened"], task });
   });
 }
 
@@ -149,10 +150,8 @@ export function recordingCheckSink(outcomes: unknown[]): RunTaskRuntimeOptions["
 }
 
 export function deepseekModel(pipr: PiprApi, name = "deepseek", model = "deepseek-v4-pro") {
-  return pipr.model({
+  return pipr.model(`deepseek/${model}`, {
     id: name === "deepseek" && model === "deepseek-v4-pro" ? undefined : name,
-    provider: "deepseek",
-    model,
     apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
   });
 }
@@ -187,11 +186,11 @@ function customOkAgent<Input>(
     output: {
       kind: "pipr.schema",
       id: options.outputId,
-      parse(value) {
+      parse(value: unknown) {
         return value as { ok: boolean };
       },
-      safeParse(value) {
-        return { success: true, data: value as { ok: boolean } };
+      safeParse(value: unknown) {
+        return { success: true as const, data: value as { ok: boolean } };
       },
     },
     prompt: options.prompt,
@@ -213,13 +212,13 @@ export function customOkTaskPlan<Input>(options: {
       prompt: () => "Summarize.",
     });
     const task = pipr.task({
+      on: { changeRequest: ["opened"] },
       name: options.taskName,
       async run(ctx) {
         const result = await ctx.pi.run(agent, options.input);
         await ctx.comment(JSON.stringify(result));
       },
     });
-    pipr.on.changeRequest({ actions: ["opened"], task });
   });
 }
 
@@ -239,17 +238,13 @@ export function registerPiReviewTask(
     : never,
 ): void {
   const task = pipr.task({
+    on: { changeRequest: ["opened"] },
     name: "review",
     async run(ctx) {
-      const result = await ctx.pi.run(
-        agent,
-        { manifest: await ctx.change.diffManifest() },
-        runOptions,
-      );
+      const result = await ctx.pi.run(agent, { diff: await ctx.change.diff() }, runOptions);
       await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
     },
   });
-  pipr.on.changeRequest({ actions: ["opened"], task });
 }
 
 export function fallbackReviewPlan(
@@ -279,16 +274,16 @@ export function fallbackReviewPlan(
 export function registerCommentingAgentTask(
   pipr: PiprApi,
   taskName: string,
-  agent: Agent<{ manifest: unknown }, unknown>,
+  agent: Agent<{ diff: unknown }, unknown>,
 ): void {
   const task = pipr.task({
+    on: { changeRequest: ["opened"] },
     name: taskName,
     async run(ctx) {
-      const result = await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+      const result = await ctx.pi.run(agent, { diff: await ctx.change.diff() });
       await ctx.comment(JSON.stringify(result));
     },
   });
-  pipr.on.changeRequest({ actions: ["opened"], task });
 }
 
 export function scopedPiReviewPlan() {
@@ -316,7 +311,7 @@ export async function runCustomOkPlan(
     plan,
     piRunner: async (options) => {
       observePrompt(options.prompt);
-      return { exitCode: 0, stdout: JSON.stringify({ ok: true }), stderr: "", durationMs: 1 };
+      return piRunResult(JSON.stringify({ ok: true }));
     },
   });
 }
@@ -529,9 +524,10 @@ export function noFindingsPiRunner(): PiRunner {
 export function providerFailurePiRunner(calls: string[]): PiRunner {
   return async (options) => {
     calls.push(options.provider.model);
-    return options.provider.id === "deepseek/deepseek-v4-pro"
-      ? { exitCode: 1, stdout: "", stderr: "temporary failure", durationMs: 1 }
-      : noFindingsPiResult();
+    if (options.provider.id === "deepseek/deepseek-v4-pro") {
+      throw piRunFailure("temporary failure");
+    }
+    return noFindingsPiResult();
   };
 }
 
@@ -540,32 +536,19 @@ export function noFindingsPiResult() {
 }
 
 export function reviewPiResultForPrompt(prompt: string, findings: ReviewFinding[]) {
-  if (prompt.includes("Schema ID: core/inline-findings.")) {
-    return {
-      exitCode: 0,
-      stdout: JSON.stringify({ inlineFindings: findings }),
-      stderr: "",
-      durationMs: 1,
-    };
+  if (/Schema ID: (core\/inline-findings|agent\/[\w-]+-findings)\./.test(prompt)) {
+    return piRunResult(JSON.stringify({ inlineFindings: findings }));
   }
   if (prompt.includes("Schema ID: core/summary.")) {
-    return {
-      exitCode: 0,
-      stdout: JSON.stringify({ body: "No findings." }),
-      stderr: "",
-      durationMs: 1,
-    };
+    return piRunResult(JSON.stringify({ body: "No findings." }));
   }
   return reviewPiResult(findings);
 }
 
 export function reviewPiResult(findings: ReviewFinding[]) {
-  return {
-    exitCode: 0,
-    stdout: JSON.stringify({ summary: { body: "No findings." }, inlineFindings: findings }),
-    stderr: "",
-    durationMs: 1,
-  };
+  return piRunResult(
+    JSON.stringify({ summary: { body: "No findings." }, inlineFindings: findings }),
+  );
 }
 
 export function countOccurrences(value: string, needle: string): number {

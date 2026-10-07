@@ -70,6 +70,18 @@ function createSchema<T>(
   };
 }
 
+/** Returns whether a value is a `pipr.schema` wrapper rather than a raw Zod schema. */
+export function isSchema(value: unknown): value is Schema<unknown> {
+  return (
+    typeof value === "object" && value !== null && Reflect.get(value, "kind") === "pipr.schema"
+  );
+}
+
+/** Wraps a Zod schema passed directly as agent output. */
+export function zodOutputSchema<T>(id: string, zodSchema: ZodSchema<T>): Schema<T> {
+  return createZodSchema(id, zodSchema);
+}
+
 function createZodSchema<T>(id: string, zodSchema: ZodSchema<T>): Schema<T> {
   return createSchema(id, (value) => zodSchema.parse(value), jsonSchemaFromZod(id, zodSchema));
 }

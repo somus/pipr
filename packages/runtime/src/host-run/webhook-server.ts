@@ -52,15 +52,6 @@ export function readWebhookDeliveryStatus(
   }
   const database = new Database(databasePath, { readonly: true, strict: true });
   try {
-    const columns = new Set(
-      database
-        .query<{ name: string }, []>("PRAGMA table_info(webhook_deliveries)")
-        .all()
-        .map((column) => column.name),
-    );
-    if (columns.size === 0) throw new Error("Webhook database is missing webhook_deliveries");
-    const field = (name: string, alias: string) =>
-      columns.has(name) ? `${name} AS ${alias}` : `NULL AS ${alias}`;
     const rows = database
       .query<
         {
@@ -76,7 +67,7 @@ export function readWebhookDeliveryStatus(
         },
         [number]
       >(
-        `SELECT id, host, status, attempts, ${field("result_kind", "resultKind")}, ${field("run_id", "runId")}, ${field("result_json", "resultJson")}, ${field("result_omitted_reason", "omittedReason")}, updated_at AS updatedAt FROM webhook_deliveries ORDER BY updated_at DESC, id DESC LIMIT ?`,
+        "SELECT id, host, status, attempts, result_kind AS resultKind, run_id AS runId, result_json AS resultJson, result_omitted_reason AS omittedReason, updated_at AS updatedAt FROM webhook_deliveries ORDER BY updated_at DESC, id DESC LIMIT ?",
       )
       .all(limit);
     return rows.map((row) => deliveryStatus(row));
@@ -371,17 +362,6 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
       `);
-      const columns = this.database
-        .query<{ name: string }, []>("PRAGMA table_info(webhook_deliveries)")
-        .all();
-      if (!columns.some((column) => column.name === "event_name")) {
-        this.database.exec("ALTER TABLE webhook_deliveries ADD COLUMN event_name TEXT");
-      }
-      for (const column of ["run_id", "result_kind", "result_json", "result_omitted_reason"]) {
-        if (!columns.some((candidate) => candidate.name === column)) {
-          this.database.exec(`ALTER TABLE webhook_deliveries ADD COLUMN ${column} TEXT`);
-        }
-      }
       this.database
         .query(
           "UPDATE webhook_deliveries SET status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE status = 'processing' AND attempts < 3",
@@ -547,6 +527,8 @@ export async function runWebhookDelivery(
   const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-"));
   const eventPath = path.join(directory, "event.json");
   const protocol = createCodeHostWebhookProtocol(delivery.host);
+  const runStoreDirectory =
+    options.runStoreDirectory ?? options.env?.PIPR_RUN_STORE_DIR ?? "/var/lib/pipr/runs";
   try {
     await writeFile(eventPath, delivery.payload, { mode: 0o600 });
     return await runHostRun({
@@ -558,11 +540,11 @@ export async function runWebhookDelivery(
         ...process.env,
         ...options.env,
         PIPR_CODE_HOST: delivery.host,
-        PIPR_RUN_STORE_DIR:
-          options.runStoreDirectory ?? options.env?.PIPR_RUN_STORE_DIR ?? "/var/lib/pipr/runs",
+        PIPR_RUN_STORE_DIR: runStoreDirectory,
         ...protocol.runtimeEnv?.(delivery.eventName),
       },
       dryRun: false,
+      piStoreRoot: path.join(runStoreDirectory, "agent-stores"),
       logSink: consoleRuntimeLogSink,
     });
   } finally {

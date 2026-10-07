@@ -14,6 +14,7 @@ import { parseChangeRequestEventContext } from "../types.js";
 import type { HostRunPorts, HostRunServices } from "./composition.js";
 import { hasRequiredRepositoryPermission } from "./entry-dispatch.js";
 import { logEventContext, logPhase } from "./logging.js";
+import { changeRequestPiStoreDir } from "./pi-store.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
 import type { HostRunCommandResult, TrustedRuntimeProject } from "./types.js";
 
@@ -207,7 +208,8 @@ async function runReviewCommentVerifier(
     verifierProvider,
     plan: trustedRuntime.plan,
     env: services.env,
-    piExecutable: services.piExecutable,
+    piProviderModule: services.piProviderModule,
+    piStoreDir: changeRequestPiStoreDir(services.piStoreRoot, event),
     piRunner: services.piRunner,
     log: services.log,
     runObserver: services.runObserver,

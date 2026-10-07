@@ -11,7 +11,7 @@ async function assertScenarioCleanupHandlesRestrictivePermissions(): Promise<voi
   const prepared = await prepareScenarioWorktree(scenarios.full);
   const restrictedDir = join(prepared.worktree, ".pipr/.act/restricted");
   mkdirSync(restrictedDir, { recursive: true });
-  writeFileSync(join(restrictedDir, "fake-pi-wrapper"), "#!/bin/sh\n");
+  writeFileSync(join(restrictedDir, "restricted-fixture"), "#!/bin/sh\n");
   chmodSync(restrictedDir, 0o500);
 
   try {

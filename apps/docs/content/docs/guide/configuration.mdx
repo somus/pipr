@@ -13,12 +13,7 @@ This config registers one model, caps inline comments, and runs a general review
 import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   pipr.config({
     publication: { maxInlineComments: 5 },
@@ -27,11 +22,9 @@ export default definePipr((pipr) => {
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: "Report concrete correctness, security, and regression risks.",
-      summary: "Summarize the change, risk, and useful reviewer focus.",
-    },
-    entrypoints: {
+    instructions: "Report concrete correctness, security, and regression risks.",
+    summary: { instructions: "Summarize the change, risk, and useful reviewer focus." },
+    on: {
       changeRequest: ["opened", "updated", "reopened", "ready"],
       command: { pattern: "@pipr review", permission: "write" },
     },
@@ -48,11 +41,7 @@ Model profiles select a Pi provider and model. `pipr.secret(...)` records an env
 
 ```ts twoslash
 // @include: pipr-builder
-const model = pipr.model({
-  provider: "deepseek",
-  model: "deepseek-v4-pro",
-  apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-});
+const model = pipr.model("deepseek/deepseek-v4-pro");
 ```
 
 Use an explicit `id` only when multiple profiles use the same provider and model with different credentials or thinking levels. Browse [Pi's Model Catalog](https://pi.dev/models) for current identifiers.
@@ -128,7 +117,7 @@ pipr.config({
 
 ## Configure fallback and retry
 
-An agent can declare fallback models and retry policy:
+An agent can declare fallback models:
 
 ```ts twoslash
 // @include: pipr-models
@@ -139,12 +128,10 @@ const reviewer = pipr.agent({
   instructions: "Report only actionable defects.",
   output: pipr.schemas.review,
   prompt: () => "Review the current change request.",
-  retry: {
-    invalidOutput: 1,
-    transientFailure: 1,
-  },
 });
 ```
+
+Pipr always validates structured output and allows one repair attempt for invalid output, sent as a follow-up turn in the same conversation. Transient provider failures retry inside the agent harness with backoff before Pipr moves to the next fallback model.
 
 Call-level model and fallback options override the agent settings. Without an override, Pipr uses the agent model and fallbacks, then the configured default provider.
 

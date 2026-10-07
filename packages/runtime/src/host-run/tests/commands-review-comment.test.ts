@@ -24,7 +24,7 @@ import {
   runTestHostCommand,
   verifierPublicationClient,
   verifierRunIdFromReplyAction,
-  writePiExecutable,
+  writePiOutput,
   writeReviewCommentEvent,
   writeStillValidVerifierOutput,
 } from "./commands-fixtures.js";
@@ -43,7 +43,7 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
           dryRun: false,
           env: reviewCommentEnv(workspace.rootDir, eventPath),
           hostAdapter: githubAdapterWithCapabilities(workspace, capabilities),
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
         });
 
         expect(result).toEqual({
@@ -72,7 +72,7 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
           env: reviewCommentEnv(workspace.rootDir, eventPath),
           githubClient: failingGitHubClient(),
           githubPublicationClient: failingGitHubPublishingClient(),
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
         }),
       ).resolves.toMatchObject({
         kind: "ignored",
@@ -253,10 +253,10 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
         tasks: ["pipr-internal-verifier"],
         models: ["deepseek-reasoner"],
         agentRuns: 1,
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: expect.any(Number),
+        outputTokens: expect.any(Number),
         costUsd: 0,
-        usageStatus: "unavailable",
+        usageStatus: "complete",
       });
       expect(result.run.id).toMatch(/^pipr-/);
       expect(result.run.durationMs).toBeGreaterThanOrEqual(0);
@@ -298,31 +298,14 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
       const output = JSON.stringify({
         findings: [{ id: "fnd_existing", status: "still-valid", response: "Still applies." }],
       });
-      await writePiExecutable(
-        workspace.piExecutable,
-        JSON.stringify({
-          type: "message_end",
-          message: {
-            role: "assistant",
-            model: "verifier-model",
-            content: [{ type: "text", text: output }],
-            usage: {
-              input: 12,
-              output: 3,
-              cacheRead: 8,
-              cacheWrite: 2,
-              cost: { total: 0.004 },
-            },
-          },
-        }),
-      );
+      await writePiOutput(workspace, output);
 
       const result = await expectVerifierReplyPublished(workspace, publication, {
         githubClient: fakeGitHubClient(workspace, "write"),
       });
       expect(result.run).toMatchObject({
-        cacheReadTokens: 8,
-        cacheWriteTokens: 2,
+        cacheReadTokens: expect.any(Number),
+        cacheWriteTokens: expect.any(Number),
         cacheUsageStatus: "complete",
         diffContextCoverage: {
           files: { total: expect.any(Number), covered: expect.any(Number) },

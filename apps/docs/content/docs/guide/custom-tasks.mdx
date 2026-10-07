@@ -7,52 +7,45 @@ Use a custom task when `pipr.review(...)` cannot express the required orchestrat
 
 ## Build a custom review
 
-A custom workflow combines a model, agent, task, and entrypoint:
+A custom workflow combines a model, agent, and task with its triggers:
 
 ```ts twoslash
 import { definePipr } from "@usepipr/sdk";
+import type { DiffContext } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro");
 
   const securityAgent = pipr.agent({
     name: "security",
     model,
     instructions: "Report exploitable security risks introduced by the change.",
     output: pipr.schemas.review,
-    prompt: (input: { manifest: unknown }) =>
-      pipr.prompt`${pipr.section("Diff Manifest", pipr.json(input.manifest))}`,
+    prompt: (_input: { diff: DiffContext }) => "Review this change for security risks.",
   });
 
-  const task = pipr.task({
+  pipr.task({
     name: "security-review",
+    on: { changeRequest: ["opened", "updated"] },
     check: { name: "security review", required: true },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({
+      const diff = await ctx.change.diff({
         compressed: true,
         paths: { include: ["src/**"] },
       });
-      const result = await ctx.pi.run(securityAgent, { manifest });
+      const result = await ctx.pi.run(securityAgent, { diff });
+      const { findings } = ctx.review.select(result.inlineFindings);
 
       await ctx.comment({
         main: result.summary.body,
-        inlineFindings: result.inlineFindings,
+        inlineFindings: findings,
       });
     },
-  });
-
-  pipr.on.changeRequest({
-    actions: ["opened", "updated"],
-    task,
   });
 });
 ```
 
-Pass the Diff Manifest through the `manifest` input field. Pipr adds the changed-code context and any bounded read tools needed for a reduced manifest.
+Pass the `ctx.change.diff()` value in the agent input. Pipr detects it and adds the changed-code context and any bounded read tools needed for a reduced manifest.
 
 ## Use task context
 
@@ -60,46 +53,45 @@ Task handlers receive provider-neutral context:
 
 | API | Purpose |
 | --- | --- |
-| `ctx.change.diffManifest(options)` | Build changed-code context and valid inline ranges. |
+| `ctx.change.diff(options)` | Build changed-code context and valid inline ranges. |
 | `ctx.change.changedFiles()` | Inspect changed file paths without running a model. |
 | `ctx.pi.run(agent, input, options)` | Run a typed agent. |
-| `ctx.review.validateFindings(findings, options?)` | Validate findings before task code consumes them. |
+| `ctx.pi.all(requests)` | Run independent agents concurrently. |
+| `ctx.review.select(findings, options?)` | Validate, deduplicate, rank, and cap findings before task code consumes them. |
 | `ctx.review.prior()` | Read prior Pipr-owned findings for the task. |
 | `ctx.comment(value)` | Emit final review output. |
 | `ctx.command?.reply(markdown)` | Emit a command response. |
+| `ctx.check.gate(findings, options)` | Derive the task check from blocking findings. |
 | `ctx.check.pass/fail/neutral(summary?)` | Set one task check outcome. |
 | `ctx.log` | Write runtime diagnostics. |
 
 A task must emit exactly one final result. Agent output remains task-local until the task calls `ctx.comment(...)` or `ctx.command.reply(...)`.
 
-## Validate findings before task decisions
+## Select findings before task decisions
 
-Call `ctx.review.validateFindings(...)` before findings affect a required check, table, or second-stage agent:
+Call `ctx.review.select(...)` before findings affect a required check, table, or second-stage agent:
 
 ```ts twoslash
 // @include: task-result
 const paths = { include: ["src/**"] };
-const { validFindings } = ctx.review.validateFindings(result.inlineFindings, {
+const { findings, dropped } = ctx.review.select(result.inlineFindings, {
   paths,
+  limit: result.inlineFindings.length,
 });
 
-if (validFindings.length > 0) {
-  ctx.check.fail(`${validFindings.length} blocking findings.`);
-} else {
-  ctx.check.pass("No blocking findings.");
-}
+ctx.check.gate(findings, { failOn: () => true });
 
 await ctx.comment({
-  main: "Review complete.",
-  inlineFindings: validFindings,
+  main: dropped.length > 0 ? `Review complete. ${dropped.length} findings dropped.` : "Review complete.",
+  inlineFindings: findings,
 });
 ```
 
-Pipr validates against the full runtime Diff Manifest and current event head. It preserves extra fields such as severity on returned findings and records dropped findings in validation metadata. If you map or sort an agent's finding array, pass `paths` explicitly; Pipr can infer the scope only from the exact array returned by `ctx.pi.run(...)`.
+Pipr validates against the full runtime Diff Manifest and current event head. It preserves extra fields such as severity on returned findings and reports each dropped finding with its reason. If you map or combine an agent's finding arrays, pass `paths` explicitly; Pipr can infer the scope only from the exact arrays returned by `ctx.pi.run(...)`.
 
-Tasks that only forward review output to `ctx.comment(...)` can rely on final publication validation. The final boundary still validates findings when a task uses this operation earlier.
+`select` caps at `publication.maxInlineComments` by default. Pass `limit` when every valid finding should count toward a check.
 
-## Define custom output
+## Define custom findings
 
 Use a built-in schema when the agent can return normal review output:
 
@@ -114,20 +106,22 @@ const reviewer = pipr.agent({
 });
 ```
 
-Use SDK-owned Zod for intermediate data:
+Use `pipr.finding(...)` to add fields to the core finding contract. Enum fields rank findings in declaration order and can drive `ctx.check.gate(...)`:
 
 ```ts twoslash
 // @include: pipr-z-builder
+const risk = pipr.finding({
+  title: z.string(),
+  severity: z.enum(["high", "medium", "low"]),
+});
+
 const riskOutput = pipr.schema({
-  id: "review/risk",
-  schema: z.strictObject({
-    risk: z.enum(["low", "medium", "high"]),
-    reasons: z.array(z.string()),
-  }),
+  id: "review/risks",
+  schema: z.strictObject({ risks: z.array(risk) }),
 });
 ```
 
-Map custom output into `ReviewFinding[]` before publication. Every inline finding must use a valid path, side, `rangeId`, and line span from the task's manifest. Keep `suggestedFix` to exact replacement code.
+Pass the same schema to `ctx.review.select(result.risks, { finding: risk })` so selection ranks by its facets. Keep `suggestedFix` to exact replacement code.
 
 ## Read prior state
 
@@ -136,7 +130,7 @@ Use prior state when a rerun needs earlier open findings:
 ```ts twoslash
 // @include: task-pi-review
 const prior = await ctx.review.prior();
-const result = await ctx.pi.run(reviewer, { manifest, prior });
+const result = await ctx.pi.run(reviewer, { diff, prior });
 ```
 
 Pipr handles main-comment updates, duplicate suppression, and bounded finding storage. Custom tasks only need prior data when it affects their own agent input or output.
@@ -147,8 +141,9 @@ Checks publish provider-native task status separately from the review comment:
 
 ```ts twoslash
 // @include: pipr-builder
-const task = pipr.task({
+pipr.task({
   name: "quality-gate",
+  on: { changeRequest: true },
   check: { name: "pipr quality gate", required: true },
   async run(ctx) {
     ctx.check.pass("No blocking findings.");
@@ -165,19 +160,19 @@ Command patterns can parse typed arguments:
 
 ```ts twoslash
 // @include: pipr-ci-agent
-const triage = pipr.task<{ log: string }>({
+pipr.task<{ log: string }>({
   name: "ci-triage",
+  on: {
+    command: {
+      pattern: "@pipr ci <log...>",
+      permission: "write",
+      parse: ({ log }) => ({ log: log ?? "" }),
+    },
+  },
   async run(ctx, input) {
     const answer = await ctx.pi.run(ciAgent, { log: input.log });
     await ctx.command?.reply(answer.body);
   },
-});
-
-pipr.command({
-  pattern: "@pipr ci <log...>",
-  permission: "write",
-  parse: ({ log }) => ({ log }),
-  task: triage,
 });
 ```
 

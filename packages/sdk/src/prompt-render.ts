@@ -15,7 +15,11 @@ export function renderPromptValue(value: PromptValue): string {
   if (typeof value === "boolean") {
     return String(value);
   }
-  if (typeof value === "object" && value !== null && Reflect.get(value, "kind") === "pipr.prompt") {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    (Reflect.get(value, "kind") === "pipr.prompt" || Reflect.get(value, "kind") === "pipr.markdown")
+  ) {
     return (value as PromptText).value;
   }
   return serializePromptJson(value, true);

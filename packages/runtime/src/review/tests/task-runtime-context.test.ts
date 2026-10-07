@@ -3,6 +3,7 @@ import { chmod, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "@usepipr/sdk";
+import { piRunResult } from "../../tests/helpers/pi-run-result.js";
 import type { DiffManifest } from "../../types.js";
 import {
   config,
@@ -38,13 +39,14 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     const manifest = reviewTestManifestWithContext();
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
-          const scoped = await ctx.change.diffManifest({
+          const scoped = await ctx.change.diff({
             compressed: true,
             maxPreviewLines: 1,
           });
-          const file = scoped.files[0] as DiffManifest["files"][number];
+          const file = scoped.manifest.files[0] as DiffManifest["files"][number];
           await ctx.comment(
             JSON.stringify({
               preview: file.commentableRanges[0]?.preview,
@@ -54,7 +56,6 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
           );
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
@@ -100,13 +101,13 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
       };
       const plan = testPlan((pipr) => {
         const task = pipr.task({
+          on: { changeRequest: ["opened"] },
           name: "review",
           async run(ctx) {
-            const projected = await ctx.change.diffManifest({ compressed: true });
-            await ctx.comment(JSON.stringify(projected.files[0]));
+            const projected = await ctx.change.diff({ compressed: true });
+            await ctx.comment(JSON.stringify(projected.manifest.files[0]));
           },
         });
-        pipr.on.changeRequest({ actions: ["opened"], task });
       });
 
       const result = await runRuntime({
@@ -144,10 +145,11 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
       );
       const plan = testPlan((pipr) => {
         const task = pipr.task({
+          on: { changeRequest: ["opened"] },
           name: "review",
           async run(ctx) {
-            const projected = await ctx.change.diffManifest({ compressed: true });
-            const strings = projected.files.flatMap((file) => [
+            const projected = await ctx.change.diff({ compressed: true });
+            const strings = projected.manifest.files.flatMap((file) => [
               ...(file.changedSymbols ?? []),
               ...file.commentableRanges.flatMap((range) =>
                 range.summary === undefined ? [] : [range.summary],
@@ -156,14 +158,16 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
             await ctx.comment(
               JSON.stringify({
                 bytes: strings.reduce((sum, value) => sum + Buffer.byteLength(value), 0),
-                symbolCounts: projected.files.map((file) => file.changedSymbols?.length ?? 0),
+                symbolCounts: projected.manifest.files.map(
+                  (file) => file.changedSymbols?.length ?? 0,
+                ),
                 maxSymbolLength: Math.max(
-                  ...projected.files.flatMap((file) =>
+                  ...projected.manifest.files.flatMap((file) =>
                     (file.changedSymbols ?? []).map((symbol) => symbol.length),
                   ),
                 ),
                 maxSummaryLength: Math.max(
-                  ...projected.files.flatMap((file) =>
+                  ...projected.manifest.files.flatMap((file) =>
                     file.commentableRanges.flatMap((range) =>
                       range.summary === undefined ? [] : [range.summary.length],
                     ),
@@ -173,7 +177,6 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
             );
           },
         });
-        pipr.on.changeRequest({ actions: ["opened"], task });
       });
 
       const result = await runRuntime({
@@ -197,13 +200,15 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
   it("filters Diff Manifest files by configured paths", async () => {
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
-          const manifest = await ctx.change.diffManifest({ paths: { include: ["docs/**"] } });
-          await ctx.comment(JSON.stringify({ paths: manifest.files.map((file) => file.path) }));
+          const diff = await ctx.change.diff({ paths: { include: ["docs/**"] } });
+          await ctx.comment(
+            JSON.stringify({ paths: diff.manifest.files.map((file) => file.path) }),
+          );
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
@@ -218,6 +223,7 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     let observed: unknown;
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           const validated = ctx.review.validateFindings([
@@ -228,7 +234,6 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
           await ctx.comment({ inlineFindings: validated.validFindings });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({ plan });
@@ -264,7 +269,8 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: { findings: "Review.", summary: "Summarize." },
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
         });
       }),
       piRunner: async (options) =>
@@ -288,24 +294,19 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
         prompt: () => "Collect notes.",
       });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           await ctx.pi.run(agent, {}, { paths: { include: ["src/**"] } });
           await ctx.comment("Notes collected.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
       plan,
       piRunner: async () =>
-        Promise.resolve({
-          exitCode: 0,
-          stdout: JSON.stringify({ inlineFindings: ["note"] }),
-          stderr: "",
-          durationMs: 1,
-        }),
+        Promise.resolve(piRunResult(JSON.stringify({ inlineFindings: ["note"] }))),
     });
 
     expect(result.mainComment).toContain("Notes collected.");
@@ -339,11 +340,12 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
         prompt: () => "Review.",
       });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           const result = await ctx.pi.run(
             agent,
-            { manifest: await ctx.change.diffManifest() },
+            { diff: await ctx.change.diff() },
             { paths: sourcePaths },
           );
           const tracked = ctx.review.validateFindings(result.inlineFindings);
@@ -354,23 +356,20 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
           });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
       plan,
       diffManifestBuilder: manifestBuilder(reviewTestManifestWithDocs()),
-      piRunner: async () => ({
-        exitCode: 0,
-        stdout: JSON.stringify({
-          inlineFindings: [
-            { ...finding("inside", "range-1", 10), severity: "high" },
-            { ...finding("docs", "docs-range-1", 1, "docs/readme.md"), severity: "high" },
-          ],
-        }),
-        stderr: "",
-        durationMs: 1,
-      }),
+      piRunner: async () =>
+        piRunResult(
+          JSON.stringify({
+            inlineFindings: [
+              { ...finding("inside", "range-1", 10), severity: "high" },
+              { ...finding("docs", "docs-range-1", 1, "docs/readme.md"), severity: "high" },
+            ],
+          }),
+        ),
     });
 
     expect(result.validated.validFindings.map((item) => item.body)).toEqual([
@@ -388,13 +387,10 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
       const paths = { include: ["src/**"] };
       const agent = defaultReviewAgent(pipr);
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
-          const result = await ctx.pi.run(
-            agent,
-            { manifest: await ctx.change.diffManifest() },
-            { paths },
-          );
+          const result = await ctx.pi.run(agent, { diff: await ctx.change.diff() }, { paths });
           const mapped = result.inlineFindings.map((item) => ({
             ...item,
             body: `mapped: ${item.body}`,
@@ -402,7 +398,6 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
           await ctx.comment({ inlineFindings: mapped });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
@@ -428,15 +423,12 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
       const docsPaths = { include: ["docs/**"] };
       const agent = defaultReviewAgent(pipr);
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           const [source, docs] = await Promise.all([
-            ctx.pi.run(
-              agent,
-              { manifest: await ctx.change.diffManifest() },
-              { paths: sourcePaths },
-            ),
-            ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() }, { paths: docsPaths }),
+            ctx.pi.run(agent, { diff: await ctx.change.diff() }, { paths: sourcePaths }),
+            ctx.pi.run(agent, { diff: await ctx.change.diff() }, { paths: docsPaths }),
           ]);
           await ctx.comment({
             inlineFindings: [...source.inlineFindings, ...docs.inlineFindings].map((item) => ({
@@ -446,7 +438,6 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
           });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     let calls = 0;
@@ -475,8 +466,8 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
   it("keeps the internal Diff Manifest immutable from task handlers", async () => {
     const plan = singleTaskPlan({
       async run(ctx) {
-        const manifest = await ctx.change.diffManifest();
-        const file = manifest.files[0] as DiffManifest["files"][number];
+        const diff = await ctx.change.diff();
+        const file = diff.manifest.files[0] as DiffManifest["files"][number];
         const range = file.commentableRanges[0] as { startLine: number };
         range.startLine = 999;
         await ctx.comment({ inlineFindings: [finding("uses original range", "range-1", 10)] });
@@ -501,13 +492,13 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
         },
       });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           await ctx.comment(`${ctx.change.title}:${ctx.change.description}`);
-          await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          await ctx.pi.run(agent, { diff: await ctx.change.diff() });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
@@ -578,14 +569,11 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
         models.push(options.provider.model);
         return calls === 1
           ? reviewPiResult([])
-          : {
-              exitCode: 0,
-              stdout: JSON.stringify({
+          : piRunResult(
+              JSON.stringify({
                 findings: [{ id: "fnd_existing", status: "fixed" }],
               }),
-              stderr: "",
-              durationMs: 1,
-            };
+            );
       },
     });
 
@@ -602,7 +590,7 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     expect(result.publicationPlan.metadata.stats).toMatchObject({
       models: ["deepseek-v4-pro", "fallback-model"],
       agentRuns: 2,
-      usageStatus: "unavailable",
+      usageStatus: "complete",
     });
   });
 
@@ -671,14 +659,11 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
           calls += 1;
           return calls === 1
             ? reviewPiResult([])
-            : {
-                exitCode: 0,
-                stdout: JSON.stringify({
+            : piRunResult(
+                JSON.stringify({
                   findings: [{ id: "fnd_existing", status }],
                 }),
-                stderr: "",
-                durationMs: 1,
-              };
+              );
         },
       });
 

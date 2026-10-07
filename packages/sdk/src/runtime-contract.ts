@@ -7,6 +7,7 @@ import type {
   RepositoryPermission,
 } from "./types/config.js";
 import type { RuntimeLimits } from "./types/manifest.js";
+import type { Schema } from "./types/schema.js";
 import type { PluginToolDefinition, TaskCheckOptions, TaskContext } from "./types/task.js";
 
 /** Type-erased executable task stored in a runtime plan. */
@@ -29,7 +30,8 @@ export type RuntimeAgentTool = {
 };
 
 /** Type-erased executable agent definition stored in a runtime plan. */
-export type RuntimeAgentDefinition = Omit<AgentDefinition<unknown, unknown>, "tools"> & {
+export type RuntimeAgentDefinition = Omit<AgentDefinition<unknown, unknown>, "tools" | "output"> & {
+  output: Schema<unknown>;
   tools?: readonly RuntimeAgentTool[];
 };
 

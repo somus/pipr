@@ -5,15 +5,11 @@ export const interactiveAskRecipe = {
   title: "Interactive Ask",
   description: "PR-Agent ask-style free-form command over diff and prior review context.",
   sourceTools: ["PR-Agent /ask"],
-  configTs: `import { definePipr } from "@usepipr/sdk";
+  configTs: `import { definePipr, md } from "@usepipr/sdk";
+import type { DiffContext, PriorReview } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   const askAgent = pipr.agent({
     name: "interactive-ask",
@@ -25,31 +21,31 @@ export default definePipr((pipr) => {
       are required, state precisely which missing context prevents an answer.
     \`,
     output: pipr.schemas.summary,
-    prompt: (input: { question: string; manifest: unknown; prior: unknown }) => pipr.prompt\`
+    prompt: (input: { question: string; diff: DiffContext; prior: PriorReview }) => pipr.prompt\`
       \${pipr.section("Question", input.question)}
       \${pipr.section("Prior pipr review", pipr.json(input.prior, { maxCharacters: 20000 }))}
     \`,
   });
 
-  const task = pipr.task<{ question: string }>({
+  pipr.task<{ question: string }>({
     name: "interactive-ask",
+    on: {
+      command: {
+        pattern: "@pipr ask <question...>",
+        permission: "read",
+        description: "Ask a question about this change request.",
+        parse: (args) => ({ question: args.question ?? "" }),
+      },
+    },
     async run(ctx, input) {
       if (!ctx.command) {
         throw new Error("interactive-ask is a command-only task");
       }
-      const manifest = await ctx.change.diffManifest({ compressed: true });
+      const diff = await ctx.change.diff({ compressed: true });
       const prior = await ctx.review.prior();
-      const answer = await ctx.pi.run(askAgent, { question: input.question, manifest, prior });
-      await ctx.command.reply(["## ℹ️ Answer", "", answer.body].join("\\n"));
+      const answer = await ctx.pi.run(askAgent, { question: input.question, diff, prior });
+      await ctx.command.reply(md.blocks(md\`## ℹ️ Answer\`, md.raw(answer.body)));
     },
-  });
-
-  pipr.command({
-    pattern: "@pipr ask <question...>",
-    permission: "read",
-    description: "Ask a question about this change request.",
-    parse: (args) => ({ question: args.question ?? "" }),
-    task,
   });
 });
 `,

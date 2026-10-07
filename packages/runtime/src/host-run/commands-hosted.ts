@@ -13,15 +13,11 @@ import { maximumRunBundleBytes } from "../observability/types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { createRuntimeLog, type RuntimeLog } from "../shared/logging.js";
 import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
+import { createHostRunAdapter } from "./adapter.js";
 import { runChangeRequestHostRunCommand } from "./change-request-entry.js";
 import { runIssueCommentHostRunCommand } from "./command-entry.js";
 import { classifyRunFailure, finishRecorderSafely } from "./commands-shared.js";
-import {
-  composeHostRunPorts,
-  composeHostRunServices,
-  composeHostRunWorkspace,
-  type HostRunServices,
-} from "./composition.js";
+import type { HostRunServices } from "./composition.js";
 import { logPhase } from "./logging.js";
 import type {
   HostRunCommandDependencyOptions,
@@ -44,16 +40,36 @@ export async function runHostRunCommandWithDependencies(
   options: HostRunCommandDependencyOptions,
 ): Promise<HostRunCommandResult> {
   const recorder = await startHostedRecorder(options);
-  const workspace = composeHostRunWorkspace(options);
-  const ports = composeHostRunPorts(options, {
-    ...(recorder ? { runObserver: recorder.observer } : {}),
+  const adapter = createHostRunAdapter({
+    env: options.env,
+    host: options.host,
+    hostAdapter: options.hostAdapter,
   });
   const log = createRuntimeLog({
     logSink: combineRuntimeLogSinks(options.logSink, recorder?.logSink),
     env: options.env,
     writesToSink: options.logSink !== undefined,
   });
-  const services = composeHostRunServices({ workspace, ports, log });
+  const services: HostRunServices = {
+    rootDir: options.rootDir,
+    configDir: options.configDir,
+    env: options.env ?? process.env,
+    dryRun: options.dryRun,
+    adapter,
+    log,
+    ...(options.eventPath !== undefined ? { eventPath: options.eventPath } : {}),
+    ...(options.piProviderModule !== undefined
+      ? { piProviderModule: options.piProviderModule }
+      : {}),
+    ...(options.piStoreRoot !== undefined ? { piStoreRoot: options.piStoreRoot } : {}),
+    ...(options.piRunner !== undefined ? { piRunner: options.piRunner } : {}),
+    ...(options.secretRedactor !== undefined ? { secretRedactor: options.secretRedactor } : {}),
+    ...(recorder
+      ? { runObserver: recorder.observer }
+      : options.runObserver !== undefined
+        ? { runObserver: options.runObserver }
+        : {}),
+  };
   const state: HostRunState = { failureCategory: "startup", adapter: services.adapter };
   try {
     const result = await log.group("pipr host run", async () => executeHostRun(services, state));

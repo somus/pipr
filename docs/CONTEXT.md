@@ -45,6 +45,14 @@ _Avoid_: bot aliases
 The agent execution boundary where Pi runs reviewer prompts and returns structured output to Pipr.
 _Avoid_: publisher
 
+**Agent Worker**:
+The low-privilege `pipr agent-worker` process that hosts the Pi durable harness, owns one Conversation Store, and exposes only Pipr-owned read-only tools.
+_Avoid_: Pi CLI process, sandbox shell
+
+**Conversation Store**:
+The durable storage of agent conversations, tool calls, and usage for one Agent Worker. Webhook deployments keep one per change request; Action and local runs export a temporary store into the Run Bundle.
+_Avoid_: session dump, Pi home
+
 **Task Input**:
 A typed value parsed from a command or local entrypoint and passed to a `pipr.task()` callback.
 _Avoid_: environment variable, hidden prompt state
@@ -54,7 +62,7 @@ A `pipr.task()` callback that gathers context, runs agents, and contributes revi
 _Avoid_: YAML workflow, block graph
 
 **Review Run**:
-The Pipr-owned path used by `ctx.change.diffManifest()` and `ctx.pi.run()`.
+The Pipr-owned path used by `ctx.change.diff()` and `ctx.pi.run()`.
 _Avoid_: user-authored diff or validation block
 
 **Run Bundle**:
@@ -62,8 +70,16 @@ The versioned, redacted diagnostic record for one Pipr process, identified by an
 _Avoid_: Pipr Result, Review Run ID, raw session dump
 
 **Built-in Review**:
-The quick `pipr.review()` wrapper that runs a shardable findings agent followed by one summary agent and renders their combined result.
+The quick `pipr.review()` preset that runs one shardable review agent returning a summary and findings, optionally followed by a summary agent, over the same helpers custom tasks use.
 _Avoid_: configurable built-in prompt, injected reviewer
+
+**Finding Schema**:
+A user-owned Zod schema created with `pipr.finding()` that extends the core Review Finding. Its enum fields are the finding's facets for ranking, gating, and outcome aggregation.
+_Avoid_: hardcoded severity, built-in category
+
+**Finding Outcome**:
+An append-only event recording what happened to one finding: proposed, dropped, published, carried, outdated, fixed, still valid, resolved by a human, or replied to.
+_Avoid_: feedback score, reaction
 
 **Pipr Result**:
 The public, versioned result returned by hosted, local, and webhook delivery surfaces. A Pipr Result contains safe review or command output, bounded Review Run usage totals, and content-free diff context coverage counts, but excludes exact coverage identities, runtime plans, native identifiers, credentials, and raw errors.

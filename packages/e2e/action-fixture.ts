@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { PublicationError } from "@usepipr/runtime";
 import {
@@ -13,6 +14,7 @@ import {
   runHostRunCommandWithDependencies,
 } from "@usepipr/runtime/internal/testing";
 import { type ActAssertionMode, assertActFixture } from "./assertions.ts";
+import type { ActProviderConfig } from "./scripted-provider.ts";
 
 type FixtureReviewComment = Awaited<
   ReturnType<GitHubPublicationClient["listReviewComments"]>
@@ -58,7 +60,7 @@ async function actionFixtureContext(): Promise<ActionFixtureContext> {
       env: Bun.env,
       eventPath: requiredEnv("GITHUB_EVENT_PATH"),
       dryRun: envValue("PIPR_DRY_RUN") === "1",
-      piExecutable: await actionPiExecutable(requiredEnv("PIPR_ACT_PI_EXECUTABLE")),
+      piProviderModule: await actionProviderModule(),
       hostAdapter: createGitHubHostAdapter({
         publicationClient: fixturePublicationClient(fixturePath),
       }),
@@ -67,57 +69,30 @@ async function actionFixtureContext(): Promise<ActionFixtureContext> {
   };
 }
 
-async function actionPiExecutable(piExecutable: string): Promise<string> {
-  const callsDir = envValue("PIPR_ACT_PI_CALL_DIR");
-  if (!callsDir) {
-    return piExecutable;
+/** World-writable so the sandboxed agent worker can record its model calls there. */
+async function modelCallDir(): Promise<string | undefined> {
+  const callsDir = envValue("PIPR_ACT_MODEL_CALL_DIR");
+  if (callsDir) {
+    await mkdir(callsDir, { recursive: true });
+    await chmod(callsDir, 0o777);
   }
-  await mkdir(callsDir, { recursive: true });
-  await chmod(callsDir, 0o777);
-  const wrapperPath = path.join(callsDir, "fake-pi-wrapper");
-  await writeFile(
-    wrapperPath,
-    `#!/usr/bin/env bun
-import { chmod, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
-
-if (process.getuid?.() !== 1000 || process.getgid?.() !== 1000) {
-  throw new Error(
-    \`fake Pi must run as 1000:1000, got \${process.getuid?.()}:\${process.getgid?.()}\`,
-  );
+  return callsDir;
 }
-const workspaceProbe = path.join(process.cwd(), ".pipr-isolation-probe");
-await expectPermissionDenied(() => chmod(process.cwd(), 0o755));
-await expectPermissionDenied(() => writeFile(workspaceProbe, "unexpected write"));
-const tempProbe = path.join(Bun.env.TMPDIR ?? "", ".pipr-writable-probe");
-await writeFile(tempProbe, "ok");
-await rm(tempProbe);
 
-Bun.env.PIPR_ACT_PI_CALL_DIR = ${JSON.stringify(callsDir)};
-Bun.env.PIPR_ACT_INVALID_FIRST_OUTPUT = ${JSON.stringify(envValue("PIPR_ACT_INVALID_FIRST_OUTPUT") ?? "")};
-Bun.env.PIPR_ACT_FAIL_PRIMARY_PROVIDER = ${JSON.stringify(envValue("PIPR_ACT_FAIL_PRIMARY_PROVIDER") ?? "")};
-const proc = Bun.spawn([${JSON.stringify(piExecutable)}, ...Bun.argv.slice(2)], {
-  stdin: "inherit",
-  stdout: "inherit",
-  stderr: "inherit",
-  env: Bun.env,
-});
-process.exit(await proc.exited);
-
-async function expectPermissionDenied(run: () => Promise<unknown>): Promise<void> {
-  try {
-    await run();
-  } catch (error) {
-    const code = error && typeof error === "object" ? Reflect.get(error, "code") : undefined;
-    if (code === "EACCES" || code === "EPERM") return;
-    throw error;
-  }
-  throw new Error("fake Pi unexpectedly modified its read-only workspace");
-}
-`,
-  );
-  await chmod(wrapperPath, 0o755);
-  return wrapperPath;
+/** Serves fixture models from the scripted provider; the agent worker loads it with a config the sandbox can read. */
+async function actionProviderModule(): Promise<{ path: string; config: string }> {
+  const config: ActProviderConfig = {
+    callsDir: await modelCallDir(),
+    failPrimaryProvider: envValue("PIPR_ACT_FAIL_PRIMARY_PROVIDER") === "1",
+    invalidFirstOutput: envValue("PIPR_ACT_INVALID_FIRST_OUTPUT") === "1",
+    // The supervisor drops to the sandbox identity only when it runs as root, as the Action container does.
+    expectSandboxIdentity: envValue("PIPR_PI_SANDBOX_UID") === "1000" && process.getuid?.() === 0,
+  };
+  const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-act-provider-"));
+  await chmod(configDir, 0o755);
+  const configPath = path.join(configDir, "provider.json");
+  await writeFile(configPath, JSON.stringify(config), { mode: 0o644 });
+  return { path: path.join(import.meta.dir, "scripted-provider.ts"), config: configPath };
 }
 
 function requiredEnv(name: string): string {

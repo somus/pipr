@@ -16,19 +16,13 @@ Define review behavior from the package root:
 import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro");
 
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: "Report actionable correctness, security, and testing issues.",
-      summary: "Summarize the change and its main risks.",
-    },
+    instructions: "Report actionable correctness, security, and testing issues.",
+    summary: { instructions: "Summarize the change and its main risks." },
   });
 });
 ```

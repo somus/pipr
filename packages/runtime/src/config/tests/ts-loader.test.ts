@@ -49,11 +49,7 @@ describe("loadTypescriptConfig installable deps", () => {
       path.join(rootDir, ".pipr", "config.ts"),
       `import { definePipr } from "@usepipr/sdk";
 export default definePipr((pipr) => {
-  pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
 });
 `,
     );
@@ -73,18 +69,12 @@ import { reviewSchemaExample } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
   const example = reviewSchemaExample();
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: \`Review. Example summary: \${example.summary.body}\`,
-      summary: "Summarize this change.",
-    },
+    instructions: \`Review. Example summary: \${example.summary.body}\`,
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -102,15 +92,12 @@ export default definePipr((pipr) => {
       `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+    instructions: "Review this change.",
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -234,18 +221,12 @@ export default definePipr((pipr) => {
 import { file } from "bun";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: \`Review this change. Bun version: \${Bun.version}. Config exists: \${file(".pipr/config.ts").exists()}\`,
-      summary: "Summarize this change.",
-    },
+    instructions: \`Review this change. Bun version: \${Bun.version}. Config exists: \${file(".pipr/config.ts").exists()}\`,
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -283,18 +264,12 @@ export default definePipr((pipr) => {
 export default definePipr((pipr) => {
   type LocalTypescriptSentinel = typeof __piprLocalTypeScriptLibSentinel;
   const sentinel = "ok" satisfies LocalTypescriptSentinel;
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: \`Review this change. Local TS lib sentinel: \${sentinel}\`,
-      summary: "Summarize this change.",
-    },
+    instructions: \`Review this change. Local TS lib sentinel: \${sentinel}\`,
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -324,15 +299,12 @@ export default definePipr((pipr) => {
       `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+    instructions: "Review this change.",
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -352,18 +324,12 @@ export default definePipr((pipr) => {
 import * as ts from "typescript";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: \`Review this change. TS target: \${ts.ScriptTarget.Latest}\`,
-      summary: "Summarize this change.",
-    },
+    instructions: \`Review this change. TS target: \${ts.ScriptTarget.Latest}\`,
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,
@@ -404,15 +370,12 @@ export default definePipr((pipr) => {
       `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model: string = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model: string = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
   pipr.review({
     id: "review",
     model,
-    instructions: { findings: "Review this change.", summary: "Summarize this change." },
+    instructions: "Review this change.",
+    summary: { instructions: "Summarize this change." },
   });
 });
 `,

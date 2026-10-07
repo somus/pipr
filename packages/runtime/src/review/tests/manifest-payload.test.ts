@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createDiffContext } from "../../diff/diff-context.js";
 import {
   condenseDiffManifest,
   measureDiffManifestPrompt,
@@ -100,7 +101,7 @@ describe("Diff Manifest prompt payload", () => {
     const manifest = reviewTestManifest();
 
     const context = prepareDiffManifestContext({
-      input: { manifest },
+      input: { diff: createDiffContext(manifest) },
       toolMode: "read-only",
     });
 
@@ -116,7 +117,7 @@ describe("Diff Manifest prompt payload", () => {
     const manifest = largeContextManifest();
 
     const context = prepareDiffManifestContext({
-      input: { manifest },
+      input: { diff: createDiffContext(manifest) },
       limits: {
         fullMaxBytes: 128,
         fullMaxEstimatedTokens: 100_000,
@@ -141,7 +142,7 @@ describe("Diff Manifest prompt payload", () => {
   it("advertises structural tools only when condensed structural capability is available", () => {
     const manifest = largeContextManifest();
     const context = prepareDiffManifestContext({
-      input: { manifest },
+      input: { diff: createDiffContext(manifest) },
       limits: {
         fullMaxBytes: 128,
         fullMaxEstimatedTokens: 100_000,
@@ -232,7 +233,7 @@ describe("Diff Manifest prompt payload", () => {
 
     for (const testCase of cases) {
       const context = prepareDiffManifestContext({
-        input: { manifest: testCase.manifest },
+        input: { diff: createDiffContext(testCase.manifest) },
         limits: testCase.limits,
         toolMode: testCase.toolMode,
         structuralAnalysis: testCase.structuralAnalysis,
@@ -253,7 +254,7 @@ describe("Diff Manifest prompt payload", () => {
 
   it("does not attach runtime read tools when tool mode is none", () => {
     const context = prepareDiffManifestContext({
-      input: { manifest: largeContextManifest() },
+      input: { diff: createDiffContext(largeContextManifest()) },
       limits: {
         fullMaxBytes: 128,
         fullMaxEstimatedTokens: 100_000,
@@ -277,7 +278,7 @@ describe("Diff Manifest prompt payload", () => {
     expect(context?.body).not.toContain("pipr_ast_grep");
   });
 
-  it("only prepares context for the reserved manifest input key", () => {
+  it("only prepares context for a branded diff input value", () => {
     expect(
       prepareDiffManifestContext({
         input: {},
@@ -286,10 +287,19 @@ describe("Diff Manifest prompt payload", () => {
     ).toBeUndefined();
     expect(
       prepareDiffManifestContext({
-        input: { manifest: "release-notes" },
+        input: { manifest: reviewTestManifest() },
         toolMode: "read-only",
       }),
     ).toBeUndefined();
+    expect(() =>
+      prepareDiffManifestContext({
+        input: {
+          head: createDiffContext(reviewTestManifest()),
+          base: createDiffContext(reviewTestManifest()),
+        },
+        toolMode: "read-only",
+      }),
+    ).toThrow();
   });
 });
 

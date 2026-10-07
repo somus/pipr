@@ -8,7 +8,7 @@ import {
   assertActCondensedFixture,
   assertActFullFixture,
   assertActOrchestratorFixture,
-  assertCondensedPiWorkspace,
+  assertCondensedModelCalls,
 } from "./assertions.ts";
 import { prepareScenarioWorktree, scenarios } from "./scenarios.ts";
 
@@ -22,7 +22,7 @@ test("renders local Action metadata for the selected image and fixture entrypoin
   await assertActionMetadataRendering();
 });
 
-test("validates condensed Pi workspace telemetry and cleanup", async () => {
+test("validates condensed model call telemetry and workspace cleanup", async () => {
   await assertCondensedWorkspaceTelemetry();
 });
 
@@ -87,12 +87,12 @@ async function assertCondensedWorkspaceTelemetry(): Promise<void> {
   const workspace = path.join(telemetryPath, "removed-workspace");
   try {
     const attempts = [
-      ["primary-first", "deepseek/deepseek-v4-pro"],
-      ["primary-retry", "deepseek/deepseek-v4-pro"],
-      ["fallback", "deepseek/deepseek-v4-fallback"],
-      ["fallback-repair", "deepseek/deepseek-v4-fallback"],
+      ["primary", "deepseek/deepseek-v4-pro", false],
+      ["fallback-tools", "deepseek/deepseek-v4-fallback", false],
+      ["fallback-answer", "deepseek/deepseek-v4-fallback", false],
+      ["fallback-repair", "deepseek/deepseek-v4-fallback", true],
     ] as const;
-    for (const [index, [id, providerId]] of attempts.entries()) {
+    for (const [index, [id, model, repair]] of attempts.entries()) {
       await Bun.write(
         path.join(telemetryPath, `${id}.jsonl`),
         `${JSON.stringify({
@@ -100,21 +100,23 @@ async function assertCondensedWorkspaceTelemetry(): Promise<void> {
           phase: "start",
           time: index * 2 + 1,
           promptKind: "condensed",
-          providerId,
+          model,
+          repair,
           workspace,
-          home: `/tmp/home-${id}`,
-          sessionDir: `/tmp/session-${id}`,
-          tmp: `/tmp/tmp-${id}`,
         })}\n${JSON.stringify({ id, phase: "end", time: index * 2 + 2, promptKind: "condensed" })}\n`,
       );
     }
 
     await mkdir(workspace);
-    await expect(assertCondensedPiWorkspace(telemetryPath)).rejects.toThrow(
-      "shared Pi workspace was not cleaned up",
+    await expect(assertCondensedModelCalls(telemetryPath)).rejects.toThrow(
+      "sandbox workspace was not cleaned up",
     );
     await rm(workspace, { recursive: true });
-    await expect(assertCondensedPiWorkspace(telemetryPath)).resolves.toBeUndefined();
+    await expect(assertCondensedModelCalls(telemetryPath)).resolves.toBeUndefined();
+    await rm(path.join(telemetryPath, "fallback-repair.jsonl"));
+    await expect(assertCondensedModelCalls(telemetryPath)).rejects.toThrow(
+      "unexpected fallback, tool, and repair model call order",
+    );
   } finally {
     await rm(telemetryPath, { recursive: true, force: true });
   }

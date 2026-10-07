@@ -1,3 +1,4 @@
+import { findInputDiffContext } from "../../diff/diff-context.js";
 import {
   type DiffManifestPromptLimits,
   type DiffManifestPromptMode,
@@ -12,7 +13,6 @@ import type {
   DiffManifestLimitsConfig,
   DiffManifestPromptMetrics,
 } from "../../types.js";
-import { parseDiffManifest } from "../../types.js";
 
 export type PreparedDiffManifestContext = {
   manifest: DiffManifest;
@@ -34,7 +34,7 @@ export function prepareDiffManifestContext(options: {
   allowOversizedCondensed?: boolean;
   structuralAnalysis?: DiffStructuralAnalysis;
 }): PreparedDiffManifestContext | undefined {
-  const manifest = readReservedInputManifest(options.input);
+  const manifest = findInputDiffContext(options.input)?.context.manifest;
   if (!manifest) {
     return undefined;
   }
@@ -65,17 +65,6 @@ export function prepareDiffManifestContext(options: {
         }
       : {}),
   };
-}
-
-export function readReservedInputManifest(input: unknown): DiffManifest | undefined {
-  if (typeof input !== "object" || input === null || !("manifest" in input)) {
-    return undefined;
-  }
-  try {
-    return parseDiffManifest((input as { manifest: unknown }).manifest);
-  } catch {
-    return undefined;
-  }
 }
 
 function diffManifestPromptBody(

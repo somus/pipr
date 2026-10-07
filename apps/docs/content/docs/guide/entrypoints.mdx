@@ -3,11 +3,11 @@ title: "Entrypoints"
 description: "Start Pipr tasks from change requests, commands, or local review."
 ---
 
-Entrypoints select when a task runs. The task still decides which agents to call and which final output to emit.
+Triggers select when a task runs. Declare them with `on` on the task itself. The task still decides which agents to call and which final output to emit.
 
 ## Configure the default review
 
-`pipr.review(...)` can register automatic, command, and local execution around one task:
+`pipr.review(...)` registers change request, command, and local execution around one task. Its `on` defaults to `defaultReviewTriggers`:
 
 ```ts twoslash
 // @include: pipr-review
@@ -15,14 +15,14 @@ pipr.review({
   id: "review",
   model,
   instructions: reviewInstructions,
-  entrypoints: {
+  on: {
     changeRequest: ["opened", "updated", "reopened", "ready"],
     command: { pattern: "@pipr review", permission: "write" },
   },
 });
 ```
 
-Set either entrypoint to `false` to disable it.
+Omit a trigger from `on` to disable it.
 
 ## Change-request events
 
@@ -32,13 +32,16 @@ Pipr exposes provider-neutral actions:
 opened | updated | reopened | ready | closed
 ```
 
-Register a custom task for selected actions:
+Run a custom task for selected actions. `changeRequest: true` uses `opened`, `updated`, `reopened`, and `ready`:
 
 ```ts twoslash
-// @include: pipr-task
-pipr.on.changeRequest({
-  actions: ["opened", "updated"],
-  task,
+// @include: pipr-builder
+pipr.task({
+  name: "summary",
+  on: { changeRequest: ["opened", "updated"] },
+  async run(ctx) {
+    await ctx.comment("Summary.");
+  },
 });
 ```
 
@@ -49,12 +52,19 @@ Use automatic review for work that should run on every relevant update. Use comm
 Command patterns must start with `@pipr`:
 
 ```ts twoslash
-// @include: pipr-security-task
-pipr.command({
-  pattern: "@pipr security",
-  permission: "write",
-  description: "Run the security review.",
-  task: securityTask,
+// @include: pipr-builder
+pipr.task({
+  name: "security",
+  on: {
+    command: {
+      pattern: "@pipr security",
+      permission: "write",
+      description: "Run the security review.",
+    },
+  },
+  async run(ctx) {
+    await ctx.comment("Security review.");
+  },
 });
 ```
 
@@ -65,7 +75,14 @@ Named captures parse one argument, while a final rest capture accepts free-form 
 @pipr ask <question...>
 ```
 
-Use `ctx.command.reply(...)` for a response tied to the source command. Use `ctx.comment(...)` when the task should publish normal review output.
+Tasks with input must declare `parse` to map captured arguments into the task input. Use `ctx.command.reply(...)` for a response tied to the source command. Use `ctx.comment(...)` when the task should publish normal review output.
+
+To add a second command to an existing task handle, use `pipr.command(...)`:
+
+```ts twoslash
+// @include: pipr-security-task
+pipr.command({ pattern: "@pipr sec", permission: "write", task: securityTask });
+```
 
 ## Command permissions
 
@@ -79,18 +96,19 @@ Commands default to `write`. Lower the requirement only when the command cannot 
 
 ## Local task selection
 
-`pipr review --base <ref>` runs each unique task registered through `pipr.on.changeRequest(...)`, without code-host publication. It ignores hosted action filters because local git state has no native event action.
+`pipr review --base <ref>` runs each unique task with a change request trigger, without code-host publication. It ignores the trigger's action list because local git state has no native event action.
 
 Set `local: false` on tasks that must run only in hosted delivery:
 
 ```ts twoslash
 // @include: pipr-security-agent
-const securityTask = pipr.task({
+pipr.task({
   name: "security",
+  on: { changeRequest: true },
   local: false,
   async run(ctx) {
-    const manifest = await ctx.change.diffManifest({ compressed: true });
-    const result = await ctx.pi.run(securityAgent, { manifest });
+    const diff = await ctx.change.diff({ compressed: true });
+    const result = await ctx.pi.run(securityAgent, { diff });
     await ctx.comment({
       main: result.summary.body,
       inlineFindings: result.inlineFindings,

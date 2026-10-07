@@ -15,11 +15,11 @@ const expected = new Map<string, string>();
 const recipeDescriptions = new Map([
   [
     "default-review",
-    "Start with one general change request review that runs separate findings and summary agents from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
+    "Start with one general change request review that runs a findings agent and an optional summary agent from change request events, `@pipr review`, and local `pipr review` while keeping inline comments bounded.",
   ],
   [
     "bug-hunter",
-    "Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with separate findings and summary agents tuned for actionable bug reports.",
+    "Focus Pipr on correctness defects, edge cases, race conditions, regressions, and missing tests with findings and summary agents tuned for actionable bug reports.",
   ],
   [
     "rich-review",
@@ -86,11 +86,11 @@ const recipeExpectedOutputs = new Map([
   ],
   [
     "rich-review",
-    "Pipr filters and deduplicates custom findings against the Diff Manifest, then uses the same collection for severity tables and validated Inline Review Comments.",
+    "Pipr validates, deduplicates, and severity-ranks custom findings against the Diff Manifest, then uses the same selection for the summary agent and validated Inline Review Comments.",
   ],
   [
     "fix-suggestions",
-    "Pipr runs from `@pipr improve`, applies deterministic range checks and a semantic verifier, then publishes only explicitly accepted exact suggestions.",
+    "Pipr runs from `@pipr improve`, keeps only findings with publishable exact suggestions, asks a semantic verifier, then publishes only explicitly accepted suggestions.",
   ],
   [
     "multi-agent-review",
@@ -159,7 +159,7 @@ const recipeNotes = new Map([
     "default-review",
     `## Recipe notes
 
-This is the baseline setup for repositories that want one trusted review path before adding specialist tasks. It uses \`pipr.review\`, so Pipr wires the change request and command entrypoints for you; local \`pipr review\` runs the same change-request task.
+This is the baseline setup for repositories that want one trusted review path before adding specialist tasks. It uses \`pipr.review\`, so Pipr registers the change request and \`@pipr review\` command triggers for you; local \`pipr review\` runs the same change-request task.
 
 - Keep \`publication.maxInlineComments\` low until the repository has enough review history to judge signal quality.
 - Put repository-specific review policy in \`instructions\`, not in ad hoc task code.
@@ -171,10 +171,10 @@ This is the baseline setup for repositories that want one trusted review path be
     "bug-hunter",
     `## Recipe notes
 
-Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by default. It also declares a fallback model profile so transient or invalid output failures can retry without changing the task.
+Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by default. It also declares a fallback model profile so transient provider failures can retry without changing the task.
 
 - Expand \`paths.exclude\` for generated files, snapshots, vendored code, or fixtures that produce noisy findings.
-- Keep the command entrypoint \`@pipr bugs\` for manual reruns on risky PRs that did not need a full review.
+- Keep the \`@pipr bugs\` command trigger for manual reruns on risky PRs that did not need a full review.
 - Tune the findings instructions around the bug classes your project sees: data loss, race conditions, migrations, API compatibility, or missed tests.
 `,
   ],
@@ -182,12 +182,12 @@ Bug Hunter narrows review to likely defects and excludes Markdown/docs paths by 
     "rich-review",
     `## Recipe notes
 
-Structured Review keeps Pipr's core finding contract small while asking one agent for severity and category metadata in a custom findings schema. The task selects up to eight findings by severity, gives them to a separate summary agent, and prefixes each Inline Review Comment body before publishing normal \`ReviewFinding[]\`.
+Structured Review declares severity, category, title, and rationale with \`pipr.finding(...)\`. \`pipr.review\` validates and ranks findings by those enum facets, keeps up to eight, gives them to a custom summary agent, and renders each Inline Review Comment through \`render\`.
 
 - Tune the severity definitions before using them as merge policy.
 - Add or remove categories to match the risks your maintainers already discuss in review.
-- Keep rationale in the collapsed main-comment details so inline comments stay short in the diff.
-- The generated task validates anchors and deduplicates by location plus body before rendering either comment surface.
+- Keep rationale in collapsed details so inline comments stay short in the diff.
+- Declaration order of enum values is the ranking order; put the most important value first.
 - On GitHub, native thread resolution requires a credential for which GitHub reports \`viewerCanResolve: true\`; see [GitHub Action](/docs/guide/github-action#permissions).
 `,
   ],
@@ -195,7 +195,7 @@ Structured Review keeps Pipr's core finding contract small while asking one agen
     "fix-suggestions",
     `## Recipe notes
 
-Fix Suggestions is command-first so maintainers can ask for exact patches only when they want them. It applies deterministic range and replacement checks, then asks a second read-only agent to verify semantic correctness before mapping accepted suggestions into normal Pipr Inline Review Comments.
+Fix Suggestions is command-first so maintainers can ask for exact patches only when they want them. \`ctx.review.select(..., { requireSuggestedFix: true })\` applies Pipr's built-in range and replacement checks, then a second read-only agent verifies semantic correctness before accepted suggestions become Inline Review Comments.
 
 - Keep \`@pipr improve\` manual until maintainers trust the patch quality.
 - Tune categories around your most common small fixes, such as tests, typing, or maintainability.
@@ -207,7 +207,7 @@ Fix Suggestions is command-first so maintainers can ask for exact patches only w
     "security-sast",
     `## Recipe notes
 
-Security SAST uses a custom JSON Schema output instead of the default review schema. The task turns high and critical risks into a failed check and publishes only findings that include validated diff ranges.
+Security SAST uses a custom output with \`pipr.finding(...)\` risks instead of the default review schema. \`ctx.check.gate(...)\` turns validated high and critical risks into a failed check, and only risks with validated diff ranges are published.
 
 - Keep severity rules concrete so the check fails only for risks with a plausible attack path.
 - Add project-specific categories when the repository has important trust boundaries, such as tenant isolation, billing, or auth scopes.
@@ -231,11 +231,11 @@ Quality Gate makes Pipr part of the merge decision by publishing a required chec
     "diff-diagnostics",
     `## Recipe notes
 
-Diff Diagnostics models reviewdog-style output: the agent emits diagnostics, then the task maps each diagnostic into a Pipr \`ReviewFinding\`. This is useful when you want a custom intermediate schema but still need normal inline review comments.
+Diff Diagnostics models reviewdog-style output: the agent emits diagnostics as \`pipr.finding(...)\` items, and \`ctx.review.select(...)\` validates them before they become inline review comments.
 
 - Keep the diagnostic schema small and deterministic so invalid-output repair stays cheap.
 - Use \`suggestedFix\` only when the replacement is exact for the selected range.
-- Add path filters to \`ctx.change.diffManifest(...)\` when diagnostics must apply to only one language or subsystem.
+- Add path filters to \`ctx.change.diff(...)\` when diagnostics must apply to only one language or subsystem.
 - Invalid and duplicate anchors are removed before the summary and inline output are built.
 `,
   ],
@@ -278,7 +278,7 @@ CI Triage is command-only. Maintainers paste the relevant log excerpt into \`@pi
     "multi-agent-review",
     `## Recipe notes
 
-Multi-agent Review runs specialist agents for security, tests, and maintainability, then asks an aggregator to dedupe and publish one review. This costs more model work than the default recipe but gives each specialist a narrower job.
+Multi-agent Review runs specialist agents for security, tests, and maintainability concurrently with \`ctx.pi.all(...)\`, then asks an aggregator to dedupe and publish one review. This costs more model work than the default recipe but gives each specialist a narrower job.
 
 - Use it for larger or riskier repositories where one broad prompt misses important review dimensions.
 - Keep specialist prompts independent, then put dedupe and prioritization rules in the aggregator.
@@ -451,7 +451,7 @@ Tune the generated config before enabling automatic review:
 | Narrower review scope | Add \`paths.include\` and \`paths.exclude\` to the recipe config. |
 | More actionable findings | Make instructions require impact, evidence, and a valid changed-code range. |
 | Less style feedback | Say which categories are out of scope instead of asking for a broad review. |
-| Manual-only review | Use a command recipe or remove change request entrypoints. |
+| Manual-only review | Use a command recipe or remove the task's \`on.changeRequest\` trigger. |
 `;
 }
 

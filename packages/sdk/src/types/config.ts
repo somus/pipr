@@ -25,12 +25,20 @@ export type SecretOptions = {
   name: string;
 };
 
-/** Options for registering a model. Omit apiKey only for local Pi authentication. */
+/** Model reference in `provider/model` form, for example `deepseek/deepseek-v4-pro`. */
+export type ModelRef = `${string}/${string}`;
+
+/**
+ * API key source for a model. Omit to read the provider's standard environment variable (for
+ * example `DEEPSEEK_API_KEY`), pass `pipr.secret(...)` to read another variable, or pass `"local"`
+ * to use local Pi login credentials.
+ */
+export type ModelApiKey = SecretRef | "local";
+
+/** Options for registering a model. */
 export type ModelOptions = {
   id?: string;
-  provider: string;
-  model: string;
-  apiKey?: SecretRef;
+  apiKey?: ModelApiKey;
   thinking?: ModelThinkingLevel;
 };
 
@@ -40,7 +48,7 @@ export type ModelProfile = {
   readonly id: string;
   readonly provider: string;
   readonly model: string;
-  readonly apiKey?: SecretRef;
+  readonly apiKey?: ModelApiKey;
   readonly thinking?: ModelThinkingLevel;
 };
 

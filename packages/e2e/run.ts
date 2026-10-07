@@ -5,7 +5,6 @@ import { actArguments, containerArchitecture } from "./action-run-plan.ts";
 import {
   actionFixtureScript,
   envValue,
-  fakePiScript,
   fixtureRootPath,
   prepareScenarioWorktree,
   run,
@@ -159,7 +158,6 @@ function fixtureWorkflow(item: Scenario): string {
     "          GIT_CONFIG_KEY_0: safe.directory",
     `          GIT_CONFIG_VALUE_0: ${githubWorkspace}`,
     `          PIPR_ACT_GITHUB_FIXTURE_PATH: ${githubWorkspace}/${fixtureRootPath}/${item.publicationFixture}`,
-    `          PIPR_ACT_PI_EXECUTABLE: ${githubWorkspace}/${fakePiScript}`,
     `          PIPR_ACT_ASSERTION: ${item.assertion}`,
     ...(item.invalidFirstOutput
       ? [
@@ -169,7 +167,7 @@ function fixtureWorkflow(item: Scenario): string {
       : []),
     ...(item.telemetryDir
       ? [
-          `          PIPR_ACT_PI_CALL_DIR: ${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`,
+          `          PIPR_ACT_MODEL_CALL_DIR: ${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`,
           `          PIPR_ACT_TELEMETRY_PATH: ${githubWorkspace}/${fixtureRootPath}/${item.telemetryDir}`,
         ]
       : []),

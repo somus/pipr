@@ -8,6 +8,7 @@ import {
   type NormalizedTaskCheckSettings,
   taskCheckSettings,
 } from "./check-settings.js";
+import { providerDefaultApiKeyEnvs } from "./provider-env.js";
 import { loadTypescriptConfig } from "./ts-loader.js";
 import type { ConfigVersionCompatibility } from "./version-compat.js";
 
@@ -67,11 +68,15 @@ export async function loadRuntimeProject(
   options: LoadRuntimeProjectOptions,
 ): Promise<LoadedRuntimeProject> {
   const loaded = await loadTypescriptConfig(options);
+  const defaultApiKeyEnvs = await providerDefaultApiKeyEnvs(
+    loaded.plan.models.filter((model) => model.apiKey === undefined).map((model) => model.provider),
+  );
   return {
     kind: "typescript",
     plan: loaded.plan,
     settings: planToRuntimeSettings(loaded.plan, {
       source: loaded.source,
+      defaultApiKeyEnvs,
       env: options.env,
       requireProviderEnv: options.requireProviderEnv,
       warnings: [loaded.versionCompatibility.warning].filter(
@@ -143,12 +148,15 @@ function planToRuntimeSettings(
   plan: RuntimePlan,
   options: {
     source: string;
+    defaultApiKeyEnvs: ReadonlyMap<string, string>;
     env?: NodeJS.ProcessEnv;
     requireProviderEnv?: boolean;
     warnings?: string[];
   },
 ): RuntimeSettings {
-  const providers = plan.models.map(modelToProvider);
+  const providers = plan.models.map((model) =>
+    modelToProvider(model, options.defaultApiKeyEnvs, options.source),
+  );
   const defaultProvider = providers[0];
   if (!defaultProvider) {
     throw new Error(`${options.source}: at least one pipr.model() is required`);
@@ -242,14 +250,38 @@ function normalizeUserReplyAutoResolveConfig(
   };
 }
 
-function modelToProvider(model: ModelProfile): ProviderConfig {
+function modelToProvider(
+  model: ModelProfile,
+  defaultApiKeyEnvs: ReadonlyMap<string, string>,
+  source: string,
+): ProviderConfig {
   return parseProviderConfig({
     id: model.id,
     provider: model.provider,
     model: model.model,
-    apiKeyEnv: model.apiKey?.name,
+    apiKeyEnv: modelApiKeyEnv(model, defaultApiKeyEnvs, source),
     thinking: model.thinking,
   });
+}
+
+function modelApiKeyEnv(
+  model: ModelProfile,
+  defaultApiKeyEnvs: ReadonlyMap<string, string>,
+  source: string,
+): string | undefined {
+  if (model.apiKey === "local") {
+    return undefined;
+  }
+  if (model.apiKey) {
+    return model.apiKey.name;
+  }
+  const apiKeyEnv = defaultApiKeyEnvs.get(model.provider);
+  if (!apiKeyEnv) {
+    throw new Error(
+      `${source}: model '${model.id}' uses provider '${model.provider}', which has no standard API key environment variable. Pass apiKey: pipr.secret({ name }) or apiKey: "local".`,
+    );
+  }
+  return apiKeyEnv;
 }
 
 function assertUniqueProviders(providers: ProviderConfig[], source: string): void {

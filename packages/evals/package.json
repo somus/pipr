@@ -15,11 +15,12 @@
     "eval:deterministic:run": "bun ./src/deterministic-smoke.ts",
     "build:deps": "bun run --cwd ../sdk build && bun run --cwd ../runtime build",
     "lint": "biome lint src",
-    "test": "bun test src/tests",
+    "test": "bun test --timeout 60000 src/tests",
     "typecheck": "tsc --noEmit",
     "format:check": "biome format src evalite.config.ts package.json tsconfig.json"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "1.0.4",
     "@usepipr/runtime": "workspace:*",
     "zod": "4.4.3"
   },

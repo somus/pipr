@@ -1,8 +1,9 @@
 import type { ModelProfile, PiprRunContext, Schema } from "@usepipr/sdk";
 import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import { z } from "zod";
+import { createDiffContext } from "../diff/diff-context.js";
 import type { RunObserver } from "../observability/types.js";
-import type { PiRunner } from "../pi/types.js";
+import type { PiProviderModule, PiRunner } from "../pi/types.js";
 import type {
   InlineThreadContext,
   PriorFindingRecord,
@@ -45,8 +46,9 @@ export type RunVerifierOptions = {
   verifierProvider: ProviderConfig;
   plan: Parameters<typeof runReviewAgent>[0]["runtime"]["plan"];
   env?: NodeJS.ProcessEnv;
-  piExecutable?: string;
-  piAgentDir?: string;
+  piProviderModule?: PiProviderModule;
+  piAuthFile?: string;
+  piStoreDir?: string;
   piRunner?: PiRunner;
   diffManifest: DiffManifest;
   priorReviewState?: PriorReviewState;
@@ -112,8 +114,9 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
         provider: options.provider,
         plan: options.plan,
         env: options.env,
-        piExecutable: options.piExecutable,
-        piAgentDir: options.piAgentDir,
+        piProviderModule: options.piProviderModule,
+        piAuthFile: options.piAuthFile,
+        piStoreDir: options.piStoreDir,
         piRunner: options.piRunner,
         run: options.run,
         log: options.log,
@@ -142,7 +145,7 @@ function verifierInput(
   candidates: Array<{ finding: PriorFindingRecord; thread: InlineThreadContext }>,
 ) {
   return {
-    manifest: options.diffManifest,
+    diff: createDiffContext(options.diffManifest),
     runId: options.run.id,
     mode: options.mode.kind,
     reviewedHeadSha: prior.reviewedHeadSha,
@@ -334,12 +337,11 @@ function internalVerifierAgent(
         .join("\n"),
       prompt: (value) => {
         const input = value as VerifierInput;
-        const { manifest: _manifest, ...verifierPromptInput } = input;
+        const { diff: _diff, ...verifierPromptInput } = input;
         return JSON.stringify(verifierPromptInput, null, 2);
       },
       tools: [],
       timeout: "2m",
-      retry: { invalidOutput: 1, transientFailure: 0 },
     },
   };
 }

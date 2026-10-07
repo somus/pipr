@@ -21,19 +21,19 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
   it("rejects multiple final comments across selected tasks", async () => {
     const plan = testPlan((pipr) => {
       const slow = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "slow",
         async run(ctx) {
           await ctx.comment({ inlineFindings: [finding("slow", "range-1", 10)] });
         },
       });
       const fast = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "fast",
         async run(ctx) {
           await ctx.comment({ inlineFindings: [finding("fast", "range-2", 20)] });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task: slow });
-      pipr.on.changeRequest({ actions: ["opened"], task: fast });
     });
 
     await expect(
@@ -48,6 +48,7 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
   it("caps inline findings from one final comment", async () => {
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           await ctx.comment({
@@ -55,7 +56,6 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
           });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
@@ -343,19 +343,19 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
   it("rejects mixed review comments and command replies across selected tasks", async () => {
     const plan = testPlan((pipr) => {
       const ask = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "ask",
         async run(ctx) {
           await ctx.command?.reply("Answer.");
         },
       });
       const review = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           await ctx.comment("Review summary.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task: ask });
-      pipr.on.changeRequest({ actions: ["opened"], task: review });
     });
 
     await expect(
@@ -369,19 +369,19 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
   it("rejects multiple command replies across selected tasks", async () => {
     const plan = testPlan((pipr) => {
       const ask = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "ask",
         async run(ctx) {
           await ctx.command?.reply("Ask answer.");
         },
       });
       const explain = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "explain",
         async run(ctx) {
           await ctx.command?.reply("Explain answer.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task: ask });
-      pipr.on.changeRequest({ actions: ["opened"], task: explain });
     });
 
     await expect(
@@ -397,6 +397,7 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
   it("records explicit ctx.check outcomes without failing the review", async () => {
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         check: { name: "pipr / review" },
         async run(ctx) {
@@ -404,7 +405,6 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
           await ctx.comment("Review completed.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({ plan });
@@ -491,13 +491,13 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
   it("rejects multiple ctx.comment calls from one task", async () => {
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           await ctx.comment("First.");
           await ctx.comment("Second.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     await expect(runRuntime({ plan })).rejects.toThrow(
@@ -507,8 +507,7 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
 
   it("rejects selected tasks that do not emit a final comment", async () => {
     const plan = testPlan((pipr) => {
-      const task = pipr.task({ name: "review", run() {} });
-      pipr.on.changeRequest({ actions: ["opened"], task });
+      pipr.task({ name: "review", on: { changeRequest: ["opened"] }, run() {} });
     });
 
     await expect(runRuntime({ plan })).rejects.toThrow(
@@ -529,13 +528,13 @@ describe("runTaskRuntime: outputs, checks, and commands", () => {
     ].join("\n");
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           observedPrior = await ctx.review.prior();
           await ctx.comment("New review summary.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({

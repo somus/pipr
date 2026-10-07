@@ -86,8 +86,8 @@ export async function runLocalReviewCommand(
       versionCompatibility: runtime.versionCompatibility,
       selectedTasks,
       emptyTasksReason: "No change-request tasks are configured for local review",
-      piExecutable: runOptions.piExecutable,
-      piAgentDir: resolveLocalPiAgentDir(runOptions),
+      piProviderModule: runOptions.piProviderModule,
+      piAuthFile: resolveLocalPiAuthFile(runOptions),
       piRunner: runOptions.piRunner,
       structuralHeadRef: includeWorkingTree ? undefined : headSha,
       diffManifestBuilder: includeWorkingTree
@@ -183,12 +183,13 @@ async function startLocalRecorder(
   }
 }
 
-function resolveLocalPiAgentDir(options: LocalReviewCommandOptions): string {
+function resolveLocalPiAuthFile(options: LocalReviewCommandOptions): string {
   const env = options.env ?? process.env;
-  const configured = options.piAgentDir ?? env.PI_CODING_AGENT_DIR;
-  return configured
-    ? path.resolve(options.rootDir, configured)
+  if (options.piAuthFile) return path.resolve(options.rootDir, options.piAuthFile);
+  const agentDir = env.PI_CODING_AGENT_DIR
+    ? path.resolve(options.rootDir, env.PI_CODING_AGENT_DIR)
     : path.join(env.HOME ?? os.homedir(), ".pi", "agent");
+  return path.join(agentDir, "auth.json");
 }
 
 function requestedCaptureMode(

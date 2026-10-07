@@ -76,7 +76,11 @@ export async function runReviewAgent(
         result = options.runtime.piRunner
           ? await runScheduled(options.runtime.piRunner)
           : await withPiRunWorkspace(
-              { workspace: options.runtime.workspace, env: options.runtime.env },
+              {
+                workspace: options.runtime.workspace,
+                env: options.runtime.env,
+                storeDir: options.runtime.piStoreDir,
+              },
               runScheduled,
             );
       }
@@ -128,7 +132,7 @@ function emitReviewWork(
 }
 
 async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunReviewAgentResult> {
-  const { prepared, prompt, providers, retry } = await assembleReviewAgentRun(options);
+  const { prepared, prompt, providers } = await assembleReviewAgentRun(options);
   const runProviders = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
     const scopedOptions = {
       ...options,
@@ -146,7 +150,6 @@ async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunRe
         scopedOptions,
         provider,
         prompt,
-        retry,
         providerIndex === 0 ? "initial" : "fallback",
       );
       repairAttempted ||= attempt.repairAttempted;
@@ -167,7 +170,11 @@ async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunRe
     return await runProviders(options.runtime.piRunner);
   }
   return await withPiRunWorkspace(
-    { workspace: options.runtime.workspace, env: options.runtime.env },
+    {
+      workspace: options.runtime.workspace,
+      env: options.runtime.env,
+      storeDir: options.runtime.piStoreDir,
+    },
     runProviders,
   );
 }

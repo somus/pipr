@@ -22,7 +22,7 @@ import {
   runIssueCommentCommand,
   runTestHostCommand,
   writeIssueCommentEvent,
-  writePiExecutable,
+  writePiOutput,
 } from "./commands-fixtures.js";
 
 describe("runHostRunCommand issue_comment dispatch", () => {
@@ -38,7 +38,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         dryRun: false,
         env: issueCommentEnv(workspace.rootDir, eventPath),
         hostAdapter: githubAdapterWithCapabilities(workspace, { commandComments: false }),
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
       });
 
       expect(result).toEqual({ kind: "ignored", reason: "host adapter does not support commands" });
@@ -125,7 +125,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
           dryRun: true,
           env: issueCommentEnv(workspace.rootDir, eventPath),
           githubClient: failingGitHubClient(),
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
         }),
       ).resolves.toMatchObject({
         kind: "ignored",
@@ -152,7 +152,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
           env: issueCommentEnv(workspace.rootDir, eventPath),
           githubClient: failingGitHubClient(),
           githubPublicationClient: failingGitHubPublishingClient(),
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
         }),
       ).resolves.toMatchObject({
         kind: "ignored",
@@ -251,10 +251,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
       checkoutBaseBeforeRun: true,
     });
     const publication = recordingCommandPublicationClient(workspace);
-    await writePiExecutable(
-      workspace.piExecutable,
-      '{"body":"The change updates command output."}',
-    );
+    await writePiOutput(workspace, '{"body":"The change updates command output."}');
 
     try {
       const result = await runIssueCommentCommand(
@@ -366,7 +363,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
         authorLogin: "github-actions[bot]",
       },
     ]);
-    await writePiExecutable(workspace.piExecutable, '{"body":"Updated answer."}');
+    await writePiOutput(workspace, '{"body":"Updated answer."}');
 
     try {
       const result = await runIssueCommentCommand(
@@ -419,7 +416,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
       checkoutBaseBeforeRun: true,
     });
     const publication = recordingCommandPublicationClient(workspace);
-    await writePiExecutable(workspace.piExecutable, "not valid json");
+    await writePiOutput(workspace, "not valid json");
     try {
       await expect(
         runIssueCommentCommand(
@@ -443,7 +440,7 @@ describe("runHostRunCommand issue_comment dispatch", () => {
       checkoutBaseBeforeRun: true,
     });
     const publication = recordingCommandPublicationClient(workspace);
-    await writePiExecutable(workspace.piExecutable, '{"body":"Head-specific answer."}');
+    await writePiOutput(workspace, '{"body":"Head-specific answer."}');
     const update = publication.client.updateIssueComment;
     publication.client.updateIssueComment = async (options) => {
       const result = await update(options);

@@ -37,11 +37,7 @@ Reference provider credentials by environment-variable name:
 
 ```ts twoslash
 // @include: pipr-builder
-const model = pipr.model({
-  provider: "deepseek",
-  model: "deepseek-v4-pro",
-  apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-});
+const model = pipr.model("deepseek/deepseek-v4-pro");
 ```
 
 Pass the value from the CI or worker secret store. Do not place credentials or private operational notes in config values, prompts, schema metadata, examples, or generated documentation.

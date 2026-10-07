@@ -6,26 +6,20 @@ export const multiAgentReviewRecipe = {
   title: "Multi-agent Review",
   description: "Security, test, and maintainability agents with an aggregator agent.",
   sourceTools: ["PR-Agent", "CodeRabbit", "GitHub Copilot code review"],
-  configTs: `import { definePipr } from "@usepipr/sdk";
+  configTs: `import { defaultReviewActions, definePipr, md } from "@usepipr/sdk";
+import type { DiffContext, PriorReview } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const primary = pipr.model({
+  const primary = pipr.model("deepseek/deepseek-v4-pro", {
     id: "deepseek/deepseek-v4-pro-primary",
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
     thinking: "high",
   });
-
-  const fast = pipr.model({
+  const fast = pipr.model("deepseek/deepseek-v4-pro", {
     id: "deepseek/deepseek-v4-pro-fast",
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
     thinking: "medium",
   });
 
-  const specialistPrompt = (input: { manifest: unknown; focus: string }) => pipr.prompt\`
+  const specialistPrompt = (input: { diff: DiffContext; focus: string }) => pipr.prompt\`
     \${pipr.section("Focus", input.focus)}
   \`;
 
@@ -72,40 +66,45 @@ export default definePipr((pipr) => {
     \`,
     output: pipr.schemas.review,
     tools: pipr.tools.readOnly,
-    prompt: (input: { manifest: unknown; specialistResults: unknown; prior: unknown }) => pipr.prompt\`
+    prompt: (input: { diff: DiffContext; specialistResults: unknown; prior: PriorReview }) => pipr.prompt\`
       \${pipr.section("Prior pipr review", pipr.json(input.prior, { maxCharacters: 20000 }))}
       \${pipr.section("Specialist results", pipr.json(input.specialistResults, { maxCharacters: 60000 }))}
     \`,
-    retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "6m",
   });
 
-  const task = pipr.task({
+  pipr.task({
     name: "multi-agent-review",
+    on: {
+      changeRequest: defaultReviewActions,
+      command: { pattern: "@pipr multi", permission: "write" },
+    },
     check: { enabled: true, name: "multi-agent review", required: true },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
+      const diff = await ctx.change.diff({ compressed: true });
       const prior = await ctx.review.prior();
-      const [securityResult, testResult, maintainabilityResult] = await Promise.all([
-        ctx.pi.run(strictSecurity, { manifest, focus: "security" }, { model: primary, fallbacks: [fast] }),
-        ctx.pi.run(tests, { manifest, focus: "tests" }, { model: fast, fallbacks: [primary] }),
-        ctx.pi.run(maintainability, { manifest, focus: "maintainability" }),
+      const [securityResult, testResult, maintainabilityResult] = await ctx.pi.all([
+        {
+          agent: strictSecurity,
+          input: { diff, focus: "security" },
+          options: { model: primary, fallbacks: [fast] },
+        },
+        { agent: tests, input: { diff, focus: "tests" }, options: { model: fast, fallbacks: [primary] } },
+        { agent: maintainability, input: { diff, focus: "maintainability" } },
       ]);
       const result = await ctx.pi.run(aggregator, {
-        manifest,
+        diff,
         specialistResults: { securityResult, testResult, maintainabilityResult },
         prior,
       });
+      const { findings } = ctx.review.select(result.inlineFindings);
       ctx.check.pass("Multi-agent review completed.");
       await ctx.comment({
-        main: ["## 🧭 Summary", "", result.summary.body].join("\\n"),
-        inlineFindings: result.inlineFindings,
+        main: md.blocks(md\`## 🧭 Summary\`, md.raw(result.summary.body)),
+        inlineFindings: findings,
       });
     },
   });
-
-  pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
-  pipr.command({ pattern: "@pipr multi", permission: "write", task });
 });
 `,
 } as const satisfies OfficialInitRecipe;

@@ -1,6 +1,6 @@
 ---
 title: "Pipr SDK reference"
-description: "Public SDK imports, builder methods, task context, schemas, tools, and entrypoints."
+description: "Public SDK imports, builder methods, task context, schemas, tools, and triggers."
 ---
 
 The Pipr SDK is the public TypeScript authoring API for `.pipr/config.ts`.
@@ -21,11 +21,12 @@ The SDK maps directly to Pipr's runtime primitives. Use this table to choose the
 
 | Primitive | SDK surface |
 | --- | --- |
-| Entrypoint | `pipr.review(...)`, `pipr.on.changeRequest(...)`, `pipr.command(...)`, `defaultReviewEntrypoints` |
+| Trigger | `pipr.task({ on })`, `pipr.review({ on })`, `defaultReviewTriggers`, `pipr.command(...)` |
 | Review Task | `pipr.task(...)`, `TaskContext` |
-| Diff Manifest | `ctx.change.diffManifest(...)`, `DiffManifest`, `ReviewFinding.rangeId` |
-| Agent | `pipr.agent(...)`, `ctx.pi.run(...)` |
-| Review Output | `ctx.comment(...)`, `ctx.command?.reply(...)`, `CommentValue` |
+| Diff Manifest | `ctx.change.diff(...)`, `DiffContext`, `DiffManifest`, `ReviewFinding.rangeId` |
+| Agent | `pipr.agent(...)`, `ctx.pi.run(...)`, `ctx.pi.all(...)` |
+| Findings | `pipr.finding(...)`, `ctx.review.select(...)`, `ctx.check.gate(...)` |
+| Review Output | `md`, `ctx.comment(...)`, `ctx.command?.reply(...)`, `CommentValue` |
 | Publication | `pipr.config({ publication })`, Pipr runtime validation and code host adapters |
 
 For the narrative model, see [How Pipr works](/docs/concepts).
@@ -49,12 +50,7 @@ The callback must be synchronous. Runtime work belongs in `pipr.task(...)`, not 
 Model ids default to `<provider>/<model>`:
 
 ```ts
-const model = pipr.model({
-  provider: "deepseek",
-  model: "deepseek-v4-pro",
-  apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  thinking: "high",
-});
+const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 ```
 
 <auto-type-table path="packages/sdk/src/index.ts" name="ModelOptions" />
@@ -63,96 +59,94 @@ Pipr passes provider and model IDs to Pi. [Browse Pi's Model Catalog](https://pi
 
 Omit `apiKey` only for a model that a local Review Task selects through local Pi authentication. Hosted runs don't receive your Pi agent directory, so hosted model selections must declare `apiKey`.
 
-## Review recipe
+## Review preset
 
-`pipr.review(...)` is the quick structured review wrapper. It creates separate findings and summary agents, then wires their Review Task into change request and command entrypoints.
+`pipr.review(...)` is a preset over the same helpers custom tasks use. It runs one findings agent over `ctx.change.diff()`, selects findings with `ctx.review.select(...)`, optionally runs a summary agent, optionally applies `ctx.check.gate(...)`, and publishes with `ctx.comment(...)`.
 
 ```ts
-import { defaultReviewEntrypoints } from "@usepipr/sdk";
-
 pipr.config({ publication: { maxInlineComments: 5 } });
 
 pipr.review({
   id: "review",
   model,
-  instructions: {
-    findings: "Review the change for actionable correctness and security defects.",
-    summary: "Summarize changed behavior, risk, and reviewer focus.",
-  },
+  instructions: "Review the change for actionable correctness and security defects.",
+  summary: { instructions: "Summarize changed behavior, risk, and reviewer focus." },
   tools: pipr.tools.readOnly,
   timeout: "10m",
   paths: {
     include: ["packages/runtime/**"],
     exclude: ["**/*.test.ts"],
   },
-  entrypoints: {
-    ...defaultReviewEntrypoints,
-    command: {
-      ...defaultReviewEntrypoints.command,
-      description: "Run the default pipr review.",
-    },
-  },
 });
 ```
 
-`entrypoints.changeRequest` accepts these actions:
+Omit `summary` to run only the findings agent. Pass `summary: { agent }` to use your own summary agent; it receives `ReviewSummaryInput` with a bounded `diff` summary, the change request, and the selected `findings`.
+
+### Triggers
+
+`on` defaults to `defaultReviewTriggers`: change request `opened`, `updated`, `reopened`, and `ready`, plus `@pipr review` with write permission.
 
 ```ts twoslash
-import { defaultReviewActions, defaultReviewEntrypoints } from "@usepipr/sdk";
+import { defaultReviewActions, defaultReviewTriggers } from "@usepipr/sdk";
 import type { ChangeRequestAction } from "@usepipr/sdk";
 
 const actions: readonly ChangeRequestAction[] = defaultReviewActions;
 actions;
 // ^?
 
-defaultReviewEntrypoints;
+defaultReviewTriggers;
 // ^?
 ```
 
-`entrypoints.command.permission` is provider-neutral:
+Command `permission` is provider-neutral:
 
 ```text
 read < triage < write < maintain < admin
 ```
 
-Adapters map native roles into this order.
-
-To disable one entrypoint:
+Adapters map native roles into this order. To run the review only from a command:
 
 ```ts
 pipr.review({
   id: "review",
   model,
-  instructions: {
-    findings: "Review for actionable defects.",
-    summary: "Summarize changed behavior and risk.",
-  },
-  entrypoints: {
-    command: false,
-  },
+  instructions: "Review for actionable defects.",
+  on: { command: { pattern: "@pipr review", permission: "write" } },
 });
 ```
 
-`paths` scopes the Diff Manifest and publishable Inline Review Comments for that review recipe. It is not a filesystem sandbox: Pi read-only tools can still inspect the repository, and Pipr prompts the agent to read nonmatching files only when needed to review matching files.
+### Custom findings
 
-<auto-type-table path="packages/sdk/src/index.ts" name="ReviewRecipeOptions" />
-
-## Review prompts
-
-The wrapper exposes separate stable instructions for findings and summary. Its built-in prompts are fixed so the runtime can supply the scoped Diff Manifest and merged findings consistently:
+Declare extra finding fields with `pipr.finding(...)`. Enum fields become facets: they rank findings in declaration order (first value is highest) and label outcome analytics. Pipr does not hardcode severity or category; declare only what your review needs.
 
 ```ts
+const finding = pipr.finding({
+  title: z.string().max(160),
+  severity: z.enum(["critical", "high", "medium", "low"]),
+  category: z.enum(["correctness", "security", "test-coverage"]),
+});
+
 pipr.review({
   id: "review",
   model,
-  instructions: {
-    findings: "Prioritize broken public API contracts.",
-    summary: "Explain the changed contract, risk, and reviewer focus.",
-  },
+  finding,
+  instructions: "Assign severity by merge impact.",
+  gate: { failOn: { severity: ["critical", "high"] } },
+  render: ({ findings }) => ({
+    main: md`## Review\n\n${findings.length} findings.`,
+    inlineFindings: findings.map((item) => ({
+      ...item,
+      body: String(md`**${md.label(item.severity)}:** ${item.title}\n\n${item.body}`),
+    })),
+  }),
 });
 ```
 
-Use `pipr.agent(...)` and `pipr.task(...)` when you need a custom per-run `prompt`. Do not repeat the change number, title, description, JSON output contract, or generic `suggestedFix` rules in instructions. Core supplies those sections once.
+`paths` scopes the Diff Manifest and publishable Inline Review Comments for that review. It is not a filesystem sandbox: Pi read-only tools can still inspect the repository, and Pipr prompts the agent to read nonmatching files only when needed to review matching files.
+
+<auto-type-table path="packages/sdk/src/index.ts" name="ReviewOptions" />
+
+The built-in findings and summary prompts are fixed so the runtime can supply the scoped Diff Manifest and selected findings consistently. Use `pipr.agent(...)` and `pipr.task(...)` when you need a custom per-run `prompt`. Do not repeat the change number, title, description, JSON output contract, or generic `suggestedFix` rules in instructions. Core supplies those sections once.
 
 ## Agents
 
@@ -169,13 +163,11 @@ const security = pipr.agent({
   prompt: () => pipr.prompt`
     Review this change request for exploitable security issues.
   `,
-  retry: {
-    invalidOutput: 1,
-    transientFailure: 1,
-  },
   timeout: "10m",
 });
 ```
+
+Pipr always validates structured output and allows one repair attempt for invalid output; the repair is a follow-up turn in the same conversation. Transient provider failures retry inside the agent harness with backoff, so agents have no retry setting.
 
 `agent.extend(...)` creates a derived agent and appends additional instructions to the base instructions:
 
@@ -189,7 +181,7 @@ const strictSecurity = security.extend({
 
 ## Multi-agent orchestration
 
-Use one task when multiple agents should produce one published review. Pass `{ manifest }` to agents that need changed-code context, then validate specialist findings before an aggregator consumes them.
+Use one task when multiple agents should produce one published review. Pass the `ctx.change.diff()` value to agents that need changed-code context; Pipr detects it in the input and supplies the Diff Manifest prompt and helper tools. Run independent agents with `ctx.pi.all(...)`, which checks the agent-run budget for every request before starting any of them.
 
 ```ts
 const base = pipr.agent({
@@ -197,7 +189,7 @@ const base = pipr.agent({
   model,
   instructions: "Return only actionable findings with valid ranges.",
   output: pipr.schemas.review,
-  prompt: (input: { manifest: unknown; focus: string }) => pipr.prompt`
+  prompt: (input: { diff: DiffContext; focus: string }) => pipr.prompt`
     ${pipr.section("Focus", input.focus)}
   `,
 });
@@ -217,59 +209,85 @@ const aggregator = pipr.agent({
   instructions: "Summarize the validated specialist findings without inventing defects.",
   output: pipr.schemas.summary,
   tools: pipr.tools.readOnly,
-  prompt: (input: { validFindings: unknown; prior: unknown }) => pipr.prompt`
+  prompt: (input: { findings: unknown; prior: PriorReview }) => pipr.prompt`
     ${pipr.section("Prior review", pipr.json(input.prior, { maxCharacters: 20000 }))}
-    ${pipr.section("Validated specialist findings", pipr.json(input.validFindings))}
+    ${pipr.section("Validated specialist findings", pipr.json(input.findings))}
   `,
 });
 
-const task = pipr.task({
+pipr.task({
   name: "multi-agent-review",
+  on: { changeRequest: true },
   async run(ctx) {
-    const manifest = await ctx.change.diffManifest({ compressed: true });
+    const diff = await ctx.change.diff({ compressed: true });
     const prior = await ctx.review.prior();
-    const [securityResult, testResult] = await Promise.all([
-      ctx.pi.run(security, { manifest, focus: "security" }),
-      ctx.pi.run(tests, { manifest, focus: "tests" }),
+    const [securityResult, testResult] = await ctx.pi.all([
+      { agent: security, input: { diff, focus: "security" } },
+      { agent: tests, input: { diff, focus: "tests" } },
     ]);
-    const candidates = [...securityResult.inlineFindings, ...testResult.inlineFindings];
-    const { validFindings } = ctx.review.validateFindings(candidates);
-    const summary = await ctx.pi.run(aggregator, { validFindings, prior });
-    await ctx.comment({ main: summary.body, inlineFindings: validFindings });
+    const { findings } = ctx.review.select([
+      securityResult.inlineFindings,
+      testResult.inlineFindings,
+    ]);
+    const summary = await ctx.pi.run(aggregator, { findings, prior });
+    await ctx.comment({ main: summary.body, inlineFindings: findings });
   },
 });
 ```
 
 ## Tasks
 
-Tasks are the executable review units. They receive a `TaskContext` and optional parsed input.
+Tasks are the executable review units. They receive a `TaskContext` and optional parsed input. `on` declares the events that start the task:
 
 ```ts
-const task = pipr.task({
+pipr.task({
   name: "security-review",
+  on: {
+    changeRequest: ["opened", "updated"],
+    command: { pattern: "@pipr security", permission: "write" },
+  },
   check: { name: "security" },
   async run(ctx) {
     const paths = { include: ["packages/runtime/**"] };
-    const manifest = await ctx.change.diffManifest({ compressed: true, paths });
-    const result = await ctx.pi.run(security, { manifest }, { paths });
+    const diff = await ctx.change.diff({ compressed: true, paths });
+    const result = await ctx.pi.run(security, { diff }, { paths });
+    const { findings } = ctx.review.select(result.inlineFindings);
 
-    await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
+    await ctx.comment({ main: result.summary.body, inlineFindings: findings });
   },
 });
-
-pipr.on.changeRequest({ actions: ["opened", "updated"], task });
-pipr.command({ pattern: "@pipr security", permission: "write", task });
 ```
 
-Local review uses tasks registered through `pipr.on.changeRequest(...)`. Set `local: false` on a task when it should be skipped by `pipr review` but still run in CI:
+`on.changeRequest: true` uses `defaultReviewActions`. Change request triggers are only available for tasks without input. Command tasks with input declare `parse`:
 
 ```ts
-const ciOnlyTask = pipr.task({
+pipr.task<{ question: string }>({
+  name: "ask",
+  on: {
+    command: {
+      pattern: "@pipr ask <question...>",
+      permission: "read",
+      parse: (args) => ({ question: args.question ?? "" }),
+    },
+  },
+  async run(ctx, input) {
+    await ctx.command?.reply(md`You asked: ${input.question}`);
+  },
+});
+```
+
+Use `pipr.command({ pattern, task })` only to add another command to a task handle you already registered.
+
+Local review runs tasks with a change request trigger. Set `local: false` on a task when it should be skipped by `pipr review` but still run in CI:
+
+```ts
+pipr.task({
   name: "ci-only",
+  on: { changeRequest: true },
   local: false,
   async run(ctx) {
-    const manifest = await ctx.change.diffManifest({ compressed: true });
-    const result = await ctx.pi.run(security, { manifest });
+    const diff = await ctx.change.diff({ compressed: true });
+    const result = await ctx.pi.run(security, { diff });
     await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
   },
 });
@@ -290,23 +308,34 @@ Task handlers use this context to read change data, run Pi, publish results, and
 | `ctx.platform.id` | Active code host adapter id. Don't use it to infer the Review Run trigger. |
 | `ctx.repository` | Provider-neutral repository metadata. |
 | `ctx.change` | Provider-neutral change request metadata plus diff helpers. |
+| `ctx.change.diff(options?)` | Build the branded Diff Manifest context passed to agents. |
 | `ctx.pi.run(agent, input, options?)` | Execute a Pi-backed agent and validate structured output. |
+| `ctx.pi.all(requests)` | Run independent agent requests concurrently after one budget check. |
 | `ctx.command` | Present only for command-triggered tasks. Includes `name`, `line`, parsed `arguments`, and `reply(markdown)`. |
 | `ctx.review.prior()` | Read prior review state: `main?`, `reviewedHeadSha?`, and `inlineFindings[]` with `id`, `status`, `path`, `rangeId`, `side`, `startLine`, and `endLine`. |
-| `ctx.review.validateFindings(findings, options?)` | Validate and deduplicate findings before task code uses them. Extra finding metadata is preserved. |
+| `ctx.review.select(findings, options?)` | Validate, deduplicate, rank, and cap findings. Returns kept `findings` and `dropped` findings with reasons. |
+| `ctx.review.validateFindings(findings, options?)` | Validate and deduplicate findings without ranking or capping. Extra finding metadata is preserved. |
+| `ctx.check.gate(findings, options)` | Derive the task check from blocking findings. |
 | `ctx.check.pass/fail/neutral(summary?)` | Set one explicit task check result. Check failure does not fail the Action process by itself. |
 | `ctx.comment(value)` | Emit the selected run's final Main Review Comment markdown and Inline Review Comments. |
 | `ctx.log` | Write runtime logs. |
 
-`ctx.change.diffManifest(...)` returns commentable file ranges. Findings must reference those ranges by `rangeId`.
+`ctx.change.diff(...)` returns a `DiffContext`. Its `manifest` holds commentable file ranges, and findings must reference those ranges by `rangeId`. `summary()` returns a bounded file-level projection for summary agents. Pipr only treats the branded value as changed-code context; an agent input may contain at most one.
 
 When structural analysis is available, manifest files and ranges can include best-effort `changedSymbols` and declaration summaries. Review logic must not require those optional fields.
 
 `ctx.command.reply(...)` emits a normal change-request comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
 
-When a custom task uses path scoping, pass the same `paths` to `ctx.change.diffManifest(...)` and `ctx.pi.run(...)`. Pipr infers that scope when `ctx.review.validateFindings(...)` receives the exact finding array returned by `ctx.pi.run(...)`. Pass `{ paths }` to the validation operation after mapping, sorting, or combining arrays.
+When a custom task uses path scoping, pass the same `paths` to `ctx.change.diff(...)` and `ctx.pi.run(...)`. Pipr infers that scope when `ctx.review.select(...)` receives the exact finding arrays returned by `ctx.pi.run(...)`. Pass `{ paths }` after mapping, sorting, or combining arrays.
 
-Call `ctx.review.validateFindings(...)` before findings affect a required check, table, or second-stage agent. Tasks that only forward core review output can rely on final validation in `ctx.comment(...)`; final publication validation still runs after an earlier validation call.
+`ctx.review.select(...)` ranks findings first, so when two findings share a fingerprint the higher-ranked one is kept. It then caps at `limit`, which defaults to `publication.maxInlineComments`, and reports capped findings with reason `cap`. Pass `limit: list.length` before `ctx.check.gate(...)` so the cap cannot hide blockers. Pass `requireSuggestedFix: true` to keep only findings whose `suggestedFix` Pipr can publish as an exact suggestion.
+
+Call `ctx.review.select(...)` before findings affect a required check, table, or second-stage agent. Final publication validation still runs in `ctx.comment(...)`.
+
+```ts
+const { findings: risks } = ctx.review.select(result.risks, { finding: risk, limit: result.risks.length });
+const gate = ctx.check.gate(risks, { failOn: { severity: ["critical", "high"] } });
+```
 
 <auto-type-table path="packages/sdk/src/index.ts" name="TaskContext" />
 
@@ -394,11 +423,25 @@ Set `respondWhenStillValid: false` to keep user-reply verifier runs silent unles
 
 Each selected run must emit exactly one final output. Use `ctx.comment(value)` for review publication, or `ctx.command.reply(value)` for command response publication. Missing or duplicate final outputs fail the run.
 
-Use `ctx.comment(...)` for Main Review Comment markdown:
+Use `ctx.comment(...)` for Main Review Comment markdown. Build Markdown with `md`: interpolated values are escaped so model-authored text cannot inject raw HTML or hidden Pipr markers, while values produced by `md` are inserted as-is.
 
 ```ts
-await ctx.comment("## Security review\n\nNo exploitable findings.");
+await ctx.comment(md.blocks(md`## Security review`, md`${result.summary}`, md.list(result.notes)));
 ```
+
+| Helper | Output |
+| --- | --- |
+| ``md`...` `` | Dedented Markdown with escaped interpolations. |
+| `md.raw(value)` | Trusted Markdown, inserted without escaping. |
+| `md.line(value)` | One escaped line. |
+| `md.label(value)` | `test-coverage` as `Test coverage`. |
+| `md.list(items, { ordered? })` | Bullet or numbered list; empty input renders nothing. |
+| `md.table(rows, columns)` | Table with escaped single-line cells. |
+| `md.details(summary, body)` | Collapsed `<details>` block; empty body renders nothing. |
+| `md.callout({ icon, title, body })` | One-line blockquote callout. |
+| `md.blocks(...blocks)` | Blocks joined by blank lines, skipping empty blocks. |
+
+Inline finding `body` values are strings; wrap `md` output with `String(...)`.
 
 Use object form to publish a Main Review Comment, Inline Review Comments, or both:
 
@@ -424,8 +467,8 @@ await ctx.comment({ inlineFindings });
 
 Structured output must contain `main`, `inlineFindings`, or both. `{ inlineFindings: [] }` is valid; `{}` is rejected.
 
-Pipr validates findings against the Diff Manifest, drops invalid findings, dedupes finding markers, and caps inline publication. Use `ctx.review.validateFindings(...)` earlier when task code consumes findings before this final boundary.
-Subjective labels such as severity, confidence, or category are not part of the built-in finding contract. Define them in a custom schema or render them into your own `ctx.comment(...)` markdown when your workflow needs them.
+Pipr validates findings against the Diff Manifest, drops invalid findings, dedupes finding markers, and caps inline publication. Use `ctx.review.select(...)` earlier when task code consumes findings before this final boundary.
+Subjective labels such as severity, confidence, or category are not part of the built-in finding contract. Declare them with `pipr.finding(...)` and render them into your own `ctx.comment(...)` markdown when your workflow needs them.
 
 ## Tools
 
@@ -653,19 +696,18 @@ const reviewer = pipr.agent({
   prompt: () => "Review this change request.",
 });
 
-const ownerReview = pipr.task({
+pipr.task({
   name: "owner-aware-review",
+  on: { changeRequest: ["opened", "updated"] },
   async run(ctx) {
-    const manifest = await ctx.change.diffManifest({ compressed: true });
-    const review = await ctx.pi.run(reviewer, { manifest });
+    const diff = await ctx.change.diff({ compressed: true });
+    const review = await ctx.pi.run(reviewer, { diff });
     await ctx.comment({
       main: review.summary.body,
       inlineFindings: review.inlineFindings,
     });
   },
 });
-
-pipr.on.changeRequest({ actions: ["opened", "updated"], task: ownerReview });
 ```
 
 Plugin setup runs during config loading. Runtime effects still belong in tasks and tools. Task, agent, and tool values are opaque handles; expose a separate plugin operation when task code needs callable behavior.

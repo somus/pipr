@@ -5,66 +5,38 @@ export const fixSuggestionsRecipe = {
   title: "Fix Suggestions",
   description: "Command-first exact suggested fixes for actionable review improvements.",
   sourceTools: ["Qodo Merge /improve", "GitHub Copilot code review", "Cursor Bugbot"],
-  configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { CommentableRange, DiffManifest, ReviewFinding } from "@usepipr/sdk";
+  configTs: `import { definePipr, md, z } from "@usepipr/sdk";
+import type { DiffContext } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   pipr.config({ publication: { maxInlineComments: 6 } });
 
-  const fixSuggestionSchema = z.strictObject({
+  const fixSuggestion = pipr.finding({
     title: z.string(),
-    category: z.enum(["correctness", "tests", "maintainability", "typing", "documentation"]),
-    body: z.string(),
-    path: z.string(),
-    rangeId: z.string(),
-    side: z.enum(["RIGHT", "LEFT"]),
-    startLine: z.number().int().positive(),
-    endLine: z.number().int().positive(),
-    suggestedFix: z.string().min(1),
+    category: z.enum(["correctness", "tests", "typing", "maintainability", "documentation"]),
   });
 
-  type FixSuggestion = z.infer<typeof fixSuggestionSchema>;
-
-  const fixSuggestionOutput = pipr.schema({
-    id: "review/fix-suggestions",
-    schema: z.strictObject({
-      suggestions: z.array(fixSuggestionSchema),
-    }),
-  });
-
-  const fixVerificationOutput = pipr.schema({
-    id: "review/fix-suggestion-verification",
-    schema: z.strictObject({
-      verdicts: z.array(z.strictObject({
-        index: z.number().int().nonnegative(),
-        accepted: z.boolean(),
-        reason: z.string(),
-      })),
-    }),
-  });
+  type FixSuggestion = z.infer<typeof fixSuggestion>;
 
   const fixer = pipr.agent({
     name: "fix-suggestions",
     model,
     instructions: \`
       Find directly applicable fixes for this change request. Return an item only
-      when an exact patch can resolve the reported defect; otherwise omit the
-      entire item. Prioritize correctness, missing tests, type safety, and small
-      maintainability improvements. Do not report broad refactors, style
-      preferences, or issues without an exact patch.
+      when an exact suggestedFix patch can resolve the reported defect; otherwise
+      omit the entire item. Prioritize correctness, missing tests, type safety,
+      and small maintainability improvements. Do not report broad refactors,
+      style preferences, or issues without an exact patch.
     \`,
-    output: fixSuggestionOutput,
+    output: pipr.schema({
+      id: "review/fix-suggestions",
+      schema: z.strictObject({ suggestions: z.array(fixSuggestion) }),
+    }),
     tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "7m",
-    prompt: () => "Find exact suggested changes for this change request.",
+    prompt: (_input: { diff: DiffContext }) => "Find exact suggested changes for this change request.",
   });
 
   const verifier = pipr.agent({
@@ -78,494 +50,94 @@ export default definePipr((pipr) => {
       dependency is invented. Reject speculative, style-only, or broad changes.
       Return one verdict for every supplied candidate index and never invent indexes.
     \`,
-    output: fixVerificationOutput,
+    output: pipr.schema({
+      id: "review/fix-suggestion-verification",
+      schema: z.strictObject({
+        verdicts: z.array(
+          z.strictObject({
+            index: z.number().int().nonnegative(),
+            accepted: z.boolean(),
+            reason: z.string(),
+          }),
+        ),
+      }),
+    }),
     tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "7m",
-    prompt: (input: { manifest: unknown; candidates: FixSuggestion[] }) => pipr.prompt\`
-      \${pipr.section(
-        "Candidate suggestions",
-        pipr.json(input.candidates, { maxCharacters: 60000 }),
-      )}
+    prompt: (input: { diff: DiffContext; candidates: readonly FixSuggestion[] }) => pipr.prompt\`
+      \${pipr.section("Candidate suggestions", pipr.json(input.candidates, { maxCharacters: 60000 }))}
     \`,
   });
 
-  const task = pipr.task({
+  pipr.task({
     name: "fix-suggestions",
+    on: {
+      command: {
+        pattern: "@pipr improve",
+        permission: "write",
+        description: "Find exact suggested fixes for this change request.",
+      },
+    },
     async run(ctx) {
       if (!ctx.command) {
         throw new Error("fix-suggestions is a command-only task");
       }
-      const manifest = await ctx.change.diffManifest({ compressed: true });
-      const result = await ctx.pi.run(fixer, { manifest });
-      const { validFindings } = ctx.review.validateFindings(result.suggestions);
-      const deterministicCandidates = validFindings.filter((suggestion) =>
-        isPublishableSuggestion(suggestion, manifest),
-      );
-      const publishableSuggestions =
-        deterministicCandidates.length === 0
-          ? []
-          : acceptedSuggestions(
-              deterministicCandidates,
-              (
-                await ctx.pi.run(verifier, {
-                  manifest,
-                  candidates: deterministicCandidates,
-                })
-              ).verdicts,
-            );
-      const inlineFindings: ReviewFinding[] = publishableSuggestions.map((suggestion) => {
-        const category = suggestion.category
-          .replaceAll("-", " ")
-          .replace(/^./, (char) => char.toUpperCase());
-        return {
-          body: \`**\${category}:** \${suggestion.title}. \${suggestion.body}\`,
-          path: suggestion.path,
-          rangeId: suggestion.rangeId,
-          side: suggestion.side,
-          startLine: suggestion.startLine,
-          endLine: suggestion.endLine,
-          suggestedFix: suggestion.suggestedFix,
-        };
+      const diff = await ctx.change.diff({ compressed: true });
+      const result = await ctx.pi.run(fixer, { diff });
+      const { findings: candidates } = ctx.review.select(result.suggestions, {
+        finding: fixSuggestion,
+        requireSuggestedFix: true,
       });
-      const sections = [
-        "## 🧭 Summary",
-        "",
-        suggestionSummary(publishableSuggestions.length),
-      ];
-      if (publishableSuggestions.length > 0) {
-        sections.push(
-          "",
-          "## 🛠️ Exact Suggested Changes",
-          "",
-          suggestionsTable(publishableSuggestions),
-        );
-      }
+      const accepted =
+        candidates.length === 0
+          ? []
+          : acceptedSuggestions(candidates, (await ctx.pi.run(verifier, { diff, candidates })).verdicts);
       await ctx.comment({
-        main: sections.join("\\n"),
-        inlineFindings,
+        main: md.blocks(
+          md\`## 🧭 Summary\`,
+          suggestionSummary(accepted.length),
+          accepted.length > 0 ? md\`## 🛠️ Exact Suggested Changes\` : "",
+          accepted.length > 0
+            ? md.table(
+                accepted.map((suggestion) => ({
+                  category: md.label(suggestion.category),
+                  title: suggestion.title,
+                })),
+                { category: "Category", title: "Title" },
+              )
+            : "",
+        ),
+        inlineFindings: accepted.map((suggestion) => ({
+          ...suggestion,
+          body: String(
+            md\`**\${md.label(suggestion.category)}:** \${suggestion.title}. \${md.raw(suggestion.body)}\`,
+          ),
+        })),
       });
     },
   });
-
-  pipr.command({
-    pattern: "@pipr improve",
-    permission: "write",
-    description: "Find exact suggested fixes for this change request.",
-    task,
-  });
 });
 
-type FixSuggestionVerdict = {
-  index: number;
-  accepted: boolean;
-  reason: string;
-};
-
-function acceptedSuggestions(
-  candidates: FixSuggestion[],
-  verdicts: FixSuggestionVerdict[],
-): FixSuggestion[] {
-  const verdictByIndex = new Map<number, FixSuggestionVerdict>();
-  const duplicateIndexes = new Set<number>();
+function acceptedSuggestions<T>(
+  candidates: readonly T[],
+  verdicts: { index: number; accepted: boolean }[],
+): T[] {
+  const counts = new Map<number, number>();
   for (const verdict of verdicts) {
-    if (verdict.index < 0 || verdict.index >= candidates.length) {
-      continue;
-    }
-    if (verdictByIndex.has(verdict.index)) {
-      duplicateIndexes.add(verdict.index);
-      continue;
-    }
-    verdictByIndex.set(verdict.index, verdict);
+    counts.set(verdict.index, (counts.get(verdict.index) ?? 0) + 1);
   }
-  return candidates.filter((_, index) => {
-    const verdict = verdictByIndex.get(index);
-    return !duplicateIndexes.has(index) && verdict?.accepted === true;
-  });
+  return candidates.filter(
+    (_, index) =>
+      counts.get(index) === 1 &&
+      verdicts.some((verdict) => verdict.index === index && verdict.accepted),
+  );
 }
 
 function suggestionSummary(count: number): string {
   if (count === 0) {
     return "No exact suggested changes passed validation.";
   }
-  const noun = count === 1 ? "change" : "changes";
-  return count + " exact suggested " + noun + " passed validation.";
-}
-
-function isPublishableSuggestion(suggestion: FixSuggestion, manifest: DiffManifest): boolean {
-  if (suggestion.suggestedFix.trim().length === 0) {
-    return false;
-  }
-  const range = commentableRangeForFinding(suggestion, manifest);
-  return Boolean(
-    range &&
-      isPublishableSuggestedFixSelection({
-        side: suggestion.side,
-        kind: range.kind,
-        rangeStartLine: range.startLine,
-        startLine: suggestion.startLine,
-        endLine: suggestion.endLine,
-        preview: range.preview,
-        suggestedFix: suggestion.suggestedFix,
-      }),
-  );
-}
-
-function commentableRangeForFinding(
-  finding: Pick<ReviewFinding, "rangeId">,
-  manifest: DiffManifest,
-): CommentableRange | undefined {
-  return manifest.files
-    .flatMap((file) => file.commentableRanges)
-    .find((range) => range.id === finding.rangeId);
-}
-
-function isPublishableSuggestedFixSelection(selection: {
-  side: "RIGHT" | "LEFT";
-  kind: "added" | "deleted" | "context" | "mixed";
-  rangeStartLine: number;
-  startLine: number;
-  endLine: number;
-  preview?: string;
-  suggestedFix: string;
-}): boolean {
-  const suggestedLines = normalizedSuggestedFixLines(selection.suggestedFix);
-  const selectedLineCount = selection.endLine - selection.startLine + 1;
-  if (
-    selection.side !== "RIGHT" ||
-    selection.kind === "deleted" ||
-    selectedLineCount > 12 ||
-    suggestedLines.length > 20
-  ) {
-    return false;
-  }
-
-  const originalLines = selectedPreviewLines(selection, selectedLineCount);
-  if (!originalLines) {
-    return false;
-  }
-  const firstOriginalEdge = structuralEdgeToken(originalLines[0]);
-  const firstSuggestedEdge = structuralEdgeToken(suggestedLines[0]);
-  const lastOriginalEdge = structuralEdgeToken(originalLines.at(-1));
-  const lastSuggestedEdge = structuralEdgeToken(suggestedLines.at(-1));
-  const originalLinesWithoutTrailingBlanks = originalLines.slice(
-    0,
-    lastNonBlankLineIndex(originalLines) + 1,
-  );
-  const suggestedLinesWithoutTrailingBlanks = suggestedLines.slice(
-    0,
-    lastNonBlankLineIndex(suggestedLines) + 1,
-  );
-  const hasTextChange =
-    originalLinesWithoutTrailingBlanks.length !== suggestedLinesWithoutTrailingBlanks.length ||
-    originalLinesWithoutTrailingBlanks.some(
-      (line, index) => line !== suggestedLinesWithoutTrailingBlanks[index],
-    );
-  return Boolean(
-    hasTextChange &&
-      !onlyChangesWhitespace(originalLinesWithoutTrailingBlanks, suggestedLinesWithoutTrailingBlanks) &&
-      !suggestionIntroducesNewEnvironmentAccess(selection.preview, selection.suggestedFix) &&
-      (firstOriginalEdge === undefined || firstOriginalEdge === firstSuggestedEdge) &&
-      (lastOriginalEdge === undefined || lastOriginalEdge === lastSuggestedEdge) &&
-      !hasUnchangedSelectionEdge(originalLines, suggestedLines) &&
-      !suggestionIncludesUnselectedContext(selection, selectedLineCount, suggestedLines),
-  );
-}
-
-function structuralEdgeToken(line: string | undefined): string | undefined {
-  const token = line?.trim().replace(/[;,]$/, "");
-  return token && Array.from(token).every((char) => "{}[]()<>".includes(char))
-    ? token
-    : undefined;
-}
-
-function normalizedSuggestedFixLines(value: string): string[] {
-  const normalized = value.replace(/\\r\\n/g, "\\n").replace(/\\r/g, "\\n");
-  const withoutFinalNewline = normalized.endsWith("\\n") ? normalized.slice(0, -1) : normalized;
-  return withoutFinalNewline.length === 0 ? [] : withoutFinalNewline.split("\\n");
-}
-
-function selectedPreviewLines(
-  selection: {
-    rangeStartLine: number;
-    startLine: number;
-    preview?: string;
-  },
-  selectedLineCount: number,
-): string[] | undefined {
-  if (!selection.preview) {
-    return undefined;
-  }
-  const offset = selection.startLine - selection.rangeStartLine;
-  if (offset < 0) {
-    return undefined;
-  }
-  const previewLines = selection.preview.replace(/\\r\\n/g, "\\n").replace(/\\r/g, "\\n").split("\\n");
-  if (offset + selectedLineCount > previewLines.length) {
-    return undefined;
-  }
-  return previewLines.slice(offset, offset + selectedLineCount);
-}
-
-function suggestionIncludesUnselectedContext(
-  selection: {
-    rangeStartLine: number;
-    startLine: number;
-    preview?: string;
-  },
-  selectedLineCount: number,
-  suggestedLines: string[],
-): boolean {
-  if (!selection.preview || suggestedLines.length <= selectedLineCount) {
-    return false;
-  }
-  const offset = selection.startLine - selection.rangeStartLine;
-  if (offset < 0) {
-    return false;
-  }
-  const previewLines = selection.preview.replace(/\\r\\n/g, "\\n").replace(/\\r/g, "\\n").split("\\n");
-  const contextLines = [
-    offset > 0 ? previewLines[offset - 1] : undefined,
-    previewLines[offset + selectedLineCount],
-  ].filter((line): line is string => Boolean(line?.trim()));
-  return contextLines.some((line) => suggestedLines.includes(line));
-}
-
-function hasUnchangedSelectionEdge(originalLines: string[], suggestedLines: string[]): boolean {
-  const firstLineUnchanged = originalLines[0] === suggestedLines[0];
-  const lastLineUnchanged = originalLines.at(-1) === suggestedLines.at(-1);
-  if (originalLines.length === suggestedLines.length || originalLines.length === 1) {
-    return firstLineUnchanged || lastLineUnchanged;
-  }
-  return firstLineUnchanged && lastLineUnchanged;
-}
-
-function lastNonBlankLineIndex(lines: string[]): number {
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (lines[index]?.trim() !== "") {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function onlyChangesWhitespace(originalLines: string[], suggestedLines: string[]): boolean {
-  const original = originalLines.join("\\n");
-  const suggested = suggestedLines.join("\\n");
-  const originalScan = scanCodeWhitespace(original);
-  const suggestedScan = scanCodeWhitespace(suggested);
-  if (originalScan.containsCommentSyntax || suggestedScan.containsCommentSyntax) {
-    return false;
-  }
-  return originalScan.stripped === suggestedScan.stripped;
-}
-
-function scanCodeWhitespace(value: string): {
-  stripped: string;
-  containsCommentSyntax: boolean;
-} {
-  let result = "";
-  const state: CodeWhitespaceScanState = {
-    literalDelimiter: undefined,
-    escaped: false,
-    regexCharacterClass: false,
-    templateExpressionDepths: [],
-  };
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value.charAt(index);
-    if (advanceCodeLiteralScan(state, char, value[index + 1])) {
-      result += char;
-      continue;
-    }
-    if (char === "/" && ["/", "*"].includes(value[index + 1] ?? "")) {
-      return { stripped: result, containsCommentSyntax: true };
-    }
-    if (/\\s/.test(char)) {
-      const nextNonWhitespace = value.slice(index + 1).match(/\\S/)?.[0];
-      result += codeTokenSeparator(result.at(-1), nextNonWhitespace);
-      continue;
-    }
-    advanceTemplateExpressionScan(state, char);
-    state.literalDelimiter ??= openingCodeLiteralDelimiter(char, value[index + 1], result);
-    state.regexCharacterClass = false;
-    result += char;
-  }
-
-  return { stripped: result, containsCommentSyntax: false };
-}
-
-function codeTokenSeparator(
-  previousChar: string | undefined,
-  nextChar: string | undefined,
-): string {
-  if (!previousChar || !nextChar) {
-    return "";
-  }
-  if (/[A-Za-z0-9_$]/.test(previousChar) && /[A-Za-z0-9_$]/.test(nextChar)) {
-    return " ";
-  }
-  const requiresSeparator = ["++", "--", "//", "/*", "**", "??", "?.", "=>", "==", "!=", "<=", ">=", "&&", "||", "<<", ">>"].includes(
-    previousChar + nextChar,
-  );
-  return requiresSeparator ? " " : "";
-}
-
-type CodeWhitespaceScanState = {
-  literalDelimiter: string | undefined;
-  escaped: boolean;
-  regexCharacterClass: boolean;
-  templateExpressionDepths: number[];
-};
-
-function advanceCodeLiteralScan(
-  state: CodeWhitespaceScanState,
-  char: string,
-  nextChar: string | undefined,
-): boolean {
-  if (!state.literalDelimiter) {
-    return false;
-  }
-  if (state.escaped) {
-    state.escaped = false;
-    return true;
-  }
-  if (char === "\\\\") {
-    state.escaped = true;
-    return true;
-  }
-  if (state.literalDelimiter.charCodeAt(0) === 96 && char === "$" && nextChar === "{") {
-    state.templateExpressionDepths.push(0);
-    state.literalDelimiter = undefined;
-    return true;
-  }
-  if (state.literalDelimiter !== "/") {
-    if (char === state.literalDelimiter) {
-      state.literalDelimiter = undefined;
-    }
-    return true;
-  }
-  advanceRegexLiteralScan(state, char);
-  return true;
-}
-
-function advanceTemplateExpressionScan(state: CodeWhitespaceScanState, char: string): void {
-  const depthIndex = state.templateExpressionDepths.length - 1;
-  const depth = state.templateExpressionDepths[depthIndex];
-  if (depth === undefined) {
-    return;
-  }
-  if (char === "{") {
-    state.templateExpressionDepths[depthIndex] = depth + 1;
-  } else if (char === "}") {
-    if (depth <= 1) {
-      state.templateExpressionDepths.pop();
-      state.literalDelimiter = "\`";
-    } else {
-      state.templateExpressionDepths[depthIndex] = depth - 1;
-    }
-  }
-}
-
-function advanceRegexLiteralScan(state: CodeWhitespaceScanState, char: string): void {
-  if (char === "[") {
-    state.regexCharacterClass = true;
-  } else if (char === "]") {
-    state.regexCharacterClass = false;
-  } else if (char === "/" && !state.regexCharacterClass) {
-    state.literalDelimiter = undefined;
-  }
-}
-
-function openingCodeLiteralDelimiter(
-  char: string,
-  nextChar: string | undefined,
-  previousCode: string,
-): string | undefined {
-  if (char === '"' || char === "'" || char.charCodeAt(0) === 96) {
-    return char;
-  }
-  return startsRegexLiteral(char, nextChar, previousCode) ? "/" : undefined;
-}
-
-function startsRegexLiteral(
-  char: string,
-  nextChar: string | undefined,
-  previousCode: string,
-): boolean {
-  const previousChar = previousCode.at(-1);
-  const previousWord = previousCode.split(/[^A-Za-z]+/).at(-1);
-  const followsRegexKeyword = [
-    "return",
-    "throw",
-    "case",
-    "delete",
-    "void",
-    "typeof",
-    "instanceof",
-    "in",
-    "of",
-    "yield",
-    "await",
-  ].includes(previousWord ?? "");
-  return (
-    char === "/" &&
-    nextChar !== "/" &&
-    nextChar !== "*" &&
-    (previousChar === undefined ||
-      "([{:;,=!?&|+-*%^~<>)".includes(previousChar) ||
-      followsRegexKeyword)
-  );
-}
-
-function suggestionIntroducesNewEnvironmentAccess(
-  preview: string | undefined,
-  suggestedFix: string,
-): boolean {
-  const suggestedKeys = environmentAccessKeys(suggestedFix);
-  if (suggestedKeys.size === 0) {
-    return false;
-  }
-  const existingKeys = environmentAccessKeys(preview ?? "");
-  return Array.from(suggestedKeys).some((key) => !existingKeys.has(key));
-}
-
-function environmentAccessKeys(value: string): Set<string> {
-  const environmentKeyAccessPattern =
-    /\\b(?:process|Bun|import\\.meta)(?:\\s*\\.|\\s*\\?\\.)\\s*env(?:\\s*(?:\\.|\\?\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)|\\s*\\?\\.\\s*\\[\\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\\s*\\]|\\s*\\[\\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\\s*\\])|\\bDeno(?:\\s*\\.|\\s*\\?\\.)\\s*env(?:\\s*\\.|\\s*\\?\\.)\\s*get\\s*\\(\\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\\s*\\)/g;
-  const keys = new Set<string>();
-  for (const match of value.matchAll(environmentKeyAccessPattern)) {
-    const key = match[1] ?? match[2] ?? match[3] ?? match[4];
-    if (key) {
-      keys.add(key);
-    }
-  }
-  const environmentDestructurePattern =
-    /\\{([^{}]*)\\}\\s*=\\s*(?:process|Bun|import\\.meta)(?:\\s*\\.|\\s*\\?\\.)\\s*env\\b/g;
-  for (const match of value.matchAll(environmentDestructurePattern)) {
-    const bindings = match[1]?.split(",") ?? [];
-    for (const binding of bindings) {
-      const key = binding.split(/[:=]/, 1)[0]?.trim().replace(/^["']|["']$/g, "");
-      if (key && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !key.startsWith("...")) {
-        keys.add(key);
-      }
-    }
-  }
-  return keys;
-}
-
-function suggestionsTable(suggestions: FixSuggestion[]): string {
-  return [
-    "| Category | Title |",
-    "| --- | --- |",
-    ...suggestions.map((suggestion) => {
-      const category = suggestion.category
-        .replaceAll("-", " ")
-        .replace(/^./, (char) => char.toUpperCase());
-      const title = suggestion.title.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
-      return \`| \${category} | \${title} |\`;
-    }),
-  ].join("\\n");
+  return count + " exact suggested " + (count === 1 ? "change" : "changes") + " passed validation.";
 }
 `,
 } as const satisfies OfficialInitRecipe;

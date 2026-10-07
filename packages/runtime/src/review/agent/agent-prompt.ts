@@ -1,7 +1,7 @@
 import type { AgentPromptContext, PathFilter, PiprRunContext, Schema } from "@usepipr/sdk";
 import { type RuntimeAgent, type RuntimeAgentTool, renderPromptValue } from "@usepipr/sdk/internal";
 import { compact } from "lodash-es";
-import { piReadOnlyToolNames } from "../../pi/contract.js";
+import { agentWorkspaceToolNames } from "../../agent-worker/protocol.js";
 import type { PriorReviewState } from "../../publication/types.js";
 import { isRecord } from "../../shared/record.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
@@ -42,6 +42,16 @@ export type PreparedAgentContext = {
   diffManifest?: PreparedDiffManifestContext;
 };
 
+/**
+ * The agent prompt in two parts. `shared` holds the change context sibling agents have in common (role, change
+ * request, tools, Diff Manifest); `specific` holds this agent's output contract and instructions.
+ */
+export type AgentPrompt = { shared: string; specific: string };
+
+export function joinedAgentPrompt(prompt: AgentPrompt): string {
+  return compact([prompt.shared, prompt.specific]).join("\n\n");
+}
+
 export async function renderAgentPrompt(
   options: {
     agent: RuntimeAgent;
@@ -55,30 +65,34 @@ export async function renderAgentPrompt(
       priorReviewState?: PriorReviewState;
     };
   } & PreparedAgentContext,
-): Promise<string> {
+): Promise<AgentPrompt> {
   const prompt = await renderAgentDefinitionPrompt(
     options.agent,
     options.input,
     options.agentRunContext.prompt,
   );
   const toolMode = options.toolMode ?? "read-only";
-  return compact([
-    promptSection("Role", "You are pipr's read-only change request agent."),
-    promptSection("Change Request", changeRequestPrompt(options.agentRunContext.prompt.change)),
-    promptSection("Tools", toolsPrompt(options.diffManifest, toolMode)),
-    customToolPrompt(options.agentTools),
-    pathScopePrompt(options.runOptions?.paths),
-    reviewPolicyPrompt(options.agent.definition.output),
-    promptSection("Output", outputPrompt(options.agent.definition.output)),
-    customInlineSelectionPrompt(options.agent.definition.output, options.diffManifest),
-    promptSection("Diff Manifest", options.diffManifest?.body),
-    promptSection("Instructions", renderPromptValue(options.agent.definition.instructions)),
-    options.runOptions?.instructions
-      ? promptSection("Run Instructions", renderPromptValue(options.runOptions.instructions))
-      : undefined,
-    priorFindingsPrompt(options.runtime.priorReviewState),
-    promptSection("Prompt", renderPromptValue(prompt)),
-  ]).join("\n\n");
+  return {
+    shared: compact([
+      promptSection("Role", "You are pipr's read-only change request agent."),
+      promptSection("Change Request", changeRequestPrompt(options.agentRunContext.prompt.change)),
+      promptSection("Tools", toolsPrompt(options.diffManifest, toolMode)),
+      promptSection("Diff Manifest", options.diffManifest?.body),
+    ]).join("\n\n"),
+    specific: compact([
+      customToolPrompt(options.agentTools),
+      pathScopePrompt(options.runOptions?.paths),
+      reviewPolicyPrompt(options.agent.definition.output),
+      promptSection("Output", outputPrompt(options.agent.definition.output)),
+      customInlineSelectionPrompt(options.agent.definition.output, options.diffManifest),
+      promptSection("Instructions", renderPromptValue(options.agent.definition.instructions)),
+      options.runOptions?.instructions
+        ? promptSection("Run Instructions", renderPromptValue(options.runOptions.instructions))
+        : undefined,
+      priorFindingsPrompt(options.runtime.priorReviewState),
+      promptSection("Prompt", renderPromptValue(prompt)),
+    ]).join("\n\n"),
+  };
 }
 
 function changeRequestPrompt(change: AgentRunContext["prompt"]["change"]): string {
@@ -127,7 +141,7 @@ function toolsPrompt(
       "Use only the prompt context. Do not request repository, filesystem, network, platform, or shell access.",
     ].join("\n");
   }
-  const toolNames = [...piReadOnlyToolNames, ...(diffManifest?.runtimeToolNames ?? [])];
+  const toolNames = [...agentWorkspaceToolNames, ...(diffManifest?.runtimeToolNames ?? [])];
   return [
     `Available tools: ${toolNames.join(", ")}.`,
     "Use tools only to inspect repository content and pipr-provided review context.",

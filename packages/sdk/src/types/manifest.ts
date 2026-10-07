@@ -69,6 +69,39 @@ export type DiffManifest = {
   files: readonly DiffManifestFile[];
 };
 
+/** Bounded file-level summary of a Diff Manifest, safe to pass to summary agents. */
+export type DiffSummary = {
+  baseSha: string;
+  headSha: string;
+  mergeBaseSha: string;
+  fileCount: number;
+  omittedFileCount: number;
+  files: readonly {
+    path: string;
+    previousPath?: string;
+    status: FileStatus;
+    language?: string;
+    additions: number;
+    deletions: number;
+    changedSymbols?: readonly string[];
+    excludedReason?: string;
+  }[];
+};
+
+declare const diffContextBrand: unique symbol;
+
+/**
+ * Changed-code context from `ctx.change.diff()`. Passing it anywhere in an agent's top-level input
+ * gives that agent the Diff Manifest prompt, sharding, and condensed-manifest helper tools.
+ */
+export type DiffContext = {
+  readonly kind: "pipr.diff";
+  readonly manifest: DiffManifest;
+  /** Bounded file-level summary for prompts that do not need hunks or ranges. */
+  summary(): DiffSummary;
+  readonly [diffContextBrand]: true;
+};
+
 /** Options for projecting a Diff Manifest for task or prompt use. */
 export type DiffManifestOptions = {
   compressed?: boolean;

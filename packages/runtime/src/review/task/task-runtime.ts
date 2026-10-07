@@ -7,6 +7,7 @@ import { enrichDiffManifestWithStructure } from "../../diff/manifest-structure.j
 import { createDiffStructuralAnalysisLoader } from "../../diff/structural-analysis.js";
 import type { RunObserver } from "../../observability/types.js";
 import { diffContextCoverageArtifact } from "../../pi/diff-context-coverage.js";
+import { withPiRunWorkspace } from "../../pi/runner.js";
 import type { PriorReviewState, PublicationPlan } from "../../publication/types.js";
 import { runLoggedPhase } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
@@ -94,6 +95,94 @@ export type ReviewRuntimeResult =
     });
 
 export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<ReviewRuntimeResult> {
+  if (options.piRunner) {
+    return await runTaskRuntimeWithPiRunner(options);
+  }
+  return await withPiRunWorkspace(
+    { workspace: options.workspace, env: options.env, storeDir: options.piStoreDir },
+    async (piRunner) => await runTaskRuntimeWithPiRunner({ ...options, piRunner }),
+  );
+}
+
+function logDiffManifest(options: RunTaskRuntimeOptions, diffManifest: DiffManifest): void {
+  options.log?.info("diff manifest", {
+    base: diffManifest.baseSha.slice(0, 12),
+    head: diffManifest.headSha.slice(0, 12),
+    mergeBase: diffManifest.mergeBaseSha.slice(0, 12),
+    files: diffManifest.files.length,
+    hunks: diffManifest.files.reduce((sum, file) => sum + file.hunks.length, 0),
+    ranges: diffManifest.files.reduce((sum, file) => sum + file.commentableRanges.length, 0),
+    additions: diffManifest.files.reduce((sum, file) => sum + file.additions, 0),
+    deletions: diffManifest.files.reduce((sum, file) => sum + file.deletions, 0),
+    excluded: diffManifest.files.filter((file) => file.excludedReason !== undefined).length,
+  });
+}
+
+function runtimeTasks(options: RunTaskRuntimeOptions) {
+  return [
+    ...(options.selectedTasks ??
+      selectRuntimeTasks({
+        plan: options.plan,
+        event: options.event,
+        taskName: options.taskName,
+      })),
+  ];
+}
+
+async function loadPriorReview(options: RunTaskRuntimeOptions, selectedTasks: string[]) {
+  const loadedPriorReviewState =
+    options.priorReviewState ??
+    (await runLoggedPhase(options.log, "load prior review state", async () =>
+      options.loadPriorReviewState?.(),
+    ));
+  const priorMainComment =
+    options.priorMainComment ??
+    (await runLoggedPhase(options.log, "load prior main comment", async () =>
+      options.loadPriorMainComment?.(),
+    ));
+  return {
+    priorReviewState: priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks),
+    priorMainComment,
+  };
+}
+
+function structuralContext(options: RunTaskRuntimeOptions, diffManifest: DiffManifest) {
+  const structuralAnalysis = createDiffStructuralAnalysisLoader({
+    manifest: diffManifest,
+    workspace: options.workspace,
+    headRef: options.structuralHeadRef,
+    env: options.env,
+    log: options.log,
+  });
+  let structuralManifestPromise: Promise<DiffManifest> | undefined;
+  const structuralManifest = () => {
+    structuralManifestPromise ??= structuralAnalysis().then((analysis) =>
+      enrichDiffManifestWithStructure(diffManifest, analysis),
+    );
+    return structuralManifestPromise;
+  };
+  return { structuralAnalysis, structuralManifest };
+}
+
+function diffContextCoverageLogFields(stats: ReturnType<typeof reviewStatsForRuns>) {
+  const coverage = stats?.diffContextCoverage;
+  return coverage
+    ? {
+        contextFilesTotal: coverage.files.total,
+        contextFilesCovered: coverage.files.covered,
+        contextRangesTotal: coverage.ranges.total,
+        contextRangesCovered: coverage.ranges.covered,
+      }
+    : {};
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+async function runTaskRuntimeWithPiRunner(
+  options: RunTaskRuntimeOptions,
+): Promise<ReviewRuntimeResult> {
   const runtimeStarted = Date.now();
   const config = parsePiprConfig(options.config);
   registerProviderSecrets(config, options);
@@ -106,17 +195,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
       headSha: options.event.change.head.sha,
     }),
   );
-  options.log?.info("diff manifest", {
-    base: diffManifest.baseSha.slice(0, 12),
-    head: diffManifest.headSha.slice(0, 12),
-    mergeBase: diffManifest.mergeBaseSha.slice(0, 12),
-    files: diffManifest.files.length,
-    hunks: diffManifest.files.reduce((sum, file) => sum + file.hunks.length, 0),
-    ranges: diffManifest.files.reduce((sum, file) => sum + file.commentableRanges.length, 0),
-    additions: diffManifest.files.reduce((sum, file) => sum + file.additions, 0),
-    deletions: diffManifest.files.reduce((sum, file) => sum + file.deletions, 0),
-    excluded: diffManifest.files.filter((file) => file.excludedReason !== undefined).length,
-  });
+  logDiffManifest(options, diffManifest);
   await recordRuntimeArtifact(options, {
     kind: "diff-manifest",
     name: "diff-manifest.json",
@@ -124,14 +203,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     content: JSON.stringify(diffManifest, null, 2),
     sensitive: true,
   });
-  const tasks = [
-    ...(options.selectedTasks ??
-      selectRuntimeTasks({
-        plan: options.plan,
-        event: options.event,
-        taskName: options.taskName,
-      })),
-  ];
+  const tasks = runtimeTasks(options);
   if (tasks.length === 0) {
     options.log?.info("task runtime skipped", { reason: "no-matched-tasks" });
     return skippedTaskRuntimeResult({
@@ -159,33 +231,10 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     id: runId,
     trigger: taskRunTrigger(options),
   });
-  const loadedPriorReviewState =
-    options.priorReviewState ??
-    (await runLoggedPhase(options.log, "load prior review state", async () =>
-      options.loadPriorReviewState?.(),
-    ));
-  const priorMainComment =
-    options.priorMainComment ??
-    (await runLoggedPhase(options.log, "load prior main comment", async () =>
-      options.loadPriorMainComment?.(),
-    ));
-  const priorReviewState = priorReviewStateForSelectedTasks(loadedPriorReviewState, selectedTasks);
+  const { priorReviewState, priorMainComment } = await loadPriorReview(options, selectedTasks);
   const piRuns: PiRunStats[] = [];
   const agentRunBudget = createAgentRunBudget(config.limits?.maxAgentRuns);
-  const structuralAnalysis = createDiffStructuralAnalysisLoader({
-    manifest: diffManifest,
-    workspace: options.workspace,
-    headRef: options.structuralHeadRef,
-    env: options.env,
-    log: options.log,
-  });
-  let structuralManifestPromise: Promise<DiffManifest> | undefined;
-  const structuralManifest = () => {
-    structuralManifestPromise ??= structuralAnalysis().then((analysis) =>
-      enrichDiffManifestWithStructure(diffManifest, analysis),
-    );
-    return structuralManifestPromise;
-  };
+  const { structuralAnalysis, structuralManifest } = structuralContext(options, diffManifest);
   const runtimeOptions = {
     ...options,
     priorReviewState,
@@ -225,9 +274,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
   if (failedTask) {
     publishFailedRunTaskChecks(options, taskChecks);
     await recordDiffContextCoverageArtifact(options, piRuns);
-    throw failedTask.error instanceof Error
-      ? failedTask.error
-      : new Error(String(failedTask.error));
+    throw asError(failedTask.error);
   }
   const output = mergeTaskOutputs(taskResults);
   options.log?.info("task runtime collected", {
@@ -324,14 +371,7 @@ export async function runTaskRuntime(options: RunTaskRuntimeOptions): Promise<Re
     droppedFindings: validated.droppedFindings.length,
     inlineDrafts: publishing.inlineCommentDrafts.length,
     threadActions: verifier.threadActions.length,
-    ...(stats?.diffContextCoverage
-      ? {
-          contextFilesTotal: stats.diffContextCoverage.files.total,
-          contextFilesCovered: stats.diffContextCoverage.files.covered,
-          contextRangesTotal: stats.diffContextCoverage.ranges.total,
-          contextRangesCovered: stats.diffContextCoverage.ranges.covered,
-        }
-      : {}),
+    ...diffContextCoverageLogFields(stats),
   });
   await recordDiffContextCoverageArtifact(options, piRuns);
   await Promise.all([
@@ -625,8 +665,8 @@ async function runSynchronizeVerifier(options: {
     ),
     plan: options.options.plan,
     env: options.options.env,
-    piExecutable: options.options.piExecutable,
-    piAgentDir: options.options.piAgentDir,
+    piProviderModule: options.options.piProviderModule,
+    piAuthFile: options.options.piAuthFile,
     piRunner: options.options.piRunner,
     log: options.options.log,
     diffManifest: options.diffManifest,

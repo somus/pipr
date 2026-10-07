@@ -34,7 +34,7 @@ Add the smallest case that captures the failure in `packages/evals/src/cases.ts`
 
 Choose the proof lane deliberately:
 
-- Use a **deterministic case** for prompt-contract text, schema validation, anchoring, budgets, deduplication, rendering, and publication policy that fake Pi can reproduce.
+- Use a **deterministic case** for prompt-contract text, schema validation, anchoring, budgets, deduplication, rendering, and publication policy that the scripted eval provider can reproduce.
 - Use a **live case** for semantic recall, false-positive suppression, body quality, or suggested-fix judgment that depends on model behavior.
 - Use both only when the regression crosses both contracts.
 

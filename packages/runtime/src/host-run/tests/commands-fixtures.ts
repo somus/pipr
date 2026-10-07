@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
 import { Buffer } from "node:buffer";
-import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -16,6 +16,7 @@ import { renderInlineFindingMarker } from "../../review/prior-state.js";
 import type { RuntimeLogSink } from "../../shared/logging.js";
 import type { SecretRedactor } from "../../shared/secret-redaction.js";
 import { writeAggregateReviewablePatchOver16MiB } from "../../tests/helpers/aggregate-reviewable-patch.js";
+import { createScriptedPi, type ScriptedPi } from "../../tests/helpers/scripted-pi.js";
 import { runHostRunCommandWithDependencies as runHostRun } from "../commands-hosted.js";
 
 export type TestHostRunOptions = Omit<Parameters<typeof runHostRun>[0], "hostAdapter"> & {
@@ -42,7 +43,7 @@ export type CommandWorkspace = {
   rootDir: string;
   baseSha: string;
   headSha: string;
-  piExecutable: string;
+  pi: ScriptedPi;
 };
 
 export type FakeCheckRuns = {
@@ -50,31 +51,14 @@ export type FakeCheckRuns = {
   updated: Array<{ checkRunId: number; name: string; conclusion: string; summary?: string }>;
 };
 
-export async function writeFailingPiExecutable(piExecutable: string): Promise<void> {
-  await Bun.write(
-    piExecutable,
-    [
-      "#!/bin/sh",
-      'printf "%s\\n" "$DEEPSEEK_API_KEY" >&2',
-      'printf "%s\\n" "model exploded" >&2',
-      "exit 42",
-    ].join("\n"),
-  );
-  await chmod(piExecutable, 0o755);
+export async function writeFailingPiOutput(workspace: CommandWorkspace): Promise<void> {
+  await workspace.pi.fail("${env:DEEPSEEK_API_KEY}\nmodel exploded");
 }
 
-export async function writeProviderAuthenticationFailurePiExecutable(
-  piExecutable: string,
+export async function writeProviderAuthenticationFailureOutput(
+  workspace: CommandWorkspace,
 ): Promise<void> {
-  await Bun.write(
-    piExecutable,
-    [
-      "#!/bin/sh",
-      'printf "%s\\n" "API Error 401: invalid API key private-provider-detail" >&2',
-      "exit 42",
-    ].join("\n"),
-  );
-  await chmod(piExecutable, 0o755);
+  await workspace.pi.fail("API Error 401: invalid API key private-provider-detail");
 }
 
 export async function createCommandWorkspace(
@@ -127,30 +111,17 @@ export async function createCommandWorkspace(
   runGit(rootDir, ["add", "."]);
   runGit(rootDir, ["commit", "--no-verify", "-m", "head"]);
   const headSha = runGit(rootDir, ["rev-parse", "HEAD"]).trim();
-  const piExecutable = path.join(rootDir, "fake-pi.sh");
-  await Bun.write(
-    piExecutable,
-    piExecutableScript('{"summary":{"body":"No findings."},"inlineFindings":[]}'),
-  );
-  await chmod(piExecutable, 0o755);
+  const piDirectory = path.join(rootDir, ".git", "scripted-pi");
+  await mkdir(piDirectory, { recursive: true });
+  const pi = await createScriptedPi(piDirectory);
   if (options.checkoutBaseBeforeRun) {
     runGit(rootDir, ["checkout", "--detach", baseSha]);
   }
-  return { rootDir, baseSha, headSha, piExecutable };
+  return { rootDir, baseSha, headSha, pi };
 }
 
-export async function writePiExecutable(piExecutable: string, stdout: string): Promise<void> {
-  await Bun.write(piExecutable, piExecutableScript(stdout));
-  await chmod(piExecutable, 0o755);
-}
-
-function piExecutableScript(stdout: string): string {
-  return [
-    "#!/bin/sh",
-    'touch "$(dirname "$0")/pi-called"',
-    'printf "%s\\n" "$PI_CODING_AGENT_DIR" > "$(dirname "$0")/pi-agent-dir"',
-    `printf '%s\\n' '${stdout}'`,
-  ].join("\n");
+export async function writePiOutput(workspace: CommandWorkspace, text: string): Promise<void> {
+  await workspace.pi.answer(text);
 }
 
 export async function runIssueCommentCommand(
@@ -173,7 +144,7 @@ export async function runIssueCommentCommand(
     githubClient: fakeGitHubClient(workspace, permission),
     githubPublicationClient:
       githubPublicationClient ?? fakeGitHubPublicationClient(workspace, [], checks),
-    piExecutable: workspace.piExecutable,
+    piProviderModule: workspace.pi.providerModule,
     logSink,
   });
 }
@@ -199,7 +170,7 @@ export async function runPullRequestAction(
     },
     githubPublicationClient:
       options.githubPublicationClient ?? fakeGitHubPublicationClient(workspace),
-    piExecutable: workspace.piExecutable,
+    piProviderModule: workspace.pi.providerModule,
     logSink: options.logSink,
   });
 }
@@ -224,7 +195,7 @@ export async function runReviewCommentAction(
     env: options.env ?? reviewCommentEnv(workspace.rootDir, eventPath),
     githubClient: options.githubClient,
     githubPublicationClient: options.githubPublicationClient,
-    piExecutable: workspace.piExecutable,
+    piProviderModule: workspace.pi.providerModule,
     logSink: options.logSink,
     secretRedactor: options.secretRedactor,
   });
@@ -243,11 +214,11 @@ export function replacingSecretRedactor(detected: string): SecretRedactor {
 }
 
 export async function expectPiNotCalled(workspace: CommandWorkspace): Promise<void> {
-  await expect(Bun.file(path.join(workspace.rootDir, "pi-called")).text()).rejects.toThrow();
+  expect(await workspace.pi.calls()).toEqual([]);
 }
 
 async function expectPiCalled(workspace: CommandWorkspace): Promise<void> {
-  await expect(Bun.file(path.join(workspace.rootDir, "pi-called")).text()).resolves.toBe("");
+  expect((await workspace.pi.calls()).length).toBeGreaterThan(0);
 }
 
 export async function expectReviewCommentIgnored(
@@ -273,8 +244,8 @@ export async function writeStillValidVerifierOutput(
   workspace: CommandWorkspace,
   response = "This still applies.",
 ): Promise<void> {
-  await writePiExecutable(
-    workspace.piExecutable,
+  await writePiOutput(
+    workspace,
     JSON.stringify({
       findings: [{ id: "fnd_existing", status: "still-valid", response }],
     }),
@@ -282,20 +253,8 @@ export async function writeStillValidVerifierOutput(
 }
 
 async function writePromptCapturingVerifierOutput(workspace: CommandWorkspace): Promise<void> {
-  await rm(path.join(workspace.rootDir, "pi-prompt.md"), { force: true });
-  await Bun.write(
-    workspace.piExecutable,
-    [
-      "#!/bin/sh",
-      'prompt_arg=""',
-      'for arg do prompt_arg="$arg"; done',
-      'prompt_path="$' + '{prompt_arg#@}"',
-      'cp "$prompt_path" "$(dirname "$0")/pi-prompt.md"',
-      'touch "$(dirname "$0")/pi-called"',
-      'printf "%s\\n" \'{"findings":[{"id":"fnd_existing","status":"unknown"}]}\'',
-    ].join("\n"),
-  );
-  await chmod(workspace.piExecutable, 0o755);
+  await workspace.pi.reset();
+  await workspace.pi.answer('{"findings":[{"id":"fnd_existing","status":"unknown"}]}');
 }
 
 export async function expectVerifierReplyPublished(
@@ -350,7 +309,7 @@ export async function verifierRunIdFromReplyAction(
     }),
   ).resolves.toMatchObject({ kind: "verifier", errors: [] });
 
-  const prompt = await Bun.file(path.join(workspace.rootDir, "pi-prompt.md")).text();
+  const prompt = (await workspace.pi.prompts()).at(-1) ?? "";
   const runId = prompt.match(/"runId": "([^"]+)"/)?.[1];
   if (!runId) {
     throw new Error("test fixture failed to capture verifier run id");
@@ -391,16 +350,9 @@ export function reviewConfigTs(
     'import { definePipr } from "@usepipr/sdk";',
     "",
     "export default definePipr((pipr) => {",
-    "  const model = pipr.model({",
-    ...(options.subscriptionModel
-      ? ['    provider: "openai-codex",', '    model: "gpt-5.5",']
-      : [
-          '    provider: "deepseek",',
-          '    model: "deepseek-reasoner",',
-          '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-        ]),
-    '    thinking: "high",',
-    "  });",
+    options.subscriptionModel
+      ? '  const model = pipr.model("openai-codex/gpt-5.5", { apiKey: "local", thinking: "high" });'
+      : '  const model = pipr.model("deepseek/deepseek-reasoner", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }), thinking: "high" });',
     "  const reviewer = pipr.agent({",
     '    name: "reviewer",',
     "    model,",
@@ -410,14 +362,14 @@ export function reviewConfigTs(
     "  });",
     "  const task = pipr.task({",
     "    name: 'review',",
+    options.event === false ? "" : '    on: { changeRequest: ["opened"] },',
     options.checks ? "    check: { enabled: true }," : "",
     "    async run(ctx, input = {}) {",
-    "    const manifest = await ctx.change.diffManifest({ compressed: true });",
-    "    const result = await ctx.pi.run(reviewer, { manifest, scope: input.scope ?? 'changed' });",
+    "    const diff = await ctx.change.diff({ compressed: true });",
+    "    const result = await ctx.pi.run(reviewer, { diff, scope: input.scope ?? 'changed' });",
     "    await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });",
     "    },",
     "  });",
-    options.event === false ? "" : '  pipr.on.changeRequest({ actions: ["opened"], task });',
     options.checks ? "  pipr.config({ checks: { aggregate: { enabled: true } } });" : "",
     options.showProgress === false
       ? "  pipr.config({ publication: { showProgress: false } });"
@@ -451,11 +403,7 @@ export function askConfigTs(): string {
     'import { definePipr } from "@usepipr/sdk";',
     "",
     "export default definePipr((pipr) => {",
-    "  const model = pipr.model({",
-    '    provider: "deepseek",',
-    '    model: "deepseek-reasoner",',
-    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-    "  });",
+    '  const model = pipr.model("deepseek/deepseek-reasoner", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });',
     "  const askAgent = pipr.agent({",
     '    name: "ask",',
     "    model,",
@@ -466,9 +414,9 @@ export function askConfigTs(): string {
     "  const ask = pipr.task({",
     '    name: "ask",',
     "    async run(ctx, input) {",
-    "      const manifest = await ctx.change.diffManifest({ compressed: true });",
+    "      const diff = await ctx.change.diff({ compressed: true });",
     "      const prior = await ctx.review.prior();",
-    "      const answer = await ctx.pi.run(askAgent, { question: input.question, manifest, prior });",
+    "      const answer = await ctx.pi.run(askAgent, { question: input.question, diff, prior });",
     "      await ctx.command?.reply(answer.body);",
     "    },",
     "  });",
@@ -482,11 +430,7 @@ export function commandRunIdConfigTs(): string {
     'import { definePipr } from "@usepipr/sdk";',
     "",
     "export default definePipr((pipr) => {",
-    "  const model = pipr.model({",
-    '    provider: "deepseek",',
-    '    model: "deepseek-reasoner",',
-    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-    "  });",
+    '  const model = pipr.model("deepseek/deepseek-reasoner", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });',
     "  const ask = pipr.task({",
     '    name: "ask",',
     "    async run(ctx) {",
@@ -504,11 +448,7 @@ function headOnlyConfigTs(): string {
     'import { definePipr } from "@usepipr/sdk";',
     "",
     "export default definePipr((pipr) => {",
-    "  const model = pipr.model({",
-    '    provider: "deepseek",',
-    '    model: "deepseek-reasoner",',
-    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-    "  });",
+    '  const model = pipr.model("deepseek/deepseek-reasoner", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });',
     "  const task = pipr.task({ name: 'head-only', async run() {} });",
     '  pipr.command({ pattern: "@pipr head-only", permission: "write", task });',
     "  void model;",
@@ -521,35 +461,30 @@ export function localReviewSelectionConfigTs(): string {
     'import { definePipr } from "@usepipr/sdk";',
     "",
     "export default definePipr((pipr) => {",
-    "  const model = pipr.model({",
-    '    provider: "deepseek",',
-    '    model: "deepseek-reasoner",',
-    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-    "  });",
-    "  const alpha = pipr.task({",
+    '  const model = pipr.model("deepseek/deepseek-reasoner", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });',
+    "  pipr.task({",
     '    name: "alpha",',
+    '    on: { changeRequest: ["opened", "updated"] },',
     "    async run(ctx) {",
     '      await Bun.write(ctx.repository.root + "/alpha-ran", "1\\n");',
     '      await ctx.comment("Alpha completed.");',
     "    },",
     "  });",
-    "  const beta = pipr.task({",
+    "  pipr.task({",
     '    name: "beta",',
+    '    on: { changeRequest: ["ready"] },',
     "    async run(ctx) {",
     '      await Bun.write(ctx.repository.root + "/beta-ran", "1\\n");',
     "    },",
     "  });",
-    "  const disabled = pipr.task({",
+    "  pipr.task({",
     '    name: "disabled",',
+    '    on: { changeRequest: ["opened"] },',
     "    local: false,",
     "    async run(ctx) {",
     '      await Bun.write(ctx.repository.root + "/disabled-ran", "1\\n");',
     "    },",
     "  });",
-    '  pipr.on.changeRequest({ actions: ["opened"], task: alpha });',
-    '  pipr.on.changeRequest({ actions: ["updated"], task: alpha });',
-    '  pipr.on.changeRequest({ actions: ["ready"], task: beta });',
-    '  pipr.on.changeRequest({ actions: ["opened"], task: disabled });',
     "  void model;",
     "});",
   ].join("\n");
@@ -560,27 +495,23 @@ export function multiTaskCheckConfigTs(): string {
     'import { definePipr } from "@usepipr/sdk";',
     "",
     "export default definePipr((pipr) => {",
-    "  const model = pipr.model({",
-    '    provider: "deepseek",',
-    '    model: "deepseek-v4-pro",',
-    '    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),',
-    "  });",
-    "  const summary = pipr.task({",
+    '  const model = pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });',
+    "  pipr.task({",
     '    name: "summary",',
+    '    on: { changeRequest: ["opened"] },',
     "    check: { enabled: true },",
     "    async run(ctx) {",
     '      await ctx.comment("Summary completed.");',
     "    },",
     "  });",
-    "  const gate = pipr.task({",
+    "  pipr.task({",
     '    name: "gate",',
+    '    on: { changeRequest: ["opened"] },',
     "    check: { enabled: true },",
     "    async run() {",
     '      throw new Error("Sensitive task failure");',
     "    },",
     "  });",
-    '  pipr.on.changeRequest({ actions: ["opened"], task: summary });',
-    '  pipr.on.changeRequest({ actions: ["opened"], task: gate });',
     "  pipr.config({ checks: { aggregate: { enabled: true } } });",
     "  void model;",
     "});",
@@ -592,13 +523,7 @@ export function explicitModelIdConfigTs(): string {
     'import { definePipr } from "@usepipr/sdk";',
     "",
     "export default definePipr((pipr) => {",
-    "  const model = pipr.model({",
-    '    id: "fast",',
-    '    provider: "deepseek",',
-    '    model: "deepseek-reasoner",',
-    '    apiKey: pipr.secret({ name: "FAST_DEEPSEEK_API_KEY" }),',
-    '    thinking: "high",',
-    "  });",
+    '  const model = pipr.model("deepseek/deepseek-reasoner", { id: "fast", apiKey: pipr.secret({ name: "FAST_DEEPSEEK_API_KEY" }), thinking: "high" });',
     "  const reviewer = pipr.agent({",
     '    name: "reviewer",',
     "    model,",
@@ -608,13 +533,13 @@ export function explicitModelIdConfigTs(): string {
     "  });",
     "  const task = pipr.task({",
     '    name: "review",',
+    '    on: { changeRequest: ["opened"] },',
     "    async run(ctx) {",
-    "      const manifest = await ctx.change.diffManifest({ compressed: true });",
-    "      const result = await ctx.pi.run(reviewer, { manifest });",
+    "      const diff = await ctx.change.diff({ compressed: true });",
+    "      const result = await ctx.pi.run(reviewer, { diff });",
     "      await ctx.comment(result.summary.body);",
     "    },",
     "  });",
-    '  pipr.on.changeRequest({ actions: ["opened"], task });',
     "});",
   ].join("\n");
 }

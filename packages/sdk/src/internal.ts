@@ -25,6 +25,8 @@ export {
   tokenizeCommandPattern,
   unsupportedCommandRestCaptureError,
 } from "./command-grammar.js";
+export { facetsForFindingSchema } from "./finding.js";
+export { isMarkdownText, markdownString } from "./markdown.js";
 export { renderPromptValue } from "./prompt-render.js";
 export type { SdkDeclarationModule } from "./standalone-declaration.js";
 export {

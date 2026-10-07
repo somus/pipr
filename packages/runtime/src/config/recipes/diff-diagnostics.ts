@@ -5,32 +5,11 @@ export const diffDiagnosticsRecipe = {
   title: "Diff Diagnostics",
   description: "reviewdog-style diagnostic review mapped into inline findings.",
   sourceTools: ["reviewdog"],
-  configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { ReviewFinding } from "@usepipr/sdk";
+  configTs: `import { definePipr, md, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
-
-  const diagnosticOutput = pipr.schema({
-    id: "diagnostics/reviewdog-style",
-    schema: z.strictObject({
-      summary: z.string(),
-      diagnostics: z.array(z.strictObject({
-        body: z.string(),
-        path: z.string(),
-        rangeId: z.string(),
-        side: z.enum(["RIGHT", "LEFT"]),
-        startLine: z.number().int().positive(),
-        endLine: z.number().int().positive(),
-        suggestedFix: z.string().optional(),
-      })),
-    }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
+  const diagnostic = pipr.finding({});
 
   const diagnostics = pipr.agent({
     name: "diff-diagnostics",
@@ -40,34 +19,26 @@ export default definePipr((pipr) => {
       State the concrete defect and impact in at most two sentences. Suppress
       style preferences, broad refactors, and diagnostics without exact changed-line anchors.
     \`,
-    output: diagnosticOutput,
+    output: z.strictObject({ summary: z.string(), diagnostics: z.array(diagnostic) }),
     prompt: () => "Summarize the diff-scoped diagnostics for this change.",
   });
 
-  const task = pipr.task({
+  pipr.task({
     name: "diff-diagnostics",
+    on: {
+      changeRequest: ["opened", "updated"],
+      command: { pattern: "@pipr diagnostics", permission: "write" },
+    },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
-      const result = await ctx.pi.run(diagnostics, { manifest });
-      const mappedFindings: ReviewFinding[] = result.diagnostics.map((diagnostic) => ({
-        body: diagnostic.body,
-        path: diagnostic.path,
-        rangeId: diagnostic.rangeId,
-        side: diagnostic.side,
-        startLine: diagnostic.startLine,
-        endLine: diagnostic.endLine,
-        ...(diagnostic.suggestedFix ? { suggestedFix: diagnostic.suggestedFix } : {}),
-      }));
-      const { validFindings: inlineFindings } = ctx.review.validateFindings(mappedFindings);
+      const diff = await ctx.change.diff({ compressed: true });
+      const result = await ctx.pi.run(diagnostics, { diff });
+      const { findings } = ctx.review.select(result.diagnostics);
       await ctx.comment({
-        main: ["## 🧭 Summary", "", result.summary].join("\\n"),
-        inlineFindings,
+        main: md.blocks(md\`## 🧭 Summary\`, md\`\${result.summary}\`),
+        inlineFindings: findings,
       });
     },
   });
-
-  pipr.on.changeRequest({ actions: ["opened", "updated"], task });
-  pipr.command({ pattern: "@pipr diagnostics", permission: "write", task });
 });
 `,
 } as const satisfies OfficialInitRecipe;

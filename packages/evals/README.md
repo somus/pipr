@@ -14,7 +14,7 @@ Use the narrowest command that covers the change.
 
 | Command | Use | Gate |
 | --- | --- | --- |
-| `bun run --cwd packages/evals eval:deterministic` | Fake Pi prompt-contract smoke tests. No model API call. | Yes |
+| `bun run --cwd packages/evals eval:deterministic` | Scripted-provider prompt-contract smoke tests. No model API call. | Yes |
 | `bun run --cwd packages/evals eval` (root alias: `bun run eval:prompts`) | Focused live gates for recall, suppression, safety, and suggested fixes. | Yes |
 | `bun run --cwd packages/evals eval:suggested-fix` | Targeted live gate for suggested-fix behavior. | Yes |
 | `bun run --cwd packages/evals eval:dev` | Evalite watch mode for the focused live gates. | Yes |
@@ -55,9 +55,9 @@ The eval package separates fixtures, live suite selection, and scoring.
 | `src/prompt-evals.eval.ts` | Broad advisory live suite over all live cases. |
 | `src/live-prompt-gates.ts` | Shared live case groups, Evalite scorers, and environment checks. |
 | `src/runner.ts` | Builds eval inputs, runs Pipr, and returns normalized outputs for scoring. |
-| `src/deterministic-smoke.ts` | Runs fake Pi evals without calling a model API. |
-| `src/scoring.ts` | Deterministic scoring functions used by live and fake Pi evals. |
-| `src/fake-pi.ts` | Fake Pi output for deterministic prompt-contract smoke tests. |
+| `src/deterministic-smoke.ts` | Runs deterministic evals through the scripted provider without calling a model API. |
+| `src/scoring.ts` | Deterministic scoring functions used by live and deterministic evals. |
+| `src/scripted-provider.ts` | Agent worker model provider for deterministic evals: checks the prompt contract and answers from the rendered Diff Manifest. |
 | `src/effectiveness-cases.ts` | Paired positive and clean benchmark fixtures plus prompt variants. |
 | `src/effectiveness.ts` | Repeated-run orchestration, issue matching, funnel metrics, metadata, and report writing. |
 | `src/effectiveness-benchmark.ts` | Advisory live benchmark CLI. |

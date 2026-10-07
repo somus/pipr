@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { assertSupportedCommandRestCapture } from "./command-grammar.js";
+import { createFindingSchema } from "./finding.js";
 import { configFactoryBrand, type InternalPiprConfigFactory } from "./internal-contract.js";
 import { stripCommonIndent } from "./prompt.js";
 import { serializePromptJson } from "./prompt-json.js";
 import { renderPromptValue } from "./prompt-render.js";
-import type { ReviewFindingsResult, ReviewResult, ReviewSummary } from "./review-contract.js";
+import { registerReviewPreset } from "./review-preset.js";
 import type {
   RuntimeAgent,
   RuntimeAgentTool,
@@ -20,7 +21,7 @@ import {
   runtimeTaskForHandle,
 } from "./runtime-handles.js";
 import { jsonSchema, schema, schemas } from "./schema.js";
-import type { Agent, BuiltinToolCatalog } from "./types/agent.js";
+import type { BuiltinToolCatalog } from "./types/agent.js";
 import type {
   AggregateCheckOptions,
   AutoResolveOptions,
@@ -33,18 +34,8 @@ import type {
 } from "./types/config.js";
 import { maxStoredFindingsLimit, modelThinkingLevels } from "./types/config.js";
 import type { DiffManifestLimits, RuntimeLimits } from "./types/manifest.js";
-import type { Markdown } from "./types/prompt.js";
-import type {
-  CommandOptions,
-  CommentValue,
-  DefaultReviewInput,
-  DefaultReviewSummaryInput,
-  PiprBuilder,
-  PiprPlugin,
-  ReviewRecipeOptions,
-  Task,
-} from "./types/task.js";
-import { defaultReviewActions, defaultReviewEntrypoints } from "./types/task.js";
+import type { PiprBuilder, PiprPlugin } from "./types/task.js";
+import { defaultReviewActions } from "./types/task.js";
 
 /** Defines a synchronous pipr configuration factory. */
 export function definePipr(configure: (pipr: PiprBuilder) => void): {
@@ -91,17 +82,6 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       readOnly: [readOnlyTool.handle],
     } satisfies BuiltinToolCatalog,
     schemas,
-    on: {
-      changeRequest(options) {
-        if (!Array.isArray(options.actions) || !options.task) {
-          throw new Error("pipr.on.changeRequest requires { actions, task }");
-        }
-        changeRequestTriggers.push({
-          actions: [...options.actions],
-          task: runtimeTaskForHandle(options.task),
-        });
-      },
-    },
     secret(options) {
       if (!options || typeof options.name !== "string") {
         throw new Error("pipr.secret requires { name }");
@@ -111,27 +91,25 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       }
       return { kind: "pipr.secret", name: options.name };
     },
-    model(options) {
-      if (!options || typeof options.provider !== "string" || typeof options.model !== "string") {
-        throw new Error("pipr.model requires { provider, model }");
+    model(ref, options = {}) {
+      const separator = typeof ref === "string" ? ref.indexOf("/") : -1;
+      if (separator <= 0 || separator === ref.length - 1) {
+        throw new Error("pipr.model requires a 'provider/model' reference");
       }
-      if (!options.provider || !options.model) {
-        throw new Error("pipr.model requires provider and model");
-      }
-      if (options.thinking !== undefined && !modelThinkingLevels.includes(options.thinking)) {
-        throw new Error(`pipr.model received unsupported thinking level '${options.thinking}'`);
-      }
-      const id = options.id ?? `${options.provider}/${options.model}`;
+      assertModelOptions(options);
       const profile: ModelProfile = {
         kind: "pipr.model",
-        id,
-        provider: options.provider,
-        model: options.model,
+        id: options.id ?? ref,
+        provider: ref.slice(0, separator),
+        model: ref.slice(separator + 1),
         apiKey: options.apiKey,
         thinking: options.thinking,
       };
       models.push(profile);
       return profile;
+    },
+    finding(fields) {
+      return createFindingSchema(fields);
     },
     agent(definition) {
       const agent = createAgentHandle(definition);
@@ -144,14 +122,31 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       }
       const task = createTaskHandle(definition);
       tasks.push(task.record);
+      const changeRequest = definition.on?.changeRequest as
+        | readonly ChangeRequestAction[]
+        | true
+        | undefined;
+      if (changeRequest) {
+        changeRequestTriggers.push({
+          actions: changeRequest === true ? [...defaultReviewActions] : [...changeRequest],
+          task: task.record,
+        });
+      }
+      const command = definition.on?.command;
+      if (command) {
+        api.command(
+          typeof command === "string"
+            ? { pattern: command, task: task.handle }
+            : { ...command, task: task.handle },
+        );
+      }
       return task.handle;
     },
     review(options) {
-      assertKnownReviewRecipeOptions(options);
-      if (!options.model || !models.includes(options.model)) {
+      if (options.model && !models.includes(options.model)) {
         throw new Error("pipr.review requires a registered model.");
       }
-      registerReviewRecipe(api, options);
+      return registerReviewPreset(api, options, models[0]);
     },
     config(options) {
       assertKnownPiprConfigOptions(options);
@@ -254,29 +249,6 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
   };
 }
 
-function registerReviewRecipe(api: PiprBuilder, options: ReviewRecipeOptions): void {
-  const id = options.id;
-  const findingsAgent = createReviewFindingsAgent(api, options);
-  const summaryAgent = createReviewSummaryAgent(api, options);
-  const task = createReviewRecipeTask(api, id, findingsAgent, summaryAgent, options);
-  registerReviewRecipeEntrypoints(api, task, options);
-}
-
-const reviewRecipeOptionKeys = new Set([
-  "id",
-  "entrypoints",
-  "comment",
-  "check",
-  "timeout",
-  "paths",
-  "model",
-  "fallbacks",
-  "instructions",
-  "tools",
-]);
-
-const reviewRecipeEntrypointKeys = new Set(["changeRequest", "command"]);
-
 const modelProfileConfigSchema: z.ZodType<ModelProfile> = z.custom<ModelProfile>(
   (value) =>
     typeof value === "object" &&
@@ -348,43 +320,6 @@ const piprConfigOptionsSchema: z.ZodType<PiprConfigOptions> = z.strictObject({
   limits: runtimeLimitsSchema.optional(),
 });
 
-function assertKnownReviewRecipeOptions(options: ReviewRecipeOptions): void {
-  const unknownKeys = Object.keys(options).filter((key) => !reviewRecipeOptionKeys.has(key));
-  if (unknownKeys.length > 0) {
-    throw new Error(`pipr.review received unsupported option fields: ${unknownKeys.join(", ")}.`);
-  }
-
-  const instructions = options.instructions as
-    | { findings?: unknown; summary?: unknown }
-    | undefined;
-  if (
-    !instructions ||
-    typeof instructions !== "object" ||
-    !isPromptSource(instructions.findings) ||
-    !isPromptSource(instructions.summary)
-  ) {
-    throw new Error("pipr.review instructions require both findings and summary.");
-  }
-
-  const entrypoints = options.entrypoints;
-  if (entrypoints && typeof entrypoints === "object") {
-    const unknownEntrypointKeys = Object.keys(entrypoints).filter(
-      (key) => !reviewRecipeEntrypointKeys.has(key),
-    );
-    if (unknownEntrypointKeys.length > 0) {
-      throw new Error(
-        `pipr.review entrypoints received unsupported fields: ${unknownEntrypointKeys.join(", ")}.`,
-      );
-    }
-  }
-}
-
-function isPromptSource(value: unknown): boolean {
-  return (
-    (typeof value === "string" && value.length > 0) || (typeof value === "object" && value !== null)
-  );
-}
-
 function assertKnownPiprConfigOptions(options: unknown): asserts options is PiprConfigOptions {
   const parsed = piprConfigOptionsSchema.safeParse(options);
   if (!parsed.success) {
@@ -426,209 +361,6 @@ function firstUnsupportedConfigFields(
 function piprConfigLabel(pathSegments: PropertyKey[]): string {
   const path = pathSegments.join(".");
   return path ? `pipr.config ${path}` : "pipr.config";
-}
-
-function createReviewFindingsAgent(
-  api: PiprBuilder,
-  options: ReviewRecipeOptions,
-): Agent<DefaultReviewInput, ReviewFindingsResult> {
-  return api.agent<DefaultReviewInput, ReviewFindingsResult>({
-    name: `${options.id}-findings`,
-    model: options.model,
-    fallbacks: options.fallbacks,
-    instructions: options.instructions.findings,
-    tools: options.tools ?? api.tools.readOnly,
-    output: api.schemas.inlineFindings,
-    timeout: options.timeout,
-    prompt: () => api.prompt`Review this change for actionable inline findings.`,
-  });
-}
-
-function createReviewSummaryAgent(
-  api: PiprBuilder,
-  options: ReviewRecipeOptions,
-): Agent<DefaultReviewSummaryInput, ReviewSummary> {
-  return api.agent<DefaultReviewSummaryInput, ReviewSummary>({
-    name: `${options.id}-summary`,
-    model: options.model,
-    fallbacks: options.fallbacks,
-    instructions: options.instructions.summary,
-    tools: options.tools ?? api.tools.readOnly,
-    output: api.schemas.summary,
-    timeout: options.timeout,
-    prompt: ({ inlineFindings, manifestSummary }) =>
-      api.prompt`
-        Summarize this change using the merged inline findings as evidence.
-
-        ${api.section("Scoped compressed manifest", api.json(manifestSummary, { maxCharacters: 60_000 }))}
-
-        ${api.section("Merged inline findings", api.json(inlineFindings, { maxCharacters: 60_000 }))}
-      `,
-  });
-}
-
-function createReviewRecipeTask(
-  api: PiprBuilder,
-  id: string,
-  findingsAgent: Agent<DefaultReviewInput, ReviewFindingsResult>,
-  summaryAgent: Agent<DefaultReviewSummaryInput, ReviewSummary>,
-  options: ReviewRecipeOptions,
-): Task {
-  return api.task({
-    name: id,
-    check: options.check,
-    async run(context) {
-      const manifest = await context.change.diffManifest({
-        compressed: true,
-        paths: options.paths,
-      });
-      if (options.paths && manifest.files.length === 0) {
-        context.check.neutral("No changed files matched this review's path scope.");
-        await context.comment({ main: "No changed files matched this review's path scope." });
-        return;
-      }
-      const findings = await context.pi.run(
-        findingsAgent,
-        { manifest, change: context.change },
-        {
-          timeout: options.timeout,
-          paths: options.paths,
-        },
-      );
-      const { validFindings } = context.review.validateFindings(findings.inlineFindings, {
-        paths: options.paths,
-      });
-      const summary = await context.pi.run(
-        summaryAgent,
-        {
-          manifestSummary: defaultReviewSummaryManifest(manifest),
-          change: context.change,
-          inlineFindings: validFindings,
-        },
-        {
-          timeout: options.timeout,
-          paths: options.paths,
-        },
-      );
-      const result: ReviewResult = {
-        summary,
-        inlineFindings: [...validFindings],
-      };
-      const source =
-        typeof options.comment === "function"
-          ? await options.comment(result, {
-              review: { id },
-              run: context.run,
-              repository: context.repository,
-              change: context.change,
-              platform: context.platform,
-            })
-          : (options.comment ?? defaultReviewComment(result));
-      await context.comment(source);
-    },
-  });
-}
-
-function defaultReviewSummaryManifest(
-  manifest: DefaultReviewInput["manifest"],
-): DefaultReviewSummaryInput["manifestSummary"] {
-  const maxSerializedFileCharacters = 40_000;
-  const files: DefaultReviewSummaryInput["manifestSummary"]["files"][number][] = [];
-  let serializedFileCharacters = 0;
-
-  for (const file of manifest.files) {
-    const projected = {
-      path: file.path.slice(0, 1_000),
-      ...(file.previousPath ? { previousPath: file.previousPath.slice(0, 1_000) } : {}),
-      status: file.status,
-      ...(file.language ? { language: file.language.slice(0, 100) } : {}),
-      additions: file.additions,
-      deletions: file.deletions,
-      ...(file.changedSymbols?.length
-        ? {
-            changedSymbols: file.changedSymbols.slice(0, 20).map((symbol) => symbol.slice(0, 200)),
-          }
-        : {}),
-      ...(file.excludedReason ? { excludedReason: file.excludedReason.slice(0, 500) } : {}),
-    };
-    const projectedCharacters = JSON.stringify(projected).length;
-    if (serializedFileCharacters + projectedCharacters > maxSerializedFileCharacters) {
-      continue;
-    }
-    files.push(projected);
-    serializedFileCharacters += projectedCharacters;
-  }
-
-  return {
-    baseSha: manifest.baseSha,
-    headSha: manifest.headSha,
-    mergeBaseSha: manifest.mergeBaseSha,
-    fileCount: manifest.files.length,
-    omittedFileCount: manifest.files.length - files.length,
-    files,
-  };
-}
-
-function defaultReviewComment(result: ReviewResult): CommentValue {
-  return {
-    main: defaultReviewMarkdown(result),
-    inlineFindings: result.inlineFindings,
-  };
-}
-
-function defaultReviewMarkdown(result: ReviewResult): Markdown {
-  const findings =
-    result.inlineFindings.length === 0
-      ? "No inline findings."
-      : result.inlineFindings.map((finding) => `- ${finding.body}`).join("\n");
-  return `## Summary\n\n${result.summary.body}\n\n## Findings\n\n${findings}`;
-}
-
-function registerReviewRecipeEntrypoints(
-  api: PiprBuilder,
-  task: Task,
-  options: ReviewRecipeOptions,
-): void {
-  const changeRequest = reviewChangeRequestEntrypoint(options);
-  if (changeRequest) {
-    api.on.changeRequest({ actions: changeRequest, task });
-  }
-  const command = reviewCommandEntrypoint(options);
-  if (command) {
-    api.command({ pattern: command.pattern, ...command.options, task });
-  }
-}
-
-function reviewChangeRequestEntrypoint(
-  options: ReviewRecipeOptions,
-): readonly ChangeRequestAction[] | undefined {
-  const entrypoint = options.entrypoints?.changeRequest;
-  return entrypoint === false ? undefined : (entrypoint ?? defaultReviewActions);
-}
-
-function reviewCommandEntrypoint(options: ReviewRecipeOptions):
-  | {
-      pattern: string;
-      options: CommandOptions<void>;
-    }
-  | undefined {
-  const entrypoint = options.entrypoints?.command;
-  if (entrypoint === false) {
-    return undefined;
-  }
-  if (typeof entrypoint === "object") {
-    return {
-      pattern: entrypoint.pattern ?? defaultReviewEntrypoints.command.pattern,
-      options: {
-        permission: entrypoint.permission ?? defaultReviewEntrypoints.command.permission,
-        description: entrypoint.description,
-      },
-    };
-  }
-  return {
-    pattern: entrypoint ?? defaultReviewEntrypoints.command.pattern,
-    options: { permission: defaultReviewEntrypoints.command.permission },
-  };
 }
 
 function mergePublicationConfig(
@@ -747,6 +479,19 @@ function assertUnique(values: string[], label: string): void {
   }
 }
 
+function assertModelOptions(options: Parameters<PiprBuilder["model"]>[1] & object): void {
+  if (options.thinking !== undefined && !modelThinkingLevels.includes(options.thinking)) {
+    throw new Error(`pipr.model received unsupported thinking level '${options.thinking}'`);
+  }
+  if (
+    options.apiKey !== undefined &&
+    options.apiKey !== "local" &&
+    options.apiKey?.kind !== "pipr.secret"
+  ) {
+    throw new Error("pipr.model apiKey must be pipr.secret(...) or 'local'");
+  }
+}
+
 function assertModelIdentity(models: ModelProfile[]): void {
   assertNoDuplicateModelConfigs(models);
   assertUniqueModelIds(models);
@@ -759,7 +504,7 @@ function assertNoDuplicateModelConfigs(models: ModelProfile[]): void {
     const effectiveConfig = stableJson({
       provider: model.provider,
       model: model.model,
-      apiKeyEnv: model.apiKey?.name,
+      apiKey: typeof model.apiKey === "string" ? model.apiKey : model.apiKey?.name,
       thinking: model.thinking,
     });
     const existingConfigId = effectiveConfigs.get(effectiveConfig);

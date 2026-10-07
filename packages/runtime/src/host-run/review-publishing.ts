@@ -9,6 +9,7 @@ import { runTaskRuntime } from "../review/task/task-runtime.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import type { HostRunServices } from "./composition.js";
+import { changeRequestPiStoreDir } from "./pi-store.js";
 import type { ReviewProgressReporter } from "./review-progress.js";
 import {
   finalizeRuntimeChecks,
@@ -78,7 +79,8 @@ async function executeTaskRuntime(
     commandInvocation: options.commandInvocation,
     trustedConfigSha: options.trustedRuntime.trustedConfigSha,
     trustedConfigHash: options.trustedRuntime.trustedConfigHash,
-    piExecutable: services.piExecutable,
+    piProviderModule: services.piProviderModule,
+    piStoreDir: changeRequestPiStoreDir(services.piStoreRoot, options.event),
     piRunner: services.piRunner,
     log: services.log,
     checkSink,

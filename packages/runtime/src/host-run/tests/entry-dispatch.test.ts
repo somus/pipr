@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { definePipr } from "@usepipr/sdk";
 import { buildPiprPlan } from "@usepipr/sdk/internal";
-import { selectLocalReviewTasks } from "../../review/task/select-runtime-tasks.js";
 import {
-  dispatchRuntimeEntry,
+  selectLocalReviewTasks,
+  selectRuntimeTasks,
+} from "../../review/task/select-runtime-tasks.js";
+import {
   parsePlanCommandInputs,
   permissionDeniedHelp,
   resolvePlanCommand,
@@ -13,37 +15,25 @@ describe("entry dispatch command routing", () => {
   it("selects change-request tasks", () => {
     const plan = buildPiprPlan(
       definePipr((pipr) => {
-        const review = pipr.task({ name: "review", run() {} });
-        const audit = pipr.task({ name: "audit", run() {} });
-        const ready = pipr.task({ name: "ready", run() {} });
-        pipr.on.changeRequest({ actions: ["updated"], task: review });
-        pipr.on.changeRequest({ actions: ["updated"], task: audit });
-        pipr.on.changeRequest({ actions: ["ready"], task: ready });
+        pipr.task({ name: "review", on: { changeRequest: ["updated"] }, run() {} });
+        pipr.task({ name: "audit", on: { changeRequest: ["updated"] }, run() {} });
+        pipr.task({ name: "ready", on: { changeRequest: ["ready"] }, run() {} });
       }),
     );
 
     expect(
-      dispatchRuntimeEntry({ kind: "change-request", plan, event: { action: "updated" } }),
-    ).toMatchObject({
-      kind: "change-request",
-      tasks: [{ name: "review" }, { name: "audit" }],
-    });
+      selectRuntimeTasks({ plan, event: { action: "updated" } }).map((task) => task.name),
+    ).toEqual(["review", "audit"]);
     expect(
-      dispatchRuntimeEntry({ kind: "change-request", plan, event: {}, taskName: "audit" }),
-    ).toMatchObject({
-      kind: "change-request",
-      tasks: [{ name: "audit" }],
-    });
+      selectRuntimeTasks({ plan, event: {}, taskName: "audit" }).map((task) => task.name),
+    ).toEqual(["audit"]);
   });
 
   it("selects unique local review tasks and skips local-disabled tasks", () => {
     const plan = buildPiprPlan(
       definePipr((pipr) => {
-        const review = pipr.task({ name: "review", run() {} });
-        const audit = pipr.task({ name: "audit", local: false, run() {} });
-        pipr.on.changeRequest({ actions: ["opened"], task: review });
-        pipr.on.changeRequest({ actions: ["updated"], task: review });
-        pipr.on.changeRequest({ actions: ["ready"], task: audit });
+        pipr.task({ name: "review", on: { changeRequest: ["opened", "updated"] }, run() {} });
+        pipr.task({ name: "audit", local: false, on: { changeRequest: ["ready"] }, run() {} });
       }),
     );
 

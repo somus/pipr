@@ -6,6 +6,8 @@ import { type AgentTool, type DiffManifest, z } from "@usepipr/sdk";
 import { createDiffRangeIndex } from "../../diff/ranges.js";
 import type { RunObserver } from "../../observability/types.js";
 import { createRuntimeLog } from "../../shared/logging.js";
+import { piRunFailure, piRunResult } from "../../tests/helpers/pi-run-result.js";
+import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import { extractPriorReviewState } from "../prior-state.js";
 import {
@@ -61,10 +63,11 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         prompt: () => "CUSTOM_CANONICAL_FINDINGS",
       });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           const result = await ctx.pi.run(agent, {
-            manifest: await ctx.change.diffManifest(),
+            diff: await ctx.change.diff(),
           });
           merged = result.inlineFindings;
           await ctx.comment({
@@ -74,7 +77,6 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
     const prompts: string[] = [];
 
@@ -87,9 +89,8 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         prompts.push(options.prompt);
         const match = options.prompt.match(/"path": "src\/file-(\d+)\.ts"/);
         const index = Number(match?.[1] ?? 0);
-        return {
-          exitCode: 0,
-          stdout: JSON.stringify({
+        return piRunResult(
+          JSON.stringify({
             inlineFindings: [
               {
                 severity: "high",
@@ -111,9 +112,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
               },
             ],
           }),
-          stderr: "",
-          durationMs: 1,
-        };
+        );
       },
     });
 
@@ -156,16 +155,16 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         prompt: () => "LIMITED_CANONICAL_FINDINGS",
       });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           const result = await ctx.pi.run(agent, {
-            manifest: await ctx.change.diffManifest(),
+            diff: await ctx.change.diff(),
           });
           merged = result.inlineFindings;
           await ctx.comment({ inlineFindings: result.inlineFindings });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     await runRuntime({
@@ -176,9 +175,8 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       piRunner: async (options) => {
         const match = options.prompt.match(/"path": "src\/file-(\d+)\.ts"/);
         const index = Number(match?.[1] ?? 0);
-        return {
-          exitCode: 0,
-          stdout: JSON.stringify({
+        return piRunResult(
+          JSON.stringify({
             inlineFindings: [
               {
                 body: `Defect ${index}.`,
@@ -190,9 +188,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
               },
             ],
           }),
-          stderr: "",
-          durationMs: 1,
-        };
+        );
       },
     });
 
@@ -207,8 +203,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: { findings: "Review.", summary: "Summarize." },
-          entrypoints: { command: false },
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+          on: { changeRequest: true },
         });
       }),
       config: {
@@ -246,7 +243,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(summaryPrompts).toHaveLength(1);
     expect(summaryPrompts[0]).toContain("source defect body");
     expect(summaryPrompts[0]).toContain("docs defect body");
-    expect(summaryPrompts[0]).toContain("Scoped compressed manifest");
+    expect(summaryPrompts[0]).toContain("Changed files");
     expect(summaryPrompts[0]).not.toContain("Diff Manifest:");
     expect(
       findingsPrompts.every(
@@ -273,6 +270,25 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     ]);
   });
 
+  it("renders a titled summary on its own line in the default review comment", async () => {
+    const result = await runRuntime({
+      plan: testPlan((pipr) => {
+        pipr.review({
+          id: "review",
+          model: deepseekModel(pipr),
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+        });
+      }),
+      piRunner: async (options) =>
+        options.prompt.includes("Schema ID: core/summary.")
+          ? piRunResult(JSON.stringify({ title: "Risky change", body: "Body text here." }))
+          : reviewPiResultForPrompt(options.prompt, []),
+    });
+
+    expect(result.mainComment).toContain("## Summary\n\n**Risky change**\n\nBody text here.");
+  });
+
   it("validates built-in findings before the summary agent", async () => {
     const prompts: string[] = [];
     const result = await runRuntime({
@@ -280,7 +296,8 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: { findings: "Review.", summary: "Summarize." },
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
         });
       }),
       piRunner: async (options) => {
@@ -314,8 +331,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           pipr.review({
             id: "review",
             model: deepseekModel(pipr),
-            instructions: { findings: "Review.", summary: "Summarize." },
-            entrypoints: { command: false },
+            instructions: "Review.",
+            summary: { instructions: "Summarize." },
+            on: { changeRequest: true },
           });
         }),
         piRunner: async (options) => {
@@ -356,8 +374,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           pipr.review({
             id: "review",
             model: deepseekModel(pipr),
-            instructions: { findings: "Review.", summary: "Summarize." },
-            entrypoints: { command: false },
+            instructions: "Review.",
+            summary: { instructions: "Summarize." },
+            on: { changeRequest: true },
           });
         }),
         config: {
@@ -685,15 +704,15 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         prompt: () => twoShardMarker,
       });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "run-specific-sharding",
         async run(ctx) {
-          const manifest = await ctx.change.diffManifest();
-          await ctx.pi.run(oneShardAgent, { manifest }, { maxShards: 1 });
-          await ctx.pi.run(twoShardAgent, { manifest }, { maxShards: 2 });
+          const diff = await ctx.change.diff();
+          await ctx.pi.run(oneShardAgent, { diff }, { maxShards: 1 });
+          await ctx.pi.run(twoShardAgent, { diff }, { maxShards: 2 });
           await ctx.comment("Run-specific sharding complete.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
     const prompts: string[] = [];
 
@@ -722,12 +741,12 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       const plan = testPlan((pipr) => {
         const agent = defaultReviewAgent(pipr);
         const task = pipr.task({
+          on: { changeRequest: ["opened"] },
           name: "invalid-run-sharding",
           async run(ctx) {
-            await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() }, { maxShards });
+            await ctx.pi.run(agent, { diff: await ctx.change.diff() }, { maxShards });
           },
         });
-        pipr.on.changeRequest({ actions: ["opened"], task });
       });
 
       await expect(
@@ -919,8 +938,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
           pipr.review({
             id: "review",
             model: deepseekModel(pipr),
-            instructions: { findings: "Review.", summary: "Summarize." },
-            entrypoints: { command: false },
+            instructions: "Review.",
+            summary: { instructions: "Summarize." },
+            on: { changeRequest: true },
           });
         }),
         config: {
@@ -943,8 +963,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: { findings: "Review.", summary: "Summarize." },
-          entrypoints: { command: false },
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+          on: { changeRequest: true },
         });
       }),
       config: {
@@ -1003,16 +1024,16 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     const plan = testPlan((pipr) => {
       const agent = defaultReviewAgent(pipr);
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           const result = await ctx.pi.run(agent, {
-            manifest: await ctx.change.diffManifest(),
+            diff: await ctx.change.diff(),
           });
           observedTitle = result.summary.title;
           await ctx.comment(result.summary.body);
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     await runRuntime({
@@ -1029,13 +1050,13 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         },
       },
       diffManifestBuilder: () => reviewTestManifestWithDocs(),
-      piRunner: async () => ({
-        ...noFindingsPiResult(),
-        stdout: JSON.stringify({
-          summary: { title: "Shared title", body: "No findings." },
-          inlineFindings: [],
-        }),
-      }),
+      piRunner: async () =>
+        piRunResult(
+          JSON.stringify({
+            summary: { title: "Shared title", body: "No findings." },
+            inlineFindings: [],
+          }),
+        ),
     });
 
     expect(observedTitle).toBe("Shared title");
@@ -1048,8 +1069,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         pipr.review({
           id: "review",
           model: deepseekModel(pipr),
-          instructions: { findings: "Review.", summary: "Summarize." },
-          entrypoints: { command: false },
+          instructions: "Review.",
+          summary: { instructions: "Summarize." },
+          on: { changeRequest: true },
         });
       }),
       diffManifestBuilder: () => reviewTestManifestWithDocs(),
@@ -1067,16 +1089,16 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     const plan = testPlan((pipr) => {
       const agent = defaultReviewAgent(pipr);
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           const result = await ctx.pi.run(agent, {
-            manifest: await ctx.change.diffManifest(),
+            diff: await ctx.change.diff(),
           });
           observedFindingCount = result.inlineFindings.length;
           await ctx.comment(result.summary.body);
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
     const duplicate = finding("same provider finding", "range-1", 10);
 
@@ -1184,10 +1206,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       plan: defaultReviewPlan(),
       piRunner: async () => {
         calls += 1;
-        return {
-          ...noFindingsPiResult(),
-          stdout: `\`\`\`json\n${noFindingsPiResult().stdout}\n\`\`\``,
-        };
+        return piRunResult(`\`\`\`json\n${noFindingsPiResult().text}\n\`\`\``);
       },
     });
 
@@ -1203,10 +1222,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         plan: defaultReviewPlan(),
         piRunner: async () => {
           calls += 1;
-          return {
-            ...noFindingsPiResult(),
-            stdout: `The review result is:\n${noFindingsPiResult().stdout}\nNo further comments.`,
-          };
+          return piRunResult(
+            `The review result is:\n${noFindingsPiResult().text}\nNo further comments.`,
+          );
         },
       }),
     ).rejects.toThrow("Pi output failed schema validation");
@@ -1221,9 +1239,8 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         plan: defaultReviewPlan(),
         piRunner: async () => {
           calls += 1;
-          return {
-            exitCode: 0,
-            stdout: JSON.stringify({
+          return piRunResult(
+            JSON.stringify({
               summary: { body: "Review." },
               inlineFindings: [
                 {
@@ -1232,9 +1249,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
                 },
               ],
             }),
-            stderr: "",
-            durationMs: 1,
-          };
+          );
         },
       }),
     ).rejects.toThrow("Pi output failed schema validation");
@@ -1284,7 +1299,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       piRunner: async (options) => {
         calls.push(options.provider.model);
         return options.provider.id === "deepseek/deepseek-v4-pro"
-          ? { exitCode: 0, stdout: "{", stderr: "", durationMs: 1 }
+          ? piRunResult("{")
           : noFindingsPiResult();
       },
     });
@@ -1301,7 +1316,6 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       piRunner: async () => {
         call += 1;
         const common = {
-          stderr: "",
           durationMs: 60_000,
           models: [call < 3 ? "primary-response-model" : "fallback-response-model"],
           usage: {
@@ -1324,9 +1338,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
             ],
           },
         };
-        return call < 3
-          ? { ...common, exitCode: 0, stdout: "{" }
-          : { ...common, ...noFindingsPiResult() };
+        return call < 3 ? piRunResult("{", common) : { ...noFindingsPiResult(), ...common };
       },
     });
     if (result.kind !== "review") {
@@ -1423,20 +1435,19 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
             return { event() {}, async finish() {} };
           },
         },
-        piRunner: async () => ({
-          ...noFindingsPiResult(),
-          exitCode: 42,
-          diffContextCoverage: {
-            files: [
-              {
-                path: "src/private-failure.ts",
-                rangeIds: ["private-failure-range"],
-                coveredRangeIds: [],
-                fullFile: false,
-              },
-            ],
-          },
-        }),
+        piRunner: async () =>
+          piRunResult("{", {
+            diffContextCoverage: {
+              files: [
+                {
+                  path: "src/private-failure.ts",
+                  rangeIds: ["private-failure-range"],
+                  coveredRangeIds: [],
+                  fullFile: false,
+                },
+              ],
+            },
+          }),
       }),
     ).rejects.toThrow("Pi agent failed");
 
@@ -1457,7 +1468,6 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       piRunner: async () => {
         call += 1;
         const telemetry = {
-          stderr: "",
           durationMs: 1,
           models: ["reported-model"],
           usage: {
@@ -1467,9 +1477,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
             costUsd: 0.001,
           },
         };
-        return call < 3
-          ? { ...telemetry, exitCode: 0, stdout: "{" }
-          : { ...telemetry, ...noFindingsPiResult() };
+        return call < 3 ? piRunResult("{", telemetry) : { ...noFindingsPiResult(), ...telemetry };
       },
     });
 
@@ -1518,24 +1526,24 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     const plan = testPlan((pipr) => {
       const agent = defaultReviewAgent(pipr);
       const first = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "first",
         async run(ctx) {
           await ctx.pi.run(agent, {
-            manifest: await ctx.change.diffManifest(),
+            diff: await ctx.change.diff(),
           });
         },
       });
       const second = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "second",
         async run(ctx) {
           await ctx.pi.run(agent, {
-            manifest: await ctx.change.diffManifest(),
+            diff: await ctx.change.diff(),
           });
           await ctx.comment("Parallel review complete.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task: first });
-      pipr.on.changeRequest({ actions: ["opened"], task: second });
     });
 
     let call = 0;
@@ -1554,7 +1562,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(result.publicationPlan.metadata.stats).toMatchObject({
       models: ["second-task-model", "first-task-model"],
       agentRuns: 2,
-      usageStatus: "unavailable",
+      usageStatus: "complete",
     });
   });
 
@@ -1565,24 +1573,24 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     const plan = testPlan((pipr) => {
       const agent = defaultReviewAgent(pipr);
       const first = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "first",
         async run(ctx) {
           await ctx.pi.run(agent, {
-            manifest: await ctx.change.diffManifest(),
+            diff: await ctx.change.diff(),
           });
         },
       });
       const second = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "second",
         async run(ctx) {
           await ctx.pi.run(agent, {
-            manifest: await ctx.change.diffManifest(),
+            diff: await ctx.change.diff(),
           });
           await ctx.comment("Parallel review complete.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task: first });
-      pipr.on.changeRequest({ actions: ["opened"], task: second });
     });
 
     const run = runRuntime({
@@ -1606,22 +1614,167 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(calls).toBe(1);
   });
 
+  it("runs ctx.pi.all requests concurrently with shared diff context", async () => {
+    const releases: Array<() => void> = [];
+    const allStarted = Promise.withResolvers<void>();
+    const sawManifestTools: boolean[] = [];
+    const requestIds: Array<string | undefined> = [];
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const diff = await ctx.change.diff();
+          const [first, second] = await ctx.pi.all([
+            { agent, input: { diff } },
+            { agent, input: { diff } },
+          ]);
+          await ctx.comment({
+            main: "Parallel review complete.",
+            inlineFindings: [...first.inlineFindings, ...second.inlineFindings],
+          });
+        },
+      });
+    });
+
+    const result = await runRuntime({
+      plan,
+      piRunner: async (options) => {
+        sawManifestTools.push(options.runtimeTools?.manifest !== undefined);
+        requestIds.push(options.requestId);
+        const released = new Promise<void>((resolve) => releases.push(resolve));
+        if (releases.length === 2) {
+          allStarted.resolve();
+        }
+        await allStarted.promise;
+        releases.shift()?.();
+        await released;
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(sawManifestTools).toHaveLength(2);
+    expect(new Set(requestIds).size).toBe(2);
+    expect(result.publicationPlan.metadata.stats).toMatchObject({ agentRuns: 2 });
+  });
+
+  it("rejects ctx.pi.all before any run when maxAgentRuns cannot cover every request", async () => {
+    let calls = 0;
+    const plan = testPlan((pipr) => {
+      const agent = defaultReviewAgent(pipr);
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const diff = await ctx.change.diff();
+          await ctx.pi.all([
+            { agent, input: { diff } },
+            { agent, input: { diff } },
+          ]);
+        },
+      });
+    });
+
+    await expect(
+      runRuntime({
+        plan,
+        config: { ...config, limits: { maxAgentRuns: 1 } },
+        piRunner: async () => {
+          calls += 1;
+          return noFindingsPiResult();
+        },
+      }),
+    ).rejects.toThrow("Review Run agent-call budget cannot start 2 concurrent runs; 1 of 1 remain");
+    expect(calls).toBe(0);
+  });
+
+  it("drops findings without a publishable suggested fix when select requires one", async () => {
+    let dropped: unknown[] = [];
+    const anchor = {
+      path: "src/a.ts",
+      rangeId: "range-1",
+      side: "RIGHT" as const,
+      startLine: 10,
+      endLine: 10,
+    };
+    const plan = testPlan((pipr) => {
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const selection = ctx.review.select(
+            [
+              { ...anchor, body: "Exact fix.", suggestedFix: "const x = recover();" },
+              { ...anchor, body: "No fix." },
+              { ...anchor, body: "Identical fix.", suggestedFix: "const x = fail();" },
+            ],
+            { requireSuggestedFix: true },
+          );
+          dropped = selection.dropped.map((item) => [item.finding.body, item.reason]);
+          await ctx.comment({ main: "Done.", inlineFindings: selection.findings });
+        },
+      });
+    });
+
+    const result = await runRuntime({ plan, diffManifestBuilder: () => reviewTestManifest() });
+
+    expect(result.inlineCommentDrafts.map((draft) => draft.finding.body)).toEqual(["Exact fix."]);
+    expect(dropped).toEqual([
+      ["No fix.", "suggested fix is missing or not publishable"],
+      ["Identical fix.", "suggested fix is missing or not publishable"],
+    ]);
+  });
+
+  it("only treats branded ctx.change.diff values as Diff Manifest context", async () => {
+    const observed: boolean[] = [];
+    const plan = testPlan((pipr) => {
+      const agent = pipr.agent({
+        name: "reviewer",
+        model: deepseekModel(pipr),
+        instructions: "Review.",
+        output: pipr.schemas.review,
+        prompt: () => "Review.",
+      });
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const diff = await ctx.change.diff();
+          await ctx.pi.run(agent, { manifest: diff.manifest });
+          await ctx.pi.run(agent, { context: diff });
+          await ctx.comment("Done.");
+        },
+      });
+    });
+
+    await runRuntime({
+      plan,
+      piRunner: async (options) => {
+        observed.push(options.prompt.includes("\nDiff Manifest:\n"));
+        return noFindingsPiResult();
+      },
+    });
+
+    expect(observed).toEqual([false, true]);
+  });
+
   it("keeps provider invocations unlimited when maxAgentRuns is omitted", async () => {
     let calls = 0;
     const plan = testPlan((pipr) => {
       const agent = defaultReviewAgent(pipr);
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           for (let index = 0; index < 5; index += 1) {
             await ctx.pi.run(agent, {
-              manifest: await ctx.change.diffManifest(),
+              diff: await ctx.change.diff(),
             });
           }
           await ctx.comment("Unlimited review complete.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
@@ -1732,11 +1885,17 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
   it("marks cumulative usage partial when an earlier rerun did not report usage", async () => {
     const first = await runRuntime({
-      plan: defaultReviewPlan(),
-      piRunner: async () => ({
-        ...noFindingsPiResult(),
-        models: ["unreported-model"],
-      }),
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async (options) => {
+        if (options.provider.id === "deepseek/deepseek-v4-pro") {
+          throw piRunFailure("unreported usage");
+        }
+        return {
+          ...noFindingsPiResult(),
+          models: ["unreported-model"],
+        };
+      },
     });
     const second = await runRuntime({
       plan: defaultReviewPlan(),
@@ -1754,7 +1913,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     });
 
     expect(second.publicationPlan.metadata.stats).toMatchObject({
-      agentRuns: 2,
+      agentRuns: 3,
       inputTokens: 200,
       outputTokens: 20,
       costUsd: 0.002,
@@ -1766,9 +1925,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     let call = 0;
     const result = await runRuntime({
       config: { ...fallbackConfig, limits: { maxAgentRuns: 2 } },
-      plan: fallbackReviewPlan({
-        agentPatch: { retry: { transientFailure: 1 } },
-      }),
+      plan: fallbackReviewPlan(),
       piRunner: async () => {
         call += 1;
         if (call === 1) {
@@ -1797,11 +1954,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     });
   });
 
-  it("retries transient failures per model before falling back", async () => {
+  it("falls back after a final provider failure without retrying the same model", async () => {
     const calls: string[] = [];
-    const plan = fallbackReviewPlan({
-      agentPatch: { retry: { transientFailure: 1 } },
-    });
+    const plan = fallbackReviewPlan();
 
     await runRuntime({
       config: fallbackConfig,
@@ -1809,10 +1964,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       piRunner: providerFailurePiRunner(calls),
     });
 
-    expect(calls).toEqual(["deepseek-v4-pro", "deepseek-v4-pro", "fallback-model"]);
+    expect(calls).toEqual(["deepseek-v4-pro", "fallback-model"]);
   });
 
-  it("counts shards, transient retries, repairs, and fallbacks against maxAgentRuns", async () => {
+  it("counts shards, repairs, and fallbacks against maxAgentRuns", async () => {
     let calls = 0;
     const limitedConfig = {
       ...manifestShardConfig(2),
@@ -1826,18 +1981,13 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     await expect(
       runRuntime({
         config: limitedConfig,
-        plan: fallbackReviewPlan({
-          agentPatch: { retry: { invalidOutput: 1, transientFailure: 1 } },
-        }),
+        plan: fallbackReviewPlan(),
         diffManifestBuilder: () => manyFileShardingManifest(),
         env: { ...process.env, PATH: "" },
         piRunner: async () => {
           calls += 1;
-          if (calls === 1) {
-            throw new Error("temporary provider failure");
-          }
           if (calls < 4) {
-            return { ...noFindingsPiResult(), stdout: "{" };
+            return piRunResult("{");
           }
           return noFindingsPiResult();
         },
@@ -1939,13 +2089,13 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     const plan = testPlan((pipr) => {
       const token = pipr.secret({ name: "CUSTOM_TOOL_TOKEN" });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "secret-task",
         async run(ctx) {
           observedSecret = ctx.secret(token);
           await ctx.comment("secret resolved");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     await runRuntime({
@@ -1998,13 +2148,13 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     const plan = testPlan((pipr) => {
       const token = pipr.secret({ name: "CUSTOM_TOOL_TOKEN" });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "secret-task",
         async run(ctx) {
           ctx.secret(token);
           await ctx.comment("secret resolved");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     await expect(runRuntime({ plan, env: {} })).rejects.toThrow(
@@ -2018,20 +2168,16 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "correctness",
         model,
-        instructions: {
-          findings: "Review correctness.",
-          summary: "Summarize correctness risk.",
-        },
-        entrypoints: { command: false },
+        instructions: "Review correctness.",
+        summary: { instructions: "Summarize correctness risk." },
+        on: { changeRequest: true },
       });
       pipr.review({
         id: "security",
         model,
-        instructions: {
-          findings: "Review security.",
-          summary: "Summarize security risk.",
-        },
-        entrypoints: { command: false },
+        instructions: "Review security.",
+        summary: { instructions: "Summarize security risk." },
+        on: { changeRequest: true },
       });
     });
 
@@ -2045,12 +2191,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
-        instructions: {
-          findings: "Review docs.",
-          summary: "Summarize docs changes.",
-        },
+        instructions: "Review docs.",
+        summary: { instructions: "Summarize docs changes." },
         paths: { include: ["docs/**"] },
-        entrypoints: { command: false },
+        on: { changeRequest: true },
       });
     });
 
@@ -2085,12 +2229,10 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
-        instructions: {
-          findings: "Review source.",
-          summary: "Summarize source changes.",
-        },
+        instructions: "Review source.",
+        summary: { instructions: "Summarize source changes." },
         paths: { include: ["src/**"] },
-        entrypoints: { command: false },
+        on: { changeRequest: true },
       });
     });
 
@@ -2099,17 +2241,15 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expectOnlyInsideFinding(result);
   });
 
-  it("honors publication maxInlineComments 0 for default comments", async () => {
+  it("caps pipr.review selection at publication maxInlineComments", async () => {
     const plan = testPlan((pipr) => {
       pipr.config({ publication: { maxInlineComments: 0 } });
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
-        instructions: {
-          findings: "Review source.",
-          summary: "Summarize source changes.",
-        },
-        entrypoints: { command: false },
+        instructions: "Review source.",
+        summary: { instructions: "Summarize source changes." },
+        on: { changeRequest: true },
       });
     });
 
@@ -2123,11 +2263,13 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
         reviewPiResultForPrompt(options.prompt, [finding("hidden", "range-1", 10)]),
     });
 
-    expect(result.review.inlineFindings).toHaveLength(1);
+    expect(result.review.inlineFindings).toEqual([]);
+    expect(result.validated.droppedFindings).toEqual([
+      { finding: finding("hidden", "range-1", 10), reason: "cap" },
+    ]);
     expect(result.inlineCommentDrafts).toEqual([]);
-    expect(result.publicationPlan.inlineItems).toEqual([]);
-    expect(result.publicationPlan.metadata.cappedInlineFindings).toBe(1);
-    expect(result.mainComment).toContain("hidden");
+    expect(result.mainComment).toContain("No inline findings.");
+    expect(result.mainComment).not.toContain("hidden");
   });
 
   it("honors publication maxStoredFindings 0 without hiding current findings", async () => {
@@ -2136,11 +2278,9 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       pipr.review({
         id: "review",
         model: deepseekModel(pipr),
-        instructions: {
-          findings: "Review source.",
-          summary: "Summarize source changes.",
-        },
-        entrypoints: { command: false },
+        instructions: "Review source.",
+        summary: { instructions: "Summarize source changes." },
+        on: { changeRequest: true },
       });
     });
 
@@ -2197,20 +2337,21 @@ function multiAgentShardingPlan() {
       model,
       instructions: multiAgentShardingMarkers[3],
       output: pipr.schemas.review,
-      prompt: (_input: { manifest: unknown; specialistResults: unknown }) =>
+      prompt: (_input: { diff: unknown; specialistResults: unknown }) =>
         multiAgentShardingMarkers[3],
     });
     const task = pipr.task({
+      on: { changeRequest: ["opened"] },
       name: "multi-agent-sharding",
       async run(ctx) {
-        const manifest = await ctx.change.diffManifest();
+        const diff = await ctx.change.diff();
         const [securityResult, testResult, maintainabilityResult] = await Promise.all([
-          ctx.pi.run(security, { manifest }),
-          ctx.pi.run(tests, { manifest }),
-          ctx.pi.run(maintainability, { manifest }),
+          ctx.pi.run(security, { diff }),
+          ctx.pi.run(tests, { diff }),
+          ctx.pi.run(maintainability, { diff }),
         ]);
         const result = await ctx.pi.run(aggregator, {
-          manifest,
+          diff,
           specialistResults: {
             securityResult,
             testResult,
@@ -2223,7 +2364,6 @@ function multiAgentShardingPlan() {
         });
       },
     });
-    pipr.on.changeRequest({ actions: ["opened"], task });
   });
 }
 

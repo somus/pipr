@@ -2,7 +2,7 @@ import type { PiprRunContext } from "../result.js";
 import type { ReviewFindingsResult, ReviewResult, ReviewSummary } from "../review-contract.js";
 import type { DurationInput, ModelProfile } from "./config.js";
 import type { PromptSource } from "./prompt.js";
-import type { Schema } from "./schema.js";
+import type { Schema, ZodSchema } from "./schema.js";
 import type { ChangeRequestInfo, PlatformInfo, RepositoryInfo } from "./task.js";
 
 /** Built-in tool catalog exposed on the pipr builder. */
@@ -41,12 +41,9 @@ export type AgentDefinition<Input, Output> = {
   fallbacks?: readonly ModelProfile[];
   instructions: PromptSource;
   prompt(input: Input, context: AgentPromptContext): PromptSource | Promise<PromptSource>;
-  output: Schema<Output>;
+  /** Output contract as a Zod schema or a `pipr.schema` wrapper. */
+  output: Schema<Output> | ZodSchema<Output>;
   tools?: readonly AgentTool[];
-  retry?: {
-    invalidOutput?: number;
-    transientFailure?: number;
-  };
   timeout?: DurationInput;
 };
 

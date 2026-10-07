@@ -1,7 +1,7 @@
 import { ReviewProgressSupersededError } from "../review/progress.js";
+import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import type { HostRunServices } from "./composition.js";
-import { dispatchRuntimeEntry } from "./entry-dispatch.js";
 import { logEventContext } from "./logging.js";
 import { startReviewProgress } from "./review-progress.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
@@ -23,12 +23,10 @@ export async function runChangeRequestHostRunCommand(
       configSource: trustedRuntime.settings.source,
     };
   }
-  const dispatch = dispatchRuntimeEntry({
-    kind: "change-request",
+  const selectedTasks = selectRuntimeTasks({
     plan: trustedRuntime.plan,
     event,
   });
-  const selectedTasks = dispatch.kind === "change-request" ? dispatch.tasks : [];
   services.log.notice("dispatch", {
     selectedTasks: selectedTasks.map((task) => task.name),
   });

@@ -1,7 +1,7 @@
 import type {
   CheckHandle,
-  CommentValue,
   DroppedReviewFinding,
+  FindingFacets,
   PathFilter,
   PiprRunSummary,
   PriorReview,
@@ -18,6 +18,7 @@ import {
   parseGeneratedMainCommentEnvelope,
 } from "../main-comment-envelope.js";
 import { maxReviewStatsModels, sanitizeReviewStatsModel } from "../review-stats.js";
+import { findingFacetValues } from "../selection.js";
 export type RuntimeCheckConclusion = "success" | "failure" | "neutral";
 
 export type RuntimeTaskCheckResult = {
@@ -36,14 +37,22 @@ export type OutputState = {
   findings: FindingContribution[];
   droppedFindings: DroppedReviewFinding[];
   findingScopes: WeakMap<readonly ReviewFinding[], PathFilter>;
+  /** Facet values of selected findings keyed by finding location. */
+  findingFacets: Map<string, Record<string, string>>;
   providerModels: string[];
   repairAttempted: boolean;
   check?: Omit<RuntimeTaskCheckResult, "taskName">;
 };
 
+/** Comment value after Markdown helpers have been converted to strings. */
+export type RuntimeCommentValue =
+  | string
+  | { main: string; inlineFindings?: readonly ReviewFinding[] }
+  | { main?: never; inlineFindings: readonly ReviewFinding[] };
+
 export type CommentContribution = {
   taskName: string;
-  value: CommentValue;
+  value: RuntimeCommentValue;
 };
 
 export type OutputStateWithComment = OutputState & {
@@ -92,6 +101,7 @@ export function createOutputState(): OutputState {
     findings: [],
     droppedFindings: [],
     findingScopes: new WeakMap(),
+    findingFacets: new Map(),
     providerModels: [],
     repairAttempted: false,
   };
@@ -346,7 +356,29 @@ export function createCheckHandle(state: OutputState): CheckHandle {
     neutral(summary) {
       setCheckResult(state, "neutral", summary);
     },
+    gate(findings, options) {
+      const failOn = options.failOn;
+      const blocks =
+        typeof failOn === "function"
+          ? failOn
+          : (finding: ReviewFinding) =>
+              Object.entries(failOn).some(([key, values]) => {
+                const value = (finding as Record<string, unknown>)[key];
+                return typeof value === "string" && values.includes(value);
+              });
+      const blocking = findings.filter((finding) => blocks(finding));
+      const summary = options.summary?.(blocking) ?? defaultGateSummary(blocking.length);
+      setCheckResult(state, blocking.length > 0 ? "failure" : "success", summary);
+      return { passed: blocking.length === 0, blocking };
+    },
   };
+}
+
+function defaultGateSummary(blockingCount: number): string {
+  if (blockingCount === 0) {
+    return "No blocking findings.";
+  }
+  return `${blockingCount} blocking finding${blockingCount === 1 ? "" : "s"}.`;
 }
 
 function setCheckResult(
@@ -369,7 +401,11 @@ export function runtimeTaskCheckResult(
     : { taskName, conclusion: check.conclusion };
 }
 
-export function collectComment(state: OutputState, value: CommentValue, taskName: string): void {
+export function collectComment(
+  state: OutputState,
+  value: RuntimeCommentValue,
+  taskName: string,
+): void {
   assertOutputContributionAllowed(
     state,
     "comment",
@@ -477,6 +513,24 @@ export function recordDroppedFindings(
       reason,
     })),
   );
+}
+
+export function recordFindingFacets(
+  state: OutputState,
+  findings: readonly ReviewFinding[],
+  facets: FindingFacets,
+): void {
+  if (Object.keys(facets).length === 0) {
+    return;
+  }
+  for (const finding of findings) {
+    state.findingFacets.set(findingLocationKey(finding), findingFacetValues(finding, facets));
+  }
+}
+
+/** Location key shared by facet tracking and outcome events. */
+function findingLocationKey(finding: ReviewFinding): string {
+  return [finding.path, finding.side, finding.startLine, finding.endLine].join(":");
 }
 
 function canonicalFindingProjection(finding: ReviewFinding): ReviewFinding {

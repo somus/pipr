@@ -9,6 +9,7 @@ import {
   prepareRunBundlePackage,
   type RuntimeLogRecord,
   type RuntimeLogSink,
+  runAgentWorkerCommand,
   runDryRunCommand,
   runHostRunCommand,
   runInitCommand,
@@ -62,8 +63,9 @@ type CliOptions = {
   requireEnv?: boolean;
   base?: string;
   head?: string;
-  piExecutable?: string;
-  piAgentDir?: string;
+  providerModule?: string;
+  providerConfig?: string;
+  piAuthFile?: string;
   json?: boolean;
   limit?: string;
   trace?: string | boolean;
@@ -87,6 +89,10 @@ type MainOptions = {
 
 export async function runMain(options: MainOptions = {}): Promise<void> {
   const argv = options.argv ?? process.argv;
+  if (argv[2] === "agent-worker") {
+    await runAgentWorkerCommand(argv.slice(3));
+    return;
+  }
   const context: CliExecutionContext = {
     cwd: options.cwd ?? process.cwd(),
     env: options.env ?? process.env,
@@ -195,9 +201,10 @@ function createProgram(
     .requiredOption("--base <sha>", "Base commit SHA")
     .option("--head <sha>", "Head commit SHA or ref; omitted reviews the working tree")
     .option("--config-dir <dir>", "Config directory", ".pipr")
-    .option("--pi-executable <path>", "Pi executable path")
     .option("--trace [path]", "Capture a diagnostic run bundle")
-    .option("--pi-agent-dir <path>", "Pi agent directory for local authentication")
+    .option("--pi-auth-file <path>", "Pi auth file for models without apiKey")
+    .option("--provider-module <path>", "Module whose default export returns Pi providers")
+    .option("--provider-config <path>", "Config path passed to the provider module")
     .option("--json", "Print structured JSON output")
     .action((commandOptions: CliOptions & { base: string }) =>
       runLocalReview(commandOptions, context),
@@ -680,9 +687,18 @@ async function runLocalReview(
     env: context.env,
     baseSha: options.base,
     headSha: options.head,
-    piExecutable: options.piExecutable,
     traceDirectory,
-    piAgentDir: options.piAgentDir,
+    piAuthFile: options.piAuthFile,
+    ...(options.providerModule
+      ? {
+          piProviderModule: {
+            path: path.resolve(context.cwd, options.providerModule),
+            ...(options.providerConfig
+              ? { config: path.resolve(context.cwd, options.providerConfig) }
+              : {}),
+          },
+        }
+      : {}),
     logSink: localConsoleLogSink,
     taskLog: stderrTaskLog,
   });

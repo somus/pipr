@@ -15,6 +15,8 @@ export class ProviderExecutionError extends Error {
   constructor(
     message: string,
     readonly remediation?: ProviderFailureRemediation,
+    /** Raw provider or worker output; may carry secrets, so callers redact it before display. */
+    readonly detail?: string,
   ) {
     super(message);
     this.name = "ProviderExecutionError";

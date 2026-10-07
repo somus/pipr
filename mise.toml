@@ -1,7 +1,7 @@
 [tools]
-bun = "1.4.0"
+bun = "1.4.2"
 act = "0.2.89"
-hk = "1.56.1"
+hk = "2.5.0"
 
 [tasks.install]
 description = "Install JavaScript dependencies and Git hooks"
@@ -12,5 +12,5 @@ description = "Run repository checks"
 run = "bun run check"
 
 [tasks.check-actions]
-description = "Build local Docker Action image, verify Pi contract, and run act fixtures"
+description = "Build local Docker Action image, verify the harness contract, and run act fixtures"
 run = "bun run check:actions"

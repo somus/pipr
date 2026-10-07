@@ -46,18 +46,12 @@ export const scenarioNames = ["dry-run", "full", "condensed", "orchestrator"] as
 const packageRootPath = "packages/e2e";
 export const fixtureRootPath = `${packageRootPath}/fixtures/act`;
 export const actionFixtureScript = `${packageRootPath}/action-fixture.ts`;
-export const fakePiScript = `${packageRootPath}/fake-pi`;
 export const sourceRoot = gitOutput(process.cwd(), ["rev-parse", "--show-toplevel"]).trim();
 
 const fullConfig = `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
   const reviewer = pipr.agent({
     name: "review",
     model,
@@ -70,13 +64,14 @@ export default definePipr((pipr) => {
     include: ["packages/e2e/fixtures/act/project/**"],
     exclude: ["**/*.test.ts"],
   };
-  const task = pipr.task({
+  pipr.task({
     name: "pipr/review",
+    on: { changeRequest: ["opened"] },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true, paths: sourcePaths });
-      const [review, duplicate] = await Promise.all([
-        ctx.pi.run(reviewer, { manifest }, { paths: sourcePaths }),
-        ctx.pi.run(reviewer, { manifest }, { paths: sourcePaths }),
+      const diff = await ctx.change.diff({ compressed: true, paths: sourcePaths });
+      const [review, duplicate] = await ctx.pi.all([
+        { agent: reviewer, input: { diff }, options: { paths: sourcePaths } },
+        { agent: reviewer, input: { diff }, options: { paths: sourcePaths } },
       ]);
       await ctx.comment({
         main: [
@@ -88,25 +83,14 @@ export default definePipr((pipr) => {
       });
     },
   });
-  pipr.on.changeRequest({ actions: ["opened"], task });
 });
 `;
 
 const condensedConfig = `import { definePipr } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const primary = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
-  const fallback = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-fallback",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const primary = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
+  const fallback = pipr.model("deepseek/deepseek-v4-fallback", { thinking: "high" });
   pipr.config({
     publication: { maxInlineComments: 5 },
     limits: {
@@ -127,33 +111,27 @@ export default definePipr((pipr) => {
     instructions: "Review the condensed act fixture.",
     output: pipr.schemas.review,
     tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
-    prompt: (input) => pipr.prompt\`Review this change.\n\nDiff Manifest:\n\${pipr.json(input.manifest)}\`,
+    prompt: (input) => pipr.prompt\`Review this change.\n\nDiff Manifest:\n\${pipr.json(input.diff.manifest)}\`,
   });
-  const task = pipr.task({
+  pipr.task({
     name: "review",
+    on: { changeRequest: ["opened"] },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
-      const review = await ctx.pi.run(reviewer, { manifest });
+      const diff = await ctx.change.diff({ compressed: true });
+      const review = await ctx.pi.run(reviewer, { diff });
       await ctx.comment({
         main: review.summary.body,
         inlineFindings: review.inlineFindings,
       });
     },
   });
-  pipr.on.changeRequest({ actions: ["opened"], task });
 });
 `;
 
 const orchestratorConfig = `import { definePipr, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
   const specialistOutput = pipr.schema({
     id: "fixture/specialist-output",
     schema: z.strictObject({
@@ -193,19 +171,20 @@ export default definePipr((pipr) => {
     model,
     instructions: "Merge specialist reviews into one final review.",
     output: orchestratorOutput,
-    prompt: (input) => pipr.prompt\`Manifest:\\n\${pipr.json(input.manifest)}\\n\\nSpecialist reviews:\\n\${pipr.json(input.reviews)}\`,
+    prompt: (input) => pipr.prompt\`Manifest:\\n\${pipr.json(input.diff.manifest)}\\n\\nSpecialist reviews:\\n\${pipr.json(input.reviews)}\`,
   });
-  const task = pipr.task({
+  pipr.task({
     name: "review",
+    on: { changeRequest: ["opened"] },
     async run(ctx) {
-      const manifest = await ctx.change.diffManifest({ compressed: true });
-      const [correctness, security, tests] = await Promise.all([
-        ctx.pi.run(specialist, { manifest, focus: "correctness" }),
-        ctx.pi.run(specialist, { manifest, focus: "security" }),
-        ctx.pi.run(specialist, { manifest, focus: "tests" }),
+      const diff = await ctx.change.diff({ compressed: true });
+      const [correctness, security, tests] = await ctx.pi.all([
+        { agent: specialist, input: { diff, focus: "correctness" } },
+        { agent: specialist, input: { diff, focus: "security" } },
+        { agent: specialist, input: { diff, focus: "tests" } },
       ]);
       const result = await ctx.pi.run(orchestrator, {
-        manifest,
+        diff,
         reviews: { correctness, security, tests },
       });
       const inlineFindings = result.findings.map(({ severity, ...finding }) => ({
@@ -229,7 +208,6 @@ export default definePipr((pipr) => {
       });
     },
   });
-  pipr.on.changeRequest({ actions: ["opened"], task });
 });
 `;
 
@@ -238,18 +216,12 @@ import { splitValues } from "pipr-config-dependency";
 
 export default definePipr((pipr) => {
   void splitValues;
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro");
   pipr.review({
     id: "review",
     model,
-    instructions: {
-      findings: "Review the act fixture change.",
-      summary: "Summarize the act fixture change.",
-    },
+    instructions: "Review the act fixture change.",
+    summary: { instructions: "Summarize the act fixture change." },
   });
 });
 `;
@@ -373,7 +345,6 @@ async function initializeScenarioWorktree(
   await overlayTrackedChanges(worktree);
   await copySourcePath(worktree, packageRootPath);
   await options.beforeBaseCommit?.({ scenario, worktree });
-  run("chmod", ["755", join(worktree, fakePiScript)], sourceRoot);
 }
 
 async function commitScenarioBase(

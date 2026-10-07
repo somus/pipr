@@ -103,7 +103,7 @@ Common causes include:
 - the file is binary, removed, generated, locked, or too large for inline review
 - another current finding duplicates the same issue and range
 
-Pass the manifest to the agent and map custom output to exact manifest anchors. See [Comments and findings](/docs/concepts/comments#dropped-findings).
+Pass the `ctx.change.diff()` value to the agent and map custom output to exact manifest anchors. See [Comments and findings](/docs/concepts/comments#dropped-findings).
 
 ## Model output is invalid
 

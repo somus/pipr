@@ -18,8 +18,7 @@ import {
 describe("runTaskRuntime: selection and identity", () => {
   it("skips cleanly when no task matches the change request action", async () => {
     const plan = testPlan((pipr) => {
-      const task = pipr.task({ name: "review", run() {} });
-      pipr.on.changeRequest({ actions: ["reopened"], task });
+      pipr.task({ name: "review", on: { changeRequest: ["reopened"] }, run() {} });
     });
 
     const result = await runRuntime({
@@ -37,6 +36,7 @@ describe("runTaskRuntime: selection and identity", () => {
     const seen: string[] = [];
     const plan = testPlan((pipr) => {
       const updated = pipr.task({
+        on: { changeRequest: ["updated"] },
         name: "updated",
         async run(ctx) {
           seen.push("updated");
@@ -44,14 +44,13 @@ describe("runTaskRuntime: selection and identity", () => {
         },
       });
       const ready = pipr.task({
+        on: { changeRequest: ["ready"] },
         name: "ready",
         async run(ctx) {
           seen.push("ready");
           await ctx.comment("ready");
         },
       });
-      pipr.on.changeRequest({ actions: ["updated"], task: updated });
-      pipr.on.changeRequest({ actions: ["ready"], task: ready });
     });
 
     await runRuntime({
@@ -74,13 +73,13 @@ describe("runTaskRuntime: selection and identity", () => {
     let observedInput: unknown = "unset";
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx, input) {
           observedInput = input;
           await ctx.comment("Review complete.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     await runRuntime({ plan });
@@ -138,14 +137,14 @@ describe("runTaskRuntime: selection and identity", () => {
         },
       });
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           taskRun = ctx.run;
-          const result = await ctx.pi.run(agent, { manifest: await ctx.change.diffManifest() });
+          const result = await ctx.pi.run(agent, { diff: await ctx.change.diff() });
           await ctx.comment({ main: result.summary.body, inlineFindings: result.inlineFindings });
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const result = await runRuntime({
@@ -172,13 +171,13 @@ describe("runTaskRuntime: selection and identity", () => {
     const observed: string[] = [];
     const plan = testPlan((pipr) => {
       const task = pipr.task({
+        on: { changeRequest: ["opened"] },
         name: "review",
         async run(ctx) {
           observed.push(ctx.run.trigger);
           await ctx.comment("Review complete.");
         },
       });
-      pipr.on.changeRequest({ actions: ["opened"], task });
     });
 
     const local = await runRuntime({ plan, runTrigger: "local" });

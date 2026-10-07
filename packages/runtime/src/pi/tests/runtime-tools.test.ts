@@ -3,11 +3,11 @@ import { access, chmod, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { pathToFileURL } from "node:url";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createRuntimeReadTools } from "../../agent-worker/runtime-read-tools.js";
 import { runGit as runGitCommand } from "../../diff/git.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest } from "../../types.js";
-import { preparePiCustomTools } from "../custom-tools.js";
 import { preparePiRuntimeReadTools, readAtRef } from "../runtime-tools.js";
 import { readDiffFromRuntimeData, runAstGrepSearch } from "../runtime-tools-core.js";
 
@@ -212,7 +212,7 @@ describe("pipr runtime Pi read tools", () => {
     }
   });
 
-  it("loads static runtime extension tools with range-scoped base truncation metadata", async () => {
+  it("loads runtime read tools with range-scoped base truncation metadata", async () => {
     const repo = await createGitRepo({
       baseContent: `${"base ".repeat(20)}\n`,
       headContent: `${"head ".repeat(20)}\n`,
@@ -225,21 +225,13 @@ describe("pipr runtime Pi read tools", () => {
         sourceWorkspace: repo.root,
         request: { manifest, toolResponseMaxBytes: 10 },
       });
-      expect(["runtime-tools-extension.ts", "runtime-tools-extension.mjs"]).toContain(
-        path.basename(prepared.extensionPath),
-      );
-      expect(path.dirname(prepared.extensionPath)).not.toBe(path.join(toolRoot, "runtime-tools"));
       await access(prepared.dataPath);
       await expect(
         access(path.join(toolRoot, "runtime-tools", "pipr-runtime-tools.mjs")),
       ).rejects.toThrow();
-      const atRefTool = await loadExtensionTool(
-        prepared.extensionPath,
-        "pipr_read_at_ref",
-        prepared.dataPath,
-      );
+      const atRefTool = await loadRuntimeTool(prepared.dataPath, "pipr_read_at_ref");
 
-      const result = await executeExtensionTool(atRefTool, repo.root, {
+      const result = await executeRuntimeTool(atRefTool, repo.root, {
         path: "src/new.ts",
         ref: "base",
         rangeId: "range-left",
@@ -282,14 +274,10 @@ describe("pipr runtime Pi read tools", () => {
         "pipr_read_declaration",
         "pipr_ast_grep",
       ]);
-      const tool = await loadExtensionTool(
-        prepared.extensionPath,
-        "pipr_read_declaration",
-        prepared.dataPath,
-      );
+      const tool = await loadRuntimeTool(prepared.dataPath, "pipr_read_declaration");
 
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           path: "src/new.ts",
           ref: "head",
           rangeId: "range-1",
@@ -307,7 +295,7 @@ describe("pipr runtime Pi read tools", () => {
         truncated: false,
       });
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           path: "src/new.ts",
           ref: "base",
           rangeId: "range-left",
@@ -323,7 +311,7 @@ describe("pipr runtime Pi read tools", () => {
         content: "function before() {\n  return 1;\n}\n",
       });
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           path: "src/new.ts",
           ref: "base",
           rangeId: "range-1",
@@ -356,16 +344,12 @@ describe("pipr runtime Pi read tools", () => {
           structuralAnalysis: structuralAnalysisForRenamedFile(),
         },
       });
-      const tool = await loadExtensionTool(
-        prepared.extensionPath,
-        "pipr_read_declaration",
-        prepared.dataPath,
-      );
+      const tool = await loadRuntimeTool(prepared.dataPath, "pipr_read_declaration");
       for (const params of [
         { path: "src/new.ts", ref: "head", rangeId: "range-1" },
         { path: "src/new.ts", ref: "base", rangeId: "range-left" },
       ]) {
-        const result = await executeExtensionToolResult(tool, repo.root, params);
+        const result = await executeRuntimeToolResult(tool, repo.root, params);
         expect(Buffer.byteLength(result.content[0]?.text ?? "", "utf8")).toBeLessThanOrEqual(
           maxBytes,
         );
@@ -383,7 +367,7 @@ describe("pipr runtime Pi read tools", () => {
       headFile.declarations = [];
       await Bun.write(prepared.dataPath, JSON.stringify(data));
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           path: "src/new.ts",
           ref: "head",
           rangeId: "range-1",
@@ -393,7 +377,7 @@ describe("pipr runtime Pi read tools", () => {
       data.toolResponseMaxBytes = 1;
       await Bun.write(prepared.dataPath, JSON.stringify(data));
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           path: "src/new.ts",
           ref: "head",
           rangeId: "range-1",
@@ -551,15 +535,11 @@ describe("pipr runtime Pi read tools", () => {
           structuralAnalysis: structuralAnalysisForRenamedFile(),
         },
       });
-      const tool = await loadExtensionTool(
-        prepared.extensionPath,
-        "pipr_ast_grep",
-        prepared.dataPath,
-      );
+      const tool = await loadRuntimeTool(prepared.dataPath, "pipr_ast_grep");
       process.env.PATH = `${executableDirectory}:${previousPath ?? ""}`;
 
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           pattern: "function $NAME() { $$$BODY }",
           language: "ts",
           paths: ["src"],
@@ -589,14 +569,14 @@ describe("pipr runtime Pi read tools", () => {
         "src",
       ]);
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           pattern: "none",
           language: "ts",
           paths: ["."],
         }),
       ).resolves.toEqual({ available: true, matches: [], truncated: false });
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           pattern: "many",
           language: "ts",
           paths: ["src"],
@@ -613,7 +593,7 @@ describe("pipr runtime Pi read tools", () => {
         ]),
         truncated: true,
       });
-      const capped = (await executeExtensionTool(tool, repo.root, {
+      const capped = (await executeRuntimeTool(tool, repo.root, {
         pattern: "many",
         language: "ts",
         paths: ["src"],
@@ -636,7 +616,7 @@ describe("pipr runtime Pi read tools", () => {
         }),
       ).rejects.toThrow("pipr_ast_grep response limit is too small");
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           pattern: "malformed",
           language: "ts",
           paths: ["src"],
@@ -649,7 +629,7 @@ describe("pipr runtime Pi read tools", () => {
         "unsafe-result-glob",
       ]) {
         await expect(
-          executeExtensionTool(tool, repo.root, {
+          executeRuntimeTool(tool, repo.root, {
             pattern,
             language: "ts",
             paths: ["src"],
@@ -657,7 +637,7 @@ describe("pipr runtime Pi read tools", () => {
         ).rejects.toThrow("pipr_ast_grep returned an unsafe path");
       }
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           pattern: "failure",
           language: "ts",
           paths: ["src"],
@@ -673,7 +653,7 @@ describe("pipr runtime Pi read tools", () => {
         }),
       ).rejects.toThrow("pipr_ast_grep timed out");
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           pattern: "x".repeat(4097),
           language: "ts",
           paths: ["src"],
@@ -681,7 +661,7 @@ describe("pipr runtime Pi read tools", () => {
       ).rejects.toThrow();
       for (const unsafePath of ["../src", ".git", "src/*.ts", "linked-src"]) {
         await expect(
-          executeExtensionTool(tool, repo.root, {
+          executeRuntimeTool(tool, repo.root, {
             pattern: "$A",
             language: "ts",
             paths: [unsafePath],
@@ -689,7 +669,7 @@ describe("pipr runtime Pi read tools", () => {
         ).rejects.toThrow();
       }
       await expect(
-        executeExtensionTool(tool, repo.root, {
+        executeRuntimeTool(tool, repo.root, {
           pattern: "$A",
           language: "ts",
           paths: Array.from({ length: 17 }, () => "src"),
@@ -703,109 +683,7 @@ describe("pipr runtime Pi read tools", () => {
     }
   });
 
-  it("fails clearly when runtime tool data env is missing", async () => {
-    const repo = await createGitRepo();
-    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-runtime-tools-env-"));
-    const previousDataPath = process.env.PIPR_RUNTIME_TOOLS_DATA;
-    try {
-      const prepared = await preparePiRuntimeReadTools({
-        root: toolRoot,
-        sourceWorkspace: repo.root,
-        request: {
-          manifest: renamedManifest(repo.baseSha, repo.headSha),
-          toolResponseMaxBytes: 10,
-        },
-      });
-      delete process.env.PIPR_RUNTIME_TOOLS_DATA;
-      const extension = await import(pathToFileURL(prepared.extensionPath).href);
-
-      expect(() => extension.default({ registerTool() {} })).toThrow(
-        "PIPR_RUNTIME_TOOLS_DATA or PIPR_CUSTOM_TOOLS_DATA is required",
-      );
-    } finally {
-      restoreEnv("PIPR_RUNTIME_TOOLS_DATA", previousDataPath);
-      await removeTree(repo.root);
-      await removeTree(toolRoot);
-    }
-  });
-
-  it("round trips custom config tools through the static extension bridge", async () => {
-    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-custom-tools-extension-"));
-    let observedContext: unknown;
-    const prepared = await preparePiCustomTools({
-      root: toolRoot,
-      request: {
-        context: { run: { id: "run-1" } },
-        tools: [
-          {
-            name: "plugin_echo",
-            description: "Echo input.",
-            input: summarySchema(),
-            output: summarySchema(),
-            async execute(context, input) {
-              observedContext = context;
-              return { body: `stored:${(input as { body: string }).body}` };
-            },
-          },
-        ],
-      },
-    });
-    try {
-      const tool = await loadExtensionToolWithEnv(prepared.extensionPath, "plugin_echo", {
-        PIPR_CUSTOM_TOOLS_DATA: prepared.dataPath,
-        PIPR_CUSTOM_TOOLS_BRIDGE_URL: prepared.bridgeUrl,
-        PIPR_CUSTOM_TOOLS_BRIDGE_TOKEN: prepared.bridgeToken,
-      });
-
-      await expect(executeExtensionTool(tool, process.cwd(), { body: "memory" })).resolves.toEqual({
-        body: "stored:memory",
-      });
-      expect(observedContext).toEqual({ run: { id: "run-1" } });
-    } finally {
-      await prepared.close();
-      await removeTree(toolRoot);
-    }
-  });
-
-  it("reports custom config tool input and output validation errors", async () => {
-    const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-custom-tools-validation-"));
-    const prepared = await preparePiCustomTools({
-      root: toolRoot,
-      request: {
-        context: {},
-        tools: [
-          {
-            name: "plugin_strict",
-            description: "Validate input.",
-            input: summarySchema(),
-            output: summarySchema(),
-            async execute() {
-              return { title: "missing body" };
-            },
-          },
-        ],
-      },
-    });
-    try {
-      const tool = await loadExtensionToolWithEnv(prepared.extensionPath, "plugin_strict", {
-        PIPR_CUSTOM_TOOLS_DATA: prepared.dataPath,
-        PIPR_CUSTOM_TOOLS_BRIDGE_URL: prepared.bridgeUrl,
-        PIPR_CUSTOM_TOOLS_BRIDGE_TOKEN: prepared.bridgeToken,
-      });
-
-      await expect(executeExtensionTool(tool, process.cwd(), { title: "missing" })).rejects.toThrow(
-        "summary.body is required",
-      );
-      await expect(executeExtensionTool(tool, process.cwd(), { body: "ok" })).rejects.toThrow(
-        "summary.body is required",
-      );
-    } finally {
-      await prepared.close();
-      await removeTree(toolRoot);
-    }
-  });
-
-  it("keeps typed helpers and static extension tools in parity", async () => {
+  it("keeps typed helpers and runtime read tools in parity", async () => {
     const repo = await createGitRepo();
     const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-runtime-tools-parity-"));
     try {
@@ -815,19 +693,11 @@ describe("pipr runtime Pi read tools", () => {
         sourceWorkspace: repo.root,
         request: { manifest, toolResponseMaxBytes: 10_000 },
       });
-      const diffTool = await loadExtensionTool(
-        prepared.extensionPath,
-        "pipr_read_diff",
-        prepared.dataPath,
-      );
-      const atRefTool = await loadExtensionTool(
-        prepared.extensionPath,
-        "pipr_read_at_ref",
-        prepared.dataPath,
-      );
+      const diffTool = await loadRuntimeTool(prepared.dataPath, "pipr_read_diff");
+      const atRefTool = await loadRuntimeTool(prepared.dataPath, "pipr_read_at_ref");
 
       const diffParams = { path: "src/new.ts", rangeId: "range-1" };
-      expect(await executeExtensionTool(diffTool, repo.root, diffParams)).toEqual(
+      expect(await executeRuntimeTool(diffTool, repo.root, diffParams)).toEqual(
         readDiffFromRuntimeData(
           { manifest, toolResponseMaxBytes: 10_000, baseRanges: {} },
           diffParams,
@@ -835,7 +705,7 @@ describe("pipr runtime Pi read tools", () => {
       );
 
       const atRefParams = { path: "src/new.ts", ref: "head" as const, rangeId: "range-1" };
-      expect(await executeExtensionTool(atRefTool, repo.root, atRefParams)).toEqual(
+      expect(await executeRuntimeTool(atRefTool, repo.root, atRefParams)).toEqual(
         await readAtRef({
           workspace: repo.root,
           manifest,
@@ -851,7 +721,7 @@ describe("pipr runtime Pi read tools", () => {
         ),
       ).toThrow("is not in the Diff Manifest");
       await expect(
-        executeExtensionTool(diffTool, repo.root, { path: "src/missing.ts" }),
+        executeRuntimeTool(diffTool, repo.root, { path: "src/missing.ts" }),
       ).rejects.toThrow("is not in the Diff Manifest");
     } finally {
       await removeTree(repo.root);
@@ -1155,17 +1025,30 @@ async function createAdvancedBaseRepo(): Promise<{
   return { root, mergeBaseSha, baseSha, headSha };
 }
 
-async function loadExtensionTool(
-  extensionPath: string,
-  toolName: string,
-  dataPath: string,
-): Promise<{
-  execute: (...args: unknown[]) => Promise<{ details?: unknown; content: Array<{ text: string }> }>;
-}> {
-  return await loadExtensionToolWithEnv(extensionPath, toolName, {
-    PIPR_RUNTIME_TOOLS_DATA: dataPath,
-  });
+async function loadRuntimeTool(dataPath: string, toolName: string): Promise<RuntimeTool> {
+  return {
+    async execute(cwd, params) {
+      const tool = (await createRuntimeReadTools(dataPath, cwd)).find(
+        (candidate) => candidate.name === toolName,
+      );
+      if (!tool) {
+        throw new Error(`missing runtime tool ${toolName}`);
+      }
+      return (await tool.execute(
+        params as never,
+        { callId: "test" } as never,
+        BACKGROUND_CONTEXT,
+      )) as never;
+    },
+  };
 }
+
+type RuntimeTool = {
+  execute(
+    cwd: string,
+    params: Record<string, unknown>,
+  ): Promise<{ details?: unknown; content: Array<{ text: string }> }>;
+};
 
 function restoreEnv(key: string, value: string | undefined): void {
   if (value === undefined) {
@@ -1175,84 +1058,19 @@ function restoreEnv(key: string, value: string | undefined): void {
   process.env[key] = value;
 }
 
-async function loadExtensionToolWithEnv(
-  extensionPath: string,
-  toolName: string,
-  env: Record<string, string>,
-): Promise<{
-  execute: (...args: unknown[]) => Promise<{ details?: unknown; content: Array<{ text: string }> }>;
-}> {
-  const tools = new Map<string, unknown>();
-  const envKeys = [
-    "PIPR_RUNTIME_TOOLS_DATA",
-    "PIPR_CUSTOM_TOOLS_DATA",
-    "PIPR_CUSTOM_TOOLS_BRIDGE_URL",
-    "PIPR_CUSTOM_TOOLS_BRIDGE_TOKEN",
-  ];
-  const previous = new Map(envKeys.map((key) => [key, process.env[key]]));
-  for (const key of envKeys) {
-    delete process.env[key];
-  }
-  Object.assign(process.env, env);
-  try {
-    const extension = await import(pathToFileURL(extensionPath).href);
-    await extension.default({
-      registerTool(tool: { name: string }) {
-        tools.set(tool.name, tool);
-      },
-    });
-  } finally {
-    for (const [key, value] of previous) {
-      restoreEnv(key, value);
-    }
-  }
-  const tool = tools.get(toolName);
-  if (!tool || typeof tool !== "object" || !("execute" in tool)) {
-    throw new Error(`missing extension tool ${toolName}`);
-  }
-  return tool as {
-    execute: (
-      ...args: unknown[]
-    ) => Promise<{ details?: unknown; content: Array<{ text: string }> }>;
-  };
-}
-
-function summarySchema() {
-  return {
-    parse(value: unknown) {
-      if (
-        typeof value === "object" &&
-        value !== null &&
-        typeof Reflect.get(value, "body") === "string"
-      ) {
-        return { body: Reflect.get(value, "body") as string };
-      }
-      throw new Error("summary.body is required");
-    },
-  };
-}
-
-async function executeExtensionTool(
-  tool: {
-    execute: (
-      ...args: unknown[]
-    ) => Promise<{ details?: unknown; content: Array<{ text: string }> }>;
-  },
+async function executeRuntimeTool(
+  tool: RuntimeTool,
   cwd: string,
   params: Record<string, unknown>,
 ): Promise<unknown> {
-  const result = await tool.execute("test", params, undefined, undefined, { cwd });
+  const result = await executeRuntimeToolResult(tool, cwd, params);
   return result.details ?? JSON.parse(result.content[0]?.text ?? "{}");
 }
 
-async function executeExtensionToolResult(
-  tool: {
-    execute: (
-      ...args: unknown[]
-    ) => Promise<{ details?: unknown; content: Array<{ text: string }> }>;
-  },
+async function executeRuntimeToolResult(
+  tool: RuntimeTool,
   cwd: string,
   params: Record<string, unknown>,
 ) {
-  return await tool.execute("test", params, undefined, undefined, { cwd });
+  return await tool.execute(cwd, params);
 }

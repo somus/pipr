@@ -7,30 +7,25 @@ import {
 } from "@usepipr/sdk/internal";
 import { uniqBy } from "lodash-es";
 import { match } from "ts-pattern";
-import { z } from "zod";
+import { findInputDiffContext, inputWithDiffManifest } from "../../diff/diff-context.js";
 import { shardDiffManifestForPrompt } from "../../diff/manifest-sharding.js";
 import type { DiffManifest, PiprConfig, ProviderConfig } from "../../types.js";
 import { reviewResultSchemaId } from "../review.js";
 import {
+  type AgentPrompt,
   type AgentRunContext,
   type AgentToolResolution,
   type PreparedAgentContext,
   renderAgentPrompt,
 } from "./agent-prompt.js";
-import { prepareDiffManifestContext, readReservedInputManifest } from "./diff-manifest-context.js";
-import type { RetrySettings, RunReviewAgentOptions } from "./review-run-types.js";
+import { prepareDiffManifestContext } from "./diff-manifest-context.js";
+import type { RunReviewAgentOptions } from "./review-run-types.js";
 import { schemaHasCanonicalInlineFindingsRoot } from "./review-schema.js";
-
-const retrySettingsSchema = z.strictObject({
-  invalidOutput: z.number().int().min(0),
-  transientFailure: z.number().int().min(0),
-});
 
 export type AssembledReviewAgentRun = {
   prepared: PreparedAgentContext;
-  prompt: string;
+  prompt: AgentPrompt;
   providers: ProviderConfig[];
-  retry: RetrySettings;
 };
 
 export type ScheduledReviewManifests = {
@@ -64,8 +59,7 @@ export async function assembleReviewAgentRun(
   const prepared: PreparedAgentContext = { agentTools, agentRunContext, diffManifest };
   const prompt = await renderAgentPrompt({ ...options, ...prepared });
   const providers = selectProviders(options.runtime, options.agent, options.runOptions);
-  const retry = retrySettings(options.agent);
-  return { prepared, prompt, providers, retry };
+  return { prepared, prompt, providers };
 }
 
 export async function scheduledReviewManifests(
@@ -85,7 +79,7 @@ export async function scheduledReviewManifests(
   if (!kind) {
     return undefined;
   }
-  const manifest = readReservedInputManifest(options.input);
+  const manifest = findInputDiffContext(options.input)?.context.manifest;
   if (!manifest) {
     return undefined;
   }
@@ -105,11 +99,8 @@ export async function scheduledReviewManifests(
   return { kind, manifests };
 }
 
-export function inputWithManifest(input: unknown, manifest: DiffManifest): Record<string, unknown> {
-  if (typeof input !== "object" || input === null) {
-    throw new Error("Scheduled review input must contain a Diff Manifest");
-  }
-  return { ...input, manifest };
+export function inputWithManifest(input: unknown, manifest: DiffManifest): unknown {
+  return inputWithDiffManifest(input, manifest);
 }
 
 export function resolveProvider(config: PiprConfig, providerId: string): ProviderConfig {
@@ -140,13 +131,6 @@ function createAgentRunContext(runtime: RunReviewAgentOptions["runtime"]): Agent
     prompt: { run, repository, change, platform },
     tools: { run, repository, change, platform },
   };
-}
-
-function retrySettings(agent: RuntimeAgent): RetrySettings {
-  return retrySettingsSchema.parse({
-    invalidOutput: agent.definition.retry?.invalidOutput ?? 1,
-    transientFailure: agent.definition.retry?.transientFailure ?? 0,
-  });
 }
 
 function resolveAgentTools(agent: RuntimeAgent, plan: RuntimePlan): AgentToolResolution {

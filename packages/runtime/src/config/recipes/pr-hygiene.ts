@@ -6,67 +6,21 @@ export const prHygieneRecipe = {
   title: "PR Hygiene",
   description: "Change request hygiene checks for tests, docs, lockfiles, and size.",
   sourceTools: ["Danger JS"],
-  configTs: `import { definePipr, z } from "@usepipr/sdk";
-import type { ReviewFinding } from "@usepipr/sdk";
+  configTs: `import { defaultReviewActions, definePipr, md, z } from "@usepipr/sdk";
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "medium",
-  });
+  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "medium" });
 
   pipr.config({ publication: { maxInlineComments: 5 } });
 
-  const hygienePolicySchema = z.enum([
-    "tests",
-    "docs",
-    "lockfiles",
-    "generated-files",
-    "change-size",
-  ]);
-
-  const policyCheckSchema = z.strictObject({
-    policy: hygienePolicySchema,
-    status: z.enum(["pass", "attention", "not-applicable"]),
-    evidence: z.string(),
-  });
-
-  const policyCheckFor = <const Policy extends z.infer<typeof hygienePolicySchema>>(
-    policy: Policy,
-  ) => policyCheckSchema.extend({ policy: z.literal(policy) });
-
-  const policyChecksSchema = z.tuple([
-    policyCheckFor("tests"),
-    policyCheckFor("docs"),
-    policyCheckFor("lockfiles"),
-    policyCheckFor("generated-files"),
-    policyCheckFor("change-size"),
-  ]);
-
-  const hygieneFindingSchema = z.strictObject({
-    title: z.string(),
-    policy: hygienePolicySchema,
-    body: z.string(),
-    path: z.string(),
-    rangeId: z.string(),
-    side: z.enum(["RIGHT", "LEFT"]),
-    startLine: z.number().int().positive(),
-    endLine: z.number().int().positive(),
-    suggestedFix: z.string().optional(),
-  });
-
-  type PolicyCheck = z.infer<typeof policyChecksSchema>[number];
-
-  const hygieneOutput = pipr.schema({
-    id: "review/pr-hygiene",
-    schema: z.strictObject({
-      summary: z.string(),
-      checks: policyChecksSchema,
-      findings: z.array(hygieneFindingSchema),
-    }),
-  });
+  const policy = z.enum(["tests", "docs", "lockfiles", "generated-files", "change-size"]);
+  const policyCheck = <const Policy extends z.infer<typeof policy>>(name: Policy) =>
+    z.strictObject({
+      policy: z.literal(name),
+      status: z.enum(["pass", "attention", "not-applicable"]),
+      evidence: z.string(),
+    });
+  const hygieneFinding = pipr.finding({ title: z.string().min(1).max(160), policy });
 
   const hygiene = pipr.agent({
     name: "pr-hygiene",
@@ -78,89 +32,75 @@ export default definePipr((pipr) => {
       evidence in changed files or counts. Use policy attention for file-level
       gaps; return inline findings only for concrete gaps in exact changed lines.
     \`,
-    output: hygieneOutput,
+    output: z.strictObject({
+      summary: z.string(),
+      checks: z.tuple([
+        policyCheck("tests"),
+        policyCheck("docs"),
+        policyCheck("lockfiles"),
+        policyCheck("generated-files"),
+        policyCheck("change-size"),
+      ]),
+      findings: z.array(hygieneFinding),
+    }),
     tools: pipr.tools.readOnly,
-    retry: { invalidOutput: 1, transientFailure: 1 },
     timeout: "6m",
     prompt: () => "Check this change request for repository hygiene and merge readiness.",
   });
 
-  const task = pipr.task({
+  pipr.task({
     name: "pr-hygiene",
+    on: {
+      changeRequest: defaultReviewActions,
+      command: { pattern: "@pipr hygiene", permission: "write" },
+    },
     check: { enabled: true, name: "pr hygiene", required: false },
     async run(ctx) {
       const changedFiles = await ctx.change.changedFiles();
       ctx.log.info(\`Checking PR hygiene for \${changedFiles.length} changed file(s).\`);
-      const manifest = await ctx.change.diffManifest({ compressed: true, maxPreviewLines: 80 });
-      const result = await ctx.pi.run(hygiene, { manifest, changedFiles });
-      const mappedFindings: ReviewFinding[] = result.findings.map((finding) => {
-        const policy = finding.policy
-          .replaceAll("-", " ")
-          .replace(/^./, (char) => char.toUpperCase());
-        return {
-          body: \`**\${policy}:** \${finding.title}. \${finding.body}\`,
-          path: finding.path,
-          rangeId: finding.rangeId,
-          side: finding.side,
-          startLine: finding.startLine,
-          endLine: finding.endLine,
-          ...(finding.suggestedFix ? { suggestedFix: finding.suggestedFix } : {}),
-        };
-      });
-      const { validFindings: inlineFindings } = ctx.review.validateFindings(mappedFindings);
+      const diff = await ctx.change.diff({ compressed: true, maxPreviewLines: 80 });
+      const result = await ctx.pi.run(hygiene, { diff, changedFiles });
+      const { findings } = ctx.review.select(result.findings, { finding: hygieneFinding });
       const attentionCount = result.checks.filter((check) => check.status === "attention").length;
       if (attentionCount > 0) {
-        const noun = attentionCount === 1 ? "check" : "checks";
-        const verb = attentionCount === 1 ? "needs" : "need";
-        ctx.check.neutral(attentionCount + " hygiene " + noun + " " + verb + " attention.");
+        ctx.check.neutral(
+          \`\${attentionCount} hygiene \${attentionCount === 1 ? "check needs" : "checks need"} attention.\`,
+        );
       } else {
         ctx.check.pass("PR hygiene review completed.");
       }
       await ctx.comment({
-        main: [
-          hygieneCallout(attentionCount),
-          "",
-          "## 🧭 Summary",
-          "",
-          result.summary,
-          "",
-          "## Policy Checks",
-          "",
-          policyTable(result.checks),
-        ].join("\\n"),
-        inlineFindings,
+        main: md.blocks(
+          attentionCount === 0
+            ? md.callout({
+                icon: "✅",
+                title: "PR hygiene passed",
+                body: "All applicable policy checks passed.",
+              })
+            : md.callout({
+                icon: "⚠️",
+                title: "PR hygiene needs attention",
+                body: \`\${attentionCount} policy \${attentionCount === 1 ? "check requires" : "checks require"} review.\`,
+              }),
+          md\`## 🧭 Summary\`,
+          md\`\${result.summary}\`,
+          md\`## Policy Checks\`,
+          md.table(
+            result.checks.map((check) => ({
+              policy: md.label(check.policy),
+              status: md.label(check.status),
+              evidence: check.evidence,
+            })),
+            { policy: "Policy", status: "Status", evidence: "Evidence" },
+          ),
+        ),
+        inlineFindings: findings.map((finding) => ({
+          ...finding,
+          body: String(md\`**\${md.label(finding.policy)}:** \${finding.title}. \${finding.body}\`),
+        })),
       });
     },
   });
-
-  pipr.on.changeRequest({ actions: ["opened", "updated", "reopened", "ready"], task });
-  pipr.command({ pattern: "@pipr hygiene", permission: "write", task });
 });
-
-function hygieneCallout(attentionCount: number): string {
-  if (attentionCount === 0) {
-    return "> ✅ **PR hygiene passed:** All applicable policy checks passed.";
-  }
-  const noun = attentionCount === 1 ? "check requires" : "checks require";
-  return \`> ⚠️ **PR hygiene needs attention:** \${attentionCount} policy \${noun} review.\`;
-}
-
-function policyTable(checks: PolicyCheck[]): string {
-  return [
-    "| Policy | Status | Evidence |",
-    "| --- | --- | --- |",
-    ...checks.map((check) => {
-      const policy = check.policy
-        .replaceAll("-", " ")
-        .replace(/^./, (char) => char.toUpperCase());
-      const status = check.status
-        .replaceAll("-", " ")
-        .replace(/^./, (char) => char.toUpperCase());
-      const evidence = check.evidence.replaceAll("\\n", " ").replaceAll("|", "\\\\|");
-      return \`| \${policy} | \${status} | \${evidence} |\`;
-    }),
-  ].join("\\n");
-}
-
 `,
 } as const satisfies OfficialInitRecipe;

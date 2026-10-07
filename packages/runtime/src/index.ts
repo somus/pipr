@@ -1,3 +1,4 @@
+export { runAgentWorkerCommand } from "./agent-worker/process.js";
 export type { OfficialInitAdapter } from "./config/init.js";
 export { supportedOfficialInitAdapters } from "./config/init.js";
 export type {

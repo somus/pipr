@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 import type { JsonObject, Schema } from "@usepipr/sdk";
 import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import type { PriorReviewState } from "../../publication/types.js";
-import { type AgentRunContext, renderAgentPrompt } from "../agent/agent-prompt.js";
+import {
+  type AgentRunContext,
+  joinedAgentPrompt,
+  renderAgentPrompt,
+} from "../agent/agent-prompt.js";
 import type { PreparedDiffManifestContext } from "../agent/diff-manifest-context.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
 import { reviewResultSchemaId } from "../review.js";
@@ -419,7 +423,7 @@ async function renderTestPrompt(
     },
   };
 
-  return await renderAgentPrompt({
+  const prompt = await renderAgentPrompt({
     agent,
     input: {},
     agentTools: { customTools: [] },
@@ -457,4 +461,5 @@ async function renderTestPrompt(
         } as unknown as PreparedDiffManifestContext)
       : undefined,
   });
+  return joinedAgentPrompt(prompt);
 }

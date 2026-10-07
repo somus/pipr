@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { checkPiContract } from "./pi-contract.ts";
+import { checkHarnessContract } from "./harness-contract.ts";
 import { envValue, run, scenarioFromName, scenarioNames, sourceRoot } from "./scenarios.ts";
 
 const actionImage = envValue("PIPR_ACTION_IMAGE") ?? "pipr-action:act";
@@ -15,7 +15,7 @@ if (envValue("PIPR_SKIP_ACTION_IMAGE_BUILD") !== "1") {
 }
 
 run("bun", ["run", "--cwd", "packages/runtime", "build"], sourceRoot);
-await checkPiContract({ cwd: sourceRoot, image: actionImage });
+await checkHarnessContract({ cwd: sourceRoot, image: actionImage });
 run("bun", ["test", "packages/e2e/assertions.test.ts"], sourceRoot);
 try {
   for (const scenario of selectedScenarioNames) {

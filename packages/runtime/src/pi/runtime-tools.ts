@@ -1,6 +1,5 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { findEnclosingDeclaration } from "../diff/manifest-structure.js";
 import type { DiffStructuralAnalysis } from "../diff/structural-analysis.js";
 import type { DiffManifest } from "../types.js";
@@ -32,7 +31,6 @@ export type PiRuntimeReadToolRequest = {
 };
 
 export type PreparedPiRuntimeReadTools = {
-  extensionPath: string;
   dataPath: string;
   toolNames: readonly PiRuntimeReadToolName[];
 };
@@ -90,7 +88,6 @@ export async function preparePiRuntimeReadTools(options: {
   const dataPath = path.join(toolRoot, "data.json");
   await Bun.write(dataPath, JSON.stringify(data));
   return {
-    extensionPath: await piRuntimeToolsExtensionPath(),
     dataPath,
     toolNames: options.request.structuralAnalysis
       ? [...piRuntimeReadToolNames, ...piRuntimeStructuralToolNames]
@@ -192,26 +189,6 @@ async function materializeBaseDeclarationSnapshot(options: {
   await Bun.write(path.join(options.baseRoot, snapshotName), blob.content);
   options.snapshots.set(snapshotKey, snapshot);
   return snapshot;
-}
-
-export async function piRuntimeToolsExtensionPath(): Promise<string> {
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.join(moduleDir, "pi", "runtime-tools-extension.mjs"),
-    path.join(moduleDir, "runtime-tools-extension.mjs"),
-    path.join(moduleDir, "..", "..", "dist", "pi", "runtime-tools-extension.mjs"),
-    path.join(moduleDir, "runtime-tools-extension.ts"),
-  ];
-  for (const candidate of candidates) {
-    if (await pathExists(candidate)) {
-      return candidate;
-    }
-  }
-  throw new Error("Unable to locate pipr runtime tools extension");
-}
-
-async function pathExists(filePath: string): Promise<boolean> {
-  return await Bun.file(filePath).exists();
 }
 
 export async function readAtRef(options: {

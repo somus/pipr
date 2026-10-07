@@ -951,7 +951,7 @@ describe("webhook runner", () => {
     }
   });
 
-  it("migrates legacy queues and preserves provider event names", async () => {
+  it("rejects delivery-status reads from legacy queues missing required columns", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
     const databasePath = path.join(root, "deliveries.sqlite");
     try {
@@ -972,24 +972,35 @@ describe("webhook runner", () => {
       `);
       legacy.close();
 
-      const store = new SqliteWebhookDeliveryStore(databasePath);
-      expect(store.next()).toEqual({ id: "legacy", host: "gitlab", payload: "{}" });
-      store.complete("legacy", ignoredPiprResult);
+      expect(() => readWebhookDeliveryStatus(databasePath)).toThrow(/no such column/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("persists provider event names across current-schema restarts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-store-"));
+    const databasePath = path.join(root, "deliveries.sqlite");
+    try {
+      const first = new SqliteWebhookDeliveryStore(databasePath);
       expect(
-        store.enqueue({
+        first.enqueue({
           id: "bitbucket",
           host: "bitbucket",
           payload: "{}",
           eventName: "pullrequest:updated",
         }),
       ).toBe("created");
-      expect(store.next()).toEqual({
+      first.close();
+
+      const second = new SqliteWebhookDeliveryStore(databasePath);
+      expect(second.next()).toEqual({
         id: "bitbucket",
         host: "bitbucket",
         payload: "{}",
         eventName: "pullrequest:updated",
       });
-      store.close();
+      second.close();
     } finally {
       await rm(root, { recursive: true, force: true });
     }

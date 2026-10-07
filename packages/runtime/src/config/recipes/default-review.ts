@@ -5,7 +5,7 @@ export const defaultReviewRecipe = {
   title: "Default Review",
   description: "General change request review with bounded inline comments.",
   sourceTools: ["pipr"],
-  configTs: `import { definePipr } from "@usepipr/sdk";
+  configTs: `import { definePipr, md } from "@usepipr/sdk";
 
 function nestedSummary(body: string): string {
   return body
@@ -14,49 +14,38 @@ function nestedSummary(body: string): string {
 }
 
 export default definePipr((pipr) => {
-  const model = pipr.model({
-    provider: "deepseek",
-    model: "deepseek-v4-pro",
-    apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }),
-    thinking: "high",
-  });
+  pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
 
   pipr.config({ publication: { maxInlineComments: 5 } });
 
   pipr.review({
     id: "review",
-    model,
-    instructions: {
-      findings: \`
-        Review changed behavior for correctness, security, maintainability, and
-        meaningful regression gaps. Focus on concrete impact and compatibility
-        with repository contracts. Return only actionable findings that target
-        valid diff ranges.
-      \`,
-      summary: \`
+    instructions: \`
+      Review changed behavior for correctness, security, maintainability, and
+      meaningful regression gaps. Focus on concrete impact and compatibility
+      with repository contracts. Return only actionable findings that target
+      valid diff ranges.
+    \`,
+    summary: {
+      instructions: \`
         Summarize the changed behavior, overall risk, and useful reviewer focus.
-        Use merged findings as evidence without introducing new defects.
+        Use the selected findings as evidence without introducing new defects.
       \`,
     },
     timeout: "10m",
-    comment: (result, context) => {
-      const sections = ["## 🧭 Summary", "", nestedSummary(result.summary.body)];
-      if (result.inlineFindings.length > 0) {
-        sections.push(
-          "",
-          "## ⚠️ Findings",
-          "",
-          context.run.trigger === "local"
-            ? result.inlineFindings.map((finding) => \`- \${finding.body}\`).join("\\n")
+    render: ({ findings, summary }, context) => ({
+      main: md.blocks(
+        md\`## 🧭 Summary\`,
+        md.raw(nestedSummary(summary?.body ?? "")),
+        findings.length > 0 ? md\`## ⚠️ Findings\` : "",
+        findings.length === 0
+          ? ""
+          : context.run.trigger === "local"
+            ? md.list(findings.map((finding) => finding.body))
             : "See inline comments in the diff.",
-        );
-      }
-
-      return {
-        main: sections.join("\\n"),
-        inlineFindings: result.inlineFindings,
-      };
-    },
+      ),
+      inlineFindings: findings,
+    }),
   });
 });
 `,

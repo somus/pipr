@@ -13,11 +13,11 @@ Pipr owns the provider-neutral change request runtime; Pi owns agent execution. 
 | Review validation | Review contract, parse/repair, bounded-range validation, and comment publication | `packages/runtime/src/review/contract.ts`, `packages/runtime/src/review/agent/review-run.ts`, `packages/runtime/src/review/range-validation.ts`, `packages/runtime/src/review/review.ts` |
 | CLI and hosted runs | CLI commands, provider-neutral host execution, and GitHub Action packaging | `packages/cli/src/`, `packages/runtime/src/host-run/`, `action.yml`, `Dockerfile` |
 | Change request dispatch | Host-run command selection, change request entry, and native payload parsing | `packages/runtime/src/host-run/commands-hosted.ts`, `packages/runtime/src/host-run/change-request-entry.ts`, `packages/runtime/src/hosts/*/event.ts` |
-| Action integration tests | Docker image, Pi contract, and `act` fixtures | `packages/e2e/` |
+| Action integration tests | Docker image, durable harness contract, scripted model fixtures, and `act` fixtures | `packages/e2e/` |
 | Product docs | Fumadocs content | `apps/docs/content/docs/` |
 | Domain and decisions | Product language and durable architecture | `docs/CONTEXT.md`, `docs/adr/` |
 
-Keep user configuration in `.pipr/config.ts`. `.pi` is only the internal Pi home inside the Docker image.
+Keep user configuration in `.pipr/config.ts`. The Docker image has no `pi` CLI or `.pi` home; agents run through `@earendil-works/pi-durable` in the `pipr agent-worker` process (see `docs/adr/0010-durable-harness-in-agent-worker.md`).
 
 ## Commands and focused checks
 
@@ -27,13 +27,13 @@ Keep user configuration in `.pipr/config.ts`. `.pi` is only the internal Pi home
 | `packages/runtime/src/review/range-validation.ts` or inline-range behavior | `bun test packages/runtime/src/review/tests` | Covers the shared validator, task runtime, review filtering, and GitHub inline mapping consumers; follow with `bun run check:packages` |
 | `packages/sdk/**`, `packages/runtime/**`, or `packages/cli/**` | `bun run check:packages` | Builds publishable packages and runs lint, typecheck, tests, formatting, and quality checks |
 | `apps/docs/**` or `docs/**` | `bun run check:docs` | Runs docs lint, typecheck, tests, build, formatting, and quality checks |
-| Action, Docker packaging, workflow fixtures, Pi CLI mapping, or PR event handling | `mise run check-actions` | Builds the local Docker Action, verifies the Pi contract, and runs `act` fixtures |
+| Action, Docker packaging, workflow fixtures, agent worker or harness wiring, or PR event handling | `mise run check-actions` | Builds the local Docker Action, verifies the harness contract, and runs `act` fixtures |
 | Maintainability, dependency hygiene, dead exports, duplication, or complexity | `bun run fallow` | Run while developing the relevant change |
 | Any pull request | `mise run check` | Canonical full-repository gate before opening or updating a PR |
 
 Treat this table as the canonical command map for task planning. Do not reopen root or package manifests solely to confirm a command already listed here; inspect them only when changing scripts, dependencies, or package-specific behavior not covered by the table.
 
-After Docker packaging changes, also verify the image can run `pi --help` and `pipr host-run --help`.
+After Docker packaging changes, also verify the image can run `pipr agent-worker --help` and `pipr host-run --help`.
 
 Local tooling is Bun 1.4.0, `act` 0.2.89, and hk 1.56.1 through mise. Action verification requires Docker. GitHub Action dispatch reads `GITHUB_EVENT_PATH` and `GITHUB_EVENT_NAME`; provider credentials remain external secrets and must not be copied into repository instructions or fixtures.
 
@@ -61,7 +61,7 @@ Never commit real local sessions, secrets, credentials, private logs, unredacted
 
 ## Load-bearing review rules
 
-- Diff parsing, Pi execution, and review validation stay in Pipr through `ctx.change.diffManifest()`, `ctx.pi.run()`, and `ctx.review.validateFindings()`, not userland blocks.
+- Diff parsing, Pi execution, and review validation stay in Pipr through `ctx.change.diff()`, `ctx.pi.run()`, and `ctx.review.select()`, not userland blocks.
 - Reviewer output remains schema-first: validate structured JSON, allow one repair attempt, and drop invalid findings with metadata.
 - Inline finding `rangeId`, path, and side must match the selected Diff Manifest range. `startLine` must not exceed `endLine`, and both bounds must stay inside that range; a valid strict subrange is allowed.
 - Range-validation changes must keep direct validator tests, review/task-runtime fixtures, GitHub inline mapping tests, and deterministic prompt-eval expectations aligned.
@@ -83,3 +83,14 @@ Never commit real local sessions, secrets, credentials, private logs, unredacted
 - State CLI, runtime, config, Docker Action, docs, release, and public API impact.
 - Include exact verification commands and results.
 - For Docker changes, include the image command evidence described above.
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+<!-- END:turborepo-agent-rules -->

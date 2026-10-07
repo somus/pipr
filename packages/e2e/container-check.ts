@@ -1,10 +1,9 @@
 #!/usr/bin/env bun
 import { join } from "node:path";
-import { checkPiContract } from "./pi-contract.ts";
+import { checkHarnessContract } from "./harness-contract.ts";
 import {
   actionFixtureScript,
   envValue,
-  fakePiScript,
   fixtureRootPath,
   type PreparedScenario,
   prepareScenarioWorktree,
@@ -35,7 +34,7 @@ if (scenarioArg && selectedScenarios.length === 0) {
 }
 
 assertDockerImageExists(actionImage);
-await checkPiContract({ cwd: sourceRoot, image: actionImage });
+await checkHarnessContract({ cwd: sourceRoot, image: actionImage });
 assertAstGrepContract(actionImage);
 assertWebhookEntrypoint(actionImage);
 assertRunStoreWritable(actionImage);
@@ -180,7 +179,6 @@ function fixtureEnv(scenario: PublicationScenario): Record<string, string> {
     GIT_CONFIG_VALUE_0: "/workspace",
     PIPR_ACT_ASSERTION: scenario.assertion,
     PIPR_ACT_GITHUB_FIXTURE_PATH: `/workspace/${fixtureRootPath}/${scenario.publicationFixture}`,
-    PIPR_ACT_PI_EXECUTABLE: `/workspace/${fakePiScript}`,
     ...fixtureScenarioEnv(scenario),
   };
 }
@@ -194,7 +192,7 @@ function fixtureScenarioEnv(scenario: PublicationScenario): Record<string, strin
   if (scenario.telemetryDir) {
     const telemetryPath = `/workspace/${fixtureRootPath}/${scenario.telemetryDir}`;
     env.PIPR_ACT_TELEMETRY_PATH = telemetryPath;
-    env.PIPR_ACT_PI_CALL_DIR = telemetryPath;
+    env.PIPR_ACT_MODEL_CALL_DIR = telemetryPath;
   }
   return env;
 }

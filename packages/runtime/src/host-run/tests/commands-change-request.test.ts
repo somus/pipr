@@ -29,9 +29,9 @@ import {
   runPullRequestAction,
   runTestHostCommand,
   snapshotGitConfigEnv,
-  writeFailingPiExecutable,
-  writePiExecutable,
-  writeProviderAuthenticationFailurePiExecutable,
+  writeFailingPiOutput,
+  writePiOutput,
+  writeProviderAuthenticationFailureOutput,
   writePullRequestEvent,
 } from "./commands-fixtures.js";
 
@@ -59,7 +59,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         githubPublicationClient: fakeGitHubPublicationClient(workspace),
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
         onRunBundleFinalized(bundle) {
           finalized.push(bundle);
         },
@@ -153,7 +153,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           }),
           id: testCase.host,
         },
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
         onRunBundleFinalized(bundle) {
           finalized.push(bundle);
         },
@@ -196,7 +196,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         githubPublicationClient: fakeGitHubPublicationClient(workspace),
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
       });
 
       await expect(readdir(traceDirectory)).rejects.toThrow();
@@ -224,7 +224,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         githubPublicationClient: fakeGitHubPublicationClient(workspace),
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
         onRunBundleFinalized(bundle) {
           bundleDirectory = bundle.directory;
         },
@@ -279,7 +279,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         githubPublicationClient: fakeGitHubPublicationClient(workspace),
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
         onRunBundleFinalized(bundle) {
           bundleDirectory = bundle.directory;
         },
@@ -299,7 +299,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
         "Review scope: changed",
       );
       expect(output && (await readFile(path.join(bundleDirectory, output.path), "utf8"))).toBe(
-        '{"summary":{"body":"No findings."},"inlineFindings":[]}\n',
+        '{"summary":{"body":"No findings."},"inlineFindings":[]}',
       );
     } finally {
       await removeWorkspace(workspace.rootDir);
@@ -311,45 +311,13 @@ describe("runHostRunCommand pull_request dispatch", () => {
     const traceDirectory = path.join(workspace.rootDir, "traces");
     let bundleDirectory: string | undefined;
     try {
-      await writePiExecutable(
-        workspace.piExecutable,
-        [
-          JSON.stringify({
-            type: "tool_execution_start",
-            toolCallId: "tool-1",
-            toolName: "grep",
-            args: { query: "do-not-store" },
-          }),
-          JSON.stringify({
-            type: "tool_execution_end",
-            toolCallId: "tool-1",
-            toolName: "grep",
-            result: "do-not-store",
-          }),
-          JSON.stringify({
-            type: "auto_retry_start",
-            attempt: 1,
-            maxAttempts: 3,
-            delayMs: 2_000,
-            errorMessage: "do-not-store",
-          }),
-          JSON.stringify({ type: "auto_retry_end", success: true, attempt: 2 }),
-          JSON.stringify({
-            type: "message_end",
-            message: {
-              role: "assistant",
-              model: "deepseek-reasoner",
-              content: [
-                {
-                  type: "text",
-                  text: '{"summary":{"body":"No findings."},"inlineFindings":[]}',
-                },
-              ],
-              usage: { input: 10, output: 4, cost: { total: 0.001 } },
-            },
-          }),
-        ].join("\n"),
-      );
+      await workspace.pi.script({
+        responses: [
+          { toolCalls: [{ name: "grep", args: { pattern: "do-not-store" } }] },
+          { error: "503 service unavailable do-not-store" },
+          { text: '{"summary":{"body":"No findings."},"inlineFindings":[]}' },
+        ],
+      });
       const eventPath = path.join(workspace.rootDir, "event.json");
       await writePullRequestEvent(eventPath, workspace);
       await runTestHostCommand({
@@ -364,7 +332,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           PIPR_RUN_STORE_DIR: traceDirectory,
         },
         githubPublicationClient: fakeGitHubPublicationClient(workspace),
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
         onRunBundleFinalized(bundle) {
           bundleDirectory = bundle.directory;
         },
@@ -389,7 +357,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           }),
           expect.objectContaining({
             name: "pipr.agent.retry",
-            attributes: expect.objectContaining({ "pipr.retry.backoff_ms": 2_000 }),
+            attributes: expect.objectContaining({ "pipr.retry.backoff_ms": expect.any(Number) }),
           }),
           expect.objectContaining({ name: "gen_ai.time_to_first_token" }),
         ]),
@@ -431,7 +399,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           RUNNER_TEMP: gitConfigDir,
         },
         githubPublicationClient: failingGitHubPublishingClient(),
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
       });
 
       expect(result).toMatchObject({ kind: "dry-run" });
@@ -471,7 +439,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
         dryRun: true,
         env: pullRequestEnv(workspace.rootDir, eventPath),
         githubPublicationClient: failingGitHubPublishingClient(),
-        piExecutable: workspace.piExecutable,
+        piProviderModule: workspace.pi.providerModule,
       });
 
       expect(result).toMatchObject({ kind: "dry-run" });
@@ -651,7 +619,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
       return result;
     };
     try {
-      await writeFailingPiExecutable(workspace.piExecutable);
+      await writeFailingPiOutput(workspace);
       await expect(
         runPullRequestAction(workspace, { githubPublicationClient: client }),
       ).resolves.toMatchObject({
@@ -673,12 +641,12 @@ describe("runHostRunCommand pull_request dispatch", () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const publication = recordingCommandPublicationClient(workspace);
     try {
-      await writeFailingPiExecutable(workspace.piExecutable);
+      await writeFailingPiOutput(workspace);
       await expect(
         runPullRequestAction(workspace, {
           githubPublicationClient: publication.client,
         }),
-      ).rejects.toThrow("Pi agent failed with exit 42");
+      ).rejects.toThrow("Pi agent failed (model_error)");
 
       const failed = publication.writes.updated.at(-1) ?? publication.writes.created.at(-1) ?? "";
       expect(failed).toContain("state=failed");
@@ -686,7 +654,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
       expect(failed).toContain(
         "**Failed work:** Task <code>review</code> · Reviewer <code>reviewer</code>",
       );
-      expect(failed).toContain("Pi agent failed with exit 42");
+      expect(failed).toContain(String.raw`Pi agent failed (model\_error)`);
       expect(failed).not.toContain("provider-key");
       expect(failed).toContain(
         "[Open workflow to rerun failed jobs](<https://github.com/local/pipr/actions/runs/123>)",
@@ -701,12 +669,12 @@ describe("runHostRunCommand pull_request dispatch", () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const publication = recordingCommandPublicationClient(workspace);
     try {
-      await writeProviderAuthenticationFailurePiExecutable(workspace.piExecutable);
+      await writeProviderAuthenticationFailureOutput(workspace);
       await expect(
         runPullRequestAction(workspace, {
           githubPublicationClient: publication.client,
         }),
-      ).rejects.toThrow("Pi agent failed with exit 42");
+      ).rejects.toThrow("Pi agent failed (model_error)");
 
       const failed = publication.writes.updated.at(-1) ?? publication.writes.created.at(-1) ?? "";
       expect(failed).toContain("**Reason:** deepseek authentication failed.");
@@ -792,7 +760,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
             PIPR_RUN_STORE_DIR: traceDirectory,
           },
           githubPublicationClient: client,
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
         }),
       ).rejects.toThrow("provider publication failed");
 
@@ -837,7 +805,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
             PIPR_RUN_STORE_DIR: traceDirectory,
           },
           githubPublicationClient: client,
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
         }),
       ).rejects.toThrow("Change request head changed");
 
@@ -906,7 +874,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
     });
     try {
       await expect(runPullRequestAction(workspace)).rejects.toThrow(
-        "does not declare apiKey and requires a Pi agent directory",
+        "does not declare apiKey and requires a Pi auth file",
       );
       await expectPiNotCalled(workspace);
     } finally {
@@ -1216,7 +1184,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
     const traceDirectory = path.join(workspace.rootDir, "traces");
     const finalized: Array<{ executionId: string; outcome: string }> = [];
     try {
-      await writeFailingPiExecutable(workspace.piExecutable);
+      await writeFailingPiOutput(workspace);
       const eventPath = path.join(workspace.rootDir, "event.json");
       await writePullRequestEvent(eventPath, workspace);
 
@@ -1232,16 +1200,16 @@ describe("runHostRunCommand pull_request dispatch", () => {
             PIPR_RUN_STORE_DIR: traceDirectory,
           },
           githubPublicationClient: fakeGitHubPublicationClient(workspace),
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
           logSink: logs.logSink,
           onRunBundleFinalized(bundle) {
             finalized.push(bundle);
           },
         }),
-      ).rejects.toThrow("Pi agent failed with exit 42");
+      ).rejects.toThrow("Pi agent failed (model_error)");
 
       const output = logs.messages.join("\n");
-      expect(output).toContain('"event":"pi stderr"');
+      expect(output).toContain('"event":"pi failure"');
       expect(output).toContain("| ***");
       expect(output).toContain("| model exploded");
       expect(output).not.toContain(secret);
@@ -1270,7 +1238,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const secret = "super-secret-deepseek-key";
     try {
-      await writeFailingPiExecutable(workspace.piExecutable);
+      await writeFailingPiOutput(workspace);
       const eventPath = path.join(workspace.rootDir, "event.json");
       await writePullRequestEvent(eventPath, workspace);
 
@@ -1283,7 +1251,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           dryRun: false,
           env: { ...pullRequestEnv(workspace.rootDir, eventPath), DEEPSEEK_API_KEY: secret },
           githubPublicationClient: fakeGitHubPublicationClient(workspace),
-          piExecutable: workspace.piExecutable,
+          piProviderModule: workspace.pi.providerModule,
         });
       } catch (error) {
         thrown = error;
@@ -1291,7 +1259,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
 
       expect(thrown).toBeInstanceOf(Error);
       const message = thrown instanceof Error ? thrown.message : String(thrown);
-      expect(message).toContain("Pi agent failed with exit 42");
+      expect(message).toContain("Pi agent failed (model_error)");
       expect(message).toContain("| ***");
       expect(message).toContain("| model exploded");
       expect(message).not.toContain(secret);

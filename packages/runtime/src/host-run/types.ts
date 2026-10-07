@@ -2,7 +2,7 @@ import type { PiprRunSummary } from "@usepipr/sdk";
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
 import type { RunObserver } from "../observability/types.js";
-import type { PiRunner } from "../pi/types.js";
+import type { PiProviderModule, PiRunner } from "../pi/types.js";
 import type { PublicationResult } from "../publication/types.js";
 import type { ReviewRuntimeResult } from "../review/task/task-runtime.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
@@ -37,6 +37,8 @@ export type HostRunCommandOptions = RuntimeCommandOptions & {
   eventPath?: string;
   dryRun: boolean;
   logSink?: RuntimeLogSink;
+  /** Root for per-change-request agent stores so redelivered events resume prior conversations. */
+  piStoreRoot?: string;
   onRunBundleFinalized?: (bundle: {
     executionId: string;
     directory: string;
@@ -48,7 +50,7 @@ export type HostRunCommandOptions = RuntimeCommandOptions & {
 
 /** Injection bag accepted only at the host-run composition root. */
 export type HostRunCommandDependencyOptions = HostRunCommandOptions & {
-  piExecutable?: string;
+  piProviderModule?: PiProviderModule;
   piRunner?: PiRunner;
   hostAdapter?: CodeHostAdapter;
   secretRedactor?: SecretRedactor;
@@ -64,8 +66,8 @@ export type LocalReviewTaskLog = {
 export type LocalReviewCommandOptions = RuntimeCommandOptions & {
   baseSha: string;
   headSha?: string;
-  piExecutable?: string;
-  piAgentDir?: string;
+  piProviderModule?: PiProviderModule;
+  piAuthFile?: string;
   piRunner?: PiRunner;
   logSink?: RuntimeLogSink;
   taskLog?: LocalReviewTaskLog;

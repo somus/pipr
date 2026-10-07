@@ -1,11 +1,11 @@
 import { firstNonEmptyLine, isPiprCommandLine } from "../commands/grammar.js";
 import type { CodeHostAdapter, CommandCommentEvent } from "../hosts/types.js";
+import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import { parseChangeRequestEventContext } from "../types.js";
 import type { HostRunServices } from "./composition.js";
 import {
-  dispatchRuntimeEntry,
   hasRequiredRepositoryPermission,
   type PlanCommandResolution,
   parsePlanCommandInputs,
@@ -198,8 +198,7 @@ async function runCommandLifecycle(
       prepared.event,
       services.log,
     );
-    const dispatch = dispatchRuntimeEntry({
-      kind: "change-request",
+    const selectedTasks = selectRuntimeTasks({
       plan: prepared.trustedRuntime.plan,
       event: prepared.event,
       taskName: invocation.taskName,
@@ -211,7 +210,7 @@ async function runCommandLifecycle(
       event: prepared.event,
       taskName: invocation.taskName,
       taskInput: invocation.inputs,
-      selectedTasks: dispatch.kind === "change-request" ? dispatch.tasks : [],
+      selectedTasks,
       commandInvocation: {
         name: invocation.commandName,
         line: invocation.line,
