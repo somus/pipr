@@ -24,7 +24,7 @@ Keep user configuration in `.pipr/config.ts`. The Docker image has no `pi` CLI o
 | Changed surface | Focused command | Notes |
 |---|---|---|
 | Initial setup | `mise run install` | Installs Bun dependencies and repository hooks |
-| `packages/runtime/src/review/range-validation.ts` or inline-range behavior | `bun test packages/runtime/src/review/tests` | Covers the shared validator, task runtime, review filtering, and GitHub inline mapping consumers; follow with `bun run check:packages` |
+| `packages/runtime/src/review/range-validation.ts` or inline-range behavior | `bun test packages/runtime/src/review packages/runtime/src/hosts/github` | Covers the shared validator, task runtime, review filtering, and GitHub inline mapping consumers; follow with `bun run check:packages` |
 | `packages/sdk/**`, `packages/runtime/**`, or `packages/cli/**` | `bun run check:packages` | Builds publishable packages and runs lint, typecheck, tests, formatting, and quality checks |
 | `apps/docs/**` or `docs/**` | `bun run check:docs` | Runs docs lint, typecheck, tests, build, formatting, and quality checks |
 | Action, Docker packaging, workflow fixtures, agent worker or harness wiring, or PR event handling | `mise run check-actions` | Builds the local Docker Action, verifies the harness contract, and runs `act` fixtures |

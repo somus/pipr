@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { enforceRunStoreRetention } from "../../index.js";
 import { currentProcessIdentity, readActiveCaptureMarker } from "../active-capture.js";
+import { enforceRunStoreRetention } from "../retention.js";
 
 const temporaryDirectories: string[] = [];
 

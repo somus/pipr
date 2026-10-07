@@ -11,14 +11,14 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { diagnoseRunBundle } from "../archive.js";
+import { startFileRunRecorder } from "../file-run-recorder.js";
 import {
-  diagnoseRunBundle,
   generateRunBundleIdentity,
   openRunBundlePackage,
   prepareRunBundlePackage,
   validateRunBundlePackage,
-} from "../../index.js";
-import { startFileRunRecorder } from "../file-run-recorder.js";
+} from "../protected-package.js";
 
 const temporaryDirectories: string[] = [];
 
