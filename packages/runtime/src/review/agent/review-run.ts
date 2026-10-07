@@ -1,18 +1,14 @@
+import { parseReviewResult } from "@usepipr/sdk";
+import { uniqBy } from "lodash-es";
 import { match } from "ts-pattern";
+import { inputWithDiffManifest } from "../../diff/diff-context.js";
 import {
   ProviderExecutionError,
   type ProviderFailureRemediation,
   preferredProviderFailureRemediation,
 } from "../../pi/provider-failure.js";
-import { withPiRunWorkspace } from "../../pi/runner.js";
-import type { PiRunner } from "../../pi/types.js";
-import { parseReviewResult } from "../review.js";
 import { runAgentWithProvider } from "./parse-repair.js";
-import {
-  assembleReviewAgentRun,
-  inputWithManifest,
-  scheduledReviewManifests,
-} from "./prompt-assembly.js";
+import { assembleReviewAgentRun, scheduledReviewManifests } from "./prompt-assembly.js";
 import type { RunReviewAgentOptions, RunReviewAgentResult } from "./review-run-types.js";
 import { canonicalInlineFindingsMaxItems } from "./review-schema.js";
 
@@ -41,48 +37,35 @@ export async function runReviewAgent(
         result = await runReviewAgentUnit(
           {
             ...options,
-            input: inputWithManifest(options.input, manifests[0]),
+            input: inputWithDiffManifest(options.input, manifests[0]),
             allowOversizedCondensedManifest: true,
           },
           1,
           totalRuns,
         );
       } else {
-        const runScheduled = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
-          options.runtime.log?.info("diff manifest sharded", {
-            agent: options.agent.name ?? "anonymous-agent",
-            task: options.runtime.taskName,
-            kind: scheduled.kind,
-            shardCount: manifests.length,
-          });
-          const results: RunReviewAgentResult[] = [];
-          for (const [index, manifest] of manifests.entries()) {
-            results.push(
-              await runReviewAgentUnit(
-                {
-                  ...options,
-                  input: inputWithManifest(options.input, manifest),
-                  allowOversizedCondensedManifest: true,
-                  shard: { index: index + 1, count: manifests.length },
-                  runtime: { ...options.runtime, piRunner },
-                },
-                index + 1,
-                totalRuns,
-              ),
-            );
-          }
-          return mergeScheduledReviewAgentResults(results, options, scheduled.kind);
-        };
-        result = options.runtime.piRunner
-          ? await runScheduled(options.runtime.piRunner)
-          : await withPiRunWorkspace(
+        options.runtime.log?.info("diff manifest sharded", {
+          agent: options.agent.name ?? "anonymous-agent",
+          task: options.runtime.taskName,
+          kind: scheduled.kind,
+          shardCount: manifests.length,
+        });
+        const results: RunReviewAgentResult[] = [];
+        for (const [index, manifest] of manifests.entries()) {
+          results.push(
+            await runReviewAgentUnit(
               {
-                workspace: options.runtime.workspace,
-                env: options.runtime.env,
-                storeDir: options.runtime.piStoreDir,
+                ...options,
+                input: inputWithDiffManifest(options.input, manifest),
+                allowOversizedCondensedManifest: true,
+                shard: { index: index + 1, count: manifests.length },
               },
-              runScheduled,
-            );
+              index + 1,
+              totalRuns,
+            ),
+          );
+        }
+        result = mergeScheduledReviewAgentResults(results, options, scheduled.kind);
       }
     }
     outcome = "completed";
@@ -133,49 +116,31 @@ function emitReviewWork(
 
 async function runReviewAgentOnce(options: RunReviewAgentOptions): Promise<RunReviewAgentResult> {
   const { prepared, prompt, providers } = await assembleReviewAgentRun(options);
-  const runProviders = async (piRunner: PiRunner): Promise<RunReviewAgentResult> => {
-    const scopedOptions = {
-      ...options,
-      runtime: { ...options.runtime, piRunner },
-      ...prepared,
-    };
-    const errors: string[] = [];
-    let remediation: ProviderFailureRemediation | undefined;
-    const providerModels: string[] = [];
-    let repairAttempted = false;
+  const scopedOptions = { ...options, ...prepared };
+  const errors: string[] = [];
+  let remediation: ProviderFailureRemediation | undefined;
+  const providerModels: string[] = [];
+  let repairAttempted = false;
 
-    for (const [providerIndex, provider] of providers.entries()) {
-      providerModels.push(provider.model);
-      const attempt = await runAgentWithProvider(
-        scopedOptions,
-        provider,
-        prompt,
-        providerIndex === 0 ? "initial" : "fallback",
-      );
-      repairAttempted ||= attempt.repairAttempted;
-      if (attempt.ok) {
-        return { value: attempt.value, repairAttempted, providerModels };
-      }
-      errors.push(`${provider.id}: ${attempt.error}`);
-      remediation = preferredProviderFailureRemediation(remediation, attempt.remediation);
-    }
-
-    throw new ProviderExecutionError(
-      `Pi agent failed for all configured models: ${errors.join("; ")}`,
-      remediation,
+  for (const [providerIndex, provider] of providers.entries()) {
+    providerModels.push(provider.model);
+    const attempt = await runAgentWithProvider(
+      scopedOptions,
+      provider,
+      prompt,
+      providerIndex === 0 ? "initial" : "fallback",
     );
-  };
-
-  if (options.runtime.piRunner) {
-    return await runProviders(options.runtime.piRunner);
+    repairAttempted ||= attempt.repairAttempted;
+    if (attempt.ok) {
+      return { value: attempt.value, repairAttempted, providerModels };
+    }
+    errors.push(`${provider.id}: ${attempt.error}`);
+    remediation = preferredProviderFailureRemediation(remediation, attempt.remediation);
   }
-  return await withPiRunWorkspace(
-    {
-      workspace: options.runtime.workspace,
-      env: options.runtime.env,
-      storeDir: options.runtime.piStoreDir,
-    },
-    runProviders,
+
+  throw new ProviderExecutionError(
+    `Pi agent failed for all configured models: ${errors.join("; ")}`,
+    remediation,
   );
 }
 
@@ -194,7 +159,7 @@ function mergeScheduledReviewAgentResults(
           ? (value as { inlineFindings: unknown[] }).inlineFindings
           : [],
       );
-      const deduplicatedFindings = deduplicateScheduledFindingValues(findings);
+      const deduplicatedFindings = deduplicateScheduledFindings(findings);
       const maxItems = canonicalInlineFindingsMaxItems(options.agent.definition.output.jsonSchema);
       return {
         value: options.agent.definition.output.parse({
@@ -217,14 +182,6 @@ function mergeScheduledReviewAgentResults(
           },
           inlineFindings: deduplicateScheduledFindings(
             reviews.flatMap((review) => review.inlineFindings),
-            (finding) => ({
-              path: finding.path,
-              rangeId: finding.rangeId,
-              side: finding.side,
-              startLine: finding.startLine,
-              endLine: finding.endLine,
-              body: finding.body,
-            }),
           ),
         }),
         repairAttempted: results.some((result) => result.repairAttempted),
@@ -234,59 +191,13 @@ function mergeScheduledReviewAgentResults(
     .exhaustive();
 }
 
-function deduplicateScheduledFindingValues(findings: readonly unknown[]): unknown[] {
-  return deduplicateScheduledFindings(findings, (finding) => ({
-    path: findingValueField(finding, "path"),
-    rangeId: findingValueField(finding, "rangeId"),
-    side: findingValueField(finding, "side"),
-    startLine: findingValueField(finding, "startLine"),
-    endLine: findingValueField(finding, "endLine"),
-    body: findingValueField(finding, "body"),
-  }));
-}
-
-function findingValueField(value: unknown, field: string): unknown {
-  return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)[field]
-    : undefined;
-}
-
-type FindingDedupAnchor = {
-  path: unknown;
-  rangeId: unknown;
-  side: unknown;
-  startLine: unknown;
-  endLine: unknown;
-  body: unknown;
-};
-
-function deduplicateScheduledFindings<T>(
-  findings: readonly T[],
-  anchor: (finding: T) => FindingDedupAnchor,
-): T[] {
-  const unique: T[] = [];
-  for (const finding of findings) {
-    const findingAnchor = anchor(finding);
-    const duplicate = unique.some((candidate) => {
-      const candidateAnchor = anchor(candidate);
-      return (
-        sameFindingAnchor(candidateAnchor, findingAnchor) &&
-        candidateAnchor.body === findingAnchor.body
-      );
-    });
-    if (!duplicate) {
-      unique.push(finding);
-    }
-  }
-  return unique;
-}
-
-function sameFindingAnchor(left: FindingDedupAnchor, right: FindingDedupAnchor): boolean {
-  return (
-    left.path === right.path &&
-    left.rangeId === right.rangeId &&
-    left.side === right.side &&
-    left.startLine === right.startLine &&
-    left.endLine === right.endLine
-  );
+/** First occurrence wins for findings sharing a path, range, side, line span, and body. */
+function deduplicateScheduledFindings<T>(findings: readonly T[]): T[] {
+  return uniqBy(findings, (finding) => {
+    const field = (name: string): unknown =>
+      typeof finding === "object" && finding !== null
+        ? (finding as Record<string, unknown>)[name]
+        : undefined;
+    return JSON.stringify(["path", "rangeId", "side", "startLine", "endLine", "body"].map(field));
+  });
 }

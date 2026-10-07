@@ -1,12 +1,5 @@
-import {
-  maxReviewStatsModelsLimit,
-  reviewStatsSchema,
-  sanitizeReviewStatsModel,
-} from "../publication/schemas.js";
+import { maxReviewStatsModels } from "../publication/schemas.js";
 import type { ReviewStats } from "../publication/types.js";
-
-export { reviewStatsSchema, sanitizeReviewStatsModel };
-export const maxReviewStatsModels = maxReviewStatsModelsLimit;
 
 export function accumulateReviewStats(
   prior: ReviewStats | undefined,
@@ -61,7 +54,8 @@ export function accumulateReviewStats(
   };
 }
 
-function addUsageTotal(
+/** Adds a usage value, keeping the prior total when the sum is invalid or negative. */
+export function addUsageTotal(
   prior: number,
   current: number,
   isValid: (value: number) => boolean,

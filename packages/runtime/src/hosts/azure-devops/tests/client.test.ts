@@ -293,7 +293,6 @@ describe("Azure DevOps API client", () => {
         base: { sha: "target", ref: "main" },
         head: { sha: "head", ref: "feature" },
       },
-      iterationId: 2,
     });
     expect(requests.every((url) => url.includes("api-version=7.1"))).toBe(true);
   });

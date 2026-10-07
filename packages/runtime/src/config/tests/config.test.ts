@@ -503,10 +503,21 @@ export default definePipr((pipr) => {
 
   it("removes the temporary config copy after loading", async () => {
     const rootDir = await newInitializedProject();
+    await Bun.write(
+      path.join(rootDir, ".pipr", "config.ts"),
+      `import { definePipr } from "@usepipr/sdk";
+(globalThis as { piprLoadedConfigDir?: string }).piprLoadedConfigDir = import.meta.dir;
+export default definePipr((pipr) => {
+  pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
+});
+`,
+    );
 
-    const loaded = await loadTypescriptConfig({ rootDir });
+    await loadTypescriptConfig({ rootDir });
 
-    await expect(access(loaded.tempRoot)).rejects.toThrow();
+    const loadedConfigDir = (globalThis as { piprLoadedConfigDir?: string }).piprLoadedConfigDir;
+    expect(loadedConfigDir).toStartWith(path.join(os.tmpdir(), "pipr-config-"));
+    await expect(access(loadedConfigDir ?? "")).rejects.toThrow();
   });
 });
 

@@ -10,6 +10,7 @@ import type {
 } from "@usepipr/sdk";
 import { z } from "zod";
 import { summarizeDiffContextCoverage } from "../../pi/diff-context-coverage.js";
+import { maxReviewStatsModels, sanitizeReviewStatsModel } from "../../publication/schemas.js";
 import type { PriorReviewState, ReviewStats } from "../../publication/types.js";
 import type { ReviewResult } from "../../types.js";
 import type { PiRunStats } from "../agent/review-run-types.js";
@@ -18,7 +19,7 @@ import {
   type GeneratedMainCommentEnvelope,
   parseGeneratedMainCommentEnvelope,
 } from "../main-comment-envelope.js";
-import { maxReviewStatsModels, sanitizeReviewStatsModel } from "../review-stats.js";
+import { addUsageTotal } from "../review-stats.js";
 import { findingFacetValues } from "../selection.js";
 export type RuntimeCheckConclusion = "success" | "failure" | "neutral";
 
@@ -192,73 +193,46 @@ function aggregateReviewUsage(runs: PiRunStats[]): {
   cacheWriteTokens: number;
   cacheStatus: NonNullable<ReviewStats["cacheUsageStatus"]>;
 } {
-  return { ...aggregateCoreUsage(runs), ...aggregateCacheUsage(runs) };
+  const core = sumReportedUsage(
+    runs.map((run) => run.usage && { values: run.usage, partial: run.usage.status === "partial" }),
+    {
+      inputTokens: Number.isSafeInteger,
+      outputTokens: Number.isSafeInteger,
+      costUsd: Number.isFinite,
+    },
+  );
+  const cache = sumReportedUsage(
+    runs.map((run) =>
+      hasReportedCacheUsage(run)
+        ? { values: run.usage, partial: run.usage.cacheUsageStatus === "partial" }
+        : undefined,
+    ),
+    { cacheReadTokens: Number.isSafeInteger, cacheWriteTokens: Number.isSafeInteger },
+  );
+  return { ...core.totals, status: core.status, ...cache.totals, cacheStatus: cache.status };
 }
 
-function aggregateCoreUsage(runs: PiRunStats[]): {
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-  status: ReviewStats["usageStatus"];
-} {
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let costUsd = 0;
+/** Sums usage fields across runs; runs without a report, partial reports, or overflow make it partial. */
+function sumReportedUsage<K extends string>(
+  reports: ({ values: Record<NoInfer<K>, number>; partial: boolean } | undefined)[],
+  fields: Record<K, (value: number) => boolean>,
+): { totals: Record<K, number>; status: "complete" | "partial" | "unavailable" } {
+  const keys = Object.keys(fields) as K[];
+  const totals = Object.fromEntries(keys.map((key) => [key, 0])) as Record<K, number>;
   let reportedRuns = 0;
   let partialUsage = false;
-  for (const run of runs) {
-    if (!run.usage) continue;
+  for (const report of reports) {
+    if (!report) continue;
     reportedRuns += 1;
-    const input = addReportedUsage(inputTokens, run.usage.inputTokens, Number.isSafeInteger);
-    const output = addReportedUsage(outputTokens, run.usage.outputTokens, Number.isSafeInteger);
-    const cost = addReportedUsage(costUsd, run.usage.costUsd, Number.isFinite);
-    inputTokens = input.total;
-    outputTokens = output.total;
-    costUsd = cost.total;
-    const sumsComplete = [input, output, cost].every((sum) => sum.complete);
-    partialUsage ||= run.usage.status === "partial" || !sumsComplete;
+    let complete = true;
+    for (const key of keys) {
+      const sum = addUsageTotal(totals[key], report.values[key], fields[key]);
+      totals[key] = sum.total;
+      complete &&= sum.complete;
+    }
+    partialUsage ||= report.partial || !complete;
   }
-  return {
-    inputTokens,
-    outputTokens,
-    costUsd,
-    status: aggregateUsageStatus(reportedRuns, runs.length, partialUsage),
-  };
-}
-
-function aggregateCacheUsage(runs: PiRunStats[]): {
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  cacheStatus: NonNullable<ReviewStats["cacheUsageStatus"]>;
-} {
-  let cacheReadTokens = 0;
-  let cacheWriteTokens = 0;
-  let reportedRuns = 0;
-  let partialUsage = false;
-  for (const run of runs) {
-    if (!hasReportedCacheUsage(run)) continue;
-    const usage = run.usage;
-    reportedRuns += 1;
-    const cacheRead = addReportedUsage(
-      cacheReadTokens,
-      usage.cacheReadTokens,
-      Number.isSafeInteger,
-    );
-    const cacheWrite = addReportedUsage(
-      cacheWriteTokens,
-      usage.cacheWriteTokens,
-      Number.isSafeInteger,
-    );
-    cacheReadTokens = cacheRead.total;
-    cacheWriteTokens = cacheWrite.total;
-    partialUsage ||=
-      usage.cacheUsageStatus === "partial" || !cacheRead.complete || !cacheWrite.complete;
-  }
-  return {
-    cacheReadTokens,
-    cacheWriteTokens,
-    cacheStatus: aggregateUsageStatus(reportedRuns, runs.length, partialUsage),
-  };
+  return { totals, status: aggregateUsageStatus(reportedRuns, reports.length, partialUsage) };
 }
 
 function hasReportedCacheUsage(run: PiRunStats): run is PiRunStats & {
@@ -283,15 +257,6 @@ function aggregateUsageStatus(
 ): "complete" | "partial" | "unavailable" {
   if (reported === 0) return "unavailable";
   return reported < total || partial ? "partial" : "complete";
-}
-
-function addReportedUsage(
-  current: number,
-  reported: number,
-  isValid: (value: number) => boolean,
-): { total: number; complete: boolean } {
-  const next = current + reported;
-  return isValid(next) ? { total: next, complete: true } : { total: current, complete: false };
 }
 
 function mergeCommentContribution(

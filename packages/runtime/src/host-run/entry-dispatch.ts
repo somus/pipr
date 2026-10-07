@@ -38,18 +38,18 @@ export type PlanCommandResolution =
       requiredPermission: CommandPermissionLevel;
       body: string;
     }
-  | {
-      kind: "matched";
-      invocation: {
-        taskName: string;
-        commandName: string;
-        requiredPermission: CommandPermissionLevel;
-        line: string;
-        pattern: string;
-        arguments: Record<string, string>;
-        inputs?: unknown;
-      };
-    };
+  | { kind: "matched"; invocation: PlanCommandInvocation };
+
+export type PlanCommandInvocation = {
+  command: RuntimePlan["commands"][number];
+  taskName: string;
+  commandName: string;
+  requiredPermission: CommandPermissionLevel;
+  line: string;
+  pattern: string;
+  arguments: Record<string, string>;
+  inputs?: unknown;
+};
 
 function selectPlanCommand(plan: RuntimePlan, line: string): SelectedPlanCommand | undefined {
   let firstInvalid: SelectedPlanCommand | undefined;
@@ -86,6 +86,7 @@ export function resolvePlanCommand(
     .with({ kind: "matched" }, (selected) => ({
       kind: "matched" as const,
       invocation: {
+        command: selected.command,
         taskName: selected.command.task.name,
         commandName: selected.commandName,
         requiredPermission: selected.command.permission,
@@ -111,29 +112,15 @@ export function resolvePlanCommand(
 
 export function parsePlanCommandInputs(
   plan: RuntimePlan,
-  invocation: Extract<PlanCommandResolution, { kind: "matched" }>["invocation"],
-): PlanCommandResolution {
-  const matchingCommand =
-    plan.commands.find(
-      (candidate) =>
-        candidate.task.name === invocation.taskName && candidate.pattern === invocation.pattern,
-    ) ?? plan.commands.find((candidate) => candidate.task.name === invocation.taskName);
-  if (!matchingCommand) {
-    return {
-      kind: "invalid",
-      reason: `No command registered for task '${invocation.taskName}'`,
-      requiredPermission: invocation.requiredPermission,
-      body: renderPlanCommandHelp(plan),
-    };
-  }
+  invocation: PlanCommandInvocation,
+): Extract<PlanCommandResolution, { kind: "matched" | "invalid" }> {
+  const { command } = invocation;
   try {
     return {
       kind: "matched",
       invocation: {
         ...invocation,
-        inputs: matchingCommand.parse
-          ? matchingCommand.parse(invocation.arguments)
-          : invocation.arguments,
+        inputs: command.parse ? command.parse(invocation.arguments) : invocation.arguments,
       },
     };
   } catch (error) {

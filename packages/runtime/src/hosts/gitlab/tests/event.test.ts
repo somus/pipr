@@ -90,7 +90,12 @@ describe("GitLab event parser", () => {
     });
     try {
       await expect(
-        parseGitLabEvent({ eventPath: command.path, env: {}, workspace: command.root }),
+        parseGitLabEvent({
+          eventPath: command.path,
+          env: {},
+          workspace: command.root,
+          loadChangeRequest: unexpectedChangeLoad,
+        }),
       ).resolves.toMatchObject({
         kind: "command-comment",
         comment: { commentId: "101", changeNumber: 7, body: "@pipr review", actor: "developer" },
@@ -100,6 +105,7 @@ describe("GitLab event parser", () => {
           eventPath: reply.path,
           env: {},
           workspace: reply.root,
+          loadChangeRequest: unexpectedChangeLoad,
           resolveReplyParent: async ({ noteId }) => (noteId === "102" ? "101" : undefined),
         }),
       ).resolves.toMatchObject({
@@ -237,4 +243,8 @@ async function eventFixture(payload: unknown) {
   const eventPath = path.join(root, "event.json");
   await Bun.write(eventPath, JSON.stringify(payload));
   return { root, path: eventPath };
+}
+
+function unexpectedChangeLoad(): never {
+  throw new Error("comment events must not load the change request");
 }

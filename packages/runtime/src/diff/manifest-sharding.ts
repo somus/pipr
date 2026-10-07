@@ -1,10 +1,7 @@
 import path from "node:path";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { DiffManifest, DiffManifestFile, DiffManifestLimitsConfig } from "../types.js";
-import {
-  partitionDiffManifestForPrompt,
-  prepareDiffManifestPrompt,
-} from "./manifest-projection.js";
+import { diffManifestFitsPrompt, partitionDiffManifestForPrompt } from "./manifest-projection.js";
 import { unquote } from "./source-text.js";
 import {
   analyzeDiffStructure,
@@ -81,16 +78,7 @@ function cappedPromptShards(
       files: mergeManifestFileSlices(shards.slice(start, end).flatMap((shard) => shard.files)),
     };
   });
-  const oversizedShards = capped.filter((shard) => {
-    const prompt = prepareDiffManifestPrompt(shard, config, {
-      allowOversizedCondensed: true,
-    });
-    return (
-      prompt.mode === "condensed" &&
-      (prompt.metrics.selected.bytes > prompt.limits.condensedMaxBytes ||
-        prompt.metrics.selected.estimatedTokens > prompt.limits.condensedMaxEstimatedTokens)
-    );
-  }).length;
+  const oversizedShards = capped.filter((shard) => !diffManifestFitsPrompt(shard, config)).length;
   if (oversizedShards > 0) {
     log?.warning("diff manifest shard cap requires oversized condensed prompts", {
       maxShards,

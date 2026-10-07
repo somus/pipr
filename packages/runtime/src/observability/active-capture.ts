@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { isMissingFileError } from "./recorder-fs.js";
 
 export const currentProcessIdentity = `${process.pid}:${Date.now() - Math.round(process.uptime() * 1000)}`;
 export const activeCaptureHeartbeatMilliseconds = 30_000;
@@ -41,8 +42,4 @@ export async function readActiveCaptureMarker(
     if (isMissingFileError(error)) return undefined;
     throw error;
   }
-}
-
-function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }

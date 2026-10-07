@@ -1,7 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { copyRunBundleInput } from "@usepipr/runtime";
+import { withTemporaryRoot } from "./runs-sources.js";
 import type { RunsInspectOptions } from "./runs-types.js";
 import { renderDownloadedRun } from "./runs-view.js";
 
@@ -11,12 +10,8 @@ export async function runRunsInspect(
   context: { env: NodeJS.ProcessEnv; cwd: string },
 ): Promise<void> {
   const source = path.resolve(context.cwd, inputPath);
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-runs-inspect-"));
-  try {
-    const destination = path.join(temporaryRoot, "downloaded");
-    const downloaded = await copyRunBundleInput(source, destination);
+  await withTemporaryRoot("pipr-runs-inspect-", async (temporaryRoot) => {
+    const downloaded = await copyRunBundleInput(source, path.join(temporaryRoot, "downloaded"));
     await renderDownloadedRun(downloaded, options, context, temporaryRoot);
-  } finally {
-    await rm(temporaryRoot, { recursive: true, force: true });
-  }
+  });
 }

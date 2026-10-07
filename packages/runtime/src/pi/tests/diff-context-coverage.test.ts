@@ -1,10 +1,25 @@
 import { describe, expect, it } from "bun:test";
+import type { AgentWorkerEvent } from "../../agent-worker/protocol.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import {
   diffContextCoverageArtifact,
   summarizeDiffContextCoverage,
 } from "../diff-context-coverage.js";
 import { createDiffContextCoverageTracker } from "../diff-context-coverage-observer.js";
+
+function toolStart(toolCallId: string, toolName: string, args: unknown): AgentWorkerEvent {
+  return { type: "tool_execution_start", toolCallId, toolName, args };
+}
+
+function toolEnd(toolCallId: string, toolName: string, details: unknown): AgentWorkerEvent {
+  return {
+    type: "tool_execution_end",
+    toolCallId,
+    toolName,
+    isError: false,
+    result: { details, contentBytes: 0, contentHash: "0".repeat(64) },
+  };
+}
 
 describe("Diff Manifest context coverage", () => {
   it("marks every file and range covered when the full manifest is in the prompt", () => {
@@ -24,49 +39,37 @@ describe("Diff Manifest context coverage", () => {
       manifest: reviewTestManifest(),
       mode: "condensed",
     });
-    tracker.observe({
-      type: "tool_execution_start",
-      toolCallId: "read-1",
-      toolName: "pipr_read_diff",
-      args: { path: "src/a.ts", rangeId: "range-1" },
-    });
-    tracker.observe({
-      type: "tool_execution_end",
-      toolCallId: "read-1",
-      toolName: "pipr_read_diff",
-      result: {
-        details: {
-          truncated: false,
-          value: {
-            files: [
-              {
-                path: "src/a.ts",
-                commentableRanges: [{ id: "range-1" }],
-              },
-            ],
-          },
+    tracker.observe(
+      toolStart("read-1", "pipr_read_diff", { path: "src/a.ts", rangeId: "range-1" }),
+    );
+    tracker.observe(
+      toolEnd("read-1", "pipr_read_diff", {
+        truncated: false,
+        value: {
+          files: [
+            {
+              path: "src/a.ts",
+              commentableRanges: [{ id: "range-1" }],
+            },
+          ],
         },
-      },
-    });
-    tracker.observe({
-      type: "tool_execution_start",
-      toolCallId: "read-2",
-      toolName: "pipr_read_at_ref",
-      args: { path: "src/a.ts", ref: "head", rangeId: "range-2" },
-    });
-    tracker.observe({
-      type: "tool_execution_end",
-      toolCallId: "read-2",
-      toolName: "pipr_read_at_ref",
-      result: {
-        details: {
-          path: "src/a.ts",
-          rangeId: "range-2",
-          available: true,
-          truncated: true,
-        },
-      },
-    });
+      }),
+    );
+    tracker.observe(
+      toolStart("read-2", "pipr_read_at_ref", {
+        path: "src/a.ts",
+        ref: "head",
+        rangeId: "range-2",
+      }),
+    );
+    tracker.observe(
+      toolEnd("read-2", "pipr_read_at_ref", {
+        path: "src/a.ts",
+        rangeId: "range-2",
+        available: true,
+        truncated: true,
+      }),
+    );
 
     expect(summarizeDiffContextCoverage([tracker.result()])).toEqual({
       files: { total: 1, covered: 0 },
@@ -79,24 +82,15 @@ describe("Diff Manifest context coverage", () => {
       manifest: reviewTestManifest({ includeExcludedLock: true }),
       mode: "condensed",
     });
-    tracker.observe({
-      type: "tool_execution_start",
-      toolCallId: "read-lock",
-      toolName: "pipr_read_diff",
-      args: { path: "bun.lock" },
-    });
-    tracker.observe({
-      type: "tool_execution_end",
-      toolCallId: "read-lock",
-      result: {
-        details: {
-          truncated: false,
-          value: {
-            files: [{ path: "bun.lock", commentableRanges: [] }],
-          },
+    tracker.observe(toolStart("read-lock", "pipr_read_diff", { path: "bun.lock" }));
+    tracker.observe(
+      toolEnd("read-lock", "pipr_read_diff", {
+        truncated: false,
+        value: {
+          files: [{ path: "bun.lock", commentableRanges: [] }],
         },
-      },
-    });
+      }),
+    );
 
     expect(summarizeDiffContextCoverage([tracker.result()])).toEqual({
       files: { total: 2, covered: 1 },
@@ -109,24 +103,17 @@ describe("Diff Manifest context coverage", () => {
       manifest: reviewTestManifest(),
       mode: "condensed",
     });
-    tracker.observe({
-      type: "tool_execution_start",
-      toolCallId: "declaration-1",
-      toolName: "pipr_read_declaration",
-      args: { declarationId: "decl-1" },
-    });
-    tracker.observe({
-      type: "tool_execution_end",
-      toolCallId: "declaration-1",
-      result: {
-        details: {
-          path: "src/a.ts",
-          rangeId: "range-1",
-          available: true,
-          truncated: false,
-        },
-      },
-    });
+    tracker.observe(
+      toolStart("declaration-1", "pipr_read_declaration", { declarationId: "decl-1" }),
+    );
+    tracker.observe(
+      toolEnd("declaration-1", "pipr_read_declaration", {
+        path: "src/a.ts",
+        rangeId: "range-1",
+        available: true,
+        truncated: false,
+      }),
+    );
 
     expect(summarizeDiffContextCoverage([tracker.result()])).toEqual({
       files: { total: 1, covered: 0 },

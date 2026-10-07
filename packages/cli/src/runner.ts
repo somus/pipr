@@ -9,6 +9,7 @@ import {
   prepareRunBundlePackage,
   type RuntimeLogRecord,
   type RuntimeLogSink,
+  readWebhookDeliveryStatus,
   runAgentWorkerCommand,
   runDryRunCommand,
   runHostRunCommand,
@@ -16,12 +17,13 @@ import {
   runInspectCommand,
   runLocalReviewCommand,
   runValidateCommand,
+  runWebhookServer,
   supportedOfficialInitAdapters,
   supportedOfficialInitRecipes,
 } from "@usepipr/runtime";
 import { stripPiprMainCommentMarkers, toPiprResult } from "@usepipr/runtime/host-run/pipr-result";
 import { presentGitHubActionResult } from "@usepipr/runtime/internal/action-result";
-import { Command, CommanderError } from "commander";
+import { Command, CommanderError, Option } from "commander";
 import cliPackage from "../package.json" with { type: "json" };
 import {
   defaultLocalTraceStore,
@@ -187,7 +189,7 @@ function createProgram(
     .requiredOption("--event <path>", "Native event payload path")
     .option("--host <host>", "Code host adapter")
     .option("--config-dir <dir>", "Config directory", ".pipr")
-    .action((commandOptions: CliOptions) => runDryRun(commandOptions, context));
+    .action((commandOptions: CliOptions & { event: string }) => runDryRun(commandOptions, context));
 
   program
     .command("inspect")
@@ -234,12 +236,7 @@ function createProgram(
     .option("--repository <repository>", "Provider repository path")
     .option("--kind <kind>", "Run kind (review, command, verifier, startup, or all)")
     .option("--timeline", "Print the complete span timeline")
-    .option(
-      "--identity <path>",
-      "Age identity file; repeat for multiple identities",
-      collectOption,
-      [],
-    )
+    .addOption(identityOption())
     .option("--json", "Print versioned JSON without prompt or output bodies")
     .option("--store <path>", "Local run store")
     .action(async (executionId: string | undefined, runOptions: RunsShowOptions) => {
@@ -253,12 +250,7 @@ function createProgram(
     .option("--repository <repository>", "Provider repository path")
     .option("--output <path>", "Destination directory")
     .option("--archive", "Preserve the GitHub Actions archive beside the unpacked bundle")
-    .option(
-      "--identity <path>",
-      "Age identity file; repeat for multiple identities",
-      collectOption,
-      [],
-    )
+    .addOption(identityOption())
     .option("--store <path>", "Local run store")
     .action(async (executionId: string, runOptions: RunsDownloadOptions) => {
       await runRunsDownload(executionId, runOptions, context);
@@ -268,12 +260,7 @@ function createProgram(
     .description("Validate and diagnose a downloaded run bundle")
     .argument("<path>", "Downloaded Run Bundle package, archive, or directory")
     .option("--timeline", "Print the complete span timeline")
-    .option(
-      "--identity <path>",
-      "Age identity file; repeat for multiple identities",
-      collectOption,
-      [],
-    )
+    .addOption(identityOption())
     .option("--json", "Print versioned JSON without prompt or output bodies")
     .action(async (inputPath: string, runOptions: RunsInspectOptions) => {
       await runRunsInspect(inputPath, runOptions, context);
@@ -302,8 +289,10 @@ function createProgram(
   return program;
 }
 
-function collectOption(value: string, previous: string[]): string[] {
-  return [...previous, value];
+function identityOption(): Option {
+  return new Option("--identity <path>", "Age identity file; repeat for multiple identities")
+    .argParser((value: string, previous: string[]) => [...previous, value])
+    .default([]);
 }
 
 const agentHelpText = `
@@ -428,7 +417,6 @@ function hostRunRootDir(context: CliExecutionContext): string {
 }
 
 async function runWebhookServe(options: CliOptions, context: CliExecutionContext): Promise<void> {
-  const { runWebhookServer } = await import("@usepipr/runtime");
   const secret = context.env.PIPR_WEBHOOK_SECRET;
   if (!secret) throw new Error("PIPR_WEBHOOK_SECRET is required");
   const host = webhookHost(options.host);
@@ -462,7 +450,6 @@ function positiveIntegerOption(value: string | undefined, name: string): number 
 }
 
 async function runWebhookStatus(options: CliOptions, context: CliExecutionContext): Promise<void> {
-  const { readWebhookDeliveryStatus } = await import("@usepipr/runtime");
   const limit = Number(options.limit);
   const databasePath = path.resolve(context.cwd, options.database ?? ".pipr/webhooks.sqlite");
   const deliveries = readWebhookDeliveryStatus(databasePath, limit);
@@ -494,19 +481,18 @@ function shorten(value: string, length: number): string {
   return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
 }
 
-function webhookHost(
-  value: string | undefined,
-): "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg" {
-  if (
-    value === "gitlab" ||
-    value === "azure-devops" ||
-    value === "bitbucket" ||
-    value === "gitea" ||
-    value === "forgejo" ||
-    value === "codeberg"
-  ) {
-    return value;
-  }
+const webhookHosts = [
+  "gitlab",
+  "azure-devops",
+  "bitbucket",
+  "gitea",
+  "forgejo",
+  "codeberg",
+] as const;
+
+function webhookHost(value: string | undefined): (typeof webhookHosts)[number] {
+  const host = webhookHosts.find((candidate) => candidate === value);
+  if (host) return host;
   throw new Error(
     "webhook serve supports --host gitlab, azure-devops, bitbucket, gitea, forgejo, or codeberg",
   );
@@ -742,18 +728,15 @@ const localConsoleLogSink: RuntimeLogSink = {
 };
 
 function formatLocalLogRecord(record: RuntimeLogRecord): string {
+  const level = record.level === "info" || record.level === "notice" ? "" : record.level;
   const fields = Object.entries(record.fields)
-    .map(([key, value]) => formatLocalLogField(key, value))
-    .filter((field): field is string => field !== undefined);
-  const prefix = formatLocalLogPrefix(record);
-  const formatted = [...prefix, ...fields].join(" ");
+    .filter(([, value]) => value != null)
+    .map(([key, value]) => {
+      const formatter = typeof value === "number" ? localLogNumberFields[key] : undefined;
+      return formatter ? formatter(value as number) : `${key}=${formatLocalLogValue(value)}`;
+    });
+  const formatted = [...["pipr", level, record.event].filter(Boolean), ...fields].join(" ");
   return record.text === undefined ? formatted : `${formatted}\n${record.text}`;
-}
-
-function formatLocalLogPrefix(record: RuntimeLogRecord): string[] {
-  return ["pipr", localLogPlainLevels.has(record.level) ? "" : record.level, record.event].filter(
-    Boolean,
-  );
 }
 
 const localLogNumberFields: Record<string, (value: number) => string> = {
@@ -766,39 +749,12 @@ const localLogNumberFields: Record<string, (value: number) => string> = {
   stdoutBytes: (value) => `stdout=${value}B`,
 };
 
-const localLogPlainLevels = new Set(["info", "notice"]);
-
-function formatLocalLogField(key: string, value: unknown): string | undefined {
-  if (value == null) {
-    return undefined;
-  }
-
-  return formatLocalLogFieldValue(key, value);
-}
-
-function formatLocalLogFieldValue(key: string, value: unknown): string {
-  const formattedNumber =
-    typeof value === "number" ? localLogNumberFields[key]?.(value) : undefined;
-  return formattedNumber ?? `${key}=${formatLocalLogValue(value)}`;
-}
-
-const localLogValueFormatters: Record<string, (value: unknown) => string> = {
-  boolean: String,
-  number: String,
-  object: (value) =>
-    Array.isArray(value)
-      ? value.length === 0
-        ? "-"
-        : value.map(formatLocalLogValue).join(",")
-      : JSON.stringify(value),
-  string: (value) => {
-    const text = String(value);
-    return /\s/.test(text) ? JSON.stringify(text) : text;
-  },
-};
-
 function formatLocalLogValue(value: unknown): string {
-  return (localLogValueFormatters[typeof value] ?? JSON.stringify)(value);
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  if (typeof value === "string") return /\s/.test(value) ? JSON.stringify(value) : value;
+  if (Array.isArray(value))
+    return value.length === 0 ? "-" : value.map(formatLocalLogValue).join(",");
+  return JSON.stringify(value);
 }
 
 function writeLocalReviewResult(result: LocalReviewResult, json: boolean): void {
@@ -831,10 +787,10 @@ function formatLocalReview(result: Extract<LocalReviewResult, { kind: "review" }
     : [mainComment.trimEnd(), "", "## Inline Findings", "", inlineFindings.join("\n\n")].join("\n");
 }
 
-async function runDryRun(options: CliOptions, context: CliExecutionContext): Promise<void> {
-  if (!options.event) {
-    throw new Error("dry-run requires --event <path>");
-  }
+async function runDryRun(
+  options: CliOptions & { event: string },
+  context: CliExecutionContext,
+): Promise<void> {
   const result = await runDryRunCommand({
     rootDir: context.cwd,
     configDir: options.configDir,

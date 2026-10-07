@@ -4,36 +4,32 @@ import { compact } from "lodash-es";
 import { agentWorkspaceToolNames } from "../../agent-worker/protocol.js";
 import type { PriorReviewState } from "../../publication/types.js";
 import { isRecord } from "../../shared/record.js";
+import { reviewResultSchemaId, reviewSchemaExample } from "../contract.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
-import { reviewResultSchemaId, reviewSchemaExample } from "../review.js";
 import type { PreparedDiffManifestContext } from "./diff-manifest-context.js";
 import { schemaContainsReviewFinding } from "./review-schema.js";
 
-export type AgentToolResolution = {
-  customTools: RuntimeAgentTool[];
-};
+/** A registered custom tool with everything needed to execute it. */
+export type RunnableAgentTool = RuntimeAgentTool &
+  Required<Pick<RuntimeAgentTool, "input" | "output" | "run">>;
 
-export type PluginToolExecutionContext = {
-  run: PiprRunContext;
-  repository: { root: string; name: string };
-  change: {
-    number: number;
-    title: string;
-    description: string;
-    base: { sha: string };
-    head: { sha: string };
-  };
-  platform: { id: string };
+export type AgentToolResolution = {
+  customTools: RunnableAgentTool[];
 };
 
 export type AgentRunContext = {
   prompt: {
     run: PiprRunContext;
-    repository: PluginToolExecutionContext["repository"];
-    change: PluginToolExecutionContext["change"];
-    platform: PluginToolExecutionContext["platform"];
+    repository: { root: string; name: string };
+    change: {
+      number: number;
+      title: string;
+      description: string;
+      base: { sha: string };
+      head: { sha: string };
+    };
+    platform: { id: string };
   };
-  tools: PluginToolExecutionContext;
 };
 
 export type PreparedAgentContext = {

@@ -9,22 +9,19 @@ import {
   applyInlineFindingMarkers,
   applyNativeThreadResolutions,
   applyResolvedFindingMarkers,
-  extractInlineFindingMarkerRecords,
   extractPriorReviewState,
   mainCommentMarker,
-  parseMainCommentIdentity,
+  parseInlineFindingMarker,
 } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import { nativeInlineLocation } from "../publication.js";
+import { isMainCommentLine, nativeInlineLocation } from "../publication.js";
 import { normalizeBitbucketMarkdown } from "./markdown.js";
-import type { BitbucketClient, BitbucketComment } from "./models.js";
+import type { BitbucketClient, BitbucketComment, BitbucketInlineRequest } from "./models.js";
 
 export function bitbucketInlineLocationFromComment(
   comment: BitbucketComment,
 ): InlinePublicationLocation | undefined {
-  const marker = extractInlineFindingMarkerRecords([
-    normalizeBitbucketMarkdown(comment.content.raw),
-  ])[0];
+  const marker = parseInlineFindingMarker(normalizeBitbucketMarkdown(comment.content.raw));
   const inline = comment.inline;
   if (!marker || !inline?.path) return undefined;
   return nativeInlineLocation({
@@ -36,16 +33,6 @@ export function bitbucketInlineLocationFromComment(
     leftStart: inline.start_from ?? undefined,
     leftEnd: inline.from ?? undefined,
   });
-}
-
-export function bitbucketInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
-  return {
-    path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
-    commitId: item.reviewedHeadSha,
-    side: item.side,
-    startLine: item.startLine,
-    endLine: item.endLine,
-  };
 }
 
 export async function loadBitbucketPriorReviewState(options: {
@@ -63,7 +50,7 @@ export async function loadBitbucketPriorReviewState(options: {
     markerState,
     comments.flatMap((comment) => {
       const marker = !comment.parent
-        ? extractInlineFindingMarkerRecords([normalizeBitbucketMarkdown(comment.content.raw)])[0]
+        ? parseInlineFindingMarker(normalizeBitbucketMarkdown(comment.content.raw))
         : undefined;
       return marker
         ? [
@@ -114,9 +101,7 @@ export function bitbucketThreadContexts(
   ownedRepliesOnly: boolean,
 ): InlineThreadContext[] {
   return comments.flatMap((root) => {
-    const marker = extractInlineFindingMarkerRecords([
-      normalizeBitbucketMarkdown(root.content.raw),
-    ])[0];
+    const marker = parseInlineFindingMarker(normalizeBitbucketMarkdown(root.content.raw));
     if (!marker || root.user?.uuid !== ownerUuid || root.parent) return [];
     const replies = comments.filter((comment) => comment.parent?.id === root.id);
     return [
@@ -146,7 +131,7 @@ export function bitbucketThreadContexts(
 export function bitbucketInline(
   item: InlinePublicationItem,
   deployment: BitbucketClient["deployment"],
-) {
+): BitbucketInlineRequest {
   return item.side === "RIGHT"
     ? {
         path: item.path,
@@ -167,13 +152,14 @@ export async function assertCurrentBitbucketEndpoints(
   client: BitbucketClient,
   change: ChangeRequestEventContext,
   reviewedHeadSha = change.change.head.sha,
+  stage = "publication",
 ) {
   const pullRequest = await client.getPullRequest(change.change.number);
   if (
     pullRequest.source.commit.hash !== reviewedHeadSha ||
     pullRequest.destination.commit.hash !== change.change.base.sha
   ) {
-    throw new Error("Bitbucket pull request endpoints changed before publication");
+    throw new Error(`Bitbucket pull request endpoints changed before ${stage}`);
   }
 }
 
@@ -207,8 +193,7 @@ export function findBitbucketMainComment(
   changeNumber: number,
   marker = mainCommentMarker,
 ): BitbucketComment | undefined {
-  return findBitbucketTopLevelComment(comments, (firstLine) => {
-    const identity = parseMainCommentIdentity(firstLine);
-    return identity?.marker === marker && identity.changeNumber === changeNumber;
-  });
+  return findBitbucketTopLevelComment(comments, (firstLine) =>
+    isMainCommentLine(firstLine, marker, changeNumber),
+  );
 }

@@ -1,6 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { type CodeHostId, codeHostIds } from "../hosts/selection.js";
 import type { CodeHostAdapter, CodeHostEvent } from "../hosts/types.js";
 import { startFileRunRecorder } from "../observability/file-run-recorder.js";
 import {
@@ -16,7 +17,12 @@ import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
 import { createHostRunAdapter } from "./adapter.js";
 import { runChangeRequestHostRunCommand } from "./change-request-entry.js";
 import { runIssueCommentHostRunCommand } from "./command-entry.js";
-import { classifyRunFailure, finishRecorderSafely } from "./commands-shared.js";
+import {
+  classifyRunFailure,
+  finishRecorderSafely,
+  parseRunCaptureSetting,
+  warnRunCaptureUnavailable,
+} from "./commands-shared.js";
 import type { HostRunServices } from "./composition.js";
 import { logPhase } from "./logging.js";
 import type {
@@ -57,18 +63,12 @@ export async function runHostRunCommandWithDependencies(
     dryRun: options.dryRun,
     adapter,
     log,
-    ...(options.eventPath !== undefined ? { eventPath: options.eventPath } : {}),
-    ...(options.piProviderModule !== undefined
-      ? { piProviderModule: options.piProviderModule }
-      : {}),
-    ...(options.piStoreRoot !== undefined ? { piStoreRoot: options.piStoreRoot } : {}),
-    ...(options.piRunner !== undefined ? { piRunner: options.piRunner } : {}),
-    ...(options.secretRedactor !== undefined ? { secretRedactor: options.secretRedactor } : {}),
-    ...(recorder
-      ? { runObserver: recorder.observer }
-      : options.runObserver !== undefined
-        ? { runObserver: options.runObserver }
-        : {}),
+    eventPath: options.eventPath,
+    piProviderModule: options.piProviderModule,
+    piStoreRoot: options.piStoreRoot,
+    piRunner: options.piRunner,
+    secretRedactor: options.secretRedactor,
+    runObserver: recorder ? recorder.observer : options.runObserver,
   };
   const state: HostRunState = { failureCategory: "startup", adapter: services.adapter };
   try {
@@ -183,7 +183,7 @@ async function finishFailedHostedRecorder(
   }
   const repository = failedBundleRepository(state);
   if (repository) result.repository = repository;
-  const provider = failedBundleProvider(options, state);
+  const provider = providerRun(options.env ?? process.env, state.adapter.id);
   if (provider) result.provider = provider;
   await finishRecorderSafely(recorder, log, result, options.onRunBundleFinalized);
   return superseded;
@@ -196,27 +196,16 @@ function failedBundleRepository(
   return partialBundleRepository(state.event, state.adapter.id);
 }
 
-function failedBundleProvider(
-  options: HostRunCommandDependencyOptions,
-  state: HostRunState,
-): import("@usepipr/sdk").RunBundleManifest["provider"] | undefined {
-  return providerRun(options.env ?? process.env, state.adapter.id);
-}
-
 async function startHostedRecorder(
   options: HostRunCommandDependencyOptions,
 ): Promise<RunRecorder | undefined> {
   if (options.dryRun) return undefined;
   // A misspelled capture mode is operator error; fail before the run instead of silently dropping capture.
-  hostedCaptureSetting(options.env ?? process.env);
+  parseRunCaptureSetting(options.env ?? process.env);
   try {
     return await createHostedRecorder(options);
   } catch (error) {
-    options.logSink?.log({
-      level: "warning",
-      event: "run capture unavailable",
-      fields: { error: error instanceof Error ? error.message : "unknown capture error" },
-    });
+    warnRunCaptureUnavailable(options.logSink, error);
     return undefined;
   }
 }
@@ -263,7 +252,7 @@ async function requestedHostedCaptureMode(
   mode: "metadata" | "diagnostic" | undefined;
   warning?: "recipients-missing" | "recipients-invalid";
 }> {
-  const value = hostedCaptureSetting(env);
+  const value = parseRunCaptureSetting(env);
   if (value === "off") return { mode: undefined };
   if (value === "metadata") return { mode: "metadata" };
   if (!nativeCi) return { mode: "diagnostic" };
@@ -280,16 +269,6 @@ async function requestedHostedCaptureMode(
   } catch {
     return { mode: "metadata", warning: "recipients-invalid" };
   }
-}
-
-function hostedCaptureSetting(
-  env: NodeJS.ProcessEnv,
-): "off" | "metadata" | "diagnostic" | undefined {
-  const value = env.PIPR_RUN_CAPTURE;
-  if (value === undefined || value === "off" || value === "metadata" || value === "diagnostic") {
-    return value;
-  }
-  throw new Error("PIPR_RUN_CAPTURE must be off, metadata, or diagnostic");
 }
 
 function isObservableHostResult(
@@ -347,21 +326,10 @@ function partialBundleRepository(
   };
 }
 
-function bundleHost(
-  host: string | undefined,
-): "github" | "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg" | "local" {
-  if (
-    host === "gitlab" ||
-    host === "azure-devops" ||
-    host === "bitbucket" ||
-    host === "gitea" ||
-    host === "forgejo" ||
-    host === "codeberg" ||
-    host === "local"
-  ) {
-    return host;
-  }
-  return "github";
+function bundleHost(host: string | undefined): CodeHostId | "local" {
+  return host === "local" || codeHostIds.some((id) => id === host)
+    ? (host as CodeHostId | "local")
+    : "github";
 }
 
 function providerRun(
@@ -470,10 +438,7 @@ async function captureHostedArtifacts(
   recorder: RunRecorder | undefined,
   result: Extract<HostRunCommandResult, { kind: "review" | "command-response" | "verifier" }>,
 ): Promise<void> {
-  if (!recorder) return;
-  if (result.kind === "review") {
-    return;
-  }
+  if (!recorder || result.kind === "review") return;
   await recorder.addArtifact({
     kind: "output",
     name: result.kind === "verifier" ? "verifier-output.json" : "command-output.json",

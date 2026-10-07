@@ -11,6 +11,7 @@ import {
   extractVerifierResponseMarkers,
   inlineFindingMarker,
   mainCommentMarker,
+  parseInlineFindingMarker,
 } from "../../review/prior-state.js";
 import {
   extractReviewProgressToken,
@@ -42,19 +43,16 @@ export interface PublicationDriver<Prepared> {
     actions: readonly ThreadAction[],
   ): Promise<readonly InlineThreadContext[]>;
   loadOwnedMain(prepared: Prepared, mainMarker: string): Promise<OwnedMainComment | undefined>;
-  upsertMain(
+  /** Creates or updates a top-level main or command response comment. */
+  upsertComment(
     prepared: Prepared,
     existing: OwnedMainComment | undefined,
     body: string,
+    kind: "main" | "command",
   ): Promise<{ id: string; action: "created" | "updated" }>;
   inlineLocation(prepared: Prepared, item: InlinePublicationItem): InlinePublicationLocation;
   createInline(prepared: Prepared, item: InlinePublicationItem): Promise<void>;
   loadOwnedCommand(prepared: Prepared, marker: string): Promise<OwnedMainComment | undefined>;
-  upsertCommand(
-    prepared: Prepared,
-    existing: OwnedMainComment | undefined,
-    body: string,
-  ): Promise<{ id: string; action: "created" | "updated" }>;
   replyThread(prepared: Prepared, action: ThreadAction, body: string): Promise<void>;
   resolveThread?(prepared: Prepared, action: ThreadAction): Promise<void>;
 }
@@ -116,7 +114,7 @@ async function publishReview<Prepared>(
   await driver.assertCurrent(prepared, expectedHeadSha);
   const currentMain = await driver.loadOwnedMain(prepared, options.plan.mainMarker);
   assertProgressLease(currentMain, options.progressLease);
-  const main = await driver.upsertMain(prepared, currentMain, options.plan.mainComment);
+  const main = await driver.upsertComment(prepared, currentMain, options.plan.mainComment, "main");
   if (inline.errors.length > 0) {
     throw new PublicationError(`${driver.provider} inline comment publication failed`, partial);
   }
@@ -156,7 +154,7 @@ async function publishProgress<Prepared>(
   main = await driver.loadOwnedMain(prepared, mainCommentMarker);
   if (progressWasSuperseded(main, options.expectedToken)) return { status: "superseded" as const };
   if (!main && options.expectedToken) return { status: "superseded" as const };
-  const result = await driver.upsertMain(prepared, main, options.renderBody(main?.body));
+  const result = await driver.upsertComment(prepared, main, options.renderBody(main?.body), "main");
   return { status: "published" as const, ...result };
 }
 
@@ -178,7 +176,7 @@ async function publishCommand<Prepared>(
   });
   const existing = await driver.loadOwnedCommand(prepared, response.marker);
   if (!options.allowHeadDrift) await driver.assertCurrent(prepared, expectedHeadSha);
-  return driver.upsertCommand(prepared, existing, response.body);
+  return driver.upsertComment(prepared, existing, response.body, "command");
 }
 
 async function publishThreadActions<Prepared>(
@@ -210,9 +208,7 @@ async function publishInlineItems<Prepared>(
     ),
   );
   const locations = state.inline.flatMap((item) =>
-    item.resolved || !item.location || extractInlineFindingMarkerRecords([item.body]).length === 0
-      ? []
-      : [item.location],
+    item.resolved || !item.location || !parseInlineFindingMarker(item.body) ? [] : [item.location],
   );
   const errors: string[] = [];
   let posted = 0;

@@ -1,14 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { parseReviewResult, reviewResultSchema } from "@usepipr/sdk";
 import { z } from "zod";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest, ReviewResult } from "../../types.js";
-import {
-  parseReviewResult,
-  reviewResultJsonSchema,
-  reviewSchemaExample,
-  validateReviewFindings,
-  validateReviewResult,
-} from "../review.js";
+import { reviewSchemaExample } from "../contract.js";
+import { validateReviewFindings, validateReviewResult } from "../review.js";
 
 const manifest = reviewTestManifest({ includeExcludedLock: true });
 
@@ -64,8 +60,8 @@ describe("validateReviewFindings", () => {
 });
 
 describe("validateReviewResult", () => {
-  it("reviewSchemaExample() validates against reviewResultJsonSchema", () => {
-    const published = z.fromJSONSchema(reviewResultJsonSchema);
+  it("reviewSchemaExample() validates against the published review JSON Schema", () => {
+    const published = z.fromJSONSchema(z.toJSONSchema(reviewResultSchema));
 
     expect(published.parse(reviewSchemaExample())).toEqual(reviewSchemaExample());
     expect(published.safeParse({ ...reviewSchemaExample(), nonInlineFindings: [] }).success).toBe(

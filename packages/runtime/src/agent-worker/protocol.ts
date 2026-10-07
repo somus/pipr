@@ -63,7 +63,6 @@ const agentRunOutcomeSchema = z.discriminatedUnion("status", [
     text: z.string(),
     models: z.array(z.string().min(1)),
     usage: agentRunUsageSchema,
-    durationMs: z.number().int().nonnegative(),
   }),
   z.strictObject({
     status: z.literal("failed"),
@@ -72,7 +71,6 @@ const agentRunOutcomeSchema = z.discriminatedUnion("status", [
     error: z.string(),
     models: z.array(z.string().min(1)),
     usage: agentRunUsageSchema.optional(),
-    durationMs: z.number().int().nonnegative(),
   }),
 ]);
 

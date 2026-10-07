@@ -1,13 +1,13 @@
 import type { InlinePublicationItem } from "../../publication/types.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
+import { planInlineLocation } from "../publication.js";
 import { normalizeBitbucketMarkdown, renderBitbucketMarkdown } from "./markdown.js";
 import type { BitbucketClient } from "./models.js";
 import {
   assertCurrentBitbucketEndpoints,
   authenticatedBitbucketOwner,
   bitbucketInline,
-  bitbucketInlineLocation,
   bitbucketInlineLocationFromComment,
   bitbucketThreadContexts,
   findBitbucketMainComment,
@@ -58,9 +58,9 @@ export function createBitbucketPublicationDriver(
       );
       return main ? { id: main.id, body: normalizeBitbucketMarkdown(main.content.raw) } : undefined;
     },
-    upsertMain: (prepared, existing, body) =>
+    upsertComment: (prepared, existing, body) =>
       upsertBitbucketComment(client, prepared, existing, body),
-    inlineLocation: (_prepared, item) => bitbucketInlineLocation(item),
+    inlineLocation: (_prepared, item) => planInlineLocation(item),
     async createInline(prepared, item: InlinePublicationItem) {
       await client.createComment(prepared.change.change.number, {
         content: { raw: renderBitbucketMarkdown(item.body) },
@@ -76,8 +76,6 @@ export function createBitbucketPublicationDriver(
         ? { id: comment.id, body: normalizeBitbucketMarkdown(comment.content.raw) }
         : undefined;
     },
-    upsertCommand: (prepared, existing, body) =>
-      upsertBitbucketComment(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       const rootId = action.threadId ?? action.commentId;
       await client.replyToComment(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ReviewFinding } from "@usepipr/sdk";
-import { capDropReason, selectRankedFindings } from "../selection.js";
+import { rankFindings } from "../selection.js";
 import { createCheckHandle, createOutputState } from "../task/task-output.js";
 
 type Finding = ReviewFinding & { severity?: string; category?: string };
@@ -22,9 +22,9 @@ const facets = {
   category: ["security", "bug"],
 } as const;
 
-describe("selectRankedFindings", () => {
+describe("rankFindings", () => {
   it("ranks by facet declaration order, then by input order", () => {
-    const selection = selectRankedFindings(
+    const selection = rankFindings(
       [
         finding(1, { severity: "low" }),
         finding(2, { severity: "critical", category: "bug" }),
@@ -33,45 +33,47 @@ describe("selectRankedFindings", () => {
       ],
       { facets },
     );
-    expect(selection.findings.map((item) => item.startLine)).toEqual([3, 2, 1, 4]);
+    expect(selection.map((item) => item.startLine)).toEqual([3, 2, 1, 4]);
   });
 
   it("honors an explicit rank order", () => {
-    const selection = selectRankedFindings(
+    const selection = rankFindings(
       [
         finding(1, { severity: "critical", category: "bug" }),
         finding(2, { severity: "low", category: "security" }),
       ],
       { facets, rank: ["category"] },
     );
-    expect(selection.findings.map((item) => item.startLine)).toEqual([2, 1]);
+    expect(selection.map((item) => item.startLine)).toEqual([2, 1]);
   });
 
-  it("keeps distinct findings at one location and caps lower-ranked findings", () => {
-    const selection = selectRankedFindings(
+  it("keeps distinct findings at one location", () => {
+    const selection = rankFindings(
       [
         finding(1, { severity: "low", body: "weak" }),
         finding(1, { severity: "high", body: "strong" }),
         finding(2, { severity: "high" }),
         finding(3, { severity: "low" }),
       ],
-      { facets, limit: 3 },
+      { facets },
     );
-    expect(selection.findings.map((item) => item.body)).toEqual(["strong", "Finding 2", "weak"]);
-    expect(selection.dropped.map((item) => [item.finding.startLine, item.reason])).toEqual([
-      [3, capDropReason],
+    expect(selection.map((item) => item.body)).toEqual([
+      "strong",
+      "Finding 2",
+      "weak",
+      "Finding 3",
     ]);
   });
 
   it("uses a custom comparator instead of facets", () => {
-    const selection = selectRankedFindings([finding(1), finding(2)], {
+    const selection = rankFindings([finding(1), finding(2)], {
       compare: (left, right) => right.startLine - left.startLine,
     });
-    expect(selection.findings.map((item) => item.startLine)).toEqual([2, 1]);
+    expect(selection.map((item) => item.startLine)).toEqual([2, 1]);
   });
 
   it("rejects rank keys that are not facets", () => {
-    expect(() => selectRankedFindings([finding(1)], { facets, rank: ["title"] })).toThrow(
+    expect(() => rankFindings([finding(1)], { facets, rank: ["title"] })).toThrow(
       "rank key 'title' is not an enum field",
     );
   });

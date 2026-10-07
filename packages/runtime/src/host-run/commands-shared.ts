@@ -2,7 +2,7 @@ import { CodeHostHttpError } from "../hosts/http.js";
 import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { PublicationError } from "../review/publication-result.js";
-import type { createRuntimeLog } from "../shared/logging.js";
+import type { createRuntimeLog, RuntimeLogSink } from "../shared/logging.js";
 import type { HostRunCommandOptions } from "./types.js";
 
 export async function finishRecorderSafely(
@@ -26,6 +26,28 @@ export async function finishRecorderSafely(
       error: error instanceof Error ? error.message : "unknown capture error",
     });
   }
+}
+
+/** Reads `PIPR_RUN_CAPTURE`; an unrecognized value is operator error and throws. */
+export function parseRunCaptureSetting(
+  env: NodeJS.ProcessEnv,
+): "off" | "metadata" | "diagnostic" | undefined {
+  const value = env.PIPR_RUN_CAPTURE;
+  if (value === undefined || value === "off" || value === "metadata" || value === "diagnostic") {
+    return value;
+  }
+  throw new Error("PIPR_RUN_CAPTURE must be off, metadata, or diagnostic");
+}
+
+export function warnRunCaptureUnavailable(
+  logSink: RuntimeLogSink | undefined,
+  error: unknown,
+): void {
+  logSink?.log({
+    level: "warning",
+    event: "run capture unavailable",
+    fields: { error: error instanceof Error ? error.message : "unknown capture error" },
+  });
 }
 
 export function classifyRunFailure(

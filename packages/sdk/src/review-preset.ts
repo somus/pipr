@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { facetsForFindingSchema } from "./finding.js";
 import { md } from "./markdown.js";
+import { isPromptText } from "./prompt-render.js";
 import type { ReviewFinding, ReviewSummary } from "./review-contract.js";
 import type { Agent } from "./types/agent.js";
 import type { ModelProfile } from "./types/config.js";
@@ -230,9 +231,5 @@ function assertReviewOptions<Finding extends ReviewFinding, Summary>(
 }
 
 function isPromptSource(value: unknown): boolean {
-  if (typeof value === "string") {
-    return value.length > 0;
-  }
-  const kind = typeof value === "object" && value !== null ? Reflect.get(value, "kind") : undefined;
-  return kind === "pipr.prompt" || kind === "pipr.markdown";
+  return typeof value === "string" ? value.length > 0 : isPromptText(value);
 }

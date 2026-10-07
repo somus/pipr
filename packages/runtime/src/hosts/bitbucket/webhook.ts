@@ -1,6 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { z } from "zod";
-import { parseWebhookJson } from "../webhook-shared.js";
+import { hmacSha256HexMatches, parseWebhookJson } from "../webhook-shared.js";
 import type { CodeHostWebhookProtocol } from "../webhook-types.js";
 import { createBitbucketClient } from "./client.js";
 
@@ -83,7 +83,5 @@ export function createBitbucketWebhookProtocol(): CodeHostWebhookProtocol {
 
 function verifyBitbucketSignature(payload: string, signature: string | null, secret: string) {
   if (!signature?.startsWith("sha256=")) return false;
-  const supplied = Buffer.from(signature.slice(7), "hex");
-  const expected = createHmac("sha256", secret).update(payload).digest();
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+  return hmacSha256HexMatches(payload, signature.slice(7), secret);
 }

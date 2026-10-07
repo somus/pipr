@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -70,7 +71,7 @@ async function extractZip(archive: Uint8Array, destination: string): Promise<voi
   unzip.register(UnzipInflate);
   unzip.push(archive, true);
   for (const file of files) {
-    await writeArchiveFile(destination, file.relativePath, concatenate(file.chunks, file.size));
+    await writeArchiveFile(destination, file.relativePath, Buffer.concat(file.chunks, file.size));
   }
 }
 
@@ -140,7 +141,7 @@ function expandTarGz(archive: Uint8Array): Uint8Array {
     chunks.push(chunk);
   });
   gunzip.push(archive, true);
-  return concatenate(chunks, expandedBytes);
+  return Buffer.concat(chunks, expandedBytes);
 }
 
 type TarEntry = {
@@ -236,14 +237,4 @@ async function findManifests(root: string, directory: string, manifests: string[
 function tarString(bytes: Uint8Array): string {
   const zero = bytes.indexOf(0);
   return new TextDecoder().decode(zero === -1 ? bytes : bytes.subarray(0, zero));
-}
-
-function concatenate(chunks: Uint8Array[], size: number): Uint8Array {
-  const output = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return output;
 }

@@ -7,15 +7,16 @@ import {
 } from "@usepipr/sdk/internal";
 import { uniqBy } from "lodash-es";
 import { match } from "ts-pattern";
-import { findInputDiffContext, inputWithDiffManifest } from "../../diff/diff-context.js";
+import { findInputDiffContext } from "../../diff/diff-context.js";
 import { shardDiffManifestForPrompt } from "../../diff/manifest-sharding.js";
 import type { DiffManifest, PiprConfig, ProviderConfig } from "../../types.js";
-import { reviewResultSchemaId } from "../review.js";
+import { reviewResultSchemaId } from "../contract.js";
 import {
   type AgentPrompt,
   type AgentRunContext,
   type AgentToolResolution,
   type PreparedAgentContext,
+  type RunnableAgentTool,
   renderAgentPrompt,
 } from "./agent-prompt.js";
 import { prepareDiffManifestContext } from "./diff-manifest-context.js";
@@ -99,10 +100,6 @@ export async function scheduledReviewManifests(
   return { kind, manifests };
 }
 
-export function inputWithManifest(input: unknown, manifest: DiffManifest): unknown {
-  return inputWithDiffManifest(input, manifest);
-}
-
 export function resolveProvider(config: PiprConfig, providerId: string): ProviderConfig {
   const provider = config.providers.find((item) => item.id === providerId);
   if (!provider) {
@@ -113,12 +110,7 @@ export function resolveProvider(config: PiprConfig, providerId: string): Provide
 
 function createAgentRunContext(runtime: RunReviewAgentOptions["runtime"]): AgentRunContext {
   const run = runtime.run;
-  const repositorySlugParts = runtime.event.repository.slug.split("/");
-  const repository = {
-    root: runtime.workspace,
-    owner: repositorySlugParts.length > 1 ? repositorySlugParts[0] : undefined,
-    name: repositorySlugParts.at(-1) ?? "repo",
-  };
+  const repository = repositoryContext(runtime.workspace, runtime.event.repository.slug);
   const change = {
     number: runtime.event.change.number,
     title: runtime.event.change.title,
@@ -127,14 +119,24 @@ function createAgentRunContext(runtime: RunReviewAgentOptions["runtime"]): Agent
     head: runtime.event.change.head,
   };
   const platform = { id: runtime.event.platform.id };
+  return { prompt: { run, repository, change, platform } };
+}
+
+/** Repository context shared by agent prompts and `ctx.repository`, derived from an `owner/name` slug. */
+export function repositoryContext(
+  root: string,
+  slug: string,
+): { root: string; owner: string | undefined; name: string } {
+  const parts = slug.split("/");
   return {
-    prompt: { run, repository, change, platform },
-    tools: { run, repository, change, platform },
+    root,
+    owner: parts.length > 1 ? parts[0] : undefined,
+    name: parts.at(-1) ?? "repo",
   };
 }
 
 function resolveAgentTools(agent: RuntimeAgent, plan: RuntimePlan): AgentToolResolution {
-  const customTools: RuntimeAgentTool[] = [];
+  const customTools: RunnableAgentTool[] = [];
   const unsupported: RuntimeAgentTool[] = [];
   const registeredTools = new Set(plan.tools);
   for (const tool of agent.definition.tools ?? []) {
@@ -160,7 +162,7 @@ function resolveAgentTools(agent: RuntimeAgent, plan: RuntimePlan): AgentToolRes
 function isRunnableCustomTool(
   tool: RuntimeAgentTool,
   registeredTools: Set<RuntimeAgentTool>,
-): boolean {
+): tool is RunnableAgentTool {
   return (
     registeredTools.has(tool) &&
     Boolean(tool.input) &&

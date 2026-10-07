@@ -6,10 +6,7 @@ import {
   tokenizeCommandPattern,
   unsupportedCommandRestCaptureError,
 } from "@usepipr/sdk/internal";
-
-export type CommandPatternParseResult =
-  | { ok: true; value: Record<string, string> }
-  | { ok: false; error: string };
+import type { Result } from "../shared/result.js";
 
 const piprCommandPrefix = "@pipr";
 
@@ -24,7 +21,7 @@ export function isPiprCommandLine(line: string): boolean {
   return line === piprCommandPrefix || line.startsWith(`${piprCommandPrefix} `);
 }
 
-export function parseCommandPattern(pattern: string, line: string): CommandPatternParseResult {
+export function parseCommandPattern(pattern: string, line: string): Result<Record<string, string>> {
   const patternParts = commandPatternParts(pattern);
   const validationError = unsupportedCommandRestCaptureError(pattern);
   if (validationError) {

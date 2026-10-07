@@ -73,6 +73,17 @@ class MemoryDriver implements PublicationDriver<Prepared> {
     return this.state.main;
   }
 
+  async upsertComment(
+    prepared: Prepared,
+    existing: OwnedMainComment | undefined,
+    body: string,
+    kind: "main" | "command",
+  ) {
+    return kind === "main"
+      ? this.upsertMain(prepared, existing, body)
+      : this.upsertCommand(prepared, existing, body);
+  }
+
   async upsertMain(_prepared: Prepared, existing: OwnedMainComment | undefined, body: string) {
     const id = existing?.id ?? "main-1";
     this.writes.push(existing ? "update-main" : "create-main");

@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { createDiffRangeIndex } from "../diff/ranges.js";
+import {
+  findingIdSchema,
+  priorReviewStateSchema,
+  reviewStatsSchema,
+} from "../publication/schemas.js";
 import type {
   InlinePublicationItem,
   PriorReviewState,
@@ -32,16 +37,13 @@ import {
   buildPriorReviewState,
   countFindingFingerprints,
   findingIdFor,
-  findingIdSchema,
   inlineFindingMarker,
   mainCommentMarker,
   matchFindingRecord,
   matchResolvedFindingRecord,
-  priorReviewStateSchema,
   renderInlineFindingMarker,
   renderMainCommentMarker,
 } from "./prior-state.js";
-import { reviewStatsSchema } from "./review-stats.js";
 import { isPublishableSuggestedFixSelection } from "./suggested-fix-publication-policy.js";
 
 const inlinePublicationItemSchema = z
@@ -326,17 +328,7 @@ function findingWithPublishableSuggestedFix(
   if (!finding.suggestedFix) {
     return finding;
   }
-  if (
-    !isPublishableSuggestedFixSelection({
-      side: range.side,
-      kind: range.kind,
-      rangeStartLine: range.startLine,
-      startLine: finding.startLine,
-      endLine: finding.endLine,
-      preview: range.preview,
-      suggestedFix: finding.suggestedFix,
-    })
-  ) {
+  if (!isPublishableSuggestedFixSelection(finding, range)) {
     return withoutSuggestedFix(finding);
   }
 

@@ -1,7 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
 import type { DurationInput, TaskContext } from "@usepipr/sdk";
-import type { RuntimeAgentTool } from "@usepipr/sdk/internal";
 import { match } from "ts-pattern";
 import {
   type AgentWorkspaceToolName,
@@ -13,7 +12,7 @@ import { ProviderExecutionError } from "../../pi/provider-failure.js";
 import type { PiConversation, PiRunOptions, PiRunResult } from "../../pi/types.js";
 import { boundedLogSnippet, type RuntimeLog } from "../../shared/logging.js";
 import type { ProviderConfig } from "../../types.js";
-import type { PreparedAgentContext } from "./agent-prompt.js";
+import type { PreparedAgentContext, RunnableAgentTool } from "./agent-prompt.js";
 import { AgentRunBudgetExhaustedError, reserveAgentRun } from "./agent-run-budget.js";
 import type { RunReviewAgentOptions } from "./review-run-types.js";
 
@@ -23,9 +22,10 @@ export type AgentAttempt = {
   conversation?: PiConversation;
 };
 
+/** Each call is one attempt; transient retries happen inside the harness, so `attemptNumber` is always 1. */
 type ReviewAttempt = {
   attemptType: AgentAttemptType;
-  attemptNumber: number;
+  attemptNumber: 1;
   attemptId: string;
 };
 
@@ -183,11 +183,8 @@ function customToolsForRun(
   };
 }
 
-function customToolDefinition(tool: RuntimeAgentTool): PiCustomToolDefinition {
+function customToolDefinition(tool: RunnableAgentTool): PiCustomToolDefinition {
   const { input, output, run } = tool;
-  if (!input || !output || !run) {
-    throw new Error(`Custom Pi tool '${tool.name}' is missing input, output, or run`);
-  }
   return {
     name: tool.name,
     description: tool.description,
@@ -250,20 +247,16 @@ async function beginObservedAttempt(
   options: RunReviewAgentOptions & PreparedAgentContext,
   provider: ProviderConfig,
   prompt: string,
-  attempt: Pick<ReviewAttempt, "attemptType" | "attemptNumber">,
+  attempt: ReviewAttempt,
 ): Promise<RunAgentAttemptObserver | undefined> {
   try {
     return await options.runtime.runObserver?.beginAgentAttempt({
       attemptType: attempt.attemptType,
       attemptNumber: attempt.attemptNumber,
       agent: options.agent.name ?? "anonymous-agent",
-      task: options.runtime.taskName,
       provider: provider.id,
       model: provider.model,
-      authMode: provider.apiKeyEnv ? "api-key" : "subscription",
-      ...(options.shard
-        ? { shardIndex: options.shard.index, shardCount: options.shard.count }
-        : {}),
+      ...attemptContextFields(options, provider),
       prompt,
     });
   } catch {
@@ -279,7 +272,12 @@ async function beginObservedAttempt(
 function attemptContextFields(
   options: RunReviewAgentOptions,
   provider: ProviderConfig,
-): Record<string, string | number | undefined> {
+): {
+  task: string | undefined;
+  authMode: "api-key" | "subscription";
+  shardIndex?: number;
+  shardCount?: number;
+} {
   return {
     task: options.runtime.taskName,
     authMode: provider.apiKeyEnv ? "api-key" : "subscription",

@@ -30,8 +30,8 @@ const prepared = await prepareScenarioWorktree(scenario, {
   beforeBaseCommit: async ({ scenario, worktree }) => {
     await writeActionMetadata(worktree, scenario);
     await writeWorkflow(worktree, scenario);
+    run("git", ["add", "-f", ".github/act/action.yml"], worktree);
   },
-  forceAddBasePaths: [".github/act/action.yml"],
 });
 
 try {

@@ -1,6 +1,12 @@
+import { withEventRef } from "../change-request.js";
 import { createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
-import { createGiteaClient, type GiteaClient, type GiteaFamilyHost } from "./client.js";
+import {
+  createGiteaClient,
+  type GiteaClient,
+  type GiteaFamilyHost,
+  parseGiteaRepositorySlug,
+} from "./client.js";
 import { parseGiteaEvent } from "./event.js";
 import {
   assertCurrentGiteaHead,
@@ -37,18 +43,11 @@ export function createGiteaHostAdapter(options: {
           loadChangeRequest: (ref) => client.loadChange(ref),
         }),
       async loadChangeRequest(ref) {
-        const coordinates = coordinatesFromSlug(ref.repository.slug);
         const loaded = await client.loadChange({
-          ...coordinates,
+          ...parseGiteaRepositorySlug(ref.repository.slug),
           changeNumber: ref.changeNumber,
         });
-        return {
-          ...loaded,
-          eventName: ref.eventName,
-          action: ref.action,
-          rawAction: ref.rawAction,
-          workspace: ref.workspace,
-        };
+        return withEventRef(loaded, ref);
       },
     },
     workspace: { ensureHeadCheckout: ensureGiteaHeadCheckout },
@@ -81,12 +80,4 @@ export function createGiteaHostAdapter(options: {
       },
     },
   };
-}
-
-function coordinatesFromSlug(slug: string): { owner: string; repository: string } {
-  const parts = slug.split("/");
-  if (parts.length !== 2 || parts.some((part) => part.length === 0)) {
-    throw new Error(`Invalid Gitea-compatible repository slug '${slug}'`);
-  }
-  return { owner: parts[0] ?? "", repository: parts[1] ?? "" };
 }

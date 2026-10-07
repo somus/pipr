@@ -1,14 +1,13 @@
 import type { InlinePublicationItem } from "../../publication/types.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
+import { mainCommentPrefix, planInlineLocation } from "../publication.js";
 import type { GitLabClient, GitLabDiffRefs } from "./client.js";
 import {
   assertCurrentGitLabHead,
   gitLabCoordinates,
   gitLabInlineBody,
-  gitLabInlineLocation,
   gitLabInlineLocationFromDiscussion,
-  gitLabMainMarker,
   gitLabPosition,
   gitLabThreadContexts,
   ownedGitLabNote,
@@ -41,7 +40,7 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       const main = ownedGitLabNote(
         notes,
         prepared.ownerUsername,
-        gitLabMainMarker(prepared.change.change.number),
+        mainCommentPrefix(prepared.change.change.number),
       );
       return {
         main: main ? { id: main.id, body: main.body } : undefined,
@@ -64,12 +63,12 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       const main = ownedGitLabNote(
         await client.listNotes(coordinates.projectId, prepared.change.change.number),
         prepared.ownerUsername,
-        gitLabMainMarker(prepared.change.change.number),
+        mainCommentPrefix(prepared.change.change.number),
       );
       return main ? { id: main.id, body: main.body } : undefined;
     },
-    upsertMain: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
-    inlineLocation: (_prepared, item) => gitLabInlineLocation(item),
+    upsertComment: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
+    inlineLocation: (_prepared, item) => planInlineLocation(item),
     async createInline(prepared, item: InlinePublicationItem) {
       if (!prepared.refs) throw new Error("GitLab diff refs were not prepared");
       const coordinates = gitLabCoordinates(prepared.change);
@@ -89,7 +88,6 @@ export function createGitLabPublicationDriver(client: GitLabClient): Publication
       );
       return note ? { id: note.id, body: note.body } : undefined;
     },
-    upsertCommand: (prepared, existing, body) => upsertGitLabNote(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       const coordinates = gitLabCoordinates(prepared.change);
       const discussionId =

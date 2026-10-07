@@ -89,7 +89,7 @@ function loadRawPatch(args: string[], cwd: string): ReturnType<typeof parseRawPa
   }
 }
 
-export function parseNameStatus(output: string): DiffFile[] {
+function parseNameStatus(output: string): DiffFile[] {
   const fields = output.split("\0");
   const files: DiffFile[] = [];
   let index = 0;

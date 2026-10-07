@@ -1,20 +1,19 @@
 import type { InlinePublicationItem } from "../../publication/types.js";
-import { extractInlineFindingMarkerRecords } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type {
   LoadedPublicationState,
   OwnedMainComment,
   PublicationDriver,
 } from "../publication/workflow.js";
+import { mainCommentPrefix, planInlineLocation } from "../publication.js";
 import type { AzureDevOpsClient, AzureDevOpsIterationChange, AzureDevOpsThread } from "./client.js";
 import {
   assertCurrentAzurePullRequest,
   authenticatedAzureOwner,
   azureCoordinates,
-  azureInlineLocation,
   azureInlineLocationFromThread,
   azureInlineThread,
-  azureMainMarker,
+  azureThreadContexts,
   currentAzureNativeChange,
   isAzureThreadResolved,
   ownedAzureRootThread,
@@ -56,15 +55,21 @@ export function createAzureDevOpsPublicationDriver(
             },
           ];
         }),
-        threads: azureThreadContexts(threads, prepared.ownerUniqueName),
+        threads: azureThreadContexts(threads, prepared.ownerUniqueName, true),
       };
     },
     async loadOwnedMain(prepared) {
       return azureOwnedMain(await loadAzureThreads(client, prepared), prepared);
     },
-    upsertMain: (prepared, existing, body) =>
-      upsertAzureRootComment(client, prepared, existing, body, "Main Review Comment"),
-    inlineLocation: (_prepared, item) => azureInlineLocation(item),
+    upsertComment: (prepared, existing, body, kind) =>
+      upsertAzureRootComment(
+        client,
+        prepared,
+        existing,
+        body,
+        kind === "main" ? "Main Review Comment" : "command response comment",
+      ),
+    inlineLocation: (_prepared, item) => planInlineLocation(item),
     async createInline(prepared, item: InlinePublicationItem) {
       const coordinates = azureCoordinates(prepared.change);
       if (!prepared.iterationId) {
@@ -93,8 +98,6 @@ export function createAzureDevOpsPublicationDriver(
       const comment = thread?.comments[0];
       return comment ? { id: comment.id, body: comment.content } : undefined;
     },
-    upsertCommand: (prepared, existing, body) =>
-      upsertAzureRootComment(client, prepared, existing, body, "command response comment"),
     async replyThread(prepared, action, body) {
       const coordinates = azureCoordinates(prepared.change);
       const thread = await findThread(prepared, action.threadId, action.commentId);
@@ -129,7 +132,7 @@ function azureOwnedMain(threads: AzureDevOpsThread[], prepared: Prepared) {
   const main = ownedAzureRootThread(
     threads,
     prepared.ownerUniqueName,
-    azureMainMarker(prepared.change.change.number),
+    mainCommentPrefix(prepared.change.change.number),
   )?.comments[0];
   return main ? { id: main.id, body: main.content } : undefined;
 }
@@ -167,29 +170,6 @@ async function upsertAzureRootComment(
   ).comments[0];
   if (!comment) throw new Error(`Azure DevOps did not return the ${description}`);
   return { id: comment.id, action: "created" as const };
-}
-
-function azureThreadContexts(threads: AzureDevOpsThread[], owner: string) {
-  return threads.flatMap((thread) => {
-    const root = thread.comments[0];
-    const marker = root ? extractInlineFindingMarkerRecords([root.content])[0] : undefined;
-    if (!root || !marker || root.author?.uniqueName !== owner) return [];
-    return [
-      {
-        findingId: marker.id,
-        findingHeadSha: marker.head,
-        parentCommentId: root.id,
-        parentBody: root.content,
-        threadId: thread.id,
-        threadResolved: isAzureThreadResolved(thread),
-        comments: thread.comments.flatMap((comment) =>
-          comment.author?.uniqueName === owner
-            ? [{ id: comment.id, body: comment.content, authorLogin: comment.author.uniqueName }]
-            : [],
-        ),
-      },
-    ];
-  });
 }
 
 async function findThread(prepared: Prepared, threadId: string | undefined, commentId: string) {

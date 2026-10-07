@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { parsePiProviderProfile } from "../contract.js";
+import { piProviderProfileSchema } from "../contract.js";
 
 describe("Pi provider profile", () => {
   it("accepts only Pi-native provider profile fields", () => {
     expect(
-      parsePiProviderProfile({
+      piProviderProfileSchema.parse({
         id: "deepseek",
         provider: "deepseek",
         model: "deepseek-v4-pro",
@@ -13,7 +13,7 @@ describe("Pi provider profile", () => {
       }),
     ).toMatchObject({ thinking: "high" });
     expect(() =>
-      parsePiProviderProfile({
+      piProviderProfileSchema.parse({
         id: "deepseek",
         provider: "deepseek",
         model: "deepseek-v4-pro",
@@ -22,7 +22,7 @@ describe("Pi provider profile", () => {
       }),
     ).toThrow();
     expect(() =>
-      parsePiProviderProfile({
+      piProviderProfileSchema.parse({
         id: "deepseek",
         provider: "deepseek",
         model: "deepseek-v4-pro",

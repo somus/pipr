@@ -1,3 +1,5 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   FileSystemRunArchiveSource,
@@ -101,7 +103,7 @@ export async function collectRecords(
   };
 }
 
-export async function collectExactRecord(
+async function collectExactRecord(
   sources: SourceEntry[],
   query: RunQuery & { executionId: string },
 ): ReturnType<typeof collectRecords> {
@@ -138,10 +140,38 @@ export function validExecutionId(executionId: string): string {
 
 export function requireAvailableRun(selected: CollectedRecord, executionId: string): void {
   if (selected.state !== "available") {
-    throw new Error(unavailableRunMessage(selected, executionId));
+    throw new Error(`Pipr run ${executionId} is ${selected.state} and cannot be downloaded`);
   }
 }
 
-export function unavailableRunMessage(selected: RunRecord, executionId: string): string {
-  return `Pipr run ${executionId} is ${selected.state} and cannot be downloaded`;
+export async function selectRunByExecutionId(
+  executionId: string,
+  sources: SourceEntry[],
+): Promise<CollectedRecord> {
+  const validId = validExecutionId(executionId);
+  const collected = await collectExactRecord(sources, {
+    executionId: validId,
+    kind: "all",
+    limit: 1000,
+  });
+  const selected = collected.records.find((record) => record.executionId === validId);
+  if (selected) return selected;
+  throw new Error(
+    withLookupErrors(
+      `Pipr run ${validId} was not found in local or GitHub storage`,
+      collected.errors,
+    ),
+  );
+}
+
+export async function withTemporaryRoot<T>(
+  prefix: string,
+  run: (temporaryRoot: string) => Promise<T>,
+): Promise<T> {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), prefix));
+  try {
+    return await run(temporaryRoot);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 }

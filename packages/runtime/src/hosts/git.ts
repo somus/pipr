@@ -5,13 +5,7 @@ export async function ensureCodeHostHeadCheckout(options: {
   fetchRemote?: string;
   fetchEnv?: NodeJS.ProcessEnv;
 }): Promise<void> {
-  await ensureCodeHostCommit({
-    rootDir: options.rootDir,
-    commitSha: options.headSha,
-    fetchRef: options.fetchRef,
-    fetchRemote: options.fetchRemote,
-    fetchEnv: options.fetchEnv,
-  });
+  await ensureCodeHostCommit({ ...options, commitSha: options.headSha });
   if ((await runGit(options.rootDir, ["rev-parse", "HEAD"])).trim() !== options.headSha) {
     await runGit(options.rootDir, ["checkout", "--detach", options.headSha]);
   }

@@ -1,8 +1,10 @@
 import { z } from "zod";
 import {
   type CodeHostHttpClientOptions,
-  CodeHostHttpError,
+  collectNumberedPages,
   createCodeHostHttpClient,
+  jsonRequest,
+  orNoneOn404,
 } from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
 
@@ -232,18 +234,11 @@ export function createGitLabClient(
       if (!user) {
         return "none";
       }
-      try {
-        const member = await api.json(
-          `projects/${encodeURIComponent(projectId)}/members/all/${user.id}`,
-          memberSchema,
-        );
-        return accessLevelPermission(member.access_level);
-      } catch (error) {
-        if (error instanceof CodeHostHttpError && error.status === 404) {
-          return "none";
-        }
-        throw error;
-      }
+      return orNoneOn404(
+        api
+          .json(`projects/${encodeURIComponent(projectId)}/members/all/${user.id}`, memberSchema)
+          .then((member) => accessLevelPermission(member.access_level)),
+      );
     },
     listNotes: (projectId, changeNumber) =>
       paginated(
@@ -317,27 +312,19 @@ export function createGitLabClient(
   };
 }
 
-type JsonClient = ReturnType<typeof createCodeHostHttpClient>;
-const MAX_PAGINATION_PAGES = 100;
-
-async function paginated<T>(client: JsonClient, path: string, schema: z.ZodType<T>): Promise<T[]> {
-  const values: T[] = [];
-  for (let page = 1; page <= MAX_PAGINATION_PAGES; page += 1) {
-    const separator = path.includes("?") ? "&" : "?";
-    const batch = await client.json(
-      `${path}${separator}per_page=100&page=${page}`,
-      z.array(schema),
-    );
-    values.push(...batch);
-    if (batch.length < 100) {
-      return values;
-    }
-  }
-  throw new Error(`GitLab pagination exceeded ${MAX_PAGINATION_PAGES} pages for ${path}`);
-}
-
-function jsonRequest(method: "POST" | "PUT", body: Record<string, unknown>): RequestInit {
-  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+function paginated<T>(
+  client: ReturnType<typeof createCodeHostHttpClient>,
+  path: string,
+  schema: z.ZodType<T>,
+): Promise<T[]> {
+  const separator = path.includes("?") ? "&" : "?";
+  return collectNumberedPages({
+    label: "GitLab",
+    path,
+    pageSize: 100,
+    loadPage: (page) =>
+      client.json(`${path}${separator}per_page=100&page=${page}`, z.array(schema)),
+  });
 }
 
 function accessLevelPermission(level: number): RepositoryPermission {

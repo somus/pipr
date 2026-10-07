@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { assertSupportedCommandRestCapture } from "./command-grammar.js";
+import { assertSupportedCommandRestCapture, tokenizeCommandPattern } from "./command-grammar.js";
 import { createFindingSchema } from "./finding.js";
 import { configFactoryBrand, type InternalPiprConfigFactory } from "./internal-contract.js";
 import { stripCommonIndent } from "./prompt.js";
@@ -162,7 +162,7 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
         throw new Error("pipr.command requires { pattern, task }");
       }
       const pattern = options.pattern;
-      const tokens = pattern.trim().split(/\s+/).filter(Boolean);
+      const tokens = tokenizeCommandPattern(pattern);
       if (tokens.length === 0) {
         throw new Error("Command pattern must not be empty");
       }
@@ -376,6 +376,16 @@ function piprConfigLabel(pathSegments: PropertyKey[]): string {
   return path ? `pipr.config ${path}` : "pipr.config";
 }
 
+const publicationConfigKeys = [
+  "maxInlineComments",
+  "maxStoredFindings",
+  "autoResolve",
+  "showHeader",
+  "showFooter",
+  "showStats",
+  "showProgress",
+] as const satisfies ReadonlyArray<keyof PublicationOptions>;
+
 function mergePublicationConfig(
   target: RuntimePlan["publication"],
   next: PublicationOptions | undefined,
@@ -383,37 +393,10 @@ function mergePublicationConfig(
   if (!next) {
     return;
   }
-  target.maxInlineComments = mergeConfigField(
-    "publication.maxInlineComments",
-    target.maxInlineComments,
-    next.maxInlineComments,
-  );
-  target.maxStoredFindings = mergeConfigField(
-    "publication.maxStoredFindings",
-    target.maxStoredFindings,
-    next.maxStoredFindings,
-  );
-  target.autoResolve = mergeConfigField(
-    "publication.autoResolve",
-    target.autoResolve,
-    next.autoResolve,
-  );
-  target.showHeader = mergeConfigField(
-    "publication.showHeader",
-    target.showHeader,
-    next.showHeader,
-  );
-  target.showFooter = mergeConfigField(
-    "publication.showFooter",
-    target.showFooter,
-    next.showFooter,
-  );
-  target.showStats = mergeConfigField("publication.showStats", target.showStats, next.showStats);
-  target.showProgress = mergeConfigField(
-    "publication.showProgress",
-    target.showProgress,
-    next.showProgress,
-  );
+  const targetRecord = target as Record<string, unknown>;
+  for (const key of publicationConfigKeys) {
+    targetRecord[key] = mergeConfigField(`publication.${key}`, targetRecord[key], next[key]);
+  }
 }
 
 function mergeConfigField<T>(
@@ -451,33 +434,14 @@ function assertRuntimeLimitConflicts(
 ): void {
   const currentRecord = current as Record<string, unknown> | undefined;
   for (const [key, value] of Object.entries(next)) {
-    if (key === "diffManifest") {
-      continue;
-    }
-    if (
-      value !== undefined &&
-      currentRecord?.[key] !== undefined &&
-      stableJson(currentRecord[key]) !== stableJson(value)
-    ) {
-      throw new Error(`pipr.config limits.${key} conflicts with existing value`);
+    if (key !== "diffManifest") {
+      mergeConfigField(`limits.${key}`, currentRecord?.[key], value);
     }
   }
-  assertDiffManifestLimitConflicts(current, next);
-}
-
-function assertDiffManifestLimitConflicts(
-  current: RuntimeLimits | undefined,
-  next: RuntimeLimits,
-): void {
   if (current?.diffManifest && next.diffManifest) {
+    const currentDiffManifest = current.diffManifest as Record<string, unknown>;
     for (const [key, value] of Object.entries(next.diffManifest)) {
-      if (
-        value !== undefined &&
-        (current.diffManifest as Record<string, unknown>)[key] !== undefined &&
-        (current.diffManifest as Record<string, unknown>)[key] !== value
-      ) {
-        throw new Error(`pipr.config limits.diffManifest.${key} conflicts with existing value`);
-      }
+      mergeConfigField(`limits.diffManifest.${key}`, currentDiffManifest[key], value);
     }
   }
 }

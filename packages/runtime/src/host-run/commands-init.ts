@@ -8,16 +8,5 @@ import type { InitCommandOptions } from "./types.js";
 export async function runInitCommand(
   options: InitCommandOptions,
 ): Promise<InitOfficialMinimalProjectResult> {
-  return await initOfficialMinimalProject({
-    rootDir: options.rootDir,
-    configDir: options.configDir,
-    force: options.force,
-    adapters: options.adapters,
-    recipe: options.recipe,
-    minimal: options.minimal,
-    runtimeImage: options.runtimeImage,
-    checkoutAction: options.checkoutAction,
-    githubRunner: options.githubRunner,
-    githubEnterpriseServer: options.githubEnterpriseServer,
-  });
+  return await initOfficialMinimalProject(options);
 }

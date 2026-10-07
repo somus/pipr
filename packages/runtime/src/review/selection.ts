@@ -1,39 +1,19 @@
-import type { DroppedReviewFinding, FindingFacets, ReviewFinding } from "@usepipr/sdk";
+import type { FindingFacets, ReviewFinding } from "@usepipr/sdk";
 
-export type FindingSelectionOptions<T extends ReviewFinding> = {
-  facets?: FindingFacets;
-  rank?: readonly string[];
-  compare?: (left: T, right: T) => number;
-  limit?: number;
-};
-
-export type FindingSelection<T extends ReviewFinding> = {
-  findings: T[];
-  dropped: DroppedReviewFinding<T>[];
-};
-
-export const capDropReason = "cap";
-
-/**
- * Ranks validated findings by facet declaration order (or a custom comparator) and caps the
- * result. Input order breaks ties.
- */
-export function selectRankedFindings<T extends ReviewFinding>(
+/** Ranks findings by facet declaration order (or a custom comparator). Input order breaks ties. */
+export function rankFindings<T extends ReviewFinding>(
   findings: readonly T[],
-  options: FindingSelectionOptions<T>,
-): FindingSelection<T> {
+  options: {
+    facets?: FindingFacets;
+    rank?: readonly string[];
+    compare?: (left: T, right: T) => number;
+  },
+): T[] {
   const compare = options.compare ?? facetComparator<T>(options.facets ?? {}, options.rank);
-  const ranked = findings
+  return findings
     .map((finding, index) => ({ finding, index }))
     .toSorted((left, right) => compare(left.finding, right.finding) || left.index - right.index)
     .map((entry) => entry.finding);
-  const limit = options.limit ?? ranked.length;
-  return {
-    findings: ranked.slice(0, limit),
-    dropped: ranked
-      .slice(limit)
-      .map((finding) => ({ finding, reason: capDropReason }) as DroppedReviewFinding<T>),
-  };
 }
 
 /** Returns facet values present on a finding, limited to declared facet keys and values. */

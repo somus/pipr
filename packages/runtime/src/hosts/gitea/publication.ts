@@ -3,14 +3,14 @@ import type { InlineThreadContext } from "../../publication/types.js";
 import {
   applyInlineFindingMarkers,
   applyResolvedFindingMarkers,
-  extractInlineFindingMarkerRecords,
   extractPriorReviewState,
   mainCommentMarker,
-  parseMainCommentIdentity,
+  parseInlineFindingMarker,
 } from "../../review/prior-state.js";
 import { PublicationError } from "../../review/publication-result.js";
 import type { ChangeRequestEventContext } from "../../types.js";
-import { nativeInlineLocation } from "../publication.js";
+import { requireCoordinates } from "../change-request.js";
+import { isMainCommentLine, nativeInlineLocation } from "../publication.js";
 import type { GiteaClient, GiteaComment, GiteaReviewComment } from "./client.js";
 
 export async function assertCurrentGiteaHead(
@@ -88,7 +88,7 @@ export function giteaThreadContexts(
   }
   return [...byRoot.entries()].flatMap(([rootId, thread]) => {
     const root = thread.find((comment) => comment.id === rootId);
-    const marker = root ? extractInlineFindingMarkerRecords([root.body])[0] : undefined;
+    const marker = root ? parseInlineFindingMarker(root.body) : undefined;
     if (!root || !marker || root.authorLogin !== ownerLogin) return [];
     return [
       {
@@ -113,11 +113,11 @@ export function findGiteaMainComment(
   marker: string,
   changeNumber: number,
 ): GiteaComment | undefined {
-  return comments.find((comment) => {
-    if (comment.authorLogin !== ownerLogin) return false;
-    const identity = parseMainCommentIdentity(firstNonEmptyLine(comment.body));
-    return identity?.marker === marker && identity.changeNumber === changeNumber;
-  });
+  return comments.find(
+    (comment) =>
+      comment.authorLogin === ownerLogin &&
+      isMainCommentLine(firstNonEmptyLine(comment.body), marker, changeNumber),
+  );
 }
 
 function loadGiteaReviewComments(
@@ -129,10 +129,7 @@ function loadGiteaReviewComments(
 }
 
 export function giteaCoordinates(change: ChangeRequestEventContext) {
-  if (change.coordinates?.provider !== "gitea") {
-    throw new Error("Gitea-compatible adapter requires Gitea coordinates");
-  }
-  return change.coordinates;
+  return requireCoordinates(change, "gitea", "Gitea-compatible", "Gitea");
 }
 
 export function giteaReviewCommentLocation(comment: GiteaReviewComment) {
@@ -147,8 +144,4 @@ export function giteaReviewCommentLocation(comment: GiteaReviewComment) {
       ? { rightStart: comment.line, rightEnd: comment.line }
       : { leftStart: comment.line, leftEnd: comment.line }),
   });
-}
-
-export function giteaDisplayName(host: GiteaClient["host"]): string {
-  return host === "gitea" ? "Gitea" : host === "forgejo" ? "Forgejo" : "Codeberg";
 }

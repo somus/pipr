@@ -50,7 +50,6 @@ export async function loadRuntimeProjectFromGitCommit(options: {
         rootDir: tempRoot,
         configDir: configDir.relativeConfigDir,
         env: options.env,
-        requireProviderEnv: false,
       })),
       trustedConfigSha: options.commitSha,
       trustedConfigHash: hash.digest("hex"),

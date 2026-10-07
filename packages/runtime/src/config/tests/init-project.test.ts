@@ -116,7 +116,6 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
         "tsconfig.json",
       ]),
     );
-    expect(project.kind).toBe("typescript");
     expect(project.settings.config.defaultProvider).toBe("deepseek/deepseek-v4-pro");
     expect(project.settings.config.publication.maxInlineComments).toBe(5);
     expect(configTs).toContain('timeout: "10m"');
@@ -135,7 +134,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
       ]),
     );
     expect(await fileExists(path.join(rootDir, ".github", "workflows", "pipr.yml"))).toBe(false);
-    expect(project.kind).toBe("typescript");
+    expect(project.settings.source).toBe(".pipr/config.ts");
   });
 
   it("can initialize a minimal single-file config without package.json", async () => {

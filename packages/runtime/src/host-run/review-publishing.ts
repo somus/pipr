@@ -1,5 +1,6 @@
 import type { RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter } from "../hosts/types.js";
+import { recordArtifactSafely } from "../observability/capture-sinks.js";
 import type { RunObserver } from "../observability/types.js";
 import { publicationPlanForHostCapabilities } from "../review/comment.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
@@ -153,7 +154,7 @@ async function publishCompletedReview(
         progressLease: options.progress?.lease,
       });
       logPublicationResult(services.log, result);
-      await recordPublicationArtifact(services, {
+      await recordArtifactSafely(services, {
         kind: "publication-plan",
         name: "publication-result.json",
         mediaType: "application/json",
@@ -198,7 +199,7 @@ async function recordPublicationError(
   publicationError: PublicationError,
   cause: unknown,
 ): Promise<void> {
-  await recordPublicationArtifact(services, {
+  await recordArtifactSafely(services, {
     kind: "publication-plan",
     name: "publication-error.json",
     mediaType: "application/json",
@@ -236,18 +237,4 @@ async function finalizeFailedChecks(
       error: finalizeError instanceof Error ? finalizeError.message : String(finalizeError),
     });
   });
-}
-
-async function recordPublicationArtifact(
-  services: HostRunServices,
-  artifact: Parameters<NonNullable<RunObserver["recordArtifact"]>>[0],
-): Promise<void> {
-  try {
-    await services.runObserver?.recordArtifact?.(artifact);
-  } catch (error) {
-    services.log.warning("run capture artifact failed", {
-      kind: artifact.kind,
-      error: error instanceof Error ? error.message : "unknown capture error",
-    });
-  }
 }

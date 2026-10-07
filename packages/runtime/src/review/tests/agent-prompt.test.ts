@@ -8,8 +8,8 @@ import {
   renderAgentPrompt,
 } from "../agent/agent-prompt.js";
 import type { PreparedDiffManifestContext } from "../agent/diff-manifest-context.js";
+import { reviewResultSchemaId } from "../contract.js";
 import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
-import { reviewResultSchemaId } from "../review.js";
 
 const unknownSchema: Schema<unknown> = {
   kind: "pipr.schema",
@@ -349,12 +349,6 @@ describe("renderAgentPrompt", () => {
       agentTools: { customTools: [] },
       agentRunContext: {
         prompt: promptContext,
-        tools: {
-          run: promptContext.run,
-          repository: promptContext.repository,
-          change: promptContext.change,
-          platform: promptContext.platform,
-        },
       },
       runtime: {},
     });
@@ -390,18 +384,6 @@ async function renderTestPrompt(
           number: 12,
           title: "Change title",
           description: change.description ?? "Change description",
-          base: { sha: "base" },
-          head: { sha: "head" },
-        },
-        platform: { id: "github" },
-      },
-      tools: {
-        run: { id: "run-1", trigger: "change-request" },
-        repository: { root: "/repo", name: "pipr" },
-        change: {
-          number: 12,
-          title: "Change title",
-          description: "Change description",
           base: { sha: "base" },
           head: { sha: "head" },
         },

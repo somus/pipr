@@ -64,6 +64,14 @@ export async function writePrivateBuffer(filePath: string, contents: Buffer): Pr
   await chmod(filePath, 0o600);
 }
 
-function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
+export function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+export async function requireRealDirectory(directory: string): Promise<void> {
+  const details = await lstat(directory);
+  if (details.isSymbolicLink()) {
+    throw new Error(`Run bundle directory cannot be a symlink: ${directory}`);
+  }
+  if (!details.isDirectory()) throw new Error(`Run bundle path is not a directory: ${directory}`);
 }

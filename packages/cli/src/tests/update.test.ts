@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { chmod, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { availablePiprUpdateNotice, releaseAssetForPlatform, runPiprUpdate } from "../update.js";
+import { releaseAssetForPlatform } from "../release/targets.js";
+import { availablePiprUpdateNotice, runPiprUpdate } from "../update.js";
 
 describe("pipr update", () => {
   it("resolves release assets for supported platforms", () => {

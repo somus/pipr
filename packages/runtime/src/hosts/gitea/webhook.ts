@@ -1,8 +1,7 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { parseWebhookJson } from "../webhook-shared.js";
+import { hmacSha256HexMatches, parseWebhookJson } from "../webhook-shared.js";
 import type { CodeHostWebhookProtocol } from "../webhook-types.js";
-import { createGiteaClient, type GiteaFamilyHost } from "./client.js";
+import { createGiteaClient, type GiteaFamilyHost, giteaDisplayName } from "./client.js";
 
 const eventSchema = z.looseObject({
   repository: z.looseObject({
@@ -25,7 +24,7 @@ export function createGiteaWebhookProtocol(
     async resolveExpectedRepository(env, repository) {
       const [owner, name] = repository.split("/");
       if (!owner || !name || repository.split("/").length !== 2) {
-        throw new Error(`${displayName(host)} --repository must be OWNER/REPOSITORY`);
+        throw new Error(`${giteaDisplayName(host)} --repository must be OWNER/REPOSITORY`);
       }
       const resolved = await createGiteaClient({ host, env }, fetch).getRepository(owner, name);
       return { id: resolved.id, fullName: resolved.full_name };
@@ -70,15 +69,9 @@ export function createGiteaWebhookProtocol(
 
 function verifySignature(payload: string, signature: string | null, secret: string): boolean {
   if (!signature || !/^[a-fA-F0-9]{64}$/.test(signature)) return false;
-  const supplied = Buffer.from(signature, "hex");
-  const expected = createHmac("sha256", secret).update(payload).digest();
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+  return hmacSha256HexMatches(payload, signature, secret);
 }
 
 function isExpectedRepository(value: unknown): value is ExpectedRepository {
   return typeof value === "object" && value !== null && "id" in value && "fullName" in value;
-}
-
-function displayName(host: GiteaFamilyHost): string {
-  return host === "gitea" ? "Gitea" : host === "forgejo" ? "Forgejo" : "Codeberg";
 }

@@ -2,6 +2,7 @@ import { lstat, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { parseRunBundleManifest, type RunBundleManifest } from "@usepipr/sdk";
 import { readActiveCaptureMarker } from "./active-capture.js";
+import { isMissingFileError } from "./recorder-fs.js";
 
 export type StoredRun = {
   executionId: string;
@@ -135,8 +136,4 @@ async function ensureRealDirectory(directory: string): Promise<void> {
     if (!isMissingFileError(error)) throw error;
     await mkdir(directory, { recursive: true, mode: 0o700 });
   }
-}
-
-function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }

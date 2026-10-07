@@ -4,18 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { writeAggregateReviewablePatchOver16MiB } from "../../tests/helpers/aggregate-reviewable-patch.js";
-import { buildDiffManifest, parseNameStatus, parseUnifiedDiff } from "../diff.js";
+import { buildDiffManifest, parseUnifiedDiff } from "../diff.js";
 import { runGit } from "../git.js";
 
 describe("diff manifest parsing", () => {
-  it("parses name-status output", () => {
-    expect(parseNameStatus("A\0src/a.ts\0M\0src/b.ts\0R100\0old.ts\0new.ts\0")).toMatchObject([
-      { path: "src/a.ts", status: "added" },
-      { path: "src/b.ts", status: "modified" },
-      { path: "new.ts", previousPath: "old.ts", status: "renamed" },
-    ]);
-  });
-
   it("creates same-side contiguous commentable ranges", () => {
     const diff = [
       "diff --git a/src/a.ts b/src/a.ts",

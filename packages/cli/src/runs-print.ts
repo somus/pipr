@@ -1,13 +1,14 @@
-import type { diagnoseRunBundle, RunRecord } from "@usepipr/runtime";
+import type { RunDiagnosis, RunRecord, ValidatedRunBundle } from "@usepipr/runtime";
 
-const runListColumnWidths = {
-  executionId: 32,
-  kind: 9,
-  outcome: 12,
-  state: 21,
-  protection: 10,
-  startedAt: 25,
-} as const;
+const runListColumns: Array<{ header: string; width: number; value: (run: RunRecord) => string }> =
+  [
+    { header: "EXECUTION ID", width: 32, value: (run) => run.executionId },
+    { header: "KIND", width: 9, value: (run) => run.kind ?? "unknown" },
+    { header: "OUTCOME", width: 12, value: (run) => run.outcome ?? "unknown" },
+    { header: "STATE", width: 21, value: (run) => run.state },
+    { header: "PROTECTION", width: 10, value: (run) => run.protection ?? "unknown" },
+    { header: "STARTED", width: 25, value: (run) => run.startedAt ?? "unknown" },
+  ];
 
 export function printRunList(runs: RunRecord[]): void {
   if (runs.length === 0) {
@@ -15,41 +16,28 @@ export function printRunList(runs: RunRecord[]): void {
     return;
   }
   console.log(
-    [
-      formatRunListColumn("EXECUTION ID", runListColumnWidths.executionId),
-      formatRunListColumn("KIND", runListColumnWidths.kind),
-      formatRunListColumn("OUTCOME", runListColumnWidths.outcome),
-      formatRunListColumn("STATE", runListColumnWidths.state),
-      formatRunListColumn("PROTECTION", runListColumnWidths.protection),
-      formatRunListColumn("STARTED", runListColumnWidths.startedAt),
-      "LOCATION",
-    ].join("  "),
+    [...runListColumns.map((column) => padColumn(column.header, column.width)), "LOCATION"].join(
+      "  ",
+    ),
   );
   for (const run of runs) {
     console.log(
       [
-        formatRunListColumn(run.executionId, runListColumnWidths.executionId),
-        formatRunListColumn(run.kind ?? "unknown", runListColumnWidths.kind),
-        formatRunListColumn(run.outcome ?? "unknown", runListColumnWidths.outcome),
-        formatRunListColumn(run.state, runListColumnWidths.state),
-        formatRunListColumn(run.protection ?? "unknown", runListColumnWidths.protection),
-        formatRunListColumn(run.startedAt ?? "unknown", runListColumnWidths.startedAt),
+        ...runListColumns.map((column) => padColumn(column.value(run), column.width)),
         run.nativeUrl ?? run.error ?? "-",
       ].join("  "),
     );
   }
 }
 
-function formatRunListColumn(value: string, width: number): string {
+function padColumn(value: string, width: number): string {
   return value.slice(0, width).padEnd(width);
 }
 
 export function printDiagnosis(
-  manifest: Awaited<
-    ReturnType<typeof import("@usepipr/runtime").loadValidatedRunBundle>
-  >["manifest"],
-  diagnosis: ReturnType<typeof diagnoseRunBundle>,
-  timeline?: Awaited<ReturnType<typeof import("@usepipr/runtime").loadValidatedRunBundle>>["spans"],
+  manifest: ValidatedRunBundle["manifest"],
+  diagnosis: RunDiagnosis,
+  timeline?: ValidatedRunBundle["spans"],
 ): void {
   printRunOverview(manifest, diagnosis);
   printDurations("Critical path", diagnosis.criticalPath);
@@ -68,10 +56,7 @@ export function printDiagnosis(
   if (timeline) printTimeline(timeline);
 }
 
-function printRunOverview(
-  manifest: Parameters<typeof printDiagnosis>[0],
-  diagnosis: Parameters<typeof printDiagnosis>[1],
-): void {
+function printRunOverview(manifest: ValidatedRunBundle["manifest"], diagnosis: RunDiagnosis): void {
   console.log(`Execution: ${manifest.executionId}`);
   console.log(`Kind: ${manifest.kind}`);
   console.log(`Outcome: ${manifest.outcome}`);
@@ -97,7 +82,7 @@ function printRunOverview(
   }
 }
 
-function printFailures(diagnosis: ReturnType<typeof diagnoseRunBundle>): void {
+function printFailures(diagnosis: RunDiagnosis): void {
   if (diagnosis.failures.length > 0) {
     console.log("Failures:");
     for (const failure of diagnosis.failures) {
@@ -108,7 +93,7 @@ function printFailures(diagnosis: ReturnType<typeof diagnoseRunBundle>): void {
   }
 }
 
-function printModelAttempts(diagnosis: ReturnType<typeof diagnoseRunBundle>): void {
+function printModelAttempts(diagnosis: RunDiagnosis): void {
   console.log("Model attempts:");
   if (diagnosis.modelAttempts.length === 0) console.log("  none");
   for (const attempt of diagnosis.modelAttempts) {
@@ -133,7 +118,7 @@ function printDurations(
   }
 }
 
-function printOptionalDiagnosis(diagnosis: ReturnType<typeof diagnoseRunBundle>): void {
+function printOptionalDiagnosis(diagnosis: RunDiagnosis): void {
   if (diagnosis.timeToFirstTokenMs !== undefined) {
     console.log(`Time to first token: ${diagnosis.timeToFirstTokenMs}ms`);
   }
@@ -142,9 +127,7 @@ function printOptionalDiagnosis(diagnosis: ReturnType<typeof diagnoseRunBundle>)
   }
 }
 
-function printTimeline(
-  timeline: Awaited<ReturnType<typeof import("@usepipr/runtime").loadValidatedRunBundle>>["spans"],
-): void {
+function printTimeline(timeline: ValidatedRunBundle["spans"]): void {
   console.log("Timeline:");
   const ordered = [...timeline].sort((left, right) =>
     left.startedAt.localeCompare(right.startedAt),

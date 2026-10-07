@@ -6,7 +6,7 @@ import path from "node:path";
 import { runtimeVersion } from "../../shared/version.js";
 import { installConfigDependencies } from "../config-deps.js";
 import { defaultTypesBunVersion, defaultTypescriptVersion } from "../scaffold-versions.js";
-import { loadTypescriptConfig, prepareConfigDirectory } from "../ts-loader.js";
+import { loadTypescriptConfig } from "../ts-loader.js";
 import type { ConfigVersionCompatibility } from "../version-compat.js";
 import {
   initOfficialMinimalProjectWithLocalDependencies as initOfficialMinimalProject,
@@ -371,7 +371,7 @@ export default definePipr((pipr) => {
   });
 });
 
-describe("prepareConfigDirectory", () => {
+describe("config directory preparation", () => {
   it("installs from a frozen verified projection without resolving runtime-provided deps", async () => {
     const originalSpawn = Bun.spawn;
     const observedInstalls: Array<{ command: string[]; packageJson: string; bunLock: string }> = [];
@@ -603,49 +603,30 @@ describe("prepareConfigDirectory", () => {
   });
 
   it("writes a typed SDK stub without running install for runtime-provided deps", async () => {
-    const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
-    await Bun.write(
-      path.join(configDir, "package.json"),
-      `${JSON.stringify(
-        {
-          private: true,
-          dependencies: { "@usepipr/sdk": "0.3.3" },
-          devDependencies: { "@types/bun": defaultTypesBunVersion },
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    const rootDir = await writeSdkStubProject({
+      private: true,
+      dependencies: { "@usepipr/sdk": "0.3.3" },
+      devDependencies: { "@types/bun": defaultTypesBunVersion },
+    });
 
-    await prepareConfigDirectory(configDir);
-
-    expect(
-      await Bun.file(
-        path.join(configDir, "node_modules", "@usepipr", "sdk", "index.d.ts"),
-      ).exists(),
-    ).toBe(true);
-    expect(
-      await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
-    ).toBe(true);
+    // Typechecking resolves the stub's declarations; loading imports its module.
+    await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
+      source: ".pipr/config.ts",
+    });
   });
 
   it("ignores malformed dependency maps when deciding whether install is required", async () => {
-    const configDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
-    await Bun.write(
-      path.join(configDir, "package.json"),
-      `${JSON.stringify({
-        dependencies: "lodash-es",
-        devDependencies: {
-          "@usepipr/sdk": runtimeVersion,
-          "not-a-version": 1,
-        },
-      })}\n`,
-    );
+    const rootDir = await writeSdkStubProject({
+      dependencies: "lodash-es",
+      devDependencies: {
+        "@usepipr/sdk": runtimeVersion,
+        "not-a-version": 1,
+      },
+    });
 
-    await expect(prepareConfigDirectory(configDir)).resolves.toBeUndefined();
-    expect(
-      await Bun.file(path.join(configDir, "node_modules", "@usepipr", "sdk", "index.mjs")).exists(),
-    ).toBe(true);
+    await expect(loadTypescriptConfig({ rootDir, typecheck: false })).resolves.toMatchObject({
+      source: ".pipr/config.ts",
+    });
   });
 });
 
@@ -771,6 +752,20 @@ async function installPiprConfigDependencies(configDir: string): Promise<void> {
   if (exitCode !== 0) {
     throw new Error(stderr);
   }
+}
+
+async function writeSdkStubProject(manifest: Record<string, unknown>): Promise<string> {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-config-stub-"));
+  await Bun.write(path.join(rootDir, ".pipr", "package.json"), `${JSON.stringify(manifest)}\n`);
+  await Bun.write(
+    path.join(rootDir, ".pipr", "config.ts"),
+    `import { definePipr } from "@usepipr/sdk";
+export default definePipr((pipr) => {
+  pipr.model("deepseek/deepseek-v4-pro", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }) });
+});
+`,
+  );
+  return rootDir;
 }
 
 async function writePackageForInstallTest(manifest: {

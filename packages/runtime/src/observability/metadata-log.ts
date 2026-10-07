@@ -88,8 +88,6 @@ const publicNumericLogFields = new Set([
   "retries",
   "shardCount",
   "shardIndex",
-  "stderrBytes",
-  "stdoutBytes",
   "used",
 ]);
 

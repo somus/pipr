@@ -1,8 +1,7 @@
+import { z } from "zod";
+import type { AgentWorkerEvent } from "../agent-worker/protocol.js";
 import type { DiffManifest } from "../types.js";
-import type {
-  DiffContextCoverageObservation,
-  DiffContextCoverageTracker,
-} from "./diff-context-coverage.js";
+import type { DiffContextCoverageObservation } from "./diff-context-coverage.js";
 
 type CoverageFileState = {
   path: string;
@@ -11,20 +10,47 @@ type CoverageFileState = {
   fullFile: boolean;
 };
 
-type PendingToolCall = {
-  name: string;
-  args?: Record<string, unknown>;
-};
+type ToolEndEvent = Extract<AgentWorkerEvent, { type: "tool_execution_end" }>;
+
+/** `pipr_read_diff` details: the bounded read of the full Diff Manifest. */
+const diffReadDetailsSchema = z.object({
+  truncated: z.literal(false),
+  value: z.object({
+    files: z.array(
+      z.object({
+        path: z.string(),
+        commentableRanges: z.array(z.object({ id: z.string() })),
+      }),
+    ),
+  }),
+});
+
+/** `pipr_read_at_ref` and `pipr_read_declaration` details for a complete range read. */
+const rangeReadDetailsSchema = z.object({
+  available: z.literal(true),
+  truncated: z.literal(false),
+  path: z.string(),
+  rangeId: z.string(),
+});
 
 export function createDiffContextCoverageTracker(options: {
   manifest: DiffManifest;
   mode: "full" | "condensed";
-}): DiffContextCoverageTracker {
-  const pending = new Map<string, PendingToolCall>();
+}): {
+  observe(event: AgentWorkerEvent): void;
+  result(): DiffContextCoverageObservation;
+} {
+  const pendingArgs = new Map<string, unknown>();
   const files = coverageFiles(options.manifest, options.mode);
   return {
     observe(event) {
-      observeCoverageEvent(pending, files, event);
+      if (event.type === "tool_execution_start") {
+        pendingArgs.set(event.toolCallId, event.args);
+      } else if (event.type === "tool_execution_end" && pendingArgs.has(event.toolCallId)) {
+        const args = pendingArgs.get(event.toolCallId);
+        pendingArgs.delete(event.toolCallId);
+        if (!event.isError) recordCompletedRead(files, args, event);
+      }
     },
     result() {
       return coverageObservation(files);
@@ -64,134 +90,47 @@ function coverageObservation(
   };
 }
 
-function observeCoverageEvent(
-  pending: Map<string, PendingToolCall>,
+function recordCompletedRead(
   files: Map<string, CoverageFileState>,
-  event: Record<string, unknown>,
+  args: unknown,
+  event: ToolEndEvent,
 ): void {
-  const id = eventId(event);
-  if (!id) return;
-  if (event.type === "tool_execution_start") {
-    pending.set(id, {
-      name: eventToolName(event),
-      args: asRecord(event.args ?? event.input ?? event.arguments),
-    });
-    return;
-  }
-  if (event.type === "tool_execution_end") {
-    recordCompletedCoverageRead(pending, files, id, event);
-  }
-}
-
-function recordCompletedCoverageRead(
-  pending: Map<string, PendingToolCall>,
-  files: Map<string, CoverageFileState>,
-  id: string,
-  event: Record<string, unknown>,
-): void {
-  const call = pending.get(id);
-  pending.delete(id);
-  if (!call || event.isError === true || event.error === true) return;
-  const details = toolResultDetails(event.result ?? event.output);
-  if (!details) return;
-  if (call.name === "pipr_read_diff") {
-    recordDiffRead(files, call.args, details);
-  } else if (call.name === "pipr_read_at_ref" || call.name === "pipr_read_declaration") {
-    recordRangeRead(files, details);
+  if (event.toolName === "pipr_read_diff") {
+    recordDiffRead(files, isRangeScoped(args), event.result.details);
+  } else if (event.toolName === "pipr_read_at_ref" || event.toolName === "pipr_read_declaration") {
+    recordRangeRead(files, event.result.details);
   }
 }
 
 function recordDiffRead(
   files: Map<string, CoverageFileState>,
-  args: Record<string, unknown> | undefined,
-  details: Record<string, unknown>,
+  rangeScoped: boolean,
+  details: unknown,
 ): void {
-  const observedFiles = completedDiffReadFiles(details);
-  if (!observedFiles) return;
-  const rangeScoped = typeof args?.rangeId === "string";
-  for (const observed of observedFiles) {
+  const parsed = diffReadDetailsSchema.safeParse(details);
+  if (!parsed.success) return;
+  for (const observed of parsed.data.value.files) {
     const file = files.get(observed.path);
     if (!file) continue;
     if (!rangeScoped) file.fullFile = true;
-    for (const rangeId of observed.rangeIds) {
-      if (file.rangeIds.has(rangeId)) file.coveredRangeIds.add(rangeId);
+    for (const { id } of observed.commentableRanges) {
+      if (file.rangeIds.has(id)) file.coveredRangeIds.add(id);
     }
   }
 }
 
-function completedDiffReadFiles(
-  details: Record<string, unknown>,
-): Array<{ path: string; rangeIds: string[] }> | undefined {
-  if (details.truncated !== false) return undefined;
-  const value = asRecord(details.value);
-  if (!Array.isArray(value?.files)) return undefined;
-  return value.files.flatMap((item) => {
-    const observed = asRecord(item);
-    if (!observed || typeof observed.path !== "string") return [];
-    const ranges = Array.isArray(observed.commentableRanges) ? observed.commentableRanges : [];
-    return [
-      {
-        path: observed.path,
-        rangeIds: ranges
-          .map(asRecord)
-          .map((range) => range?.id)
-          .filter((rangeId): rangeId is string => typeof rangeId === "string"),
-      },
-    ];
-  });
+function recordRangeRead(files: Map<string, CoverageFileState>, details: unknown): void {
+  const parsed = rangeReadDetailsSchema.safeParse(details);
+  if (!parsed.success) return;
+  const file = files.get(parsed.data.path);
+  if (file?.rangeIds.has(parsed.data.rangeId)) file.coveredRangeIds.add(parsed.data.rangeId);
 }
 
-function recordRangeRead(
-  files: Map<string, CoverageFileState>,
-  details: Record<string, unknown>,
-): void {
-  if (
-    details.available !== true ||
-    details.truncated !== false ||
-    typeof details.path !== "string" ||
-    typeof details.rangeId !== "string"
-  ) {
-    return;
-  }
-  const file = files.get(details.path);
-  if (file?.rangeIds.has(details.rangeId)) {
-    file.coveredRangeIds.add(details.rangeId);
-  }
-}
-
-function toolResultDetails(value: unknown): Record<string, unknown> | undefined {
-  const result = asRecord(value);
-  if (!result) return undefined;
-  const details = asRecord(result.details);
-  if (details) return details;
-  if (!Array.isArray(result.content)) return result;
-  const text = result.content
-    .map(asRecord)
-    .find((item) => item?.type === "text" && typeof item.text === "string")?.text;
-  if (typeof text !== "string") return result;
-  try {
-    return asRecord(JSON.parse(text) as unknown) ?? result;
-  } catch {
-    return result;
-  }
-}
-
-function eventId(event: Record<string, unknown>): string | undefined {
-  for (const key of ["toolCallId", "tool_call_id", "id"]) {
-    if (typeof event[key] === "string" && event[key].length > 0) return event[key];
-  }
-  return undefined;
-}
-
-function eventToolName(event: Record<string, unknown>): string {
-  for (const key of ["toolName", "tool_name", "name"]) {
-    if (typeof event[key] === "string") return event[key];
-  }
-  return "";
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+function isRangeScoped(args: unknown): boolean {
+  return (
+    typeof args === "object" &&
+    args !== null &&
+    "rangeId" in args &&
+    typeof args.rangeId === "string"
+  );
 }

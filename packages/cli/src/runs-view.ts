@@ -1,8 +1,20 @@
 import path from "node:path";
-import { type DownloadedBundle, diagnoseRunBundle, openRunBundlePackage } from "@usepipr/runtime";
+import {
+  type DownloadedBundle,
+  diagnoseRunBundle,
+  loadValidatedRunBundle,
+  openRunBundlePackage,
+  type RunDiagnosis,
+  type ValidatedRunBundle,
+} from "@usepipr/runtime";
 import { resolveIdentityContents } from "./runs-identity.js";
 import { printDiagnosis } from "./runs-print.js";
-import type { RunsInspectOptions, RunsShowOptions } from "./runs-types.js";
+import type {
+  RunDiagnosticState,
+  RunProtection,
+  RunsInspectOptions,
+  RunsShowOptions,
+} from "./runs-types.js";
 
 export async function renderDownloadedRun(
   downloaded: DownloadedBundle,
@@ -26,10 +38,10 @@ export async function renderDownloadedRun(
 }
 
 function printRunJson(
-  bundle: Awaited<ReturnType<typeof import("@usepipr/runtime").loadValidatedRunBundle>>,
-  diagnosis: ReturnType<typeof diagnoseRunBundle>,
-  protection: "plaintext" | "metadata" | "age",
-  diagnostic: "available" | "locked" | "not-captured" | "encryption-failed" | "size-limit",
+  bundle: ValidatedRunBundle,
+  diagnosis: RunDiagnosis,
+  protection: RunProtection,
+  diagnostic: RunDiagnosticState,
 ): void {
   console.log(
     JSON.stringify(
@@ -53,11 +65,10 @@ async function openDownloadedRunForShow(
   options: RunsShowOptions,
   context: { env: NodeJS.ProcessEnv; cwd: string; temporaryRoot: string },
 ): Promise<{
-  bundle: Awaited<ReturnType<typeof import("@usepipr/runtime").loadValidatedRunBundle>>;
-  protection: "plaintext" | "metadata" | "age";
-  diagnostic: "available" | "locked" | "not-captured" | "encryption-failed" | "size-limit";
+  bundle: ValidatedRunBundle;
+  protection: RunProtection;
+  diagnostic: RunDiagnosticState;
 }> {
-  const { loadValidatedRunBundle } = await import("@usepipr/runtime");
   if (!downloaded.envelope) {
     return {
       bundle: await loadValidatedRunBundle(downloaded.directory),

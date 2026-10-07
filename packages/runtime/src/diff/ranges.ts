@@ -6,10 +6,8 @@ export type DiffRangeMatch = {
 };
 
 export type DiffRangeIndex = {
-  fileByPath(filePath: string): DiffManifestFile | undefined;
   excludedReason(filePath: string): string | undefined;
   findRange(rangeId: string): DiffRangeMatch | undefined;
-  rangeById(rangeId: string): CommentableRange | undefined;
   requireFile(filePath: string): DiffManifestFile;
   requireRangeInFile(file: DiffManifestFile, rangeId: string): CommentableRange;
   requireHunk(file: DiffManifestFile, range: CommentableRange): DiffHunk;
@@ -25,17 +23,11 @@ export function createDiffRangeIndex(manifest: DiffManifest): DiffRangeIndex {
   }
 
   return {
-    fileByPath(filePath) {
-      return filesByPath.get(filePath);
-    },
     excludedReason(filePath) {
       return filesByPath.get(filePath)?.excludedReason;
     },
     findRange(rangeId) {
       return rangesById.get(rangeId);
-    },
-    rangeById(rangeId) {
-      return rangesById.get(rangeId)?.range;
     },
     requireFile(filePath) {
       const file = filesByPath.get(filePath);

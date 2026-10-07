@@ -8,7 +8,7 @@ import {
   type NormalizedTaskCheckSettings,
   taskCheckSettings,
 } from "./check-settings.js";
-import { missingProviderCredential } from "./provider-credentials.js";
+import { assertProviderCredentials } from "./provider-credentials.js";
 import { type ProviderEnvironment, providerEnvironments } from "./provider-env.js";
 import { loadTypescriptConfig } from "./ts-loader.js";
 import type { ConfigVersionCompatibility } from "./version-compat.js";
@@ -22,7 +22,6 @@ export type LoadRuntimeProjectOptions = {
 };
 
 export type LoadedRuntimeProject = {
-  kind: "typescript";
   plan: RuntimePlan;
   settings: RuntimeSettings;
   versionCompatibility: ConfigVersionCompatibility;
@@ -73,7 +72,6 @@ export async function loadRuntimeProject(
     loaded.plan.models.filter((model) => model.apiKey !== "local").map((model) => model.provider),
   );
   return {
-    kind: "typescript",
     plan: loaded.plan,
     settings: planToRuntimeSettings(loaded.plan, {
       source: loaded.source,
@@ -120,10 +118,7 @@ export function inspectRuntimePlan(plan: RuntimePlan, source: string): InspectRu
       ...(plan.publication.maxStoredFindings === undefined
         ? {}
         : { maxStoredFindings: plan.publication.maxStoredFindings }),
-      showHeader: plan.publication.showHeader ?? true,
-      showFooter: plan.publication.showFooter ?? true,
-      showStats: plan.publication.showStats ?? true,
-      showProgress: plan.publication.showProgress ?? true,
+      ...publicationDisplaySettings(plan.publication),
       autoResolve: {
         enabled: autoResolve.enabled,
         ...(autoResolve.model === undefined ? {} : { model: autoResolve.model }),
@@ -163,7 +158,9 @@ function planToRuntimeSettings(
     throw new Error(`${options.source}: at least one pipr.model() is required`);
   }
   assertUniqueProviders(providers, options.source);
-  assertRequiredProviderEnv(providers, options);
+  if (options.requireProviderEnv) {
+    assertProviderCredentials(providers, options.env ?? process.env);
+  }
   return parseRuntimeSettings({
     source: options.source,
     config: {
@@ -173,15 +170,22 @@ function planToRuntimeSettings(
         maxInlineComments: plan.publication.maxInlineComments,
         maxStoredFindings: plan.publication.maxStoredFindings,
         autoResolve: normalizeAutoResolveConfig(plan.publication.autoResolve, defaultProvider.id),
-        showHeader: plan.publication.showHeader ?? true,
-        showFooter: plan.publication.showFooter ?? true,
-        showStats: plan.publication.showStats ?? true,
-        showProgress: plan.publication.showProgress ?? true,
+        ...publicationDisplaySettings(plan.publication),
       },
       limits: plan.limits,
     },
     warnings: options.warnings ?? [],
   });
+}
+
+/** Header, footer, stats, and progress default to shown. */
+function publicationDisplaySettings(publication: RuntimePlan["publication"]) {
+  return {
+    showHeader: publication.showHeader ?? true,
+    showFooter: publication.showFooter ?? true,
+    showStats: publication.showStats ?? true,
+    showProgress: publication.showProgress ?? true,
+  };
 }
 
 function normalizeAutoResolveConfig(
@@ -191,24 +195,13 @@ function normalizeAutoResolveConfig(
   if (options === false) {
     return disabledAutoResolveConfig();
   }
-  if (!options) {
-    return enabledAutoResolveConfig(defaultProvider);
-  }
-  return enabledAutoResolveConfig(defaultProvider, options);
+  return enabledAutoResolveConfig(defaultProvider, options ?? {});
 }
 
 function enabledAutoResolveConfig(
   defaultProvider: string,
-  options?: Exclude<AutoResolveOptions, false>,
+  options: Exclude<AutoResolveOptions, false>,
 ): AutoResolveConfig {
-  if (!options) {
-    return {
-      enabled: true,
-      model: defaultProvider,
-      synchronize: true,
-      userReplies: normalizeUserReplyAutoResolveConfig(undefined),
-    };
-  }
   if (options.enabled === false && options.model) {
     throw new Error("publication.autoResolve.model cannot be set when autoResolve is disabled");
   }
@@ -234,9 +227,9 @@ function disabledAutoResolveConfig(): AutoResolveConfig {
 }
 
 function normalizeUserReplyAutoResolveConfig(
-  options: Exclude<AutoResolveOptions, false> | undefined,
+  options: Exclude<AutoResolveOptions, false>,
 ): AutoResolveConfig["userReplies"] {
-  const userReplies = options?.userReplies;
+  const userReplies = options.userReplies;
   if (typeof userReplies === "boolean") {
     return {
       enabled: userReplies,
@@ -300,19 +293,5 @@ function assertUniqueProviders(providers: ProviderConfig[], source: string): voi
       throw new Error(`${source}: duplicate model id '${provider.id}'`);
     }
     seen.add(provider.id);
-  }
-}
-
-function assertRequiredProviderEnv(
-  providers: ProviderConfig[],
-  options: { env?: NodeJS.ProcessEnv; requireProviderEnv?: boolean },
-): void {
-  if (!options.requireProviderEnv) {
-    return;
-  }
-  const env = options.env ?? process.env;
-  const missing = providers.flatMap((provider) => missingProviderCredential(provider, env) ?? []);
-  if (missing.length > 0) {
-    throw new Error(`Missing provider env vars: ${missing.join(", ")}`);
   }
 }

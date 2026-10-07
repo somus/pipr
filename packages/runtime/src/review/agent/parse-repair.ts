@@ -3,7 +3,6 @@ import type { RuntimeAgent } from "@usepipr/sdk/internal";
 import { providerFailureRemediation } from "../../pi/provider-failure.js";
 import type { PiRunResult } from "../../pi/types.js";
 import type { ProviderConfig } from "../../types.js";
-import { parseReviewResult, reviewResultSchemaId } from "../review.js";
 import { type AgentPrompt, joinedAgentPrompt, type PreparedAgentContext } from "./agent-prompt.js";
 import {
   type AgentAttempt,
@@ -100,11 +99,7 @@ function parseAgentOutput(output: string, agent: RuntimeAgent): ParseAgentResult
   let lastError = "";
   for (const payload of jsonPayloadCandidates(output)) {
     try {
-      const json = JSON.parse(payload) as unknown;
-      if (agent.definition.output.id === reviewResultSchemaId) {
-        return { ok: true, value: parseReviewResult(json), repairAttempted: false };
-      }
-      return { ok: true, value: agent.definition.output.parse(json), repairAttempted: false };
+      return { ok: true, value: agent.definition.output.parse(JSON.parse(payload)) };
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
     }

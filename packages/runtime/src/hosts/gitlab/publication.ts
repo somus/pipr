@@ -8,10 +8,12 @@ import {
   applyInlineFindingMarkers,
   applyNativeThreadResolutions,
   applyResolvedFindingMarkers,
-  extractInlineFindingMarkerRecords,
   extractPriorReviewState,
+  parseInlineFindingMarker,
 } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
+import { requireCoordinates } from "../change-request.js";
+import { mainCommentPrefix } from "../publication.js";
 import type {
   GitLabClient,
   GitLabDiffRefs,
@@ -40,7 +42,7 @@ export async function loadGitLabPriorReviewState(options: {
     markerState,
     discussions.flatMap((discussion) => {
       const root = discussion.notes[0];
-      const marker = root ? extractInlineFindingMarkerRecords([root.body])[0] : undefined;
+      const marker = root ? parseInlineFindingMarker(root.body) : undefined;
       return root && marker && root.author?.username === owner.username
         ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved: root.resolved ?? false }]
         : [];
@@ -57,7 +59,7 @@ export async function loadGitLabPriorMainComment(options: {
     gitLabCoordinates(options.change).projectId,
     options.change.change.number,
   );
-  return ownedGitLabNote(notes, owner.username, gitLabMainMarker(options.change.change.number))
+  return ownedGitLabNote(notes, owner.username, mainCommentPrefix(options.change.change.number))
     ?.body;
 }
 
@@ -80,7 +82,7 @@ export function gitLabThreadContexts(
 ): InlineThreadContext[] {
   return discussions.flatMap((discussion) => {
     const root = discussion.notes[0];
-    const marker = root ? extractInlineFindingMarkerRecords([root.body])[0] : undefined;
+    const marker = root ? parseInlineFindingMarker(root.body) : undefined;
     if (!root || !marker || root.author?.username !== ownerUsername) return [];
     return [
       {
@@ -105,7 +107,7 @@ export function gitLabInlineLocationFromDiscussion(
 ): InlinePublicationLocation | undefined {
   const root = discussion.notes[0];
   if (!root?.position) return undefined;
-  const marker = extractInlineFindingMarkerRecords([root.body])[0];
+  const marker = parseInlineFindingMarker(root.body);
   if (!marker) return undefined;
   const position = root.position;
   const rightSide = position.new_line !== undefined;
@@ -119,16 +121,6 @@ export function gitLabInlineLocationFromDiscussion(
       ? (position.line_range?.start.new_line ?? endLine)
       : (position.line_range?.start.old_line ?? endLine),
     endLine,
-  };
-}
-
-export function gitLabInlineLocation(item: InlinePublicationItem): InlinePublicationLocation {
-  return {
-    path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
-    commitId: item.reviewedHeadSha,
-    side: item.side,
-    startLine: item.startLine,
-    endLine: item.endLine,
   };
 }
 
@@ -176,20 +168,14 @@ export async function assertCurrentGitLabHead(
   return current;
 }
 
-export function gitLabCoordinates(change: ChangeRequestEventContext) {
-  if (change.coordinates?.provider !== "gitlab")
-    throw new Error("GitLab adapter requires GitLab coordinates");
-  return change.coordinates;
+export function gitLabCoordinates(change: Pick<ChangeRequestEventContext, "coordinates">) {
+  return requireCoordinates(change, "gitlab", "GitLab");
 }
 
 export function ownedGitLabNote(notes: GitLabNote[], username: string, marker: string) {
   return notes.find(
     (note) => note.author?.username === username && note.body.trimStart().startsWith(marker),
   );
-}
-
-export function gitLabMainMarker(changeNumber: number): string {
-  return `<!-- pipr:main-comment change=${changeNumber} `;
 }
 
 function discussionNotes(discussions: GitLabDiscussion[]) {

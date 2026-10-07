@@ -1,7 +1,31 @@
 import { describe, expect, it } from "bun:test";
 import { isPublishableSuggestedFixSelection } from "../suggested-fix-publication-policy.js";
 
-type Selection = Parameters<typeof isPublishableSuggestedFixSelection>[0];
+type Selection = {
+  side: "RIGHT" | "LEFT";
+  kind: "added" | "deleted" | "context" | "mixed";
+  rangeStartLine: number;
+  startLine: number;
+  endLine: number;
+  preview?: string;
+  suggestedFix: string;
+};
+
+function isPublishable(selection: Selection): boolean {
+  return isPublishableSuggestedFixSelection(
+    {
+      startLine: selection.startLine,
+      endLine: selection.endLine,
+      suggestedFix: selection.suggestedFix,
+    },
+    {
+      side: selection.side,
+      kind: selection.kind,
+      startLine: selection.rangeStartLine,
+      preview: selection.preview,
+    },
+  );
+}
 
 const publishable: Selection = {
   side: "RIGHT",
@@ -18,15 +42,15 @@ const lines = (count: number, prefix: string) =>
 
 describe("isPublishableSuggestedFixSelection", () => {
   it("publishes a bounded RIGHT-side replacement that changes the selected lines", () => {
-    expect(isPublishableSuggestedFixSelection(publishable)).toBe(true);
+    expect(isPublishable(publishable)).toBe(true);
     expect(
-      isPublishableSuggestedFixSelection({
+      isPublishable({
         ...publishable,
         suggestedFix: ["recover();", "log();"].join("\n"),
       }),
     ).toBe(true);
     expect(
-      isPublishableSuggestedFixSelection({
+      isPublishable({
         ...publishable,
         startLine: 10,
         endLine: 21,
@@ -34,9 +58,7 @@ describe("isPublishableSuggestedFixSelection", () => {
         suggestedFix: lines(12, "new"),
       }),
     ).toBe(true);
-    expect(
-      isPublishableSuggestedFixSelection({ ...publishable, suggestedFix: lines(20, "new") }),
-    ).toBe(true);
+    expect(isPublishable({ ...publishable, suggestedFix: lines(20, "new") })).toBe(true);
   });
 
   it.each<[string, Partial<Selection>]>([
@@ -65,6 +87,6 @@ describe("isPublishableSuggestedFixSelection", () => {
       { suggestedFix: ["before();", "recover();"].join("\n") },
     ],
   ])("does not publish %s", (_label, patch) => {
-    expect(isPublishableSuggestedFixSelection({ ...publishable, ...patch })).toBe(false);
+    expect(isPublishable({ ...publishable, ...patch })).toBe(false);
   });
 });

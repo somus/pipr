@@ -241,7 +241,12 @@ describe("Azure DevOps event parser", () => {
       });
       try {
         await expect(
-          parseAzureDevOpsEvent({ eventPath: fixture.path, env: {}, workspace: fixture.root }),
+          parseAzureDevOpsEvent({
+            eventPath: fixture.path,
+            env: {},
+            workspace: fixture.root,
+            loadChangeRequest: unexpectedChangeLoad,
+          }),
         ).resolves.toMatchObject(
           expectedKind === "command-comment"
             ? { kind: expectedKind, comment: { commentId: "102", changeNumber: 7 } }
@@ -280,4 +285,8 @@ async function eventFixture(payload: unknown) {
   const eventPath = path.join(root, "event.json");
   await Bun.write(eventPath, JSON.stringify(payload));
   return { root, path: eventPath };
+}
+
+function unexpectedChangeLoad(): never {
+  throw new Error("comment events must not load the change request");
 }

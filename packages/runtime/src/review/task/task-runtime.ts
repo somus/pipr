@@ -1,11 +1,12 @@
 import type { PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
 import type { RuntimeTask } from "@usepipr/sdk/internal";
 import { uniq } from "lodash-es";
-import { providerSecretEnvNames } from "../../config/provider-credentials.js";
+import { registerProviderSecrets } from "../../config/provider-credentials.js";
 import type { ConfigVersionCompatibility } from "../../config/version-compat.js";
 import { buildDiffManifest } from "../../diff/diff.js";
 import { enrichDiffManifestWithStructure } from "../../diff/manifest-structure.js";
 import { createDiffStructuralAnalysisLoader } from "../../diff/structural-analysis.js";
+import { recordArtifactSafely } from "../../observability/capture-sinks.js";
 import type { RunObserver } from "../../observability/types.js";
 import { diffContextCoverageArtifact } from "../../pi/diff-context-coverage.js";
 import { withPiRunWorkspace } from "../../pi/runner.js";
@@ -36,7 +37,6 @@ import { runInternalVerifier } from "../verifier.js";
 import { selectRuntimeTasks } from "./select-runtime-tasks.js";
 import { createTaskContext } from "./task-context.js";
 import {
-  type CommandResponseContribution,
   collectedReview,
   createOutputState,
   mergeTaskOutputs,
@@ -47,6 +47,7 @@ import {
   reviewStatsForRuns,
   runSummaryStatsFields,
   runtimeTaskCheckResult,
+  type TaskRunResult,
 } from "./task-output.js";
 import type { RunTaskRuntimeOptions } from "./task-runtime-options.js";
 
@@ -187,7 +188,7 @@ async function runTaskRuntimeWithPiRunner(
 ): Promise<ReviewRuntimeResult> {
   const runtimeStarted = Date.now();
   const config = parsePiprConfig(options.config);
-  registerProviderSecrets(config, options);
+  registerProviderSecrets(config.providers, options.env, options);
   const provider = taskRuntimeProvider(options, config);
   await options.progress?.transition("building-diff");
   const diffManifest = parseDiffManifest(
@@ -198,7 +199,7 @@ async function runTaskRuntimeWithPiRunner(
     }),
   );
   logDiffManifest(options, diffManifest);
-  await recordRuntimeArtifact(options, {
+  await recordArtifactSafely(options, {
     kind: "diff-manifest",
     name: "diff-manifest.json",
     mediaType: "application/json",
@@ -285,7 +286,7 @@ async function runTaskRuntimeWithPiRunner(
     repairAttempted: output.repairAttempted,
   });
   const commandDurationMs = Date.now() - runtimeStarted;
-  const commandResponse = commandResponseResultFromOutput({
+  const commandResponse = commandResponseRuntimeResult({
     provider,
     diffManifest,
     output,
@@ -377,7 +378,7 @@ async function runTaskRuntimeWithPiRunner(
   });
   await recordDiffContextCoverageArtifact(options, piRuns);
   await Promise.all([
-    recordRuntimeArtifact(options, {
+    recordArtifactSafely(options, {
       kind: "output",
       name: "review-output.json",
       mediaType: "application/json",
@@ -388,14 +389,14 @@ async function runTaskRuntimeWithPiRunner(
       ),
       sensitive: true,
     }),
-    recordRuntimeArtifact(options, {
+    recordArtifactSafely(options, {
       kind: "validation",
       name: "validation.json",
       mediaType: "application/json",
       content: JSON.stringify(redactedPublication.validated, null, 2),
       sensitive: true,
     }),
-    recordRuntimeArtifact(options, {
+    recordArtifactSafely(options, {
       kind: "publication-plan",
       name: "publication-plan.json",
       mediaType: "application/json",
@@ -419,33 +420,6 @@ async function runTaskRuntimeWithPiRunner(
   };
 }
 
-function registerProviderSecrets(config: PiprConfig, options: RunTaskRuntimeOptions): void {
-  const env = options.env ?? process.env;
-  for (const provider of config.providers) {
-    for (const name of providerSecretEnvNames(provider)) {
-      const value = env[name];
-      if (!value) continue;
-      options.log?.addSecret(value);
-      options.secretRedactor?.addSecret(value);
-      options.runObserver?.registerSecret?.(value);
-    }
-  }
-}
-
-async function recordRuntimeArtifact(
-  options: Pick<RunTaskRuntimeOptions, "runObserver" | "log">,
-  artifact: Parameters<NonNullable<RunObserver["recordArtifact"]>>[0],
-): Promise<void> {
-  try {
-    await options.runObserver?.recordArtifact?.(artifact);
-  } catch (error) {
-    options.log?.warning("run capture artifact failed", {
-      kind: artifact.kind,
-      error: error instanceof Error ? error.message : "unknown capture error",
-    });
-  }
-}
-
 async function recordDiffContextCoverageArtifact(
   options: Pick<RunTaskRuntimeOptions, "runObserver" | "log">,
   piRuns: readonly PiRunStats[],
@@ -454,7 +428,7 @@ async function recordDiffContextCoverageArtifact(
     piRuns.map((piRun) => piRun.diffContextCoverage).filter((coverage) => coverage !== undefined),
   );
   if (!content) return;
-  await recordRuntimeArtifact(options, {
+  await recordArtifactSafely(options, {
     kind: "diff-context-coverage",
     name: "diff-context-coverage.json",
     mediaType: "application/json",
@@ -494,19 +468,13 @@ function reviewProviderModels(
     : [fallbackModel];
 }
 
-type TaskExecutionResult = {
-  taskName: string;
-  output: OutputState;
-  error?: unknown;
-};
-
 async function executeSelectedTasks(options: {
   tasks: readonly RuntimeTask[];
   runtimeOptions: RunTaskRuntimeOptions;
   context: Omit<Parameters<typeof createTaskContext>[0], "output" | "taskName" | "taskOrder">;
-}): Promise<TaskExecutionResult[]> {
+}): Promise<TaskRunResult[]> {
   return Promise.all(
-    options.tasks.map(async (task, taskOrder): Promise<TaskExecutionResult> => {
+    options.tasks.map(async (task, taskOrder): Promise<TaskRunResult> => {
       const output = createOutputState();
       const started = Date.now();
       const taskId = String(taskOrder);
@@ -599,29 +567,6 @@ function runSummary(options: {
   };
 }
 
-function commandResponseResultFromOutput(options: {
-  provider: ProviderConfig;
-  diffManifest: DiffManifest;
-  output: OutputState;
-  taskChecks: RuntimeTaskCheckResult[];
-  commandInvocation?: RuntimeCommandInvocation;
-  secretRedactor?: SecretRedactor;
-  run: PiprRunSummary;
-}): ReviewRuntimeResult | undefined {
-  const commandResponse = options.output.commandResponse;
-  if (!commandResponse) {
-    return undefined;
-  }
-  if (!options.commandInvocation) {
-    throw new Error("ctx.command.reply(...) is only available for command-triggered tasks");
-  }
-  return commandResponseRuntimeResult({
-    ...options,
-    commandResponse,
-    commandInvocation: options.commandInvocation,
-  });
-}
-
 function assertReviewCommentOutput(
   output: OutputState,
   hasCommandInvocation: boolean,
@@ -690,14 +635,20 @@ function commandResponseRuntimeResult(options: {
   provider: ProviderConfig;
   diffManifest: DiffManifest;
   output: OutputState;
-  commandResponse: CommandResponseContribution;
   taskChecks: RuntimeTaskCheckResult[];
-  commandInvocation: RuntimeCommandInvocation;
+  commandInvocation?: RuntimeCommandInvocation;
   secretRedactor?: SecretRedactor;
   run: PiprRunSummary;
-}): ReviewRuntimeResult {
+}): ReviewRuntimeResult | undefined {
+  const commandResponse = options.output.commandResponse;
+  if (!commandResponse) {
+    return undefined;
+  }
+  if (!options.commandInvocation) {
+    throw new Error("ctx.command.reply(...) is only available for command-triggered tasks");
+  }
   const redacted = redactCommandPublication({
-    body: options.commandResponse.value,
+    body: commandResponse.value,
     taskChecks: options.taskChecks,
     redactor: options.secretRedactor,
   });

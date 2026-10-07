@@ -23,7 +23,6 @@ export type LoadTypescriptConfigOptions = {
 export type LoadedTypescriptConfig = {
   plan: RuntimePlan;
   source: string;
-  tempRoot: string;
   versionCompatibility: ConfigVersionCompatibility;
 };
 
@@ -82,7 +81,6 @@ export async function loadTypescriptConfig(
     return {
       plan: buildPiprPlan(factory),
       source,
-      tempRoot,
       versionCompatibility,
     };
   } finally {
@@ -90,7 +88,7 @@ export async function loadTypescriptConfig(
   }
 }
 
-export async function prepareConfigDirectory(configDir: string): Promise<void> {
+async function prepareConfigDirectory(configDir: string): Promise<void> {
   await installConfigDependencies(configDir);
   await installTypedSdkStub(configDir);
 }

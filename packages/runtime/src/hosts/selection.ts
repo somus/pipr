@@ -1,6 +1,4 @@
-import { match } from "ts-pattern";
-
-const codeHostIds = [
+export const codeHostIds = [
   "github",
   "gitlab",
   "azure-devops",
@@ -49,22 +47,12 @@ export function resolveCodeHostId(options: {
 }
 
 function parseCodeHostId(value: string): CodeHostId {
-  return match(value)
-    .with(
-      "github",
-      "gitlab",
-      "azure-devops",
-      "bitbucket",
-      "gitea",
-      "forgejo",
-      "codeberg",
-      (host) => host,
-    )
-    .otherwise((unsupported) => {
-      throw new Error(
-        `Unsupported code host '${unsupported}'. Supported hosts: ${codeHostIds.join(", ")}`,
-      );
-    });
+  if (isCodeHostId(value)) return value;
+  throw new Error(`Unsupported code host '${value}'. Supported hosts: ${codeHostIds.join(", ")}`);
+}
+
+function isCodeHostId(value: string): value is CodeHostId {
+  return (codeHostIds as readonly string[]).includes(value);
 }
 
 function detectedGiteaFamilyHost(env: NodeJS.ProcessEnv): CodeHostId | undefined {

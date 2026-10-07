@@ -8,14 +8,15 @@ SDK or CLI surface.
 
 ## Technical notes
 
-- `pipr-e2e-check` builds the local Action image, verifies the durable harness
+- `check.ts` (`check:actions`) builds the local Action image, verifies the durable harness
   contract (pinned `@earendil-works/pi-durable`, `pi-ai`, and `chord` versions
   plus `pipr agent-worker --help`), runs fixture assertions, and runs every local
   `act` scenario.
-- `pipr-e2e-container-check` runs direct-container equivalents against an
-  existing Docker image.
-- `pipr-e2e-run` runs one local `act` scenario.
-- `pipr-e2e-action-fixture` is the in-container GitHub fixture entrypoint. It
+- `container-check.ts` (`check:container`) runs direct-container equivalents
+  against an existing Docker image. It leaves the harness contract to
+  `check:actions`, which the Docker e2e pipeline runs next.
+- `run.ts` runs one local `act` scenario.
+- `action-fixture.ts` is the in-container GitHub fixture entrypoint. It
   loads `scripted-provider.ts` into the agent worker as the model provider, so
   fixtures answer from the rendered prompt and drive the Pipr read tools without
   a model API call.

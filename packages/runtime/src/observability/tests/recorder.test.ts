@@ -5,7 +5,6 @@ import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
 import { loadValidatedRunBundle } from "../archive.js";
 import { startFileRunRecorder } from "../file-run-recorder.js";
-import { parseOtlpHeaders } from "../otlp.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -251,7 +250,7 @@ describe("file run recorder", () => {
       model: "test",
       prompt: `prompt ${secret}`,
     });
-    await attempt.finish({ output: `output ${secret}`, stderr: `stderr ${secret}` });
+    await attempt.finish({ output: `output ${secret}`, error: `stderr ${secret}` });
     await recorder.finish({ kind: "review", outcome: "succeeded" });
 
     const files = await Promise.all(
@@ -287,7 +286,7 @@ describe("file run recorder", () => {
       model: "test",
       prompt: `prompt ${leak}`,
     });
-    await attempt.finish({ output: `output ${leak}`, stderr: `stderr ${leak}` });
+    await attempt.finish({ output: `output ${leak}`, error: `stderr ${leak}` });
     await recorder.finish({ kind: "review", outcome: "succeeded" });
 
     const bundleText = await readBundleText(recorder.directory);
@@ -298,13 +297,19 @@ describe("file run recorder", () => {
   });
 
   it("exports content-free traces, metrics, and logs through OTLP HTTP/protobuf", async () => {
-    const requests: Array<{ path: string; contentType: string | null; body: Buffer }> = [];
+    const requests: Array<{
+      path: string;
+      contentType: string | null;
+      authorization: string | null;
+      body: Buffer;
+    }> = [];
     const server = Bun.serve({
       port: 0,
       async fetch(request) {
         requests.push({
           path: new URL(request.url).pathname,
           contentType: request.headers.get("content-type"),
+          authorization: request.headers.get("authorization"),
           body: Buffer.from(await request.arrayBuffer()),
         });
         return new Response(null, { status: 200 });
@@ -319,6 +324,7 @@ describe("file run recorder", () => {
         env: {
           OPENAI_API_KEY: secret,
           OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${server.port}`,
+          OTEL_EXPORTER_OTLP_HEADERS: " authorization = Bearer%20token ",
         },
       });
       recorder.logSink.log({
@@ -357,6 +363,7 @@ describe("file run recorder", () => {
       expect(requests.every((request) => request.contentType === "application/x-protobuf")).toBe(
         true,
       );
+      expect(requests.every((request) => request.authorization === "Bearer token")).toBe(true);
       const exported = Buffer.concat(requests.map((request) => request.body)).toString("utf8");
       expect(exported).not.toContain(secret);
       expect(exported).not.toContain("visible output");
@@ -406,7 +413,7 @@ describe("file run recorder", () => {
     }
   });
 
-  it("parses OTLP headers and records OTLP configuration failures in the bundle", async () => {
+  it("records OTLP header configuration failures in the bundle", async () => {
     const recorder = await startFileRunRecorder({
       rootDirectory: await temporaryDirectory(),
       env: {
@@ -422,9 +429,6 @@ describe("file run recorder", () => {
     );
     expect(manifest.export.otlp).toBe("failed");
     expect(manifest.capture.errors).toContainEqual(expect.stringContaining("OTLP export failed"));
-    expect(parseOtlpHeaders(" authorization = Bearer%20token ")).toEqual({
-      authorization: "Bearer token",
-    });
   });
 
   it("caps finalization and OTLP flush at two seconds without failing the run", async () => {
@@ -601,7 +605,7 @@ describe("file run recorder", () => {
       model: "gpt-test",
       prompt: "private prompt",
     });
-    await attempt.finish({ output: "private output", stderr: "private stderr", exitCode: 0 });
+    await attempt.finish({ output: "private output", error: "private stderr", exitCode: 0 });
 
     await recorder.finish({ kind: "review", outcome: "succeeded" });
 

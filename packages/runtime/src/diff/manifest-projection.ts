@@ -395,7 +395,7 @@ function ensureManifestFitsPrompt(
   return manifest;
 }
 
-function diffManifestFitsPrompt(
+export function diffManifestFitsPrompt(
   manifest: DiffManifest,
   config: DiffManifestLimitsConfig | undefined,
 ): boolean {

@@ -9,10 +9,14 @@ import type { RunFailureCategory, RunRecorder } from "../observability/recorder-
 import { combineRuntimeLogSinks } from "../observability/runtime-log-sinks.js";
 import { selectLocalReviewTasks } from "../review/task/select-runtime-tasks.js";
 import { runTaskRuntime } from "../review/task/task-runtime.js";
-import { createRuntimeLog } from "../shared/logging.js";
-import { parseChangeRequestEventContext } from "../types.js";
-import { classifyRunFailure, finishRecorderSafely } from "./commands-shared.js";
-import { logConfigWarnings, logEventContext } from "./logging.js";
+import { createRuntimeLog, shortSha } from "../shared/logging.js";
+import {
+  classifyRunFailure,
+  finishRecorderSafely,
+  parseRunCaptureSetting,
+  warnRunCaptureUnavailable,
+} from "./commands-shared.js";
+import { logConfigWarnings, logEventContext, runtimeSummaryFields } from "./logging.js";
 import type { LocalReviewCommandOptions, LocalReviewCommandResult } from "./types.js";
 
 /** Runs configured change-request tasks against local Git base and head revisions. */
@@ -36,8 +40,8 @@ export async function runLocalReviewCommand(
     log?.notice("local review start", {
       root: options.rootDir,
       configDir: options.configDir,
-      base: options.baseSha.slice(0, 12),
-      head: options.headSha?.slice(0, 12),
+      base: shortSha(options.baseSha),
+      head: shortSha(options.headSha),
     });
     const runtime = await loadRuntimeProject({
       ...runOptions,
@@ -45,13 +49,9 @@ export async function runLocalReviewCommand(
     });
     log?.notice("local config loaded", {
       source: runtime.settings.source,
-      providers: runtime.settings.config.providers
-        .map((provider) => `${provider.id}:${provider.model}`)
-        .join(","),
-      tasks: runtime.plan.tasks.length,
-      commands: runtime.plan.commands.length,
+      ...runtimeSummaryFields(runtime),
     });
-    logLocalConfigWarnings(log, runtime.settings.warnings);
+    if (log) logConfigWarnings(log, runtime.settings.warnings);
     failureCategory = "dispatch";
     reviewStarted = true;
     const selectedTasks = selectLocalReviewTasks(runtime.plan);
@@ -63,20 +63,21 @@ export async function runLocalReviewCommand(
       baseSha: options.baseSha,
       headSha,
     };
-    const event = parseChangeRequestEventContext({
-      ...createLocalChangeRequestEvent({
-        rootDir: options.rootDir,
-        baseSha: options.baseSha,
-        headSha,
-      }),
+    const event = createLocalChangeRequestEvent({
+      rootDir: options.rootDir,
+      baseSha: options.baseSha,
+      headSha,
     });
-    logLocalDispatch(log, event, {
-      selectedTasks: selectedTasks.map((task) => task.name),
-      skippedLocalTasks: runtime.plan.tasks
-        .filter((task) => task.local === false)
-        .map((task) => task.name),
-      diffTarget: includeWorkingTree ? "working-tree" : "head-ref",
-    });
+    if (log) {
+      logEventContext(log, event);
+      log.notice("local dispatch", {
+        selectedTasks: selectedTasks.map((task) => task.name),
+        skippedLocalTasks: runtime.plan.tasks
+          .filter((task) => task.local === false)
+          .map((task) => task.name),
+        diffTarget: includeWorkingTree ? "working-tree" : "head-ref",
+      });
+    }
     const result = await runTaskRuntime({
       workspace: options.rootDir,
       config: runtime.settings.config,
@@ -101,14 +102,7 @@ export async function runLocalReviewCommand(
     if (result.kind === "command-response") {
       throw new Error("command response result is only supported for issue_comment commands");
     }
-    log?.notice("local review complete", {
-      kind: result.kind,
-      taskChecks: result.taskChecks.length,
-      validFindings: result.kind === "review" ? result.validated.validFindings.length : undefined,
-      droppedFindings:
-        result.kind === "review" ? result.validated.droppedFindings.length : undefined,
-      inlineDrafts: result.kind === "review" ? result.inlineCommentDrafts.length : undefined,
-    });
+    log?.notice("local review complete", localReviewCompleteFields(result));
     await finishRecorderSafely(recorder, log, successfulLocalReviewRun(result, localRepository));
     return result as LocalReviewCommandResult;
   } catch (error) {
@@ -122,25 +116,15 @@ export async function runLocalReviewCommand(
   }
 }
 
-function logLocalConfigWarnings(
-  log: ReturnType<typeof createRuntimeLog> | undefined,
-  warnings: string[],
-): void {
-  if (log) logConfigWarnings(log, warnings);
-}
-
-function logLocalDispatch(
-  log: ReturnType<typeof createRuntimeLog> | undefined,
-  event: Parameters<typeof logEventContext>[1],
-  fields: {
-    selectedTasks: string[];
-    skippedLocalTasks: string[];
-    diffTarget: "working-tree" | "head-ref";
-  },
-): void {
-  if (!log) return;
-  logEventContext(log, event);
-  log.notice("local dispatch", fields);
+function localReviewCompleteFields(result: LocalReviewCommandResult) {
+  const review = result.kind === "review" ? result : undefined;
+  return {
+    kind: result.kind,
+    taskChecks: result.taskChecks.length,
+    validFindings: review?.validated.validFindings.length,
+    droppedFindings: review?.validated.droppedFindings.length,
+    inlineDrafts: review?.inlineCommentDrafts.length,
+  };
 }
 
 function successfulLocalReviewRun(
@@ -166,19 +150,15 @@ async function startLocalRecorder(
   if (!options.traceDirectory) return undefined;
   try {
     const env = options.env ?? process.env;
-    const mode = requestedCaptureMode(env);
-    if (!mode) return undefined;
+    const mode = parseRunCaptureSetting(env) ?? "diagnostic";
+    if (mode === "off") return undefined;
     return await startFileRunRecorder({
       rootDirectory: options.traceDirectory,
       env,
       mode,
     });
   } catch (error) {
-    options.logSink?.log({
-      level: "warning",
-      event: "run capture unavailable",
-      fields: { error: error instanceof Error ? error.message : "unknown capture error" },
-    });
+    warnRunCaptureUnavailable(options.logSink, error);
     return undefined;
   }
 }
@@ -190,14 +170,4 @@ function resolveLocalPiAuthFile(options: LocalReviewCommandOptions): string {
     ? path.resolve(options.rootDir, env.PI_CODING_AGENT_DIR)
     : path.join(env.HOME ?? os.homedir(), ".pi", "agent");
   return path.join(agentDir, "auth.json");
-}
-
-function requestedCaptureMode(
-  env: NodeJS.ProcessEnv | undefined,
-): "metadata" | "diagnostic" | undefined {
-  const value = env?.PIPR_RUN_CAPTURE;
-  if (value === undefined || value === "diagnostic") return "diagnostic";
-  if (value === "metadata") return "metadata";
-  if (value === "off") return undefined;
-  throw new Error("PIPR_RUN_CAPTURE must be off, metadata, or diagnostic");
 }

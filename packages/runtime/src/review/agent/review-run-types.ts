@@ -34,7 +34,6 @@ export type RunReviewAgentOptions = {
     env?: NodeJS.ProcessEnv;
     piProviderModule?: PiProviderModule;
     piAuthFile?: string;
-    piStoreDir?: string;
     /** Shares one worker and conversation store across a run, so repair can continue a conversation. */
     piRunner: PiRunner;
     /** Fork from a parent conversation holding the shared change context, so sibling calls share its cache prefix. */
@@ -65,9 +64,7 @@ export type RunReviewAgentResult = {
   providerModels: string[];
 };
 
-export type ParseAgentResult =
-  | { ok: true; value: unknown; repairAttempted: boolean }
-  | { ok: false; error: string };
+export type ParseAgentResult = { ok: true; value: unknown } | { ok: false; error: string };
 
 export type AgentAttemptResult =
   | { ok: true; value: unknown; repairAttempted: boolean }

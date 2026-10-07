@@ -12,7 +12,6 @@ describe("Diff Ranges", () => {
 
     expect(file.path).toBe("src/a.ts");
     expect(range.id).toBe("range-1");
-    expect(index.rangeById("range-1")).toEqual(range);
     expect(index.excludedReason("bun.lock")).toBe("lock file");
     expect(index.requireHunk(file, range).contentHash).toBe(range.hunkContentHash);
   });

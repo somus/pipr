@@ -1,5 +1,26 @@
+export const runHosts = [
+  "github",
+  "gitlab",
+  "azure-devops",
+  "bitbucket",
+  "gitea",
+  "forgejo",
+  "codeberg",
+] as const;
+
+export type RunHost = (typeof runHosts)[number];
+
+export type RunProtection = "plaintext" | "metadata" | "age";
+
+export type RunDiagnosticState =
+  | "available"
+  | "locked"
+  | "not-captured"
+  | "encryption-failed"
+  | "size-limit";
+
 export type RunSelector = {
-  host: "github" | "gitlab" | "azure-devops" | "bitbucket" | "gitea" | "forgejo" | "codeberg";
+  host: RunHost;
   repository: string;
   changeNumber: number;
 };

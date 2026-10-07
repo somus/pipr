@@ -2,7 +2,7 @@ import { ReviewProgressSupersededError } from "../review/progress.js";
 import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { ChangeRequestEventContext } from "../types.js";
 import type { HostRunServices } from "./composition.js";
-import { logEventContext } from "./logging.js";
+import { ignore, logEventContext } from "./logging.js";
 import { startReviewProgress } from "./review-progress.js";
 import { runTrustedReviewAndPublish } from "./review-publishing.js";
 import { loadTrustedRuntimeForEvent, prepareTrustedHeadCheckout } from "./trusted-runtime.js";
@@ -31,8 +31,7 @@ export async function runChangeRequestHostRunCommand(
     selectedTasks: selectedTasks.map((task) => task.name),
   });
   if (selectedTasks.length === 0) {
-    services.log.notice("event ignored", { reason: "No tasks matched the change request event" });
-    return { kind: "ignored", reason: "No tasks matched the change request event" };
+    return ignore(services.log, "No tasks matched the change request event");
   }
   const workflowUrl = workflowUrlFromEnvironment(services.adapter.id, services.env);
   const progress = await startReviewProgress({
@@ -68,8 +67,7 @@ export async function runChangeRequestHostRunCommand(
     throw error;
   }
   if (completed.kind === "skipped") {
-    services.log.notice("event ignored", { reason: completed.reason });
-    return { kind: "ignored", reason: completed.reason };
+    return ignore(services.log, completed.reason);
   }
   if (completed.kind === "command-response") {
     throw new Error("command response result is only supported for issue_comment commands");

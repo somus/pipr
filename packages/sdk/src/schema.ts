@@ -14,7 +14,8 @@ import type {
   ZodSchema,
 } from "./types/schema.js";
 
-const coreReviewOutputSchemaId = "core/pr-review";
+/** Stable identifier for Pipr's built-in change request review output schema. */
+export const reviewOutputSchemaId = "core/pr-review";
 
 /** Defines a typed schema from a Zod schema. */
 export function schema<T>(definition: SchemaDefinition<T>): Schema<T> {
@@ -41,7 +42,7 @@ export const schemas: BuiltinSchemaCatalog = {
     "core/inline-findings",
     coreReviewFindingsResultSchema,
   ),
-  review: createZodSchema<ReviewResult>(coreReviewOutputSchemaId, coreReviewResultSchema),
+  review: createZodSchema<ReviewResult>(reviewOutputSchemaId, coreReviewResultSchema),
   summary: createZodSchema<ReviewSummary>("core/summary", coreReviewSummarySchema),
 };
 

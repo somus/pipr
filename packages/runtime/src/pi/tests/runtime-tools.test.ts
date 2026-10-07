@@ -8,7 +8,7 @@ import { createRuntimeReadTools } from "../../agent-worker/runtime-read-tools.js
 import { runGit as runGitCommand } from "../../diff/git.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import type { DiffManifest } from "../../types.js";
-import { preparePiRuntimeReadTools, readAtRef } from "../runtime-tools.js";
+import { preparePiRuntimeReadTools } from "../runtime-tools.js";
 import { readDiffFromRuntimeData, runAstGrepSearch } from "../runtime-tools-core.js";
 
 describe("pipr runtime Pi read tools", () => {
@@ -61,7 +61,7 @@ describe("pipr runtime Pi read tools", () => {
       const manifest = renamedManifest(repo.baseSha, repo.headSha);
 
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace: repo.root,
           manifest,
           path: "src/new.ts",
@@ -78,7 +78,7 @@ describe("pipr runtime Pi read tools", () => {
         truncated: false,
       });
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace: repo.root,
           manifest,
           path: "src/new.ts",
@@ -107,7 +107,7 @@ describe("pipr runtime Pi read tools", () => {
       const manifest = manifestForPath("link.ts");
 
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace,
           manifest,
           path: "../target.ts",
@@ -117,7 +117,7 @@ describe("pipr runtime Pi read tools", () => {
         }),
       ).rejects.toThrow("Unsafe manifest path");
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace,
           manifest: manifestForPath(".git/config"),
           path: ".git/config",
@@ -127,7 +127,7 @@ describe("pipr runtime Pi read tools", () => {
         }),
       ).rejects.toThrow("Unsafe manifest path");
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace,
           manifest: manifestWithPreviousPath("safe.ts", "../old.ts"),
           path: "safe.ts",
@@ -137,7 +137,7 @@ describe("pipr runtime Pi read tools", () => {
         }),
       ).rejects.toThrow("Unsafe manifest path");
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace,
           manifest,
           path: "link.ts",
@@ -147,7 +147,7 @@ describe("pipr runtime Pi read tools", () => {
         }),
       ).rejects.toThrow("crosses a symlink");
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace,
           manifest,
           path: "link.ts",
@@ -157,7 +157,7 @@ describe("pipr runtime Pi read tools", () => {
         }),
       ).rejects.toThrow("Unsupported ref");
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace,
           manifest,
           path: "link.ts",
@@ -180,7 +180,7 @@ describe("pipr runtime Pi read tools", () => {
       const manifest = renamedManifest(repo.baseSha, repo.headSha);
 
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace: repo.root,
           manifest,
           path: "src/new.ts",
@@ -194,7 +194,7 @@ describe("pipr runtime Pi read tools", () => {
         truncated: true,
       });
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace: repo.root,
           manifest,
           path: "src/new.ts",
@@ -694,7 +694,6 @@ describe("pipr runtime Pi read tools", () => {
         request: { manifest, toolResponseMaxBytes: 10_000 },
       });
       const diffTool = await loadRuntimeTool(prepared.dataPath, "pipr_read_diff");
-      const atRefTool = await loadRuntimeTool(prepared.dataPath, "pipr_read_at_ref");
 
       const diffParams = { path: "src/new.ts", rangeId: "range-1" };
       expect(await executeRuntimeTool(diffTool, repo.root, diffParams)).toEqual(
@@ -702,16 +701,6 @@ describe("pipr runtime Pi read tools", () => {
           { manifest, toolResponseMaxBytes: 10_000, baseRanges: {} },
           diffParams,
         ),
-      );
-
-      const atRefParams = { path: "src/new.ts", ref: "head" as const, rangeId: "range-1" };
-      expect(await executeRuntimeTool(atRefTool, repo.root, atRefParams)).toEqual(
-        await readAtRef({
-          workspace: repo.root,
-          manifest,
-          ...atRefParams,
-          maxBytes: 10_000,
-        }),
       );
     } finally {
       await removeTree(repo.root);
@@ -725,7 +714,7 @@ describe("pipr runtime Pi read tools", () => {
       const manifest = renamedManifest(repo.baseSha, repo.headSha);
 
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace: repo.root,
           manifest,
           path: "src/new.ts",
@@ -755,7 +744,7 @@ describe("pipr runtime Pi read tools", () => {
       };
 
       await expect(
-        readAtRef({
+        readAtRefWithTool({
           workspace: repo.root,
           manifest,
           path: "src/a.ts",
@@ -1013,6 +1002,33 @@ async function createAdvancedBaseRepo(): Promise<{
   runGit(root, ["commit", "-m", "head"]);
   const headSha = runGit(root, ["rev-parse", "HEAD"]).trim();
   return { root, mergeBaseSha, baseSha, headSha };
+}
+
+/** Prepares runtime data for `manifest` and reads one range through the worker `pipr_read_at_ref` tool. */
+async function readAtRefWithTool(options: {
+  workspace: string;
+  manifest: DiffManifest;
+  path: string;
+  ref: "base" | "head";
+  rangeId: string;
+  maxBytes: number;
+}): Promise<unknown> {
+  const toolRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-read-at-ref-"));
+  try {
+    const prepared = await preparePiRuntimeReadTools({
+      root: toolRoot,
+      sourceWorkspace: options.workspace,
+      request: { manifest: options.manifest, toolResponseMaxBytes: options.maxBytes },
+    });
+    const tool = await loadRuntimeTool(prepared.dataPath, "pipr_read_at_ref");
+    return await executeRuntimeTool(tool, options.workspace, {
+      path: options.path,
+      ref: options.ref,
+      rangeId: options.rangeId,
+    });
+  } finally {
+    await removeTree(toolRoot);
+  }
 }
 
 async function loadRuntimeTool(dataPath: string, toolName: string): Promise<RuntimeTool> {

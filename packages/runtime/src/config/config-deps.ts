@@ -29,11 +29,11 @@ export async function installConfigDependencies(configDir: string): Promise<void
     { packageJsonPath, originalPackageJson, bunLockPath, originalBunLock },
     async () => {
       if (hasRuntimeProvidedDependencies(manifest)) {
-        await runConfigBunInstall(configDir, ["install", "--ignore-scripts", "--lockfile-only"]);
+        await runBunInstall(configDir, ["install", "--ignore-scripts", "--lockfile-only"]);
         const projectedBunLock = await Bun.file(bunLockPath).text();
         assertTrustedLockProjection(configDir, originalBunLock, projectedBunLock);
       }
-      await runConfigBunInstall(configDir, [
+      await runBunInstall(configDir, [
         "install",
         "--ignore-scripts",
         "--no-save",
@@ -68,9 +68,10 @@ async function withSanitizedConfigInstallInputs(
   }
 }
 
-async function runConfigBunInstall(configDir: string, args: string[]): Promise<void> {
+/** Runs `bun <args>` in `cwd`; failures name `label` (the config directory by default). */
+export async function runBunInstall(cwd: string, args: string[], label = cwd): Promise<void> {
   const proc = Bun.spawn(["bun", ...args], {
-    cwd: configDir,
+    cwd,
     env: process.env,
     stdout: "pipe",
     stderr: "pipe",
@@ -78,7 +79,7 @@ async function runConfigBunInstall(configDir: string, args: string[]): Promise<v
   const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
   if (exitCode !== 0) {
     throw new Error(
-      `${configDir}: bun install failed (exit ${exitCode}).` +
+      `${label}: bun install failed (exit ${exitCode}).` +
         (stderr.trim().length > 0 ? `\n${stderr.trim()}` : ""),
     );
   }
@@ -255,19 +256,17 @@ function firstRecordProjectionChange(
 }
 
 export async function assertBunAvailable(): Promise<void> {
+  let exitCode: number | undefined;
   try {
-    const proc = Bun.spawn(["bun", "--version"], {
+    exitCode = await Bun.spawn(["bun", "--version"], {
       env: process.env,
       stdout: "pipe",
       stderr: "pipe",
-    });
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      throw new Error(
-        "bun is required on PATH to install .pipr/package.json dependencies. Install Bun from https://bun.sh",
-      );
-    }
+    }).exited;
   } catch {
+    // Reported below like a non-zero exit.
+  }
+  if (exitCode !== 0) {
     throw new Error(
       "bun is required on PATH to install .pipr/package.json dependencies. Install Bun from https://bun.sh",
     );

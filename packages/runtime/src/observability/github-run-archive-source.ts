@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { chmod, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -5,6 +6,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { DownloadedBundle, RunArchiveSource, RunQuery, RunRecord, RunRef } from "./archive.js";
 import { extractRunArchive, extractRunArchiveFiles } from "./archive-extraction.js";
+import { setDefined } from "./event-observation.js";
 import { copyRunBundlePackage } from "./protected-package.js";
 import { maximumRunBundleBytes } from "./types.js";
 
@@ -258,13 +260,7 @@ async function readGitHubArchive(response: Response): Promise<Uint8Array> {
   } finally {
     reader.releaseLock();
   }
-  const archive = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    archive.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return archive;
+  return Buffer.concat(chunks, totalBytes);
 }
 
 function githubClient(
@@ -408,10 +404,6 @@ function linkedGitHubWorkflow(
   if (!artifact.workflow_run) return {};
   const id = String(artifact.workflow_run.id);
   return { id, run: runsById.get(id) };
-}
-
-function setDefined<T, Key extends keyof T>(target: T, key: Key, value: T[Key] | undefined): void {
-  if (value !== undefined) target[key] = value;
 }
 
 function syntheticExecutionId(source: string, providerId: unknown): string {

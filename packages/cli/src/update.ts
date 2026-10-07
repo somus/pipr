@@ -2,10 +2,7 @@ import { createHash } from "node:crypto";
 import { chmod, mkdtemp, open, rename, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ReleasePlatform } from "./release/targets.js";
-import { releaseAssetForPlatform } from "./release/targets.js";
-
-export { releaseAssetForPlatform } from "./release/targets.js";
+import { type ReleasePlatform, releaseAssetForPlatform } from "./release/targets.js";
 
 export type UpdateResult =
   | { kind: "up-to-date"; version: string }
@@ -79,8 +76,12 @@ export async function runPiprUpdate(options: UpdateOptions): Promise<UpdateResul
   }
   const releaseDownloadBaseUrl = `https://github.com/${officialRepo}/releases/download/${release.tag}`;
   const [binary, checksums] = await Promise.all([
-    downloadBytes(fetchRelease, `${releaseDownloadBaseUrl}/${asset}`),
-    downloadText(fetchRelease, `${releaseDownloadBaseUrl}/SHA256SUMS`),
+    fetchOk(fetchRelease, `${releaseDownloadBaseUrl}/${asset}`).then(async (response) =>
+      Buffer.from(await response.arrayBuffer()),
+    ),
+    fetchOk(fetchRelease, `${releaseDownloadBaseUrl}/SHA256SUMS`).then((response) =>
+      response.text(),
+    ),
   ]);
   verifyChecksum(binary, expectedChecksum(checksums, asset), asset);
 
@@ -171,26 +172,15 @@ async function latestRelease(fetchRelease: ReleaseFetch): Promise<{
   return { tag: release.tag_name, version };
 }
 
-async function downloadBytes(
+async function fetchOk(
   fetchRelease: (url: string) => Promise<Response>,
   url: string,
-): Promise<Buffer> {
+): Promise<Response> {
   const response = await fetchRelease(url);
   if (!response.ok) {
     throw new Error(`failed to download ${url}: HTTP ${response.status}`);
   }
-  return Buffer.from(await response.arrayBuffer());
-}
-
-async function downloadText(
-  fetchRelease: (url: string) => Promise<Response>,
-  url: string,
-): Promise<string> {
-  const response = await fetchRelease(url);
-  if (!response.ok) {
-    throw new Error(`failed to download ${url}: HTTP ${response.status}`);
-  }
-  return await response.text();
+  return response;
 }
 
 function expectedChecksum(checksums: string, asset: string): string {

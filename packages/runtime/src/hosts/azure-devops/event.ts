@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseChangeRequestEventContext } from "../../types.js";
+import { changeRequestEvent, draftEvent } from "../change-request.js";
 import { positiveIntegerHostEnv, requiredHostEnv } from "../env.js";
 import type { CodeHostEvent, HostEventParseOptions, LoadedChangeRequest } from "../types.js";
 import { azureOrganizationFromUrl, normalizeAzureCollectionUrl } from "./coordinates.js";
@@ -44,7 +44,7 @@ const commentResourceSchema = z.looseObject({
 });
 
 export type AzureDevOpsEventParseOptions = HostEventParseOptions & {
-  loadChangeRequest?: (ref: {
+  loadChangeRequest: (ref: {
     organization: string;
     project: string;
     repositoryId: string;
@@ -70,13 +70,18 @@ async function pipelineEvent(options: AzureDevOpsEventParseOptions): Promise<Cod
     "SYSTEM_PULLREQUEST_PULLREQUESTID",
     "Azure DevOps pipeline",
   );
-  const loaded = await loadChange(options, { organization, project, repositoryId, changeNumber });
+  const loaded = await options.loadChangeRequest({
+    organization,
+    project,
+    repositoryId,
+    changeNumber,
+  });
   if (loaded.change.isDraft) return draftEvent();
   return changeRequestEvent(loaded, {
     eventName: "azure_pipeline",
     action: options.env.PIPR_CHANGE_ACTION ?? "updated",
     rawAction: options.env.PIPR_CHANGE_ACTION,
-    host: collectionUrl,
+    platform: { id: "azure-devops", host: collectionUrl },
     workspace: options.workspace,
   });
 }
@@ -132,7 +137,7 @@ async function pullRequestHookEvent(
   resource: z.infer<typeof pullRequestResourceSchema>,
 ): Promise<CodeHostEvent> {
   if (resource.isDraft) return draftEvent();
-  const loaded = await loadChange(options, {
+  const loaded = await options.loadChangeRequest({
     organization,
     project: resource.repository.project.name,
     repositoryId: resource.repository.id,
@@ -142,48 +147,9 @@ async function pullRequestHookEvent(
     eventName: eventType,
     action: eventType === "git.pullrequest.created" ? "opened" : "updated",
     rawAction: eventType,
-    host: collectionUrl,
+    platform: { id: "azure-devops", host: collectionUrl },
     workspace: options.workspace,
   });
-}
-
-function draftEvent(): CodeHostEvent {
-  return { kind: "ignored", reason: "pull request is a draft" };
-}
-
-function changeRequestEvent(
-  loaded: LoadedChangeRequest,
-  native: {
-    eventName: string;
-    action?: string;
-    rawAction?: string;
-    host: string;
-    workspace: string;
-  },
-): CodeHostEvent {
-  return {
-    kind: "change-request",
-    change: parseChangeRequestEventContext({
-      eventName: native.eventName,
-      action: native.action,
-      rawAction: native.rawAction,
-      platform: { id: "azure-devops", host: native.host },
-      repository: loaded.repository,
-      coordinates: loaded.coordinates,
-      change: loaded.change,
-      workspace: native.workspace,
-    }),
-  };
-}
-
-async function loadChange(
-  options: AzureDevOpsEventParseOptions,
-  ref: { organization: string; project: string; repositoryId: string; changeNumber: number },
-): Promise<LoadedChangeRequest> {
-  if (!options.loadChangeRequest) {
-    throw new Error("Azure DevOps pull request events require an API-backed change loader");
-  }
-  return await options.loadChangeRequest(ref);
 }
 
 function organizationFromCollectionUri(value: string): string {

@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import { join } from "node:path";
-import { checkHarnessContract } from "./harness-contract.ts";
 import {
   actionFixtureScript,
   envValue,
@@ -34,7 +33,6 @@ if (scenarioArg && selectedScenarios.length === 0) {
 }
 
 assertDockerImageExists(actionImage);
-await checkHarnessContract({ cwd: sourceRoot, image: actionImage });
 assertAstGrepContract(actionImage);
 assertWebhookEntrypoint(actionImage);
 assertRunStoreWritable(actionImage);

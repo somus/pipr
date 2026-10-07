@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createCodeHostHttpClient, createCodeHostSuccessThrottle } from "../http.js";
+import { createCodeHostHttpClient, createCodeHostSuccessThrottle, jsonRequest } from "../http.js";
 import type { CodeHostStatusState, LoadedChangeRequest, RepositoryPermission } from "../types.js";
 import {
   azureOrganizationFromUrl,
@@ -143,8 +143,6 @@ export type AzureDevOpsIterationChange = {
   originalPath?: string;
 };
 
-export type LoadedAzureDevOpsChangeRequest = LoadedChangeRequest & { iterationId: number };
-
 export type AzureDevOpsClient = {
   organization: string;
   project: string;
@@ -168,7 +166,7 @@ export type AzureDevOpsClient = {
     project: string;
     repositoryId: string;
     changeNumber: number;
-  }): Promise<LoadedAzureDevOpsChangeRequest>;
+  }): Promise<LoadedChangeRequest>;
   listIterations(
     repositoryId: string,
     changeNumber: number,
@@ -353,8 +351,7 @@ export function createAzureDevOpsClient(
       const pullRequest = await this.getPullRequest(options.repositoryId, options.changeNumber);
       const iterations = await this.listIterations(options.repositoryId, options.changeNumber);
       const headSha = pullRequest.lastMergeSourceCommit.commitId;
-      const iteration = iterations.findLast((candidate) => candidate.headSha === headSha);
-      if (!iteration)
+      if (!iterations.some((candidate) => candidate.headSha === headSha))
         throw new Error(`Azure DevOps has no pull request iteration for head ${headSha}`);
       const sourceRef = branchName(pullRequest.sourceRefName);
       const targetRef = branchName(pullRequest.targetRefName);
@@ -393,7 +390,6 @@ export function createAzureDevOpsClient(
           },
           ...(pullRequest.forkSource ? { isFork: true } : {}),
         },
-        iterationId: iteration.id,
       };
     },
     async listIterationChanges(repositoryId, changeNumber, iterationId) {
@@ -522,10 +518,6 @@ function collectionSchema<T extends z.ZodType>(item: T) {
 
 function withApiVersion(path: string, apiVersion: "7.0" | "7.1"): string {
   return `${path}${path.includes("?") ? "&" : "?"}api-version=${apiVersion}`;
-}
-
-function jsonRequest(method: "POST" | "PATCH", body: Record<string, unknown>): RequestInit {
-  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
 
 function organizationFromCollectionUri(value: string | undefined): string | undefined {

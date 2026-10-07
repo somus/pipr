@@ -294,7 +294,7 @@ function appendSignalPath(endpoint: string | undefined, signal: OtlpSignal): str
   return `${endpoint.replace(/\/+$/, "")}/v1/${signal}`;
 }
 
-export function parseOtlpHeaders(value: string | undefined): Record<string, string> {
+function parseOtlpHeaders(value: string | undefined): Record<string, string> {
   if (!value) return {};
   return Object.fromEntries(
     value

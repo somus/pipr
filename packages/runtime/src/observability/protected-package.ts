@@ -30,6 +30,7 @@ import {
   type ValidatedRunBundle,
 } from "./bundle-validation.js";
 import { publicLog } from "./metadata-log.js";
+import { isMissingFileError } from "./recorder-fs.js";
 import { maximumRunBundleBytes } from "./types.js";
 
 const metadataArchiveName = "metadata.tar.gz";
@@ -538,7 +539,7 @@ async function rejectExistingPath(target: string): Promise<void> {
     await lstat(target);
     throw new Error(`Run Bundle package destination already exists: ${target}`);
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    if (isMissingFileError(error)) return;
     throw error;
   }
 }

@@ -131,7 +131,6 @@ async function verifyCandidates(
         env: options.env,
         piProviderModule: options.piProviderModule,
         piAuthFile: options.piAuthFile,
-        piStoreDir: options.piStoreDir,
         piRunner,
         run: options.run,
         log: options.log,

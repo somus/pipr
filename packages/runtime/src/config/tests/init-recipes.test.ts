@@ -45,7 +45,7 @@ describe("initOfficialMinimalProject: generated recipes", () => {
       );
       expect(result.overwritten).toEqual([]);
       await expect(validateProject({ rootDir }), recipe).resolves.toMatchObject({
-        kind: "typescript",
+        settings: { source: ".pipr/config.ts" },
       });
     }
   }, 120_000);
@@ -2176,6 +2176,6 @@ export default definePipr((pipr) => {
     );
 
     const validation = await validateProject({ rootDir });
-    expect(validation.kind).toBe("typescript");
+    expect(validation.settings.source).toBe(".pipr/config.ts");
   });
 });

@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { gzipSync } from "fflate";
@@ -18,7 +19,7 @@ async function createTarGz(directory: string, relativePaths: string[]): Promise<
     if (padding > 0) blocks.push(new Uint8Array(padding));
   }
   blocks.push(new Uint8Array(1024));
-  return gzipSync(concatenate(blocks), { mtime: 0 });
+  return gzipSync(Buffer.concat(blocks), { mtime: 0 });
 }
 
 function tarHeader(name: string, size: number): Uint8Array {
@@ -42,14 +43,4 @@ function tarHeader(name: string, size: number): Uint8Array {
 
 function writeAscii(target: Uint8Array, offset: number, length: number, value: string): void {
   target.set(new TextEncoder().encode(value).subarray(0, length), offset);
-}
-
-function concatenate(chunks: Uint8Array[]): Uint8Array {
-  const output = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0));
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return output;
 }

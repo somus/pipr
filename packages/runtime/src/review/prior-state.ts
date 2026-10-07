@@ -6,8 +6,6 @@ import { findingIdSchema, priorReviewStateSchema } from "../publication/schemas.
 import type { PriorFindingRecord, PriorReviewState, ReviewStats } from "../publication/types.js";
 import { accumulateReviewStats } from "./review-stats.js";
 
-export { findingIdSchema, priorReviewStateSchema };
-
 export const mainCommentMarker = "pipr:main-comment";
 const inlineFindingMarkerPrefix = "pipr:finding";
 const resolvedFindingMarkerPrefix = "pipr:resolved";
@@ -340,6 +338,10 @@ export function extractInlineFindingMarkerRecords(commentBodies: string[]): Find
   return extractMarkerRecords(commentBodies, inlineFindingMarkerPrefix);
 }
 
+export function parseInlineFindingMarker(body: string): FindingMarkerRecord | undefined {
+  return parseFindingHeadMarker(firstNonEmptyLine(body), inlineFindingMarkerPrefix);
+}
+
 export function extractInlineFindingMarkers(commentBodies: string[]): Set<string> {
   return new Set(extractInlineFindingMarkerRecords(commentBodies).map((record) => record.marker));
 }
@@ -419,13 +421,9 @@ export function applyInlineFindingMarkers(
   state: PriorReviewState,
   commentBodies: string[],
 ): PriorReviewState {
-  const markerById = new Map<string, string>();
-  for (const marker of extractInlineFindingMarkers(commentBodies)) {
-    const [, , findingId, headSha] = marker.split(":");
-    if (findingId && headSha) {
-      markerById.set(findingId, headSha);
-    }
-  }
+  const markerById = new Map(
+    extractInlineFindingMarkerRecords(commentBodies).map((record) => [record.id, record.head]),
+  );
   return {
     ...state,
     findings: state.findings.map((finding) => {
@@ -498,13 +496,19 @@ function findingOverlapsRecord(finding: ReviewFinding, record: PriorFindingRecor
 }
 
 function newFindingId(finding: ReviewFinding): string {
-  return `fnd_${hashParts([
+  return `fnd_${findingContentHash(finding)}`;
+}
+
+/** Hash of a finding's location and body; prefixed with `fnd_` it is the deterministic finding id. */
+export function findingContentHash(finding: ReviewFinding): string {
+  const basis = [
     finding.path,
     finding.rangeId,
     finding.side,
     `${finding.startLine}-${finding.endLine}`,
     finding.body,
-  ])}`;
+  ].join("\n");
+  return new Bun.CryptoHasher("sha256").update(basis).digest("hex").slice(0, 16);
 }
 
 function parseFindingHeadMarker(
@@ -520,23 +524,12 @@ function parseFindingHeadMarker(
   if (!id || !head || !findingIdSchema.safeParse(id).success) {
     return undefined;
   }
-  return {
-    id,
-    head,
-    marker:
-      prefix === inlineFindingMarkerPrefix
-        ? inlineFindingMarker(id, head)
-        : prefix === resolvedFindingMarkerPrefix
-          ? `${resolvedFindingMarkerPrefix}:${id}:${head}`
-          : `${verifierResponseMarkerPrefix}:${id}:${head}`,
-  };
+  return { id, head, marker: `${prefix}:${id}:${head}` };
 }
 
 function extractMarkerRecords(commentBodies: string[], prefix: string): FindingMarkerRecord[] {
-  return commentBodies.flatMap((body) =>
-    [parseFindingHeadMarker(firstNonEmptyLine(body), prefix)].filter(
-      (marker): marker is FindingMarkerRecord => marker !== undefined,
-    ),
+  return commentBodies.flatMap(
+    (body) => parseFindingHeadMarker(firstNonEmptyLine(body), prefix) ?? [],
   );
 }
 
@@ -584,8 +577,4 @@ function parseAttrs(input: string): Record<string, string> {
     attrs[token.slice(0, index)] = token.slice(index + 1);
   }
   return attrs;
-}
-
-function hashParts(parts: string[]): string {
-  return new Bun.CryptoHasher("sha256").update(parts.join("\n")).digest("hex").slice(0, 16);
 }

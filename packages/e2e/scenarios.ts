@@ -1,3 +1,4 @@
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export type ScenarioName = "dry-run" | "full" | "condensed" | "orchestrator";
@@ -33,7 +34,6 @@ export type PreparedScenario = {
 
 type PrepareScenarioOptions = {
   beforeBaseCommit?: (context: { scenario: Scenario; worktree: string }) => Promise<void> | void;
-  forceAddBasePaths?: string[];
 };
 
 type TrackedChange = {
@@ -313,7 +313,7 @@ export async function prepareScenarioWorktree(
   const worktree = join(tmpRoot, "worktree");
   try {
     await initializeScenarioWorktree(worktree, scenario, options);
-    const baseSha = await commitScenarioBase(worktree, scenario, options);
+    const baseSha = await commitScenarioBase(worktree, scenario);
     const headSha = await commitScenarioHead(worktree, scenario);
     await writePullRequestEvent(worktree, scenario, baseSha, headSha);
 
@@ -347,14 +347,9 @@ async function initializeScenarioWorktree(
   await options.beforeBaseCommit?.({ scenario, worktree });
 }
 
-async function commitScenarioBase(
-  worktree: string,
-  scenario: Scenario,
-  options: PrepareScenarioOptions,
-): Promise<string> {
+async function commitScenarioBase(worktree: string, scenario: Scenario): Promise<string> {
   await writeScenarioConfig(worktree, scenario);
   await writeScenarioBaseSample(worktree, scenario);
-  forceAddBasePaths(worktree, options.forceAddBasePaths ?? []);
   git(worktree, ["add", "-A"]);
   git(worktree, ["commit", "-m", `test: prepare ${scenario.name} e2e fixture base`]);
   return gitOutput(worktree, ["rev-parse", "HEAD"]).trim();
@@ -432,12 +427,6 @@ async function writeScenarioBaseSample(worktree: string, scenario: Scenario): Pr
   }
 }
 
-function forceAddBasePaths(worktree: string, paths: string[]): void {
-  for (const path of paths) {
-    git(worktree, ["add", "-f", path]);
-  }
-}
-
 async function commitScenarioHead(worktree: string, scenario: Scenario): Promise<string> {
   await writeWorktreeFile(worktree, scenario.headPath, scenario.headContent);
   git(worktree, ["add", "-A"]);
@@ -460,7 +449,7 @@ export async function writeWorktreeFile(
   content: string,
 ): Promise<void> {
   const target = join(worktree, relativePath);
-  run("mkdir", ["-p", dirname(target)], sourceRoot);
+  mkdirSync(dirname(target), { recursive: true });
   await Bun.write(target, content);
 }
 
@@ -542,13 +531,13 @@ function renamedPath(change: TrackedChange): string {
 
 async function copySourcePath(worktree: string, relativePath: string): Promise<void> {
   const source = join(sourceRoot, relativePath);
-  if (!pathExists(source)) {
+  if (!existsSync(source)) {
     return;
   }
   const target = join(worktree, relativePath);
-  run("mkdir", ["-p", dirname(target)], sourceRoot);
+  mkdirSync(dirname(target), { recursive: true });
   removePath(target);
-  run("cp", ["-pR", source, target], sourceRoot);
+  cpSync(source, target, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true });
 }
 
 async function writePullRequestEvent(
@@ -596,22 +585,22 @@ function gitOutput(cwd: string, args: string[]): string {
 function removePath(targetPath: string): void {
   let failure = "";
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const result = Bun.spawnSync(["rm", "-rf", targetPath], {
-      cwd: sourceRoot,
-      env: Bun.env,
-      stderr: "pipe",
-      stdout: "pipe",
-    });
-    if (result.exitCode === 0 || !pathExists(targetPath)) {
+    try {
+      rmSync(targetPath, { recursive: true, force: true, maxRetries: 3 });
       return;
+    } catch (error) {
+      if (!existsSync(targetPath)) {
+        return;
+      }
+      failure = error instanceof Error ? error.message : String(error);
+      makePathWritable(targetPath);
+      Bun.sleepSync(50);
     }
-    failure = result.stderr.toString().trim() || result.stdout.toString().trim();
-    makePathWritable(targetPath);
-    sleepSync(50);
   }
   throw new Error(`rm -rf ${targetPath} failed${failure ? `: ${failure}` : ""}`);
 }
 
+/** Container runs leave UID-1000-owned files; widen permissions before retrying removal. */
 function makePathWritable(targetPath: string): void {
   Bun.spawnSync(["chmod", "-R", "u+rwX,a+rwX", targetPath], {
     cwd: sourceRoot,
@@ -621,26 +610,6 @@ function makePathWritable(targetPath: string): void {
   });
 }
 
-function sleepSync(milliseconds: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
-}
-
-function pathExists(path: string): boolean {
-  return (
-    Bun.spawnSync(["test", "-e", path], {
-      stderr: "ignore",
-      stdout: "ignore",
-    }).exitCode === 0
-  );
-}
-
 function mktemp(prefix: string): string {
-  const result = Bun.spawnSync(["mktemp", "-d", `/tmp/${prefix}.XXXXXX`], {
-    stderr: "pipe",
-    stdout: "pipe",
-  });
-  if (result.exitCode !== 0) {
-    throw new Error(`mktemp failed with exit ${result.exitCode}`);
-  }
-  return result.stdout.toString().trim();
+  return mkdtempSync(`/tmp/${prefix}.`);
 }

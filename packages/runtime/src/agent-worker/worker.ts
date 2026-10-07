@@ -24,7 +24,7 @@ import {
   watchEvents,
 } from "@earendil-works/pi-durable";
 import { openBunSqliteStorage } from "./bun-sqlite.js";
-import { AgentWorkerCredentials } from "./credentials.js";
+import { type AgentWorkerCredentials, createAgentWorkerCredentials } from "./credentials.js";
 import {
   type AgentRunOutcome,
   type AgentRunRequest,
@@ -80,7 +80,7 @@ const decoder = new TextDecoder();
 export async function runAgentWorker(options: AgentWorkerOptions): Promise<void> {
   const context = BACKGROUND_CONTEXT;
   const send = (message: WorkerMessage) => options.write(encodeAgentWorkerMessage(message));
-  const credentials = new AgentWorkerCredentials(options.authFile);
+  const credentials = createAgentWorkerCredentials(options.authFile);
   const models = builtinModels({ credentials });
   for (const provider of options.providers ?? []) {
     models.setProvider(provider);
@@ -165,11 +165,7 @@ function handleMessage(
     worker.send({
       type: "result",
       runId: message.runId,
-      outcome: failedOutcome(
-        "invalid_request",
-        `run '${message.runId}' is already active`,
-        Date.now(),
-      ),
+      outcome: failedOutcome("invalid_request", `run '${message.runId}' is already active`),
     });
     return;
   }
@@ -186,7 +182,6 @@ type Cancellation = {
 };
 
 function startRun(worker: WorkerState, runId: string, request: AgentRunRequest): ActiveRun {
-  const started = Date.now();
   const waiting = withCancel(BACKGROUND_CONTEXT);
   const cancellation: Cancellation = { context: waiting.context };
   // The first cancel aborts the conversation; a repeated cancel, such as the supervisor's backstop after the worker's
@@ -201,9 +196,9 @@ function startRun(worker: WorkerState, runId: string, request: AgentRunRequest):
     request.timeoutMs === undefined
       ? undefined
       : setTimeout(() => cancel("timeout"), request.timeoutMs);
-  const done = executeRun(worker, runId, request, cancellation, started)
+  const done = executeRun(worker, runId, request, cancellation)
     .catch((error: unknown) =>
-      failedOutcome("internal", error instanceof Error ? error.message : String(error), started),
+      failedOutcome("internal", error instanceof Error ? error.message : String(error)),
     )
     .then((outcome) => {
       clearTimeout(timer);
@@ -217,12 +212,11 @@ async function executeRun(
   runId: string,
   request: AgentRunRequest,
   cancellation: Cancellation,
-  started: number,
 ): Promise<AgentRunOutcome> {
   const context = BACKGROUND_CONTEXT;
   const apiKeyFailure = applyApiKey(worker, request);
   if (apiKeyFailure) {
-    return failedOutcome("invalid_request", apiKeyFailure, started);
+    return failedOutcome("invalid_request", apiKeyFailure);
   }
   const tools = await createRunTools(request, (call, signal) =>
     callBridgedTool(worker, runId, call, signal),
@@ -244,7 +238,7 @@ async function executeRun(
       context,
     );
     if (!conversation) {
-      return failedOutcome("invalid_request", "conversation to continue does not exist", started);
+      return failedOutcome("invalid_request", "conversation to continue does not exist");
     }
     cancellation.conversation = conversation;
     await conversation.configure(
@@ -264,11 +258,7 @@ async function executeRun(
     });
     stopEvents = () => events.stop();
     if (cancellation.reason) {
-      return failedOutcome(
-        cancellation.reason,
-        cancellationMessage(cancellation.reason, request),
-        started,
-      );
+      return failedOutcome(cancellation.reason, cancellationMessage(cancellation.reason, request));
     }
     let settled: SettledSubmissionRecord;
     try {
@@ -282,11 +272,7 @@ async function executeRun(
     } catch (error) {
       if (!cancellation.reason) throw error;
       await recordFailure(worker.harness, request.requestId, context);
-      return failedOutcome(
-        cancellation.reason,
-        cancellationMessage(cancellation.reason, request),
-        started,
-      );
+      return failedOutcome(cancellation.reason, cancellationMessage(cancellation.reason, request));
     }
     if (settled.status !== "done" || settled.answer === undefined) {
       await recordFailure(worker.harness, request.requestId, context);
@@ -302,7 +288,6 @@ async function executeRun(
       observed,
       cancellation,
       request,
-      started,
     });
   } finally {
     await stopEvents?.().catch(() => undefined);
@@ -408,10 +393,8 @@ async function settledOutcome(options: {
   observed: { models: Set<string> };
   cancellation: { reason?: "aborted" | "timeout" };
   request: AgentRunRequest;
-  started: number;
 }): Promise<AgentRunOutcome> {
   const { settled, conversation } = options;
-  const durationMs = Date.now() - options.started;
   if (settled.status === "done" && settled.answer !== undefined) {
     const answer = await findEntry(conversation, settled.answer);
     const message = answer?.model?.[0] as AssistantMessage | undefined;
@@ -422,7 +405,6 @@ async function settledOutcome(options: {
       text: message ? assistantText(message) : "",
       models: [...options.observed.models],
       usage: options.usage,
-      durationMs,
     };
   }
   const reason =
@@ -436,7 +418,6 @@ async function settledOutcome(options: {
       : unansweredMessage(settled),
     models: [...options.observed.models],
     usage: options.usage,
-    durationMs,
   };
 }
 
@@ -625,7 +606,6 @@ function cancellationMessage(reason: "aborted" | "timeout", request: AgentRunReq
 function failedOutcome(
   reason: Extract<AgentRunOutcome, { status: "failed" }>["reason"],
   error: string,
-  started: number,
 ): AgentRunOutcome {
-  return { status: "failed", reason, error, models: [], durationMs: Date.now() - started };
+  return { status: "failed", reason, error, models: [] };
 }

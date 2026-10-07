@@ -2,12 +2,12 @@ import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type { InlinePublicationItem } from "../../publication/types.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import type { LoadedPublicationState, PublicationDriver } from "../publication/workflow.js";
-import type { GiteaClient } from "./client.js";
+import { inlineItemPath, planInlineLocation } from "../publication.js";
+import { type GiteaClient, giteaDisplayName } from "./client.js";
 import {
   assertCurrentGiteaHead,
   findGiteaMainComment,
   giteaCoordinates,
-  giteaDisplayName,
   giteaReviewCommentLocation,
   giteaThreadContexts,
 } from "./publication.js";
@@ -76,16 +76,9 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
       );
       return main ? { id: main.id, body: main.body } : undefined;
     },
-    upsertMain: (prepared, existing, body) => upsertGiteaComment(client, prepared, existing, body),
-    inlineLocation(_prepared, item) {
-      return {
-        path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
-        commitId: item.reviewedHeadSha,
-        side: item.side,
-        startLine: item.endLine,
-        endLine: item.endLine,
-      };
-    },
+    upsertComment: (prepared, existing, body) =>
+      upsertGiteaComment(client, prepared, existing, body),
+    inlineLocation: (_prepared, item) => planInlineLocation(item, { singleLine: true }),
     async createInline(prepared, item: InlinePublicationItem) {
       const coordinates = giteaCoordinates(prepared.change);
       await client.createReviewComment(
@@ -94,7 +87,7 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
         prepared.change.change.number,
         {
           body: item.body,
-          path: item.side === "LEFT" ? (item.previousPath ?? item.path) : item.path,
+          path: inlineItemPath(item),
           commitId: item.reviewedHeadSha,
           line: item.endLine,
           side: item.side,
@@ -115,8 +108,6 @@ export function createGiteaPublicationDriver(client: GiteaClient): PublicationDr
       );
       return comment ? { id: comment.id, body: comment.body } : undefined;
     },
-    upsertCommand: (prepared, existing, body) =>
-      upsertGiteaComment(client, prepared, existing, body),
     async replyThread(prepared, action, body) {
       const coordinates = giteaCoordinates(prepared.change);
       await client.replyToReviewComment(

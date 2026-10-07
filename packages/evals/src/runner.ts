@@ -19,7 +19,7 @@ type PiprEvalRunOptions = {
   reviewInstructions?: string;
 };
 
-export const piprEvalModel = {
+const piprEvalModel = {
   provider: "deepseek",
   model: "deepseek-v4-pro",
 } as const;
@@ -98,9 +98,11 @@ export type PiprEvalOutput = {
   droppedFindings: EvalDroppedFinding[];
   diffRanges: EvalDiffRange[];
   piCalls: EvalPiCall[];
+  /** Whether raw (pre-sanitization) output contained an expected forbidden substring. */
+  forbiddenOutputLeaked: boolean;
 };
 
-type ForbiddenOutputSnapshot = Pick<
+type RawEvalText = Pick<
   PiprEvalOutput,
   "droppedFindings" | "error" | "inlineFindings" | "mainComment" | "reviewSummary"
 >;
@@ -111,7 +113,6 @@ const defaultReviewInstructions = [
   "Review the pull request diff for correctness, security, and test coverage.",
   "Return only actionable findings that target valid diff ranges.",
 ].join("\n");
-const forbiddenOutputSnapshotKey = Symbol("piprEvalForbiddenOutputSnapshot");
 const textDecoder = new TextDecoder();
 
 export async function runPiprEvalCase(
@@ -182,78 +183,68 @@ async function successfulEvalOutput(
   result: LocalReviewEvalJson,
   forbiddenOutputSubstrings: string[],
 ): Promise<PiprEvalOutput> {
-  return withForbiddenOutputSnapshot(
-    {
-      reviewSummary: result.reviewSummary,
-      mainComment: result.mainComment,
-      inlineFindings: result.validated.validFindings,
-      droppedFindings: result.validated.droppedFindings,
-    },
-    {
-      ok: true,
-      kind: result.kind,
-      fixturePath: keepFixtures() ? rootDir : undefined,
-      reviewSummary: sanitizeEvalText(result.reviewSummary, forbiddenOutputSubstrings),
-      mainComment: sanitizeEvalText(result.mainComment, forbiddenOutputSubstrings),
-      inlineFindings: sanitizeEvalInlineFindings(
-        result.validated.validFindings,
-        forbiddenOutputSubstrings,
-      ),
-      publicationInlineFindings: sanitizeEvalInlineFindings(
-        result.inlineFindings.map((draft) => draft.finding),
-        forbiddenOutputSubstrings,
-      ),
-      droppedFindings: result.validated.droppedFindings.map((finding) => ({
-        ...finding,
-        body: sanitizeEvalText(finding.body, forbiddenOutputSubstrings),
-        reason: sanitizeEvalText(finding.reason, forbiddenOutputSubstrings),
-      })),
-      diffRanges: result.diffRanges.map((range) => ({
-        ...range,
-        preview: range.preview
-          ? sanitizeEvalText(range.preview, forbiddenOutputSubstrings)
-          : undefined,
-      })),
-      piCalls: await readPiCalls(callsDir),
-    } satisfies PiprEvalOutput,
-  );
+  return {
+    ok: true,
+    kind: result.kind,
+    fixturePath: keepFixtures() ? rootDir : undefined,
+    reviewSummary: sanitizeEvalText(result.reviewSummary, forbiddenOutputSubstrings),
+    mainComment: sanitizeEvalText(result.mainComment, forbiddenOutputSubstrings),
+    inlineFindings: sanitizeEvalInlineFindings(
+      result.validated.validFindings,
+      forbiddenOutputSubstrings,
+    ),
+    publicationInlineFindings: sanitizeEvalInlineFindings(
+      result.inlineFindings.map((draft) => draft.finding),
+      forbiddenOutputSubstrings,
+    ),
+    droppedFindings: result.validated.droppedFindings.map((finding) => ({
+      ...finding,
+      body: sanitizeEvalText(finding.body, forbiddenOutputSubstrings),
+      reason: sanitizeEvalText(finding.reason, forbiddenOutputSubstrings),
+    })),
+    diffRanges: result.diffRanges.map((range) => ({
+      ...range,
+      preview: range.preview
+        ? sanitizeEvalText(range.preview, forbiddenOutputSubstrings)
+        : undefined,
+    })),
+    piCalls: await readPiCalls(callsDir),
+    forbiddenOutputLeaked: forbiddenOutputLeaked(
+      {
+        reviewSummary: result.reviewSummary,
+        mainComment: result.mainComment,
+        inlineFindings: result.validated.validFindings,
+        droppedFindings: result.validated.droppedFindings,
+      },
+      forbiddenOutputSubstrings,
+    ),
+  };
 }
 
-export function piprEvalForbiddenOutputText(output: PiprEvalOutput): string {
-  const snapshot =
-    (
-      output as PiprEvalOutput & {
-        [forbiddenOutputSnapshotKey]?: ForbiddenOutputSnapshot;
-      }
-    )[forbiddenOutputSnapshotKey] ?? output;
-  return [
-    snapshot.reviewSummary ?? "",
-    snapshot.mainComment ?? "",
-    snapshot.error ?? "",
-    ...snapshot.inlineFindings.flatMap((finding) => [
+function forbiddenOutputLeaked(raw: RawEvalText, forbidden: string[]): boolean {
+  if (forbidden.length === 0) {
+    return false;
+  }
+  const text = [
+    raw.reviewSummary ?? "",
+    raw.mainComment ?? "",
+    raw.error ?? "",
+    ...raw.inlineFindings.flatMap((finding) => [
       finding.body,
       finding.path,
       finding.rangeId,
       finding.suggestedFix ?? "",
     ]),
-    ...snapshot.droppedFindings.flatMap((finding) => [
+    ...raw.droppedFindings.flatMap((finding) => [
       finding.body,
       finding.reason,
       finding.path,
       finding.rangeId,
     ]),
-  ].join("\n");
-}
-
-function withForbiddenOutputSnapshot(
-  snapshot: ForbiddenOutputSnapshot,
-  output: PiprEvalOutput,
-): PiprEvalOutput {
-  Object.defineProperty(output, forbiddenOutputSnapshotKey, {
-    enumerable: false,
-    value: snapshot,
-  });
-  return output;
+  ]
+    .join("\n")
+    .toLowerCase();
+  return forbidden.some((value) => text.includes(value.toLowerCase()));
 }
 
 function sanitizeEvalInlineFindings(
@@ -296,23 +287,20 @@ async function failedEvalOutput(
   const piCallsResult = await readPiCallsAfterFailure(callsDir);
   const originalError = error instanceof Error ? error.message : String(error);
   const rawError = piCallsResult.error ? `${originalError}; ${piCallsResult.error}` : originalError;
-  const output = withForbiddenOutputSnapshot(
-    {
-      error: rawError,
-      inlineFindings: [],
-      droppedFindings: [],
-    },
-    {
-      ok: false,
-      fixturePath: keepFixtures() ? rootDir : undefined,
-      error: sanitizeEvalText(rawError, forbiddenOutputSubstrings),
-      inlineFindings: [],
-      publicationInlineFindings: [],
-      droppedFindings: [],
-      diffRanges: [],
-      piCalls: piCallsResult.piCalls,
-    } satisfies PiprEvalOutput,
-  );
+  const output: PiprEvalOutput = {
+    ok: false,
+    fixturePath: keepFixtures() ? rootDir : undefined,
+    error: sanitizeEvalText(rawError, forbiddenOutputSubstrings),
+    inlineFindings: [],
+    publicationInlineFindings: [],
+    droppedFindings: [],
+    diffRanges: [],
+    piCalls: piCallsResult.piCalls,
+    forbiddenOutputLeaked: forbiddenOutputLeaked(
+      { error: rawError, inlineFindings: [], droppedFindings: [] },
+      forbiddenOutputSubstrings,
+    ),
+  };
   await cleanupFixture(rootDir);
   return output;
 }

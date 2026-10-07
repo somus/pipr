@@ -12,7 +12,7 @@ export const findingIdSchema = z
   .min(1)
   .regex(/^[A-Za-z0-9_.-]+$/);
 
-const maxReviewStatsModels = 20;
+export const maxReviewStatsModels = 20;
 const maxReviewStatsModelLength = 200;
 
 export function sanitizeReviewStatsModel(model: string): string | undefined {
@@ -96,8 +96,6 @@ export const priorReviewStateSchema = z.strictObject({
   stats: reviewStatsSchema.optional(),
   workflowUrls: z.array(workflowUrlSchema).optional(),
 });
-
-export const maxReviewStatsModelsLimit = maxReviewStatsModels;
 
 export type ReviewStats = z.infer<typeof reviewStatsSchema>;
 export type PriorFindingRecord = z.infer<typeof priorFindingRecordSchema>;

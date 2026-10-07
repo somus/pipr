@@ -1,17 +1,16 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { parseKind, resolveRepositorySelector, resolveRunSelector } from "./runs-selector.js";
 import {
   type CollectedRecord,
-  collectExactRecord,
   collectRecords,
   isCompletedAvailableRun,
   requireAvailableRun,
   runSources,
   type SourceEntry,
+  selectRunByExecutionId,
   validExecutionId,
   withLookupErrors,
+  withTemporaryRoot,
 } from "./runs-sources.js";
 import type { RunSelector, RunsShowOptions } from "./runs-types.js";
 import { renderDownloadedRun } from "./runs-view.js";
@@ -64,40 +63,17 @@ async function selectRunForShow(
   );
 }
 
-async function selectRunByExecutionId(
-  executionId: string,
-  sources: SourceEntry[],
-): Promise<CollectedRecord> {
-  const validId = validExecutionId(executionId);
-  const collected = await collectExactRecord(sources, {
-    executionId: validId,
-    kind: "all",
-    limit: 1000,
-  });
-  const selected = collected.records.find((record) => record.executionId === validId);
-  if (selected) return selected;
-  throw new Error(
-    withLookupErrors(
-      `Pipr run ${validId} was not found in local or GitHub storage`,
-      collected.errors,
-    ),
-  );
-}
-
 async function renderSelectedRun(
   selected: CollectedRecord,
   executionId: string,
   options: RunsShowOptions,
   context: { env: NodeJS.ProcessEnv; cwd: string },
 ): Promise<void> {
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "pipr-runs-show-"));
-  try {
+  await withTemporaryRoot("pipr-runs-show-", async (temporaryRoot) => {
     const downloaded = await selected.archiveSource.download(
       selected.ref,
       path.join(temporaryRoot, executionId),
     );
     await renderDownloadedRun(downloaded, options, context, temporaryRoot);
-  } finally {
-    await rm(temporaryRoot, { recursive: true, force: true });
-  }
+  });
 }

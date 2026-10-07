@@ -1,9 +1,11 @@
+import { requireCoordinates, withEventRef } from "../change-request.js";
 import { createPublicationWorkflow } from "../publication/workflow.js";
 import type { CodeHostAdapter } from "../types.js";
 import { bitbucketStatusState, createBitbucketClient } from "./client.js";
 import { parseBitbucketEvent } from "./event.js";
 import type { BitbucketClient } from "./models.js";
 import {
+  assertCurrentBitbucketEndpoints,
   loadBitbucketInlineThreadContexts,
   loadBitbucketPriorMainComment,
   loadBitbucketPriorReviewState,
@@ -40,13 +42,7 @@ export function createBitbucketHostAdapter(
             repository: parts.at(-1) ?? client.repository,
             changeNumber: ref.changeNumber,
           })
-          .then((loaded) => ({
-            ...loaded,
-            eventName: ref.eventName,
-            action: ref.action,
-            rawAction: ref.rawAction,
-            workspace: ref.workspace,
-          }));
+          .then((loaded) => withEventRef(loaded, ref));
       },
     },
     workspace: {
@@ -54,7 +50,7 @@ export function createBitbucketHostAdapter(
     },
     permissions: {
       getRepositoryPermission({ change, actor }) {
-        const coordinates = bitbucketCoordinates(change);
+        const coordinates = requireCoordinates(change, "bitbucket", "Bitbucket");
         if (!coordinates.repositoryUuid)
           throw new Error("Bitbucket repository UUID is required for permission checks");
         return client.getRepositoryPermission(actor, coordinates.repositoryUuid);
@@ -70,12 +66,12 @@ export function createBitbucketHostAdapter(
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {
-        const pullRequest = await client.getPullRequest(change.change.number);
-        if (
-          pullRequest.source.commit.hash !== change.change.head.sha ||
-          pullRequest.destination.commit.hash !== change.change.base.sha
-        )
-          throw new Error("Bitbucket pull request endpoints changed before status publication");
+        await assertCurrentBitbucketEndpoints(
+          client,
+          change,
+          change.change.head.sha,
+          "status publication",
+        );
         const key = `pipr-${name}`.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 40);
         const id = await client.setStatus(change.change.head.sha, key, {
           state: bitbucketStatusState(state),
@@ -89,12 +85,4 @@ export function createBitbucketHostAdapter(
       },
     },
   };
-}
-
-function bitbucketCoordinates(
-  change: Parameters<NonNullable<CodeHostAdapter["statuses"]>["upsert"]>[0]["change"],
-) {
-  if (change.coordinates?.provider !== "bitbucket")
-    throw new Error("Bitbucket adapter requires Bitbucket coordinates");
-  return change.coordinates;
 }
