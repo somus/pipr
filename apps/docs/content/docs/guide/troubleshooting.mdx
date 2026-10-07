@@ -42,7 +42,7 @@ After the check passes, run `pipr inspect` to confirm the selected models, tasks
 
 ## A provider secret is missing
 
-Expose the model's key variable to local execution, CI, or the webhook worker. A model without `apiKey` reads its provider's standard variable, such as `DEEPSEEK_API_KEY`; a model with `apiKey: pipr.secret({ name })` reads that name.
+Expose the model's key variable to local execution, CI, or the webhook worker. A model without `apiKey` reads its provider's standard variable, such as `DEEPSEEK_API_KEY`; a model with `apiKey: pipr.secret({ name })` reads that name. Models of a provider declared with `pipr.provider(...)` read the provider's `apiKey` variable, such as `MERGE_GATEWAY_API_KEY`.
 
 For GitHub:
 

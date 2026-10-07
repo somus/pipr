@@ -21,6 +21,7 @@ The SDK maps directly to Pipr's runtime primitives. Use this table to choose the
 
 | Primitive | SDK surface |
 | --- | --- |
+| Model | `pipr.model(...)`, `pipr.provider(...)` for OpenAI-compatible gateways |
 | Trigger | `pipr.task({ on })`, `pipr.review({ on })`, `defaultReviewTriggers`, `pipr.command(...)` |
 | Review Task | `pipr.task(...)`, `TaskContext` |
 | Diff Manifest | `ctx.change.diff(...)`, `DiffContext`, `DiffManifest`, `ReviewFinding.rangeId` |

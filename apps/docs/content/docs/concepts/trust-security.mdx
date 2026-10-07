@@ -40,7 +40,11 @@ Reference provider credentials by environment-variable name:
 const model = pipr.model("deepseek/deepseek-v4-pro");
 ```
 
-Without `apiKey`, this model reads `DEEPSEEK_API_KEY`, the provider's standard variable. Use `apiKey: pipr.secret({ name })` to read a different variable. Pass the value from the CI or worker secret store. Do not place credentials or private operational notes in config values, prompts, schema metadata, examples, or generated documentation.
+Without `apiKey`, this model reads `DEEPSEEK_API_KEY`, the provider's standard variable. Use `apiKey: pipr.secret({ name })` to read a different variable. Pass the value from the CI or worker secret store.
+
+A model of a [custom provider](/docs/reference/sdk-reference#openai-compatible-gateways) sends its key and prompts to the provider's `baseUrl`. Pipr reads that URL from the trusted config on the base branch, so a change request cannot redirect credentials to another endpoint. Point `baseUrl` only at a gateway or model server you trust with your code.
+
+Do not place credentials or private operational notes in config values, prompts, schema metadata, examples, or generated documentation.
 
 ## Model workspace
 
