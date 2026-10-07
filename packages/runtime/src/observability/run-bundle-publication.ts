@@ -1,5 +1,6 @@
 import path from "node:path";
 import { parseRunBundleRecipients, prepareRunBundlePackage } from "./protected-package.js";
+import { resolveRunStoreDirectory } from "./retention-store.js";
 import { buildRunArtifactName } from "./run-artifact-name.js";
 
 /** A finalized Run Bundle package ready for provider artifact upload. */
@@ -20,7 +21,11 @@ export async function publishRunBundle(options: {
 }): Promise<PublishedRunBundle> {
   const prepared = await prepareRunBundlePackage({
     bundleDirectory: options.bundleDirectory,
-    destinationRoot: options.env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"),
+    destinationRoot: resolveRunStoreDirectory({
+      env: options.env,
+      mode: "workspace",
+      rootDir: options.rootDir,
+    }),
     recipients: parseRunBundleRecipients(options.env.PIPR_RUN_AGE_RECIPIENTS),
   });
   const relative = path.relative(options.rootDir, prepared.directory);

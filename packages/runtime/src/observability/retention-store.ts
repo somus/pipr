@@ -14,6 +14,23 @@ export type StoredRun = {
   removed?: boolean;
 };
 
+/**
+ * Resolves the run store: an explicit directory, then `PIPR_RUN_STORE_DIR`, then the mode default
+ * (`<rootDir>/.pipr-runs` for workspace runs, `/var/lib/pipr/runs` for the webhook service).
+ */
+export function resolveRunStoreDirectory(
+  options: { configured?: string; env: NodeJS.ProcessEnv } & (
+    | { mode: "workspace"; rootDir: string }
+    | { mode: "webhook" }
+  ),
+): string {
+  return (
+    options.configured ??
+    options.env.PIPR_RUN_STORE_DIR ??
+    (options.mode === "workspace" ? path.join(options.rootDir, ".pipr-runs") : "/var/lib/pipr/runs")
+  );
+}
+
 /** Run store subdirectory holding per-change-request agent conversation stores (`<host>/<repo>/<number>`). */
 export const agentStoresDirectoryName = "agent-stores";
 

@@ -58,6 +58,7 @@ export {
   validateRunBundleRecipients,
 } from "./observability/protected-package.js";
 export { enforceRunStoreRetention } from "./observability/retention.js";
+export { resolveRunStoreDirectory } from "./observability/retention-store.js";
 export { copyRunBundleInput } from "./observability/run-bundle-input.js";
 export type { PublishedRunBundle } from "./observability/run-bundle-publication.js";
 export type { PublicationResult } from "./publication/types.js";

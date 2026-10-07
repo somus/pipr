@@ -7,6 +7,7 @@ import {
   type RunArchiveSource,
   type RunQuery,
   type RunRecord,
+  resolveRunStoreDirectory,
 } from "@usepipr/runtime";
 import { defaultLocalTraceStore } from "./runs-paths.js";
 import type { RunSelector } from "./runs-types.js";
@@ -39,7 +40,10 @@ export async function runSources(
   const localStores = configuredStore
     ? [path.resolve(context.cwd, configuredStore)]
     : [
-        path.resolve(context.cwd, ".pipr-runs"),
+        path.resolve(
+          context.cwd,
+          resolveRunStoreDirectory({ env: {}, mode: "workspace", rootDir: context.cwd }),
+        ),
         await defaultLocalTraceStore(context.cwd, context.env),
       ];
   const sources: SourceEntry[] = [...new Set(localStores)].map((localStore) => ({

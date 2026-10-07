@@ -7,7 +7,10 @@ import { type PiprResult, parsePiprResult } from "@usepipr/sdk";
 import { createCodeHostWebhookProtocol } from "../hosts/webhook.js";
 import type { WebhookHost } from "../hosts/webhook-types.js";
 import { enforceRunStoreRetention } from "../observability/retention.js";
-import { agentStoresDirectoryName } from "../observability/retention-store.js";
+import {
+  agentStoresDirectoryName,
+  resolveRunStoreDirectory,
+} from "../observability/retention-store.js";
 import type { RuntimeLogSink } from "../shared/logging.js";
 import { runHostRunCommand } from "./commands-hosted.js";
 import { toPiprErrorResult, toPiprResult } from "./pipr-result.js";
@@ -244,8 +247,11 @@ export async function runWebhookServer(options: {
     env,
     options.expectedRepository,
   );
-  const runStoreDirectory =
-    options.runStoreDirectory ?? env.PIPR_RUN_STORE_DIR ?? "/var/lib/pipr/runs";
+  const runStoreDirectory = resolveRunStoreDirectory({
+    configured: options.runStoreDirectory,
+    env,
+    mode: "webhook",
+  });
   const runRetentionDays =
     options.runRetentionDays ?? integerSetting(env.PIPR_RUN_RETENTION_DAYS, 14);
   const runMaxBytes = options.runMaxBytes ?? integerSetting(env.PIPR_RUN_MAX_BYTES, 5 * 1024 ** 3);
@@ -528,8 +534,11 @@ export async function runWebhookDelivery(
   const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-webhook-"));
   const eventPath = path.join(directory, "event.json");
   const protocol = createCodeHostWebhookProtocol(delivery.host);
-  const runStoreDirectory =
-    options.runStoreDirectory ?? options.env?.PIPR_RUN_STORE_DIR ?? "/var/lib/pipr/runs";
+  const runStoreDirectory = resolveRunStoreDirectory({
+    configured: options.runStoreDirectory,
+    env: options.env ?? {},
+    mode: "webhook",
+  });
   try {
     await writeFile(eventPath, delivery.payload, { mode: 0o600 });
     return await runHostRun({

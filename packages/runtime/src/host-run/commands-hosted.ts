@@ -10,6 +10,7 @@ import {
   validateRunBundleRecipients,
 } from "../observability/protected-package.js";
 import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
+import { resolveRunStoreDirectory } from "../observability/retention-store.js";
 import { publishRunBundle } from "../observability/run-bundle-publication.js";
 import { combineRuntimeLogSinks } from "../observability/runtime-log-sinks.js";
 import { maximumRunBundleBytes } from "../observability/types.js";
@@ -229,7 +230,7 @@ async function createHostedRecorder(
   publishCaptureProtectionWarning(options, capture.warning);
   const rootDirectory = nativeCi
     ? await mkdtemp(path.join(os.tmpdir(), "pipr-run-capture-"))
-    : (env.PIPR_RUN_STORE_DIR ?? path.join(options.rootDir, ".pipr-runs"));
+    : resolveRunStoreDirectory({ env, mode: "workspace", rootDir: options.rootDir });
   const recorder = await startFileRunRecorder({
     rootDirectory,
     env,
