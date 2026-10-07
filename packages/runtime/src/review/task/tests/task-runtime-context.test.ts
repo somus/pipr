@@ -3,8 +3,8 @@ import { chmod, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "@usepipr/sdk";
-import { piRunResult } from "../../tests/helpers/pi-run-result.js";
-import type { DiffManifest } from "../../types.js";
+import { piRunResult } from "../../../tests/helpers/pi-run-result.js";
+import type { DiffManifest } from "../../../types.js";
 import {
   config,
   countOccurrences,

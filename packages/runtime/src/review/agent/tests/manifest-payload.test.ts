@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { createDiffContext } from "../../diff/diff-context.js";
+import { createDiffContext } from "../../../diff/diff-context.js";
 import {
   condenseDiffManifest,
   measureDiffManifestPrompt,
   prepareDiffManifestPrompt,
-} from "../../diff/manifest-projection.js";
-import { piRuntimeReadToolNames, piRuntimeStructuralToolNames } from "../../pi/runtime-tools.js";
-import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
-import { prepareDiffManifestContext } from "../agent/diff-manifest-context.js";
+} from "../../../diff/manifest-projection.js";
+import { piRuntimeReadToolNames, piRuntimeStructuralToolNames } from "../../../pi/runtime-tools.js";
+import { reviewTestManifest } from "../../../tests/helpers/review-test-manifest.js";
+import { prepareDiffManifestContext } from "../diff-manifest-context.js";
 
 describe("Diff Manifest prompt payload", () => {
   it("keeps small manifests full and unchanged", () => {

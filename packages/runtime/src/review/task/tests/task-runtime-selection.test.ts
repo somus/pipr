@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { PiprRunContext } from "@usepipr/sdk";
-import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
+import { reviewTestManifest } from "../../../tests/helpers/review-test-manifest.js";
 import {
   askCommandInvocation,
   defaultReviewAgent,

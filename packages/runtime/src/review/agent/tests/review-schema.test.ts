@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   canonicalInlineFindingsMaxItems,
   schemaHasCanonicalInlineFindingsRoot,
-} from "../agent/review-schema.js";
+} from "../review-schema.js";
 
 describe("canonical inline findings schemas", () => {
   it("resolves item references against definitions on the root schema", () => {

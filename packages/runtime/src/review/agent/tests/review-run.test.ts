@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { definePipr, type Schema, z } from "@usepipr/sdk";
 import { buildPiprPlan } from "@usepipr/sdk/internal";
-import { createDiffContext } from "../../diff/diff-context.js";
-import { createRuntimeLog, type RuntimeLogRecord } from "../../shared/logging.js";
-import { piRunFailure, piRunResult } from "../../tests/helpers/pi-run-result.js";
-import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
-import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../types.js";
-import { runReviewAgent } from "../agent/review-run.js";
+import { createDiffContext } from "../../../diff/diff-context.js";
+import { createRuntimeLog, type RuntimeLogRecord } from "../../../shared/logging.js";
+import { piRunFailure, piRunResult } from "../../../tests/helpers/pi-run-result.js";
+import { reviewTestManifest } from "../../../tests/helpers/review-test-manifest.js";
+import type { ChangeRequestEventContext, PiprConfig, ProviderConfig } from "../../../types.js";
+import { runReviewAgent } from "../review-run.js";
 
 const provider: ProviderConfig = {
   id: "test-provider/test-model",

@@ -1,15 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { JsonObject, Schema } from "@usepipr/sdk";
 import type { RuntimeAgent } from "@usepipr/sdk/internal";
-import type { PriorReviewState } from "../../publication/types.js";
-import {
-  type AgentRunContext,
-  joinedAgentPrompt,
-  renderAgentPrompt,
-} from "../agent/agent-prompt.js";
-import type { PreparedDiffManifestContext } from "../agent/diff-manifest-context.js";
-import { reviewResultSchemaId } from "../contract.js";
-import { maxInlineFindingBodyCharacters } from "../inline-finding-limits.js";
+import type { PriorReviewState } from "../../../publication/types.js";
+import { reviewResultSchemaId } from "../../contract.js";
+import { maxInlineFindingBodyCharacters } from "../../inline-finding-limits.js";
+import { type AgentRunContext, joinedAgentPrompt, renderAgentPrompt } from "../agent-prompt.js";
+import type { PreparedDiffManifestContext } from "../diff-manifest-context.js";
 
 const unknownSchema: Schema<unknown> = {
   kind: "pipr.schema",

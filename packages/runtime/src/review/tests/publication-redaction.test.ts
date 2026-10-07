@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ThreadAction } from "../../publication/types.js";
 import type { ReviewFinding } from "../../types.js";
 import { redactReviewPublication } from "../publication-redaction.js";
-import { replacingRedactor } from "./task-runtime-fixtures.js";
+import { replacingRedactor } from "../task/tests/task-runtime-fixtures.js";
 
 const secret = "registered-runtime-secret";
 

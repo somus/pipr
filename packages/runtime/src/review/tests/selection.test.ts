@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ReviewFinding } from "@usepipr/sdk";
 import { rankFindings } from "../selection.js";
-import { createCheckHandle, createOutputState } from "../task/task-output.js";
 
 type Finding = ReviewFinding & { severity?: string; category?: string };
 
@@ -76,25 +75,5 @@ describe("rankFindings", () => {
     expect(() => rankFindings([finding(1)], { facets, rank: ["title"] })).toThrow(
       "rank key 'title' is not an enum field",
     );
-  });
-});
-
-describe("ctx.check.gate", () => {
-  it("fails on matching facet values and passes otherwise", () => {
-    const failing = createOutputState();
-    const result = createCheckHandle(failing).gate(
-      [finding(1, { severity: "high" }), finding(2, { severity: "low" })],
-      { failOn: { severity: ["critical", "high"] } },
-    );
-    expect(result.passed).toBe(false);
-    expect(result.blocking.map((item) => item.startLine)).toEqual([1]);
-    expect(failing.check).toEqual({ conclusion: "failure", summary: "1 blocking finding." });
-
-    const passing = createOutputState();
-    createCheckHandle(passing).gate([finding(2, { severity: "low" })], {
-      failOn: (item) => item.severity === "critical",
-      summary: (blocking) => `${blocking.length} critical`,
-    });
-    expect(passing.check).toEqual({ conclusion: "success", summary: "0 critical" });
   });
 });
