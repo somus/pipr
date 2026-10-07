@@ -125,6 +125,8 @@ Operational settings stay outside `.pipr/config.ts`:
 | `PIPR_RUN_RETENTION_DAYS` | Set webhook retention, for run bundles and per-change-request agent conversation stores |
 | `PIPR_RUN_MAX_BYTES` | Set the webhook store quota, counting both |
 
+The webhook runner also writes each delivery's public Finding Outcome events to a `finding_events` table in its SQLite delivery database. The table holds the same content-free fields as the public `ledger`, plus the host, repository, and delivery ID. Pipr validates every event against the public schema before it stores it, so paths and bodies never reach the table. Events are keyed by event ID, so redelivered or retried work does not count twice. `PIPR_RUN_RETENTION_DAYS` also bounds how long these rows are kept, and the table keeps at most the newest 100,000 events.
+
 Recipient rotation affects future runs only. Keep old identities through the provider retention period when older diagnostics remain useful.
 
 ## Export telemetry

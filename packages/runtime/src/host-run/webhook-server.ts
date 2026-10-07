@@ -3,7 +3,12 @@ import { chmodSync, existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { type PiprResult, parsePiprResult } from "@usepipr/sdk";
+import {
+  type FindingOutcomeEvent,
+  findingOutcomeEventSchema,
+  type PiprResult,
+  parsePiprResult,
+} from "@usepipr/sdk";
 import type { WebhookHost } from "../hosts/selection.js";
 import { createCodeHostWebhookProtocol } from "../hosts/webhook.js";
 import { enforceRunStoreRetention } from "../observability/retention.js";
@@ -28,9 +33,131 @@ export type WebhookDelivery = {
 export type WebhookDeliveryStore = {
   enqueue(delivery: WebhookDelivery): "created" | "duplicate" | "full";
   next(): WebhookDelivery | undefined;
-  complete(id: string, result: PiprResult): void;
+  complete(id: string, result: PiprResult, findings?: WebhookFindingEvents): void;
   fail(id: string, result: PiprResult): void;
 };
+
+/** Finding Outcome events one delivery's host run recorded, with the repository they belong to. */
+type WebhookFindingEvents = {
+  repository: string;
+  events: readonly FindingOutcomeEvent[];
+};
+
+/** One stored Finding Outcome event with the delivery identity that recorded it. */
+export type WebhookFindingEventRecord = {
+  host: string;
+  repository: string;
+  deliveryId: string;
+  event: FindingOutcomeEvent;
+};
+
+export type FindingEventQuery = {
+  repository?: string;
+  /** Only events stored at or after this instant. */
+  since?: Date;
+  /** Newest events to return, 1 to 100,000; defaults to 10,000. */
+  limit?: number;
+};
+
+const MAX_FINDING_EVENT_READ_LIMIT = 100_000;
+
+/** Reads stored Finding Outcome events newest first, opening the delivery database read-only. */
+export function readFindingEvents(
+  databasePath: string,
+  query: FindingEventQuery = {},
+): WebhookFindingEventRecord[] {
+  const limit = query.limit ?? 10_000;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_FINDING_EVENT_READ_LIMIT) {
+    throw new Error(`--limit must be an integer from 1 to ${MAX_FINDING_EVENT_READ_LIMIT}`);
+  }
+  if (!existsSync(databasePath)) {
+    throw new Error(`Webhook database not found: ${databasePath}`);
+  }
+  const database = new Database(databasePath, { readonly: true, strict: true });
+  try {
+    const rows = database
+      .query<FindingEventRow, [string | null, string | null, number]>(
+        `SELECT ${findingEventColumns} FROM finding_events
+         WHERE (?1 IS NULL OR repository = ?1) AND (?2 IS NULL OR created_at >= datetime(?2))
+         ORDER BY created_at DESC, id DESC LIMIT ?3`,
+      )
+      .all(query.repository ?? null, query.since?.toISOString() ?? null, limit);
+    return rows.flatMap((row) => {
+      const event = storedFindingEvent(row);
+      return event
+        ? [{ host: row.host, repository: row.repository, deliveryId: row.deliveryId, event }]
+        : [];
+    });
+  } finally {
+    database.close();
+  }
+}
+
+type FindingEventRow = {
+  host: string;
+  repository: string;
+  deliveryId: string;
+  eventId: string;
+  findingId: string;
+  kind: string;
+  reasonCode: string | null;
+  actorPermission: string | null;
+  workId: string;
+  executionId: string;
+  headSha: string;
+  configHash: string | null;
+  agent: string | null;
+  model: string | null;
+  facetsJson: string;
+  at: string;
+  sequence: number;
+};
+
+const findingEventColumns = [
+  "host",
+  "repository",
+  "delivery_id AS deliveryId",
+  "event_id AS eventId",
+  "finding_id AS findingId",
+  "kind",
+  "reason_code AS reasonCode",
+  "actor_permission AS actorPermission",
+  "work_id AS workId",
+  "execution_id AS executionId",
+  "head_sha AS headSha",
+  "config_hash AS configHash",
+  "agent",
+  "model",
+  "facets_json AS facetsJson",
+  "at",
+  "sequence",
+].join(", ");
+
+function storedFindingEvent(row: FindingEventRow): FindingOutcomeEvent | undefined {
+  let facets: unknown;
+  try {
+    facets = JSON.parse(row.facetsJson);
+  } catch {
+    return undefined;
+  }
+  const parsed = findingOutcomeEventSchema.safeParse({
+    eventId: row.eventId,
+    findingId: row.findingId,
+    kind: row.kind,
+    ...(row.reasonCode === null ? {} : { reasonCode: row.reasonCode }),
+    ...(row.actorPermission === null ? {} : { actorPermission: row.actorPermission }),
+    workId: row.workId,
+    executionId: row.executionId,
+    headSha: row.headSha,
+    ...(row.configHash === null ? {} : { configHash: row.configHash }),
+    ...(row.agent === null ? {} : { agent: row.agent }),
+    ...(row.model === null ? {} : { model: row.model }),
+    facets,
+    at: row.at,
+    sequence: row.sequence,
+  });
+  return parsed.success ? parsed.data : undefined;
+}
 
 export type WebhookDeliveryStatus = {
   id: string;
@@ -184,7 +311,11 @@ export async function processNextWebhookDelivery(options: {
   if (!delivery) return false;
   try {
     const result = await options.run(delivery);
-    options.store.complete(delivery.id, toPiprResult({ source: "host", result }));
+    options.store.complete(
+      delivery.id,
+      toPiprResult({ source: "host", result }),
+      deliveryFindingEvents(result),
+    );
     options.log?.(`webhook delivery completed: ${delivery.id.slice(0, 200)}`);
   } catch (error) {
     options.store.fail(delivery.id, toPiprErrorResult(error));
@@ -193,6 +324,12 @@ export async function processNextWebhookDelivery(options: {
     );
   }
   return true;
+}
+
+function deliveryFindingEvents(result: HostRunCommandResult): WebhookFindingEvents | undefined {
+  if (result.kind !== "review" && result.kind !== "verifier") return undefined;
+  if (result.findingEvents.length === 0) return undefined;
+  return { repository: result.event.repository.slug, events: result.findingEvents };
 }
 
 export function createWebhookQueueProcessor(options: {
@@ -260,7 +397,9 @@ export async function runWebhookServer(options: {
     retentionDays: runRetentionDays,
     maxBytes: runMaxBytes,
   });
-  const store = new SqliteWebhookDeliveryStore(options.databasePath);
+  const store = new SqliteWebhookDeliveryStore(options.databasePath, {
+    retentionDays: runRetentionDays,
+  });
   const ingress = createWebhookIngress({
     host: options.host,
     secret: options.secret,
@@ -331,6 +470,8 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
   private readonly maxRetainedDeliveries: number;
   private readonly maxResultBytes: number;
   private readonly maxRetainedResultBytes: number;
+  private readonly retentionDays: number;
+  private readonly maxRetainedFindingEvents: number;
 
   constructor(
     databasePath: string,
@@ -340,6 +481,9 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
       maxRetainedDeliveries?: number;
       maxResultBytes?: number;
       maxRetainedResultBytes?: number;
+      /** Age limit for stored Finding Outcome events; matches the run store retention. */
+      retentionDays?: number;
+      maxRetainedFindingEvents?: number;
     } = {},
   ) {
     this.database = new Database(databasePath, { create: true, strict: true });
@@ -348,6 +492,8 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
     this.maxRetainedDeliveries = options.maxRetainedDeliveries ?? 10_000;
     this.maxResultBytes = options.maxResultBytes ?? 512 * 1024;
     this.maxRetainedResultBytes = options.maxRetainedResultBytes ?? 32 * 1024 * 1024;
+    this.retentionDays = options.retentionDays ?? 14;
+    this.maxRetainedFindingEvents = options.maxRetainedFindingEvents ?? 100_000;
     secureWebhookDatabaseFiles(databasePath);
     this.database.exec("PRAGMA journal_mode = WAL");
     secureWebhookDatabaseFiles(databasePath);
@@ -368,6 +514,30 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS finding_events (
+          id INTEGER PRIMARY KEY,
+          event_id TEXT NOT NULL UNIQUE,
+          host TEXT NOT NULL,
+          repository TEXT NOT NULL,
+          delivery_id TEXT NOT NULL,
+          finding_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          reason_code TEXT,
+          actor_permission TEXT,
+          work_id TEXT NOT NULL,
+          execution_id TEXT NOT NULL,
+          head_sha TEXT NOT NULL,
+          config_hash TEXT,
+          agent TEXT,
+          model TEXT,
+          facets_json TEXT NOT NULL,
+          at TEXT NOT NULL,
+          sequence INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS finding_events_repository_created_at
+          ON finding_events (repository, created_at);
+        CREATE INDEX IF NOT EXISTS finding_events_created_at ON finding_events (created_at);
       `);
       this.database
         .query(
@@ -388,6 +558,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           stored.omittedReason,
         );
       this.enforceResultRetention();
+      this.pruneFindingEvents();
     })();
   }
 
@@ -436,7 +607,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
     })();
   }
 
-  complete(id: string, result: PiprResult): void {
+  complete(id: string, result: PiprResult, findings?: WebhookFindingEvents): void {
     this.database.transaction(() => {
       const stored = this.storedResult(result);
       this.database
@@ -444,6 +615,7 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
           "UPDATE webhook_deliveries SET status = 'completed', payload = NULL, error = NULL, run_id = ?, result_kind = ?, result_json = ?, result_omitted_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .run(stored.runId, result.kind, stored.json, stored.omittedReason, id);
+      if (findings) this.insertFindingEvents(id, findings);
       this.enforceResultRetention();
       this.pruneTerminalDeliveries();
     })();
@@ -465,6 +637,54 @@ export class SqliteWebhookDeliveryStore implements WebhookDeliveryStore {
 
   close(): void {
     this.database.close();
+  }
+
+  private insertFindingEvents(deliveryId: string, findings: WebhookFindingEvents): void {
+    const delivery = this.database
+      .query<{ host: string }, [string]>("SELECT host FROM webhook_deliveries WHERE id = ?")
+      .get(deliveryId);
+    if (!delivery) return;
+    const insert = this.database.query(
+      `INSERT OR IGNORE INTO finding_events (event_id, host, repository, delivery_id, finding_id, kind, reason_code, actor_permission, work_id, execution_id, head_sha, config_hash, agent, model, facets_json, at, sequence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const candidate of findings.events) {
+      // Re-validate so only the strict public projection reaches the store, never paths or bodies.
+      const parsed = findingOutcomeEventSchema.safeParse(candidate);
+      if (!parsed.success) continue;
+      const event = parsed.data;
+      insert.run(
+        event.eventId,
+        delivery.host,
+        findings.repository,
+        deliveryId,
+        event.findingId,
+        event.kind,
+        event.reasonCode ?? null,
+        event.actorPermission ?? null,
+        event.workId,
+        event.executionId,
+        event.headSha,
+        event.configHash ?? null,
+        event.agent ?? null,
+        event.model ?? null,
+        JSON.stringify(event.facets),
+        event.at,
+        event.sequence,
+      );
+    }
+    this.pruneFindingEvents();
+  }
+
+  private pruneFindingEvents(): void {
+    this.database
+      .query("DELETE FROM finding_events WHERE created_at < datetime('now', ?)")
+      .run(`-${this.retentionDays} days`);
+    this.database
+      .query(
+        "DELETE FROM finding_events WHERE id IN (SELECT id FROM finding_events ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?)",
+      )
+      .run(this.maxRetainedFindingEvents);
   }
 
   private pruneTerminalDeliveries(): void {
