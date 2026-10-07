@@ -207,6 +207,8 @@ async function startHostedRecorder(
   options: HostRunCommandDependencyOptions,
 ): Promise<RunRecorder | undefined> {
   if (options.dryRun) return undefined;
+  // A misspelled capture mode is operator error; fail before the run instead of silently dropping capture.
+  hostedCaptureSetting(options.env ?? process.env);
   try {
     return await createHostedRecorder(options);
   } catch (error) {
@@ -261,12 +263,9 @@ async function requestedHostedCaptureMode(
   mode: "metadata" | "diagnostic" | undefined;
   warning?: "recipients-missing" | "recipients-invalid";
 }> {
-  const value = env.PIPR_RUN_CAPTURE;
+  const value = hostedCaptureSetting(env);
   if (value === "off") return { mode: undefined };
   if (value === "metadata") return { mode: "metadata" };
-  if (value !== undefined && value !== "diagnostic") {
-    throw new Error("PIPR_RUN_CAPTURE must be off, metadata, or diagnostic");
-  }
   if (!nativeCi) return { mode: "diagnostic" };
   const recipients = parseRunBundleRecipients(env.PIPR_RUN_AGE_RECIPIENTS);
   if (recipients.length === 0) {
@@ -281,6 +280,16 @@ async function requestedHostedCaptureMode(
   } catch {
     return { mode: "metadata", warning: "recipients-invalid" };
   }
+}
+
+function hostedCaptureSetting(
+  env: NodeJS.ProcessEnv,
+): "off" | "metadata" | "diagnostic" | undefined {
+  const value = env.PIPR_RUN_CAPTURE;
+  if (value === undefined || value === "off" || value === "metadata" || value === "diagnostic") {
+    return value;
+  }
+  throw new Error("PIPR_RUN_CAPTURE must be off, metadata, or diagnostic");
 }
 
 function isObservableHostResult(

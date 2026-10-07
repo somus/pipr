@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { mkdtemp, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import type { FakeCheckRuns } from "./commands-fixtures.js";
 import {
   askConfigTs,
@@ -212,34 +211,51 @@ describe("runHostRunCommand issue_comment dispatch", () => {
     }
   });
 
-  it("executes commands from the base commit config instead of PR-head config", async () => {
-    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
-    const logs = memoryRuntimeLogSink();
+  it("runs a base-config command for an admin while the PR head is checked out", async () => {
+    const workspace = await createCommandWorkspace();
     const publication = recordingCommandPublicationClient(workspace);
     try {
-      expect(currentGitHead(workspace.rootDir)).toBe(workspace.baseSha);
+      expect(currentGitHead(workspace.rootDir)).toBe(workspace.headSha);
       const result = await runIssueCommentCommand(
         workspace,
         "@pipr review --scope full",
-        "write",
+        "admin",
         undefined,
         publication.client,
-        logs.logSink,
       );
 
-      expect(result).toMatchObject({
-        kind: "review",
-        command: "review",
-      });
+      expect(result).toMatchObject({ kind: "review", command: "review" });
       expect(result.kind === "review" ? result.review.validated.validFindings : []).toEqual([]);
-      const output = logs.messages.join("\n");
-      expect(output).toContain('"eventName":"issue_comment"');
-      expect(output).toContain('"event":"parse event start"');
-      expect(output).toContain('"event":"event dispatch","kind":"command-comment"');
-      expect(output).toContain('"event":"command dispatch"');
-      expect(output).toContain('"event":"publication result"');
       expect(publication.writes.updated.at(-1)).toContain("state=completed");
       await expectReviewRanAtHead(result, workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("refuses commands registered only in the PR head config", async () => {
+    const workspace = await createCommandWorkspace();
+    try {
+      const result = await runIssueCommentCommand(workspace, "@pipr head-only", "admin");
+
+      expect(result).toMatchObject({ kind: "command-help" });
+      expect(result.kind === "command-help" ? result.reason : "").toContain("unknown pipr command");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("denies every command when the commenter has no repository permission", async () => {
+    const workspace = await createCommandWorkspace({ baseConfigTs: askConfigTs() });
+    try {
+      const result = await runIssueCommentCommand(workspace, "@pipr ask what changed?", "none");
+
+      expect(result).toMatchObject({
+        kind: "command-help",
+        reason: "permission denied for '@pipr ask what changed?'",
+      });
+      await expectPiNotCalled(workspace);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

@@ -11,8 +11,8 @@ export type PiRunSandbox = {
   tmp: string;
 };
 
+/** Top-level workspace entries left out of the sandbox copy. */
 const ignoredWorkspacePaths = new Set([
-  ".git",
   ".pipr-runs",
   "node_modules",
   "dist",
@@ -94,8 +94,12 @@ async function copyWorkspace(sourceWorkspace: string, destination: string): Prom
       if (!relative) {
         return true;
       }
-      const first = relative.split(path.sep)[0];
-      return !ignoredWorkspacePaths.has(first ?? "") && !(await lstat(source)).isSymbolicLink();
+      const parts = relative.split(path.sep);
+      // Repository metadata is never copied: neither the root `.git` nor a nested repository's or submodule's.
+      if (parts.includes(".git") || ignoredWorkspacePaths.has(parts[0] ?? "")) {
+        return false;
+      }
+      return !(await lstat(source)).isSymbolicLink();
     },
   });
 }

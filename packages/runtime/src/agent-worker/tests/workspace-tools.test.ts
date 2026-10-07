@@ -84,6 +84,19 @@ describe("workspace tools", () => {
     expect(await call("ls", { path: "src" })).toBe("app.ts\nnested/");
   });
 
+  it("keeps top-level and nested .git content hidden even when the model passes a catch-all glob", async () => {
+    await mkdir(path.join(workspace, "sub", ".git"), { recursive: true });
+    await writeFile(path.join(workspace, "sub", ".git", "config"), "secret = nested\n");
+
+    for (const glob of ["*", "**", ".git/**", "**/.git/**", "sub/.git/*"]) {
+      expect(await call("grep", { pattern: "secret", glob })).toBe("No matches found");
+    }
+    for (const pattern of ["*", "**", "**/*", ".git/*", "**/config", "sub/.git/config"]) {
+      expect(await call("find", { pattern })).not.toContain(".git");
+    }
+    expect(await call("find", { pattern: "*" })).toBe("src/app.ts\nsrc/nested/util.ts");
+  });
+
   it("caps result lists", async () => {
     expect(await call("find", { pattern: "**/*.ts", limit: 1 })).toBe(
       "src/app.ts\n\n[Showing 1 of 2 lines. Narrow the search to see more.]",

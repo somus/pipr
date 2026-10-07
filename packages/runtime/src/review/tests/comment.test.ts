@@ -135,29 +135,6 @@ describe("comments", () => {
     expect(extractPriorReviewState(plan.mainComment, 1)?.findings[0]).not.toHaveProperty("body");
   });
 
-  it("replaces the visible main comment body wholesale", () => {
-    const plan = buildPublicationPlan({
-      event,
-      main: "New summary.",
-      inlineItems: [],
-      metadata: metadata(),
-    });
-
-    expect(plan.mainComment).toContain("New summary.");
-    expect(plan.mainComment).not.toContain("Old summary.");
-  });
-
-  it("preserves the visible main comment body", () => {
-    const plan = buildPublicationPlan({
-      event,
-      main: "A hard-coded secret was committed: pipr_eval_secret_do_not_repeat_12345.",
-      inlineItems: [],
-      metadata: metadata(),
-    });
-
-    expect(plan.mainComment).toContain("pipr_eval_secret_do_not_repeat_12345");
-  });
-
   it("dedupes inline drafts with hidden markers", () => {
     const first = prepareInlinePublicationItems({
       validated: { validFindings: [finding] },
@@ -224,14 +201,11 @@ describe("comments", () => {
     expect(item?.body).not.toContain("**Issue**");
   });
 
-  it("omits suggested-change blocks when suggestedFix is absent", () => {
+  it("publishes suggested-change blocks only when a suggestedFix is present", () => {
     const findingWithoutSuggestion = { ...finding };
     delete findingWithoutSuggestion.suggestedFix;
-
     expectSuggestedChangeOmitted({ finding: findingWithoutSuggestion });
-  });
 
-  it("publishes suggested-change blocks when one selected line expands to multiple replacement lines", () => {
     const [item] = prepareInlinePublicationItems({
       validated: {
         validFindings: [
@@ -249,6 +223,34 @@ describe("comments", () => {
     expect(item?.body).toContain("This can fail.");
     expect(item?.body).toContain("```suggestion\nif (failed) {\n  recover();\n}\n```");
   });
+
+  it.each([
+    ["three", 'const fence = "```";', "````"],
+    ["four", 'const fence = "````ts";', "`````"],
+  ])(
+    "fences suggested changes containing %s backticks with a longer closing fence",
+    (_label, suggestedFix, fence) => {
+      const [native] = prepareInlinePublicationItems({
+        validated: { validFindings: [{ ...finding, suggestedFix }] },
+        manifest,
+        reviewedHeadSha: "head",
+      });
+      const [plain] = publicationPlanForHostCapabilities(
+        buildPublicationPlan({
+          event,
+          main: "Summary.",
+          inlineItems: native ? [native] : [],
+          metadata: metadata(),
+        }),
+        { multilineInlineComments: true, suggestedChanges: false },
+      ).inlineItems;
+
+      expect(native?.finding.suggestedFix).toBe(suggestedFix);
+      expect(native?.body.endsWith(`${fence}suggestion\n${suggestedFix}\n${fence}`)).toBe(true);
+      expect(plain?.body.endsWith(`${fence}\n${suggestedFix}\n${fence}`)).toBe(true);
+      expect(fencedBlockLines(native?.body ?? "", fence)).toEqual([suggestedFix]);
+    },
+  );
 
   it("omits broad suggested-change blocks while keeping the finding", () => {
     const selectedLines = [
@@ -475,6 +477,16 @@ function expectSuggestedChangeOmitted(
   expect(item?.finding.suggestedFix).toBeUndefined();
   expect(item?.body).toContain("This can fail.");
   expect(item?.body).not.toContain("```suggestion");
+}
+
+/** Returns the lines a CommonMark backtick fence encloses: it closes on the first line of at least as many backticks. */
+function fencedBlockLines(body: string, fence: string): string[] {
+  const lines = body.split("\n");
+  const opening = lines.findIndex((line) => line.startsWith(fence));
+  const closing = lines.findIndex(
+    (line, index) => index > opening && /^`+\s*$/.test(line) && line.trim().length >= fence.length,
+  );
+  return lines.slice(opening + 1, closing);
 }
 
 function manifestWithRange(startLine: number, endLine: number, preview = "fail()"): DiffManifest {

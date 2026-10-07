@@ -102,24 +102,31 @@ describe("buildCommentPublishingPlan", () => {
     expect(publishing.inlineCommentDrafts[0]?.finding.body).toBe("First finding.");
   });
 
-  it("keeps current findings visible while serialized prior state is capped", () => {
-    const currentFindings = manyFindings(101);
-    const publishing = buildCommentPublishingPlan({
-      event,
-      main: "Review completed.",
-      validated: { ...validated, validFindings: currentFindings },
-      manifest: manifestForFindings(currentFindings),
-      metadata: metadata({ validFindings: currentFindings.length }),
-    });
+  it.each([
+    [undefined, 50],
+    [100, 100],
+  ])(
+    "keeps current findings visible while maxStoredFindings=%p caps serialized state at %p",
+    (maxStoredFindings, storedFindings) => {
+      const currentFindings = manyFindings(101);
+      const publishing = buildCommentPublishingPlan({
+        event,
+        main: "Review completed.",
+        validated: { ...validated, validFindings: currentFindings },
+        manifest: manifestForFindings(currentFindings),
+        ...(maxStoredFindings === undefined ? {} : { maxStoredFindings }),
+        metadata: metadata({ validFindings: currentFindings.length }),
+      });
 
-    expect(publishing.publicationPlan.reviewState.findings).toHaveLength(101);
-    expect(publishing.inlineCommentDrafts).toHaveLength(101);
-    expect(
-      extractPriorReviewState(publishing.publicationPlan.mainComment, event.change.number)
-        ?.findings,
-    ).toHaveLength(50);
-    expect(publishing.publicationPlan.mainComment).toContain("Review completed.");
-  });
+      expect(publishing.publicationPlan.reviewState.findings).toHaveLength(101);
+      expect(publishing.inlineCommentDrafts).toHaveLength(101);
+      expect(
+        extractPriorReviewState(publishing.publicationPlan.mainComment, event.change.number)
+          ?.findings,
+      ).toHaveLength(storedFindings);
+      expect(publishing.publicationPlan.mainComment).toContain("Review completed.");
+    },
+  );
 
   it("lists every workflow run contributing to accumulated review stats", () => {
     const stats = {
@@ -179,23 +186,6 @@ describe("buildCommentPublishingPlan", () => {
       "https://github.com/acme/repo/actions/runs/102",
       "https://github.com/acme/repo/actions/runs/103",
     ]);
-  });
-
-  it("supports the maximum stored finding limit", () => {
-    const currentFindings = manyFindings(101);
-    const publishing = buildCommentPublishingPlan({
-      event,
-      main: "Review completed.",
-      validated: { ...validated, validFindings: currentFindings },
-      manifest: manifestForFindings(currentFindings),
-      maxStoredFindings: 100,
-      metadata: metadata({ validFindings: currentFindings.length }),
-    });
-
-    expect(
-      extractPriorReviewState(publishing.publicationPlan.mainComment, event.change.number)
-        ?.findings,
-    ).toHaveLength(100);
   });
 
   it("can serialize no finding records without hiding current findings", () => {

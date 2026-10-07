@@ -364,7 +364,7 @@ pipr.config({
 });
 ```
 
-Statuses publish for supported change-request events when the selected adapter exposes status publication. GitHub uses Check Runs, GitLab uses external commit statuses, Azure DevOps uses pull request statuses, and Bitbucket plus Gitea-compatible hosts use source-commit statuses. They do not publish for command responses, local runs, or dry runs. `ctx.check.pass/fail/neutral(...)` can be called at most once per task. A failed task status does not fail the delivery process by itself.
+Statuses publish for supported change-request events when the selected adapter exposes status publication. GitHub uses Check Runs, GitLab uses external commit statuses, Azure DevOps uses pull request statuses, and Bitbucket plus Gitea-compatible hosts use source-commit statuses. They do not publish for command responses, local runs, or dry runs. `ctx.check.pass/fail/neutral(...)` can be called at most once per task. A failed task status does not fail the delivery process by itself. Local `pipr review` runs exit non-zero after printing the result when any task status concludes `failure`.
 
 ## Global config
 
@@ -423,7 +423,7 @@ Set `respondWhenStillValid: false` to keep user-reply verifier runs silent unles
 
 Each selected run must emit exactly one final output. Use `ctx.comment(value)` for review publication, or `ctx.command.reply(value)` for command response publication. Missing or duplicate final outputs fail the run.
 
-Use `ctx.comment(...)` for Main Review Comment markdown. Build Markdown with `md`: interpolated values are escaped so model-authored text cannot inject raw HTML or hidden Pipr markers, while values produced by `md` are inserted as-is.
+Use `ctx.comment(...)` for Main Review Comment markdown. Build Markdown with `md`: interpolated values are escaped so model-authored text cannot inject raw HTML or hidden Pipr markers, while values produced by `md` are inserted without being escaped twice. Code in interpolated text stays unescaped only where Markdown will render it as code: a top-level fenced block closed by a matching fence, or a code span on a single line. Pipr checks this against the final template, so text that would render as prose is escaped, including inside nested `md` values.
 
 ```ts
 await ctx.comment(md.blocks(md`## Security review`, result.summary.body, md.list(notes)));
@@ -438,7 +438,7 @@ await ctx.comment(md.blocks(md`## Security review`, result.summary.body, md.list
 | `md.list(items, { ordered? })` | Bullet or numbered list; empty input renders nothing. |
 | `md.table(rows, columns)` | Table with escaped single-line cells. |
 | `md.details(summary, body)` | Collapsed `<details>` block; empty body renders nothing. |
-| `md.callout({ icon, title, body })` | One-line blockquote callout. |
+| `md.callout({ icon, title, body })` | One-line blockquote callout; icon, title, and body are escaped. |
 | `md.blocks(...blocks)` | Blocks joined by blank lines, skipping empty blocks. |
 
 Inline finding `body` values are strings; wrap `md` output with `String(...)`.

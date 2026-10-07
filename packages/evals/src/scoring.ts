@@ -268,6 +268,7 @@ function rangeContainsFinding(range: EvalDiffRange, finding: EvalInlineFinding):
     range.rangeId === finding.rangeId,
     range.side === finding.side,
     finding.startLine >= range.startLine,
+    finding.startLine <= finding.endLine,
     finding.endLine <= range.endLine,
   ].every(Boolean);
 }

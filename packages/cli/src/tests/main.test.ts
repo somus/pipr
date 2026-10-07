@@ -89,7 +89,9 @@ describe("pipr CLI", () => {
         updateNoticeFetch: fakeLatestReleaseFetch("9.9.9", requests),
         writeUpdateNotice: (message) => notices.push(message),
       }),
-    ).rejects.toThrow("compiled GitHub Release binaries");
+    ).rejects.toThrow(
+      /only supports compiled GitHub Release binaries[\s\S]*npm install -g @usepipr\/cli@latest/,
+    );
     expect(requests).toEqual([]);
     expect(notices).toEqual([]);
   });
@@ -152,24 +154,6 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("uses injected cwd and env for local review", async () => {
-    const workspace = await createLocalReviewWorkspace();
-    try {
-      const result = await runInProcess(
-        ["review", "--base", workspace.baseSha, ...workspace.providerArgs],
-        { DEEPSEEK_API_KEY: "provider-key" },
-        workspace.rootDir,
-      );
-
-      expect(result.exitCode, result.stderr).toBe(0);
-      expect(result.stdout).toContain("No findings.");
-      expect(result.stderr).toContain("pipr local review complete");
-      expect(await countLines(workspace.callLog)).toBe(2);
-    } finally {
-      await removeWorkspace(workspace.rootDir);
-    }
-  });
-
   it("uses injected cwd and env for host-run with a relative event path", async () => {
     const result = await runHostRunWithGitWorkspace({ inProcess: true });
 
@@ -193,17 +177,8 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("starts and exposes no-args, help, and version process boundaries", async () => {
-    const noArgs = await runCli([]);
-    const help = await runCli(["--help"]);
-    const version = await runCli(["--version"]);
-
-    expect(noArgs.exitCode).toBe(0);
-    expect(help.exitCode).toBe(0);
-    expect(version.exitCode).toBe(0);
-    expect(noArgs.stdout).toContain("Usage: pipr");
-    expect(help.stdout).toContain("Start here (for AI agents):");
-    expect(version.stdout).toBe(`${cliPackage.version}\n`);
+  it("exits successfully with no arguments", async () => {
+    expect((await runCli([])).exitCode).toBe(0);
   });
 
   it("keeps local fatal exit and terminal sanitization at the process boundary", async () => {
@@ -319,14 +294,6 @@ describe("pipr CLI", () => {
     }
   });
 
-  it("rejects self-update when running from source", async () => {
-    const result = await runCli(["update"]);
-
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("pipr update only supports compiled GitHub Release binaries");
-    expect(result.stderr).toContain("npm install -g @usepipr/cli@latest");
-  });
-
   it("initializes and checks a TypeScript config through the process boundary", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-init-"));
     try {
@@ -344,7 +311,6 @@ describe("pipr CLI", () => {
   });
 
   it("serves the agent worker protocol on stdio until stdin closes", async () => {
-    const help = await runCli(["agent-worker", "--help"]);
     const worker = Bun.spawnSync(["bun", cliPath, "agent-worker"], {
       env: minimalEnv(),
       stdin: new Blob([]),
@@ -352,15 +318,24 @@ describe("pipr CLI", () => {
       stderr: "pipe",
     });
 
-    expect(help.exitCode, help.stderr).toBe(0);
-    expect(help.stdout).toContain("pipr agent-worker");
     expect(worker.exitCode, worker.stderr.toString()).toBe(0);
     expect(worker.stdout.toString()).toBe(`${JSON.stringify({ type: "ready", protocol: 1 })}\n`);
   });
 
-  it("prints versioned local-review JSON through the process boundary", async () => {
+  it("prints local review text in-process and versioned JSON through the process boundary", async () => {
     const workspace = await createLocalReviewWorkspace({ findings: true });
     try {
+      const text = await runInProcess(
+        ["review", "--base", workspace.baseSha, ...workspace.providerArgs],
+        { DEEPSEEK_API_KEY: "provider-key" },
+        workspace.rootDir,
+      );
+      expect(text.exitCode, text.stderr).toBe(0);
+      expect(text.stdout).toContain("## Inline Findings");
+      expect(text.stdout).toContain("Use the reviewed value.");
+      expect(text.stderr).toContain("pipr local review complete");
+      expect(await countLines(workspace.callLog)).toBe(2);
+
       const result = await runCli(
         ["review", "--base", workspace.baseSha, ...workspace.providerArgs, "--json"],
         { DEEPSEEK_API_KEY: "provider-key" },
@@ -380,6 +355,32 @@ describe("pipr CLI", () => {
       expect(json.inlineFindings.length).toBeGreaterThan(0);
       expect(Array.isArray(json.droppedFindings)).toBe(true);
       expect(json.publication).toEqual({ state: "disabled" });
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  }, 30_000);
+
+  it("exits non-zero after printing the local review when a gate fails", async () => {
+    const workspace = await createLocalReviewWorkspace({ findings: true, gate: true });
+    const review = (extra: string[] = []) =>
+      runCli(
+        ["review", "--base", workspace.baseSha, ...workspace.providerArgs, ...extra],
+        { DEEPSEEK_API_KEY: "provider-key" },
+        workspace.rootDir,
+      );
+    try {
+      const text = await review();
+      expect(text.exitCode).toBe(1);
+      expect(text.stdout).toContain("Use the reviewed value.");
+      expect(text.stderr).toContain("error: pipr review failed: review");
+
+      const json = await review(["--json"]);
+      expect(json.exitCode).toBe(1);
+      expect(JSON.parse(json.stdout)).toMatchObject({ kind: "review" });
+
+      await Bun.write(workspace.scriptPath, JSON.stringify(reviewScript(workspace.callLog, [])));
+      const passing = await review();
+      expect(passing.exitCode, passing.stderr).toBe(0);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -418,16 +419,27 @@ async function initializeWorkspace(workspace: string): Promise<void> {
   if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout);
 }
 
-async function createLocalReviewWorkspace(options: { findings?: boolean } = {}): Promise<{
+async function createLocalReviewWorkspace(
+  options: { findings?: boolean; gate?: boolean } = {},
+): Promise<{
   rootDir: string;
   baseSha: string;
   headSha: string;
   providerArgs: string[];
   callLog: string;
+  scriptPath: string;
 }> {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-cli-review-"));
   await initializeGitRepository(rootDir);
   await initializeWorkspace(rootDir);
+  if (options.gate) {
+    const configPath = path.join(rootDir, ".pipr", "config.ts");
+    const config = await Bun.file(configPath).text();
+    await Bun.write(
+      configPath,
+      config.replace('timeout: "10m",', 'timeout: "10m",\n    gate: { failOn: () => true },'),
+    );
+  }
   await mkdir(path.join(rootDir, "src"));
   await Bun.write(path.join(rootDir, "src/a.ts"), "export const value = 1;\n");
   await runCommand("git", ["add", "."], rootDir);
@@ -450,7 +462,7 @@ async function createLocalReviewWorkspace(options: { findings?: boolean } = {}):
     const rangeId = await rightRangeId({ rootDir, baseSha, providerArgs, callLog });
     await Bun.write(scriptPath, JSON.stringify(reviewScript(callLog, findingsFor(rangeId))));
   }
-  return { rootDir, baseSha, headSha, providerArgs, callLog };
+  return { rootDir, baseSha, headSha, providerArgs, callLog, scriptPath };
 }
 
 async function runHostRunWithGitWorkspace(options: {

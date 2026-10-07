@@ -1,3 +1,4 @@
+import { firstNonEmptyLine } from "../../commands/grammar.js";
 import type {
   InlinePublicationItem,
   InlineThreadContext,
@@ -10,6 +11,8 @@ import {
   applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
   extractPriorReviewState,
+  mainCommentMarker,
+  parseMainCommentIdentity,
 } from "../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../types.js";
 import { nativeInlineLocation } from "../publication.js";
@@ -50,11 +53,7 @@ export async function loadBitbucketPriorReviewState(options: {
   change: ChangeRequestEventContext;
 }): Promise<PriorReviewState | undefined> {
   const comments = await loadBitbucketOwnedComments(options);
-  const body = comments.find((comment) =>
-    normalizeBitbucketMarkdown(comment.content.raw).includes(
-      bitbucketMainMarker(options.change.change.number),
-    ),
-  )?.content.raw;
+  const body = findBitbucketMainComment(comments, options.change.change.number)?.content.raw;
   const normalizedBody = body ? normalizeBitbucketMarkdown(body) : undefined;
   const state = extractPriorReviewState(normalizedBody, options.change.change.number);
   if (!state) return undefined;
@@ -83,10 +82,9 @@ export async function loadBitbucketPriorMainComment(options: {
   client: BitbucketClient;
   change: ChangeRequestEventContext;
 }) {
-  const body = (await loadBitbucketOwnedComments(options)).find((comment) =>
-    normalizeBitbucketMarkdown(comment.content.raw).includes(
-      bitbucketMainMarker(options.change.change.number),
-    ),
+  const body = findBitbucketMainComment(
+    await loadBitbucketOwnedComments(options),
+    options.change.change.number,
   )?.content.raw;
   return body ? normalizeBitbucketMarkdown(body) : undefined;
 }
@@ -187,6 +185,30 @@ export async function authenticatedBitbucketOwner(
   return { uuid: owner.uuid };
 }
 
-export function bitbucketMainMarker(changeNumber: number): string {
-  return `<!-- pipr:main-comment change=${changeNumber} `;
+/**
+ * Finds a top-level (non-inline, non-reply) comment whose first non-empty line
+ * matches. Markers elsewhere in a body, or in inline finding comments, never
+ * identify the main or command comment.
+ */
+export function findBitbucketTopLevelComment(
+  comments: readonly BitbucketComment[],
+  matchesFirstLine: (firstLine: string | undefined) => boolean,
+): BitbucketComment | undefined {
+  return comments.find(
+    (comment) =>
+      !comment.inline &&
+      !comment.parent &&
+      matchesFirstLine(firstNonEmptyLine(normalizeBitbucketMarkdown(comment.content.raw))),
+  );
+}
+
+export function findBitbucketMainComment(
+  comments: readonly BitbucketComment[],
+  changeNumber: number,
+  marker = mainCommentMarker,
+): BitbucketComment | undefined {
+  return findBitbucketTopLevelComment(comments, (firstLine) => {
+    const identity = parseMainCommentIdentity(firstLine);
+    return identity?.marker === marker && identity.changeNumber === changeNumber;
+  });
 }

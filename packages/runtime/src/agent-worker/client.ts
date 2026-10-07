@@ -39,6 +39,8 @@ export type StartAgentWorkerOptions = {
   authFile?: string;
   providerModule?: string;
   providerConfig?: string;
+  /** Start as a replacement for a failed worker: abort its unfinished work instead of resuming it. */
+  abandonUnfinished?: boolean;
   processIdentity?: PiProcessIdentity;
   /** Command that starts the worker; defaults to this runtime's worker entry under the current Bun. */
   command?: readonly string[];
@@ -251,6 +253,7 @@ function workerFlags(options: StartAgentWorkerOptions): string[] {
     ...(options.authFile ? ["--auth-file", options.authFile] : []),
     ...(options.providerModule ? ["--provider-module", options.providerModule] : []),
     ...(options.providerConfig ? ["--provider-config", options.providerConfig] : []),
+    ...(options.abandonUnfinished ? ["--abandon-unfinished"] : []),
   ];
 }
 

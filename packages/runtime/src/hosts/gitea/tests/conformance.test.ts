@@ -61,15 +61,19 @@ class FakeClient implements GiteaClient {
     headSha: string;
   }> = [];
   pullRequest: GiteaPullRequest = pullRequest("head");
+  changeLoads = 0;
 
   currentUser = async () => ({ id: 1, login: "pipr-bot" });
   getRepository = async () => this.pullRequest.base.repo;
   getPullRequest = async () => this.pullRequest;
-  loadChange = async () => ({
-    repository: change.repository,
-    coordinates: { provider: "gitea" as const, owner: "acme", repository: "pipr" },
-    change: change.change,
-  });
+  loadChange = async () => {
+    this.changeLoads += 1;
+    return {
+      repository: change.repository,
+      coordinates: { provider: "gitea" as const, owner: "acme", repository: "pipr" },
+      change: change.change,
+    };
+  };
   getRepositoryPermission = async (_owner: string, _repository: string, actor: string) => {
     this.permissionActors.push(actor);
     return this.permission;
@@ -236,23 +240,27 @@ async function createHarness(): Promise<CodeHostAdapterConformanceHarness> {
         env: { PIPR_GITEA_EVENT_NAME: "pull_request_review_comment" },
         workspace: root,
       });
+      return { changeRequest, command, reply };
+    },
+    async draftEvent() {
+      const eventPath = path.join(root, "draft.json");
       await Bun.write(
         eventPath,
         JSON.stringify({
           action: "open",
           number: 7,
           pull_request: { draft: true },
-          repository,
-          sender,
+          repository: { full_name: "acme/pipr", html_url: "https://forge.example.com/acme/pipr" },
+          sender: { login: "developer" },
         }),
       );
-      const draft = await adapter.events.parseEvent({
+      return adapter.events.parseEvent({
         eventPath,
         env: { PIPR_GITEA_EVENT_NAME: "pull_request" },
         workspace: root,
       });
-      return { changeRequest, command, reply, draft };
     },
+    changeLoads: () => client.changeLoads,
     setPermission(permission) {
       client.permission = permission;
     },
@@ -281,16 +289,19 @@ async function createHarness(): Promise<CodeHostAdapterConformanceHarness> {
     failNextInline() {
       client.failInline = true;
     },
-    seedForeignInline() {
+    seedForeignInline(body) {
       client.reviewComments.push({
         id: "foreign-inline",
-        body: "<!-- pipr:finding:foreign:head -->\nForeign.",
+        body,
         authorLogin: "developer",
         path: "src/new.ts",
         commitId: "head",
         line: 2,
         side: "RIGHT",
       });
+    },
+    seedForeignMainComment(body) {
+      client.issueComments.push({ id: "foreign-main", body, authorLogin: "developer" });
     },
     seedForeignReply(body) {
       const rootComment = client.reviewComments.find(
@@ -304,7 +315,6 @@ async function createHarness(): Promise<CodeHostAdapterConformanceHarness> {
         authorLogin: "developer",
       });
     },
-    setFirstInlineResolved() {},
     ownedReplyBodies: () =>
       client.reviewComments
         .filter((comment) => comment.parentId && comment.authorLogin === "pipr-bot")
@@ -331,7 +341,9 @@ async function createHarness(): Promise<CodeHostAdapterConformanceHarness> {
             comment.line !== undefined,
         )
         .map((comment) => ({
-          path: comment.path ?? "",
+          ...(comment.side === "LEFT"
+            ? { path: "src/new.ts", previousPath: comment.path ?? "" }
+            : { path: comment.path ?? "" }),
           side: comment.side ?? "RIGHT",
           startLine: comment.line ?? 0,
           endLine: comment.line ?? 0,

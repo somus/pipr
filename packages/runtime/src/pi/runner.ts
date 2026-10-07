@@ -49,6 +49,11 @@ export type DurablePiRunnerOptions = {
   env?: NodeJS.ProcessEnv;
   /** Directory that keeps conversation stores across runs; defaults to a store removed with the runner. */
   storeDir?: string;
+  /**
+   * How long the supervisor waits past a run timeout before cancelling the run, and then before killing a worker that
+   * still has not settled it. Defaults to 15s each.
+   */
+  supervisorGraceMs?: { cancel: number; kill: number };
 };
 
 const workerEnvKeys = ["BUN_INSTALL", "LANG", "PATH"] as const;
@@ -101,10 +106,12 @@ async function createRunnerScope(
     }
     return {
       env,
+      graceMs: options.supervisorGraceMs ?? defaultSupervisorGraceMs,
       sandbox,
       processIdentity,
       storeDir: options.storeDir ?? sandbox.sessionDir,
       workers: new Map(),
+      failedWorkers: new Set(),
     };
   } catch (error) {
     await removeSandboxRoot(sandbox.root);
@@ -126,10 +133,13 @@ export async function withPiRunWorkspace<T>(
 
 type RunnerScope = {
   env: NodeJS.ProcessEnv;
+  graceMs: SupervisorGraceMs;
   sandbox: PiRunSandbox;
   processIdentity: PiProcessIdentity | undefined;
   storeDir: string;
   workers: Map<string, Promise<AgentWorkerClient>>;
+  /** Worker keys whose worker failed; their replacements abandon unfinished work. */
+  failedWorkers: Set<string>;
 };
 
 async function runInWorker(
@@ -147,7 +157,7 @@ async function runInWorker(
       : undefined;
     const worker = await workerFor(scope, options, sourceEnv);
     let outcome: AgentRunOutcome;
-    const deadline = supervisorDeadline(worker, options.timeoutSeconds);
+    const deadline = supervisorDeadline(worker, options.timeoutSeconds, scope.graceMs);
     try {
       outcome = await worker.run(request, {
         onEvent(event) {
@@ -253,6 +263,7 @@ async function workerFor(
   let worker = scope.workers.get(key);
   if (worker && (await worker.catch(() => undefined))?.failed) {
     if (scope.workers.get(key) === worker) scope.workers.delete(key);
+    scope.failedWorkers.add(key);
     worker = scope.workers.get(key);
   }
   if (!worker) {
@@ -271,17 +282,25 @@ async function workerFor(
           }
         : {}),
       processIdentity: scope.processIdentity,
+      // A replacement must not resume the run that crashed or hung its predecessor on the shared store.
+      abandonUnfinished: scope.failedWorkers.has(key),
     });
     scope.workers.set(key, worker);
-    worker.catch(() => scope.workers.delete(key));
+    worker.catch(() => {
+      scope.workers.delete(key);
+      scope.failedWorkers.add(key);
+    });
   }
   return await worker;
 }
 
-/** Grace after the run timeout for the worker to settle a cancelled run before the supervisor cancels it. */
-const cancelGraceMs = 15_000;
-/** Further grace after cancelling before the supervisor kills a worker that no longer answers. */
-const killGraceMs = 15_000;
+type SupervisorGraceMs = NonNullable<DurablePiRunnerOptions["supervisorGraceMs"]>;
+
+/**
+ * `cancel`: grace after the run timeout for the worker to settle a cancelled run before the supervisor cancels it.
+ * `kill`: further grace after cancelling before the supervisor kills a worker that no longer answers.
+ */
+const defaultSupervisorGraceMs: SupervisorGraceMs = { cancel: 15_000, kill: 15_000 };
 
 /**
  * The worker enforces the run timeout itself; the supervisor backs it up so a provider stream that ignores abort or a
@@ -290,17 +309,18 @@ const killGraceMs = 15_000;
 function supervisorDeadline(
   worker: AgentWorkerClient,
   timeoutSeconds: number | undefined,
+  graceMs: SupervisorGraceMs,
 ): { signal: AbortSignal | undefined; clear(): void } {
   if (timeoutSeconds === undefined) return { signal: undefined, clear() {} };
   const controller = new AbortController();
   const timeoutMs = timeoutSeconds * 1000;
-  const cancel = setTimeout(() => controller.abort(), timeoutMs + cancelGraceMs);
+  const cancel = setTimeout(() => controller.abort(), timeoutMs + graceMs.cancel);
   const kill = setTimeout(
     () =>
       worker.kill(
         new Error(`Pi timed out after ${timeoutSeconds}s and the agent worker did not stop`),
       ),
-    timeoutMs + cancelGraceMs + killGraceMs,
+    timeoutMs + graceMs.cancel + graceMs.kill,
   );
   return {
     signal: controller.signal,

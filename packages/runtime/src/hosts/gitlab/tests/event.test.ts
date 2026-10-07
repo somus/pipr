@@ -143,31 +143,6 @@ describe("GitLab event parser", () => {
     }
   });
 
-  it("ignores draft merge request webhooks before loading the change", async () => {
-    const fixture = await eventFixture({
-      object_kind: "merge_request",
-      project: { id: 42, path_with_namespace: "group/project" },
-      object_attributes: { iid: 7, action: "open", draft: true },
-    });
-    let loadCalls = 0;
-    try {
-      await expect(
-        parseGitLabEvent({
-          eventPath: fixture.path,
-          env: {},
-          workspace: fixture.root,
-          loadChangeRequest: async () => {
-            loadCalls += 1;
-            throw new Error("draft merge requests must not be loaded");
-          },
-        }),
-      ).resolves.toEqual({ kind: "ignored", reason: "merge request is a draft" });
-      expect(loadCalls).toBe(0);
-    } finally {
-      await rm(fixture.root, { recursive: true, force: true });
-    }
-  });
-
   it("synthesizes pipeline change events from GitLab CI variables", async () => {
     const loaded = {
       repository: { slug: "group/project" },

@@ -52,7 +52,7 @@ export type FakeCheckRuns = {
 };
 
 export async function writeFailingPiOutput(workspace: CommandWorkspace): Promise<void> {
-  await workspace.pi.fail("${env:DEEPSEEK_API_KEY}\nmodel exploded");
+  await workspace.pi.fail(`\${env:DEEPSEEK_API_KEY}\nmodel exploded`);
 }
 
 export async function writeProviderAuthenticationFailureOutput(

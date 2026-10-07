@@ -14,6 +14,12 @@ const maxOutputBytes = 50 * 1024;
 const searchTimeoutMs = 30_000;
 const searchStdoutLimitBytes = 4 * 1024 * 1024;
 
+/**
+ * Excludes every `.git` directory at any depth. ripgrep lets the last matching glob win, so these must follow any
+ * model-supplied glob.
+ */
+const gitExclusionGlobs = ["--glob", "!.git", "--glob", "!**/.git/**"];
+
 type TextDetails = Record<string, string | number | boolean>;
 type TextResult = { content: Array<{ type: "text"; text: string }>; details: TextDetails };
 
@@ -107,6 +113,7 @@ function grepTool(cwd: string): ToolRegistration {
         ...(args.literal ? ["--fixed-strings"] : []),
         ...(args.context ? ["--context", String(args.context)] : []),
         ...(args.glob ? ["--glob", args.glob] : []),
+        ...gitExclusionGlobs,
         "--regexp",
         args.pattern,
         ...searchPath,
@@ -128,7 +135,13 @@ function findTool(cwd: string): ToolRegistration {
     }),
     execute: async (args) => {
       const searchPath = await workspaceSearchPath(cwd, args.path);
-      const output = await ripgrep(cwd, ["--files", "--glob", args.pattern, ...searchPath]);
+      const output = await ripgrep(cwd, [
+        "--files",
+        "--glob",
+        args.pattern,
+        ...gitExclusionGlobs,
+        ...searchPath,
+      ]);
       return limitedListResult(output, args.limit ?? 1000, "No files found");
     },
   }) as unknown as ToolRegistration;
@@ -170,18 +183,7 @@ async function workspaceSearchPath(cwd: string, filePath: string | undefined): P
 
 async function ripgrep(cwd: string, args: string[]): Promise<string> {
   const result = await runBoundedProcess(
-    [
-      "rg",
-      "--color",
-      "never",
-      "--sort",
-      "path",
-      "--hidden",
-      "--glob",
-      "!.git",
-      "--no-follow",
-      ...args,
-    ],
+    ["rg", "--color", "never", "--sort", "path", "--hidden", "--no-follow", ...args],
     {
       cwd,
       timeoutMs: searchTimeoutMs,
@@ -194,7 +196,8 @@ async function ripgrep(cwd: string, args: string[]): Promise<string> {
       },
     },
   );
-  if (result.exitCode === 1) return "";
+  // Exit 1 means no matches; exit 2 with this notice means the globs filtered out every file.
+  if (result.exitCode === 1 || result.stderr.startsWith("rg: No files were searched")) return "";
   if (result.exitCode !== 0) {
     throw new Error(result.stderr.trim() || `ripgrep exited with code ${result.exitCode}`);
   }

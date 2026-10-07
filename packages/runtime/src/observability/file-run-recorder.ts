@@ -294,7 +294,8 @@ export async function startFileRunRecorder(options: {
       traceId: executionId,
       spanId: rootSpanId,
       fields: normalizeLogFields(record.fields, redactor, markSignalTruncated),
-      ...(record.text === undefined
+      // Metadata capture is content-free: free-form log text is a diagnostic body.
+      ...(record.text === undefined || options.mode === "metadata"
         ? {}
         : {
             text: boundLogString(redactor.redact(record.text).value, 65_536, markSignalTruncated),

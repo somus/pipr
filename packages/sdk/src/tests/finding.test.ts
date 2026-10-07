@@ -66,9 +66,14 @@ describe("pipr.finding", () => {
 
 describe("pipr.model", () => {
   it("parses provider/model references and keeps slashes in model ids", () => {
-    const { value } = capture((pipr) => [
+    const { value, plan } = capture((pipr) => [
       pipr.model("openrouter/anthropic/claude-sonnet", { thinking: "high" }),
       pipr.model("openai-codex/gpt-5.5", { apiKey: "local" }),
+    ]);
+    expect(plan.models.map((model) => model.id)).toEqual([
+      "openrouter/anthropic/claude-sonnet",
+      "openai-codex/gpt-5.5",
+      "deepseek/deepseek-v4-pro",
     ]);
     expect(value[0]).toMatchObject({
       id: "openrouter/anthropic/claude-sonnet",

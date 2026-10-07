@@ -347,4 +347,6 @@ Options:
 | `--provider-config <path>` | none | Path passed to the `--provider-module` default export. |
 | `--json` | false | Print structured local review output. |
 
+Exit codes: `0` when every task check passes or is neutral. `1` when a task check or gate concludes `failure`, after the text or JSON result is printed, or when the run itself fails.
+
 See [Local runs](/docs/guide/local-runs) for behavior differences between local and hosted change-request runs.

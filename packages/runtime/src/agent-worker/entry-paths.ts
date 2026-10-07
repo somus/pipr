@@ -3,14 +3,16 @@ import { fileURLToPath } from "node:url";
 
 /** Resolves a runtime entry built to `dist/agent-worker/<name>.mjs`, or its source file when running from source. */
 export async function agentWorkerEntryPath(name: "main" | "scripted-provider"): Promise<string> {
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.join(moduleDir, "agent-worker", `${name}.mjs`),
-    path.join(moduleDir, `${name}.mjs`),
-    path.join(moduleDir, "..", "agent-worker", `${name}.mjs`),
-    path.join(moduleDir, "..", "..", "dist", "agent-worker", `${name}.mjs`),
-    path.join(moduleDir, `${name}.ts`),
-  ];
+  const modulePath = fileURLToPath(import.meta.url);
+  const moduleDir = path.dirname(modulePath);
+  // Running from source resolves source siblings, so a stale build never stands in for the code under test.
+  const candidates = modulePath.endsWith(".ts")
+    ? [path.join(moduleDir, `${name}.ts`)]
+    : [
+        path.join(moduleDir, "agent-worker", `${name}.mjs`),
+        path.join(moduleDir, `${name}.mjs`),
+        path.join(moduleDir, "..", "agent-worker", `${name}.mjs`),
+      ];
   for (const candidate of candidates) {
     if (await Bun.file(candidate).exists()) {
       return candidate;

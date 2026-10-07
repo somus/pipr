@@ -78,6 +78,7 @@ describe("webhook runner", () => {
           },
         }),
       ).rejects.toThrow("positive integer");
+      await expect(access(path.join(root, "invalid.sqlite"))).rejects.toThrow();
 
       const server = runWebhookServer({
         host: "gitlab",
@@ -185,6 +186,28 @@ describe("webhook runner", () => {
 
     await processor.run();
     expect(backingStore.completed).toEqual(["delivery-1"]);
+  });
+
+  it("rejects signed payloads above the configured size limit before enqueue", async () => {
+    const store = new MemoryDeliveryStore();
+    const ingress = createWebhookIngress({
+      host: "gitlab",
+      secret: "webhook-secret",
+      expectedRepository: { id: "42", path: "group/project" },
+      store,
+      maxPayloadBytes: 10,
+    });
+
+    const response = await ingress(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "X-Gitlab-Token": "webhook-secret", "X-Gitlab-Webhook-UUID": "too-large" },
+        body: "x".repeat(20),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(store.deliveries).toHaveLength(0);
   });
 
   it("validates GitLab secrets and dedupes delivery IDs before enqueue", async () => {

@@ -50,6 +50,11 @@ export type AgentWorkerOptions = {
   authFile?: string;
   /** Providers that replace built-in providers with the same id. */
   providers?: readonly Provider[];
+  /**
+   * Abort unfinished work instead of resuming it. A replacement for a worker that crashed or hung must not resume the
+   * run that killed its predecessor; each abandoned request counts as failed, so repeating it calls the model afresh.
+   */
+  abandonUnfinished?: boolean;
 };
 
 type RequestsState = {
@@ -85,6 +90,9 @@ export async function runAgentWorker(options: AgentWorkerOptions): Promise<void>
     ? await openBunSqliteStorage(options.storePath)
     : new MemoryStorage();
   const harness = await Harness.open(storage, { models, registry }, context);
+  if (options.abandonUnfinished) {
+    await abandonUnfinishedWork(harness, context);
+  }
   harness.resume();
 
   const runs = new Map<string, ActiveRun>();
@@ -311,6 +319,17 @@ function applyApiKey(worker: WorkerState, request: AgentRunRequest): string | un
   }
   worker.credentials.setApiKey(request.model.provider, key);
   return undefined;
+}
+
+async function abandonUnfinishedWork(harness: Harness, context: Context): Promise<void> {
+  const { submissions } = await harness.inspect(context);
+  for (const submission of submissions) {
+    const conversation = await harness.conversation(submission.conversationId, context);
+    await conversation?.abort(context);
+    if (submission.requestId) {
+      await recordFailure(harness, submission.requestId.replace(/#\d+$/, ""), context);
+    }
+  }
 }
 
 async function currentRequestId(

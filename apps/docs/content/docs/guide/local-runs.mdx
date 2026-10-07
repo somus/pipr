@@ -44,6 +44,8 @@ pipr review --base origin/main --json
 
 The top-level `formatVersion` is currently `2`. Check it before reading other fields. Local results include public comments, findings, dropped findings, task checks, repair status, and a bounded run summary; publication is disabled.
 
+`pipr review` exits non-zero when any task check or gate concludes `failure`, the same way the hosted check would fail. The review is still printed first, in both text and `--json` modes, and stderr names the failed tasks. Passing and neutral checks exit `0`.
+
 ## Model authentication
 
 Models read their API key from the local process environment: the variable named by `apiKey: pipr.secret({ name })`, or the provider's standard variable, such as `DEEPSEEK_API_KEY`, when `apiKey` is omitted. Bun also loads standard environment files from the working directory.

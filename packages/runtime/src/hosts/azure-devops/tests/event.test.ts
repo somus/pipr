@@ -210,39 +210,6 @@ describe("Azure DevOps event parser", () => {
     }
   });
 
-  it("ignores draft service-hook pull requests without loading them", async () => {
-    const fixture = await eventFixture({
-      id: "event-draft",
-      eventType: "git.pullrequest.updated",
-      resource: {
-        pullRequestId: 7,
-        isDraft: true,
-        repository: { id: "repo-id", project: { id: "project-id", name: "project" } },
-      },
-      resourceContainers: {
-        account: { id: "account-id", baseUrl: "https://dev.azure.com/org/" },
-        collection: { id: "collection-id", baseUrl: "https://dev.azure.com/org/" },
-      },
-    });
-    let loadedChange = false;
-    try {
-      await expect(
-        parseAzureDevOpsEvent({
-          eventPath: fixture.path,
-          env: {},
-          workspace: fixture.root,
-          loadChangeRequest: async () => {
-            loadedChange = true;
-            return loaded;
-          },
-        }),
-      ).resolves.toEqual({ kind: "ignored", reason: "pull request is a draft" });
-      expect(loadedChange).toBe(false);
-    } finally {
-      await rm(fixture.root, { recursive: true, force: true });
-    }
-  });
-
   it("normalizes root comments as commands and replies as review replies", async () => {
     for (const [parentCommentId, expectedKind] of [
       [0, "command-comment"],

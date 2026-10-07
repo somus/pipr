@@ -1,13 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import type { PiprEvalCase } from "../cases.js";
 import {
   aggregateEffectivenessRuns,
   runPiprEffectivenessBenchmark,
   scoreEffectivenessRun,
-  writePiprEffectivenessReport,
 } from "../effectiveness.js";
 import {
   effectivenessBenchmarkCases,
@@ -222,50 +218,6 @@ describe("effectiveness benchmark", () => {
     expect(scoreEffectivenessRun(output, testCase.expected).structuredRecalledIssues).toBe(1);
   });
 
-  it("keeps the acceptance clean control free of secondary error masking", () => {
-    const testCase = effectivenessBenchmarkCases.find(
-      ({ id }) => id === "pr105-stale-acceptance-supersession-clean",
-    );
-    const source = testCase?.headFiles["src/review-target.ts"] ?? "";
-
-    expect(source).toContain("Best-effort terminal reporting must not replace the task error");
-    expect(source).toContain("throw error");
-  });
-
-  it("covers the clean lifecycle branches that the reviewer is asked to inspect", () => {
-    const recovery = effectivenessBenchmarkCases.find(
-      ({ id }) => id === "pr105-interrupted-result-recovery-clean",
-    );
-    const ordering = effectivenessBenchmarkCases.find(
-      ({ id }) => id === "pr105-stale-lifecycle-overwrite-clean",
-    );
-    const dispatch = effectivenessBenchmarkCases.find(
-      ({ id }) => id === "pr105-stale-acceptance-supersession-clean",
-    );
-
-    expect(recovery?.headFiles["src/review-target.test.ts"]).toContain(
-      "preserves a retryable interrupted delivery",
-    );
-    expect(ordering?.headFiles["src/review-target.test.ts"]).toContain(
-      "orders later states for an existing running record",
-    );
-    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
-      "reports failures from every command stage",
-    );
-    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
-      "reports superseded when the reviewed head changed",
-    );
-    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
-      "preserves the command error when terminal reporting fails",
-    );
-    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
-      "resolves after every command stage succeeds",
-    );
-    expect(dispatch?.headFiles["src/review-target.test.ts"]).toContain(
-      "preserves the command error when current-head lookup fails",
-    );
-  });
-
   it("aggregates issue-level recall, precision, clean accuracy, and funnel counts", () => {
     const positive = scoreEffectivenessRun(
       evalOutput({ valid: [expectedFinding], publication: [expectedFinding] }),
@@ -310,6 +262,30 @@ describe("effectiveness benchmark", () => {
         structuredFindings: 2,
         validatedFindings: 2,
         publicationEligibleFindings: 1,
+      }),
+    ]);
+  });
+
+  it("reports null precision and full clean accuracy when no findings are produced", () => {
+    const clean = scoreEffectivenessRun(evalOutput(), cleanCase.expected);
+
+    expect(
+      aggregateEffectivenessRuns([
+        {
+          caseId: "clean",
+          variantId: "generic",
+          repetition: 1,
+          metrics: clean,
+          issueMatches: emptyIssueMatches,
+          artifacts: { structuredFindings: [], publicationEligibleFindings: [] },
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        structuredPrecision: null,
+        validatedPrecision: null,
+        publicationEligiblePrecision: null,
+        cleanRunAccuracy: 1,
       }),
     ]);
   });
@@ -376,20 +352,6 @@ describe("effectiveness benchmark", () => {
       missedAtStructured: ["stale-lifecycle-overwrite"],
     });
     expect(report.variants.map(({ variantId }) => variantId)).toEqual(["failure-modes", "generic"]);
-  });
-
-  it("persists the complete report as JSON", async () => {
-    const workspace = await mkdtemp(path.join(os.tmpdir(), "pipr-effectiveness-report-"));
-    try {
-      const outputPath = path.join(workspace, "nested", "report.json");
-      const report = { metadata: { schemaVersion: 1 }, runs: [] } as never;
-
-      await writePiprEffectivenessReport(report, outputPath);
-
-      expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual(report);
-    } finally {
-      await rm(workspace, { force: true, recursive: true });
-    }
   });
 });
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
 import { runGit as runGitCommand } from "../../diff/git.js";
 import { createGitHubHostAdapter } from "../../hosts/github/adapter.js";
+import type { RuntimeLogSink } from "../../shared/logging.js";
 import { runtimeVersion } from "../../shared/version.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import type { FakeCheckRuns } from "./commands-fixtures.js";
@@ -30,7 +31,6 @@ import {
   runTestHostCommand,
   snapshotGitConfigEnv,
   writeFailingPiOutput,
-  writePiOutput,
   writeProviderAuthenticationFailureOutput,
   writePullRequestEvent,
 } from "./commands-fixtures.js";
@@ -200,6 +200,73 @@ describe("runHostRunCommand pull_request dispatch", () => {
       });
 
       await expect(readdir(traceDirectory)).rejects.toThrow();
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("downgrades native-CI diagnostic capture to metadata without age recipients", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const logs = memoryRuntimeLogSink();
+    let bundleDirectory: string | undefined;
+    try {
+      const eventPath = path.join(workspace.rootDir, "event.json");
+      await writePullRequestEvent(eventPath, workspace);
+      await runTestHostCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: {
+          ...pullRequestEnv(workspace.rootDir, eventPath),
+          GITHUB_ACTIONS: "true",
+          PIPR_RUN_CAPTURE: "diagnostic",
+        },
+        githubPublicationClient: fakeGitHubPublicationClient(workspace),
+        piProviderModule: workspace.pi.providerModule,
+        logSink: logs.logSink,
+        onRunBundleFinalized(bundle) {
+          bundleDirectory = bundle.directory;
+        },
+      });
+
+      if (!bundleDirectory) throw new Error("Expected a finalized Run Bundle");
+      const manifest = parseRunBundleManifest(
+        JSON.parse(await readFile(path.join(bundleDirectory, "run.json"), "utf8")),
+      );
+      expect(manifest.capture.mode).toBe("metadata");
+      expect(
+        manifest.artifacts.filter((artifact) => /prompt-|output-/.test(artifact.path)),
+      ).toEqual([]);
+      expect(logs.records).toContainEqual(
+        expect.objectContaining({
+          level: "warning",
+          event: "run capture protection unavailable",
+          fields: { status: "recipients-missing" },
+        }),
+      );
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("rejects an unknown PIPR_RUN_CAPTURE mode", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    try {
+      const eventPath = path.join(workspace.rootDir, "event.json");
+      await writePullRequestEvent(eventPath, workspace);
+      await expect(
+        runTestHostCommand({
+          rootDir: workspace.rootDir,
+          configDir: ".pipr",
+          eventPath,
+          dryRun: false,
+          env: { ...pullRequestEnv(workspace.rootDir, eventPath), PIPR_RUN_CAPTURE: "bogus" },
+          githubPublicationClient: fakeGitHubPublicationClient(workspace),
+          piProviderModule: workspace.pi.providerModule,
+        }),
+      ).rejects.toThrow("PIPR_RUN_CAPTURE must be off, metadata, or diagnostic");
+      await expectPiNotCalled(workspace);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -1097,27 +1164,21 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
-  it("logs host run, event, config, diff, task, Pi, and publication breadcrumbs", async () => {
+  it("logs the trusted config and publication result as notices", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const logs = memoryRuntimeLogSink();
     try {
       const result = await runPullRequestAction(workspace, { logSink: logs.logSink });
 
       expect(result).toMatchObject({ kind: "review" });
-      const output = logs.messages.join("\n");
-      expect(output).toContain('"event":"host run start"');
-      expect(output).toContain('"eventName":"pull_request"');
-      expect(output).toContain('"platform":"github"');
-      expect(output).toContain('"event":"trusted config"');
-      expect(output).toContain('"event":"diff manifest"');
-      expect(output).toContain('"event":"task start"');
-      expect(output).toContain('"task":"review"');
-      expect(output).toContain('"event":"pi start"');
-      expect(output).toContain('"event":"pi run"');
-      expect(output).toContain('"event":"publication result"');
+      expect(logs.records).toContainEqual(
+        expect.objectContaining({
+          level: "notice",
+          event: "trusted config",
+          fields: expect.objectContaining({ trustedConfigSha: workspace.baseSha.slice(0, 12) }),
+        }),
+      );
       expect(logs.notices.join("\n")).toContain('"event":"publication result"');
-      expect(logs.groups).toContain("pipr host run");
-      expect(logs.groups).toContain("publish review");
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -1263,6 +1324,91 @@ describe("runHostRunCommand pull_request dispatch", () => {
       expect(message).toContain("| ***");
       expect(message).toContain("| model exploded");
       expect(message).not.toContain(secret);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+});
+
+describe("runHostRunCommand provider credentials", () => {
+  const deepseekModel =
+    'pipr.model("deepseek/deepseek-reasoner", { apiKey: pipr.secret({ name: "DEEPSEEK_API_KEY" }), thinking: "high" })';
+
+  async function runWithProviderEnv(
+    model: string,
+    providerEnv: NodeJS.ProcessEnv,
+    options: { failWith?: string; logSink?: RuntimeLogSink } = {},
+  ) {
+    const workspace = await createCommandWorkspace({
+      baseConfigTs: reviewConfigTs().replace(deepseekModel, model),
+      checkoutBaseBeforeRun: true,
+    });
+    await workspace.pi.script({
+      models: ["amazon-bedrock/claude-test", "deepseek/deepseek-reasoner"],
+      responses: [
+        options.failWith
+          ? { error: options.failWith }
+          : { text: '{"summary":{"body":"No findings."},"inlineFindings":[]}' },
+      ],
+    });
+    const eventPath = path.join(workspace.rootDir, "event.json");
+    await writePullRequestEvent(eventPath, workspace);
+    const {
+      DEEPSEEK_API_KEY: _key,
+      FAST_DEEPSEEK_API_KEY: _fast,
+      ...hostEnv
+    } = pullRequestEnv(workspace.rootDir, eventPath);
+    const result = runTestHostCommand({
+      rootDir: workspace.rootDir,
+      configDir: ".pipr",
+      eventPath,
+      dryRun: false,
+      env: { ...hostEnv, ...providerEnv },
+      githubPublicationClient: fakeGitHubPublicationClient(workspace),
+      piProviderModule: workspace.pi.providerModule,
+      logSink: options.logSink,
+    });
+    return { workspace, result };
+  }
+
+  it("runs a Bedrock review with only AWS access keys", async () => {
+    const { workspace, result } = await runWithProviderEnv(
+      'pipr.model("amazon-bedrock/claude-test")',
+      { AWS_ACCESS_KEY_ID: "access-key-id", AWS_SECRET_ACCESS_KEY: "secret-access-key" },
+    );
+    try {
+      await expect(result).resolves.toMatchObject({ kind: "review" });
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("treats empty fallback credentials as missing", async () => {
+    const { workspace, result } = await runWithProviderEnv(
+      'pipr.model("amazon-bedrock/claude-test")',
+      { AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "" },
+    );
+    try {
+      await expect(result).rejects.toThrow("Missing provider env vars: AWS_BEARER_TOKEN_BEDROCK");
+      await expectPiNotCalled(workspace);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("redacts a custom-named provider apiKey from pull request logs", async () => {
+    const secret = "custom-named-provider-secret";
+    const logs = memoryRuntimeLogSink();
+    const { workspace, result } = await runWithProviderEnv(
+      'pipr.model("deepseek/deepseek-reasoner", { apiKey: pipr.secret({ name: "FOO" }) })',
+      { FOO: secret },
+      { failWith: `\${env:FOO}\nmodel exploded`, logSink: logs.logSink },
+    );
+    try {
+      await expect(result).rejects.toThrow("Pi agent failed");
+      const output = logs.messages.join("\n");
+      expect(output).toContain("model exploded");
+      expect(output).not.toContain(secret);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

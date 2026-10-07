@@ -2,85 +2,43 @@ import { describe, expect, it } from "bun:test";
 import { createHostRunAdapter } from "../adapter.js";
 
 describe("host-run adapter selection", () => {
-  it("registers GitLab for explicit and native CI selection", () => {
-    expect(createHostRunAdapter({ host: "gitlab", env: { GITLAB_TOKEN: "test-token" } }).id).toBe(
-      "gitlab",
-    );
-    expect(
-      createHostRunAdapter({ env: { GITLAB_CI: "true", GITLAB_TOKEN: "test-token" } }).id,
-    ).toBe("gitlab");
+  const gitlab = { GITLAB_TOKEN: "test-token" };
+  const azure = {
+    AZURE_DEVOPS_TOKEN: "test-token",
+    AZURE_DEVOPS_ORGANIZATION: "org",
+    AZURE_DEVOPS_PROJECT: "project",
+  };
+  const bitbucket = {
+    BITBUCKET_WORKSPACE: "workspace",
+    BITBUCKET_REPO_SLUG: "repository",
+    BITBUCKET_EMAIL: "pipr@example.com",
+    BITBUCKET_API_TOKEN: "token",
+  };
+  const forgejo = { FORGEJO_ACTIONS: "true", FORGEJO_TOKEN: "token" };
+
+  it.each<[string, string | undefined, NodeJS.ProcessEnv]>([
+    ["gitlab", "gitlab", gitlab],
+    ["gitlab", undefined, { ...gitlab, GITLAB_CI: "true" }],
+    ["azure-devops", "azure-devops", azure],
+    ["azure-devops", undefined, { ...azure, TF_BUILD: "True" }],
+    ["bitbucket", "bitbucket", bitbucket],
+    ["bitbucket", undefined, { ...bitbucket, BITBUCKET_BUILD_NUMBER: "1" }],
+    ["gitea", "gitea", { GITEA_TOKEN: "token", GITEA_SERVER_URL: "https://gitea.example.com" }],
+    ["forgejo", undefined, { ...forgejo, FORGEJO_SERVER_URL: "https://forge.example.com" }],
+    ["codeberg", undefined, { ...forgejo, FORGEJO_SERVER_URL: "https://codeberg.org" }],
+  ])("selects %s (explicit host: %s)", (expected, host, env) => {
+    expect(createHostRunAdapter({ host, env }).id).toBe(expected);
   });
 
-  it("fails GitLab selection before execution when credentials are missing", () => {
-    expect(() => createHostRunAdapter({ host: "gitlab", env: {} })).toThrow(
-      "GITLAB_TOKEN or CI_JOB_TOKEN is required",
-    );
-  });
-
-  it("registers Azure DevOps for explicit and native pipeline selection", () => {
-    const env = {
-      AZURE_DEVOPS_TOKEN: "test-token",
-      AZURE_DEVOPS_ORGANIZATION: "org",
-      AZURE_DEVOPS_PROJECT: "project",
-    };
-    expect(createHostRunAdapter({ host: "azure-devops", env }).id).toBe("azure-devops");
-    expect(createHostRunAdapter({ env: { ...env, TF_BUILD: "True" } }).id).toBe("azure-devops");
-  });
-
-  it("fails Azure DevOps selection before execution when coordinates are missing", () => {
-    expect(() =>
-      createHostRunAdapter({ host: "azure-devops", env: { AZURE_DEVOPS_TOKEN: "token" } }),
-    ).toThrow(
+  it.each<[string, NodeJS.ProcessEnv, string]>([
+    ["gitlab", {}, "GITLAB_TOKEN or CI_JOB_TOKEN is required"],
+    [
+      "azure-devops",
+      { AZURE_DEVOPS_TOKEN: "token" },
       "AZURE_DEVOPS_ORGANIZATION, AZURE_DEVOPS_COLLECTION_URL, or SYSTEM_COLLECTIONURI is required",
-    );
-  });
-
-  it("registers Bitbucket for explicit and native pipeline selection", () => {
-    const env = {
-      BITBUCKET_WORKSPACE: "workspace",
-      BITBUCKET_REPO_SLUG: "repository",
-      BITBUCKET_EMAIL: "pipr@example.com",
-      BITBUCKET_API_TOKEN: "token",
-    };
-    expect(createHostRunAdapter({ host: "bitbucket", env }).id).toBe("bitbucket");
-    expect(createHostRunAdapter({ env: { ...env, BITBUCKET_BUILD_NUMBER: "1" } }).id).toBe(
-      "bitbucket",
-    );
-  });
-
-  it("registers the Gitea-compatible adapter family", () => {
-    expect(
-      createHostRunAdapter({
-        host: "gitea",
-        env: { GITEA_TOKEN: "token", GITEA_SERVER_URL: "https://gitea.example.com" },
-      }).id,
-    ).toBe("gitea");
-    expect(
-      createHostRunAdapter({
-        env: {
-          FORGEJO_ACTIONS: "true",
-          FORGEJO_TOKEN: "token",
-          FORGEJO_SERVER_URL: "https://forge.example.com",
-        },
-      }).id,
-    ).toBe("forgejo");
-    expect(
-      createHostRunAdapter({
-        env: {
-          FORGEJO_ACTIONS: "true",
-          FORGEJO_TOKEN: "token",
-          FORGEJO_SERVER_URL: "https://codeberg.org",
-        },
-      }).id,
-    ).toBe("codeberg");
-  });
-
-  it("fails Gitea-compatible selection before execution when credentials are missing", () => {
-    expect(() =>
-      createHostRunAdapter({
-        host: "forgejo",
-        env: { FORGEJO_SERVER_URL: "https://forge.example.com" },
-      }),
-    ).toThrow("FORGEJO_TOKEN is required");
+    ],
+    ["forgejo", { FORGEJO_SERVER_URL: "https://forge.example.com" }, "FORGEJO_TOKEN is required"],
+  ])("fails %s selection before execution without credentials", (host, env, message) => {
+    expect(() => createHostRunAdapter({ host, env })).toThrow(message);
   });
 });

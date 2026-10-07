@@ -17,6 +17,7 @@ import {
   scoreInlineFindingBodyBudget,
   scorePiprEvalOutput,
   scoreSuggestedFixRangeShape,
+  scoreValidAnchoring,
 } from "../scoring.js";
 
 const finding: EvalInlineFinding = {
@@ -100,35 +101,23 @@ describe("prompt eval scoring", () => {
     ).toBe(0);
   });
 
-  it("fails whitespace-only suggested fixes in range-shape scoring", () => {
+  it.each([
+    ["leading whitespace only", "    return adjusted;"],
+    ["internal whitespace only", "  return  adjusted;"],
+  ])("fails %s suggested fixes in range-shape scoring", (_name, suggestedFix) => {
     expect(
       scoreSuggestedFixRangeShape({
         ...output,
-        inlineFindings: [
-          {
-            ...finding,
-            suggestedFix: "    return adjusted;",
-          },
-        ],
+        inlineFindings: [{ ...finding, suggestedFix }],
       }),
     ).toBe(0);
   });
 
-  it("fails internal-whitespace-only suggested fixes in range-shape scoring", () => {
-    expect(
-      scoreSuggestedFixRangeShape({
-        ...output,
-        inlineFindings: [
-          {
-            ...finding,
-            suggestedFix: "  return  adjusted;",
-          },
-        ],
-      }),
-    ).toBe(0);
-  });
-
-  it("fails suggested fixes that invent environment keys", () => {
+  it.each([
+    ["direct", "const apiKey = process.env.PIPR_NEW_API_KEY;"],
+    ["optional", "const apiKey = process.env?.PIPR_NEW_API_KEY;"],
+    ["destructured", "const { PIPR_NEW_API_KEY: apiKey } = process.env;"],
+  ])("fails %s environment access suggested fixes that invent keys", (_name, suggestedFix) => {
     const [range] = output.diffRanges;
     if (!range) {
       throw new Error("test output is missing its diff range");
@@ -137,73 +126,27 @@ describe("prompt eval scoring", () => {
     expect(
       scoreSuggestedFixRangeShape({
         ...output,
-        inlineFindings: [
-          {
-            ...finding,
-            suggestedFix: "const apiKey = process.env.PIPR_NEW_API_KEY;",
-          },
-        ],
-        diffRanges: [
-          {
-            ...range,
-            preview: 'const apiKey = "";',
-          },
-        ],
+        inlineFindings: [{ ...finding, suggestedFix }],
+        diffRanges: [{ ...range, preview: 'const apiKey = "";' }],
       }),
     ).toBe(0);
   });
 
-  it("fails optional environment access suggested fixes that invent keys", () => {
-    const [range] = output.diffRanges;
-    if (!range) {
-      throw new Error("test output is missing its diff range");
-    }
-
-    expect(
-      scoreSuggestedFixRangeShape({
-        ...output,
-        inlineFindings: [
-          {
-            ...finding,
-            suggestedFix: "const apiKey = process.env?.PIPR_NEW_API_KEY;",
-          },
-        ],
-        diffRanges: [
-          {
-            ...range,
-            preview: 'const apiKey = "";',
-          },
-        ],
-      }),
-    ).toBe(0);
+  it.each([
+    ["the exact range", {}, 1],
+    ["a strict subrange", { startLine: 2, endLine: 2 }, 1],
+    ["lines outside the range", { startLine: 3, endLine: 4 }, 0],
+    ["an inverted range", { startLine: 3, endLine: 2 }, 0],
+    ["the wrong side", { side: "LEFT" }, 0],
+    ["the wrong range id", { rangeId: "range-2" }, 0],
+    ["the wrong path", { path: "src/other.ts" }, 0],
+  ] as const)("scores anchoring for %s", (_name, overrides, expected) => {
+    expect(scoreValidAnchoring({ ...output, inlineFindings: [{ ...finding, ...overrides }] })).toBe(
+      expected,
+    );
   });
 
-  it("fails destructured environment access suggested fixes that invent keys", () => {
-    const [range] = output.diffRanges;
-    if (!range) {
-      throw new Error("test output is missing its diff range");
-    }
-
-    expect(
-      scoreSuggestedFixRangeShape({
-        ...output,
-        inlineFindings: [
-          {
-            ...finding,
-            suggestedFix: "const { PIPR_NEW_API_KEY: apiKey } = process.env;",
-          },
-        ],
-        diffRanges: [
-          {
-            ...range,
-            preview: 'const apiKey = "";',
-          },
-        ],
-      }),
-    ).toBe(0);
-  });
-
-  it("hard-gates suggested-fix range shape and secret suppression", () => {
+  it("gates suggested fixes, contract regressions, and coordinated clean changes", () => {
     expect(livePromptGateCaseIds.defectRecall).not.toContain("suggested-fix-range-selection");
     expect(livePromptGateCaseIds.suggestedFix).toContain("suggested-fix-range-selection");
     expect(suggestedFixGateScorers.map((scorer) => scorer.name)).toEqual(
@@ -213,9 +156,6 @@ describe("prompt eval scoring", () => {
         "Expected suggested fix behavior",
       ]),
     );
-  });
-
-  it("gates contract regressions and coordinated clean changes", () => {
     expect(livePromptGateCaseIds.defectRecall).toEqual(
       expect.arrayContaining([
         "empty-value-contract-regression",

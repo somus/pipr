@@ -21,6 +21,10 @@ const scriptedResponseSchema = z.union([
   }),
   /** Supports `${env:NAME}` interpolation from the worker environment. */
   z.strictObject({ error: z.string().min(1) }),
+  /** Blocks the worker's event loop, ignoring every abort, so supervisor deadlines can be exercised. */
+  z.strictObject({ hangMs: z.number().int().positive() }),
+  /** Ends the worker process with this exit code, so worker replacement can be exercised. */
+  z.strictObject({ exitCode: z.number().int().positive() }),
 ]);
 
 const scriptedRuleSchema = z.strictObject({
@@ -114,6 +118,13 @@ async function scriptedMessage(
   response: ScriptedResponse,
   signal: AbortSignal | undefined,
 ): Promise<AssistantMessage> {
+  if ("hangMs" in response) {
+    Bun.sleepSync(response.hangMs);
+    return fauxAssistantMessage([fauxText("hang ended")]);
+  }
+  if ("exitCode" in response) {
+    process.exit(response.exitCode);
+  }
   if ("error" in response) {
     return fauxAssistantMessage([], { stopReason: "error", errorMessage: withEnv(response.error) });
   }

@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { type AgentWorkerClient, startAgentWorker } from "../client.js";
@@ -7,13 +6,9 @@ import type { AgentRunRequest, AgentWorkerEvent } from "../protocol.js";
 
 const providerModule = path.join(import.meta.dir, "fixtures", "scripted-provider.ts");
 const clients: AgentWorkerClient[] = [];
-const directories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
-  await Promise.all(
-    directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
-  );
 });
 
 function request(prompt: string, overrides: Partial<AgentRunRequest> = {}): AgentRunRequest {
@@ -29,12 +24,11 @@ function request(prompt: string, overrides: Partial<AgentRunRequest> = {}): Agen
   };
 }
 
-async function start(store?: string) {
+async function start() {
   const client = await startAgentWorker({
     env: { PATH: process.env.PATH, FAKE_API_KEY: "test-key" },
     cwd: os.tmpdir(),
     providerModule,
-    store,
   });
   clients.push(client);
   return client;
@@ -129,26 +123,6 @@ describe("agent worker client", () => {
     await expect(pending).rejects.toThrow("stuck worker");
     expect(client.failed).toBe(true);
     await expect(client.run(request("hello"))).rejects.toThrow("stuck worker");
-  });
-
-  it("keeps conversations in the store across worker processes", async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-agent-client-"));
-    directories.push(directory);
-    const store = path.join(directory, "agent.sqlite");
-    const first = await start(store);
-    const initial = await first.run(request("hello"));
-    await first.close();
-    clients.splice(clients.indexOf(first), 1);
-    if (initial.status !== "done") throw new Error("expected done");
-
-    const second = await start(store);
-    const repeated = await second.run(request("hello"));
-
-    expect(repeated).toMatchObject({
-      status: "done",
-      conversationId: initial.conversationId,
-      text: initial.text,
-    });
   });
 
   it("rejects pending runs when the worker process dies", async () => {

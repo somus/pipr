@@ -282,6 +282,8 @@ const githubReviewThreadsPageSchema = z
     };
   });
 
+const maxReviewThreadPages = 100;
+
 const githubAuthenticatedUserSchema = z.looseObject({
   login: z.string().min(1),
 });
@@ -440,7 +442,7 @@ export function createGitHubPublicationClient(
       const repo = parseRepoSlug(options.repo);
       const threads: GitHubReviewThread[] = [];
       let after: string | undefined;
-      for (;;) {
+      for (let pageNumber = 1; pageNumber <= maxReviewThreadPages; pageNumber += 1) {
         const page = githubReviewThreadsPageSchema.parse(
           await octokit.graphql(githubReviewThreadsQuery, {
             owner: repo.owner,
@@ -453,8 +455,12 @@ export function createGitHubPublicationClient(
         if (!page.pageInfo.hasNextPage) {
           return threads;
         }
+        if (!page.pageInfo.endCursor) {
+          throw new Error("GitHub review threads reported another page without an end cursor");
+        }
         after = page.pageInfo.endCursor;
       }
+      throw new Error(`GitHub review thread pagination exceeded ${maxReviewThreadPages} pages`);
     },
     async createReviewCommentReply(options) {
       const repo = parseRepoSlug(options.repo);

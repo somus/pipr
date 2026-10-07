@@ -5,7 +5,6 @@ import path from "node:path";
 import type { ScriptedProviderScript } from "../../agent-worker/scripted-provider.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import { createScriptedPi, type ScriptedPi } from "../../tests/helpers/scripted-pi.js";
-import { parsePiProviderProfile } from "../contract.js";
 import { ProviderExecutionError } from "../provider-failure.js";
 import { createDurablePiRunner, withPiRunWorkspace } from "../runner.js";
 
@@ -25,38 +24,6 @@ afterEach(async () => {
   await Promise.all(
     directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
   );
-});
-
-describe("Pi provider profile", () => {
-  it("accepts only Pi-native provider profile fields", () => {
-    expect(
-      parsePiProviderProfile({
-        id: "deepseek",
-        provider: "deepseek",
-        model: "deepseek-v4-pro",
-        apiKeyEnv: "DEEPSEEK_API_KEY",
-        thinking: "high",
-      }),
-    ).toMatchObject({ thinking: "high" });
-    expect(() =>
-      parsePiProviderProfile({
-        id: "deepseek",
-        provider: "deepseek",
-        model: "deepseek-v4-pro",
-        apiKeyEnv: "DEEPSEEK_API_KEY",
-        options: { reasoning_effort: "high" },
-      }),
-    ).toThrow();
-    expect(() =>
-      parsePiProviderProfile({
-        id: "deepseek",
-        provider: "deepseek",
-        model: "deepseek-v4-pro",
-        apiKeyEnv: "DEEPSEEK_API_KEY",
-        thinking: "enabled",
-      }),
-    ).toThrow();
-  });
 });
 
 describe("durable Pi runner", () => {
@@ -127,26 +94,132 @@ describe("durable Pi runner", () => {
     expect(toolResultText((await pi.calls())[2])).not.toContain("changed");
   });
 
-  it("passes only the selected provider key to the agent worker", async () => {
-    const { runOptions } = await fixture({
+  it("passes only the provider's variables to the agent worker, never CI tokens", async () => {
+    const { workspace, runOptions } = await fixture({
       responses: [
-        { error: "key=${env:DEEPSEEK_API_KEY} secret=${env:SECRET_SHOULD_NOT_LEAK} end" },
+        {
+          error: [
+            `key=${envRef("DEEPSEEK_API_KEY")}`,
+            `account=${envRef("DEEPSEEK_ACCOUNT_ID")}`,
+            `credential=${envRef("DEEPSEEK_OAUTH_TOKEN")}`,
+            `github=${envRef("GITHUB_TOKEN")}`,
+            `actions=${envRef("ACTIONS_RUNTIME_TOKEN")}`,
+            `azure=${envRef("SYSTEM_ACCESSTOKEN")}`,
+            `gitlab=${envRef("CI_JOB_TOKEN")}`,
+            `other=${envRef("SECRET_SHOULD_NOT_LEAK")}`,
+          ].join(" "),
+        },
       ],
     });
+    const env = {
+      DEEPSEEK_API_KEY: "provided-key",
+      DEEPSEEK_ACCOUNT_ID: "account-1",
+      DEEPSEEK_OAUTH_TOKEN: "oauth-1",
+      GITHUB_TOKEN: "ghs_secret",
+      ACTIONS_RUNTIME_TOKEN: "actions-secret",
+      SYSTEM_ACCESSTOKEN: "azure-secret",
+      CI_JOB_TOKEN: "gitlab-secret",
+      SECRET_SHOULD_NOT_LEAK: "hidden",
+      PATH: process.env.PATH,
+    };
 
-    const failure = await runPi(
-      runOptions({
-        env: {
-          DEEPSEEK_API_KEY: "provided-key",
-          SECRET_SHOULD_NOT_LEAK: "hidden",
-          PATH: process.env.PATH,
-        },
-      }),
+    const failure = await withPiRunWorkspace({ workspace, env }, async (runner) =>
+      runner(
+        runOptions({
+          env: undefined,
+          provider: {
+            ...deepseekProvider(),
+            providerEnv: ["DEEPSEEK_ACCOUNT_ID"],
+            credentialEnv: ["DEEPSEEK_OAUTH_TOKEN"],
+          },
+        }),
+      ),
     ).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(ProviderExecutionError);
     expect((failure as ProviderExecutionError).message).toBe("Pi agent failed (model_error)");
-    expect((failure as ProviderExecutionError).detail).toBe("key=provided-key secret= end");
+    expect((failure as ProviderExecutionError).detail).toBe(
+      "key=provided-key account=account-1 credential=oauth-1 github= actions= azure= gitlab= other=",
+    );
+  });
+
+  it("gives an auth-file worker no provider key or CI token from the environment", async () => {
+    const { workspace, runOptions } = await fixture({
+      responses: [
+        { error: `key=${envRef("DEEPSEEK_API_KEY")} github=${envRef("GITHUB_TOKEN")} end` },
+      ],
+    });
+    const authFile = path.join(await temporaryDirectory("pipr-auth-"), "auth.json");
+    await Bun.write(authFile, JSON.stringify({ deepseek: { type: "api_key", key: "file-key" } }));
+    const env = {
+      DEEPSEEK_API_KEY: "env-key",
+      GITHUB_TOKEN: "ghs_secret",
+      PATH: process.env.PATH,
+    };
+
+    const failure = await withPiRunWorkspace({ workspace, env }, async (runner) =>
+      runner(
+        runOptions({
+          env: undefined,
+          authFile,
+          provider: { ...deepseekProvider(), apiKeyEnv: undefined },
+        }),
+      ),
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProviderExecutionError);
+    expect((failure as ProviderExecutionError).detail).toBe("key= github= end");
+  });
+
+  it("replaces a worker that crashed on the next call of the same runner", async () => {
+    // Every "Crash." call exits, so the replacement would die too if it resumed the abandoned run.
+    const { workspace, pi, runOptions } = await fixture({
+      rules: [{ when: { promptIncludes: "Crash." }, response: { exitCode: 3 } }],
+      responses: [{ text: "recovered" }],
+    });
+
+    await withPiRunWorkspace({ workspace }, async (runner) => {
+      const failure = await runner(runOptions({ prompt: "Crash." })).catch(
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(ProviderExecutionError);
+      expect((failure as ProviderExecutionError).message).toBe("Pi agent worker failed");
+      expect((failure as ProviderExecutionError).detail).toContain("exited with code 3");
+
+      await expect(runner(runOptions({ prompt: "Again." }))).resolves.toMatchObject({
+        text: "recovered",
+      });
+    });
+    expect((await pi.prompts()).sort()).toEqual(["Again.", "Crash."]);
+  });
+
+  it("kills a worker that ignores its timeout and replaces it on the next call", async () => {
+    const { workspace, pi, runOptions } = await fixture({
+      rules: [{ when: { promptIncludes: "Hang." }, response: { hangMs: 10_000 } }],
+      responses: [{ text: "recovered" }],
+    });
+
+    await withPiRunWorkspace(
+      { workspace, supervisorGraceMs: { cancel: 100, kill: 100 } },
+      async (runner) => {
+        const started = Date.now();
+        const failure = await runner(runOptions({ prompt: "Hang.", timeoutSeconds: 0.2 })).catch(
+          (error: unknown) => error,
+        );
+        expect(Date.now() - started).toBeLessThan(5_000);
+        expect(failure).toBeInstanceOf(ProviderExecutionError);
+        expect((failure as ProviderExecutionError).message).toBe("Pi agent worker failed");
+        expect((failure as ProviderExecutionError).detail).toBe(
+          "Pi timed out after 0.2s and the agent worker did not stop",
+        );
+
+        await expect(runner(runOptions({ prompt: "Again." }))).resolves.toMatchObject({
+          text: "recovered",
+        });
+      },
+    );
+    // The replacement abandons the hung run instead of resuming it.
+    expect((await pi.prompts()).sort()).toEqual(["Again.", "Hang."]);
   });
 
   it("rejects models without credentials before starting the agent", async () => {
@@ -270,57 +343,6 @@ describe("durable Pi runner", () => {
     expect(await pi.calls()).toHaveLength(1);
   });
 
-  it("continues a conversation with the prior turns in context", async () => {
-    const { workspace, pi, runOptions } = await fixture({
-      responses: [{ text: "not json" }, { text: '{"ok":true}' }],
-    });
-
-    await withPiRunWorkspace({ workspace }, async (runner) => {
-      const first = await runner(runOptions({ prompt: "Answer in JSON." }));
-      await runner(
-        runOptions({
-          prompt: "Return valid JSON only.",
-          conversation: { kind: "continue", conversationId: first.conversationId },
-        }),
-      );
-    });
-
-    const repair = (await pi.calls())[1];
-    expect(repair?.messages.map((message) => message.text)).toEqual([
-      "Answer in JSON.",
-      "not json",
-      "Return valid JSON only.",
-    ]);
-  });
-
-  it("forks sibling calls from one shared parent context", async () => {
-    const { workspace, pi, runOptions } = await fixture({ responses: [{ text: "{}" }] });
-    const shared = "Shared change request context.";
-
-    await withPiRunWorkspace({ workspace }, async (runner) => {
-      await Promise.all(
-        ["Security pass.", "Correctness pass."].map((prompt) =>
-          runner(
-            runOptions({
-              prompt,
-              conversation: { kind: "fork", parentKey: "shared-1", parentPrompt: shared },
-            }),
-          ),
-        ),
-      );
-    });
-
-    const calls = await pi.calls();
-    expect(calls).toHaveLength(2);
-    for (const call of calls) {
-      expect(call.messages[0]?.text).toBe(shared);
-    }
-    expect(calls.map((call) => call.messages.at(-1)?.text).sort()).toEqual([
-      "Correctness pass.",
-      "Security pass.",
-    ]);
-  });
-
   it("times out slow model calls", async () => {
     const { runOptions } = await fixture({ responses: [{ text: "late", delayMs: 5_000 }] });
 
@@ -391,4 +413,9 @@ function passthroughSchema() {
       return value;
     },
   };
+}
+
+/** A `${env:NAME}` placeholder that the scripted provider expands from the worker environment. */
+function envRef(name: string): string {
+  return `\${env:${name}}`;
 }

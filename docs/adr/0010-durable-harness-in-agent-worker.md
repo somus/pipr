@@ -31,7 +31,10 @@ The harness `bash`, `write`, and `edit` tools are never installed.
 
 Each worker owns one **Conversation Store**. Webhook deployments keep one store per change request
 under the run store directory, so a retried delivery resumes committed work through stable request
-identities. Action and local runs use a temporary store that is exported into the Run Bundle and
+identities. A recorded failure is never replayed: repeating a failed request calls the model again.
+When a worker crashes or the supervisor kills it after a timeout, its replacement aborts the
+unfinished work in the shared store instead of resuming it, so one bad run cannot take down each
+successor. Action and local runs use a temporary store that is exported into the Run Bundle and
 then removed.
 
 `ctx.pi.run()` keeps Pipr's orchestration: shards, fallbacks, and the agent-run budget. One

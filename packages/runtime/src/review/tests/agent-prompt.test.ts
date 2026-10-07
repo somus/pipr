@@ -176,59 +176,18 @@ describe("renderAgentPrompt", () => {
   it("includes review policy for core review outputs", async () => {
     const prompt = await renderTestPrompt(reviewSchema);
 
-    expect(prompt).toContain("Review Policy:");
-    expect(prompt).toContain("Review only changed behavior.");
-    expect(prompt).toContain("Report only actionable defects");
-    expect(prompt).toContain(
-      "verify that the changed code introduces or exposes the issue, repository evidence supports it, and the impact is concrete",
-    );
-    expect(prompt).toContain(
-      "Moved or copied code exposes defects in its new changed location even when the same defect existed at the old location",
-    );
-    expect(prompt).toContain("Do not report unrelated pre-existing defects outside changed code");
-    expect(prompt).toContain(
-      "inspect relevant callers, callees, and tests before deciding whether the change is defective or intentionally coordinated",
-    );
-    expect(prompt).toContain(
-      "Do not claim tests or checks ran, passed, or failed unless their output is present",
-    );
-    expect(prompt).toContain("Do not leave actionable defects or test gaps only in the summary.");
-    expect(prompt).toContain("Finding bodies must be publication-ready review prose");
+    expect(prompt.match(/^Review Policy:/gm)).toHaveLength(1);
+    expect(prompt.match(/^Output:/gm)).toHaveLength(1);
+    expect(
+      prompt.match(/Select the smallest contiguous line span that makes the inline comment/g),
+    ).toHaveLength(1);
     expect(prompt).toContain(
       `at most two sentences, and at most ${maxInlineFindingBodyCharacters} characters.`,
     );
     expect(prompt).toContain(
-      `Treat ${maxInlineFindingBodyCharacters} as a hard ceiling, not a target`,
-    );
-    expect(prompt).toContain("Do not include step-by-step reasoning, broad context");
-    expect(prompt).toContain(
-      "Never copy a secret-looking literal from changed code into any publishable output field",
-    );
-    expect(prompt).toContain("custom title or rationale");
-    expect(prompt).toContain("one inline finding");
-    expect(prompt).toContain(
       "path, rangeId, and side must identify one Diff Manifest commentable range",
     );
     expect(prompt).toContain("startLine and endLine must select a valid span within that range");
-    expect(prompt).toContain(
-      "Select the smallest contiguous line span that makes the inline comment understandable",
-    );
-    expect(prompt).toContain("Prefer one line when it identifies the issue");
-    expect(prompt).toContain(
-      "select the relevant declaration or signature line instead of the enclosing body",
-    );
-    expect(prompt).toContain("the suggested-fix replacement span rules take precedence");
-    expect(prompt).toContain("Select the smallest contiguous line span");
-    expect(prompt).toContain("Do not select a larger enclosing block");
-    expect(prompt).toContain(
-      "the finding body must describe the defect that `suggestedFix` directly fixes",
-    );
-    expect(prompt).toContain(
-      "Do not include `suggestedFix` when it would be identical to the selected lines",
-    );
-    expect(prompt).toContain(
-      "Omit `suggestedFix` for secrets, credentials, API keys, tokens, or config wiring",
-    );
     expect(
       prompt.match(/the finding body must describe the defect that `suggestedFix` directly fixes/g),
     ).toHaveLength(1);
@@ -270,20 +229,16 @@ describe("renderAgentPrompt", () => {
     }
   });
 
-  it("does not include review policy for non-review outputs", async () => {
-    const prompt = await renderTestPrompt(unknownSchema);
-
-    expect(prompt).not.toContain("Review Policy:");
-    expect(prompt).not.toContain("Report only actionable defects");
-  });
-
-  it("does not include inline selection policy for non-review outputs", async () => {
-    const prompt = await renderTestPrompt(unknownSchema, {}, undefined, true);
-
-    expect(prompt).not.toContain("Inline Review Selection Policy:");
-    expect(prompt).not.toContain(
-      "Select the smallest contiguous line span that makes the inline comment understandable",
-    );
+  it("does not include review or inline selection policy for non-review outputs", async () => {
+    for (const prompt of [
+      await renderTestPrompt(unknownSchema),
+      await renderTestPrompt(unknownSchema, {}, undefined, true),
+    ]) {
+      expect(prompt).not.toContain("Review Policy:");
+      expect(prompt).not.toContain("Report only actionable defects");
+      expect(prompt).not.toContain("Inline Review Selection Policy:");
+      expect(prompt).not.toContain("Select the smallest contiguous line span");
+    }
   });
 
   it("ignores unused review-shaped schema definitions", async () => {

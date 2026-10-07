@@ -911,49 +911,22 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(calls).toEqual(["core/pr-review"]);
   });
 
-  it("rejects invalid runtime Review Run and Diff Manifest fan-out limits", async () => {
-    for (const limits of [
-      { maxAgentRuns: 0 },
-      { maxAgentRuns: 1.5 },
-      { diffManifest: { maxShards: 0 } },
-      { diffManifest: { maxShards: 1.5 } },
-    ]) {
-      await expect(
-        runRuntime({
-          plan: defaultReviewPlan(),
-          config: {
-            ...config,
-            limits,
-          },
-          piRunner: noFindingsPiRunner(),
-        }),
-      ).rejects.toThrow();
-    }
-  });
-
-  it("does not accept the removed sharding compatibility alias", async () => {
+  it.each([
+    [{ maxAgentRuns: 0 }, ["limits", "maxAgentRuns"], "too_small"],
+    [{ maxAgentRuns: 1.5 }, ["limits", "maxAgentRuns"], "invalid_type"],
+    [{ diffManifest: { maxShards: 0 } }, ["limits", "diffManifest", "maxShards"], "too_small"],
+    [{ diffManifest: { maxShards: 1.5 } }, ["limits", "diffManifest", "maxShards"], "invalid_type"],
+  ])("rejects invalid runtime fan-out limits %j", async (limits, issuePath, code) => {
     await expect(
       runRuntime({
-        plan: testPlan((pipr) => {
-          pipr.review({
-            id: "review",
-            model: deepseekModel(pipr),
-            instructions: "Review.",
-            summary: { instructions: "Summarize." },
-            on: { changeRequest: true },
-          });
-        }),
-        config: {
-          ...config,
-          limits: {
-            diffManifest: {
-              sharding: false,
-            },
-          },
-        } as unknown as typeof config,
+        plan: defaultReviewPlan(),
+        config: { ...config, limits },
         piRunner: noFindingsPiRunner(),
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      name: "ZodError",
+      issues: [expect.objectContaining({ path: issuePath, code })],
+    });
   });
 
   it("deduplicates only exact same-anchor findings from scheduled review units", async () => {
@@ -1965,6 +1938,136 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     });
 
     expect(calls).toEqual(["deepseek-v4-pro", "fallback-model"]);
+  });
+
+  it("derives stable, distinct request ids for initial, repair, fallback, and shard calls", async () => {
+    const shardedFallbackConfig = {
+      ...manifestShardConfig(2),
+      providers: fallbackConfig.providers,
+    };
+    const run = async () => {
+      const requestIds: string[] = [];
+      await runRuntime({
+        config: shardedFallbackConfig,
+        plan: fallbackReviewPlan(),
+        diffManifestBuilder: () => manyFileShardingManifest(),
+        env: { ...process.env, PATH: "" },
+        piRunner: async (options) => {
+          requestIds.push(options.requestId ?? "missing");
+          return options.provider.id === "deepseek/deepseek-v4-pro"
+            ? piRunResult("{")
+            : noFindingsPiResult();
+        },
+      });
+      return requestIds;
+    };
+
+    const first = await run();
+    const second = await run();
+
+    // Per shard: primary initial, primary repair, fallback initial.
+    expect(first).toHaveLength(6);
+    expect(new Set(first).size).toBe(6);
+    expect(first).not.toContain("missing");
+    expect(second).toEqual(first);
+  });
+
+  it("continues the first attempt's conversation when repairing invalid output", async () => {
+    const conversations: unknown[] = [];
+
+    const result = await runRuntime({
+      plan: defaultReviewPlan(),
+      piRunner: async (options) => {
+        conversations.push(options.conversation);
+        return conversations.length === 1
+          ? piRunResult("{", { conversationId: 41 })
+          : noFindingsPiResult();
+      },
+    });
+
+    expect(conversations).toHaveLength(2);
+    expect(conversations[1]).toEqual({ kind: "continue", conversationId: 41 });
+    expect(result.repairAttempted).toBe(true);
+  });
+
+  it("moves to the fallback without a second repair when the repair call fails", async () => {
+    const calls: string[] = [];
+
+    const result = await runRuntime({
+      config: fallbackConfig,
+      plan: fallbackReviewPlan(),
+      piRunner: async (options) => {
+        const isRepair = options.conversation?.kind === "continue";
+        calls.push(`${options.provider.model}${isRepair ? ":repair" : ""}`);
+        if (options.provider.id !== "deepseek/deepseek-v4-pro") {
+          return noFindingsPiResult();
+        }
+        if (isRepair) {
+          throw piRunFailure("repair failed");
+        }
+        return piRunResult("{");
+      },
+    });
+
+    expect(calls).toEqual(["deepseek-v4-pro", "deepseek-v4-pro:repair", "fallback-model"]);
+    expect(result.repairAttempted).toBe(true);
+  });
+
+  it("propagates agent-call budget exhaustion during repair instead of falling back", async () => {
+    let calls = 0;
+
+    await expect(
+      runRuntime({
+        config: { ...fallbackConfig, limits: { maxAgentRuns: 1 } },
+        plan: fallbackReviewPlan(),
+        piRunner: async () => {
+          calls += 1;
+          return piRunResult("{");
+        },
+      }),
+    ).rejects.toThrow("Review Run agent-call budget exhausted after 1 provider invocations");
+    expect(calls).toBe(1);
+  });
+
+  it("fails the whole review when one manifest shard fails on every provider", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const calls: string[] = [];
+
+    await expect(
+      runRuntime({
+        config: { ...manifestShardConfig(2), providers: fallbackConfig.providers },
+        plan: fallbackReviewPlan(),
+        diffManifestBuilder: () => manyFileShardingManifest(),
+        env: { ...process.env, PATH: "" },
+        progress: {
+          async transition() {},
+          recordStats() {},
+          work(event) {
+            events.push(event);
+          },
+        },
+        piRunner: async (options) => {
+          calls.push(options.provider.model);
+          if (calls.length === 1) {
+            return reviewPiResult([finding("shard one", "range-0-0", 10, "src/file-0.ts")]);
+          }
+          throw piRunFailure("shard two failed");
+        },
+      }),
+    ).rejects.toThrow("Pi agent failed for all configured models");
+
+    expect(calls).toEqual(["deepseek-v4-pro", "deepseek-v4-pro", "fallback-model"]);
+    expect(
+      events
+        .filter((event) => event.type === "review-run-finished")
+        .map((event) => [event.run, event.outcome]),
+    ).toEqual([
+      [1, "completed"],
+      [2, "failed"],
+    ]);
+    expect(events.filter((event) => event.type === "reviewer-finished")).toEqual([
+      expect.objectContaining({ outcome: "failed" }),
+    ]);
   });
 
   it("counts shards, repairs, and fallbacks against maxAgentRuns", async () => {

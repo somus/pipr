@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
@@ -192,13 +203,15 @@ describe("pipr runs", () => {
     expect(output).not.toContain("AGE-SECRET-KEY");
     expect((await lstat(sharedDirectory)).mode & 0o777).toBe(0o755);
     expect((await lstat(identityPath)).mode & 0o777).toBe(0o600);
-    expect(await readFile(identityPath, "utf8")).toStartWith("AGE-SECRET-KEY-");
+    const firstIdentity = await readFile(identityPath, "utf8");
+    expect(firstIdentity).toStartWith("AGE-SECRET-KEY-");
     await expect(
       runMain({
         argv: ["bun", "pipr", "runs", "keygen", "--output", identityPath],
         env: { PIPR_UPDATE_NOTICE: "0" },
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("already exists");
+    expect(await readFile(identityPath, "utf8")).toBe(firstIdentity);
   });
 
   it("shows public metadata while locked and decrypts diagnostics with an identity", async () => {
@@ -247,13 +260,23 @@ describe("pipr runs", () => {
       diagnostic: "available",
       manifest: { capture: { mode: "diagnostic" } },
     });
+    const wrongIdentity = "no identity matched any of the file's recipients";
     await expect(
       runRunsShow(
         executionId,
         { store: protectedStore, json: true, identity: [wrongIdentityPath] },
         { cwd: outputRoot, env: {} },
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(wrongIdentity);
+    const wrongDestination = path.join(outputRoot, "wrong-download");
+    await expect(
+      runRunsDownload(
+        executionId,
+        { store: protectedStore, output: wrongDestination, identity: [wrongIdentityPath] },
+        { cwd: outputRoot, env: {} },
+      ),
+    ).rejects.toThrow(wrongIdentity);
+    expect(await pathExists(path.join(wrongDestination, "run.json"))).toBe(false);
 
     await expect(
       runRunsDownload(
@@ -267,14 +290,57 @@ describe("pipr runs", () => {
     await captureStdout(async () => {
       await runRunsDownload(
         executionId,
-        { store: protectedStore, output: destination, identity: [identityPath] },
-        { cwd: outputRoot, env: {} },
+        { store: protectedStore, output: destination },
+        { cwd: outputRoot, env: { PIPR_RUN_AGE_IDENTITY: "run.agekey" } },
       );
     });
     expect(JSON.parse(await readFile(path.join(destination, "run.json"), "utf8"))).toMatchObject({
       executionId,
       capture: { mode: "diagnostic" },
     });
+  });
+
+  it.each([
+    ["a symlinked identity", "must be a regular file"],
+    ["an empty identity", "is empty"],
+  ])("rejects %s before decrypting", async (name, message) => {
+    const rawStore = await temporaryDirectory();
+    const protectedStore = await temporaryDirectory();
+    const outputRoot = await temporaryDirectory();
+    const executionId = "efefefefefefefefefefefefefefefef";
+    await writeBundle(rawStore, executionId);
+    const key = await generateRunBundleIdentity();
+    await prepareRunBundlePackage({
+      bundleDirectory: path.join(rawStore, executionId),
+      destinationRoot: protectedStore,
+      recipients: [key.recipient],
+    });
+    const identityPath = path.join(outputRoot, "run.agekey");
+    if (name === "a symlinked identity") {
+      const targetPath = path.join(outputRoot, "target.agekey");
+      await writeFile(targetPath, `${key.identity}\n`, { mode: 0o600 });
+      await symlink(targetPath, identityPath);
+    } else {
+      await writeFile(identityPath, "\n", { mode: 0o600 });
+    }
+    const destination = path.join(outputRoot, "download");
+
+    await expect(
+      runRunsDownload(
+        executionId,
+        { store: protectedStore, output: destination, identity: [identityPath] },
+        { cwd: outputRoot, env: {} },
+      ),
+    ).rejects.toThrow(message);
+    expect(await pathExists(path.join(destination, "run.json"))).toBe(false);
+  });
+
+  it("rejects execution ids that are not 32 lowercase hex characters", async () => {
+    for (const executionId of ["ABABABABABABABABABABABABABABABAB", "abab", "../../etc/passwd"]) {
+      await expect(runRunsDownload(executionId, {}, { cwd: os.tmpdir(), env: {} })).rejects.toThrow(
+        "Execution ID must be a 32-character lowercase hexadecimal trace ID",
+      );
+    }
   });
 
   it("inspects a manually downloaded protected package directory", async () => {
@@ -886,6 +952,13 @@ async function captureStdout(run: () => Promise<void>): Promise<string> {
     console.log = original;
   }
   return messages.join("\n");
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  return await access(filePath).then(
+    () => true,
+    () => false,
+  );
 }
 
 async function temporaryDirectory(): Promise<string> {

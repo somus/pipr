@@ -703,6 +703,19 @@ async function runLocalReview(
     taskLog: stderrTaskLog,
   });
   writeLocalReviewResult(result, options.json === true);
+  assertLocalReviewChecksPassed(result);
+}
+
+/** Fails like CI after the result is printed when any task check or gate concluded `failure`. */
+function assertLocalReviewChecksPassed(result: LocalReviewResult): void {
+  const failed = result.taskChecks.filter((check) => check.conclusion === "failure");
+  if (failed.length === 0) {
+    return;
+  }
+  const details = failed.map((check) =>
+    check.summary ? `${check.taskName} (${check.summary})` : check.taskName,
+  );
+  throw new Error(`pipr review failed: ${details.join(", ")}`);
 }
 
 type LocalReviewResult = Awaited<ReturnType<typeof runLocalReviewCommand>>;

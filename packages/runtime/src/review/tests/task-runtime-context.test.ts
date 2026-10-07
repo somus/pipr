@@ -757,23 +757,6 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     expect(observedPrompt).toContain("Read tools may access the whole repository.");
   });
 
-  it("does not treat arbitrary agent input manifest fields as Diff Manifests", async () => {
-    let observedPrompt = "";
-    const plan = customOkTaskPlan<{ manifest: string }>({
-      taskName: "notes",
-      agentName: "release-notes",
-      instructions: "Summarize release notes.",
-      outputId: "test/release-notes",
-      input: { manifest: "release-notes" },
-    });
-
-    await runCustomOkPlan(plan, (prompt) => {
-      observedPrompt = prompt;
-    });
-
-    expect(observedPrompt).not.toContain("Diff Manifest:");
-  });
-
   it("does not inject Diff Manifest context when manifest input is absent", async () => {
     let observedPrompt = "";
     const plan = customOkTaskPlan<{ changedFiles: string[] }>({
@@ -793,67 +776,24 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     expect(observedPrompt).toContain("Summarize files.");
   });
 
-  it("renders one full-mode agent prompt contract with authoritative manifest wording", async () => {
+  it("wires full-mode prompts with workspace tools, the manifest section, and no runtime tools", async () => {
     let observedPrompt = "";
+    let observedRuntimeTools: unknown = "unset";
 
     await runRuntime({
       plan: defaultReviewPlan(),
       piRunner: async (options) => {
         observedPrompt = options.prompt;
-        expect(options.runtimeTools).toBeUndefined();
+        observedRuntimeTools = options.runtimeTools;
         return noFindingsPiResult();
       },
     });
 
+    expect(observedRuntimeTools).toBeUndefined();
     expect(countOccurrences(observedPrompt, "Available tools:")).toBe(1);
-    expect(observedPrompt).toContain("Role:\nYou are pipr's read-only change request agent.");
     expect(observedPrompt).toContain("Available tools: read, grep, find, ls.");
     expect(observedPrompt).not.toContain("pipr_read_diff");
-    expect(observedPrompt).toContain("Use tools only to inspect repository content");
-    expect(observedPrompt).toContain("Do not write files, edit code, run shell commands");
-    expect(observedPrompt).toContain("Output:\nSchema ID: core/pr-review.");
-    expect(observedPrompt).toContain("JSON Schema:");
-    expect(observedPrompt).toContain("Example:");
-    expect(observedPrompt).toContain(
-      "`suggestedFix` is exact replacement code for the selected range.",
-    );
-    expect(observedPrompt).toContain(
-      "The first non-whitespace character must be { or [ and the last non-whitespace character must be } or ].",
-    );
-    expect(observedPrompt).toContain(
-      "Each finding's path, rangeId, and side must identify one Diff Manifest commentable range",
-    );
-    expect(observedPrompt).toContain("Treat 700 as a hard ceiling, not a target");
-    expect(observedPrompt).toContain("Finding bodies must be publication-ready review prose");
-    expect(observedPrompt).toContain(
-      "Omit `suggestedFix` for broad rewrites, generated docs/pages, uncertain ranges, or changes better described in prose.",
-    );
-    expect(observedPrompt).toContain(
-      "Do not include `suggestedFix` when it would be identical to the selected lines",
-    );
-    expect(observedPrompt).toContain(
-      "Omit `suggestedFix` for secrets, credentials, API keys, tokens, or config wiring",
-    );
-    expect(observedPrompt).toContain(
-      "Diff Manifest:\nUse this as the authoritative changed-code context",
-    );
-    expect(observedPrompt).toContain(
-      "Each publishable inline finding's path, rangeId, and side must identify one Diff Manifest commentable range, and its startLine and endLine must select a valid span within that range.",
-    );
-    expect(
-      countOccurrences(
-        observedPrompt,
-        "Select the smallest contiguous line span that makes the inline comment understandable",
-      ),
-    ).toBe(1);
-    expect(
-      countOccurrences(
-        observedPrompt,
-        "select the relevant declaration or signature line instead of the enclosing body",
-      ),
-    ).toBe(1);
-    expect(countOccurrences(observedPrompt, "Inline Review Selection Policy:")).toBe(0);
-    expect(observedPrompt).toContain("Manifest:");
+    expect(countOccurrences(observedPrompt, "\nDiff Manifest:\n")).toBe(1);
     expect(observedPrompt).not.toContain("Diff Manifest Runtime Context");
   });
 

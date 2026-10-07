@@ -10,10 +10,12 @@ type AgentWorkerProcessOptions = {
   providerModule?: string;
   /** Path passed to the provider module's default export. */
   providerConfig?: string;
+  /** Abort work a failed predecessor left unfinished instead of resuming it. */
+  abandonUnfinished?: boolean;
 };
 
 const agentWorkerUsage = [
-  "Usage: pipr agent-worker [--store <path>] [--auth-file <path>] [--provider-module <path> [--provider-config <path>]]",
+  "Usage: pipr agent-worker [--store <path>] [--auth-file <path>] [--provider-module <path> [--provider-config <path>]] [--abandon-unfinished]",
   "",
   "Internal: runs Pi agent conversations for the pipr supervisor over newline-delimited JSON on stdio.",
 ].join("\n");
@@ -37,6 +39,7 @@ async function runAgentWorkerProcess(options: AgentWorkerProcessOptions): Promis
     env: process.env,
     storePath: options.store,
     authFile: options.authFile,
+    abandonUnfinished: options.abandonUnfinished === true,
     providers: options.providerModule
       ? await loadProviders(options.providerModule, options.providerConfig)
       : [],
@@ -45,7 +48,7 @@ async function runAgentWorkerProcess(options: AgentWorkerProcessOptions): Promis
 
 function parseAgentWorkerArgs(argv: readonly string[]): AgentWorkerProcessOptions | "help" {
   const options: AgentWorkerProcessOptions = {};
-  const flags: Record<string, keyof AgentWorkerProcessOptions> = {
+  const flags: Record<string, Exclude<keyof AgentWorkerProcessOptions, "abandonUnfinished">> = {
     "--store": "store",
     "--auth-file": "authFile",
     "--provider-module": "providerModule",
@@ -54,6 +57,10 @@ function parseAgentWorkerArgs(argv: readonly string[]): AgentWorkerProcessOption
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] as string;
     if (arg === "--help" || arg === "-h") return "help";
+    if (arg === "--abandon-unfinished") {
+      options.abandonUnfinished = true;
+      continue;
+    }
     const key = flags[arg];
     const value = argv[index + 1];
     if (!key || value === undefined) {

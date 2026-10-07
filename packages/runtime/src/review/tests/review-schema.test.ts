@@ -62,128 +62,59 @@ describe("canonical inline findings schemas", () => {
     expect(canonicalInlineFindingsMaxItems(schema)).toBe(20);
   });
 
-  it("does not shard schemas that allow additional root metadata", () => {
-    const schema = {
-      type: "object",
-      properties: {
-        inlineFindings: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: Object.fromEntries(
-              ["body", "path", "rangeId", "side", "startLine", "endLine"].map((name) => [name, {}]),
-            ),
-            required: ["body", "path", "rangeId", "side", "startLine", "endLine"],
-          },
-        },
-      },
-      required: ["inlineFindings"],
-    };
+  const findingFields = ["body", "path", "rangeId", "side", "startLine", "endLine"];
+  const finding = {
+    type: "object",
+    properties: Object.fromEntries(findingFields.map((name) => [name, {}])),
+    required: findingFields,
+  };
+  const closedRoot = (
+    extraProperties: Record<string, unknown> = {},
+    patch: Record<string, unknown> = {},
+  ) => ({
+    type: "object",
+    properties: {
+      inlineFindings: { type: "array", maxItems: 20, items: finding },
+      ...extraProperties,
+    },
+    required: ["inlineFindings"],
+    additionalProperties: false,
+    ...patch,
+  });
+  const referencedItems = (definition: unknown) => ({
+    ...closedRoot(),
+    properties: {
+      inlineFindings: { type: "array", maxItems: 20, items: { $ref: "#/$defs/Item" } },
+    },
+    $defs: { Item: definition },
+  });
 
+  it.each<[string, unknown]>([
+    ["roots that allow additional metadata", closedRoot({}, { additionalProperties: true })],
+    [
+      "referenced nested finding wrappers",
+      referencedItems({ type: "object", properties: { finding } }),
+    ],
+    ["referenced nested finding arrays", referencedItems({ type: "array", items: finding })],
+    ["non-object roots with finding-shaped properties", { ...closedRoot(), type: "string" }],
+    [
+      "closed roots with additional declared metadata",
+      closedRoot({ metadata: { type: "string" } }),
+    ],
+    [
+      "closed roots whose patterns allow metadata",
+      closedRoot({}, { patternProperties: { "^meta": {} } }),
+    ],
+    [
+      "referenced roots with sibling metadata properties",
+      { $ref: "#/$defs/Output", properties: { metadata: {} }, $defs: { Output: closedRoot() } },
+    ],
+  ])("does not shard %s", (_label, schema) => {
     expect(schemaHasCanonicalInlineFindingsRoot(schema)).toBe(false);
     expect(canonicalInlineFindingsMaxItems(schema)).toBeUndefined();
   });
 
-  it("does not shard referenced nested finding wrappers or arrays", () => {
-    const finding = {
-      type: "object",
-      properties: Object.fromEntries(
-        ["body", "path", "rangeId", "side", "startLine", "endLine"].map((name) => [name, {}]),
-      ),
-    };
-    const output = (reference: string) => ({
-      type: "object",
-      properties: {
-        inlineFindings: { type: "array", maxItems: 20, items: { $ref: reference } },
-      },
-      required: ["inlineFindings"],
-      additionalProperties: false,
-      $defs: {
-        Wrapper: { type: "object", properties: { finding } },
-        NestedArray: { type: "array", items: finding },
-      },
-    });
-
-    for (const reference of ["#/$defs/Wrapper", "#/$defs/NestedArray"]) {
-      const schema = output(reference);
-      expect(schemaHasCanonicalInlineFindingsRoot(schema)).toBe(false);
-      expect(canonicalInlineFindingsMaxItems(schema)).toBeUndefined();
-    }
-  });
-
-  it("does not shard non-object roots with finding-shaped properties", () => {
-    const schema = {
-      type: "string",
-      properties: {
-        inlineFindings: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: Object.fromEntries(
-              ["body", "path", "rangeId", "side", "startLine", "endLine"].map((name) => [name, {}]),
-            ),
-          },
-        },
-      },
-      required: ["inlineFindings"],
-      additionalProperties: false,
-    };
-
-    expect(schemaHasCanonicalInlineFindingsRoot(schema)).toBe(false);
-    expect(canonicalInlineFindingsMaxItems(schema)).toBeUndefined();
-  });
-
-  it("does not shard closed roots with additional declared metadata", () => {
-    const schema = {
-      type: "object",
-      properties: {
-        inlineFindings: {
-          type: "array",
-          maxItems: 20,
-          items: {
-            type: "object",
-            properties: Object.fromEntries(
-              ["body", "path", "rangeId", "side", "startLine", "endLine"].map((name) => [name, {}]),
-            ),
-          },
-        },
-        metadata: { type: "string" },
-      },
-      required: ["inlineFindings"],
-      additionalProperties: false,
-    };
-
-    expect(schemaHasCanonicalInlineFindingsRoot(schema)).toBe(false);
-    expect(canonicalInlineFindingsMaxItems(schema)).toBeUndefined();
-  });
-
-  it("does not shard closed roots whose patterns or references allow metadata", () => {
-    const finding = {
-      type: "object",
-      properties: Object.fromEntries(
-        ["body", "path", "rangeId", "side", "startLine", "endLine"].map((name) => [name, {}]),
-      ),
-      required: ["body", "path", "rangeId", "side", "startLine", "endLine"],
-    };
-    const output = {
-      type: "object",
-      properties: {
-        inlineFindings: { type: "array", items: finding },
-      },
-      required: ["inlineFindings"],
-      additionalProperties: false,
-      patternProperties: { "^meta": {} },
-    };
-
-    expect(schemaHasCanonicalInlineFindingsRoot(output)).toBe(false);
-    expect(
-      schemaHasCanonicalInlineFindingsRoot({
-        $ref: "#/$defs/Output",
-        properties: { metadata: {} },
-        $defs: {
-          Output: { ...output, patternProperties: undefined },
-        },
-      }),
-    ).toBe(false);
+  it("shards the closed canonical root those cases deviate from", () => {
+    expect(schemaHasCanonicalInlineFindingsRoot(closedRoot())).toBe(true);
   });
 });

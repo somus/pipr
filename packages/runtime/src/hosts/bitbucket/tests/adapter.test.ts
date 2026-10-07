@@ -72,61 +72,6 @@ describe("Bitbucket Cloud adapter", () => {
     }
   });
 
-  it("rechecks the head immediately before a progress write", async () => {
-    const client = new FakeBitbucketClient();
-    client.afterGetPullRequest = () => {
-      client.afterGetPullRequest = undefined;
-      client.pullRequest = {
-        ...client.pullRequest,
-        source: { ...client.pullRequest.source, commit: { hash: "new-head" } },
-      };
-    };
-    const adapter = createBitbucketHostAdapter({ client });
-
-    await expect(
-      adapter.publication?.publishReviewProgress?.({
-        change,
-        reviewedHeadSha: "head",
-        renderBody: () => "Progress.",
-      }),
-    ).rejects.toThrow("endpoints changed");
-    expect(client.mainCreates).toBe(0);
-  });
-
-  it("rechecks the progress token immediately before an update write", async () => {
-    const client = new FakeBitbucketClient();
-    const adapter = createBitbucketHostAdapter({ client });
-    const publishProgress = adapter.publication?.publishReviewProgress;
-    if (!publishProgress) throw new Error("Expected progress publication");
-    await publishProgress({
-      change,
-      reviewedHeadSha: "head",
-      renderBody: () => progressBody("old-token"),
-    });
-    let headReads = 0;
-    client.afterGetPullRequest = () => {
-      headReads += 1;
-      if (headReads !== 2) return;
-      client.afterGetPullRequest = undefined;
-      const comment = client.comments[0];
-      if (!comment) throw new Error("Expected progress comment");
-      comment.content.raw = renderBitbucketMarkdown(progressBody("new-token"));
-    };
-
-    await expect(
-      publishProgress({
-        change,
-        reviewedHeadSha: "head",
-        expectedToken: "old-token",
-        renderBody: () => progressBody("old-token"),
-      }),
-    ).resolves.toEqual({ status: "superseded" });
-    expect(client.mainUpdates).toBe(0);
-    expect(normalizeBitbucketMarkdown(client.comments[0]?.content.raw ?? "")).toBe(
-      progressBody("new-token"),
-    );
-  });
-
   it("publishes Markdown-only comments while preserving hidden publication metadata", async () => {
     const client = new FakeBitbucketClient();
     const adapter = createBitbucketHostAdapter({ client });
@@ -177,25 +122,41 @@ describe("Bitbucket Cloud adapter", () => {
     );
   });
 
-  it("fails stale endpoints before writes and declares native limits", async () => {
+  it("does not treat inline finding bodies with Pipr markers as the main or command comment", async () => {
     const client = new FakeBitbucketClient();
-    client.pullRequest = {
-      ...client.pullRequest,
-      source: { ...client.pullRequest.source, commit: { hash: "new-head" } },
-    };
     const adapter = createBitbucketHostAdapter({ client });
-    await expect(adapter.publication?.publish({ change, plan: publicationPlan() })).rejects.toThrow(
-      "endpoints changed",
-    );
-    expect(client.comments).toEqual([]);
-    expect(adapter.capabilities).toEqual({
-      commandComments: true,
-      reviewCommentReplies: true,
-      threadResolution: true,
-      multilineInlineComments: true,
-      suggestedChanges: false,
-      statuses: true,
+    const command = { change, sourceCommentId: "9", commandName: "ask", body: "answer" };
+    const commandMarker = "<!-- pipr:command-response change=7 source=9 command=ask -->";
+    const plan = publicationPlan();
+    const item = plan.inlineItems[0];
+    if (!item) throw new Error("Expected inline fixture");
+    const inlineBody = [
+      renderInlineFindingMarker(item.findingId, item.reviewedHeadSha),
+      "Fix",
+      "<!-- pipr:main-comment change=7 version=1 -->",
+      commandMarker,
+    ].join("\n");
+    item.body = inlineBody;
+
+    await adapter.publication?.publish({ change, plan });
+    await adapter.publication?.publish({ change, plan });
+    await adapter.publication?.publishCommandResponse?.(command);
+
+    const inline = client.comments.filter((comment) => comment.inline);
+    const topLevel = client.comments.filter((comment) => !comment.inline && !comment.parent);
+    expect(inline).toHaveLength(1);
+    expect(normalizeBitbucketMarkdown(inline[0]?.content.raw ?? "")).toBe(inlineBody);
+    expect(topLevel).toHaveLength(2);
+    expect(client.mainCreates).toBe(1);
+    expect(client.mainUpdates).toBe(1);
+    expect(client.commandCreates).toBe(1);
+    await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toMatchObject({
+      reviewedHeadSha: "head",
+      findings: [expect.objectContaining({ path: "src/a.ts" })],
     });
+    await expect(adapter.comments?.loadPriorMainComment?.({ change })).resolves.toContain(
+      "Summary",
+    );
   });
 
   it("rejects a missing authenticated UUID before publication writes", async () => {
@@ -273,59 +234,12 @@ describe("Bitbucket Cloud adapter", () => {
     client.currentUserCalls = 0;
     client.listCommentsCalls = 0;
 
-    await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toBeDefined();
+    await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toMatchObject({
+      reviewedHeadSha: "head",
+      findings: [{ path: "src/a.ts", side: "RIGHT", startLine: 2, endLine: 4, status: "open" }],
+    });
     expect(client.currentUserCalls).toBe(1);
     expect(client.listCommentsCalls).toBe(1);
-  });
-
-  it("retries only inline comments missing after partial publication", async () => {
-    const client = new FakeBitbucketClient();
-    const adapter = createBitbucketHostAdapter({ client });
-    const plan = publicationPlan();
-    const first = plan.inlineItems[0];
-    if (!first) throw new Error("Expected inline fixture");
-    const second = {
-      ...first,
-      finding: { ...first.finding, body: "Second fix", startLine: 5, endLine: 5 },
-      range: { ...first.range, startLine: 5, endLine: 5 },
-      startLine: 5,
-      endLine: 5,
-      findingId: "finding-2",
-      marker: "pipr:finding:finding-2:head",
-      body: `${renderInlineFindingMarker("finding-2", "head")}\nSecond fix`,
-    };
-    plan.inlineItems = [first, second];
-    client.failCommentBodyOnce = "finding-2";
-
-    await expect(adapter.publication?.publish({ change, plan })).rejects.toThrow(
-      "Bitbucket inline comment publication failed",
-    );
-    await expect(adapter.publication?.publish({ change, plan })).resolves.toMatchObject({
-      mainComment: { action: "updated" },
-      inlineComments: { posted: 1, skipped: 1, failed: 0 },
-    });
-
-    expect(client.createdBodies.filter((body) => body.inline)).toHaveLength(2);
-    expect(
-      client.createdBodies.filter((body) => (body.inline as { to?: number } | undefined)?.to === 4),
-    ).toHaveLength(1);
-    expect(
-      client.createdBodies.filter((body) => (body.inline as { to?: number } | undefined)?.to === 5),
-    ).toHaveLength(1);
-  });
-
-  it("upserts a pending status to success with the same key", async () => {
-    const client = new FakeBitbucketClient();
-    const adapter = createBitbucketHostAdapter({ client });
-
-    await adapter.statuses?.upsert({ change, name: "review", state: "pending" });
-    await adapter.statuses?.upsert({ change, name: "review", state: "success" });
-
-    expect(client.statusKeys).toEqual(["pipr-review", "pipr-review"]);
-    expect(client.statusBodies).toMatchObject([
-      { state: "INPROGRESS", refname: "feature" },
-      { state: "SUCCESSFUL", refname: "feature" },
-    ]);
   });
 });
 
@@ -362,15 +276,6 @@ const change: ChangeRequestEventContext = {
   },
   workspace: "/workspace",
 };
-
-function progressBody(token: string): string {
-  return [
-    "<!-- pipr:main-comment change=7 version=1 -->",
-    `<!-- pipr:progress:start token=${token} head=head stage=preparing-workspace state=running -->`,
-    "## Progress",
-    "<!-- pipr:progress:end -->",
-  ].join("\n");
-}
 
 function publicationPlan() {
   const item: InlinePublicationItem = {
@@ -433,6 +338,7 @@ class FakeBitbucketClient implements BitbucketClient {
   failCommentBodyOnce: string | undefined;
   currentUserCalls = 0;
   listCommentsCalls = 0;
+  changeLoads = 0;
   permission: RepositoryPermission = "write";
   permissionActors: string[] = [];
   failInline = false;
@@ -477,11 +383,14 @@ class FakeBitbucketClient implements BitbucketClient {
     this.afterGetPullRequest?.();
     return pullRequest;
   };
-  loadChange = async () => ({
-    repository: change.repository,
-    coordinates: change.coordinates as NonNullable<typeof change.coordinates>,
-    change: change.change,
-  });
+  loadChange = async () => {
+    this.changeLoads += 1;
+    return {
+      repository: change.repository,
+      coordinates: change.coordinates as NonNullable<typeof change.coordinates>,
+      change: change.change,
+    };
+  };
   listComments = async () => {
     this.listCommentsCalls += 1;
     const comments = this.comments;
@@ -611,6 +520,10 @@ async function createBitbucketConformanceHarness(): Promise<CodeHostAdapterConfo
         ...options,
         env: { BITBUCKET_EVENT_KEY: "pullrequest:comment_created" },
       });
+      return { changeRequest, command, reply };
+    },
+    async draftEvent() {
+      const eventPath = path.join(root, "draft.json");
       await Bun.write(
         eventPath,
         JSON.stringify({
@@ -619,12 +532,13 @@ async function createBitbucketConformanceHarness(): Promise<CodeHostAdapterConfo
           pullrequest: { id: 7, draft: true },
         }),
       );
-      const draft = await adapter.events.parseEvent({
-        ...options,
+      return adapter.events.parseEvent({
+        eventPath,
         env: { BITBUCKET_EVENT_KEY: "pullrequest:updated" },
+        workspace: root,
       });
-      return { changeRequest, command, reply, draft };
     },
+    changeLoads: () => client.changeLoads,
     setPermission(permission) {
       client.permission = permission;
     },
@@ -660,12 +574,19 @@ async function createBitbucketConformanceHarness(): Promise<CodeHostAdapterConfo
     failNextInline() {
       client.failInline = true;
     },
-    seedForeignInline() {
+    seedForeignInline(body) {
       client.comments.push({
         id: "foreign-inline",
-        content: { raw: `${renderInlineFindingMarker("foreign", "head")}\nForeign.` },
+        content: { raw: renderBitbucketMarkdown(body) },
         user: { uuid: "{developer}", nickname: "developer" },
         inline: { path: "src/new.ts", to: 4, start_to: 2 },
+      });
+    },
+    seedForeignMainComment(body) {
+      client.comments.push({
+        id: "foreign-main",
+        content: { raw: renderBitbucketMarkdown(body) },
+        user: { uuid: "{developer}", nickname: "developer" },
       });
     },
     seedForeignReply(body) {

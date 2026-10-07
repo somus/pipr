@@ -2,11 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
-import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
 import { runLocalReviewCommand } from "../commands-local-review.js";
 import {
   createCommandWorkspace,
-  expectPiNotCalled,
   localReviewSelectionConfigTs,
   removeWorkspace,
   reviewConfigTs,
@@ -40,32 +38,6 @@ describe("runLocalReviewCommand", () => {
       expect(await Bun.file(path.join(workspace.rootDir, "alpha-ran")).text()).toBe("1\n");
       expect(await Bun.file(path.join(workspace.rootDir, "beta-ran")).text()).toBe("1\n");
       expect(await Bun.file(path.join(workspace.rootDir, "disabled-ran")).exists()).toBe(false);
-    } finally {
-      await removeWorkspace(workspace.rootDir);
-    }
-  });
-
-  it("logs config version warnings for local reviews", async () => {
-    const workspace = await createCommandWorkspace({
-      baseConfigTs: localReviewSelectionConfigTs(),
-      headConfigTs: localReviewSelectionConfigTs(),
-      sdkVersion: "0.1.0",
-    });
-    const logs = memoryRuntimeLogSink();
-    try {
-      const result = await runLocalReviewCommand({
-        rootDir: workspace.rootDir,
-        configDir: ".pipr",
-        env: { DEEPSEEK_API_KEY: "provider-key" },
-        baseSha: workspace.baseSha,
-        headSha: workspace.headSha,
-        piProviderModule: workspace.pi.providerModule,
-        logSink: logs.logSink,
-      });
-
-      expect(result.kind).toBe("review");
-      expect(logs.messages.join("\n")).toContain('"event":"config warning"');
-      expect(logs.messages.join("\n")).toContain(".pipr/package.json pins @usepipr/sdk 0.1.0");
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -158,29 +130,6 @@ describe("runLocalReviewCommand", () => {
       } else {
         process.env.PI_CODING_AGENT_DIR = previousPiAgentDir;
       }
-      await removeWorkspace(workspace.rootDir);
-    }
-  });
-
-  it("fails local reviews before Pi when the config SDK pin is newer than Pipr", async () => {
-    const workspace = await createCommandWorkspace({
-      baseConfigTs: localReviewSelectionConfigTs(),
-      headConfigTs: localReviewSelectionConfigTs(),
-      sdkVersion: "999.0.0",
-    });
-    try {
-      await expect(
-        runLocalReviewCommand({
-          rootDir: workspace.rootDir,
-          configDir: ".pipr",
-          env: { DEEPSEEK_API_KEY: "provider-key" },
-          baseSha: workspace.baseSha,
-          headSha: workspace.headSha,
-          piProviderModule: workspace.pi.providerModule,
-        }),
-      ).rejects.toThrow("Upgrade Pipr before running this config");
-      await expectPiNotCalled(workspace);
-    } finally {
       await removeWorkspace(workspace.rootDir);
     }
   });

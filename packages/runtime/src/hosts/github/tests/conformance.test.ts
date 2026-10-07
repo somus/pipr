@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { renderInlineFindingMarker } from "../../../review/prior-state.js";
 import type { ChangeRequestEventContext } from "../../../types.js";
 import {
   type CodeHostAdapterConformanceHarness,
@@ -126,8 +125,10 @@ class StatefulGitHubClient implements GitHubCommandClient, GitHubPublicationClie
     headSha: string;
   }> = [];
   afterListIssueComments?: () => void;
+  pullRequestLoads = 0;
 
   async getPullRequest() {
+    this.pullRequestLoads += 1;
     return {
       repository: { slug: "local/pipr", url: "https://github.test/local/pipr" },
       change: {
@@ -333,6 +334,10 @@ async function createGitHubConformanceHarness(): Promise<CodeHostAdapterConforma
         env: githubEnv("pull_request_review_comment", root),
         workspace: root,
       });
+      return { changeRequest, command, reply };
+    },
+    async draftEvent() {
+      const eventPath = path.join(root, "draft.json");
       await Bun.write(
         eventPath,
         JSON.stringify({
@@ -340,13 +345,13 @@ async function createGitHubConformanceHarness(): Promise<CodeHostAdapterConforma
           pull_request: { ...pullRequestPayload().pull_request, draft: true },
         }),
       );
-      const draft = await adapter.events.parseEvent({
+      return adapter.events.parseEvent({
         eventPath,
         env: githubEnv("pull_request", root),
         workspace: root,
       });
-      return { changeRequest, command, reply, draft };
     },
+    changeLoads: () => client.pullRequestLoads,
     setPermission(permission) {
       client.permission = permission;
     },
@@ -371,10 +376,10 @@ async function createGitHubConformanceHarness(): Promise<CodeHostAdapterConforma
     failNextInline() {
       client.failInline = true;
     },
-    seedForeignInline() {
+    seedForeignInline(body) {
       client.reviewComments.push({
         id: 900,
-        body: `${renderInlineFindingMarker("foreign", "head")}\nForeign.`,
+        body,
         authorLogin: "developer",
         path: "src/new.ts",
         commitId: "head",
@@ -383,6 +388,9 @@ async function createGitHubConformanceHarness(): Promise<CodeHostAdapterConforma
         side: "RIGHT",
         startSide: "RIGHT",
       });
+    },
+    seedForeignMainComment(body) {
+      client.issueComments.push({ id: 902, body, authorLogin: "developer" });
     },
     seedForeignReply(body) {
       const thread = client.threads.find((item) =>

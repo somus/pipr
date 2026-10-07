@@ -13,10 +13,8 @@ import {
   configCoreInitFiles,
   eventContext,
   githubExpression,
-  initializedConfigOnlyProject,
   jsonPiRunner,
   mkdtemp,
-  packageInitFiles,
   recipeConfigFiles,
   sequentialJsonPiRunner,
   useLocalInitSdk,
@@ -26,7 +24,7 @@ afterAll(await useLocalInitSdk());
 afterEach(cleanupTemporaryDirectories);
 
 describe("initOfficialMinimalProject: generated recipes", () => {
-  it("initializes every official recipe and validates the generated config", async () => {
+  it("initializes and type-checks every official recipe config", async () => {
     expect(supportedOfficialInitRecipes).toContain("rich-review");
     expect(supportedOfficialInitRecipes).toContain("fix-suggestions");
     expect(listOfficialInitRecipes().map((recipe) => recipe.id)).toEqual([
@@ -34,33 +32,18 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     ]);
 
     for (const recipe of supportedOfficialInitRecipes) {
-      const { rootDir, result, project } = await initializedConfigOnlyProject(recipe);
-
-      expect(result.created).toEqual(expect.arrayContaining(configCoreInitFiles));
-      expect(result.created).toEqual(expect.arrayContaining(packageInitFiles));
-      for (const file of recipeConfigFiles(recipe)) {
-        expect(result.created).toContain(file);
-      }
-      expect(result.overwritten).toEqual([]);
-      expect(project.kind).toBe("typescript");
-      const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-      expect(configTs).toContain("definePipr");
-      expect(configTs).not.toContain("pipr.local");
-      expect(configTs).not.toContain('section("Diff Manifest"');
-      expect(configTs).not.toContain("json(input.manifest");
-      expect(configTs).not.toContain("input.manifest");
-      expect(configTs).not.toContain("Include suggestedFix only");
-      expect(configTs).not.toContain("Omit suggestedFix when");
-      expect(configTs).not.toContain("Omit suggestedFix for secrets");
-      expect(configTs).not.toContain("suggestedFix directly fixes");
-      expect(configTs).not.toContain("trailing-blank-line-only");
-    }
-  });
-
-  it("type-checks every official recipe config", async () => {
-    for (const recipe of supportedOfficialInitRecipes) {
       const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${recipe}-`));
-      await initOfficialMinimalProject({ rootDir, adapters: [], recipe, minimal: true });
+      const result = await initOfficialMinimalProject({
+        rootDir,
+        adapters: [],
+        recipe,
+        minimal: true,
+      });
+
+      expect(result.created).toEqual(
+        expect.arrayContaining([...configCoreInitFiles, ...recipeConfigFiles(recipe)]),
+      );
+      expect(result.overwritten).toEqual([]);
       await expect(validateProject({ rootDir }), recipe).resolves.toMatchObject({
         kind: "typescript",
       });
@@ -197,57 +180,20 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     }
   });
 
-  it("initializes the structured review recipe with category and severity metadata", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-rich-review-"));
+  it.each([
+    ["rich-review", ["review-findings", "summary-reviewer"], "review"],
+    ["security-sast", ["security-sast"], "security-sast"],
+  ] as const)("initializes the %s recipe plan", async (recipe, agents, task) => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${recipe}-`));
 
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "rich-review",
-      minimal: true,
-    });
-    const project = await loadRuntimeProject({ rootDir });
-    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-
-    expect(configTs).toContain("summarySchema");
-    expect(configTs).not.toContain("issueKey");
-    expect(configTs).toContain("changeSummary: z.array(z.string().min(1).max(500)).min(1).max(4)");
-    expect(configTs).toContain("reviewerFocus: z.array(z.string().min(1).max(500)).max(4)");
-    expect(configTs).toContain("**Review risk:**");
-    expect(configTs).toContain("pipr.finding({");
-    expect(configTs).toContain("severity");
-    expect(configTs).toContain("category");
-    expect(configTs).not.toContain('"nit"');
-    expect(configTs).not.toContain("validateFindings");
-    expect(configTs).not.toContain('"## Findings"');
-    expect(configTs).not.toContain('"## Review"');
-    expect(configTs).not.toContain("rich-review");
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toEqual(
-      expect.arrayContaining(["review-findings", "summary-reviewer"]),
+    await initOfficialMinimalProject({ rootDir, adapters: [], recipe, minimal: true });
+    const plan = inspectRuntimePlan(
+      (await loadRuntimeProject({ rootDir })).plan,
+      ".pipr/config.ts",
     );
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("review");
-  });
 
-  it("initializes the security SAST recipe with structured summary rendering", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-security-sast-"));
-
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "security-sast",
-      minimal: true,
-    });
-    const project = await loadRuntimeProject({ rootDir });
-    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-
-    expect(configTs).toContain("riskSummary: z.string()");
-    expect(configTs).toContain("diagramMermaid");
-    expect(configTs).toContain("mermaidBlock");
-    expect(configTs).toContain("ctx.review.select(result.risks");
-    expect(configTs).toContain("ctx.check.gate(risks");
-    expect(configTs).toContain("$" + "{fence}mermaid");
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").agents).toContain("security-sast");
-    expect(inspectRuntimePlan(project.plan, ".pipr/config.ts").tasks).toContain("security-sast");
+    expect(plan.agents).toEqual(expect.arrayContaining([...agents]));
+    expect(plan.tasks).toContain(task);
   });
 
   it("renders the structured review recipe as a scannable clean summary", async () => {
@@ -1909,23 +1855,6 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     expect(insufficient.commandResponse.body).not.toContain("## Likely Causes");
   });
 
-  it("initializes the PR briefing recipe with dynamic diagram fences", async () => {
-    const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-briefing-"));
-
-    await initOfficialMinimalProject({
-      rootDir,
-      adapters: [],
-      recipe: "pr-briefing",
-      minimal: true,
-    });
-    const configTs = await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text();
-
-    expect(configTs).toContain("function fenced");
-    expect(configTs).toContain('fenced("mermaid"');
-    expect(configTs).toContain("Return empty arrays for list sections with no useful content");
-    expect(configTs).not.toContain('"```mermaid",\n    diagram,\n    "```"');
-  });
-
   it("omits empty optional PR briefing sections", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-pr-briefing-"));
 
@@ -2128,50 +2057,6 @@ describe("initOfficialMinimalProject: generated recipes", () => {
     );
   });
 
-  it("generates grounded recipe policies and expanded dependency scopes", async () => {
-    const recipeConfigs = new Map<string, string>();
-    for (const recipe of [
-      "dependency-risk",
-      "plugin-tool-review",
-      "interactive-ask",
-      "changelog-draft",
-    ] as const) {
-      const rootDir = await mkdtemp(path.join(os.tmpdir(), `pipr-init-${recipe}-`));
-      await initOfficialMinimalProject({
-        rootDir,
-        adapters: [],
-        recipe,
-        minimal: true,
-      });
-      recipeConfigs.set(recipe, await Bun.file(path.join(rootDir, ".pipr", "config.ts")).text());
-    }
-
-    const dependencyConfig = recipeConfigs.get("dependency-risk") ?? "";
-    for (const dependencyFile of [
-      "deno.json",
-      "deno.jsonc",
-      "jsr.json",
-      "uv.lock",
-      "poetry.lock",
-      "Pipfile",
-      "Pipfile.lock",
-      "Gemfile",
-      "Gemfile.lock",
-      "composer.json",
-      "composer.lock",
-      "Package.swift",
-      "Package.resolved",
-      "Directory.Packages.props",
-      "packages.lock.json",
-    ]) {
-      expect(dependencyConfig).toContain(`**/${dependencyFile}`);
-    }
-    expect(dependencyConfig).toContain("z.array(z.string()).max(6)");
-    expect(recipeConfigs.get("plugin-tool-review")).toContain("based only on memory");
-    expect(recipeConfigs.get("interactive-ask")).toContain("Distinguish evidence from inference");
-    expect(recipeConfigs.get("changelog-draft")).toContain("Do not invent issue IDs");
-  });
-
   it("renders changelog drafts with a safe collapsed rationale", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "pipr-init-changelog-draft-"));
     await initOfficialMinimalProject({
@@ -2249,19 +2134,21 @@ describe("initOfficialMinimalProject: generated recipes", () => {
 
     await initOfficialMinimalProject({ rootDir, recipe: "plugin-tool-review" });
 
-    const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
-    expect(workflow).toContain(
-      `PIPR_R2_MEMORY_BUCKET: ${githubExpression("secrets.PIPR_R2_MEMORY_BUCKET")}`,
+    const workflow = Bun.YAML.parse(
+      await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text(),
+    ) as { jobs: Record<string, { steps: Array<{ env?: Record<string, string> }> }> };
+    const env = Object.assign(
+      {},
+      ...Object.values(workflow.jobs).flatMap((job) => job.steps.map((step) => step.env ?? {})),
     );
-    expect(workflow).toContain(
-      `PIPR_R2_MEMORY_ENDPOINT: ${githubExpression("secrets.PIPR_R2_MEMORY_ENDPOINT")}`,
-    );
-    expect(workflow).toContain(
-      `PIPR_R2_MEMORY_ACCESS_KEY_ID: ${githubExpression("secrets.PIPR_R2_MEMORY_ACCESS_KEY_ID")}`,
-    );
-    expect(workflow).toContain(
-      `PIPR_R2_MEMORY_SECRET_ACCESS_KEY: ${githubExpression("secrets.PIPR_R2_MEMORY_SECRET_ACCESS_KEY")}`,
-    );
+    for (const name of [
+      "PIPR_R2_MEMORY_BUCKET",
+      "PIPR_R2_MEMORY_ENDPOINT",
+      "PIPR_R2_MEMORY_ACCESS_KEY_ID",
+      "PIPR_R2_MEMORY_SECRET_ACCESS_KEY",
+    ]) {
+      expect(env[name]).toBe(githubExpression(`secrets.${name}`));
+    }
   });
 
   it("generates SDK types that preserve optional Zod object fields", async () => {

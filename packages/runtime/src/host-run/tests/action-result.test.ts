@@ -141,35 +141,29 @@ describe("presentGitHubActionResult", () => {
     );
   });
 
-  it("presents ignored results as versioned output", async () => {
-    const calls = recordingPresenter();
-    await presentGitHubActionResult(ignoredResult(), calls.sink);
-    expect(calls.info).toEqual(["pipr ignored event: unsupported event"]);
-    expect(calls.output).toEqual([
-      ["result", '{"formatVersion":2,"kind":"ignored","reason":"unsupported event"}'],
-    ]);
-  });
-
-  it("presents dry-run results as versioned output", async () => {
-    const calls = recordingPresenter();
-    await presentGitHubActionResult(dryRunResult(), calls.sink);
-    expect(calls.info.at(-1)).toBe(
-      "PIPR_DRY_RUN=1; stopping before review runtime, model, or GitHub publishing calls",
-    );
-    expect(calls.output).toEqual([["result", '{"formatVersion":2,"kind":"dry-run"}']]);
-  });
-
-  it("presents generic failures as versioned output", async () => {
-    const calls = recordingPresenter();
-    await presentGitHubActionError(calls.sink);
-
-    expect(calls.output).toEqual([
+  it.each<[string, (sink: ReturnType<typeof recordingPresenter>["sink"]) => Promise<void>, string]>(
+    [
       [
-        "result",
+        "ignored",
+        (sink) => presentGitHubActionResult(ignoredResult(), sink),
+        '{"formatVersion":2,"kind":"ignored","reason":"unsupported event"}',
+      ],
+      [
+        "dry-run",
+        (sink) => presentGitHubActionResult(dryRunResult(), sink),
+        '{"formatVersion":2,"kind":"dry-run"}',
+      ],
+      [
+        "generic failure",
+        (sink) => presentGitHubActionError(sink),
         '{"formatVersion":2,"kind":"error","message":"Pipr failed; see the Action log for details."}',
       ],
-    ]);
-    expect(calls.output[0]?.[1]).not.toContain("provider-secret");
+    ],
+  )("presents %s results as versioned output", async (_kind, present, expected) => {
+    const calls = recordingPresenter();
+    await present(calls.sink);
+
+    expect(calls.output).toEqual([["result", expected]]);
   });
 
   it("preserves leading Markdown indentation while removing control markers", async () => {

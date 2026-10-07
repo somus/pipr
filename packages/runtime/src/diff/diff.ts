@@ -254,7 +254,17 @@ function parseNumstatHeader(
 function parseRawPatch(output: string): { filePaths: string[]; patch: string } {
   const rawPatchSeparator = "\0\0";
   const separatorIndex = output.indexOf(rawPatchSeparator);
-  const raw = separatorIndex < 0 ? output : output.slice(0, separatorIndex);
+  if (separatorIndex < 0) {
+    return { filePaths: parseRawPatchPaths(output), patch: "" };
+  }
+  return {
+    filePaths: parseRawPatchPaths(output.slice(0, separatorIndex)),
+    patch: output.slice(separatorIndex + rawPatchSeparator.length),
+  };
+}
+
+/** The file path of each patch section, in the order Git writes them. */
+function parseRawPatchPaths(raw: string): string[] {
   const fields = raw.split("\0");
   const filePaths: string[] = [];
   let index = 0;
@@ -265,16 +275,12 @@ function parseRawPatch(output: string): { filePaths: string[]; patch: string } {
     }
     const rawStatus = metadata.slice(metadata.lastIndexOf(" ") + 1);
     const firstPath = fields[index++] ?? "";
-    if (rawStatus.startsWith("R") || rawStatus.startsWith("C")) {
-      filePaths.push(fields[index++] || firstPath);
-      continue;
-    }
-    filePaths.push(firstPath);
+    const hasSecondPath = rawStatus.startsWith("R") || rawStatus.startsWith("C");
+    const filePath = hasSecondPath ? fields[index++] || firstPath : firstPath;
+    // Git splits a type change into a deletion patch and a creation patch for the same path.
+    filePaths.push(...(rawStatus === "T" ? [filePath, filePath] : [filePath]));
   }
-  return {
-    filePaths,
-    patch: separatorIndex < 0 ? "" : output.slice(separatorIndex + rawPatchSeparator.length),
-  };
+  return filePaths;
 }
 
 function baseFile(filePath: string, status: FileStatus, previousPath?: string): DiffFile {
@@ -417,7 +423,7 @@ function parseUnifiedDiffLine(state: DiffParserState, line: string): void {
     return;
   }
 
-  if (!state.activeHunk || line.startsWith("+++ /dev/null")) {
+  if (!state.activeHunk) {
     return;
   }
 
@@ -490,6 +496,17 @@ function applyHunkLine(state: DiffParserState, line: string): void {
     return;
   }
 
+  if (line.startsWith("\\")) {
+    hunk.bodyLines.push(line);
+    flushPendingRange(state);
+    return;
+  }
+  // Once the @@ header line counts are consumed, nothing else belongs to the
+  // hunk; inside it, `---`/`+++` prefixes are removed/added content.
+  if (isHunkExhausted(hunk)) {
+    flushPendingRange(state);
+    return;
+  }
   if (line.startsWith(" ")) {
     hunk.bodyLines.push(line);
     flushPendingRange(state);
@@ -497,22 +514,25 @@ function applyHunkLine(state: DiffParserState, line: string): void {
     hunk.newLine += 1;
     return;
   }
-  if (line.startsWith("+") && !line.startsWith("+++")) {
+  if (line.startsWith("+")) {
     hunk.bodyLines.push(line);
     applyCommentableLine(state, "RIGHT", hunk.newLine, line.slice(1), "added");
     hunk.newLine += 1;
     return;
   }
-  if (line.startsWith("-") && !line.startsWith("---")) {
+  if (line.startsWith("-")) {
     hunk.bodyLines.push(line);
     applyCommentableLine(state, "LEFT", hunk.oldLine, line.slice(1), "deleted");
     hunk.oldLine += 1;
     return;
   }
-  if (line.startsWith("\\")) {
-    hunk.bodyLines.push(line);
-  }
   flushPendingRange(state);
+}
+
+function isHunkExhausted(hunk: ActiveHunk): boolean {
+  return (
+    hunk.oldLine >= hunk.oldStart + hunk.oldLines && hunk.newLine >= hunk.newStart + hunk.newLines
+  );
 }
 
 function applyCommentableLine(

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, symlink } from "node:fs/promises";
 import path from "node:path";
 import { writeThirdPartyPiprProject } from "../../config/tests/helpers/third-party-config.js";
+import { runGit } from "../../diff/git.js";
 import { loadRuntimeProjectFromGitCommit } from "../git-project.js";
 import { commitGitProjectBase, initGitRepoRoot } from "./helpers/git-project.js";
 
@@ -67,5 +68,34 @@ describe("loadRuntimeProjectFromGitCommit", () => {
         commitSha: baseSha,
       }),
     ).rejects.toThrow("No Pipr config found at .pipr/config.ts in base commit");
+  });
+
+  it.each([
+    [
+      "a symlink",
+      async (rootDir: string) => {
+        await symlink("../README.md", path.join(rootDir, ".pipr", "x.ts"));
+        commitGitProjectBase(rootDir);
+      },
+    ],
+    [
+      "a submodule",
+      async (rootDir: string) => {
+        const sha = runGit(["rev-parse", "HEAD"], rootDir).trim();
+        runGit(["update-index", "--add", "--cacheinfo", `160000,${sha},.pipr/sub`], rootDir);
+        runGit(["commit", "--no-verify", "-m", "submodule"], rootDir);
+      },
+    ],
+  ])("rejects %s inside the trusted config directory", async (_kind, addEntry) => {
+    const rootDir = await initGitRepoRoot();
+    await writeThirdPartyPiprProject(rootDir);
+    await Bun.write(path.join(rootDir, "README.md"), "# readme\n");
+    commitGitProjectBase(rootDir);
+    await addEntry(rootDir);
+    const baseSha = runGit(["rev-parse", "HEAD"], rootDir).trim();
+
+    await expect(loadRuntimeProjectFromGitCommit({ rootDir, commitSha: baseSha })).rejects.toThrow(
+      `only regular config files are supported at ${baseSha}`,
+    );
   });
 });

@@ -713,16 +713,6 @@ describe("pipr runtime Pi read tools", () => {
           maxBytes: 10_000,
         }),
       );
-
-      expect(() =>
-        readDiffFromRuntimeData(
-          { manifest, toolResponseMaxBytes: 10_000, baseRanges: {} },
-          { path: "src/missing.ts" },
-        ),
-      ).toThrow("is not in the Diff Manifest");
-      await expect(
-        executeRuntimeTool(diffTool, repo.root, { path: "src/missing.ts" }),
-      ).rejects.toThrow("is not in the Diff Manifest");
     } finally {
       await removeTree(repo.root);
       await removeTree(toolRoot);

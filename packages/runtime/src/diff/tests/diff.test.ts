@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rename, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -149,6 +149,316 @@ describe("diff manifest parsing", () => {
       newStart: 1,
       newLines: 1,
     });
+  });
+
+  it("treats ---/+++ lines inside an open hunk as removed/added content", () => {
+    const diff = [
+      "diff --git a/notes.md b/notes.md",
+      "index 111..222 100644",
+      "--- a/notes.md",
+      "+++ b/notes.md",
+      "@@ -1,4 +1,4 @@",
+      " title",
+      "----",
+      "+++i;",
+      " keep",
+      "-old",
+      "+new",
+    ].join("\n");
+
+    const file = parseUnifiedDiff(diff, ["notes.md"]).get("notes.md");
+
+    expect(
+      file?.commentableRanges.map(({ side, startLine, endLine, preview }) => ({
+        side,
+        startLine,
+        endLine,
+        preview,
+      })),
+    ).toEqual([
+      { side: "LEFT", startLine: 2, endLine: 2, preview: "---" },
+      { side: "RIGHT", startLine: 2, endLine: 2, preview: "++i;" },
+      { side: "LEFT", startLine: 4, endLine: 4, preview: "old" },
+      { side: "RIGHT", startLine: 4, endLine: 4, preview: "new" },
+    ]);
+  });
+
+  it("keeps hunk 1 range ids stable when only hunk 2 changes", async () => {
+    await withGitRepo(async (repo) => {
+      const lines = makeNumberedLines("line", 400).split("\n");
+      const baseSha = await commitFile(repo, "src/a.ts", lines.join("\n"), "base");
+      const edit = (secondHunk: string) =>
+        lines
+          .map((line, index) => {
+            if (index === 5) {
+              return "first hunk edit";
+            }
+            return index === 350 ? secondHunk : line;
+          })
+          .join("\n");
+      const firstHead = await commitFile(repo, "src/a.ts", edit("second hunk v1"), "head v1");
+      git(repo, "reset", "--hard", baseSha);
+      const secondHead = await commitFile(repo, "src/a.ts", edit("second hunk v2"), "head v2");
+
+      const rangesFor = (headSha: string) =>
+        changedFile(buildDiffManifest({ cwd: repo, baseSha, headSha }), "src/a.ts")
+          ?.commentableRanges ?? [];
+      const first = rangesFor(firstHead);
+      const second = rangesFor(secondHead);
+      const idsForHunk = (ranges: typeof first, hunkIndex: number) =>
+        ranges.filter((range) => range.hunkIndex === hunkIndex).map((range) => range.id);
+
+      expect(idsForHunk(first, 1)).toHaveLength(2);
+      expect(idsForHunk(second, 1)).toEqual(idsForHunk(first, 1));
+      expect(idsForHunk(second, 2)).toHaveLength(2);
+      expect(idsForHunk(second, 2)).not.toEqual(idsForHunk(first, 2));
+    });
+  });
+
+  it("parses a Markdown --- removal from a real git diff without shifting lines", async () => {
+    await withGitRepo(async (repo) => {
+      const baseSha = await commitFile(
+        repo,
+        "doc.md",
+        "# Title\n---\n++counter\nbody\nold\n",
+        "base",
+      );
+      const headSha = await commitFile(repo, "doc.md", "# Title\n++i;\nbody\nnew\n", "head");
+
+      const file = changedFile(buildDiffManifest({ cwd: repo, baseSha, headSha }), "doc.md");
+
+      expect(
+        file?.commentableRanges.map(({ side, startLine, endLine, preview }) => ({
+          side,
+          startLine,
+          endLine,
+          preview,
+        })),
+      ).toEqual([
+        { side: "LEFT", startLine: 2, endLine: 3, preview: "---\n++counter" },
+        { side: "RIGHT", startLine: 2, endLine: 2, preview: "++i;" },
+        { side: "LEFT", startLine: 5, endLine: 5, preview: "old" },
+        { side: "RIGHT", startLine: 4, endLine: 4, preview: "new" },
+      ]);
+    });
+  });
+
+  describe("real git edge cases", () => {
+    type EdgeCase = {
+      name: string;
+      setup?: (repo: string) => void;
+      base: Record<string, string>;
+      head: (repo: string) => Promise<void>;
+      expected: Array<Record<string, unknown>>;
+    };
+    const rangeSummary = (file: ReturnType<typeof changedFile>) =>
+      file?.commentableRanges.map(({ side, startLine, endLine, preview }) => ({
+        side,
+        startLine,
+        endLine,
+        preview,
+      }));
+    const edgeCases: EdgeCase[] = [
+      {
+        name: "CRLF line endings",
+        base: { "crlf.txt": "one\r\ntwo\r\nthree\r\n" },
+        head: async (repo) => {
+          await Bun.write(path.join(repo, "crlf.txt"), "one\r\nTWO\r\nthree\r\n");
+        },
+        expected: [
+          {
+            path: "crlf.txt",
+            status: "modified",
+            additions: 1,
+            deletions: 1,
+            ranges: [
+              { side: "LEFT", startLine: 2, endLine: 2, preview: "two\r" },
+              { side: "RIGHT", startLine: 2, endLine: 2, preview: "TWO\r" },
+            ],
+          },
+        ],
+      },
+      {
+        name: "no newline at end of file between - and +",
+        base: { "eof.txt": "one\ntwo" },
+        head: async (repo) => {
+          await Bun.write(path.join(repo, "eof.txt"), "one\nTWO");
+        },
+        expected: [
+          {
+            path: "eof.txt",
+            status: "modified",
+            additions: 1,
+            deletions: 1,
+            ranges: [
+              { side: "LEFT", startLine: 2, endLine: 2, preview: "two" },
+              { side: "RIGHT", startLine: 2, endLine: 2, preview: "TWO" },
+            ],
+          },
+        ],
+      },
+      {
+        name: "mode-only change",
+        base: { "script.sh": "echo hi\n" },
+        head: async (repo) => {
+          await chmod(path.join(repo, "script.sh"), 0o755);
+        },
+        expected: [
+          {
+            path: "script.sh",
+            status: "modified",
+            additions: 0,
+            deletions: 0,
+            hunks: 0,
+            ranges: [],
+          },
+        ],
+      },
+      {
+        name: "copy with copy detection configured",
+        setup: (repo) => git(repo, "config", "diff.renames", "copies"),
+        base: { "orig.txt": "one\ntwo\nthree\nfour\nfive\n" },
+        head: async (repo) => {
+          await Bun.write(path.join(repo, "copy.txt"), "one\ntwo\nthree\nfour\nfive\n");
+          await Bun.write(path.join(repo, "orig.txt"), "one\ntwo\nthree\nfour\nfive\nsix\n");
+        },
+        expected: [
+          {
+            path: "copy.txt",
+            status: "added",
+            additions: 5,
+            deletions: 0,
+            ranges: [
+              {
+                side: "RIGHT",
+                startLine: 1,
+                endLine: 5,
+                preview: "one\ntwo\nthree\nfour\nfive",
+              },
+            ],
+          },
+          {
+            path: "orig.txt",
+            status: "modified",
+            additions: 1,
+            deletions: 0,
+            ranges: [{ side: "RIGHT", startLine: 6, endLine: 6, preview: "six" }],
+          },
+        ],
+      },
+      {
+        name: "type change followed by another file",
+        base: { "link.txt": "one\ntwo\n", "z-after.txt": "before\n" },
+        head: async (repo) => {
+          await rm(path.join(repo, "link.txt"));
+          await symlink("z-after.txt", path.join(repo, "link.txt"));
+          await Bun.write(path.join(repo, "z-after.txt"), "after\n");
+        },
+        expected: [
+          {
+            path: "link.txt",
+            status: "modified",
+            ranges: [
+              { side: "LEFT", startLine: 1, endLine: 2, preview: "one\ntwo" },
+              { side: "RIGHT", startLine: 1, endLine: 1, preview: "z-after.txt" },
+            ],
+          },
+          {
+            path: "z-after.txt",
+            status: "modified",
+            additions: 1,
+            deletions: 1,
+            ranges: [
+              { side: "LEFT", startLine: 1, endLine: 1, preview: "before" },
+              { side: "RIGHT", startLine: 1, endLine: 1, preview: "after" },
+            ],
+          },
+        ],
+      },
+      {
+        name: "added and deleted files",
+        base: { "gone.txt": "bye\n" },
+        head: async (repo) => {
+          await rm(path.join(repo, "gone.txt"));
+          await Bun.write(path.join(repo, "new.txt"), "hello\nworld\n");
+        },
+        expected: [
+          {
+            path: "gone.txt",
+            status: "removed",
+            excludedReason: "removed file",
+            hunks: 0,
+            ranges: [],
+          },
+          {
+            path: "new.txt",
+            status: "added",
+            additions: 2,
+            deletions: 0,
+            ranges: [{ side: "RIGHT", startLine: 1, endLine: 2, preview: "hello\nworld" }],
+          },
+        ],
+      },
+      {
+        name: "rename with edits",
+        base: { "old.txt": "one\ntwo\nthree\nfour\nfive\nsix\n" },
+        head: async (repo) => {
+          await rm(path.join(repo, "old.txt"));
+          await Bun.write(path.join(repo, "renamed.txt"), "one\ntwo\nTHREE\nfour\nfive\nsix\n");
+        },
+        expected: [
+          {
+            path: "renamed.txt",
+            previousPath: "old.txt",
+            status: "renamed",
+            additions: 1,
+            deletions: 1,
+            ranges: [
+              { side: "LEFT", startLine: 3, endLine: 3, preview: "three" },
+              { side: "RIGHT", startLine: 3, endLine: 3, preview: "THREE" },
+            ],
+          },
+        ],
+      },
+    ];
+
+    for (const edgeCase of edgeCases) {
+      it(edgeCase.name, async () => {
+        await withGitRepo(async (repo) => {
+          edgeCase.setup?.(repo);
+          for (const [filePath, contents] of Object.entries(edgeCase.base)) {
+            await Bun.write(path.join(repo, filePath), contents);
+          }
+          commitAll(repo, "base");
+          const baseSha = git(repo, "rev-parse", "HEAD");
+          await edgeCase.head(repo);
+          commitAll(repo, "head");
+          const headSha = git(repo, "rev-parse", "HEAD");
+
+          const manifest = buildDiffManifest({ cwd: repo, baseSha, headSha });
+
+          expect(
+            manifest.files.map((file) => {
+              const summary: Record<string, unknown> = {
+                path: file.path,
+                status: file.status,
+                ranges: rangeSummary(file),
+              };
+              for (const key of Object.keys(
+                edgeCase.expected.find((entry) => entry.path === file.path) ?? {},
+              )) {
+                if (key === "hunks") {
+                  summary.hunks = file.hunks.length;
+                } else if (key !== "ranges" && key in file) {
+                  summary[key] = file[key as keyof typeof file];
+                }
+              }
+              return summary;
+            }),
+          ).toEqual(edgeCase.expected);
+        });
+      });
+    }
   });
 
   it("uses the merge base when the base branch has advanced", async () => {
@@ -335,11 +645,8 @@ describe("diff manifest parsing", () => {
     });
   });
 
-  it("keeps sparse context diffs below the expanded manifest cap", async () => {
+  it("keeps sparse diffs whose changed lines stay below the manifest caps", async () => {
     await expectSparseDiffIncluded({ filePath: "sparse.ts", lineCount: 400 });
-  });
-
-  it("keeps large sparse diffs when changed lines stay below the manifest cap", async () => {
     await expectSparseDiffIncluded({ filePath: "huge-sparse.ts", lineCount: 7000 });
   });
 
@@ -495,20 +802,6 @@ describe("diff manifest parsing", () => {
     });
   });
 
-  it("matches the golden diff manifest file shape", async () => {
-    await withGitRepo(async (repo) => {
-      const baseSha = await commitFile(repo, "src/a.ts", "one\ntwo\nthree\n", "base");
-      const headSha = await commitFile(repo, "src/a.ts", "one\nTWO\nthree\nfour\n", "head");
-      const manifest = buildDiffManifest({ cwd: repo, baseSha, headSha });
-      const expected = (await readJsonFixture("fixtures/diff-manifest.golden.json")) as Pick<
-        ReturnType<typeof buildDiffManifest>,
-        "files"
-      >;
-
-      expect(manifest.files).toEqual(expected.files);
-    });
-  });
-
   it("pre-excludes oversized renamed files while preserving target stats", async () => {
     await withGitRepo(async (repo) => {
       const baseSha = await commitFile(repo, "src/old.ts", makeNumberedLines("base", 3000), "base");
@@ -637,9 +930,4 @@ function makeSparseChangedLines(totalCount: number): string {
   return `${Array.from({ length: totalCount }, (_, index) =>
     index % 200 === 0 ? `changed ${index}` : `base ${index}`,
   ).join("\n")}\n`;
-}
-
-async function readJsonFixture(relativePath: string): Promise<unknown> {
-  const contents = await Bun.file(new URL(relativePath, import.meta.url)).text();
-  return JSON.parse(contents);
 }

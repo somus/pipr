@@ -9,8 +9,9 @@ import {
   bitbucketInline,
   bitbucketInlineLocation,
   bitbucketInlineLocationFromComment,
-  bitbucketMainMarker,
   bitbucketThreadContexts,
+  findBitbucketMainComment,
+  findBitbucketTopLevelComment,
 } from "./publication.js";
 
 type Prepared = { client: BitbucketClient; change: ChangeRequestEventContext };
@@ -26,15 +27,11 @@ export function createBitbucketPublicationDriver(
     assertCurrent(prepared, expectedHeadSha) {
       return assertCurrentBitbucketEndpoints(client, prepared.change, expectedHeadSha);
     },
-    async loadOwnedState(prepared): Promise<LoadedPublicationState> {
+    async loadOwnedState(prepared, mainMarker): Promise<LoadedPublicationState> {
       const owner = await authenticatedBitbucketOwner(client);
       const comments = await client.listComments(prepared.change.change.number);
       const owned = comments.filter((comment) => comment.user?.uuid === owner.uuid);
-      const main = owned.find((comment) =>
-        normalizeBitbucketMarkdown(comment.content.raw).includes(
-          bitbucketMainMarker(prepared.change.change.number),
-        ),
-      );
+      const main = findBitbucketMainComment(owned, prepared.change.change.number, mainMarker);
       return {
         main: main
           ? { id: main.id, body: normalizeBitbucketMarkdown(main.content.raw) }
@@ -53,14 +50,11 @@ export function createBitbucketPublicationDriver(
         threads: bitbucketThreadContexts(comments, owner.uuid, true),
       };
     },
-    async loadOwnedMain(prepared) {
-      const owner = await authenticatedBitbucketOwner(client);
-      const main = (await client.listComments(prepared.change.change.number)).find(
-        (comment) =>
-          comment.user?.uuid === owner.uuid &&
-          normalizeBitbucketMarkdown(comment.content.raw).includes(
-            bitbucketMainMarker(prepared.change.change.number),
-          ),
+    async loadOwnedMain(prepared, mainMarker) {
+      const main = findBitbucketMainComment(
+        await loadOwned(client, prepared),
+        prepared.change.change.number,
+        mainMarker,
       );
       return main ? { id: main.id, body: normalizeBitbucketMarkdown(main.content.raw) } : undefined;
     },
@@ -74,12 +68,9 @@ export function createBitbucketPublicationDriver(
       });
     },
     async loadOwnedCommand(prepared, marker) {
-      const owner = await authenticatedBitbucketOwner(client);
-      const comments = await client.listComments(prepared.change.change.number);
-      const comment = comments.find(
-        (candidate) =>
-          candidate.user?.uuid === owner.uuid &&
-          normalizeBitbucketMarkdown(candidate.content.raw).includes(marker),
+      const comment = findBitbucketTopLevelComment(
+        await loadOwned(client, prepared),
+        (firstLine) => firstLine === marker,
       );
       return comment
         ? { id: comment.id, body: normalizeBitbucketMarkdown(comment.content.raw) }
@@ -102,6 +93,13 @@ export function createBitbucketPublicationDriver(
       );
     },
   };
+}
+
+async function loadOwned(client: BitbucketClient, prepared: Prepared) {
+  const owner = await authenticatedBitbucketOwner(client);
+  return (await client.listComments(prepared.change.change.number)).filter(
+    (comment) => comment.user?.uuid === owner.uuid,
+  );
 }
 
 async function upsertBitbucketComment(
