@@ -586,7 +586,13 @@ describe("file run recorder", () => {
       env: {},
       mode: "metadata",
     });
-    recorder.logSink.log({ level: "info", event: "pi run", fields: {}, text: "private log" });
+    recorder.logSink.log({
+      level: "info",
+      event: "pi run",
+      fields: { model: "gpt-test", durationMs: 12, path: "private/path.ts" },
+      text: "private log",
+    });
+    recorder.logSink.log({ level: "info", event: "private custom event", fields: {} });
     const attempt = await recorder.observer.beginAgentAttempt({
       attemptType: "initial",
       attemptNumber: 1,
@@ -612,9 +618,19 @@ describe("file run recorder", () => {
       "private output",
       "private stderr",
       "private log",
+      "private/path.ts",
+      "private custom event",
     ]) {
       expect(bundleText).not.toContain(privateText);
     }
+    const logs = (await readFile(path.join(recorder.directory, "logs.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { event: string; fields: Record<string, unknown> });
+    expect(logs.find((log) => log.event === "pi run")?.fields).toEqual({
+      model: "gpt-test",
+      durationMs: 12,
+    });
   });
 });
 

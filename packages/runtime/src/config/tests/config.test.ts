@@ -62,7 +62,7 @@ describe("loadRuntimeProject", () => {
 
     const settings = (await loadRuntimeProject({ rootDir })).settings;
 
-    expect(settings.source).toContain(".pipr/config.ts");
+    expect(settings.source).toBe(".pipr/config.ts");
     expect(settings.config.defaultProvider).toBe("deepseek/deepseek-v4-pro");
     expect(settings.config.providers[0]).toMatchObject({
       id: "deepseek/deepseek-v4-pro",
@@ -326,7 +326,7 @@ export default definePipr((pipr) => {
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: false })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -334,7 +334,7 @@ export default definePipr((pipr) => {
     const rootDir = await newConfigProject(minimalReviewConfig({ bunS3: true }));
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -361,7 +361,7 @@ export default definePipr((pipr) => {
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 

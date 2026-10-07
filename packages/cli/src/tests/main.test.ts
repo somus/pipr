@@ -118,7 +118,7 @@ describe("pipr CLI", () => {
       const inspect = await runInProcess(["inspect"], {}, workspace);
 
       expect(check.exitCode, check.stderr).toBe(0);
-      expect(check.stdout).toContain(`valid: ${path.join(workspace, ".pipr", "config.ts")}`);
+      expect(check.stdout).toContain("valid: .pipr/config.ts");
       expect(inspect.exitCode, inspect.stderr).toBe(0);
       expect(inspect.stdout).toContain("models");
       expect(inspect.stdout).toContain("core/pr-review");

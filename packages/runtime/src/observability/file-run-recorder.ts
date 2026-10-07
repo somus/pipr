@@ -33,6 +33,7 @@ import {
   setDefined,
   stringField,
 } from "./event-observation.js";
+import { publicLog } from "./metadata-log.js";
 import { exportRunTelemetry } from "./otlp.js";
 import {
   ensureSafeDirectory,
@@ -285,7 +286,7 @@ export async function startFileRunRecorder(options: {
 
   const queueLog = (record: RuntimeLogRecord) => {
     observeLogRecord(record);
-    const bundleRecord: RunLogRecord = {
+    const fullRecord: RunLogRecord = {
       formatVersion: 1,
       timestamp: new Date().toISOString(),
       sequence: sequence++,
@@ -294,13 +295,15 @@ export async function startFileRunRecorder(options: {
       traceId: executionId,
       spanId: rootSpanId,
       fields: normalizeLogFields(record.fields, redactor, markSignalTruncated),
-      // Metadata capture is content-free: free-form log text is a diagnostic body.
-      ...(record.text === undefined || options.mode === "metadata"
+      ...(record.text === undefined
         ? {}
         : {
             text: boundLogString(redactor.redact(record.text).value, 65_536, markSignalTruncated),
           }),
     };
+    // Metadata capture is content-free: only the public projection of a log is kept.
+    const bundleRecord = options.mode === "metadata" ? publicLog(fullRecord) : fullRecord;
+    if (!bundleRecord) return;
     const line = `${JSON.stringify(bundleRecord)}\n`;
     const bytes = Buffer.byteLength(line);
     if (logBytes + bytes > logLimitBytes) {

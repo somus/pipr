@@ -40,6 +40,22 @@ describe("sensitiveEnvironmentValues", () => {
   });
 });
 
+describe("sensitiveEnvironmentValues identifier keys", () => {
+  it.each(["BITBUCKET_EVENT_KEY", "BITBUCKET_PROJECT_KEY", "GIT_CONFIG_KEY_0", "JIRA_ISSUE_KEY"])(
+    "does not treat identifier %s as a credential",
+    (name) => {
+      expect(sensitiveEnvironmentValues({ [name]: "pullrequest:created" })).toEqual([]);
+    },
+  );
+
+  it.each(["SSH_KEY", "PRIVATE_KEY", "OPENAI_API_KEY", "SIGNING_KEY_PEM", "AWS_ACCESS_KEY_ID"])(
+    "still treats %s as a credential",
+    (name) => {
+      expect(sensitiveEnvironmentValues({ [name]: "abcdefgh12345" })).toEqual(["abcdefgh12345"]);
+    },
+  );
+});
+
 describe("createKnownSecretRedactor", () => {
   it("masks registered values without scanning unknown credential-like content", () => {
     const redactor = createKnownSecretRedactor({ env: {} });

@@ -39,7 +39,7 @@ describe("loadTypescriptConfig installable deps", () => {
     await writeThirdPartyPiprProject(rootDir, { instructions: "Review this change." });
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: false })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -107,7 +107,7 @@ export default definePipr((pipr) => {
     const loaded = await loadTypescriptConfig({ rootDir, typecheck: true });
 
     expect(loaded).toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
       versionCompatibility: {
         kind: "unknown",
         runtimeVersion,
@@ -217,7 +217,7 @@ export default definePipr((pipr) => {
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -260,7 +260,7 @@ export default definePipr((pipr) => {
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -295,7 +295,7 @@ export default definePipr((pipr) => {
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 
@@ -320,7 +320,7 @@ export default definePipr((pipr) => {
     );
 
     await expect(loadTypescriptConfig({ rootDir, typecheck: true })).resolves.toMatchObject({
-      source: path.join(rootDir, ".pipr", "config.ts"),
+      source: ".pipr/config.ts",
     });
   });
 

@@ -1175,7 +1175,10 @@ describe("runHostRunCommand pull_request dispatch", () => {
         expect.objectContaining({
           level: "notice",
           event: "trusted config",
-          fields: expect.objectContaining({ trustedConfigSha: workspace.baseSha.slice(0, 12) }),
+          fields: expect.objectContaining({
+            source: ".pipr/config.ts",
+            trustedConfigSha: workspace.baseSha.slice(0, 12),
+          }),
         }),
       );
       expect(logs.notices.join("\n")).toContain('"event":"publication result"');

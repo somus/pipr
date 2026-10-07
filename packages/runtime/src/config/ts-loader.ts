@@ -43,6 +43,8 @@ export async function loadTypescriptConfig(
 ): Promise<LoadedTypescriptConfig> {
   const { projectDir, relativeConfigDir } = resolveContainedConfigDir(options);
   const sourceConfigPath = path.join(projectDir, "config.ts");
+  // Reported relative to the project, so a trusted config loaded from a temporary checkout reads as `.pipr/config.ts`.
+  const source = path.relative(path.resolve(options.rootDir), sourceConfigPath);
   if (!(await Bun.file(sourceConfigPath).exists())) {
     throw new Error(
       `No Pipr config found at ${sourceConfigPath}.\n` +
@@ -75,11 +77,11 @@ export async function loadTypescriptConfig(
     const imported = await import(`${pathToFileURL(configPath).href}?pipr=${Date.now()}`);
     const factory = imported.default as unknown;
     if (!isPiprConfigFactory(factory)) {
-      throw new Error(`${sourceConfigPath}: default export must be created by definePipr()`);
+      throw new Error(`${source}: default export must be created by definePipr()`);
     }
     return {
       plan: buildPiprPlan(factory),
-      source: sourceConfigPath,
+      source,
       tempRoot,
       versionCompatibility,
     };
