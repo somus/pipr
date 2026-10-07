@@ -129,8 +129,10 @@ describe("webhook finding events", () => {
     await deliver(store, "delivery-1", verifierResult(events));
     store.close();
 
-    expect(readFindingEvents(database).map((record) => record.event)).toEqual(events.toReversed());
-    expect(readFindingEvents(database)[0]).toMatchObject({
+    expect(readFindingEvents(database).records.map((record) => record.event)).toEqual(
+      events.toReversed(),
+    );
+    expect(readFindingEvents(database).records[0]).toMatchObject({
       host: "gitlab",
       repository: "somus/pipr",
       deliveryId: "delivery-1",
@@ -146,7 +148,9 @@ describe("webhook finding events", () => {
     });
     store.close();
 
-    expect(readFindingEvents(database).map((record) => record.event)).toEqual(events.toReversed());
+    expect(readFindingEvents(database).records.map((record) => record.event)).toEqual(
+      events.toReversed(),
+    );
     expect(readWebhookDeliveryStatus(database)[0]).toMatchObject({ status: "pending" });
   });
 
@@ -160,7 +164,10 @@ describe("webhook finding events", () => {
     store.close();
 
     expect(
-      readFindingEvents(database).map((record) => [record.event.sequence, record.threadResolution]),
+      readFindingEvents(database).records.map((record) => [
+        record.event.sequence,
+        record.threadResolution,
+      ]),
     ).toEqual([
       [2, "available"],
       [1, "unavailable"],
@@ -175,7 +182,7 @@ describe("webhook finding events", () => {
     await deliver(store, "delivery-2", verifierResult(events));
     store.close();
 
-    expect(readFindingEvents(database)).toHaveLength(2);
+    expect(readFindingEvents(database).records).toHaveLength(2);
   });
 
   it("rejects malformed or diagnostic events without storing them", async () => {
@@ -190,7 +197,7 @@ describe("webhook finding events", () => {
     );
     store.close();
 
-    expect(readFindingEvents(database).map((record) => record.event.sequence)).toEqual([3]);
+    expect(readFindingEvents(database).records.map((record) => record.event.sequence)).toEqual([3]);
     const raw = new Database(database, { readonly: true });
     try {
       expect(JSON.stringify(raw.query("SELECT * FROM finding_events").all())).not.toContain(
@@ -209,13 +216,13 @@ describe("webhook finding events", () => {
     ageEvents(database, 15);
 
     const reopened = new SqliteWebhookDeliveryStore(database, { retentionDays: 14 });
-    expect(readFindingEvents(database)).toEqual([]);
+    expect(readFindingEvents(database).records).toEqual([]);
     await deliver(reopened, "delivery-2", verifierResult([findingEvent(2)]));
     ageEvents(database, 15);
     await deliver(reopened, "delivery-3", verifierResult([findingEvent(3)]));
     reopened.close();
 
-    expect(readFindingEvents(database).map((record) => record.event.sequence)).toEqual([3]);
+    expect(readFindingEvents(database).records.map((record) => record.event.sequence)).toEqual([3]);
   });
 
   it("caps retained events and keeps the newest rows", async () => {
@@ -225,7 +232,9 @@ describe("webhook finding events", () => {
     await deliver(store, "delivery-2", verifierResult([findingEvent(3)]));
     store.close();
 
-    expect(readFindingEvents(database).map((record) => record.event.sequence)).toEqual([3, 2]);
+    expect(readFindingEvents(database).records.map((record) => record.event.sequence)).toEqual([
+      3, 2,
+    ]);
   });
 
   it("filters reads by repository, age, and limit", async () => {
@@ -238,15 +247,21 @@ describe("webhook finding events", () => {
     store.close();
 
     expect(
-      readFindingEvents(database, { repository: "somus/pipr" }).map((r) => r.event.sequence),
-    ).toEqual([2]);
-    expect(
-      readFindingEvents(database, { since: new Date(Date.now() - 24 * 60 * 60 * 1000) }).map(
+      readFindingEvents(database, { repository: "somus/pipr" }).records.map(
         (r) => r.event.sequence,
       ),
+    ).toEqual([2]);
+    expect(
+      readFindingEvents(database, {
+        since: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      }).records.map((r) => r.event.sequence),
     ).toEqual([3, 2]);
-    expect(readFindingEvents(database, { limit: 1 }).map((r) => r.event.sequence)).toEqual([3]);
-    expect(() => readFindingEvents(database, { limit: 0 })).toThrow("--limit");
+    expect(readFindingEvents(database, { limit: 1 })).toMatchObject({
+      records: [{ event: { sequence: 3 } }],
+      truncated: true,
+    });
+    expect(readFindingEvents(database, { limit: 3 }).truncated).toBe(false);
+    expect(() => readFindingEvents(database, { limit: 0 })).toThrow("limit must be");
     expect(() => readFindingEvents(path.join(path.dirname(database), "missing.sqlite"))).toThrow(
       "Webhook database not found",
     );
@@ -264,6 +279,6 @@ describe("webhook finding events", () => {
       db.close();
     }
 
-    expect(readFindingEvents(database).map((record) => record.event.sequence)).toEqual([2]);
+    expect(readFindingEvents(database).records.map((record) => record.event.sequence)).toEqual([2]);
   });
 });

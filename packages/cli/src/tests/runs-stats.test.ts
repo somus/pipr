@@ -94,6 +94,39 @@ describe("pipr runs stats", () => {
     expect(JSON.parse(later).totals.findings).toBe(0);
   });
 
+  it("reports when the webhook event limit leaves older events unread", async () => {
+    const { store, database, cwd, env } = await statsFixture();
+
+    const output = await captureStdout(() =>
+      runMain({
+        argv: [
+          "bun",
+          "pipr",
+          "runs",
+          "stats",
+          "--store",
+          store,
+          "--webhook-db",
+          database,
+          "--event-limit",
+          "2",
+          "--json",
+        ],
+        cwd,
+        env,
+      }),
+    );
+    const stats = JSON.parse(output);
+
+    expect(stats.sources.webhookEvents).toBe(2);
+    expect(stats.errors).toEqual([
+      {
+        source: database,
+        message: "read only the newest 2 webhook finding events; raise --event-limit to read more",
+      },
+    ]);
+  });
+
   it("explains how to initialise a webhook database without finding events", async () => {
     const cwd = await temporaryDirectory();
     const database = path.join(cwd, "webhooks.sqlite");

@@ -57,6 +57,7 @@ export type RunsLedgerOptions = {
   repository?: string;
   since?: string;
   limit?: string;
+  eventLimit?: string;
   store?: string;
   webhookDb?: string;
 };

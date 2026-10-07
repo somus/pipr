@@ -60,8 +60,14 @@ export type FindingEventQuery = {
   repository?: string;
   /** Only events stored at or after this instant. */
   since?: Date;
-  /** Newest events to return, 1 to 100,000; defaults to 10,000. */
+  /** Newest events to return, 1 to 100,000; defaults to 100,000, the retention cap. */
   limit?: number;
+};
+
+/** Stored events newest first; `truncated` when older matching events were left unread. */
+type FindingEventReadResult = {
+  records: WebhookFindingEventRecord[];
+  truncated: boolean;
 };
 
 const MAX_FINDING_EVENT_READ_LIMIT = 100_000;
@@ -71,24 +77,25 @@ const findingThreadResolutionSchema = z.enum(["available", "unavailable"]);
 export function readFindingEvents(
   databasePath: string,
   query: FindingEventQuery = {},
-): WebhookFindingEventRecord[] {
-  const limit = query.limit ?? 10_000;
+): FindingEventReadResult {
+  const limit = query.limit ?? MAX_FINDING_EVENT_READ_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_FINDING_EVENT_READ_LIMIT) {
-    throw new Error(`--limit must be an integer from 1 to ${MAX_FINDING_EVENT_READ_LIMIT}`);
+    throw new Error(`limit must be an integer from 1 to ${MAX_FINDING_EVENT_READ_LIMIT}`);
   }
   if (!existsSync(databasePath)) {
     throw new Error(`Webhook database not found: ${databasePath}`);
   }
   const database = new Database(databasePath, { readonly: true, strict: true });
   try {
+    // One extra row tells whether the limit left older events unread.
     const rows = database
       .query<FindingEventRow, [string | null, string | null, number]>(
         `SELECT ${findingEventColumns} FROM finding_events
          WHERE (?1 IS NULL OR repository = ?1) AND (?2 IS NULL OR created_at >= datetime(?2))
          ORDER BY created_at DESC, id DESC LIMIT ?3`,
       )
-      .all(query.repository ?? null, query.since?.toISOString() ?? null, limit);
-    return rows.flatMap((row) => {
+      .all(query.repository ?? null, query.since?.toISOString() ?? null, limit + 1);
+    const records = rows.slice(0, limit).flatMap((row) => {
       const event = storedFindingEvent(row);
       const threadResolution = findingThreadResolutionSchema.safeParse(row.threadResolution);
       return event && threadResolution.success
@@ -103,6 +110,7 @@ export function readFindingEvents(
           ]
         : [];
     });
+    return { records, truncated: rows.length > limit };
   } finally {
     database.close();
   }

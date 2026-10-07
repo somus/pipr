@@ -82,7 +82,11 @@ export async function collectFindingLedgers(
   });
   const databasePath = options.webhookDb ?? context.env.PIPR_WEBHOOK_DB;
   if (databasePath) {
-    addWebhookEvents(result, path.resolve(context.cwd, databasePath), options.repository, since);
+    addWebhookEvents(result, path.resolve(context.cwd, databasePath), {
+      ...(options.repository ? { repository: options.repository } : {}),
+      ...(since ? { since } : {}),
+      limit: parseEventLimit(options.eventLimit),
+    });
   }
   return result;
 }
@@ -107,16 +111,27 @@ function addLedger(
 function addWebhookEvents(
   result: CollectedLedgers,
   databasePath: string,
-  repository: string | undefined,
-  since: Date | undefined,
+  query: { repository?: string; since?: Date; limit: number },
 ): void {
-  const rows = readWebhookFindingEvents(databasePath, {
-    ...(repository ? { repository } : {}),
-    ...(since ? { since } : {}),
-  });
-  const kept = rows.filter((row) => eventsSince([row.event], since).length > 0);
+  const read = readWebhookFindingEvents(databasePath, query);
+  const kept = read.records.filter((row) => eventsSince([row.event], query.since).length > 0);
   result.webhookEvents = kept.length;
   result.sources.push(...webhookFindingOutcomeSources(kept));
+  if (read.truncated) {
+    result.errors.push({
+      source: databasePath,
+      message: `read only the newest ${query.limit} webhook finding events; raise --event-limit to read more`,
+    });
+  }
+}
+
+/** Webhook events to read; defaults to the database's retention cap of 100,000. */
+function parseEventLimit(value: string | undefined): number {
+  const limit = Number(value ?? "100000");
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100_000) {
+    throw new Error("--event-limit must be an integer between 1 and 100000");
+  }
+  return limit;
 }
 
 async function readRecordLedger(

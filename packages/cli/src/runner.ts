@@ -314,6 +314,7 @@ function addLedgerSourceOptions(command: Command): Command {
     .option("--repository <repository>", "Provider repository path")
     .option("--since <date>", "Only runs and events since an ISO 8601 date or a day count like 30d")
     .option("--limit <count>", "Maximum runs to read", "100")
+    .option("--event-limit <count>", "Maximum newest webhook finding events to read", "100000")
     .option("--store <path>", "Local run store")
     .option(
       "--webhook-db <path>",
