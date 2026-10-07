@@ -1,3 +1,5 @@
+import type { RunBundleManifest } from "@usepipr/sdk";
+
 export const codeHostIds = [
   "github",
   "gitlab",
@@ -9,6 +11,38 @@ export const codeHostIds = [
 ] as const;
 
 export type CodeHostId = (typeof codeHostIds)[number];
+
+/** Code hosts are exactly the public Run Bundle hosts minus the `local` pseudo-host. */
+type RunBundleCodeHost = Exclude<NonNullable<RunBundleManifest["repository"]>["host"], "local">;
+const codeHostsMatchRunBundleHosts: [RunBundleCodeHost] extends [CodeHostId]
+  ? [CodeHostId] extends [RunBundleCodeHost]
+    ? true
+    : never
+  : never = true;
+void codeHostsMatchRunBundleHosts;
+
+/** Code hosts served by `pipr webhook serve`; GitHub uses the Action instead. */
+export const webhookHostIds = [
+  "gitlab",
+  "azure-devops",
+  "bitbucket",
+  "gitea",
+  "forgejo",
+  "codeberg",
+] as const satisfies readonly CodeHostId[];
+
+export type WebhookHost = (typeof webhookHostIds)[number];
+
+export function isCodeHostId(value: string): value is CodeHostId {
+  return (codeHostIds as readonly string[]).includes(value);
+}
+
+export function parseWebhookHostId(value: string | undefined): WebhookHost {
+  const host = webhookHostIds.find((candidate) => candidate === value);
+  if (host) return host;
+  const choices = `${webhookHostIds.slice(0, -1).join(", ")}, or ${webhookHostIds.at(-1)}`;
+  throw new Error(`webhook serve supports --host ${choices}`);
+}
 
 export function resolveCodeHostId(options: {
   explicitHost?: string;
@@ -49,10 +83,6 @@ export function resolveCodeHostId(options: {
 function parseCodeHostId(value: string): CodeHostId {
   if (isCodeHostId(value)) return value;
   throw new Error(`Unsupported code host '${value}'. Supported hosts: ${codeHostIds.join(", ")}`);
-}
-
-function isCodeHostId(value: string): value is CodeHostId {
-  return (codeHostIds as readonly string[]).includes(value);
 }
 
 function detectedGiteaFamilyHost(env: NodeJS.ProcessEnv): CodeHostId | undefined {

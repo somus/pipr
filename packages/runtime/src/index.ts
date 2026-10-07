@@ -27,7 +27,13 @@ export type {
 export type { WebhookDeliveryStatus } from "./host-run/webhook-server.js";
 export { readWebhookDeliveryStatus, runWebhookServer } from "./host-run/webhook-server.js";
 export { GitHubRunArchiveSource } from "./hosts/github/run-archive-source.js";
-export type { WebhookHost } from "./hosts/webhook-types.js";
+export type { CodeHostId, WebhookHost } from "./hosts/selection.js";
+export {
+  codeHostIds,
+  isCodeHostId,
+  parseWebhookHostId,
+  webhookHostIds,
+} from "./hosts/selection.js";
 export type {
   DownloadedBundle,
   RunArchiveSource,

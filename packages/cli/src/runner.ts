@@ -2,6 +2,7 @@ import path from "node:path";
 import { inspect } from "node:util";
 import * as core from "@actions/core";
 import {
+  parseWebhookHostId,
   type RuntimeLogRecord,
   type RuntimeLogSink,
   readWebhookDeliveryStatus,
@@ -344,7 +345,7 @@ function resolveCliPath(cwd: string, value: string | undefined): string | undefi
 async function runWebhookServe(options: CliOptions, context: CliExecutionContext): Promise<void> {
   const secret = context.env.PIPR_WEBHOOK_SECRET;
   if (!secret) throw new Error("PIPR_WEBHOOK_SECRET is required");
-  const host = webhookHost(options.host);
+  const host = parseWebhookHostId(options.host);
   const port = webhookPort(options.port);
   await runWebhookServer({
     host,
@@ -404,23 +405,6 @@ async function runWebhookStatus(options: CliOptions, context: CliExecutionContex
 
 function shorten(value: string, length: number): string {
   return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
-}
-
-const webhookHosts = [
-  "gitlab",
-  "azure-devops",
-  "bitbucket",
-  "gitea",
-  "forgejo",
-  "codeberg",
-] as const;
-
-function webhookHost(value: string | undefined): (typeof webhookHosts)[number] {
-  const host = webhookHosts.find((candidate) => candidate === value);
-  if (host) return host;
-  throw new Error(
-    "webhook serve supports --host gitlab, azure-devops, bitbucket, gitea, forgejo, or codeberg",
-  );
 }
 
 function webhookPort(value: string | undefined): number {

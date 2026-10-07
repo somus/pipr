@@ -1,5 +1,5 @@
-import type { RunQuery } from "@usepipr/runtime";
-import { type RunHost, type RunSelector, runHosts } from "./runs-types.js";
+import { type CodeHostId, isCodeHostId, type RunQuery } from "@usepipr/runtime";
+import type { RunSelector } from "./runs-types.js";
 
 export async function resolveRunSelector(options: {
   pr: string;
@@ -206,12 +206,8 @@ function parseChangeNumber(value: string): number | undefined {
   return Number.isSafeInteger(number) && number > 0 ? number : undefined;
 }
 
-function isRunHost(value: string): value is RunHost {
-  return (runHosts as readonly string[]).includes(value);
-}
-
-function parseHost(value: string): RunHost {
-  if (isRunHost(value)) return value;
+function parseHost(value: string): CodeHostId {
+  if (isCodeHostId(value)) return value;
   throw new Error(`Unsupported run host '${value}'`);
 }
 

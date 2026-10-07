@@ -1,14 +1,4 @@
-export const runHosts = [
-  "github",
-  "gitlab",
-  "azure-devops",
-  "bitbucket",
-  "gitea",
-  "forgejo",
-  "codeberg",
-] as const;
-
-export type RunHost = (typeof runHosts)[number];
+import type { CodeHostId } from "@usepipr/runtime";
 
 export type RunProtection = "plaintext" | "metadata" | "age";
 
@@ -20,7 +10,7 @@ export type RunDiagnosticState =
   | "size-limit";
 
 export type RunSelector = {
-  host: RunHost;
+  host: CodeHostId;
   repository: string;
   changeNumber: number;
 };

@@ -1,10 +1,4 @@
-export type WebhookHost =
-  | "gitlab"
-  | "azure-devops"
-  | "bitbucket"
-  | "gitea"
-  | "forgejo"
-  | "codeberg";
+import type { WebhookHost } from "./selection.js";
 
 export type CodeHostWebhookProtocol = {
   host: WebhookHost;

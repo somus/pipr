@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { type PiprResult, parsePiprResult } from "@usepipr/sdk";
+import type { WebhookHost } from "../hosts/selection.js";
 import { createCodeHostWebhookProtocol } from "../hosts/webhook.js";
-import type { WebhookHost } from "../hosts/webhook-types.js";
 import { enforceRunStoreRetention } from "../observability/retention.js";
 import {
   agentStoresDirectoryName,
