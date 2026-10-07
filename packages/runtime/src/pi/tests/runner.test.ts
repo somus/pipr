@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ScriptedProviderScript } from "../../agent-worker/scripted-provider.js";
+import { startFakeOpenAIGateway } from "../../tests/helpers/fake-openai-gateway.js";
 import { reviewTestManifest } from "../../tests/helpers/review-test-manifest.js";
 import { createScriptedPi, type ScriptedPi } from "../../tests/helpers/scripted-pi.js";
 import { ProviderExecutionError } from "../provider-failure.js";
@@ -40,6 +41,42 @@ describe("durable Pi runner", () => {
     });
     expect(result.usage.inputTokens).toBeGreaterThan(0);
     expect(await pi.prompts()).toEqual(["Review this diff."]);
+  });
+
+  it("runs a model of a custom OpenAI-compatible provider against its base URL", async () => {
+    const gateway = startFakeOpenAIGateway({ reply: () => '{"summary":"from gateway"}' });
+    try {
+      const workspace = await temporaryDirectory("pipr-source-");
+
+      const result = await runPi({
+        workspace,
+        prompt: "Review this diff.",
+        provider: {
+          id: "merge/anthropic/claude-sonnet-5-5",
+          provider: "merge",
+          model: "anthropic/claude-sonnet-5-5",
+          thinking: "high",
+          apiKeyEnv: "MERGE_GATEWAY_API_KEY",
+          endpoint: { api: "openai-completions", baseUrl: gateway.baseUrl },
+        },
+        env: { MERGE_GATEWAY_API_KEY: "mg_test-key", PATH: process.env.PATH },
+      });
+
+      expect(result).toMatchObject({
+        text: '{"summary":"from gateway"}',
+        usage: { status: "complete", inputTokens: 12, outputTokens: 3 },
+      });
+      // Priced from the built-in catalog entry for anthropic/claude-sonnet-5-5.
+      expect(result.usage.costUsd).toBeCloseTo((12 * 2 + 3 * 10) / 1_000_000, 12);
+      expect(gateway.requests).toHaveLength(1);
+      expect(gateway.requests[0]).toMatchObject({
+        path: "/v1/chat/completions",
+        authorization: "Bearer mg_test-key",
+        body: { model: "anthropic/claude-sonnet-5-5", stream: true },
+      });
+    } finally {
+      await gateway.stop();
+    }
   });
 
   it("offers read-only workspace tools and only the runtime tools that were requested", async () => {

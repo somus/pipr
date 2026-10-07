@@ -60,7 +60,7 @@ Before I initialize Pipr, choose the setup policy:
    security-sast, quality-gate, diff-diagnostics, pr-hygiene, dependency-risk,
    ci-triage-command, multi-agent-review, plugin-tool-review, pr-briefing,
    interactive-ask, changelog-draft, or a custom workflow.
-2. Model: use Pipr default DeepSeek, or specify provider/model/secret env var names.
+2. Model: use Pipr default DeepSeek, or specify provider/model/secret env var names. For an OpenAI-compatible gateway or local model server, also ask for its provider id, base URL, and key variable name.
 3. Triggers and publishing: automatic PR review plus @pipr review with capped inline comments, command-only, or merge-gate checks.
 4. Code host and existing files: choose github, gitlab, azure-devops, bitbucket,
    gitea, forgejo, codeberg,

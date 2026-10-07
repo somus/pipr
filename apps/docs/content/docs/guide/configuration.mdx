@@ -46,6 +46,23 @@ const model = pipr.model("deepseek/deepseek-v4-pro");
 
 Use an explicit `id` only when multiple profiles use the same provider and model with different credentials or thinking levels. Browse [Pi's Model Catalog](https://pi.dev/models) for current identifiers.
 
+### Use an OpenAI-compatible gateway
+
+Declare a gateway or local model server with `pipr.provider(...)`, then reference its models as `<provider id>/<gateway model id>`. Models of the provider use its `apiKey` unless they pass their own:
+
+```ts twoslash
+// @include: pipr-builder
+pipr.provider({
+  id: "merge",
+  api: "openai-completions",
+  baseUrl: "https://api-gateway.merge.dev/v1/openai",
+  apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
+});
+const model = pipr.model("merge/anthropic/claude-sonnet-5-5", { thinking: "high" });
+```
+
+The key and prompts go to the configured `baseUrl`, which must use `https` unless it points at `localhost`. See [OpenAI-compatible gateways](/docs/reference/sdk-reference#openai-compatible-gateways) for local servers, model metadata, and validation rules.
+
 ### Use local Pi authentication
 
 For local-only subscription authentication, pass `apiKey: "local"` and select that model only when `ctx.run.trigger === "local"`. Hosted runs do not receive your local Pi agent directory, so they must select a profile with an environment-backed key.

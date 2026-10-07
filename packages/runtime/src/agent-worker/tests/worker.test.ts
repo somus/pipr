@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
+import { startFakeOpenAIGateway } from "../../tests/helpers/fake-openai-gateway.js";
 import type { AgentRunRequest, WorkerMessage } from "../protocol.js";
 import { type InProcessWorker, startInProcessWorker } from "./worker-harness.js";
 
@@ -152,6 +153,76 @@ describe("agent worker", () => {
 
     expect(outcome).toMatchObject({ status: "done", text: "stored answer" });
     expect(second.faux.state.callCount).toBe(0);
+  });
+
+  it("serves custom provider models with default metadata and declared overrides", async () => {
+    const gateway = startFakeOpenAIGateway({ reply: (_request, index) => `answer ${index}` });
+    try {
+      const worker = startInProcessWorker({ providers: [], env: { GATEWAY_KEY: "gw-key" } });
+      workers.push(worker);
+      const gatewayModel = (modelId: string, maxTokens?: number): AgentRunRequest["model"] => ({
+        provider: "gateway",
+        modelId,
+        thinking: "off",
+        apiKeyEnv: "GATEWAY_KEY",
+        endpoint: {
+          api: "openai-completions",
+          baseUrl: gateway.baseUrl,
+          ...(maxTokens ? { metadata: { maxTokens } } : {}),
+        },
+      });
+
+      const unknown = await run(
+        worker,
+        "run-1",
+        request({ requestId: "unknown", model: gatewayModel("acme/house-model") }),
+      );
+      const overridden = await run(
+        worker,
+        "run-2",
+        request({ requestId: "overridden", model: gatewayModel("acme/small-model", 2048) }),
+      );
+
+      expect(unknown).toMatchObject({ status: "done", text: "answer 0", usage: { costUsd: 0 } });
+      expect(overridden).toMatchObject({ status: "done", text: "answer 1" });
+      expect(gateway.requests.map((call) => call.body.model)).toEqual([
+        "acme/house-model",
+        "acme/small-model",
+      ]);
+      expect(gateway.requests[0]?.body).toMatchObject({ max_completion_tokens: 16_384 });
+      expect(gateway.requests[1]?.body).toMatchObject({ max_completion_tokens: 2048 });
+      expect(gateway.requests.map((call) => call.authorization)).toEqual([
+        "Bearer gw-key",
+        "Bearer gw-key",
+      ]);
+    } finally {
+      await gateway.stop();
+    }
+  });
+
+  it("refuses a custom endpoint for a built-in provider id", async () => {
+    const worker = startInProcessWorker({ providers: [], env: { DEEPSEEK_API_KEY: "key" } });
+    workers.push(worker);
+
+    const outcome = await run(
+      worker,
+      "run-1",
+      request({
+        model: {
+          provider: "deepseek",
+          modelId: "deepseek-v4-pro",
+          thinking: "off",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+          endpoint: { api: "openai-completions", baseUrl: "https://gateway.example/v1" },
+        },
+      }),
+    );
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      reason: "invalid_request",
+      error: "custom provider 'deepseek' collides with a built-in Pi provider",
+    });
   });
 
   it("continues a conversation so a repair follow-up sees the earlier answer", async () => {

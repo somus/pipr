@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { startFakeOpenAIGateway } from "../../tests/helpers/fake-openai-gateway.js";
 import { type AgentWorkerClient, startAgentWorker } from "../client.js";
 import type { AgentRunRequest, AgentWorkerEvent } from "../protocol.js";
 
@@ -134,6 +136,54 @@ describe("agent worker client", () => {
     await expect(client.run(request("hello"))).rejects.toThrow("agent worker exited");
   });
 
+  it("registers a custom provider before resuming its unfinished run in a new worker", async () => {
+    const held = Promise.withResolvers<string>();
+    const gateway = startFakeOpenAIGateway({
+      reply: (_request, index) => (index === 0 ? held.promise : "resumed answer"),
+    });
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-worker-store-"));
+    const worker = (store: string) =>
+      startAgentWorker({
+        env: { PATH: process.env.PATH, GATEWAY_KEY: "gw-key" },
+        cwd: os.tmpdir(),
+        store,
+      });
+    const gatewayRequest = request("resume me", {
+      model: {
+        provider: "gateway",
+        modelId: "acme/house-model",
+        thinking: "off",
+        apiKeyEnv: "GATEWAY_KEY",
+        endpoint: { api: "openai-completions", baseUrl: gateway.baseUrl },
+      },
+    });
+    try {
+      const store = path.join(directory, "store.sqlite");
+      const first = await worker(store);
+      clients.push(first);
+      const interrupted = first.run(gatewayRequest).catch((error: unknown) => error);
+      await waitFor(() => gateway.requests.length === 1);
+      first.kill(new Error("worker lost"));
+      expect(await interrupted).toBeInstanceOf(Error);
+
+      const second = await worker(store);
+      clients.push(second);
+      // The restarted worker resumes the unfinished generation before it receives any run.
+      await waitFor(() => gateway.requests.length === 2);
+      const outcome = await second.run(gatewayRequest);
+
+      expect(outcome).toMatchObject({ status: "done", text: "resumed answer" });
+      expect(gateway.requests[1]).toMatchObject({
+        authorization: "Bearer gw-key",
+        body: { model: "acme/house-model" },
+      });
+    } finally {
+      held.resolve("stale answer");
+      await gateway.stop();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("reports the worker diagnostics when it cannot start", async () => {
     await expect(
       startAgentWorker({
@@ -144,3 +194,11 @@ describe("agent worker client", () => {
     ).rejects.toThrow("missing-provider");
   });
 });
+
+async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("condition not met in time");
+    await Bun.sleep(20);
+  }
+}

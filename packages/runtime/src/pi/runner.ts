@@ -256,6 +256,7 @@ function modelSelection(
     modelId: provider.model,
     thinking: provider.thinking ?? "high",
     ...(provider.apiKeyEnv && env[provider.apiKeyEnv] ? { apiKeyEnv: provider.apiKeyEnv } : {}),
+    ...(provider.endpoint ? { endpoint: provider.endpoint } : {}),
   };
 }
 

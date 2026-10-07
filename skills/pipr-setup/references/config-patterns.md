@@ -211,4 +211,18 @@ const model = pipr.model("deepseek/deepseek-v4-pro", {
 
 Config loading fails for a provider without a standard API-key variable unless the model sets `apiKey`. `apiKey: "local"` uses local Pi login credentials and works only for `pipr review`.
 
+For an OpenAI-compatible gateway or local model server, declare it with `pipr.provider(...)` and reference models as `<provider id>/<gateway model id>`. The provider `apiKey` is required and is the default for its models; the id must not reuse a built-in Pi provider id, and `baseUrl` must use `https` unless it points at `localhost`, `127.0.0.1`, or `[::1]`:
+
+```ts
+pipr.provider({
+  id: "merge",
+  api: "openai-completions",
+  baseUrl: "https://api-gateway.merge.dev/v1/openai",
+  apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
+});
+const model = pipr.model("merge/anthropic/claude-sonnet-5-5", { thinking: "high" });
+```
+
+The key and prompts go to that `baseUrl`; confirm the endpoint with the user before writing it.
+
 Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab CI uses masked CI/CD variables, while a GitLab Self-Managed webhook runner also sets `GITLAB_API_URL` to its REST v4 root. Azure DevOps Server webhook runners set `AZURE_DEVOPS_COLLECTION_URL` and the matching `AZURE_DEVOPS_API_VERSION`; Azure DevOps Services, Bitbucket, Gitea, Forgejo, and Codeberg webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.

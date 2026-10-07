@@ -1468,6 +1468,115 @@ describe("definePipr", () => {
   });
 });
 
+describe("pipr.provider", () => {
+  const mergeOptions = (pipr: PiprBuilder) => ({
+    id: "merge",
+    api: "openai-completions" as const,
+    baseUrl: "https://api-gateway.merge.dev/v1/openai",
+    apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
+  });
+
+  it("declares an OpenAI-compatible provider that models reference by id", () => {
+    const factory = definePipr((pipr) => {
+      pipr.provider({
+        ...mergeOptions(pipr),
+        models: {
+          "anthropic/claude-sonnet-5-5": {
+            contextWindow: 200_000,
+            maxTokens: 64_000,
+            reasoning: true,
+          },
+        },
+      });
+      pipr.model("merge/anthropic/claude-sonnet-5-5", { thinking: "high" });
+    });
+
+    const plan = buildPiprPlan(factory);
+
+    expect(plan.providers).toEqual([
+      {
+        kind: "pipr.provider",
+        id: "merge",
+        api: "openai-completions",
+        baseUrl: "https://api-gateway.merge.dev/v1/openai",
+        apiKey: { kind: "pipr.secret", name: "MERGE_GATEWAY_API_KEY" },
+        models: {
+          "anthropic/claude-sonnet-5-5": {
+            contextWindow: 200_000,
+            maxTokens: 64_000,
+            reasoning: true,
+          },
+        },
+      },
+    ]);
+    expect(plan.models[0]).toMatchObject({
+      id: "merge/anthropic/claude-sonnet-5-5",
+      provider: "merge",
+      model: "anthropic/claude-sonnet-5-5",
+      thinking: "high",
+    });
+  });
+
+  it("allows plain http only for loopback hosts", () => {
+    const local = definePipr((pipr) => {
+      pipr.provider({ ...mergeOptions(pipr), id: "ollama", baseUrl: "http://localhost:11434/v1" });
+      pipr.provider({ ...mergeOptions(pipr), id: "loopback", baseUrl: "http://127.0.0.1:8080/v1" });
+      pipr.provider({ ...mergeOptions(pipr), id: "loopback-v6", baseUrl: "http://[::1]:8080/v1" });
+    });
+
+    expect(buildPiprPlan(local).providers.map((provider) => provider.id)).toEqual([
+      "ollama",
+      "loopback",
+      "loopback-v6",
+    ]);
+    for (const baseUrl of [
+      "http://api-gateway.merge.dev/v1/openai",
+      "https://user:secret@api-gateway.merge.dev/v1/openai",
+      "https://api-gateway.merge.dev/v1/openai?key=secret",
+      "https://api-gateway.merge.dev/v1/openai#fragment",
+      "ftp://api-gateway.merge.dev/v1",
+      "not a url",
+    ]) {
+      const factory = definePipr((pipr) => {
+        pipr.provider({ ...mergeOptions(pipr), baseUrl });
+      });
+      expect(() => buildPiprPlan(factory)).toThrow("pipr.provider 'merge' baseUrl");
+    }
+  });
+
+  it("rejects duplicate ids, unsupported APIs, invalid ids, and missing keys", () => {
+    const duplicate = definePipr((pipr) => {
+      pipr.provider(mergeOptions(pipr));
+      pipr.provider(mergeOptions(pipr));
+    });
+    const unsupportedApi = definePipr((pipr) => {
+      pipr.provider({ ...mergeOptions(pipr), api: "anthropic-messages" } as never);
+    });
+    const invalidId = definePipr((pipr) => {
+      pipr.provider({ ...mergeOptions(pipr), id: "Merge/Gateway" });
+    });
+    const missingKey = definePipr((pipr) => {
+      pipr.provider({ ...mergeOptions(pipr), apiKey: undefined } as never);
+    });
+
+    expect(() => buildPiprPlan(duplicate)).toThrow("Duplicate provider 'merge'");
+    expect(() => buildPiprPlan(unsupportedApi)).toThrow("api");
+    expect(() => buildPiprPlan(invalidId)).toThrow("pipr.provider id");
+    expect(() => buildPiprPlan(missingKey)).toThrow("apiKey");
+  });
+
+  it("rejects local Pi login credentials for models of a declared provider", () => {
+    const factory = definePipr((pipr) => {
+      pipr.provider(mergeOptions(pipr));
+      pipr.model("merge/openai/gpt-5.2", { apiKey: "local" });
+    });
+
+    expect(() => buildPiprPlan(factory)).toThrow(
+      "Model 'merge/openai/gpt-5.2' uses provider 'merge' declared with pipr.provider",
+    );
+  });
+});
+
 describe("prompt rendering", () => {
   const serializationError = "Prompt value must be JSON-serializable";
 

@@ -59,6 +59,47 @@ Pipr passes provider and model IDs to Pi. [Browse Pi's Model Catalog](https://pi
 
 Omit `apiKey` to read the provider's standard environment variable, such as `DEEPSEEK_API_KEY` for `deepseek/...`. Pass `apiKey: pipr.secret({ name })` to read a different variable. Config loading fails when you omit `apiKey` for a provider without a standard API-key variable. Pass `apiKey: "local"` only for a model that local runs select through local Pi login credentials. Hosted runs don't receive your Pi agent directory, so hosted model selections must not use `"local"`.
 
+### OpenAI-compatible gateways
+
+`pipr.provider(...)` declares an OpenAI-compatible provider, such as an LLM gateway or a local model server. Models reference it as `<provider id>/<gateway model id>`. Pipr splits the reference at the first `/`, so `merge/anthropic/claude-sonnet-5-5` sends `anthropic/claude-sonnet-5-5` to the gateway:
+
+```ts
+pipr.provider({
+  id: "merge",
+  api: "openai-completions",
+  baseUrl: "https://api-gateway.merge.dev/v1/openai",
+  apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
+  models: {
+    "anthropic/claude-sonnet-5-5": { contextWindow: 200_000, maxTokens: 64_000, reasoning: true },
+  },
+});
+const model = pipr.model("merge/anthropic/claude-sonnet-5-5", { thinking: "high" });
+```
+
+<auto-type-table path="packages/sdk/src/index.ts" name="ProviderOptions" />
+
+- `id` is a lowercase slug and must not reuse a built-in Pi provider id such as `openai` or `anthropic`. Config loading rejects a collision.
+- `api` must be `"openai-completions"`. Pipr calls `POST <baseUrl>/chat/completions` with streaming and sends the key as `Authorization: Bearer <key>`.
+- `baseUrl` must use `https`. Plain `http` is allowed only for `localhost`, `127.0.0.1`, and `[::1]`. Credentials, query strings, and fragments are rejected.
+- `apiKey` is required and is the default key for every model of the provider. A model's own `apiKey: pipr.secret(...)` overrides it; `apiKey: "local"` is rejected because Pi logins cover only built-in providers.
+- Model metadata comes from Pi's catalog when the gateway model id is `<vendor>/<model>` and Pi knows that vendor model, including its context window, output limit, image input, thinking levels, and pricing. Unknown models default to reasoning, text input, a 128,000-token context window, 16,384 output tokens, and zero cost. `models` overrides `reasoning`, `input`, `contextWindow`, and `maxTokens` per gateway model id.
+
+A local server works the same way, for example Ollama:
+
+```ts
+pipr.provider({
+  id: "ollama",
+  api: "openai-completions",
+  baseUrl: "http://localhost:11434/v1",
+  apiKey: pipr.secret({ name: "OLLAMA_API_KEY" }),
+});
+const model = pipr.model("ollama/qwen3-coder");
+```
+
+Set the key variable to any non-empty value when the server does not check keys.
+
+The API key and every prompt, including diffs and repository content the agent reads, go to the configured `baseUrl`. Hosted runs load `.pipr/config.ts` from the trusted base branch, so a change request cannot redirect the key or prompts to another endpoint.
+
 ## Review preset
 
 `pipr.review(...)` is a preset over the same helpers custom tasks use. It runs one findings agent over `ctx.change.diff()`, selects findings with `ctx.review.select(...)`, optionally runs a summary agent, optionally applies `ctx.check.gate(...)`, and publishes with `ctx.comment(...)`.

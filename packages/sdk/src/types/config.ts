@@ -52,6 +52,43 @@ export type ModelProfile = {
   readonly thinking?: ModelThinkingLevel;
 };
 
+/** Wire API an OpenAI-compatible provider speaks; only Chat Completions is supported. */
+export type ProviderApi = "openai-completions";
+
+/** Metadata overrides for one model served by a custom provider. */
+export type ProviderModelOptions = {
+  reasoning?: boolean;
+  input?: ("text" | "image")[];
+  contextWindow?: number;
+  maxTokens?: number;
+};
+
+/**
+ * Options for declaring an OpenAI-compatible provider, such as an LLM gateway. Models reference it as
+ * `pipr.model("<id>/<model>")`; the API key is sent to `baseUrl`.
+ */
+export type ProviderOptions = {
+  /** Lowercase slug; must not be the id of a built-in Pi provider. */
+  id: string;
+  api: ProviderApi;
+  /** `https` URL, or `http` for `localhost`, `127.0.0.1`, or `[::1]`; no credentials, query, or fragment. */
+  baseUrl: string;
+  /** Secret holding the provider's API key; models of this provider use it unless they pass their own. */
+  apiKey: SecretRef;
+  /** Per-model metadata overrides keyed by the provider's model id. */
+  models?: Record<string, ProviderModelOptions>;
+};
+
+/** Registered custom provider. */
+export type ProviderProfile = {
+  readonly kind: "pipr.provider";
+  readonly id: string;
+  readonly api: ProviderApi;
+  readonly baseUrl: string;
+  readonly apiKey: SecretRef;
+  readonly models?: Readonly<Record<string, ProviderModelOptions>>;
+};
+
 /** Aggregate check-run options for a Pipr review run. */
 export type AggregateCheckOptions =
   | false

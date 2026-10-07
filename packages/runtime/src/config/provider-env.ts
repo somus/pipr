@@ -62,6 +62,11 @@ export async function providerEnvironment(
   };
 }
 
+/** Ids of the built-in Pi providers, which `pipr.provider` ids must not reuse. */
+export function builtinProviderIds(): ReadonlySet<string> {
+  return new Set(builtinProviders().map((provider) => provider.id));
+}
+
 /** Resolves the API-key environment of each provider used by the configured models. */
 export async function providerEnvironments(
   providerIds: readonly string[],

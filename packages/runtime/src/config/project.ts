@@ -1,4 +1,4 @@
-import type { AutoResolveOptions, ModelProfile } from "@usepipr/sdk";
+import type { AutoResolveOptions, ModelProfile, ProviderProfile } from "@usepipr/sdk";
 import type { RuntimePlan } from "@usepipr/sdk/internal";
 import type { AutoResolveConfig, ProviderConfig, RuntimeSettings } from "../types.js";
 import { parseProviderConfig, parseRuntimeSettings } from "../types.js";
@@ -9,7 +9,11 @@ import {
   taskCheckSettings,
 } from "./check-settings.js";
 import { assertProviderCredentials } from "./provider-credentials.js";
-import { type ProviderEnvironment, providerEnvironments } from "./provider-env.js";
+import {
+  builtinProviderIds,
+  type ProviderEnvironment,
+  providerEnvironments,
+} from "./provider-env.js";
 import { loadTypescriptConfig } from "./ts-loader.js";
 import type { ConfigVersionCompatibility } from "./version-compat.js";
 
@@ -68,14 +72,19 @@ export async function loadRuntimeProject(
   options: LoadRuntimeProjectOptions,
 ): Promise<LoadedRuntimeProject> {
   const loaded = await loadTypescriptConfig(options);
+  assertCustomProviderIds(loaded.plan.providers, loaded.source);
+  const customProviders = new Map(loaded.plan.providers.map((provider) => [provider.id, provider]));
   const providerEnvs = await providerEnvironments(
-    loaded.plan.models.filter((model) => model.apiKey !== "local").map((model) => model.provider),
+    loaded.plan.models
+      .filter((model) => model.apiKey !== "local" && !customProviders.has(model.provider))
+      .map((model) => model.provider),
   );
   return {
     plan: loaded.plan,
     settings: planToRuntimeSettings(loaded.plan, {
       source: loaded.source,
       providerEnvs,
+      customProviders,
       env: options.env,
       requireProviderEnv: options.requireProviderEnv,
       warnings: [loaded.versionCompatibility.warning].filter(
@@ -145,13 +154,14 @@ function planToRuntimeSettings(
   options: {
     source: string;
     providerEnvs: ReadonlyMap<string, ProviderEnvironment>;
+    customProviders: ReadonlyMap<string, ProviderProfile>;
     env?: NodeJS.ProcessEnv;
     requireProviderEnv?: boolean;
     warnings?: string[];
   },
 ): RuntimeSettings {
   const providers = plan.models.map((model) =>
-    modelToProvider(model, options.providerEnvs, options.source),
+    modelToProvider(model, options.providerEnvs, options.customProviders, options.source),
   );
   const defaultProvider = providers[0];
   if (!defaultProvider) {
@@ -247,15 +257,38 @@ function normalizeUserReplyAutoResolveConfig(
 function modelToProvider(
   model: ModelProfile,
   providerEnvs: ReadonlyMap<string, ProviderEnvironment>,
+  customProviders: ReadonlyMap<string, ProviderProfile>,
   source: string,
 ): ProviderConfig {
+  const custom = customProviders.get(model.provider);
+  const environment = custom
+    ? { apiKeyEnv: custom.apiKey.name, companions: [], alternatives: [] }
+    : providerEnvs.get(model.provider);
   return parseProviderConfig({
     id: model.id,
     provider: model.provider,
     model: model.model,
-    ...modelProviderEnv(model, providerEnvs.get(model.provider), source),
+    ...modelProviderEnv(model, environment, source),
     thinking: model.thinking,
+    ...(custom ? { endpoint: customModelEndpoint(custom, model.model) } : {}),
   });
+}
+
+/** The endpoint a custom provider model runs against, with any metadata the provider declares for it. */
+function customModelEndpoint(provider: ProviderProfile, modelId: string) {
+  const metadata = provider.models?.[modelId];
+  return { api: provider.api, baseUrl: provider.baseUrl, ...(metadata ? { metadata } : {}) };
+}
+
+function assertCustomProviderIds(providers: readonly ProviderProfile[], source: string): void {
+  const builtinIds = builtinProviderIds();
+  for (const provider of providers) {
+    if (builtinIds.has(provider.id)) {
+      throw new Error(
+        `${source}: pipr.provider '${provider.id}' collides with the built-in Pi provider '${provider.id}'. Choose another id.`,
+      );
+    }
+  }
 }
 
 /**
@@ -276,7 +309,7 @@ function modelProviderEnv(
   }
   if (!environment) {
     throw new Error(
-      `${source}: model '${model.id}' uses provider '${model.provider}', which has no standard API key environment variable. Pass apiKey: pipr.secret({ name }) or apiKey: "local".`,
+      `${source}: model '${model.id}' uses provider '${model.provider}', which has no standard API key environment variable. Declare the provider with pipr.provider({ id: "${model.provider}", ... }), or pass apiKey: pipr.secret({ name }) or apiKey: "local".`,
     );
   }
   return {

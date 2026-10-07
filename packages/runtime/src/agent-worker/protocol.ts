@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { modelThinkingLevels } from "@usepipr/sdk";
+import { providerModelOptionsSchema } from "@usepipr/sdk/internal";
 import { z } from "zod";
 
 export const agentWorkerProtocolVersion = 1;
@@ -11,6 +12,14 @@ const idSchema = z.string().min(1).max(512);
 const toolNameSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const tokenCountSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
+/** An OpenAI-compatible endpoint, such as an LLM gateway, that serves a model under a custom provider id. */
+export const customModelEndpointSchema = z.strictObject({
+  api: z.literal("openai-completions"),
+  baseUrl: z.url({ protocol: /^https?$/ }),
+  /** Metadata the provider declares for the model, over the catalog defaults the worker resolves. */
+  metadata: providerModelOptionsSchema.optional(),
+});
+
 const agentWorkerModelSchema = z.strictObject({
   provider: z.string().min(1),
   modelId: z.string().min(1),
@@ -19,6 +28,8 @@ const agentWorkerModelSchema = z.strictObject({
     .string()
     .regex(/^[A-Z_][A-Z0-9_]*$/)
     .optional(),
+  /** Present for a model of a custom provider; the worker registers the provider before running. */
+  endpoint: customModelEndpointSchema.optional(),
 });
 
 const agentWorkerToolSpecSchema = z.strictObject({
@@ -134,6 +145,7 @@ export const workerMessageSchema = z.discriminatedUnion("type", [
 ]);
 
 export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
+export type CustomModelEndpoint = z.infer<typeof customModelEndpointSchema>;
 export type AgentRunUsage = z.infer<typeof agentRunUsageSchema>;
 export type AgentRunOutcome = z.infer<typeof agentRunOutcomeSchema>;
 export type AgentWorkerEvent = z.infer<typeof agentWorkerEventSchema>;

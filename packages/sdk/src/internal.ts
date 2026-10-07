@@ -19,6 +19,7 @@ export { commandPatternPrefixMatches, parseCommandPattern } from "./command-gram
 export { facetsForFindingSchema } from "./finding.js";
 export { isMarkdownText, markdownString } from "./markdown.js";
 export { renderPromptValue } from "./prompt-render.js";
+export { providerModelOptionsSchema } from "./provider-model.js";
 export { reviewOutputSchemaId, zodOutputSchema } from "./schema.js";
 export type { SdkDeclarationModule } from "./standalone-declaration.js";
 export {

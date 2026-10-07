@@ -3,6 +3,7 @@ import type {
   ChangeRequestAction,
   ChecksOptions,
   ModelProfile,
+  ProviderProfile,
   PublicationOptions,
   RepositoryPermission,
 } from "./types/config.js";
@@ -45,6 +46,8 @@ export type RuntimeAgent = {
 export type RuntimePlan = {
   resolveAgent<Input, Output>(agent: Agent<Input, Output>): RuntimeAgent;
   models: ModelProfile[];
+  /** Custom providers declared with `pipr.provider`. */
+  providers: ProviderProfile[];
   agents: RuntimeAgent[];
   tasks: RuntimeTask[];
   changeRequestTriggers: Array<{ actions: ChangeRequestAction[]; task: RuntimeTask }>;

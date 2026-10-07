@@ -3,6 +3,7 @@ import { access, mkdtemp as createTemporaryDirectory, mkdir, rm } from "node:fs/
 import os from "node:os";
 import path from "node:path";
 import { inspectRuntimePlan, loadRuntimeProject, validateProject } from "../project.js";
+import { providerEnvNames, providerSecretEnvNames } from "../provider-credentials.js";
 import { loadTypescriptConfig } from "../ts-loader.js";
 import {
   initOfficialMinimalProjectWithLocalDependencies as initOfficialMinimalProject,
@@ -54,6 +55,52 @@ describe("loadRuntimeProject", () => {
 
     await expect(loadRuntimeProject({ rootDir })).rejects.toThrow(
       "model 'gateway/model' uses provider 'gateway', which has no standard API key environment variable",
+    );
+    await expect(loadRuntimeProject({ rootDir })).rejects.toThrow("pipr.provider");
+  });
+
+  it("resolves models of a custom provider to its endpoint and API key", async () => {
+    const rootDir = await newConfigProject(customProviderConfig("merge"));
+    const env = {
+      PATH: process.env.PATH,
+      MERGE_GATEWAY_API_KEY: "mg_test",
+      OTHER_MERGE_KEY: "mg_other",
+    };
+
+    const settings = (await loadRuntimeProject({ rootDir, env, requireProviderEnv: true }))
+      .settings;
+    const [gateway, explicitKey] = settings.config.providers;
+
+    expect(gateway).toEqual({
+      id: "merge/anthropic/claude-sonnet-5-5",
+      provider: "merge",
+      model: "anthropic/claude-sonnet-5-5",
+      apiKeyEnv: "MERGE_GATEWAY_API_KEY",
+      thinking: "high",
+      endpoint: {
+        api: "openai-completions",
+        baseUrl: "https://api-gateway.merge.dev/v1/openai",
+        metadata: { contextWindow: 200_000, maxTokens: 64_000 },
+      },
+    });
+    expect(gateway && providerEnvNames(gateway)).toEqual(["MERGE_GATEWAY_API_KEY"]);
+    expect(gateway && providerSecretEnvNames(gateway)).toEqual(["MERGE_GATEWAY_API_KEY"]);
+    expect(explicitKey).toMatchObject({
+      provider: "merge",
+      model: "openai/gpt-5.2",
+      apiKeyEnv: "OTHER_MERGE_KEY",
+      endpoint: { api: "openai-completions", baseUrl: "https://api-gateway.merge.dev/v1/openai" },
+    });
+    await expect(
+      loadRuntimeProject({ rootDir, env: { PATH: process.env.PATH }, requireProviderEnv: true }),
+    ).rejects.toThrow("Missing provider env vars: MERGE_GATEWAY_API_KEY, OTHER_MERGE_KEY");
+  });
+
+  it("rejects a custom provider that reuses a built-in provider id", async () => {
+    const rootDir = await newConfigProject(customProviderConfig("openai"));
+
+    await expect(loadRuntimeProject({ rootDir })).rejects.toThrow(
+      "pipr.provider 'openai' collides with the built-in Pi provider 'openai'",
     );
   });
 
@@ -538,6 +585,24 @@ async function newConfigProject(contents: string): Promise<string> {
 
 async function writePiprConfig(rootDir: string, contents: string): Promise<void> {
   await Bun.write(path.join(rootDir, ".pipr", "config.ts"), contents);
+}
+
+function customProviderConfig(id: string): string {
+  return `import { definePipr } from "@usepipr/sdk";
+
+export default definePipr((pipr) => {
+  pipr.provider({
+    id: "${id}",
+    api: "openai-completions",
+    baseUrl: "https://api-gateway.merge.dev/v1/openai",
+    apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
+    models: { "anthropic/claude-sonnet-5-5": { contextWindow: 200_000, maxTokens: 64_000 } },
+  });
+  const model = pipr.model("${id}/anthropic/claude-sonnet-5-5", { thinking: "high" });
+  pipr.model("${id}/openai/gpt-5.2", { apiKey: pipr.secret({ name: "OTHER_MERGE_KEY" }) });
+  pipr.review({ id: "review", model, instructions: "Review this change." });
+});
+`;
 }
 
 function minimalReviewConfig(options: { bunS3?: boolean } = {}): string {

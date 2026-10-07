@@ -5,6 +5,7 @@ import { configFactoryBrand, type InternalPiprConfigFactory } from "./internal-c
 import { stripCommonIndent } from "./prompt.js";
 import { serializePromptJson } from "./prompt-json.js";
 import { renderPromptValue } from "./prompt-render.js";
+import { providerModelOptionsSchema } from "./provider-model.js";
 import { registerReviewPreset } from "./review-preset.js";
 import type {
   RuntimeAgent,
@@ -30,6 +31,8 @@ import type {
   ChecksOptions,
   ModelProfile,
   PiprConfigOptions,
+  ProviderOptions,
+  ProviderProfile,
   PublicationOptions,
 } from "./types/config.js";
 import { maxStoredFindingsLimit, modelThinkingLevels } from "./types/config.js";
@@ -70,6 +73,7 @@ export function definePlugin<Handle>(setup: (builder: PiprBuilder) => Handle): P
 
 function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
   const models: ModelProfile[] = [];
+  const providers: ProviderProfile[] = [];
   const agents: RuntimeAgent[] = [];
   const tasks: RuntimeTask[] = [];
   const changeRequestTriggers: RuntimePlan["changeRequestTriggers"] = [];
@@ -110,6 +114,11 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       };
       models.push(profile);
       return profile;
+    },
+    provider(options) {
+      const provider = parseProviderOptions(options);
+      providers.push(provider);
+      return provider;
     },
     finding(fields) {
       return createFindingSchema(fields);
@@ -245,10 +254,16 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
         commands.map((command) => command.pattern),
         "command",
       );
+      assertUnique(
+        providers.map((provider) => provider.id),
+        "provider",
+      );
       assertModelIdentity(models);
+      assertCustomProviderModelKeys(models, providers);
       return {
         resolveAgent: runtimeAgentForHandle,
         models,
+        providers,
         agents,
         tasks,
         changeRequestTriggers,
@@ -260,6 +275,77 @@ function createBuilder(): { api: PiprBuilder; plan(): RuntimePlan } {
       };
     },
   };
+}
+
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+const providerOptionsSchema = z.strictObject({
+  id: z.string(),
+  api: z.literal("openai-completions", { error: "api must be 'openai-completions'" }),
+  baseUrl: z.string().refine(isAllowedProviderBaseUrl, {
+    error:
+      "baseUrl must be an https URL (or http for localhost, 127.0.0.1, or [::1]) without credentials, query, or fragment",
+  }),
+  apiKey: z.custom<ProviderOptions["apiKey"]>(
+    (value) =>
+      typeof value === "object" &&
+      value !== null &&
+      (value as { kind?: unknown }).kind === "pipr.secret" &&
+      typeof (value as { name?: unknown }).name === "string",
+    { error: "apiKey must be pipr.secret(...)" },
+  ),
+  models: z.record(z.string().min(1), providerModelOptionsSchema).optional(),
+});
+
+function parseProviderOptions(options: ProviderOptions): ProviderProfile {
+  const id = typeof options?.id === "string" ? options.id : "";
+  if (!/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(id)) {
+    throw new Error(
+      `pipr.provider id '${id}' must be a lowercase slug of letters, digits, hyphens, or underscores`,
+    );
+  }
+  const parsed = providerOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    throw new Error(`pipr.provider '${id}' ${providerOptionsIssue(parsed.error.issues[0])}`);
+  }
+  const { models, ...provider } = parsed.data;
+  return { kind: "pipr.provider", ...provider, ...(models ? { models } : {}) };
+}
+
+function providerOptionsIssue(issue: z.core.$ZodIssue | undefined): string {
+  if (issue?.code === "unrecognized_keys") {
+    return `received unsupported option fields: ${issue.keys.join(", ")}`;
+  }
+  const nested = issue && issue.path.length > 1 ? `${issue.path.join(".")}: ` : "";
+  return `${nested}${issue?.message ?? "is invalid"}`;
+}
+
+function isAllowedProviderBaseUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.username || url.password || value.includes("?") || value.includes("#")) {
+    return false;
+  }
+  return url.protocol === "https:" || (url.protocol === "http:" && loopbackHosts.has(url.hostname));
+}
+
+/** Models of a declared provider authenticate with an API key; local Pi logins only cover built-in providers. */
+function assertCustomProviderModelKeys(
+  models: readonly ModelProfile[],
+  providers: readonly ProviderProfile[],
+): void {
+  const declared = new Set(providers.map((provider) => provider.id));
+  for (const model of models) {
+    if (model.apiKey === "local" && declared.has(model.provider)) {
+      throw new Error(
+        `Model '${model.id}' uses provider '${model.provider}' declared with pipr.provider, which needs an API key; omit apiKey or pass pipr.secret(...).`,
+      );
+    }
+  }
 }
 
 const modelProfileConfigSchema: z.ZodType<ModelProfile> = z.custom<ModelProfile>(

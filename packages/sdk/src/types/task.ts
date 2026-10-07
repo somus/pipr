@@ -15,6 +15,8 @@ import type {
   ModelProfile,
   ModelRef,
   PiprConfigOptions,
+  ProviderOptions,
+  ProviderProfile,
   RepositoryPermission,
   SecretOptions,
   SecretRef,
@@ -288,7 +290,10 @@ export type PiprBuilder = {
   readonly tools: BuiltinToolCatalog;
   readonly schemas: BuiltinSchemaCatalog;
   secret(options: SecretOptions): SecretRef;
+  /** `provider/model` reference; a provider declared with `provider()` supplies the default API key. */
   model(ref: ModelRef, options?: ModelOptions): ModelProfile;
+  /** Declares an OpenAI-compatible provider, such as an LLM gateway, for `model()` references. */
+  provider(options: ProviderOptions): ProviderProfile;
   /** Declares an inline finding schema; enum fields become rankable facets in declaration order. */
   finding<const Fields extends FindingFields>(fields: Fields): FindingSchema<Fields>;
   agent<Input, Output>(definition: AgentDefinition<Input, Output>): Agent<Input, Output>;

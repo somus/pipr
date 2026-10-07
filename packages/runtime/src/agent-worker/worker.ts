@@ -25,6 +25,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { openBunSqliteStorage } from "./bun-sqlite.js";
 import { type AgentWorkerCredentials, createAgentWorkerCredentials } from "./credentials.js";
+import { type CustomProviderModel, createCustomProviders } from "./custom-providers.js";
 import {
   type AgentRunOutcome,
   type AgentRunRequest,
@@ -75,6 +76,14 @@ const RequestsDoc = defineDoc<RequestsState>({
   initial: () => ({ conversations: {}, parents: {}, failures: {} }),
 });
 
+/** Custom provider models the worker served, keyed by provider and model, so a restarted worker can resume them. */
+const CustomModelsDoc = defineDoc<{ models: Record<string, CustomProviderModel> }>({
+  kind: "pipr.custom-models",
+  version: 1,
+  scope: "session",
+  initial: () => ({ models: {} }),
+});
+
 const decoder = new TextDecoder();
 
 export async function runAgentWorker(options: AgentWorkerOptions): Promise<void> {
@@ -85,26 +94,30 @@ export async function runAgentWorker(options: AgentWorkerOptions): Promise<void>
   for (const provider of options.providers ?? []) {
     models.setProvider(provider);
   }
+  const customProviders = createCustomProviders(models);
   const registry = createRegistry();
   const storage: Storage = options.storePath
     ? await openBunSqliteStorage(options.storePath)
     : new MemoryStorage();
   const harness = await Harness.open(storage, { models, registry }, context);
-  if (options.abandonUnfinished) {
-    await abandonUnfinishedWork(harness, context);
-  }
-  harness.resume();
-
   const runs = new Map<string, ActiveRun>();
   const pendingToolCalls = new Map<string, (result: ToolCallResult) => void>();
   const worker: WorkerState = {
     harness,
     registry,
     credentials,
+    customProviders,
     env: options.env,
     send,
     pendingToolCalls,
   };
+  // Unfinished work may use a custom provider; it must be registered before the harness resumes that work.
+  await restoreCustomModels(worker, context);
+  if (options.abandonUnfinished) {
+    await abandonUnfinishedWork(harness, context);
+  }
+  harness.resume();
+
   let shuttingDown = false;
   const lines = createAgentWorkerLineDecoder(supervisorMessageSchema, {
     onMessage: (message) => {
@@ -136,6 +149,7 @@ type WorkerState = {
   harness: Harness;
   registry: ReturnType<typeof createRegistry>;
   credentials: AgentWorkerCredentials;
+  customProviders: ReturnType<typeof createCustomProviders>;
   env: NodeJS.ProcessEnv;
   send(message: WorkerMessage): void;
   pendingToolCalls: Map<string, (result: ToolCallResult) => void>;
@@ -214,9 +228,9 @@ async function executeRun(
   cancellation: Cancellation,
 ): Promise<AgentRunOutcome> {
   const context = BACKGROUND_CONTEXT;
-  const apiKeyFailure = applyApiKey(worker, request);
-  if (apiKeyFailure) {
-    return failedOutcome("invalid_request", apiKeyFailure);
+  const modelFailure = await prepareModel(worker, request, context);
+  if (modelFailure) {
+    return failedOutcome("invalid_request", modelFailure);
   }
   const tools = await createRunTools(request, (call, signal) =>
     callBridgedTool(worker, runId, call, signal),
@@ -304,6 +318,59 @@ function applyApiKey(worker: WorkerState, request: AgentRunRequest): string | un
   }
   worker.credentials.setApiKey(request.model.provider, key);
   return undefined;
+}
+
+/** Makes the request's model runnable: registers its custom provider and applies its API key. */
+async function prepareModel(
+  worker: WorkerState,
+  request: AgentRunRequest,
+  context: Context,
+): Promise<string | undefined> {
+  return (await registerCustomModel(worker, request, context)) ?? applyApiKey(worker, request);
+}
+
+/** Records and registers the custom provider of a request's model; built-in models need neither. */
+async function registerCustomModel(
+  worker: WorkerState,
+  request: AgentRunRequest,
+  context: Context,
+): Promise<string | undefined> {
+  const { provider, modelId, apiKeyEnv, endpoint } = request.model;
+  if (!endpoint) return undefined;
+  const entry: CustomProviderModel = {
+    providerId: provider,
+    modelId,
+    ...(apiKeyEnv ? { apiKeyEnv } : {}),
+    endpoint,
+  };
+  const failure = worker.customProviders.register(entry);
+  if (failure) return failure;
+  const key = customModelKey(entry);
+  await worker.harness.commit(async (tx) => {
+    const recorded = await tx.doc(CustomModelsDoc);
+    if (JSON.stringify(recorded.models[key]) !== JSON.stringify(entry))
+      recorded.models[key] = entry;
+  }, context);
+  return undefined;
+}
+
+async function restoreCustomModels(worker: WorkerState, context: Context): Promise<void> {
+  const recorded = await worker.harness.commit(
+    async (tx) =>
+      Object.values((await tx.doc(CustomModelsDoc)).models).map(
+        (entry) => JSON.parse(JSON.stringify(entry)) as CustomProviderModel,
+      ),
+    context,
+  );
+  for (const entry of recorded) {
+    worker.customProviders.register(entry);
+    const key = entry.apiKeyEnv ? worker.env[entry.apiKeyEnv] : undefined;
+    if (key) worker.credentials.setApiKey(entry.providerId, key);
+  }
+}
+
+function customModelKey(entry: CustomProviderModel): string {
+  return JSON.stringify([entry.providerId, entry.modelId]);
 }
 
 async function abandonUnfinishedWork(harness: Harness, context: Context): Promise<void> {
