@@ -160,7 +160,10 @@ describe("agent worker", () => {
     try {
       const worker = startInProcessWorker({ providers: [], env: { GATEWAY_KEY: "gw-key" } });
       workers.push(worker);
-      const gatewayModel = (modelId: string, maxTokens?: number): AgentRunRequest["model"] => ({
+      const gatewayModel = (
+        modelId: string,
+        metadata?: NonNullable<AgentRunRequest["model"]["endpoint"]>["metadata"],
+      ): AgentRunRequest["model"] => ({
         provider: "gateway",
         modelId,
         thinking: "off",
@@ -168,7 +171,7 @@ describe("agent worker", () => {
         endpoint: {
           api: "openai-completions",
           baseUrl: gateway.baseUrl,
-          ...(maxTokens ? { metadata: { maxTokens } } : {}),
+          ...(metadata ? { metadata } : {}),
         },
       });
 
@@ -180,18 +183,36 @@ describe("agent worker", () => {
       const overridden = await run(
         worker,
         "run-2",
-        request({ requestId: "overridden", model: gatewayModel("acme/small-model", 2048) }),
+        request({
+          requestId: "overridden",
+          model: gatewayModel("acme/small-model", { maxTokens: 2048 }),
+        }),
+      );
+      const priced = await run(
+        worker,
+        "run-3",
+        request({
+          requestId: "priced",
+          model: gatewayModel("acme/priced-model", { cost: { input: 2, output: 10 } }),
+        }),
       );
 
       expect(unknown).toMatchObject({ status: "done", text: "answer 0", usage: { costUsd: 0 } });
       expect(overridden).toMatchObject({ status: "done", text: "answer 1" });
+      expect(priced).toMatchObject({ status: "done", text: "answer 2" });
+      expect(priced.status === "done" ? priced.usage.costUsd : undefined).toBeCloseTo(
+        (12 * 2 + 3 * 10) / 1_000_000,
+        12,
+      );
       expect(gateway.requests.map((call) => call.body.model)).toEqual([
         "acme/house-model",
         "acme/small-model",
+        "acme/priced-model",
       ]);
       expect(gateway.requests[0]?.body).toMatchObject({ max_completion_tokens: 16_384 });
       expect(gateway.requests[1]?.body).toMatchObject({ max_completion_tokens: 2048 });
       expect(gateway.requests.map((call) => call.authorization)).toEqual([
+        "Bearer gw-key",
         "Bearer gw-key",
         "Bearer gw-key",
       ]);

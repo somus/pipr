@@ -61,7 +61,7 @@ Omit `apiKey` to read the provider's standard environment variable, such as `DEE
 
 ### OpenAI-compatible gateways
 
-`pipr.provider(...)` declares an OpenAI-compatible provider, such as an LLM gateway or a local model server. Models reference it as `<provider id>/<gateway model id>`. Pipr splits the reference at the first `/`, so `merge/anthropic/claude-sonnet-5-5` sends `anthropic/claude-sonnet-5-5` to the gateway:
+`pipr.provider(...)` declares an OpenAI-compatible provider, such as an LLM gateway or a local model server. Models reference it as `<provider id>/<gateway model id>`. Pipr splits the reference at the first `/`, so `merge/deepseek/deepseek-v4.1-flash` sends `deepseek/deepseek-v4.1-flash` to the gateway:
 
 ```ts
 pipr.provider({
@@ -70,10 +70,13 @@ pipr.provider({
   baseUrl: "https://api-gateway.merge.dev/v1/openai",
   apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
   models: {
-    "anthropic/claude-sonnet-5-5": { contextWindow: 200_000, maxTokens: 64_000, reasoning: true },
+    "deepseek/deepseek-v4.1-flash": {
+      contextWindow: 1_000_000,
+      cost: { input: 0.15, output: 0.6 },
+    },
   },
 });
-const model = pipr.model("merge/anthropic/claude-sonnet-5-5", { thinking: "high" });
+const model = pipr.model("merge/deepseek/deepseek-v4.1-flash", { thinking: "high" });
 ```
 
 <auto-type-table path="packages/sdk/src/index.ts" name="ProviderOptions" />
@@ -82,7 +85,7 @@ const model = pipr.model("merge/anthropic/claude-sonnet-5-5", { thinking: "high"
 - `api` must be `"openai-completions"`. Pipr calls `POST <baseUrl>/chat/completions` with streaming and sends the key as `Authorization: Bearer <key>`.
 - `baseUrl` must use `https`. Plain `http` is allowed only for `localhost`, `127.0.0.1`, and `[::1]`. Credentials, query strings, and fragments are rejected.
 - `apiKey` is required and is the default key for every model of the provider. A model's own `apiKey: pipr.secret(...)` overrides it; `apiKey: "local"` is rejected because Pi logins cover only built-in providers.
-- Model metadata comes from Pi's catalog when the gateway model id is `<vendor>/<model>` and Pi knows that vendor model, including its context window, output limit, image input, thinking levels, and pricing. Unknown models default to reasoning, text input, a 128,000-token context window, 16,384 output tokens, and zero cost. `models` overrides `reasoning`, `input`, `contextWindow`, and `maxTokens` per gateway model id.
+- Model metadata comes from Pi's catalog when the gateway model id is `<vendor>/<model>` and Pi knows that vendor model, including its context window, output limit, image input, thinking levels, and pricing. Unknown models default to reasoning, text input, a 128,000-token context window, 16,384 output tokens, and zero cost. `models` overrides `reasoning`, `input`, `contextWindow`, `maxTokens`, and `cost` per gateway model id. `cost` is the price in USD per million tokens (`input`, `output`, and optional `cacheRead` and `cacheWrite`, which default to 0); it replaces the catalog price and feeds the cost row in review stats.
 
 A local server works the same way, for example Ollama:
 

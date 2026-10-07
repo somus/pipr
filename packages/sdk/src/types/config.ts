@@ -61,6 +61,16 @@ export type ProviderModelOptions = {
   input?: ("text" | "image")[];
   contextWindow?: number;
   maxTokens?: number;
+  /** Replaces the catalog price; cache rates default to 0. */
+  cost?: ProviderModelCost;
+};
+
+/** Model price in USD per million tokens. */
+export type ProviderModelCost = {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
 };
 
 /**

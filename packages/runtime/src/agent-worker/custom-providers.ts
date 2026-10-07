@@ -80,7 +80,8 @@ function customProvider(catalog: CatalogLookup, entries: readonly CustomProvider
 
 /**
  * A gateway model id such as `anthropic/claude-sonnet-5-5` names a vendor and its model. When the built-in catalog
- * knows that model, its capabilities, limits, cost, and thinking levels apply; the endpoint's metadata overrides them.
+ * knows that model, its capabilities, limits, cost, and thinking levels apply; the endpoint's metadata overrides them,
+ * and a declared cost replaces the catalog price, including any pricing tiers.
  */
 function customProviderModel(
   catalog: CatalogLookup,
@@ -101,6 +102,7 @@ function customProviderModel(
         ...(known.thinkingLevelMap ? { thinkingLevelMap: known.thinkingLevelMap } : {}),
       }
     : defaultMetadata;
+  const { cost, ...overrides } = entry.endpoint.metadata ?? {};
   return {
     id: entry.modelId,
     name: entry.modelId,
@@ -108,6 +110,7 @@ function customProviderModel(
     provider: entry.providerId,
     baseUrl: entry.endpoint.baseUrl,
     ...metadata,
-    ...entry.endpoint.metadata,
+    ...overrides,
+    ...(cost ? { cost: { cacheRead: 0, cacheWrite: 0, ...cost } } : {}),
   };
 }

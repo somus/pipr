@@ -10,4 +10,12 @@ export const providerModelOptionsSchema: z.ZodType<ProviderModelOptions> = z.str
     .optional(),
   contextWindow: z.number().int().positive().optional(),
   maxTokens: z.number().int().positive().optional(),
+  cost: z
+    .strictObject({
+      input: z.number().nonnegative(),
+      output: z.number().nonnegative(),
+      cacheRead: z.number().nonnegative().optional(),
+      cacheWrite: z.number().nonnegative().optional(),
+    })
+    .optional(),
 });

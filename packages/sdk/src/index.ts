@@ -75,6 +75,7 @@ export type {
   ModelThinkingLevel,
   PiprConfigOptions,
   ProviderApi,
+  ProviderModelCost,
   ProviderModelOptions,
   ProviderOptions,
   ProviderProfile,

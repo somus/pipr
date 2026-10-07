@@ -1565,6 +1565,33 @@ describe("pipr.provider", () => {
     expect(() => buildPiprPlan(missingKey)).toThrow("apiKey");
   });
 
+  it("accepts per-million-token cost overrides and rejects negative or partial rates", () => {
+    const priced = definePipr((pipr) => {
+      pipr.provider({
+        ...mergeOptions(pipr),
+        models: { "deepseek/deepseek-v4.1-flash": { cost: { input: 0.15, output: 0.6 } } },
+      });
+    });
+    const negative = definePipr((pipr) => {
+      pipr.provider({
+        ...mergeOptions(pipr),
+        models: { "deepseek/deepseek-v4.1-flash": { cost: { input: -1, output: 0.6 } } },
+      });
+    });
+    const partial = definePipr((pipr) => {
+      pipr.provider({
+        ...mergeOptions(pipr),
+        models: { "deepseek/deepseek-v4.1-flash": { cost: { input: 0.15 } } },
+      } as never);
+    });
+
+    expect(buildPiprPlan(priced).providers[0]?.models).toEqual({
+      "deepseek/deepseek-v4.1-flash": { cost: { input: 0.15, output: 0.6 } },
+    });
+    expect(() => buildPiprPlan(negative)).toThrow("cost");
+    expect(() => buildPiprPlan(partial)).toThrow("cost");
+  });
+
   it("rejects local Pi login credentials for models of a declared provider", () => {
     const factory = definePipr((pipr) => {
       pipr.provider(mergeOptions(pipr));

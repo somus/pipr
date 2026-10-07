@@ -223,6 +223,6 @@ pipr.provider({
 const model = pipr.model("merge/anthropic/claude-sonnet-5-5", { thinking: "high" });
 ```
 
-The key and prompts go to that `baseUrl`; confirm the endpoint with the user before writing it.
+The key and prompts go to that `baseUrl`; confirm the endpoint with the user before writing it. When Pi's catalog does not know the gateway model, set `models: { "<gateway model id>": { contextWindow, maxTokens, cost: { input, output } } }` from the gateway's model page so limits and review cost stats are accurate; `cost` is USD per million tokens.
 
 Add secret mappings in the selected code host integration. GitHub uses `.github/workflows/pipr.yml`; GitLab CI uses masked CI/CD variables, while a GitLab Self-Managed webhook runner also sets `GITLAB_API_URL` to its REST v4 root. Azure DevOps Server webhook runners set `AZURE_DEVOPS_COLLECTION_URL` and the matching `AZURE_DEVOPS_API_VERSION`; Azure DevOps Services, Bitbucket, Gitea, Forgejo, and Codeberg webhook runners use their trusted secret stores. Never commit raw provider keys, local `.env` values, or personal credentials.
