@@ -23,8 +23,11 @@ export type LoadedPriorReviewState = {
   /** Whether the host reports native thread resolution, so `resolved-by-human` is observable. */
   threadResolution: FindingThreadResolution;
   /**
-   * Outcomes observed on the host that `state` did not record yet: Pipr resolutions and verifier
-   * replies posted by reply runs, and threads a human resolved. `state` history already notes them.
+   * Outcomes the host's comments show: Pipr resolutions and verifier replies posted by reply runs,
+   * and threads a human resolved. They are emitted on every load with anchored, stable event IDs,
+   * so a run whose bundle survives still carries outcomes an earlier, lost bundle recorded (a
+   * re-run GitHub Actions attempt replaces the earlier attempt's artifact). `state` history notes
+   * each outcome once.
    */
   events: FindingOutcomeEmission[];
 };
@@ -35,7 +38,7 @@ type LoadedInlineComment = { body: string; resolved?: boolean };
 /**
  * Reconciles stored review state with the host's comments: inline markers set where each finding
  * was last commented, unconfirmed `published` history is dropped, Pipr and native resolutions set
- * the status, and outcomes the state has not recorded yet become events.
+ * the status, and the outcomes those comments show become events.
  */
 export function reconcilePriorReviewState(options: {
   prior: PriorReviewState;
@@ -59,11 +62,13 @@ export function reconcilePriorReviewState(options: {
   return {
     state: recordFindingOutcomeHistory(
       reconciled,
-      observed.map(({ emission, headSha }) => ({
-        findingId: emission.findingId,
-        kind: emission.kind,
-        headSha,
-      })),
+      observed
+        .filter((outcome) => !outcome.recorded)
+        .map(({ emission, headSha }) => ({
+          findingId: emission.findingId,
+          kind: emission.kind,
+          headSha,
+        })),
     ),
     threadResolution: options.threadResolution,
     events: observed.map(({ emission }) => emission),
@@ -105,7 +110,12 @@ function withConfirmedPublications(
   };
 }
 
-type ObservedOutcome = { emission: FindingOutcomeEmission; headSha: string };
+type ObservedOutcome = {
+  emission: FindingOutcomeEmission;
+  headSha: string;
+  /** Whether the stored history already notes this outcome. */
+  recorded: boolean;
+};
 
 /** Outcomes one host marker shows, and the history entry that means they were recorded. */
 type MarkerOutcomes = {
@@ -116,8 +126,8 @@ type MarkerOutcomes = {
 };
 
 /**
- * Outcomes shown by host markers that the stored history has not recorded yet, once per finding
- * and kind, attributed from the stored finding.
+ * Outcomes shown by host markers, once per finding and kind, attributed from the stored finding
+ * and flagged when the stored history already notes them.
  */
 function observedOutcomes(
   state: PriorReviewState,
@@ -160,18 +170,14 @@ function observedOutcomes(
   return candidates.flatMap((candidate) => {
     const record = records.get(candidate.findingId);
     const key = `${candidate.findingId}:${candidate.recorded.kind}`;
-    if (
-      !record ||
-      observed.has(key) ||
-      findingHistoryHas(record, candidate.recorded.kind, candidate.recorded.headSha)
-    ) {
-      return [];
-    }
+    if (!record || observed.has(key)) return [];
     observed.add(key);
+    const recorded = findingHistoryHas(record, candidate.recorded.kind, candidate.recorded.headSha);
     const attribution = priorFindingAttribution(record);
     return candidate.emissions.map((emission) => ({
       emission: { ...emission, findingId: record.id, ...(attribution ? { attribution } : {}) },
       headSha: candidate.headSha,
+      recorded,
     }));
   });
 }

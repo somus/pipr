@@ -1732,7 +1732,22 @@ describe("runHostRunCommand finding outcome history", () => {
 
       await workspace.pi.answer('{"summary":{"body":"No findings."},"inlineFindings":[]}');
       const rerun = await review("synchronize");
-      expect(rerun.findingEvents).toEqual([]);
+      // A rerun reports the same host-observed outcomes again under the same event IDs, so stats
+      // stay complete even if the earlier run's bundle is lost, and history does not grow.
+      expect(rerun.findingEvents.map((event) => event.eventId)).toEqual(
+        synchronized.findingEvents.map((event) => event.eventId),
+      );
+      expect(storedHistory()).toEqual([
+        [
+          findingId,
+          [
+            ["p", head1],
+            ["r", head1],
+            ["s", head1],
+            ["h", head1],
+          ],
+        ],
+      ]);
     } finally {
       await removeWorkspace(workspace.rootDir);
     }

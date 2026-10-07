@@ -68,7 +68,7 @@ describe("reconcilePriorReviewState", () => {
     expect(confirmed.events).toEqual([]);
   });
 
-  it("reports a natively resolved thread without a Pipr resolution as resolved-by-human once", () => {
+  it("reports a natively resolved thread without a Pipr resolution as resolved-by-human, noting it once", () => {
     const first = reconcilePriorReviewState({
       prior: stored(),
       inline: [inline(true)],
@@ -97,7 +97,13 @@ describe("reconcilePriorReviewState", () => {
       replyBodies: [],
       threadResolution: "available",
     });
-    expect(next.events).toEqual([]);
+    // Every load re-reports the outcome with the same anchor, so a surviving bundle carries it
+    // even when the bundle that first recorded it is gone; history notes it only once.
+    expect(next.events).toEqual(first.events);
+    expect(next.state.findings[0]?.h).toEqual([
+      ["p", head12],
+      ["h", head12],
+    ]);
   });
 
   it("reports a thread Pipr resolved as fixed, not as resolved by a human", () => {
@@ -111,14 +117,14 @@ describe("reconcilePriorReviewState", () => {
     expect(loaded.events).toEqual([
       { kind: "fixed", findingId, anchor: `pipr-resolved:${headSha}`, attribution },
     ]);
-    expect(
-      reconcilePriorReviewState({
-        prior: stored({ h: [["f", "b".repeat(12)]] }),
-        inline: [inline(true)],
-        replyBodies: [`${renderResolvedFindingMarker(findingId, headSha)}\n\nFixed.`],
-        threadResolution: "available",
-      }).events,
-    ).toEqual([]);
+    const recorded = reconcilePriorReviewState({
+      prior: stored({ h: [["f", "b".repeat(12)]] }),
+      inline: [inline(true)],
+      replyBodies: [`${renderResolvedFindingMarker(findingId, headSha)}\n\nFixed.`],
+      threadResolution: "available",
+    });
+    expect(recorded.events).toEqual(loaded.events);
+    expect(recorded.state.findings[0]?.h).toEqual([["f", "b".repeat(12)]]);
   });
 
   it("rebuilds still-valid verifier replies as replied by an unknown actor and still-valid", () => {
@@ -149,14 +155,14 @@ describe("reconcilePriorReviewState", () => {
         attribution,
       },
     ]);
-    expect(
-      reconcilePriorReviewState({
-        prior: loaded.state,
-        inline: [inline(false)],
-        replyBodies,
-        threadResolution: "available",
-      }).events,
-    ).toEqual([]);
+    const reloaded = reconcilePriorReviewState({
+      prior: loaded.state,
+      inline: [inline(false)],
+      replyBodies,
+      threadResolution: "available",
+    });
+    expect(reloaded.events).toEqual(loaded.events);
+    expect(reloaded.state.findings[0]?.h).toEqual(loaded.state.findings[0]?.h);
   });
 
   it("observes no human resolution where the host has no thread resolution", () => {
