@@ -85,8 +85,8 @@ const webhookEnvironmentNames: Record<Exclude<OfficialInitAdapter, "github">, re
   codeberg: ["FORGEJO_SERVER_URL=https://codeberg.org", "CODEBERG_TOKEN="],
 };
 
-const defaultGitLabImageRef = "ghcr.io/somus/pipr:v0.8.0"; // x-release-please-version
-const defaultSdkVersion = "0.8.0"; // x-release-please-version
+const defaultGitLabImageRef = "ghcr.io/somus/pipr:v0.9.0"; // x-release-please-version
+const defaultSdkVersion = "0.9.0"; // x-release-please-version
 const ociReferenceCharacters = /^[A-Za-z0-9[][A-Za-z0-9._/@:+\]-]*$/;
 const ociRepositoryComponent = /^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*$/;
 const ociRegistryWithPort = /^[a-z0-9]+(?:[.-][a-z0-9]+)*:[0-9]+$/;

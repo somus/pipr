@@ -4,6 +4,19 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.9.0](https://github.com/somus/pipr/compare/v0.8.0...v0.9.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* finding outcome ledger and harness-native run records ([#156](https://github.com/somus/pipr/issues/156))
+* authoring API reshaped (pipr.on.changeRequest, reserved manifest input, retry options removed) and the Docker image no longer ships the `pi` CLI. Webhook DB migrations from pre-0.5 schemas are removed.
+
+### Features
+
+* authoring API v2 and durable harness agent worker ([#154](https://github.com/somus/pipr/issues/154)) ([1610e23](https://github.com/somus/pipr/commit/1610e2316ae40dbbc2779bcee5dba13c01acc68a))
+* finding outcome ledger and harness-native run records ([#156](https://github.com/somus/pipr/issues/156)) ([4a4ad24](https://github.com/somus/pipr/commit/4a4ad2437359ed8da398366fbaec646dec3a7fb2))
+
 ## [0.8.0](https://github.com/somus/pipr/compare/v0.7.0...v0.8.0) (2026-08-06)
 
 
