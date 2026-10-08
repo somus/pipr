@@ -194,7 +194,7 @@ Export needs at least one decryption identity because finding paths, ranges, and
 | `fixed` or still valid | Positive: the review should report the finding at the same line range. |
 | `dismissed` | Negative: the review should publish no inline findings. |
 
-The directory gets one JSON file per case and an `index.json` listing cases and skipped counts. Cases contain source code and finding bodies, so treat the directory like a decrypted bundle: keep it out of the repository and share it only through an authorized channel. `findingDatasetCaseSchema` from `@usepipr/sdk` validates the case format.
+The directory gets one JSON file per case and an `index.json` listing cases and skipped counts. Cases contain source code and finding bodies, so treat the directory like a decrypted bundle: keep it out of the repository and share it only through an authorized channel. `findingDatasetCaseSchema` from `@usepipr/sdk` validates the case format. See [Improve reviews from outcomes](/docs/guide/improve-reviews) for how to use stats and datasets to tune a review.
 
 ## Export telemetry
 
@@ -202,6 +202,7 @@ Set standard `OTEL_EXPORTER_OTLP_*` variables to export content-free traces, met
 
 ## Next steps
 
+- Turn outcomes into review improvements with [Improve reviews from outcomes](/docs/guide/improve-reviews).
 - Use the [CLI reference](/docs/reference/cli#pipr-runs-list) for every filter and output option, including [`pipr runs stats`](/docs/reference/cli#pipr-runs-stats) and [`pipr runs export`](/docs/reference/cli#pipr-runs-export).
 - Map a diagnosed failure to its fix in [Troubleshooting](/docs/guide/troubleshooting).
 - Review [Trust and security](/docs/concepts/trust-security#diagnostic-data) before sharing a bundle.

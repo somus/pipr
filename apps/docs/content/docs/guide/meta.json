@@ -20,6 +20,7 @@
     "---[ServerCog]Run and deploy---",
     "local-runs",
     "run-observability",
+    "improve-reviews",
     "webhook-docker",
     "troubleshooting"
   ]
