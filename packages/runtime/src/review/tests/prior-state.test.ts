@@ -3,7 +3,7 @@ import type { PriorReviewState } from "../../publication/types.js";
 import { priorReviewStateForSelectedTasks } from "../prior-state.js";
 
 const state: PriorReviewState = {
-  version: 1,
+  version: 2,
   reviewedHeadSha: "head",
   selectedTasks: ["security", "review"],
   findings: [],

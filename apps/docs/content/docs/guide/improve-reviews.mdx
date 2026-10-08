@@ -1,0 +1,102 @@
+---
+title: "Improve reviews from outcomes"
+description: "Use Finding Outcomes to find noisy reviewers, build labeled datasets, and check that a config change helped."
+---
+
+Every review records what happened to its findings after publication. Maintainers fix them, resolve them without a fix, or reply and dispute them. Those reactions are labels. Use them to find where a review is noisy, turn real findings into evaluation cases, and check that a change to prompts, models, or finding fields improved real outcomes.
+
+```
+review ──► maintainers react ──► Finding Outcomes ──► pipr runs stats   (where is it weak?)
+  ▲                                               └──► pipr runs export  (labeled cases)
+  │                                                          │
+  └──────── change config, compare by config hash ◄──── evaluate the change
+```
+
+[Debug captured runs](/docs/guide/run-observability#measure-finding-outcomes) describes how outcomes are recorded and stored. This page describes how to act on them.
+
+## Before you start
+
+- Capture Run Bundles, or run the webhook runner, so outcomes reach a source `pipr runs` can read. On GitHub Actions, keep the upload step from the generated workflow.
+- To export datasets, set `PIPR_RUN_AGE_RECIPIENTS` and keep the matching identity from `pipr runs keygen`. Without it, bundles hold only the content-free public ledger.
+- Review on a host with thread resolution (GitHub, GitLab, Bitbucket, or Azure DevOps) if you want dismissal signals. Gitea, Forgejo, and Codeberg record fixes and replies but never dismissals.
+- Declare enum fields with [`pipr.finding(...)`](/docs/guide/custom-tasks#define-custom-findings), such as severity or category, if you want to compare outcomes by finding kind.
+
+## 1. Find the weak spot
+
+Let outcomes accumulate over a few weeks of reviews, then report rates:
+
+```bash
+pipr runs stats --repository acme/app --since 30d --group-by agent
+pipr runs stats --repository acme/app --since 30d --group-by facet
+```
+
+Read the rates together:
+
+| Signal | Likely meaning |
+| --- | --- |
+| High dismissal, low acceptance for one agent or field value | That reviewer or finding kind is noisy. Tighten its instructions, raise its threshold, or stop publishing that kind inline. |
+| Low fix rate with low dismissal | Findings stay open. They may be correct but low value, or maintainers may ignore the review. |
+| Many `disputed` findings | The verifier keeps a finding after a maintainer pushes back. Read those threads before changing anything. |
+| High drop rate | Reviewers return output that fails validation or exceeds caps. Check the drop reason codes: `out-of-range` and `unknown-range` point at anchoring, `cap` and `inline-cap` at volume. |
+
+`--json` gives the same report for dashboards or scripts. The report never contains paths, bodies, or finding IDs.
+
+## 2. Export labeled cases
+
+Export the findings behind those rates as evaluation cases:
+
+```bash
+pipr runs export --dataset ./pipr-dataset \
+  --identity ~/.local/state/pipr/keys/run-observability.agekey \
+  --repo . --since 30d
+```
+
+Each case holds the finding's file at the reviewed base and head commits, the finding itself, and the expected result:
+
+| Label | Expected result |
+| --- | --- |
+| `fixed` | Positive: a review should report a finding at the same line range. |
+| `still-valid` | Positive: the verifier kept the finding after a push or a reply. |
+| `dismissed` | Negative: a review should publish no inline findings for this case. |
+
+Each case also keeps its source attribution: execution and work IDs, agent, model, config hash, and enum field values. Filter on these to build a dataset for one reviewer or finding kind. Cases follow `findingDatasetCaseSchema` from `@usepipr/sdk`, so any evaluation harness can load them after validating each file.
+
+`index.json` lists the cases and counts skipped findings: findings with no decrypted evidence, and findings whose commit or file is missing from `--repo`. Run export from a full clone (`fetch-depth: 0` in CI) to keep skips low.
+
+The dataset contains source code and finding bodies. Store it like a decrypted bundle: outside the repository, and shared only through an authorized channel.
+
+## 3. Evaluate a change
+
+Pipr does not ship a runner for exported cases. Replay them through your own evaluation harness: run a review over each case's base and head files, then score the inline findings against `expected`. Pipr's own prompt evaluation suite loads these cases the same way.
+
+Change one thing at a time: a task's instructions, its model, its thinking level, or its finding fields. Then compare before and after on the same cases:
+
+1. Run the cases against the current config and record which pass.
+2. Apply the change and run them again.
+3. Positive cases should keep passing. Negative cases that failed before should now pass.
+
+A change that fixes the negative cases but breaks the positive ones has only made the review quieter, not better.
+
+## 4. Confirm in production
+
+Every outcome event records the hash of the trusted config that produced it. After you ship the change, compare real outcomes across config versions:
+
+```bash
+pipr runs stats --repository acme/app --since 30d --group-by config
+```
+
+The new config hash should show a lower dismissal rate without a lower fix rate. Give it enough reviews before deciding; a handful of findings is noise.
+
+## Know the limits
+
+- **Labels are noisy.** A maintainer may resolve a thread because the work is deferred, not because the finding was wrong. `fixed` reflects the verifier's judgement of the next push. Read a sample of cases before trusting a rate.
+- **Negative cases are coarse.** A dismissed case expects no inline findings at all. When a file had both a fixed and a dismissed finding, the dismissed case also fails on the legitimate one.
+- **Positive cases match location, not wording.** A finding at the right lines passes even when its explanation is weaker.
+- **Dropped findings are not exported.** They appear in stats only, by reason code.
+- **The loop is manual.** Pipr records outcomes automatically; exporting, evaluating, and comparing are steps you run.
+
+## Next steps
+
+- Read [Debug captured runs](/docs/guide/run-observability#measure-finding-outcomes) for outcome kinds, storage, and rate formulas.
+- See the [CLI reference](/docs/reference/cli#pipr-runs-stats) for every `pipr runs stats` and `pipr runs export` option.
+- Review [Trust and security](/docs/concepts/trust-security#diagnostic-data) before sharing a dataset.

@@ -155,6 +155,125 @@ describe("agent worker", () => {
     expect(second.faux.state.callCount).toBe(0);
   });
 
+  it("forwards content-free turn events with model, usage, stop reason, and entry kinds", async () => {
+    const { worker } = start([
+      fauxAssistantMessage([fauxToolCall("missing_tool", { key: "turn-secret" })], {
+        stopReason: "toolUse",
+      }),
+      fauxAssistantMessage([fauxText("turn answer")]),
+    ]);
+
+    const outcome = await run(worker, "run-1", request());
+
+    expect(outcome.status).toBe("done");
+    const turnEvents = worker.messages.flatMap((message) =>
+      message.type === "event" && message.event.type.startsWith("turn_") ? [message.event] : [],
+    );
+    expect(turnEvents.map((event) => event.type)).toEqual([
+      "turn_start",
+      "turn_end",
+      "turn_start",
+      "turn_end",
+    ]);
+    expect(turnEvents[1]).toMatchObject({
+      type: "turn_end",
+      model: "reviewer",
+      stopReason: "toolUse",
+      entryKinds: expect.arrayContaining(["pi.assistant", "pi.tool-result"]),
+      usage: { inputTokens: expect.any(Number), outputTokens: expect.any(Number) },
+    });
+    expect(turnEvents[3]).toMatchObject({ type: "turn_end", stopReason: "stop" });
+    expect(JSON.stringify(turnEvents)).not.toContain("turn-secret");
+    expect(JSON.stringify(turnEvents)).not.toContain("turn answer");
+  });
+
+  it("returns the committed conversation entries, also for a request resumed after a restart", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pipr-worker-store-"));
+    directories.push(directory);
+    const storePath = path.join(directory, "store.sqlite");
+    const first = start([fauxAssistantMessage([fauxText("stored answer")])], storePath);
+    const answered = await run(first.worker, "run-1", request({ captureConversation: true }));
+    await first.worker.close();
+    workers.splice(workers.indexOf(first.worker), 1);
+
+    const second = start([fauxAssistantMessage([fauxText("rerun")])], storePath);
+    const resumed = await run(second.worker, "run-1", request({ captureConversation: true }));
+
+    for (const outcome of [answered, resumed]) {
+      if (outcome.status !== "done" || !outcome.conversation) throw new Error("expected capture");
+      expect(outcome.conversation.truncated).toBe(false);
+      const kinds = outcome.conversation.entries.map((entry) => entry.kind);
+      expect(kinds).toContain("pi.user");
+      expect(kinds.at(-1)).toBe("pi.assistant");
+      const text = JSON.stringify(outcome.conversation.entries);
+      expect(text).toContain("Review the change.");
+      expect(text).toContain("stored answer");
+    }
+    expect(second.faux.state.callCount).toBe(0);
+  });
+
+  it("returns the conversation of a failed run", async () => {
+    const { worker } = start([
+      fauxAssistantMessage([], { stopReason: "error", errorMessage: "invalid request" }),
+    ]);
+
+    const outcome = await run(worker, "run-1", request({ captureConversation: true }));
+
+    expect(outcome).toMatchObject({ status: "failed", reason: "model_error" });
+    if (outcome.status !== "failed") throw new Error("expected failed");
+    expect(outcome.conversation?.entries.map((entry) => entry.kind)).toContain("pi.user");
+  });
+
+  it("leaves the conversation out unless the request captures it", async () => {
+    const { worker } = start([
+      fauxAssistantMessage([fauxText("answer")]),
+      fauxAssistantMessage([], { stopReason: "error", errorMessage: "invalid request" }),
+    ]);
+
+    const done = await run(worker, "run-1", request());
+    const failed = await run(worker, "run-2", request({ requestId: "work-1:task:agent:1" }));
+
+    expect(done).toMatchObject({ status: "done", text: "answer" });
+    expect(failed).toMatchObject({ status: "failed", reason: "model_error" });
+    expect(done).not.toHaveProperty("conversation");
+    expect(failed).not.toHaveProperty("conversation");
+  });
+
+  it("sends gateway models of a known vendor in that vendor's request format", async () => {
+    const gateway = startFakeOpenAIGateway({ reply: () => "answer" });
+    try {
+      const worker = startInProcessWorker({ providers: [], env: { GATEWAY_KEY: "gw-key" } });
+      workers.push(worker);
+      const gatewayModel = (modelId: string): AgentRunRequest["model"] => ({
+        provider: "gateway",
+        modelId,
+        thinking: "high",
+        apiKeyEnv: "GATEWAY_KEY",
+        endpoint: { api: "openai-completions", baseUrl: gateway.baseUrl },
+      });
+
+      await run(
+        worker,
+        "run-1",
+        request({ requestId: "vendor", model: gatewayModel("deepseek/deepseek-v9-gateway") }),
+      );
+      await run(
+        worker,
+        "run-2",
+        request({ requestId: "unknown", model: gatewayModel("acme/house-model") }),
+      );
+
+      const [vendor, unknown] = gateway.requests.map((call) => call.body);
+      expect(vendor).toMatchObject({ thinking: { type: "enabled" } });
+      expect(vendor).toHaveProperty("max_tokens");
+      expect(vendor).not.toHaveProperty("max_completion_tokens");
+      expect(unknown).not.toHaveProperty("thinking");
+      expect(unknown).toHaveProperty("max_completion_tokens");
+    } finally {
+      await gateway.stop();
+    }
+  });
+
   it("serves custom provider models with default metadata and declared overrides", async () => {
     const gateway = startFakeOpenAIGateway({ reply: (_request, index) => `answer ${index}` });
     try {

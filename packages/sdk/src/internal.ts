@@ -17,6 +17,7 @@ import type { RuntimePlan } from "./runtime-contract.js";
 
 export { commandPatternPrefixMatches, parseCommandPattern } from "./command-grammar.js";
 export { facetsForFindingSchema } from "./finding.js";
+export { normalizeFindingAttribution } from "./finding-outcome.js";
 export { isMarkdownText, markdownString } from "./markdown.js";
 export { renderPromptValue } from "./prompt-render.js";
 export { providerModelOptionsSchema } from "./provider-model.js";

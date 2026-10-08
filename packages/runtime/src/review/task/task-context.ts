@@ -2,6 +2,7 @@ import type {
   Agent,
   CommentValue,
   DiffManifestOptions,
+  FindingDropCode,
   PathFilter,
   PiprRunContext,
   ReviewFinding,
@@ -31,6 +32,7 @@ import {
   type OutputState,
   priorReviewForTask,
   type RuntimeCommentValue,
+  recordAgentFindingProvenance,
   recordDroppedFindings,
   recordFindingFacets,
   trackResultFindingScope,
@@ -88,6 +90,10 @@ export function createTaskContext(options: CreateTaskContextOptions): TaskContex
       },
     });
     options.output.providerModels.push(...result.providerModels);
+    recordAgentFindingProvenance(options.output, result.value, {
+      agent: resolvedAgent.name?.trim() || undefined,
+      model: result.providerModels.at(-1),
+    });
     if (result.repairAttempted) {
       options.output.repairAttempted = true;
     }
@@ -190,6 +196,7 @@ export function createTaskContext(options: CreateTaskContextOptions): TaskContex
           rank: selectOptions.rank,
           compare: selectOptions.compare as ((left: T, right: T) => number) | undefined,
         });
+        recordFindingFacets(options.output, ranked, facets);
         const validated = validateReviewFindings<T>(ranked, options.diffManifest, {
           expectedHeadSha: options.event.change.head.sha,
           pathScopeForFinding: (_finding, index) => scopes.get(ranked[index] as T),
@@ -202,7 +209,6 @@ export function createTaskContext(options: CreateTaskContextOptions): TaskContex
         const selected = capped.findings;
         const dropped = [...validated.droppedFindings, ...capped.dropped];
         recordDroppedFindings(options.output, dropped);
-        recordFindingFacets(options.output, selected, facets);
         const paths = selectOptions.paths ?? sharedFindingScope(options.output, lists);
         if (paths) {
           options.output.findingScopes.set(selected, paths);
@@ -243,7 +249,7 @@ function findingScopesByFinding<T extends ReviewFinding>(
 function capSelectedFindings<F extends ReviewFinding>(
   findings: readonly F[],
   options: { manifest: DiffManifest; requireSuggestedFix: boolean; limit: number | undefined },
-): { findings: F[]; dropped: { finding: F; reason: string }[] } {
+): { findings: F[]; dropped: { finding: F; code: FindingDropCode; reason: string }[] } {
   const unfixable = options.requireSuggestedFix
     ? findings.filter((finding) => !hasPublishableSuggestedFix(finding, options.manifest))
     : [];
@@ -251,8 +257,14 @@ function capSelectedFindings<F extends ReviewFinding>(
   return {
     findings: candidates.slice(0, options.limit),
     dropped: [
-      ...unfixable.map((finding) => ({ finding, reason: unpublishableSuggestedFixDropReason })),
-      ...candidates.slice(options.limit).map((finding) => ({ finding, reason: "cap" })),
+      ...unfixable.map((finding) => ({
+        finding,
+        code: "unpublishable-fix" as const,
+        reason: unpublishableSuggestedFixDropReason,
+      })),
+      ...candidates
+        .slice(options.limit)
+        .map((finding) => ({ finding, code: "cap" as const, reason: "cap" })),
     ],
   };
 }

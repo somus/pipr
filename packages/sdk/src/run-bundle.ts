@@ -92,6 +92,20 @@ export function parseRunBundleEnvelope(value: unknown): RunBundleEnvelope {
   return runBundleEnvelopeSchema.parse(value);
 }
 
+const boundedCounts = (maxKeys: number) =>
+  z
+    .record(text.max(200), count)
+    .refine(
+      (counts) => Object.keys(counts).length <= maxKeys,
+      `counts must have at most ${maxKeys} keys`,
+    );
+
+const conversationCountsSchema = z.strictObject({
+  entries: count,
+  byKind: boundedCounts(32),
+  tools: boundedCounts(64),
+});
+
 export const runBundleArtifactSchema = z
   .strictObject({
     kind: z.enum([
@@ -102,6 +116,10 @@ export const runBundleArtifactSchema = z
       "diff-context-coverage",
       "validation",
       "publication-plan",
+      "conversation",
+      "usage",
+      "task-graph",
+      "ledger",
       "other",
     ]),
     path: bundlePath,
@@ -113,10 +131,15 @@ export const runBundleArtifactSchema = z
     originalSizeBytes: count.optional(),
     originalSha256: sha256.optional(),
     omitted: z.boolean().optional(),
+    /** Content-free entry, entry kind, and tool call counts of a `conversation` artifact. */
+    counts: conversationCountsSchema.optional(),
   })
   .superRefine((artifact, context) => {
     validateTruncationMetadata(artifact, context);
     validateOmittedArtifact(artifact, context);
+    if (artifact.counts !== undefined && artifact.kind !== "conversation") {
+      context.addIssue({ code: "custom", message: "only conversation artifacts carry counts" });
+    }
   });
 
 export type RunBundleArtifact = z.infer<typeof runBundleArtifactSchema>;

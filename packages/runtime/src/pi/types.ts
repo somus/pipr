@@ -27,6 +27,8 @@ export type PiRunOptions = {
   };
   customTools?: PiCustomToolRequest;
   eventObserver?: (event: RunAgentEvent) => void;
+  /** Hand the settled conversation's entries to `eventObserver`, for diagnostic capture. */
+  captureConversation?: boolean;
 };
 
 /** Module whose default export receives `config` and returns replacement model providers, for scripted fixtures. */

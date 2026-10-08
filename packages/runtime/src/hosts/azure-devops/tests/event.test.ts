@@ -260,6 +260,55 @@ describe("Azure DevOps event parser", () => {
       }
     }
   });
+
+  it("keeps the thread of a reply, since comment ids repeat across threads", async () => {
+    const fixture = await eventFixture({
+      id: "event-thread-reply",
+      eventType: "ms.vss-code.git-pullrequest-comment-event",
+      resource: {
+        comment: {
+          id: 2,
+          parentCommentId: 1,
+          content: "Handled elsewhere.",
+          author: { uniqueName: "developer@example.com" },
+          _links: {
+            self: {
+              href: "https://dev.azure.com/org/_apis/git/repositories/repo-id/pullRequests/7/threads/9/comments/2",
+            },
+            threads: {
+              href: "https://dev.azure.com/org/_apis/git/repositories/repo-id/pullRequests/7/threads/9",
+            },
+          },
+        },
+        pullRequest: {
+          pullRequestId: 7,
+          repository: {
+            id: "repo-id",
+            name: "repository",
+            project: { id: "project-id", name: "project" },
+          },
+        },
+      },
+      resourceContainers: {
+        collection: { id: "collection-id", baseUrl: "https://dev.azure.com/org/" },
+      },
+    });
+    try {
+      await expect(
+        parseAzureDevOpsEvent({
+          eventPath: fixture.path,
+          env: {},
+          workspace: fixture.root,
+          loadChangeRequest: unexpectedChangeLoad,
+        }),
+      ).resolves.toMatchObject({
+        kind: "review-comment-reply",
+        reply: { commentId: "2", parentCommentId: "1", threadId: "9" },
+      });
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
 });
 
 const loaded = {

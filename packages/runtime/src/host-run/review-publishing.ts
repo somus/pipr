@@ -2,6 +2,7 @@ import type { RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import { recordArtifactSafely } from "../observability/capture-sinks.js";
 import type { RunObserver } from "../observability/types.js";
+import { findingLedgerContext } from "../review/finding-ledger.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { publicationPlanForHostCapabilities } from "../review/publication-plan.js";
 import { PublicationError } from "../review/publication-result.js";
@@ -87,6 +88,7 @@ async function executeTaskRuntime(
     checkSink,
     secretRedactor: services.secretRedactor,
     runObserver: services.runObserver,
+    findingLedger: services.findingLedger,
     workflowUrl: options.workflowUrl,
     progress: options.progress,
     loadPriorReviewState: () =>
@@ -153,6 +155,7 @@ async function publishCompletedReview(
         plan,
         progressLease: options.progress?.lease,
       });
+      recordPublishedFindings(options, review, result.postedFindingIds);
       logPublicationResult(services.log, result);
       await recordArtifactSafely(services, {
         kind: "publication-plan",
@@ -166,9 +169,25 @@ async function publishCompletedReview(
   } catch (error) {
     if (error instanceof ReviewProgressSupersededError) throw error;
     const publicationError = asPublicationError(error);
+    recordPublishedFindings(options, review, publicationError.result?.postedFindingIds ?? []);
     await recordPublicationError(services, publicationError, error);
     throw publicationError;
   }
+}
+
+/** Records `published` only for inline comments the host actually posted. */
+function recordPublishedFindings(
+  options: ReviewPublishingOptions,
+  review: Extract<RuntimeReview, { kind: "review" }>,
+  findingIds: readonly string[],
+): void {
+  options.services.findingLedger.recordPublished(
+    findingLedgerContext(
+      { event: options.event, trustedConfigHash: options.trustedRuntime.trustedConfigHash },
+      review.run,
+    ),
+    findingIds,
+  );
 }
 
 function logPublicationResult(

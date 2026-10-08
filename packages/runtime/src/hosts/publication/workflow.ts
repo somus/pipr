@@ -4,8 +4,6 @@ import type {
   ThreadAction,
 } from "../../publication/types.js";
 import {
-  applyInlineFindingMarkers,
-  applyResolvedFindingMarkers,
   extractInlineFindingMarkerRecords,
   extractPriorReviewState,
   extractResolvedFindingMarkerRecords,
@@ -16,7 +14,7 @@ import {
 } from "../../review/comment-markers.js";
 import type { InlinePublicationLocation } from "../../review/inline-publication-policy.js";
 import { inlinePublicationDecision } from "../../review/inline-publication-policy.js";
-import { applyNativeThreadResolutions } from "../../review/prior-state.js";
+import { reconcilePriorReviewState } from "../../review/prior-review-state-load.js";
 import {
   extractReviewProgressToken,
   ReviewProgressSupersededError,
@@ -119,9 +117,13 @@ export function createPublicationWorkflow<Prepared>(
   };
 }
 
-/** Reads prior Pipr comments through the same owned-state loaders publication uses. */
+/**
+ * Reads prior Pipr comments through the same owned-state loaders publication uses. Native thread
+ * resolution is read only where the host declares the `threadResolution` capability.
+ */
 export function createCommentsReader<Prepared>(
   driver: PublicationDriver<Prepared>,
+  capabilities: { threadResolution: boolean },
 ): Required<CodeHostComments> {
   const prepare = (change: ChangeRequestEventContext) =>
     driver.prepare(change, change.change.head.sha);
@@ -138,23 +140,16 @@ export function createCommentsReader<Prepared>(
       const state = await driver.loadOwnedState(prepared, mainCommentMarker);
       const prior = extractPriorReviewState(state.main?.body, change.change.number);
       if (!prior) return undefined;
-      const bodies = [
-        ...state.inline.map((item) => item.body),
-        ...state.threads.flatMap((thread) =>
+      return reconcilePriorReviewState({
+        prior,
+        inline: state.inline,
+        replyBodies: state.threads.flatMap((thread) =>
           thread.comments.flatMap((comment) =>
             comment.id === thread.parentCommentId ? [] : [comment.body],
           ),
         ),
-      ];
-      return applyNativeThreadResolutions(
-        applyResolvedFindingMarkers(applyInlineFindingMarkers(prior, bodies), bodies),
-        state.inline.flatMap(({ body, resolved }) => {
-          const marker = resolved === undefined ? undefined : parseInlineFindingMarker(body);
-          return marker && resolved !== undefined
-            ? [{ findingId: marker.id, findingHeadSha: marker.head, resolved }]
-            : [];
-        }),
-      );
+        threadResolution: capabilities.threadResolution ? "available" : "unavailable",
+      });
     },
     async loadInlineThreadContexts({ change }) {
       const state = await driver.loadOwnedState(await prepare(change), mainCommentMarker, {
@@ -321,7 +316,7 @@ async function publishInlineItems<Prepared>(
     item.resolved || !item.location || !parseInlineFindingMarker(item.body) ? [] : [item.location],
   );
   const errors: string[] = [];
-  let posted = 0;
+  const postedFindingIds: string[] = [];
   let skipped = 0;
   for (const item of items) {
     let location: InlinePublicationLocation;
@@ -345,14 +340,14 @@ async function publishInlineItems<Prepared>(
     await beforeWrite();
     try {
       await driver.createInline(prepared, item);
-      posted += 1;
+      postedFindingIds.push(item.findingId);
       markers.add(marker);
       locations.push(location);
     } catch (error) {
       errors.push(errorMessage(error));
     }
   }
-  return { posted, skipped, errors };
+  return { postedFindingIds, skipped, errors };
 }
 
 async function runThreadActions<Prepared>(
@@ -469,12 +464,13 @@ function progressWasSuperseded(main: OwnedMainComment | undefined, token: string
 
 function publicationPartial(
   metadata: Parameters<CodeHostPublication["publish"]>[0]["plan"]["metadata"],
-  inline: { posted: number; skipped: number; errors: string[] },
+  inline: { postedFindingIds: string[]; skipped: number; errors: string[] },
   resolutionErrors: string[],
 ) {
   return {
+    postedFindingIds: inline.postedFindingIds,
     inlineComments: {
-      posted: inline.posted,
+      posted: inline.postedFindingIds.length,
       skipped: inline.skipped,
       failed: inline.errors.length,
     },

@@ -1,27 +1,29 @@
 import { createHash, randomBytes } from "node:crypto";
 import { appendFile, chmod, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import type {
-  RunBundleArtifact,
-  RunBundleManifest,
-  RunLogRecord,
-  RunMetricsSnapshot,
-  RunSpanRecord,
+import {
+  diagnosticFindingLedgerSchema,
+  findingLedgerSchema,
+  findingOutcomeEventSchema,
+  type RunBundleArtifact,
+  type RunBundleManifest,
+  type RunLogRecord,
+  type RunMetricsSnapshot,
+  type RunSpanRecord,
 } from "@usepipr/sdk";
 import type { RuntimeLogRecord } from "../shared/logging.js";
 import { createKnownSecretRedactor } from "../shared/secret-redactor.js";
 import { runtimeVersion } from "../shared/version.js";
 import { activeCaptureHeartbeatMilliseconds, currentProcessIdentity } from "./active-capture.js";
 import { artifactPriority, emptyMetrics, runMetrics, truncateUtf8 } from "./artifact-packaging.js";
+import { conversationArtifact } from "./conversation-artifact.js";
 import {
+  type AttemptRecord,
   addInstantLogAttributes,
-  booleanField,
+  agentSpanAttributes,
   instantLogSpanCategory,
   instantLogSpanName,
   maxRssBytes,
-  modelResultAttributes,
-  modelSpanAttributes,
-  modelSpanKey,
   numberField,
   numericLogAttributes,
   type OpenSpan,
@@ -32,6 +34,7 @@ import {
   resourceSnapshot,
   setDefined,
   stringField,
+  usageAttributes,
 } from "./event-observation.js";
 import { publicLog } from "./metadata-log.js";
 import { exportRunTelemetry } from "./otlp.js";
@@ -43,8 +46,20 @@ import {
   writePrivateFile,
 } from "./recorder-fs.js";
 import type { RunRecorder, RunRecorderFinish } from "./recorder-types.js";
+import {
+  type RecordedAttempt,
+  type RecordedTask,
+  taskGraphDocument,
+  usageDocument,
+} from "./run-record.js";
 import { boundLogString, normalizeLogFields } from "./runtime-log-sinks.js";
-import { maximumRunBundleBytes, type RunObserver } from "./types.js";
+import {
+  maximumRunBundleBytes,
+  type RunAgentAttemptResult,
+  type RunAgentEvent,
+  type RunAgentUsage,
+  type RunObserver,
+} from "./types.js";
 
 const emptySha256 = createHash("sha256").update("").digest("hex");
 
@@ -109,6 +124,8 @@ export async function startFileRunRecorder(options: {
   let logBytes = 0;
   let signalTruncated = false;
   let agentAttemptSequence = 0;
+  const recordedAttempts: RecordedAttempt[] = [];
+  const recordedTasks: RecordedTask[] = [];
   let groupSequence = 0;
   let sequence = 0;
   let finished = false;
@@ -189,26 +206,8 @@ export async function startFileRunRecorder(options: {
   };
 
   const observeLogRecord = (record: RuntimeLogRecord) => {
-    if (observeModelLog(record)) return;
     if (observePhaseLog(record)) return;
-    if (observeTaskLog(record)) return;
     observeInstantLog(record);
-  };
-
-  const observeModelLog = (record: RuntimeLogRecord): boolean => {
-    if (record.event === "pi start") {
-      openSpan(modelSpanKey(record), "gen_ai.chat", "model", modelSpanAttributes(record));
-      return true;
-    }
-    if (record.event !== "pi run") return false;
-    const exitCode = numberField(record, "exitCode");
-    closeSpan(
-      modelSpanKey(record),
-      exitCode === undefined || exitCode === 0 ? "ok" : "error",
-      numberField(record, "durationMs"),
-      modelResultAttributes(record),
-    );
-    return true;
   };
 
   const observePhaseLog = (record: RuntimeLogRecord): boolean => {
@@ -223,27 +222,6 @@ export async function startFileRunRecorder(options: {
       `phase:${phaseEnd.name}`,
       phaseEnd.failed ? "error" : "ok",
       numberField(record, "durationMs"),
-    );
-    return true;
-  };
-
-  const observeTaskLog = (record: RuntimeLogRecord): boolean => {
-    if (record.event === "task start") {
-      openSpan(`task:${stringField(record, "task")}`, "pipr.task", "phase", {
-        "pipr.task.name": stringField(record, "task"),
-        "pipr.task.order": numberField(record, "order") ?? 0,
-      });
-      return true;
-    }
-    if (record.event !== "task ok" && record.event !== "task failed") return false;
-    closeSpan(
-      `task:${stringField(record, "task")}`,
-      record.event === "task failed" ? "error" : "ok",
-      numberField(record, "durationMs"),
-      {
-        "pipr.task.findings": numberField(record, "findings") ?? 0,
-        "pipr.task.repair_attempted": booleanField(record, "repairAttempted") ?? false,
-      },
     );
     return true;
   };
@@ -343,6 +321,25 @@ export async function startFileRunRecorder(options: {
       async recordArtifact(artifact) {
         await addRecorderArtifact(artifact);
       },
+      beginTask(task) {
+        const recorded: RecordedTask = { name: task.name, order: task.order };
+        recordedTasks.push(recorded);
+        const key = `task:${task.order}:${task.name}`;
+        openSpan(key, "pipr.task", "phase", {
+          "pipr.task.name": task.name,
+          "pipr.task.order": task.order,
+        });
+        return {
+          finish(result) {
+            if (recorded.status) return;
+            recorded.status = result.status;
+            const attributes: RunSpanRecord["attributes"] = {};
+            setDefined(attributes, "pipr.task.findings", result.findings);
+            setDefined(attributes, "pipr.task.repair_attempted", result.repairAttempted);
+            closeSpan(key, result.status, undefined, attributes);
+          },
+        };
+      },
       async beginAgentAttempt(attempt) {
         agentAttemptSequence += 1;
         const sequence = String(agentAttemptSequence).padStart(3, "0");
@@ -350,7 +347,12 @@ export async function startFileRunRecorder(options: {
         const attemptStartedAt = new Date();
         const attemptStartedMs = Date.now();
         const attemptStartedResources = resourceSnapshot();
+        const record: AttemptRecord = { turns: 0, models: new Map() };
         let firstResponseRecorded = false;
+        openSpan(`agent:${suffix}`, "gen_ai.invoke_agent", "agent", {
+          ...agentSpanAttributes(attempt, suffix, "invoke_agent"),
+          "pipr.prompt.bytes": Buffer.byteLength(attempt.prompt, "utf8"),
+        });
         await addRecorderArtifact({
           kind: "prompt",
           name: `prompt-${suffix}.md`,
@@ -360,7 +362,13 @@ export async function startFileRunRecorder(options: {
         });
         let attemptFinished = false;
         return {
+          // Conversation artifacts are diagnostic; metadata capture would drop them unread.
+          capturesConversation: options.mode !== "metadata",
           event(event) {
+            if (event.kind === "conversation") {
+              // Written on arrival so the attempt record keeps only the conversation's identity, never its entries.
+              pendingWrites = pendingWrites.then(() => addAttemptConversation(suffix, event));
+            }
             observeAttemptEvent(event, {
               suffix,
               attempt,
@@ -372,9 +380,11 @@ export async function startFileRunRecorder(options: {
               },
               openSpan,
               closeSpan,
+              hasOpenSpan: (key) => openSpans.has(key),
               queueSpan,
               executionId,
               rootSpanId,
+              record,
             });
           },
           async finish(result) {
@@ -386,6 +396,7 @@ export async function startFileRunRecorder(options: {
               attemptStartedAt,
               attemptStartedMs,
               attemptStartedResources,
+              record,
               result,
             });
           },
@@ -394,6 +405,34 @@ export async function startFileRunRecorder(options: {
     },
     async addArtifact(artifact) {
       await addRecorderArtifact(artifact);
+    },
+    async recordLedger(ledger) {
+      // One invalid event costs only itself; the rest of the ledger is still recorded.
+      const events = ledger.events.filter(
+        (event) => findingOutcomeEventSchema.safeParse(event).success,
+      );
+      const dropped = ledger.events.length - events.length;
+      if (dropped > 0) {
+        captureErrors.push(
+          `finding ledger dropped ${dropped} invalid event${dropped === 1 ? "" : "s"}`,
+        );
+      }
+      if (events.length === 0) return;
+      const metadataOnly = options.mode === "metadata";
+      const document = metadataOnly
+        ? findingLedgerSchema.parse({
+            formatVersion: ledger.formatVersion,
+            threadResolution: ledger.threadResolution,
+            events,
+          })
+        : diagnosticFindingLedgerSchema.parse({ ...ledger, events });
+      await storeArtifact({
+        kind: "ledger",
+        name: "ledger.json",
+        mediaType: "application/json",
+        content: `${JSON.stringify(document)}\n`,
+        sensitive: !metadataOnly,
+      });
     },
     async discard() {
       if (finished) return;
@@ -424,19 +463,62 @@ export async function startFileRunRecorder(options: {
     attemptStartedAt: Date;
     attemptStartedMs: number;
     attemptStartedResources: ReturnType<typeof resourceSnapshot>;
-    result: Parameters<Awaited<ReturnType<RunObserver["beginAgentAttempt"]>>["finish"]>[0];
+    record: AttemptRecord;
+    result: RunAgentAttemptResult;
   }): Promise<void> {
-    const failed = context.result.error !== undefined || (context.result.exitCode ?? 0) !== 0;
-    closeAttemptSpans(context.suffix, failed);
+    const { suffix, record, result } = context;
+    const failed = result.error !== undefined || (result.exitCode ?? 0) !== 0;
+    closeAgentSpan(suffix, record, result, failed);
+    closeAttemptSpans(suffix, failed);
+    const { prompt: _prompt, ...attemptOptions } = context.attempt;
+    recordedAttempts.push({
+      id: suffix,
+      options: attemptOptions,
+      status: failed ? "error" : "ok",
+      ...(result.usage ? { usage: attemptUsage(result.usage) } : {}),
+      record,
+    });
     await addRecorderArtifact({
       kind: "output",
-      name: `output-${context.suffix}.txt`,
+      name: `output-${suffix}.txt`,
       mediaType: "text/plain",
-      content: context.result.output ?? "",
+      content: result.output ?? "",
       sensitive: true,
     });
-    await addAttemptStderr(context.suffix, context.result.error);
+    await addAttemptStderr(suffix, result.error);
     queueAttemptResources(context, failed, resourceSnapshot());
+  }
+
+  function closeAgentSpan(
+    suffix: string,
+    record: AttemptRecord,
+    result: RunAgentAttemptResult,
+    failed: boolean,
+  ): void {
+    const attributes: RunSpanRecord["attributes"] = {
+      ...(result.usage ? usageAttributes(result.usage) : {}),
+      "pipr.turn.count": record.turns,
+      "pipr.response.bytes": Buffer.byteLength(result.output ?? "", "utf8"),
+    };
+    setDefined(attributes, "pipr.usage.cache_status", result.usage?.cacheUsageStatus);
+    setDefined(attributes, "pipr.conversation.id", record.conversation?.conversationId);
+    setDefined(attributes, "pipr.conversation.truncated", record.conversation?.truncated);
+    closeSpan(`agent:${suffix}`, failed ? "error" : "ok", result.durationMs, attributes);
+  }
+
+  async function addAttemptConversation(
+    suffix: string,
+    conversation: Extract<RunAgentEvent, { kind: "conversation" }>,
+  ): Promise<void> {
+    const { content, counts } = conversationArtifact(conversation.entries);
+    await addRecorderArtifact({
+      kind: "conversation",
+      name: `conversation-${suffix}.jsonl`,
+      mediaType: "application/x-ndjson",
+      content,
+      sensitive: true,
+      counts,
+    });
   }
 
   function closeAttemptSpans(suffix: string, failed: boolean): void {
@@ -508,6 +590,7 @@ export async function startFileRunRecorder(options: {
   async function finalizeRun(result: RunRecorderFinish): Promise<void> {
     const finalizationDeadline = Date.now() + 2_000;
     closeAllOpenSpans();
+    await addRunRecordArtifacts();
     await pendingWrites;
     const endedAt = new Date();
     const durationMs = Math.max(0, Date.now() - startedMs);
@@ -521,6 +604,27 @@ export async function startFileRunRecorder(options: {
     refreshCaptureStatus(manifest);
     await exportAndWriteManifest(manifest, metrics, finalizationDeadline);
     await preserveStoreOwnership(rootDirectory, directory, owner);
+  }
+
+  /** Usage and task graph documents; content-free, so they are not sensitive. */
+  async function addRunRecordArtifacts(): Promise<void> {
+    if (recordedAttempts.length > 0) {
+      await addRecorderArtifact({
+        kind: "usage",
+        name: "usage.json",
+        mediaType: "application/json",
+        content: `${JSON.stringify(usageDocument(recordedAttempts), null, 2)}\n`,
+        sensitive: false,
+      });
+    }
+    if (recordedAttempts.length === 0 && recordedTasks.length === 0) return;
+    await addRecorderArtifact({
+      kind: "task-graph",
+      name: "task-graph.json",
+      mediaType: "application/json",
+      content: `${JSON.stringify(taskGraphDocument(recordedTasks, recordedAttempts), null, 2)}\n`,
+      sensitive: false,
+    });
   }
 
   function closeAllOpenSpans(): void {
@@ -655,14 +759,22 @@ export async function startFileRunRecorder(options: {
     await rm(activePath, { force: true });
   }
 
-  async function addRecorderArtifact(artifact: {
+  type RecorderArtifact = {
     kind: RunBundleArtifact["kind"];
     name: string;
     mediaType: string;
     content: string;
     sensitive: boolean;
-  }): Promise<void> {
+    counts?: RunBundleArtifact["counts"];
+  };
+
+  /** Metadata capture keeps no artifact bodies; only the public ledger bypasses this. */
+  async function addRecorderArtifact(artifact: RecorderArtifact): Promise<void> {
     if (options.mode === "metadata") return;
+    await storeArtifact(artifact);
+  }
+
+  async function storeArtifact(artifact: RecorderArtifact): Promise<void> {
     try {
       if (!/^[a-z0-9][a-z0-9._-]*$/i.test(artifact.name)) {
         throw new Error(`Invalid run artifact name: ${artifact.name}`);
@@ -687,6 +799,7 @@ export async function startFileRunRecorder(options: {
         sizeBytes: stored.byteLength,
         sha256: createHash("sha256").update(stored).digest("hex"),
         sensitive: artifact.sensitive,
+        ...(artifact.counts ? { counts: artifact.counts } : {}),
         truncated: stored.byteLength < original.byteLength,
         ...(stored.byteLength < original.byteLength
           ? {
@@ -759,6 +872,16 @@ export async function startFileRunRecorder(options: {
     artifact.originalSha256 = originalSha256;
     artifact.omitted = true;
   }
+}
+
+function attemptUsage(usage: NonNullable<RunAgentAttemptResult["usage"]>): RunAgentUsage {
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens ?? 0,
+    cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+    costUsd: usage.costUsd,
+  };
 }
 
 function runnerName(env: NodeJS.ProcessEnv): string | undefined {

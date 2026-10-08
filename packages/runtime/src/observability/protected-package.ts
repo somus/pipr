@@ -14,6 +14,8 @@ import {
 import os from "node:os";
 import path from "node:path";
 import {
+  diagnosticFindingLedgerSchema,
+  findingLedgerSchema,
   parseRunBundleEnvelope,
   type RunBundleArtifact,
   type RunBundleEnvelope,
@@ -22,6 +24,7 @@ import {
   type RunSpanRecord,
 } from "@usepipr/sdk";
 import { Decrypter, Encrypter, generateX25519Identity, identityToRecipient } from "age-encryption";
+import { z } from "zod";
 import { extractRunArchive } from "./archive-extraction.js";
 import { createRunBundleTarGz } from "./bundle-archive.js";
 import {
@@ -161,7 +164,7 @@ export async function openRunBundlePackage(options: {
   });
   requireExecutionId(downloaded.manifest.executionId, envelope.executionId);
   const bundle = await loadValidatedRunBundle(downloaded.directory);
-  validatePublicMetadata(bundle);
+  await validatePublicMetadata(bundle);
   return {
     envelope,
     bundle,
@@ -259,11 +262,7 @@ async function writeMetadataProjection(
   bundle: ValidatedRunBundle,
   destination: string,
 ): Promise<void> {
-  const artifacts = bundle.manifest.artifacts
-    .filter((artifact) => artifact.kind !== "diff-context-coverage")
-    .map(publicArtifactDescriptor)
-    .filter((artifact): artifact is RunBundleArtifact => artifact !== undefined);
-  let truncated = bundle.manifest.capture.truncated;
+  const ledger = await publicLedgerProjection(bundle);
   const manifest: RunBundleManifest = {
     ...bundle.manifest,
     capture: {
@@ -272,12 +271,17 @@ async function writeMetadataProjection(
       redactionApplied: true,
       errors: [],
     },
-    artifacts,
+    artifacts: [
+      ...bundle.manifest.artifacts
+        .filter((artifact) => artifact.kind !== "diff-context-coverage")
+        .filter((artifact) => artifact !== ledger?.source)
+        .map(publicArtifactDescriptor)
+        .filter((artifact): artifact is RunBundleArtifact => artifact !== undefined),
+      // The public ledger goes last so manifest trimming drops omitted descriptors first.
+      ...(ledger ? [ledger.descriptor] : []),
+    ],
   };
-  while (Buffer.byteLength(JSON.stringify(manifest)) > 256 * 1024 && manifest.artifacts.length) {
-    manifest.artifacts.shift();
-    truncated = true;
-  }
+  let truncated = trimManifestArtifacts(manifest, ledger?.descriptor) || manifest.capture.truncated;
   const allSpans = bundle.spans
     .map(publicSpan)
     .filter((span): span is RunSpanRecord => Boolean(span));
@@ -302,9 +306,87 @@ async function writeMetadataProjection(
       path.join(destination, manifest.signals.metrics),
       Buffer.from(`${JSON.stringify(bundle.metrics)}\n`),
     ),
+    writePublicLedger(destination, ledger),
   ]);
-  validatePublicMetadata(await loadValidatedRunBundle(destination));
+  await validatePublicMetadata(await loadValidatedRunBundle(destination));
 }
+
+/** Drops leading descriptors until run.json fits its limit, keeping `kept`; returns whether any were dropped. */
+function trimManifestArtifacts(
+  manifest: RunBundleManifest,
+  kept: RunBundleArtifact | undefined,
+): boolean {
+  let trimmed = false;
+  while (
+    Buffer.byteLength(JSON.stringify(manifest)) > 256 * 1024 &&
+    manifest.artifacts.length > 0 &&
+    manifest.artifacts[0] !== kept
+  ) {
+    manifest.artifacts.shift();
+    trimmed = true;
+  }
+  return trimmed;
+}
+
+async function writePublicLedger(
+  destination: string,
+  ledger: Awaited<ReturnType<typeof publicLedgerProjection>>,
+): Promise<void> {
+  if (!ledger) return;
+  await mkdir(path.join(destination, "artifacts"), { recursive: true, mode: 0o700 });
+  await writePrivate(path.join(destination, ledger.descriptor.path), ledger.contents);
+}
+
+const publicLedgerPath = "artifacts/ledger.json";
+
+/**
+ * Public form of the bundle's `ledger` artifact: content-free Finding Outcome events, re-parsed
+ * with the strict public schema. Invalid or truncated ledgers are omitted like other artifacts.
+ */
+async function publicLedgerProjection(bundle: ValidatedRunBundle): Promise<
+  | {
+      source: RunBundleArtifact;
+      descriptor: RunBundleArtifact;
+      contents: Buffer;
+    }
+  | undefined
+> {
+  const source = bundle.manifest.artifacts.find(
+    (artifact) => artifact.kind === "ledger" && !artifact.omitted && !artifact.truncated,
+  );
+  if (!source) return undefined;
+  let ledger: z.infer<typeof sourceLedgerSchema>;
+  try {
+    const parsed = JSON.parse(await readFile(path.join(bundle.directory, source.path), "utf8"));
+    ledger = sourceLedgerSchema.parse(parsed);
+  } catch {
+    return undefined;
+  }
+  const contents = Buffer.from(
+    `${JSON.stringify(
+      findingLedgerSchema.parse({
+        formatVersion: 1,
+        threadResolution: ledger.threadResolution,
+        events: ledger.events,
+      }),
+    )}\n`,
+  );
+  return {
+    source,
+    contents,
+    descriptor: {
+      kind: "ledger",
+      path: publicLedgerPath,
+      mediaType: "application/json",
+      sizeBytes: contents.byteLength,
+      sha256: createHash("sha256").update(contents).digest("hex"),
+      sensitive: false,
+      truncated: false,
+    },
+  };
+}
+
+const sourceLedgerSchema = z.union([diagnosticFindingLedgerSchema, findingLedgerSchema]);
 
 function takeLastJsonLines<T>(records: T[], limitBytes: number): T[] {
   const selected: T[] = [];
@@ -357,6 +439,7 @@ const publicSpanAttributes = new Set([
   "gen_ai.agent.name",
   "gen_ai.provider.name",
   "gen_ai.request.model",
+  "gen_ai.response.model",
   "gen_ai.tool.name",
   "pipr.attempt.type",
   "pipr.attempt.id",
@@ -366,16 +449,16 @@ const publicSpanAttributes = new Set([
   "pipr.model.name",
   "pipr.task.name",
   "pipr.auth.mode",
+  "pipr.conversation.id",
+  "pipr.conversation.truncated",
   "pipr.declarationCount",
   "pipr.fileCount",
   "pipr.limit",
-  "pipr.process.exit_code",
   "pipr.prompt.bytes",
   "pipr.resource.cpu_system_ms",
   "pipr.resource.cpu_user_ms",
   "pipr.resource.peak_rss_bytes",
-  "pipr.response.stderr_bytes",
-  "pipr.response.stdout_bytes",
+  "pipr.response.bytes",
   "pipr.retry.backoff_ms",
   "pipr.run.failure_category",
   "pipr.run.kind",
@@ -392,6 +475,10 @@ const publicSpanAttributes = new Set([
   "pipr.tool.input_hash",
   "pipr.tool.output_bytes",
   "pipr.tool.output_hash",
+  "pipr.turn.count",
+  "pipr.turn.entry_kinds",
+  "pipr.turn.index",
+  "pipr.turn.stop_reason",
   "pipr.usage.cache_read_tokens",
   "pipr.usage.cache_status",
   "pipr.usage.cache_write_tokens",
@@ -402,6 +489,7 @@ const publicSpanAttributes = new Set([
 const publicSpanNames = new Set([
   "gen_ai.chat",
   "gen_ai.execute_tool",
+  "gen_ai.invoke_agent",
   "gen_ai.time_to_first_token",
   "pipr.agent.attempt_resources",
   "pipr.agent.compaction",
@@ -443,7 +531,7 @@ function publicSpan(span: RunSpanRecord): RunSpanRecord | undefined {
   };
 }
 
-function validatePublicMetadata(bundle: ValidatedRunBundle): void {
+async function validatePublicMetadata(bundle: ValidatedRunBundle): Promise<void> {
   if (bundle.manifest.capture.mode !== "metadata") {
     throw new Error("Protected package metadata must use metadata capture mode");
   }
@@ -473,8 +561,23 @@ function validatePublicMetadata(bundle: ValidatedRunBundle): void {
   if (bundle.manifest.capture.errors.length > 0) {
     throw new Error("Protected package metadata contains diagnostic capture errors");
   }
-  if (bundle.manifest.artifacts.some((artifact) => artifact.omitted !== true)) {
+  const bodies = bundle.manifest.artifacts.filter((artifact) => artifact.omitted !== true);
+  if (
+    bodies.length > 1 ||
+    bodies.some(
+      (artifact) =>
+        artifact.kind !== "ledger" || artifact.path !== publicLedgerPath || artifact.sensitive,
+    )
+  ) {
     throw new Error("Protected package metadata contains diagnostic artifact bodies");
+  }
+  for (const artifact of bodies) {
+    const parsed = findingLedgerSchema.safeParse(
+      JSON.parse(await readFile(path.join(bundle.directory, artifact.path), "utf8")),
+    );
+    if (!parsed.success) {
+      throw new Error("Protected package metadata ledger contains diagnostic content");
+    }
   }
 }
 

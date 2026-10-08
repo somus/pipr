@@ -472,7 +472,7 @@ export function priorReviewStateForTasks(
   selectedTasks: string[],
 ): NonNullable<RunTaskRuntimeOptions["priorReviewState"]> {
   return {
-    version: 1,
+    version: 2,
     reviewedHeadSha: "head",
     selectedTasks,
     findings: [
@@ -512,6 +512,7 @@ function expectDroppedOutsideConfiguredPaths(result: ReviewOnlyRuntimeResult): v
   expect(result.validated.droppedFindings).toEqual([
     {
       finding: expect.objectContaining({ body: "outside body" }),
+      code: "path-scope",
       reason: "finding path is outside configured paths",
     },
   ]);

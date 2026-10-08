@@ -1,5 +1,6 @@
 import { firstNonEmptyLine, isPiprCommandLine } from "../commands/grammar.js";
 import type { CodeHostAdapter, CommandCommentEvent } from "../hosts/types.js";
+import type { FindingLedger } from "../review/finding-ledger.js";
 import { selectRuntimeTasks } from "../review/task/select-runtime-tasks.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext } from "../types.js";
@@ -200,6 +201,7 @@ async function runCommandLifecycle(
       commandName: invocation.commandName,
       sourceCommentId: prepared.comment.commentId,
       configSource: prepared.trustedRuntime.settings.source,
+      findingLedger: services.findingLedger,
     });
     if (result.kind === "review") {
       await status({ ...statusOptions, state: "completed" });
@@ -251,6 +253,7 @@ async function issueCommentCommandResult(options: {
   commandName: string;
   sourceCommentId: string;
   configSource: string;
+  findingLedger: FindingLedger;
 }): Promise<HostRunCommandResult> {
   if (options.completed.kind === "skipped") {
     return { kind: "ignored", reason: options.completed.reason };
@@ -271,6 +274,7 @@ async function issueCommentCommandResult(options: {
     configSource: options.configSource,
     review: options.completed.review,
     publication: options.completed.publication,
+    findingEvents: options.findingLedger.events(),
   };
 }
 

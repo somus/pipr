@@ -1,6 +1,7 @@
 import type { CodeHostAdapter } from "../hosts/types.js";
 import type { RunObserver } from "../observability/types.js";
 import type { PiProviderModule, PiRunner } from "../pi/types.js";
+import type { FindingLedger } from "../review/finding-ledger.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { SecretRedactor } from "../shared/secret-redaction.js";
 
@@ -28,4 +29,6 @@ export type HostRunPorts = {
 export type HostRunServices = HostRunWorkspace &
   HostRunPorts & {
     log: RuntimeLog;
+    /** Finding Outcome events of this execution, recorded beside the run observer. */
+    findingLedger: FindingLedger;
   };

@@ -56,6 +56,36 @@ const reviewStatsSchema = z.strictObject({
 
 const priorFindingStatusSchema = z.enum(["open", "resolved"]);
 
+/**
+ * One-letter codes for the Finding Outcome kinds kept in review state history. `proposed` and
+ * `dropped` are not kept: every stored finding was proposed, and dropped findings get no record.
+ */
+export const findingHistoryCodes = {
+  published: "p",
+  carried: "c",
+  outdated: "o",
+  fixed: "f",
+  "still-valid": "s",
+  "resolved-by-human": "h",
+  replied: "r",
+} as const;
+
+export type FindingHistoryCode = (typeof findingHistoryCodes)[keyof typeof findingHistoryCodes];
+
+export const maxFindingHistoryEntries = 6;
+/** Length of the head SHA prefix stored with each history entry. */
+export const findingHistoryHeadLength = 12;
+
+/** `[kindCode, head12]`: an outcome and the first 12 characters of the head it happened at. */
+const findingHistoryEntrySchema = z.tuple([
+  z.enum(["p", "c", "o", "f", "s", "h", "r"] satisfies FindingHistoryCode[]),
+  z
+    .string()
+    .min(1)
+    .max(findingHistoryHeadLength)
+    .regex(/^[A-Za-z0-9._-]+$/),
+]);
+
 const workflowUrlSchema = z
   .string()
   .url()
@@ -86,10 +116,21 @@ const priorFindingRecordSchema = z.strictObject({
   firstSeenHeadSha: z.string().min(1),
   lastSeenHeadSha: z.string().min(1),
   lastCommentedHeadSha: z.string().min(1).optional(),
+  /** Declared enum field values (facets) of the finding. */
+  f: z
+    .record(z.string().min(1).max(100), z.string().min(1).max(100))
+    .refine((facets) => Object.keys(facets).length <= 32)
+    .optional(),
+  /** Agent that produced the finding. */
+  a: z.string().min(1).max(200).optional(),
+  /** Model that produced the finding. */
+  m: z.string().min(1).max(200).optional(),
+  /** Finding Outcome history, oldest first. */
+  h: z.array(findingHistoryEntrySchema).min(1).max(maxFindingHistoryEntries).optional(),
 });
 
 export const priorReviewStateSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.literal(2),
   reviewedHeadSha: z.string().min(1),
   selectedTasks: z.array(z.string().min(1)),
   findings: z.array(priorFindingRecordSchema),
@@ -122,6 +163,18 @@ export const publicationMetadataSchema = z.strictObject({
   stats: reviewStatsSchema.optional(),
   workflowUrl: workflowUrlSchema.optional(),
 });
+
+/**
+ * Index of the history entry to drop first: the oldest one other than `fixed` and
+ * `resolved-by-human`, which tell later runs those outcomes were already recorded.
+ */
+export function oldestTrimmableHistoryIndex(history: NonNullable<PriorFindingRecord["h"]>): number {
+  const index = history.findIndex(
+    ([code]) =>
+      code !== findingHistoryCodes.fixed && code !== findingHistoryCodes["resolved-by-human"],
+  );
+  return index === -1 ? 0 : index;
+}
 
 export type ReviewStats = z.infer<typeof reviewStatsSchema>;
 export type ThreadAction = z.infer<typeof threadActionSchema>;

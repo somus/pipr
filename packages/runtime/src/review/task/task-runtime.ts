@@ -27,6 +27,7 @@ import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../t
 import { type AgentRunBudget, createAgentRunBudget } from "../agent/agent-run-budget.js";
 import { resolveProvider } from "../agent/prompt-assembly.js";
 import type { PiRunStats } from "../agent/review-run-types.js";
+import { deriveReviewFindingOutcomes, findingLedgerContext } from "../finding-ledger.js";
 import { priorReviewStateForSelectedTasks } from "../prior-state.js";
 import { buildCommentPublishingPlan, type InlineCommentDraft } from "../publication-plan.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
@@ -39,6 +40,7 @@ import { createTaskContext } from "./task-context.js";
 import {
   collectedReview,
   createOutputState,
+  findingAttribution,
   mergeTaskOutputs,
   type OutputState,
   type OutputStateWithComment,
@@ -130,12 +132,24 @@ function runtimeTasks(options: RunTaskRuntimeOptions) {
   ];
 }
 
-async function loadPriorReview(options: RunTaskRuntimeOptions, selectedTasks: string[]) {
-  const loadedPriorReviewState =
-    options.priorReviewState ??
-    (await runLoggedPhase(options.log, "load prior review state", async () =>
-      options.loadPriorReviewState?.(),
-    ));
+/**
+ * Loads prior review state and records the outcomes observed on the host since it was written
+ * (Pipr resolutions and verifier replies from reply runs, human thread resolutions).
+ */
+async function loadPriorReview(
+  options: RunTaskRuntimeOptions,
+  selectedTasks: string[],
+  run: PiprRunContext,
+) {
+  const loaded = options.priorReviewState
+    ? undefined
+    : await runLoggedPhase(options.log, "load prior review state", async () =>
+        options.loadPriorReviewState?.(),
+      );
+  if (loaded?.events.length) {
+    options.findingLedger?.record(findingLedgerContext(options, run), loaded.events);
+  }
+  const loadedPriorReviewState = options.priorReviewState ?? loaded?.state;
   const priorMainComment =
     options.priorMainComment ??
     (await runLoggedPhase(options.log, "load prior main comment", async () =>
@@ -233,7 +247,7 @@ async function runTaskRuntimeWithPiRunner(
     id: runId,
     trigger: taskRunTrigger(options),
   });
-  const { priorReviewState, priorMainComment } = await loadPriorReview(options, selectedTasks);
+  const { priorReviewState, priorMainComment } = await loadPriorReview(options, selectedTasks, run);
   const piRuns: PiRunStats[] = [];
   const agentRunBudget = createAgentRunBudget(config.limits?.maxAgentRuns);
   const { structuralAnalysis, structuralManifest } = structuralContext(options, diffManifest);
@@ -351,6 +365,24 @@ async function runTaskRuntimeWithPiRunner(
     showStats: config.publication.showStats,
     priorReviewState: verifier.priorReviewState,
     threadActions: redactedPublication.threadActions,
+    findingOutcomes: (dispositions) =>
+      deriveReviewFindingOutcomes({
+        valid: redactedPublication.validated.validFindings.map((finding, index) => ({
+          finding,
+          attribution: findingAttribution(output, validated.validFindings[index] ?? finding),
+        })),
+        dispositions,
+        dropped: redactedPublication.validated.droppedFindings.map((dropped, index) => ({
+          finding: dropped.finding,
+          code: dropped.code,
+          attribution: findingAttribution(
+            output,
+            validated.droppedFindings[index]?.finding ?? dropped.finding,
+          ),
+        })),
+        priorReviewState,
+        verdicts: verifier.verdicts,
+      }),
     metadata: {
       runtimeVersion,
       configVersion: options.versionCompatibility?.configVersion,
@@ -367,6 +399,7 @@ async function runTaskRuntimeWithPiRunner(
     },
   });
   const publicationPlan = publishing.publicationPlan;
+  options.findingLedger?.record(findingLedgerContext(options, run), publishing.findingOutcomes);
   publishTaskChecks(options.checkSink, redactedPublication.taskChecks);
   options.log?.info("review validated", {
     validFindings: validated.validFindings.length,
@@ -478,6 +511,10 @@ async function executeSelectedTasks(options: {
       const started = Date.now();
       const taskId = String(taskOrder);
       options.runtimeOptions.log?.info("task start", { task: task.name, order: taskOrder });
+      const observedTask = options.runtimeOptions.runObserver?.beginTask?.({
+        name: task.name,
+        order: taskOrder,
+      });
       options.runtimeOptions.progress?.work({
         type: "task-started",
         taskId,
@@ -503,6 +540,11 @@ async function executeSelectedTasks(options: {
           providerModels: output.providerModels,
           repairAttempted: output.repairAttempted,
         });
+        observedTask?.finish({
+          status: "ok",
+          findings: output.findings.length,
+          repairAttempted: output.repairAttempted,
+        });
         options.runtimeOptions.progress?.work({
           type: "task-finished",
           taskId,
@@ -520,6 +562,7 @@ async function executeSelectedTasks(options: {
           durationMs: Date.now() - started,
           error: error instanceof Error ? error.message : String(error),
         });
+        observedTask?.finish({ status: "error" });
         if (options.runtimeOptions.log?.debugEnabled && error instanceof Error && error.stack) {
           options.runtimeOptions.log.text("debug", "error stack", error.stack);
         }
@@ -597,6 +640,7 @@ async function runSynchronizeVerifier(options: {
     return {
       priorReviewState: options.priorReviewState,
       threadActions: [],
+      verdicts: [],
       providerModels: [],
     };
   }

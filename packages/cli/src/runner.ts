@@ -24,15 +24,19 @@ import cliPackage from "../package.json" with { type: "json" };
 import {
   defaultLocalTraceStore,
   type RunsDownloadOptions,
+  type RunsExportOptions,
   type RunsInspectOptions,
   type RunsKeygenOptions,
   type RunsListOptions,
   type RunsShowOptions,
+  type RunsStatsOptions,
   runRunsDownload,
+  runRunsExport,
   runRunsInspect,
   runRunsKeygen,
   runRunsList,
   runRunsShow,
+  runRunsStats,
 } from "./runs.js";
 import { formatBundledSkill, materializeBundledSkill, resolveBundledSkill } from "./skills.js";
 import {
@@ -261,6 +265,25 @@ function createProgram(
     .action(async (inputPath: string, runOptions: RunsInspectOptions) => {
       await runRunsInspect(inputPath, runOptions, context);
     });
+  addLedgerSourceOptions(
+    runs
+      .command("stats")
+      .description("Report content-free Finding Outcome rates across captured runs")
+      .option("--group-by <dimension>", "Group rates by facet, agent, model, or config")
+      .option("--json", "Print versioned JSON"),
+  ).action(async (runOptions: RunsStatsOptions) => {
+    await runRunsStats(runOptions, context);
+  });
+  addLedgerSourceOptions(
+    runs
+      .command("export")
+      .description("Export labeled evaluation cases from decrypted Finding Outcome ledgers")
+      .requiredOption("--dataset <dir>", "Directory for dataset case files and index.json")
+      .option("--repo <dir>", "Git checkout that contains the reviewed commits", ".")
+      .addOption(identityOption()),
+  ).action(async (runOptions: RunsExportOptions) => {
+    await runRunsExport(runOptions, context);
+  });
   runs
     .command("keygen")
     .description("Generate an age identity for encrypted Run Bundles")
@@ -283,6 +306,20 @@ function createProgram(
     .action(runSkillPath);
 
   return program;
+}
+
+function addLedgerSourceOptions(command: Command): Command {
+  return command
+    .option("--host <host>", "Code host")
+    .option("--repository <repository>", "Provider repository path")
+    .option("--since <date>", "Only runs and events since an ISO 8601 date or a day count like 30d")
+    .option("--limit <count>", "Maximum runs to read", "100")
+    .option("--event-limit <count>", "Maximum newest webhook finding events to read", "100000")
+    .option("--store <path>", "Local run store")
+    .option(
+      "--webhook-db <path>",
+      "Webhook delivery database with finding events (PIPR_WEBHOOK_DB)",
+    );
 }
 
 function identityOption(): Option {

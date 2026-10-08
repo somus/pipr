@@ -24,16 +24,18 @@ export function createGiteaHostAdapter(options: {
   const client = options.client ?? createGiteaClient({ host: options.host, env: options.env });
   const driver = createGiteaPublicationDriver(client);
   const publication = createPublicationWorkflow(driver);
+  const capabilities = {
+    commandComments: true,
+    reviewCommentReplies: false,
+    threadResolution: false,
+    multilineInlineComments: false,
+    suggestedChanges: false,
+    statuses: true,
+  };
+  const comments = createCommentsReader(driver, capabilities);
   return {
     id: options.host,
-    capabilities: {
-      commandComments: true,
-      reviewCommentReplies: false,
-      threadResolution: false,
-      multilineInlineComments: false,
-      suggestedChanges: false,
-      statuses: true,
-    },
+    capabilities,
     events: {
       parseEvent: (parseOptions) =>
         parseGiteaEvent({
@@ -57,7 +59,7 @@ export function createGiteaHostAdapter(options: {
       },
     },
     publication,
-    comments: createCommentsReader(driver),
+    comments,
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {

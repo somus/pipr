@@ -151,6 +151,9 @@ export class FileSystemRunArchiveSource implements RunArchiveSource {
   }
 }
 
+/** One span per agent attempt; it carries the attempt's usage totals. */
+const agentSpanName = "gen_ai.invoke_agent";
+
 export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
   const timedSpans = bundle.spans.filter(
     (span): span is RunSpanRecord & { durationMs: number } => span.durationMs !== undefined,
@@ -172,7 +175,9 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
       durationMs: span.durationMs,
       status: span.status,
     }));
-  const usage = bundle.spans.reduce(
+  // Each agent attempt carries its usage totals; per-turn model spans repeat them, so they are not summed again.
+  const agentAttempts = bundle.spans.filter((span) => span.name === agentSpanName);
+  const usage = agentAttempts.reduce(
     (total, span) => {
       const cacheRead = addSafeTokenTotal(
         total.cacheReadTokens,
@@ -231,7 +236,7 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
   const structuralSpan = timedSpans.find((span) => span.name === "pipr.diff.structural_analysis");
   const budgetSpan = bundle.spans.find((span) => span.name === "pipr.agent.run_budget");
   const modelAttempts = timedSpans
-    .filter((span) => span.name === "gen_ai.chat")
+    .filter((span) => span.name === agentSpanName)
     .sort(compareSpans)
     .map(modelAttemptDiagnosis);
 
@@ -241,8 +246,8 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
     criticalPath,
     phaseDurations,
     agentRetryAttempts: bundle.spans.filter((span) => span.name === "pipr.agent.retry").length,
-    modelRetryAttempts: bundle.spans.filter(
-      (span) => span.name === "gen_ai.chat" && span.attributes["pipr.attempt.type"] === "retry",
+    modelRetryAttempts: agentAttempts.filter(
+      (span) => span.attributes["pipr.attempt.type"] === "retry",
     ).length,
     backoffDurationsMs: bundle.spans
       .filter((span) => span.name === "pipr.agent.retry")
@@ -408,18 +413,7 @@ function numberAttribute(span: RunSpanRecord, key: string): number {
 }
 
 function diagnoseCacheUsageStatus(spans: RunSpanRecord[]): "complete" | "partial" | "unavailable" {
-  const usageKeys = [
-    "gen_ai.usage.input_tokens",
-    "gen_ai.usage.output_tokens",
-    "pipr.usage.cache_read_tokens",
-    "pipr.usage.cache_write_tokens",
-    "pipr.usage.cost_usd",
-  ];
-  const usageSpans = spans.filter((span) =>
-    usageKeys.some((key) => Object.hasOwn(span.attributes, key)),
-  );
-  const modelAttempts = spans.filter((span) => span.name === "gen_ai.chat");
-  const statusSpans = modelAttempts.length > 0 ? modelAttempts : usageSpans;
+  const statusSpans = spans.filter((span) => span.name === agentSpanName);
   const statuses = statusSpans
     .map((span) => stringAttribute(span, "pipr.usage.cache_status"))
     .filter(

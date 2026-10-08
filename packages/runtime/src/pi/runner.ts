@@ -177,24 +177,43 @@ async function runInWorker(
     } finally {
       deadline.clear();
     }
-    if (outcome.status === "failed") {
-      throw new ProviderExecutionError(
-        `Pi agent failed (${outcome.reason})`,
-        classifyProviderFailure({ provider: options.provider, output: outcome.error }),
-        outcome.error,
-      );
-    }
-    return {
-      text: outcome.text,
-      conversationId: outcome.conversationId,
+    return settledRunResult(outcome, options, {
       durationMs: Date.now() - started,
-      models: outcome.models,
-      usage: { status: "complete", ...outcome.usage, cacheUsageStatus: "complete" },
       ...(coverage ? { diffContextCoverage: coverage.result() } : {}),
-    };
+    });
   } finally {
     await removeSandboxRoot(callDir).catch(() => rm(callDir, { recursive: true, force: true }));
   }
+}
+
+/** Hands the settled conversation to the observer, then returns the answer or throws the run's failure. */
+function settledRunResult(
+  outcome: AgentRunOutcome,
+  options: PiRunOptions,
+  measured: Pick<PiRunResult, "durationMs" | "diffContextCoverage">,
+): PiRunResult {
+  if (outcome.conversation && outcome.conversationId !== undefined) {
+    options.eventObserver?.({
+      kind: "conversation",
+      conversationId: outcome.conversationId,
+      entries: outcome.conversation.entries,
+      truncated: outcome.conversation.truncated,
+    });
+  }
+  if (outcome.status === "failed") {
+    throw new ProviderExecutionError(
+      `Pi agent failed (${outcome.reason})`,
+      classifyProviderFailure({ provider: options.provider, output: outcome.error }),
+      outcome.error,
+    );
+  }
+  return {
+    text: outcome.text,
+    conversationId: outcome.conversationId,
+    models: outcome.models,
+    usage: { status: "complete", ...outcome.usage, cacheUsageStatus: "complete" },
+    ...measured,
+  };
 }
 
 async function agentRunRequest(
@@ -213,6 +232,7 @@ async function agentRunRequest(
     ...(options.timeoutSeconds !== undefined
       ? { timeoutMs: Math.max(1, Math.round(options.timeoutSeconds * 1000)) }
       : {}),
+    ...(options.captureConversation ? { captureConversation: true } : {}),
   };
 }
 
@@ -396,6 +416,7 @@ function assertUniqueToolNames(names: readonly string[]): void {
 
 const markerEvents = {
   first_response: "first-response",
+  turn_start: "turn-start",
   auto_retry_end: "retry-end",
   compaction_start: "compaction-start",
   compaction_end: "compaction-end",
@@ -427,6 +448,10 @@ function runAgentEvent(event: AgentWorkerEvent): RunAgentEvent {
         kind: "retry-start",
         ...(event.delayMs !== undefined ? { delayMs: event.delayMs } : {}),
       };
+    case "turn_end": {
+      const { type: _type, ...turn } = event;
+      return { kind: "turn-end", ...turn };
+    }
     default:
       return { kind: markerEvents[event.type] };
   }

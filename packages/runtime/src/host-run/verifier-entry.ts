@@ -1,15 +1,23 @@
-import type { PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
+import type { FindingActorPermission, PiprRunContext, PiprRunSummary } from "@usepipr/sdk";
 import { registerProviderSecrets } from "../config/provider-credentials.js";
 import { buildDiffManifest } from "../diff/diff.js";
 import type { CodeHostAdapter, ReviewCommentReplyEvent } from "../hosts/types.js";
 import { recordArtifactSafely } from "../observability/capture-sinks.js";
+import type { InlineThreadContext, PriorReviewState } from "../publication/types.js";
 import { resolveProvider } from "../review/agent/prompt-assembly.js";
 import type { PiRunStats } from "../review/agent/review-run-types.js";
 import { isPiprThreadActionReplyBody } from "../review/comment-markers.js";
+import {
+  type FindingOutcomeEmission,
+  findingLedgerContext,
+  findingOutcomeAnchors,
+  verifierVerdictOutcome,
+} from "../review/finding-ledger.js";
+import { priorFindingAttribution } from "../review/prior-state.js";
 import { redactThreadActions } from "../review/publication-redaction.js";
 import { reviewStatsForRuns, runSummaryStatsFields } from "../review/review-stats.js";
 import { stableReviewRunId } from "../review/run-identity.js";
-import { runInternalVerifier } from "../review/verifier.js";
+import { replyThreadContext, replyThreadKey, runInternalVerifier } from "../review/verifier.js";
 import type { RuntimeLog } from "../shared/logging.js";
 import type { ChangeRequestEventContext, PiprConfig } from "../types.js";
 import type { HostRunPorts, HostRunServices } from "./composition.js";
@@ -57,6 +65,7 @@ export async function runReviewCommentReplyHostRunCommand(
     event: prepared.event,
     configSource: prepared.trustedRuntime.settings.source,
     errors: publication?.errors ?? [],
+    findingEvents: services.findingLedger.events(),
   };
 }
 
@@ -93,6 +102,7 @@ type PreparedReviewCommentVerifier =
       reply: ReviewCommentReplyEvent & { parentCommentId: string };
       event: ChangeRequestEventContext;
       trustedRuntime: TrustedRuntimeProject;
+      actorPermission: FindingActorPermission;
     };
 
 async function prepareReviewCommentVerifier(
@@ -111,7 +121,13 @@ async function prepareReviewCommentVerifier(
   if (!config.publication.autoResolve.userReplies.enabled) {
     return { kind: "ignored", reason: "publication.autoResolve.userReplies is disabled" };
   }
-  if (!(await verifierActorAllowed(services.adapter, event, reply, config))) {
+  const actorPermission = await allowedVerifierActorPermission(
+    services.adapter,
+    event,
+    reply,
+    config,
+  );
+  if (!actorPermission) {
     return { kind: "ignored", reason: "review comment reply actor is not allowed" };
   }
   await prepareTrustedHeadCheckout(
@@ -126,6 +142,7 @@ async function prepareReviewCommentVerifier(
     reply: { ...reply, parentCommentId: reply.parentCommentId },
     event,
     trustedRuntime,
+    actorPermission,
   };
 }
 
@@ -152,6 +169,7 @@ async function runReviewCommentVerifier(
       mode: "user-reply",
       commentId: reply.commentId,
       parentCommentId: reply.parentCommentId,
+      ...(reply.threadId ? { threadId: reply.threadId } : {}),
     },
   });
   const runContext: PiprRunContext = Object.freeze({ id: runId, trigger: "verifier" });
@@ -176,6 +194,9 @@ async function runReviewCommentVerifier(
     content: JSON.stringify(diffManifest, null, 2),
     sensitive: true,
   });
+  const priorReviewState = (
+    await services.adapter.comments?.loadPriorReviewState?.({ change: event })
+  )?.state;
   const result = await runInternalVerifier({
     workspace: services.rootDir,
     config,
@@ -190,13 +211,14 @@ async function runReviewCommentVerifier(
     log: services.log,
     runObserver: services.runObserver,
     diffManifest,
-    priorReviewState: await services.adapter.comments?.loadPriorReviewState?.({ change: event }),
+    priorReviewState,
     threadContexts,
     mode: {
       kind: "user-reply",
       reply: {
         commentId: reply.commentId,
         parentCommentId: reply.parentCommentId,
+        ...(reply.threadId ? { threadId: reply.threadId } : {}),
         body: reply.body,
         actor: reply.actor,
       },
@@ -207,6 +229,19 @@ async function runReviewCommentVerifier(
       piRuns.push(run);
     },
   });
+  services.findingLedger.record(
+    findingLedgerContext(
+      { event, trustedConfigHash: trustedRuntime.trustedConfigHash },
+      runContext,
+    ),
+    replyOutcomes({
+      threadContexts,
+      reply,
+      actorPermission: prepared.actorPermission,
+      verdicts: result.verdicts,
+      priorReviewState,
+    }),
+  );
   const durationMs = Date.now() - started;
   const stats = reviewStatsForRuns(piRuns, durationMs);
   const run = verifierRunSummary({
@@ -265,22 +300,62 @@ function runnableReviewCommentReply(
   return { kind: "runnable" };
 }
 
-async function verifierActorAllowed(
+/**
+ * The reply's outcome on the replied-to finding, then the verifier's verdicts. Both are anchored
+ * to the reply and the markers Pipr leaves, so the next review run rebuilding them from those
+ * markers records the same events.
+ */
+function replyOutcomes(options: {
+  threadContexts: readonly InlineThreadContext[];
+  reply: ReviewCommentReplyEvent & { parentCommentId: string };
+  actorPermission: FindingActorPermission;
+  verdicts: Awaited<ReturnType<typeof runInternalVerifier>>["verdicts"];
+  priorReviewState: PriorReviewState | undefined;
+}): FindingOutcomeEmission[] {
+  const records = new Map(options.priorReviewState?.findings.map((record) => [record.id, record]));
+  const attribution = (findingId: string) => {
+    const stored = priorFindingAttribution(records.get(findingId));
+    return stored ? { attribution: stored } : {};
+  };
+  const thread = replyThreadContext(options.threadContexts, options.reply);
+  return [
+    ...(thread
+      ? [
+          {
+            kind: "replied" as const,
+            findingId: thread.findingId,
+            actorPermission: options.actorPermission,
+            anchor: findingOutcomeAnchors.reply(replyThreadKey(thread), options.reply.commentId),
+            ...attribution(thread.findingId),
+          },
+        ]
+      : []),
+    ...options.verdicts.map((verdict) =>
+      verifierVerdictOutcome(verdict, priorFindingAttribution(records.get(verdict.findingId))),
+    ),
+  ];
+}
+
+/**
+ * The permission that allowed the reply's actor to run the verifier: `unchecked` when any actor
+ * is allowed, `author` for the change author, otherwise the host permission; undefined if denied.
+ */
+async function allowedVerifierActorPermission(
   adapter: CodeHostAdapter,
   event: ChangeRequestEventContext,
   reply: ReviewCommentReplyEvent,
   config: PiprConfig,
-): Promise<boolean> {
+): Promise<FindingActorPermission | undefined> {
   const allowed = config.publication.autoResolve.userReplies.allowedActors;
   if (allowed === "any") {
-    return true;
+    return "unchecked";
   }
   if (allowed === "author-or-write" && event.change.author?.login === reply.actor) {
-    return true;
+    return "author";
   }
   const permission = await adapter.permissions.getRepositoryPermission({
     change: event,
     actor: reply.actor,
   });
-  return hasRequiredRepositoryPermission(permission, "write");
+  return hasRequiredRepositoryPermission(permission, "write") ? permission : undefined;
 }

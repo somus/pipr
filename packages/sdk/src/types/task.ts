@@ -1,4 +1,5 @@
 import type { FindingFields, FindingSchema } from "../finding.js";
+import type { FindingDropCode } from "../finding-outcome.js";
 import type { PiprRunContext } from "../result.js";
 import type { ReviewFinding, ReviewSummary } from "../review-contract.js";
 import type {
@@ -79,6 +80,9 @@ type ValidatedReviewFinding<T extends ReviewFinding> = T extends unknown
 /** One review finding rejected by runtime validation. */
 export type DroppedReviewFinding<T extends ReviewFinding = ReviewFinding> = {
   finding: ValidatedReviewFinding<T>;
+  /** Content-free drop reason recorded in Finding Outcome events. */
+  code: FindingDropCode;
+  /** Human-readable explanation for logs; may mention finding content. */
   reason: string;
 };
 

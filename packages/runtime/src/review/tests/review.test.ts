@@ -39,6 +39,7 @@ describe("validateReviewFindings", () => {
     expect(validated.droppedFindings).toEqual([
       {
         finding: { ...finding, rangeId: "range-1" },
+        code: "duplicate",
         reason: "duplicate finding fingerprint",
       },
     ]);
@@ -54,7 +55,7 @@ describe("validateReviewFindings", () => {
 
     expect(validated.validFindings).toHaveLength(0);
     expect(validated.droppedFindings).toEqual([
-      { finding, reason: "finding path is outside configured paths" },
+      { finding, code: "path-scope", reason: "finding path is outside configured paths" },
     ]);
   });
 });
@@ -157,6 +158,7 @@ describe("validateReviewResult", () => {
     expect(validated.droppedFindings).toEqual([
       {
         finding: review.inlineFindings[0],
+        code: "unknown-range",
         reason: "unknown rangeId 'range-without-a-unique-match'",
       },
     ]);

@@ -1,12 +1,12 @@
 import type {
   InlineThreadContext,
   NativeId,
-  PriorReviewState,
   PublicationPlan,
   PublicationResult,
   ReviewProgressLease,
   ThreadAction,
 } from "../publication/types.js";
+import type { LoadedPriorReviewState } from "../review/prior-review-state-load.js";
 import type {
   ChangeRequestEventContext,
   ChangeRequestRef,
@@ -49,6 +49,8 @@ export type ReviewCommentReplyEvent = {
   changeNumber: number;
   commentId: NativeId;
   parentCommentId?: NativeId;
+  /** Thread of the reply, for hosts whose comment ids repeat across threads (Azure DevOps). */
+  threadId?: NativeId;
   body: string;
   actor: string;
   workspace: string;
@@ -146,9 +148,10 @@ export type CodeHostPublication = {
 };
 
 export type CodeHostComments = {
+  /** Undefined when no Pipr-owned main comment carries current-version review state. */
   loadPriorReviewState?(options: {
     change: ChangeRequestEventContext;
-  }): Promise<PriorReviewState | undefined>;
+  }): Promise<LoadedPriorReviewState | undefined>;
   loadPriorMainComment?(options: {
     change: ChangeRequestEventContext;
   }): Promise<string | undefined>;

@@ -96,7 +96,10 @@ function reviewResult(
     run: publicRunSummary(review.run),
     mainComment: stripPiprMainCommentMarkers(review.mainComment),
     inlineFindings: review.inlineCommentDrafts.map((draft) => draft.finding),
-    droppedFindings: review.validated.droppedFindings,
+    droppedFindings: review.validated.droppedFindings.map(({ finding, reason }) => ({
+      finding,
+      reason,
+    })),
     taskChecks: review.taskChecks,
     repairAttempted: review.repairAttempted,
     publication,

@@ -168,8 +168,11 @@ describe("Gitea-compatible host adapter", () => {
     await adapter.publication?.publish({ change, plan: publicationPlan(true) });
 
     await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toMatchObject({
-      reviewedHeadSha: "head",
-      findings: [{ path: "src/a.ts", status: "open" }],
+      threadResolution: "unavailable",
+      state: {
+        reviewedHeadSha: "head",
+        findings: [{ path: "src/a.ts", status: "open" }],
+      },
     });
     await expect(adapter.comments?.loadPriorMainComment?.({ change })).resolves.toContain(
       "Summary.",

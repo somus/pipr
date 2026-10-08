@@ -11,7 +11,12 @@ export function stableReviewRunId(options: {
   trustedConfigSha?: string;
   trustedConfigHash?: string;
   commandInvocation?: RuntimeCommandInvocation;
-  verifierInvocation?: { mode: "user-reply"; commentId: string; parentCommentId: string };
+  verifierInvocation?: {
+    mode: "user-reply";
+    commentId: string;
+    parentCommentId: string;
+    threadId?: string;
+  };
 }): string {
   const hash = new Bun.CryptoHasher("sha256")
     .update(

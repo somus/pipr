@@ -50,3 +50,25 @@ export type RunsInspectOptions = {
 export type RunsKeygenOptions = {
   output?: string;
 };
+
+/** Selects the runs and webhook events whose Finding Outcome ledgers are read. */
+export type RunsLedgerOptions = {
+  host?: string;
+  repository?: string;
+  since?: string;
+  limit?: string;
+  eventLimit?: string;
+  store?: string;
+  webhookDb?: string;
+};
+
+export type RunsStatsOptions = RunsLedgerOptions & {
+  groupBy?: string;
+  json?: boolean;
+};
+
+export type RunsExportOptions = RunsLedgerOptions & {
+  dataset: string;
+  repo?: string;
+  identity?: string[];
+};

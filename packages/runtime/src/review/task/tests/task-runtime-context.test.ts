@@ -243,6 +243,7 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
       droppedFindings: [
         {
           finding: { body: "invalid body", severity: "high" },
+          code: "unknown-range",
           reason: "unknown rangeId 'missing-range'",
         },
       ],
@@ -252,6 +253,7 @@ describe("runTaskRuntime: Diff Manifest, prompt, and verifier context", () => {
     expect(result.validated.droppedFindings).toEqual([
       {
         finding: finding("invalid", "missing-range", 99),
+        code: "unknown-range",
         reason: "unknown rangeId 'missing-range'",
       },
     ]);

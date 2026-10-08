@@ -204,12 +204,16 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
     const publication = verifierPublicationClient(workspace);
     try {
       await writeStillValidVerifierOutput(workspace);
-      await expectVerifierReplyPublished(workspace, publication, {
+      const result = await expectVerifierReplyPublished(workspace, publication, {
         event: { actor: "somu" },
         githubClient: fakeGitHubClient(workspace, "read", {
           author: "somu",
           failPermission: true,
         }),
+      });
+      expect(result.findingEvents[0]).toMatchObject({
+        kind: "replied",
+        actorPermission: "author",
       });
     } finally {
       await removeWorkspace(workspace.rootDir);
@@ -224,9 +228,13 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
     const publication = verifierPublicationClient(workspace);
     try {
       await writeStillValidVerifierOutput(workspace);
-      await expectVerifierReplyPublished(workspace, publication, {
+      const result = await expectVerifierReplyPublished(workspace, publication, {
         event: { actor: "outsider" },
         githubClient: fakeGitHubClient(workspace, "read", { failPermission: true }),
+      });
+      expect(result.findingEvents[0]).toMatchObject({
+        kind: "replied",
+        actorPermission: "unchecked",
       });
     } finally {
       await removeWorkspace(workspace.rootDir);
@@ -246,6 +254,13 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
         githubClient: fakeGitHubClient(workspace, "write"),
         logSink: logs.logSink,
       });
+      expect(
+        result.findingEvents.map((event) => [event.kind, event.findingId, event.actorPermission]),
+      ).toEqual([
+        ["replied", "fnd_existing", "write"],
+        ["still-valid", "fnd_existing", undefined],
+      ]);
+      expect(result.findingEvents[0]?.workId).toBe(result.run.id);
       expect(result.run).toMatchObject({
         trigger: "verifier",
         baseSha: workspace.baseSha,
@@ -267,7 +282,7 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
       expect(output).toContain('"event":"verifier start"');
       expect(output).toContain('"event":"verifier publication"');
       expect(publication.reviewReplies[0]?.body).toContain(
-        renderVerifierResponseMarker("fnd_existing", "reply-11:still-valid:fnd_existing"),
+        renderVerifierResponseMarker("fnd_existing", "reply-11:thread-1:still-valid:fnd_existing"),
       );
       expect(currentGitHead(workspace.rootDir)).toBe(workspace.headSha);
       const [executionId] = await readdir(path.join(workspace.rootDir, ".pipr-runs"));

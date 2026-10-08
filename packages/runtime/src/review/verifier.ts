@@ -33,6 +33,8 @@ export type VerifierMode =
       reply: {
         commentId: string;
         parentCommentId: string;
+        /** Present for hosts whose comment ids repeat across threads. */
+        threadId?: string;
         body: string;
         actor: string;
       };
@@ -62,9 +64,18 @@ export type RunVerifierOptions = {
   agentRunBudget?: AgentRunBudget;
 };
 
+/** A verifier decision that took effect, reported as a Finding Outcome. */
+export type VerifierVerdict = {
+  findingId: string;
+  status: "fixed" | "still-valid";
+  /** Thread action that leaves the verdict's marker on the host, if any. */
+  action?: ThreadAction;
+};
+
 export type VerifierResult = {
   priorReviewState?: PriorReviewState;
   threadActions: ThreadAction[];
+  verdicts: VerifierVerdict[];
   providerModels: string[];
 };
 
@@ -84,7 +95,7 @@ const maxVerifierInputText = 4000;
 export async function runInternalVerifier(options: RunVerifierOptions): Promise<VerifierResult> {
   const prior = options.priorReviewState;
   if (!prior || !autoResolveEnabled(options.config, options.mode)) {
-    return { priorReviewState: prior, threadActions: [], providerModels: [] };
+    return { priorReviewState: prior, threadActions: [], verdicts: [], providerModels: [] };
   }
 
   const candidates = verifierCandidates(prior, options.threadContexts, options.mode);
@@ -95,7 +106,7 @@ export async function runInternalVerifier(options: RunVerifierOptions): Promise<
     threadContexts: options.threadContexts.length,
   });
   if (candidates.length === 0) {
-    return { priorReviewState: prior, threadActions: [], providerModels: [] };
+    return { priorReviewState: prior, threadActions: [], verdicts: [], providerModels: [] };
   }
   if (options.piRunner) {
     return await verifyCandidates(options, options.piRunner, prior, candidates);
@@ -149,7 +160,7 @@ async function verifyCandidates(
     options.log?.warning("verifier failed closed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return { priorReviewState: prior, threadActions: [], providerModels: [] };
+    return { priorReviewState: prior, threadActions: [], verdicts: [], providerModels: [] };
   }
 }
 
@@ -198,6 +209,7 @@ function verifierCandidates(
   contexts: InlineThreadContext[],
   mode: VerifierMode,
 ) {
+  const replied = mode.kind === "user-reply" ? replyThreadContext(contexts, mode.reply) : undefined;
   return prior.findings
     .filter((finding) => finding.status === "open")
     .flatMap((finding) => {
@@ -210,7 +222,7 @@ function verifierCandidates(
       if (!context || context.threadResolved) {
         return [];
       }
-      if (mode.kind === "user-reply" && context.parentCommentId !== mode.reply.parentCommentId) {
+      if (mode.kind === "user-reply" && context !== replied) {
         return [];
       }
       return [{ finding, thread: context }];
@@ -227,13 +239,19 @@ function applyVerifierOutput(
   const candidateById = new Map(candidates.map((candidate) => [candidate.finding.id, candidate]));
   const resolvedIds: string[] = [];
   const threadActions: ThreadAction[] = [];
+  const verdicts: VerifierVerdict[] = [];
 
   for (const item of output.findings) {
-    const action = verifierThreadAction(options, candidateById.get(item.id), item);
+    const candidate = candidateById.get(item.id);
+    const action = verifierThreadAction(options, candidate, item);
+    if (candidate && item.status === "still-valid") {
+      verdicts.push({ findingId: item.id, status: "still-valid", ...(action ? { action } : {}) });
+    }
     if (!action) {
       continue;
     }
     if (action.kind === "resolve") {
+      verdicts.push({ findingId: item.id, status: "fixed", action });
       resolvedIds.push(item.id);
     }
     threadActions.push(action);
@@ -242,6 +260,7 @@ function applyVerifierOutput(
   return {
     priorReviewState: resolvedIds.length > 0 ? resolvePriorFindings(prior, resolvedIds) : prior,
     threadActions,
+    verdicts,
     providerModels,
   };
 }
@@ -307,8 +326,28 @@ function stillValidReplyAction(
     commentId: candidate.thread.parentCommentId,
     threadId: candidate.thread.threadId,
     body,
-    responseKey: `reply-${options.mode.reply.commentId}:still-valid:${item.id}`,
+    responseKey: `reply-${options.mode.reply.commentId}:${replyThreadKey(candidate.thread)}:still-valid:${item.id}`,
   };
+}
+
+type ReplyThread = Pick<InlineThreadContext, "threadId" | "parentCommentId">;
+
+/** The thread a user reply belongs to: by thread id when the host reports one, else by parent comment. */
+export function replyThreadContext<Thread extends ReplyThread>(
+  contexts: readonly Thread[],
+  reply: { parentCommentId: string; threadId?: string },
+): Thread | undefined {
+  return reply.threadId === undefined
+    ? contexts.find((context) => context.parentCommentId === reply.parentCommentId)
+    : contexts.find((context) => context.threadId === reply.threadId);
+}
+
+/**
+ * A thread's key in reply markers and Finding Outcome anchors: its host thread id, else its root
+ * comment id, URI-encoded so it never contains `:`.
+ */
+export function replyThreadKey(thread: ReplyThread): string {
+  return encodeURIComponent(thread.threadId ?? thread.parentCommentId);
 }
 
 function verifierResponseBody(response: string | undefined): string | undefined {

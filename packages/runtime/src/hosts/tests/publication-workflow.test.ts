@@ -207,6 +207,7 @@ describe("shared publication workflow", () => {
       message: "Memory inline comment publication failed",
       result: {
         inlineComments: { posted: 1, skipped: 0, failed: 1 },
+        postedFindingIds: ["finding-left"],
         metadata: {
           inlinePublicationErrors: ["failed finding-right"],
           inlineResolutionErrors: [],
@@ -222,10 +223,12 @@ describe("shared publication workflow", () => {
     await expect(workflow.publish({ change, plan: plan() })).resolves.toMatchObject({
       mainComment: { action: "created", id: "main-1" },
       inlineComments: { posted: 2, skipped: 0, failed: 0 },
+      postedFindingIds: plan().inlineItems.map((item) => item.findingId),
     });
     await expect(workflow.publish({ change, plan: plan() })).resolves.toMatchObject({
       mainComment: { action: "updated", id: "main-1" },
       inlineComments: { posted: 0, skipped: 2, failed: 0 },
+      postedFindingIds: [],
     });
     const command = commandOptions();
     await expect(
@@ -431,7 +434,7 @@ function plan(suffix = "") {
     main: "Summary.",
     inlineItems,
     reviewState: {
-      version: 1,
+      version: 2,
       reviewedHeadSha: "head",
       selectedTasks: ["review"],
       findings: inlineItems.map((item) => ({

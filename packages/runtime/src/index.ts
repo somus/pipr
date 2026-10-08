@@ -20,8 +20,16 @@ export type {
   LocalReviewCommandResult,
   RuntimeCommandOptions,
 } from "./host-run/types.js";
-export type { WebhookDeliveryStatus } from "./host-run/webhook-server.js";
-export { readWebhookDeliveryStatus, runWebhookServer } from "./host-run/webhook-server.js";
+export type {
+  FindingEventQuery,
+  WebhookDeliveryStatus,
+  WebhookFindingEventRecord,
+} from "./host-run/webhook-server.js";
+export {
+  readFindingEvents,
+  readWebhookDeliveryStatus,
+  runWebhookServer,
+} from "./host-run/webhook-server.js";
 export { GitHubRunArchiveSource } from "./hosts/github/run-archive-source.js";
 export type { CodeHostId } from "./hosts/selection.js";
 export { isCodeHostId, parseWebhookHostId } from "./hosts/selection.js";
@@ -41,6 +49,16 @@ export {
   FileSystemRunArchiveSource,
   loadValidatedRunBundle,
 } from "./observability/archive.js";
+export type {
+  FindingOutcomeSource,
+  FindingOutcomeStats,
+  FindingStatsGroupBy,
+} from "./observability/finding-stats.js";
+export {
+  findingOutcomeStats,
+  labelFindingOutcomes,
+  webhookFindingOutcomeSources,
+} from "./observability/finding-stats.js";
 export type {
   OpenedRunBundlePackage,
   PreparedRunBundlePackage,

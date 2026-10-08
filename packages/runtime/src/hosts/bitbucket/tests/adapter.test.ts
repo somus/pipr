@@ -152,8 +152,11 @@ describe("Bitbucket Cloud adapter", () => {
     expect(client.mainUpdates).toBe(1);
     expect(client.commandCreates).toBe(1);
     await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toMatchObject({
-      reviewedHeadSha: "head",
-      findings: [expect.objectContaining({ path: "src/a.ts" })],
+      threadResolution: "available",
+      state: {
+        reviewedHeadSha: "head",
+        findings: [expect.objectContaining({ path: "src/a.ts" })],
+      },
     });
     await expect(adapter.comments?.loadPriorMainComment?.({ change })).resolves.toContain(
       "Summary",
@@ -236,8 +239,11 @@ describe("Bitbucket Cloud adapter", () => {
     client.listCommentsCalls = 0;
 
     await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toMatchObject({
-      reviewedHeadSha: "head",
-      findings: [{ path: "src/a.ts", side: "RIGHT", startLine: 2, endLine: 4, status: "open" }],
+      threadResolution: "available",
+      state: {
+        reviewedHeadSha: "head",
+        findings: [{ path: "src/a.ts", side: "RIGHT", startLine: 2, endLine: 4, status: "open" }],
+      },
     });
     expect(client.currentUserCalls).toBe(1);
     expect(client.listCommentsCalls).toBe(1);

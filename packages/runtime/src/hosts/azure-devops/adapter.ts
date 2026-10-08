@@ -17,16 +17,18 @@ export function createAzureDevOpsHostAdapter(
   const client = options.client ?? createAzureDevOpsClient(options.env);
   const driver = createAzureDevOpsPublicationDriver(client);
   const publication = createPublicationWorkflow(driver);
+  const capabilities = {
+    commandComments: true,
+    reviewCommentReplies: true,
+    threadResolution: true,
+    multilineInlineComments: true,
+    suggestedChanges: false,
+    statuses: true,
+  };
+  const comments = createCommentsReader(driver, capabilities);
   return {
     id: "azure-devops",
-    capabilities: {
-      commandComments: true,
-      reviewCommentReplies: true,
-      threadResolution: true,
-      multilineInlineComments: true,
-      suggestedChanges: false,
-      statuses: true,
-    },
+    capabilities,
     events: {
       parseEvent(parseOptions) {
         return parseAzureDevOpsEvent({
@@ -55,7 +57,7 @@ export function createAzureDevOpsHostAdapter(
       },
     },
     publication,
-    comments: createCommentsReader(driver),
+    comments,
     statuses: {
       isAvailable: () => true,
       async upsert({ change, name, state, summary, status }) {

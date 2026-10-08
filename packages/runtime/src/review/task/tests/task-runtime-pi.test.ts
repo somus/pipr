@@ -10,6 +10,7 @@ import { piRunFailure, piRunResult } from "../../../tests/helpers/pi-run-result.
 import { reviewTestManifest } from "../../../tests/helpers/review-test-manifest.js";
 import { memoryRuntimeLogSink } from "../../../tests/helpers/runtime-log-sink.js";
 import { extractPriorReviewState } from "../../comment-markers.js";
+import { createFindingLedger } from "../../finding-ledger.js";
 import {
   config,
   deepseekModel,
@@ -195,6 +196,27 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(merged.map((item) => item.body)).toEqual(["Defect 0.", "Defect 2."]);
   });
 
+  it("asks the runner for the conversation only when the attempt observer captures it", async () => {
+    const captured: Array<boolean | undefined> = [];
+    for (const capturesConversation of [true, false]) {
+      await runRuntime({
+        plan: defaultReviewPlan(),
+        runObserver: {
+          async beginAgentAttempt() {
+            return { capturesConversation, event() {}, async finish() {} };
+          },
+        },
+        piRunner: async (options) => {
+          captured.push(options.captureConversation);
+          return noFindingsPiResult();
+        },
+      });
+    }
+
+    expect(new Set(captured.slice(0, captured.length / 2))).toEqual(new Set([true]));
+    expect(new Set(captured.slice(captured.length / 2))).toEqual(new Set([undefined]));
+  });
+
   it("schedules oversized core reviews into bounded manifest units", async () => {
     const prompts: string[] = [];
     const observedAttempts: Array<Parameters<RunObserver["beginAgentAttempt"]>[0]> = [];
@@ -317,6 +339,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expect(result.validated.droppedFindings).toEqual([
       {
         finding: finding("invalid", "missing-range", 99),
+        code: "unknown-range",
         reason: "unknown rangeId 'missing-range'",
       },
     ]);
@@ -1699,6 +1722,67 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     ]);
   });
 
+  it("attributes outcome events to the producing agent, model, and facets", async () => {
+    const ledger = createFindingLedger({ executionId: "0123456789abcdef0123456789abcdef" });
+    let userFindingKeys: string[] = [];
+    const plan = testPlan((pipr) => {
+      const Finding = pipr.finding({ severity: z.enum(["high", "low"]) });
+      const agent = pipr.agent({
+        name: "security-reviewer",
+        model: deepseekModel(pipr),
+        instructions: "Review.",
+        output: z.strictObject({ inlineFindings: z.array(Finding) }),
+        prompt: () => "Review.",
+      });
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const result = await ctx.pi.run(agent, {});
+          userFindingKeys = Object.keys(result.inlineFindings[0] ?? {});
+          const selection = ctx.review.select(
+            result.inlineFindings.map((item) => ({ ...item })),
+            { finding: Finding, limit: 1 },
+          );
+          await ctx.comment({ main: "Done.", inlineFindings: selection.findings });
+        },
+      });
+    });
+
+    const result = await runRuntime({
+      plan,
+      trustedConfigHash: "c".repeat(64),
+      findingLedger: ledger,
+      piRunner: async () =>
+        piRunResult(
+          JSON.stringify({
+            inlineFindings: [
+              { ...finding("kept", "range-1", 10), severity: "high" },
+              { ...finding("capped", "range-2", 20), severity: "low" },
+            ],
+          }),
+        ),
+    });
+
+    if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
+    const events = ledger.events();
+    expect(events.map((event) => [event.kind, event.reasonCode, event.facets])).toEqual([
+      ["proposed", undefined, { severity: "high" }],
+      ["proposed", undefined, { severity: "low" }],
+      ["dropped", "cap", { severity: "low" }],
+    ]);
+    expect(events[0]).toMatchObject({
+      findingId: result.inlineCommentDrafts[0]?.findingId,
+      workId: result.run.id,
+      headSha: result.run.headSha,
+      configHash: "c".repeat(64),
+      agent: "security-reviewer",
+      model: "deepseek-v4-pro",
+    });
+    expect(userFindingKeys).not.toContain("agent");
+    expect(userFindingKeys).not.toContain("model");
+  });
+
   it("only treats branded ctx.change.diff values as Diff Manifest context", async () => {
     const observed: boolean[] = [];
     const plan = testPlan((pipr) => {
@@ -2368,7 +2452,7 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
 
     expect(result.review.inlineFindings).toEqual([]);
     expect(result.validated.droppedFindings).toEqual([
-      { finding: finding("hidden", "range-1", 10), reason: "cap" },
+      { finding: finding("hidden", "range-1", 10), code: "cap", reason: "cap" },
     ]);
     expect(result.inlineCommentDrafts).toEqual([]);
     expect(result.mainComment).toContain("No inline findings.");

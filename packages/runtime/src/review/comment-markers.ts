@@ -1,8 +1,13 @@
 import { Buffer } from "node:buffer";
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { defaultMaxStoredFindings } from "@usepipr/sdk/internal";
 import { firstNonEmptyLine } from "../commands/grammar.js";
-import { findingIdSchema, priorReviewStateSchema } from "../publication/schemas.js";
-import type { PriorReviewState } from "../publication/types.js";
+import {
+  findingIdSchema,
+  oldestTrimmableHistoryIndex,
+  priorReviewStateSchema,
+} from "../publication/schemas.js";
+import type { PriorFindingRecord, PriorReviewState } from "../publication/types.js";
 
 export const mainCommentMarker = "pipr:main-comment";
 const inlineFindingMarkerPrefix = "pipr:finding";
@@ -15,21 +20,86 @@ type FindingMarkerRecord = {
   marker: string;
 };
 
+/**
+ * Largest encoded review state the main comment marker carries. The smallest host comment limit
+ * is Bitbucket Data Center's 32 KiB (GitHub allows 65,536 characters, GitLab 1,000,000, Gitea and
+ * Forgejo store LONGTEXT), and the rendered review keeps at least 8 KiB beside the state there.
+ */
+const maxEncodedReviewStateLength = 24_000;
+
 export function renderMainCommentMarker(options: {
   marker: string;
   changeNumber: number;
   reviewState: PriorReviewState;
   maxStoredFindings?: number;
 }): string {
-  return `<!-- ${options.marker} change=${options.changeNumber} version=1 state=${encodeReviewState(
-    {
-      ...options.reviewState,
-      findings: options.reviewState.findings.slice(
-        0,
-        options.maxStoredFindings ?? defaultMaxStoredFindings,
-      ),
-    },
-  )} -->`;
+  const state = encodeReviewStateWithinBudget({
+    ...options.reviewState,
+    findings: options.reviewState.findings.slice(
+      0,
+      options.maxStoredFindings ?? defaultMaxStoredFindings,
+    ),
+  });
+  return `<!-- ${options.marker} change=${options.changeNumber} version=1 state=${state} -->`;
+}
+
+/**
+ * Encodes the state, trimming it until it fits {@link maxEncodedReviewStateLength}: first the
+ * oldest history entry of every finding per pass, then resolved or historical findings, then
+ * open findings, each oldest first (findings are stored newest first), then the oldest workflow
+ * URLs.
+ */
+function encodeReviewStateWithinBudget(state: PriorReviewState): string {
+  let current = state;
+  let encoded = encodeReviewState(current);
+  for (const trim of reviewStateTrimSteps) {
+    let next = encoded.length > maxEncodedReviewStateLength ? trim(current) : undefined;
+    while (next) {
+      current = next;
+      encoded = encodeReviewState(current);
+      next = encoded.length > maxEncodedReviewStateLength ? trim(current) : undefined;
+    }
+  }
+  return encoded;
+}
+
+/** Each step trims a little more, or returns undefined when it has nothing left to trim. */
+const reviewStateTrimSteps: ReadonlyArray<
+  (state: PriorReviewState) => PriorReviewState | undefined
+> = [
+  (state) =>
+    state.findings.some((finding) => finding.h)
+      ? { ...state, findings: state.findings.map(withoutOldestHistoryEntry) }
+      : undefined,
+  (state) =>
+    withoutOldestFinding(
+      state,
+      (finding) => finding.status !== "open" || finding.lastSeenHeadSha !== state.reviewedHeadSha,
+    ),
+  (state) => withoutOldestFinding(state, () => true),
+  (state) => {
+    if (!state.workflowUrls?.length) return undefined;
+    const {
+      workflowUrls: [, ...workflowUrls],
+      ...rest
+    } = state;
+    return workflowUrls.length > 0 ? { ...rest, workflowUrls } : rest;
+  },
+];
+
+function withoutOldestHistoryEntry(finding: PriorFindingRecord): PriorFindingRecord {
+  if (!finding.h) return finding;
+  const { h, ...rest } = finding;
+  const history = h.toSpliced(oldestTrimmableHistoryIndex(h), 1);
+  return history.length > 0 ? { ...rest, h: history } : rest;
+}
+
+function withoutOldestFinding(
+  state: PriorReviewState,
+  trimmable: (finding: PriorFindingRecord) => boolean,
+): PriorReviewState | undefined {
+  const index = state.findings.findLastIndex(trimmable);
+  return index === -1 ? undefined : { ...state, findings: state.findings.toSpliced(index, 1) };
 }
 
 export function extractPriorReviewState(
@@ -124,6 +194,32 @@ export function applyResolvedFindingMarkers(
   };
 }
 
+/**
+ * Verifier replies that told a human their finding still applies: finding ID, key, and the reply's
+ * comment ID and thread key.
+ */
+export function extractStillValidReplyMarkers(
+  commentBodies: readonly string[],
+): Array<{ id: string; responseKey: string; replyCommentId: string; threadKey: string }> {
+  return extractMarkerRecords([...commentBodies], verifierResponseMarkerPrefix).flatMap(
+    (record) => {
+      const groups = /^reply-(?<comment>[^:]+):(?<thread>[^:]+):still-valid:/.exec(
+        record.head,
+      )?.groups;
+      return groups?.comment && groups.thread
+        ? [
+            {
+              id: record.id,
+              responseKey: record.head,
+              replyCommentId: groups.comment,
+              threadKey: groups.thread,
+            },
+          ]
+        : [];
+    },
+  );
+}
+
 export function extractVerifierResponseMarkers(commentBodies: string[]): Set<string> {
   return new Set(
     extractMarkerRecords(commentBodies, verifierResponseMarkerPrefix).map(
@@ -178,18 +274,23 @@ function extractMarkerRecords(commentBodies: string[], prefix: string): FindingM
   );
 }
 
+/** Review state is raw-deflated JSON in base64url. */
 function encodeReviewState(state: PriorReviewState): string {
-  return Buffer.from(JSON.stringify(state)).toString("base64url");
+  return deflateRawSync(JSON.stringify(state)).toString("base64url");
 }
 
+/** Bounds inflation of a hostile marker; real state stays far below this. */
+const maxDecodedReviewStateBytes = 1024 * 1024;
+
 function decodeReviewState(value: string | undefined): PriorReviewState | undefined {
-  if (!value) {
+  if (!value || value.length > maxEncodedReviewStateLength) {
     return undefined;
   }
   try {
-    return priorReviewStateSchema.parse(
-      JSON.parse(Buffer.from(value, "base64url").toString("utf8")),
-    );
+    const json = inflateRawSync(Buffer.from(value, "base64url"), {
+      maxOutputLength: maxDecodedReviewStateBytes,
+    }).toString("utf8");
+    return priorReviewStateSchema.parse(JSON.parse(json));
   } catch {
     return undefined;
   }

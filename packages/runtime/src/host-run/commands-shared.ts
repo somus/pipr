@@ -1,5 +1,6 @@
 import { CodeHostHttpError } from "../hosts/http.js";
 import type { RunFailureCategory, RunRecorder } from "../observability/recorder-types.js";
+import type { FindingLedger } from "../review/finding-ledger.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { PublicationError, StaleHeadError } from "../review/publication-result.js";
 import type { createRuntimeLog, RuntimeLogSink } from "../shared/logging.js";
@@ -23,6 +24,23 @@ export async function finishRecorderSafely(
     });
   } catch (error) {
     log?.warning("run capture failed", {
+      error: error instanceof Error ? error.message : "unknown capture error",
+    });
+  }
+}
+
+/** Writes the execution's Finding Outcome events into the Run Bundle when any were recorded. */
+export async function recordFindingLedgerSafely(
+  recorder: RunRecorder | undefined,
+  ledger: FindingLedger,
+  log: ReturnType<typeof createRuntimeLog> | undefined,
+): Promise<void> {
+  const document = ledger.document();
+  if (!recorder || document.events.length === 0) return;
+  try {
+    await recorder.recordLedger(document);
+  } catch (error) {
+    log?.warning("finding ledger capture failed", {
       error: error instanceof Error ? error.message : "unknown capture error",
     });
   }

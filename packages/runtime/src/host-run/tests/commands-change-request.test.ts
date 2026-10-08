@@ -5,9 +5,11 @@ import path from "node:path";
 import { parseRunBundleManifest } from "@usepipr/sdk";
 import { runGit as runGitCommand } from "../../diff/git.js";
 import { createGitHubHostAdapter } from "../../hosts/github/adapter.js";
+import { extractPriorReviewState } from "../../review/comment-markers.js";
 import type { RuntimeLogSink } from "../../shared/logging.js";
 import { runtimeVersion } from "../../shared/version.js";
 import { memoryRuntimeLogSink } from "../../tests/helpers/runtime-log-sink.js";
+import type { HostRunFindingEvents } from "../types.js";
 import type { FakeCheckRuns } from "./commands-fixtures.js";
 import {
   clearGitConfigEnv,
@@ -17,6 +19,7 @@ import {
   expectReviewRanAtHead,
   explicitModelIdConfigTs,
   failingGitHubPublishingClient,
+  fakeGitHubClient,
   fakeGitHubPublicationClient,
   maliciousHeadConfigTs,
   multiTaskCheckConfigTs,
@@ -26,6 +29,7 @@ import {
   removeWorkspace,
   restoreEnv,
   restoreGitConfigEnv,
+  reviewCommentEnv,
   reviewConfigTs,
   runPullRequestAction,
   runTestHostCommand,
@@ -33,6 +37,7 @@ import {
   writeFailingPiOutput,
   writeProviderAuthenticationFailureOutput,
   writePullRequestEvent,
+  writeReviewCommentEvent,
 } from "./commands-fixtures.js";
 
 const runBundleRecipient = "age1cy0su9fwf3gf9mw868g5yut09p6nytfmmnktexz2ya5uqg9vl9sss4euqm";
@@ -315,6 +320,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
           "pipr.review.validate",
           "pipr.publish.review_progress",
           "pipr.publish.review",
+          "gen_ai.invoke_agent",
           "gen_ai.chat",
           "pipr.agent.attempt_resources",
           "pipr.run",
@@ -374,7 +380,7 @@ describe("runHostRunCommand pull_request dispatch", () => {
     }
   });
 
-  it("records tool timing and first response without retaining Pi event payloads", async () => {
+  it("records tool timing and first response, keeping Pi payloads only in the conversation", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const traceDirectory = path.join(workspace.rootDir, "traces");
     let bundleDirectory: string | undefined;
@@ -430,16 +436,17 @@ describe("runHostRunCommand pull_request dispatch", () => {
           expect.objectContaining({ name: "gen_ai.time_to_first_token" }),
         ]),
       );
-      const bundleText = (
-        await Promise.all(
-          (
-            await readdir(bundleDirectory, { recursive: true, withFileTypes: true })
-          )
-            .filter((entry) => entry.isFile())
-            .map((entry) => readFile(path.join(entry.parentPath, entry.name), "utf8")),
-        )
-      ).join("\n");
-      expect(bundleText).not.toContain("do-not-store");
+      const files = (await readdir(bundleDirectory, { recursive: true, withFileTypes: true }))
+        .filter((entry) => entry.isFile())
+        .map((entry) => path.join(entry.parentPath, entry.name));
+      const conversations = files.filter((file) => path.basename(file).startsWith("conversation-"));
+      const readAll = async (paths: string[]) =>
+        (await Promise.all(paths.map((file) => readFile(file, "utf8")))).join("\n");
+      expect(conversations.length).toBeGreaterThan(0);
+      expect(await readAll(conversations)).toContain("do-not-store");
+      expect(await readAll(files.filter((file) => !conversations.includes(file)))).not.toContain(
+        "do-not-store",
+      );
     } finally {
       await removeWorkspace(workspace.rootDir);
     }
@@ -1428,4 +1435,411 @@ function supersedeProgressComment(
     /token=[A-Za-z0-9-]+/,
     "token=00000000-0000-4000-8000-000000000000",
   );
+}
+
+describe("runHostRunCommand finding outcomes", () => {
+  it("returns Finding Outcome events from an opened review and its synchronize follow-up", async () => {
+    const workspace = await createCommandWorkspace({
+      checkoutBaseBeforeRun: true,
+      baseConfigTs: reviewConfigTs().replace(
+        'changeRequest: ["opened"]',
+        'changeRequest: ["opened", "updated"]',
+      ),
+    });
+    const traceDirectory = path.join(workspace.rootDir, "traces");
+    const github = statefulGitHubPublicationClient(workspace);
+    const bundles: string[] = [];
+    const run = async (action: "opened" | "synchronize") => {
+      const eventPath = path.join(workspace.rootDir, `${action}.json`);
+      await writeChangeRequestEvent(eventPath, workspace, action);
+      const result = await runTestHostCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: {
+          ...pullRequestEnv(workspace.rootDir, eventPath),
+          PIPR_RUN_STORE_DIR: traceDirectory,
+        },
+        githubPublicationClient: github.client,
+        piProviderModule: workspace.pi.providerModule,
+        onRunBundleFinalized(bundle) {
+          bundles.push(bundle.directory);
+        },
+      });
+      if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
+      return result;
+    };
+    try {
+      await workspace.pi.answer(
+        JSON.stringify({
+          summary: { body: "One issue." },
+          inlineFindings: [
+            { ...changedLineFinding, body: "Unchecked value." },
+            {
+              ...changedLineFinding,
+              path: "src/missing.ts",
+              rangeId: "missing",
+              body: "Phantom.",
+            },
+          ],
+        }),
+      );
+      const opened = await run("opened");
+      const publishedId = opened.publication.postedFindingIds[0];
+      expect(opened.findingEvents.map((event) => [event.kind, event.reasonCode])).toEqual([
+        ["proposed", undefined],
+        ["proposed", undefined],
+        ["dropped", "unknown-range"],
+        ["published", undefined],
+      ]);
+      expect(opened.findingEvents.at(-1)).toMatchObject({
+        findingId: publishedId,
+        workId: opened.review.run.id,
+        headSha: workspace.headSha,
+        agent: "reviewer",
+        configHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(github.reviewComments[0]?.body).toContain(`id=${publishedId}`);
+      expect(JSON.stringify(opened.findingEvents)).not.toContain("src/missing.ts");
+      const ledger = JSON.parse(
+        await readFile(path.join(bundles[0] ?? "", "artifacts", "ledger.json"), "utf8"),
+      );
+      expect(ledger.events).toEqual(opened.findingEvents);
+      expect(Object.values(ledger.evidence).map((item) => (item as { path: string }).path)).toEqual(
+        ["src/a.ts", "src/missing.ts"],
+      );
+
+      runGitCommand(["checkout", "--detach", workspace.headSha], workspace.rootDir);
+      await Bun.write(path.join(workspace.rootDir, "src", "a.ts"), "export const value = 3;\n");
+      runGitCommand(["commit", "--no-verify", "-am", "fix"], workspace.rootDir);
+      workspace.headSha = currentGitHead(workspace.rootDir);
+      runGitCommand(["checkout", "--detach", workspace.baseSha], workspace.rootDir);
+      await workspace.pi.script({
+        responses: [{ text: '{"summary":{"body":"No findings."},"inlineFindings":[]}' }],
+        rules: [
+          {
+            when: { promptIncludes: "currentHeadSha" },
+            response: {
+              text: JSON.stringify({ findings: [{ id: publishedId, status: "fixed" }] }),
+            },
+          },
+        ],
+      });
+      const synchronized = await run("synchronize");
+
+      expect(
+        synchronized.findingEvents.map((event) => [event.kind, event.findingId, event.headSha]),
+      ).toEqual([["fixed", publishedId, workspace.headSha]]);
+      expect(synchronized.findingEvents[0]?.eventId).not.toBe(opened.findingEvents[0]?.eventId);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+});
+
+describe("runHostRunCommand finding outcomes after a failure", () => {
+  it("reports the outcomes recorded before a partial publication failure", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const github = statefulGitHubPublicationClient(workspace);
+    const createReviewComment = github.client.createReviewComment.bind(github.client);
+    let inlineWrites = 0;
+    github.client.createReviewComment = async (options) => {
+      inlineWrites += 1;
+      if (inlineWrites === 2) throw new Error("inline comment rejected");
+      return await createReviewComment(options);
+    };
+    const reported: HostRunFindingEvents[] = [];
+    const eventPath = path.join(workspace.rootDir, "opened.json");
+    await writeChangeRequestEvent(eventPath, workspace, "opened");
+    try {
+      await workspace.pi.answer(
+        JSON.stringify({
+          summary: { body: "Two issues." },
+          inlineFindings: [
+            { ...changedLineFinding, body: "First issue." },
+            {
+              ...changedLineFinding,
+              path: ".pipr/config.ts",
+              startLine: 3,
+              endLine: 3,
+              body: "Second issue.",
+            },
+          ],
+        }),
+      );
+      await expect(
+        runTestHostCommand({
+          rootDir: workspace.rootDir,
+          configDir: ".pipr",
+          eventPath,
+          dryRun: false,
+          env: pullRequestEnv(workspace.rootDir, eventPath),
+          githubPublicationClient: github.client,
+          piProviderModule: workspace.pi.providerModule,
+          onFindingEvents(findings) {
+            reported.push(findings);
+          },
+        }),
+      ).rejects.toThrow("inline comment publication failed");
+
+      expect(reported).toHaveLength(1);
+      expect(reported[0]).toMatchObject({
+        repository: "local/pipr",
+        threadResolution: "available",
+      });
+      expect(reported[0]?.events.map((event) => event.kind)).toEqual([
+        "proposed",
+        "proposed",
+        "published",
+      ]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+});
+
+describe("runHostRunCommand finding outcome history", () => {
+  it("carries outcome history across opened, reply, and synchronize runs", async () => {
+    const workspace = await createCommandWorkspace({
+      checkoutBaseBeforeRun: true,
+      baseConfigTs: reviewConfigTs().replace(
+        'changeRequest: ["opened"]',
+        'changeRequest: ["opened", "updated"]',
+      ),
+    });
+    const traceDirectory = path.join(workspace.rootDir, "traces");
+    const github = statefulGitHubPublicationClient(workspace);
+    const bundles: string[] = [];
+    const run = async (eventName: "pull_request" | "pull_request_review_comment") => {
+      const eventPath = path.join(workspace.rootDir, `${eventName}.json`);
+      const env =
+        eventName === "pull_request"
+          ? pullRequestEnv(workspace.rootDir, eventPath)
+          : reviewCommentEnv(workspace.rootDir, eventPath);
+      return await runTestHostCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: { ...env, PIPR_RUN_STORE_DIR: traceDirectory },
+        githubClient: fakeGitHubClient(workspace, "write"),
+        githubPublicationClient: github.client,
+        piProviderModule: workspace.pi.providerModule,
+        onRunBundleFinalized(bundle) {
+          bundles.push(bundle.directory);
+        },
+      });
+    };
+    const review = async (action: "opened" | "synchronize") => {
+      await writeChangeRequestEvent(
+        path.join(workspace.rootDir, "pull_request.json"),
+        workspace,
+        action,
+      );
+      const result = await run("pull_request");
+      if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
+      return result;
+    };
+    const issueComments: string[] = [];
+    const storedHistory = () =>
+      extractPriorReviewState(issueComments.at(-1), 1)?.findings.map((record) => [
+        record.id,
+        record.h,
+      ]);
+    const createIssueComment = github.client.createIssueComment;
+    github.client.createIssueComment = async (options) => {
+      issueComments.push(options.body);
+      return await createIssueComment(options);
+    };
+    const updateIssueComment = github.client.updateIssueComment;
+    github.client.updateIssueComment = async (options) => {
+      issueComments.push(options.body);
+      return await updateIssueComment(options);
+    };
+    try {
+      await workspace.pi.answer(
+        JSON.stringify({
+          summary: { body: "One issue." },
+          inlineFindings: [{ ...changedLineFinding, body: "Unchecked value." }],
+        }),
+      );
+      const opened = await review("opened");
+      const findingId = opened.publication.postedFindingIds[0] ?? "";
+      const head1 = workspace.headSha.slice(0, 12);
+      expect(storedHistory()).toEqual([[findingId, [["p", head1]]]]);
+      const openedLedger = JSON.parse(
+        await readFile(path.join(bundles[0] ?? "", "artifacts", "ledger.json"), "utf8"),
+      );
+      expect(openedLedger.threadResolution).toBe("available");
+
+      const parentId = github.reviewComments[0]?.id ?? 0;
+      const replyId = github.humanReply(parentId, "The caller validates this earlier.");
+      await writeReviewCommentEvent(
+        path.join(workspace.rootDir, "pull_request_review_comment.json"),
+        {
+          commentId: replyId,
+          parentCommentId: parentId,
+        },
+      );
+      await workspace.pi.answer(
+        JSON.stringify({
+          findings: [{ id: findingId, status: "still-valid", response: "Still applies." }],
+        }),
+      );
+      const replied = await run("pull_request_review_comment");
+      if (replied.kind !== "verifier") throw new Error(`Expected verifier, got ${replied.kind}`);
+      expect(replied.findingEvents.map((event) => [event.kind, event.actorPermission])).toEqual([
+        ["replied", "write"],
+        ["still-valid", undefined],
+      ]);
+
+      github.humanResolve(parentId);
+      runGitCommand(["checkout", "--detach", workspace.headSha], workspace.rootDir);
+      await Bun.write(path.join(workspace.rootDir, "src", "a.ts"), "export const value = 3;\n");
+      runGitCommand(["commit", "--no-verify", "-am", "rename"], workspace.rootDir);
+      workspace.headSha = currentGitHead(workspace.rootDir);
+      runGitCommand(["checkout", "--detach", workspace.baseSha], workspace.rootDir);
+      await workspace.pi.answer('{"summary":{"body":"No findings."},"inlineFindings":[]}');
+      const synchronized = await review("synchronize");
+
+      expect(
+        synchronized.findingEvents.map((event) => [
+          event.kind,
+          event.findingId,
+          event.actorPermission,
+        ]),
+      ).toEqual([
+        ["replied", findingId, "unknown"],
+        ["still-valid", findingId, undefined],
+        ["resolved-by-human", findingId, undefined],
+      ]);
+      expect(synchronized.findingEvents.slice(0, 2).map((event) => event.eventId)).toEqual(
+        replied.findingEvents.map((event) => event.eventId),
+      );
+      expect(synchronized.findingEvents[2]).toMatchObject({ agent: "reviewer" });
+      expect(storedHistory()).toEqual([
+        [
+          findingId,
+          [
+            ["p", head1],
+            ["r", head1],
+            ["s", head1],
+            ["h", head1],
+          ],
+        ],
+      ]);
+
+      await workspace.pi.answer('{"summary":{"body":"No findings."},"inlineFindings":[]}');
+      const rerun = await review("synchronize");
+      // A rerun reports the same host-observed outcomes again under the same event IDs, so stats
+      // stay complete even if the earlier run's bundle is lost, and history does not grow.
+      expect(rerun.findingEvents.map((event) => event.eventId)).toEqual(
+        synchronized.findingEvents.map((event) => event.eventId),
+      );
+      expect(storedHistory()).toEqual([
+        [
+          findingId,
+          [
+            ["p", head1],
+            ["r", head1],
+            ["s", head1],
+            ["h", head1],
+          ],
+        ],
+      ]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+});
+
+const changedLineFinding = {
+  path: "src/a.ts",
+  rangeId: "unknown",
+  side: "RIGHT",
+  startLine: 1,
+  endLine: 1,
+} as const;
+
+async function writeChangeRequestEvent(
+  eventPath: string,
+  workspace: Awaited<ReturnType<typeof createCommandWorkspace>>,
+  action: "opened" | "synchronize",
+): Promise<void> {
+  await Bun.write(
+    eventPath,
+    JSON.stringify({
+      action,
+      number: 1,
+      repository: { full_name: "local/pipr" },
+      pull_request: {
+        number: 1,
+        title: "Test PR",
+        body: "Test body",
+        base: { sha: workspace.baseSha, repo: { full_name: "local/pipr" } },
+        head: { sha: workspace.headSha },
+      },
+    }),
+  );
+}
+
+/** A GitHub publication fake that keeps posted inline comments and threads across runs. */
+function statefulGitHubPublicationClient(
+  workspace: Awaited<ReturnType<typeof createCommandWorkspace>>,
+) {
+  const client = fakeGitHubPublicationClient(workspace);
+  const reviewComments: Awaited<ReturnType<typeof client.listReviewComments>> = [];
+  const threads: Array<{ id: string; isResolved: boolean; commentIds: number[] }> = [];
+  const addComment = (body: string, authorLogin: string, inReplyTo?: number) => {
+    const id = 100 + reviewComments.length;
+    reviewComments.push({
+      id,
+      body,
+      authorLogin,
+      path: undefined,
+      commitId: undefined,
+      line: undefined,
+      startLine: undefined,
+      side: undefined,
+      startSide: undefined,
+    });
+    const thread = threads.find((item) => inReplyTo && item.commentIds.includes(inReplyTo));
+    if (thread) thread.commentIds.push(id);
+    else threads.push({ id: `thread-${id}`, isResolved: false, commentIds: [id] });
+    return id;
+  };
+  client.listReviewComments = async () => reviewComments;
+  client.listReviewThreads = async () =>
+    threads.map((thread) => ({ ...thread, viewerCanResolve: true }));
+  client.createReviewComment = async (options) => {
+    const id = addComment(options.body, "github-actions[bot]");
+    Object.assign(reviewComments.at(-1) ?? {}, {
+      path: options.path,
+      commitId: options.commit_id,
+      line: options.line,
+      startLine: options.start_line,
+      side: options.side,
+      startSide: options.start_side,
+    });
+    return { id };
+  };
+  client.createReviewCommentReply = async (options) => ({
+    id: addComment(options.body, "github-actions[bot]", options.commentId),
+  });
+  client.resolveReviewThread = async (options) => {
+    const thread = threads.find((item) => item.id === options.threadId);
+    if (thread) thread.isResolved = true;
+  };
+  return {
+    client,
+    reviewComments,
+    /** A human reply in the thread of `commentId`. */
+    humanReply: (commentId: number, body: string) => addComment(body, "somu", commentId),
+    /** A human resolving the thread of `commentId` in the host UI. */
+    humanResolve(commentId: number) {
+      const thread = threads.find((item) => item.commentIds.includes(commentId));
+      if (thread) thread.isResolved = true;
+    },
+  };
 }

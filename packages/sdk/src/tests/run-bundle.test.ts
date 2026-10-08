@@ -277,6 +277,62 @@ describe("Run Bundle artifact truncation", () => {
     ).toMatchObject({ kind: "diff-context-coverage", sensitive: true });
   });
 
+  it("accepts conversation, usage, task graph, and ledger artifacts", () => {
+    const artifact = {
+      path: "artifacts/run.json",
+      mediaType: "application/json",
+      sizeBytes: 10,
+      sha256: "a".repeat(64),
+      sensitive: false,
+      truncated: false,
+    };
+    for (const kind of ["usage", "task-graph", "ledger"] as const) {
+      expect(runBundleArtifactSchema.parse({ ...artifact, kind })).toMatchObject({ kind });
+    }
+    const conversation = {
+      ...artifact,
+      kind: "conversation" as const,
+      path: "artifacts/conversation-001-initial.jsonl",
+      sensitive: true,
+      counts: { entries: 4, byKind: { "pi.assistant": 2, "pi.user": 2 }, tools: { read: 1 } },
+    };
+    expect(runBundleArtifactSchema.parse(conversation)).toEqual(conversation);
+  });
+
+  it("allows content-free counts only on bounded conversation artifacts", () => {
+    const conversation = {
+      kind: "conversation" as const,
+      path: "artifacts/conversation-001-initial.jsonl",
+      mediaType: "application/x-ndjson",
+      sizeBytes: 10,
+      sha256: "a".repeat(64),
+      sensitive: true,
+      truncated: false,
+      counts: { entries: 1, byKind: { "pi.user": 1 }, tools: {} },
+    };
+    expect(runBundleArtifactSchema.safeParse({ ...conversation, kind: "output" }).success).toBe(
+      false,
+    );
+    const manyKinds = Object.fromEntries(
+      Array.from({ length: 33 }, (_, index) => [`kind-${index}`, 1]),
+    );
+    expect(
+      runBundleArtifactSchema.safeParse({
+        ...conversation,
+        counts: { ...conversation.counts, byKind: manyKinds },
+      }).success,
+    ).toBe(false);
+    const manyTools = Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`tool-${index}`, 1]),
+    );
+    expect(
+      runBundleArtifactSchema.safeParse({
+        ...conversation,
+        counts: { ...conversation.counts, tools: manyTools },
+      }).success,
+    ).toBe(false);
+  });
+
   it("records the original size and hash when an artifact is truncated or omitted", () => {
     const truncated = {
       kind: "output" as const,

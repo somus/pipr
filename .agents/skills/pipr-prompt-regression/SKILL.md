@@ -32,6 +32,8 @@ Trace the artifact through `packages/evals/src`, `packages/runtime/src/review`, 
 
 Add the smallest case that captures the failure in `packages/evals/src/cases.ts` or the nearest runtime test.
 
+When the failure comes from findings maintainers fixed, dismissed, or disputed, `pipr runs export --dataset <dir> --identity <path>` writes labeled cases from decrypted Run Bundle ledgers. Treat that directory as diagnostic data: keep it out of the repository, and run it through the advisory live suite with `PIPR_EVAL_DATASET=<dir>`. Copy a case into `cases.ts` only after reducing it to a minimal, non-sensitive fixture.
+
 Choose the proof lane deliberately:
 
 - Use a **deterministic case** for prompt-contract text, schema validation, anchoring, budgets, deduplication, rendering, and publication policy that the scripted eval provider can reproduce.

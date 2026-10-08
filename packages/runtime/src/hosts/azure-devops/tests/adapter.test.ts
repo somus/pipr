@@ -164,7 +164,10 @@ describe("Azure DevOps host adapter", () => {
     await publication.publish({ change, plan: publicationPlan() });
 
     await expect(comments.loadPriorReviewState?.({ change })).resolves.toMatchObject({
-      reviewedHeadSha: "head",
+      threadResolution: "available",
+      state: {
+        reviewedHeadSha: "head",
+      },
     });
     await expect(comments.loadInlineThreadContexts?.({ change })).resolves.toMatchObject([
       { findingId: "finding-1", findingHeadSha: "head", threadResolved: false },

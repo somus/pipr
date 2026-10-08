@@ -269,6 +269,7 @@ describe("presentGitHubActionResult", () => {
     const calls = recordingPresenter();
     await presentGitHubActionPublicationError(
       new PublicationError("inline publication failed", {
+        postedFindingIds: ["fnd_0123456789abcdef"],
         inlineComments: { posted: 1, skipped: 0, failed: 1 },
         metadata: {
           ...metadata,
@@ -351,6 +352,7 @@ function verifierResult(overrides: Omit<Partial<ResultOf<"verifier">>, "kind"> =
     kind: "verifier",
     run: { ...run, trigger: "verifier", tasks: ["pipr-internal-verifier"] },
     errors: ["fnd_private thread PRRT_private is stale"],
+    findingEvents: [],
     ...overrides,
   } satisfies ResultOf<"verifier">;
 }
@@ -375,7 +377,7 @@ function reviewResult(overrides: Omit<Partial<ResultOf<"review">>, "kind"> = {})
       validated: {
         review,
         validFindings: [finding],
-        droppedFindings: [{ finding, reason: "outside range" }],
+        droppedFindings: [{ finding, code: "out-of-range", reason: "outside range" }],
       },
       publicationPlan: {
         mainComment: "review body",
@@ -384,7 +386,7 @@ function reviewResult(overrides: Omit<Partial<ResultOf<"review">>, "kind"> = {})
         inlineItems: [inlineDraft],
         metadata,
         reviewState: {
-          version: 1,
+          version: 2,
           reviewedHeadSha: "head",
           selectedTasks: ["review"],
           findings: [],
@@ -404,6 +406,7 @@ function reviewResult(overrides: Omit<Partial<ResultOf<"review">>, "kind"> = {})
     },
     publication: {
       mainComment: { action: "created", id: "10" },
+      postedFindingIds: ["fnd_0123456789abcdef"],
       inlineComments: { posted: 1, skipped: 1, failed: 0 },
       metadata: {
         ...metadata,
@@ -411,6 +414,7 @@ function reviewResult(overrides: Omit<Partial<ResultOf<"review">>, "kind"> = {})
         inlinePublicationErrors: [],
       },
     },
+    findingEvents: [],
     ...overrides,
   } satisfies ResultOf<"review">;
 }

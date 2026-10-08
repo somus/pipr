@@ -7,7 +7,7 @@ Pipr captures structured evidence for hosted reviews, commands, and verifier run
 
 ## Understand capture protection
 
-GitHub Actions uploads content-free metadata by default. When you configure age recipients, it also uploads encrypted diagnostics containing redacted prompts, visible model output, diffs, and validation evidence.
+GitHub Actions uploads content-free metadata by default. When you configure age recipients, it also uploads encrypted diagnostics containing redacted prompts, visible model output, agent conversations, diffs, and validation evidence.
 
 GitHub access permits artifact discovery and download. A matching local age identity is required to decrypt diagnostic content. Other code hosts can use local or webhook stores, or pass a protected package to `pipr runs inspect`.
 
@@ -61,6 +61,27 @@ Use `--json` for automation. The JSON output remains content-free; download the 
 
 Public telemetry exposes only aggregate diff-context file and range counts. Encrypted diagnostics can also contain the bounded `diff-context-coverage` artifact with exact covered and uncovered paths and range IDs.
 
+## Understand run evidence
+
+Agent and model spans come from the agent harness. Each agent attempt records one `gen_ai.invoke_agent` span with its usage totals. Each model turn records one `gen_ai.chat` span with the answering model, stop reason, and turn usage. Each task records one `pipr.task` span.
+
+A diagnostic bundle can contain these artifacts:
+
+| Kind | Contents | Sensitive |
+| --- | --- | --- |
+| `prompt`, `output`, `stderr` | Each attempt's redacted prompt, visible output, and failure detail | Yes |
+| `conversation` | Each attempt's redacted agent conversation, one harness entry per line | Yes |
+| `usage` | Token and cost totals per run, response model, and attempt | No |
+| `task-graph` | Tasks, their agents, and each attempt's conversation ID and fork | No |
+| `diff-manifest`, `diff-context-coverage`, `validation`, `publication-plan` | Review evidence | Yes |
+| `ledger` | Finding Outcome events, plus each finding's path, range, and body as evidence | Yes |
+
+Conversations are the first evidence dropped when a bundle reaches its size limit. Public metadata keeps only artifact descriptors. A `conversation` descriptor also keeps its entry, entry kind, and tool call counts, never the entries themselves.
+
+The `ledger` is the one artifact public metadata keeps a body for. Its public form holds only the content-free outcome events: finding ID, outcome kind, drop reason code, work and execution IDs, head SHA, config hash, agent, model, and enum field values. Paths, ranges, and bodies stay in the diagnostic ledger. Metadata-only captures record the public ledger directly. The ledger also records whether the code host reports thread resolution: GitHub, GitLab, Bitbucket, and Azure DevOps do, so a thread a maintainer resolves without a Pipr resolution becomes `resolved-by-human`. Gitea, Forgejo, and Codeberg do not, so their ledgers never contain that outcome.
+
+The main review comment also keeps each finding's agent, model, enum field values, and its last six outcomes, so outcomes continue across pushes in ephemeral CI. Pipr rebuilds outcomes that reply runs and maintainers leave on the host (Pipr resolutions, verifier replies, resolved threads) every time a review loads that state, with the same event IDs the original run recorded. Each later run therefore carries those outcomes again, so stats stay complete when an earlier bundle is gone, for example after a GitHub Actions re-run replaces the earlier attempt's artifact. The stored state is compressed and capped at 24,000 characters to fit the smallest host comment limit; Pipr trims the oldest outcomes first, then resolved and earlier findings, then the oldest open findings. Review state written before this format is ignored once, so the first review after upgrading starts fresh.
+
 ## Inspect an existing package
 
 Validate and diagnose a manually downloaded archive or directory:
@@ -106,7 +127,74 @@ Operational settings stay outside `.pipr/config.ts`:
 | `PIPR_RUN_RETENTION_DAYS` | Set webhook retention, for run bundles and per-change-request agent conversation stores |
 | `PIPR_RUN_MAX_BYTES` | Set the webhook store quota, counting both |
 
+The webhook runner also writes each delivery's public Finding Outcome events to a `finding_events` table in its SQLite delivery database. The table holds the same content-free fields as the public `ledger`, plus the host, repository, and delivery ID. Pipr validates every event against the public schema before it stores it, so paths and bodies never reach the table. Events are keyed by event ID, so redelivered or retried work does not count twice. `PIPR_RUN_RETENTION_DAYS` also bounds how long these rows are kept, and the table keeps at most the newest 100,000 events.
+
 Recipient rotation affects future runs only. Keep old identities through the provider retention period when older diagnostics remain useful.
+
+## Measure finding outcomes
+
+Finding Outcomes record what happened to each finding after a reviewer proposed it. Each outcome is an append-only event keyed by the finding's stable ID:
+
+| Kind | Recorded when |
+| --- | --- |
+| `proposed` | A reviewer returned a finding that passed schema validation. |
+| `dropped` | Validation, selection, or publication planning removed the finding. The event carries a reason code such as `out-of-range`, `duplicate`, `cap`, or `inline-cap`. |
+| `published` | The code host accepted the inline comment. |
+| `carried` | A later review found the same finding again. |
+| `outdated` | A later review no longer reported an open finding. |
+| `fixed`, `still-valid` | The verifier judged a published finding after a push or a reply. |
+| `resolved-by-human` | A maintainer resolved the thread without a Pipr resolution. Only hosts with thread resolution record it. |
+| `replied` | A human replied to the finding. The event carries the replier's repository permission. |
+
+Pipr records outcomes in three places: the `ledger` artifact of every Run Bundle, the main review comment's state across pushes, and the webhook `finding_events` table.
+
+### Report outcome rates
+
+`pipr runs stats` reads public ledgers and webhook events and reports rates without paths, bodies, or finding IDs:
+
+```bash
+pipr runs stats --repository acme/app --since 30d --group-by agent
+pipr runs stats --webhook-db /var/lib/pipr/webhooks.sqlite --group-by facet --json
+```
+
+Pipr merges every source and counts each event once by event ID. When a reply appears both in the reply run's ledger and as an outcome rebuilt from review state, Pipr keeps the replier's recorded permission.
+
+Each published finding gets one terminal outcome. The first matching rule wins:
+
+1. `fixed`: the verifier judged the finding fixed.
+2. `dismissed`: a maintainer resolved the thread without a fix.
+3. `disputed`: a human replied, and the verifier then judged the finding still valid.
+4. `open`: none of the above.
+
+| Rate | Formula |
+| --- | --- |
+| Fix | fixed / published |
+| Dismissal | dismissed / published, counting only findings from hosts with thread resolution |
+| Acceptance | fixed / (fixed + dismissed) |
+| Drop | dropped and never published / proposed |
+
+GitHub, GitLab, Bitbucket, and Azure DevOps report thread resolution. Gitea, Forgejo, and Codeberg do not, so their findings never count toward dismissal, and local runs never do either. Stats also count drops by reason code and replies by permission. `--group-by` splits every count by enum field value (`key=value`), agent, model, or config hash. Findings without that attribute appear under `(none)`.
+
+`pipr runs stats` reads only the public metadata plane, so it works without a decryption identity. For GitHub repositories it downloads one archive per run, so `--limit` defaults to 100 runs.
+
+### Export evaluation datasets
+
+`pipr runs export --dataset` turns labeled outcomes into prompt evaluation cases:
+
+```bash
+pipr runs export --dataset ./pipr-dataset \
+  --identity ~/.local/state/pipr/keys/run-observability.agekey \
+  --repo .
+```
+
+Export needs at least one decryption identity because finding paths, ranges, and bodies exist only in the diagnostic ledger. Pipr reads each finding's file at the reviewed base and head commits with `git show` from `--repo`. It reads no other files. Findings whose commits are missing from that checkout are skipped and counted.
+
+| Terminal outcome | Case |
+| --- | --- |
+| `fixed` or still valid | Positive: the review should report the finding at the same line range. |
+| `dismissed` | Negative: the review should publish no inline findings. |
+
+The directory gets one JSON file per case and an `index.json` listing cases and skipped counts. Cases contain source code and finding bodies, so treat the directory like a decrypted bundle: keep it out of the repository and share it only through an authorized channel. `findingDatasetCaseSchema` from `@usepipr/sdk` validates the case format. See [Improve reviews from outcomes](/docs/guide/improve-reviews) for how to use stats and datasets to tune a review.
 
 ## Export telemetry
 
@@ -114,6 +202,7 @@ Set standard `OTEL_EXPORTER_OTLP_*` variables to export content-free traces, met
 
 ## Next steps
 
-- Use the [CLI reference](/docs/reference/cli#pipr-runs-list) for every filter and output option.
+- Turn outcomes into review improvements with [Improve reviews from outcomes](/docs/guide/improve-reviews).
+- Use the [CLI reference](/docs/reference/cli#pipr-runs-list) for every filter and output option, including [`pipr runs stats`](/docs/reference/cli#pipr-runs-stats) and [`pipr runs export`](/docs/reference/cli#pipr-runs-export).
 - Map a diagnosed failure to its fix in [Troubleshooting](/docs/guide/troubleshooting).
 - Review [Trust and security](/docs/concepts/trust-security#diagnostic-data) before sharing a bundle.

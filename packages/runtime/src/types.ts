@@ -7,6 +7,7 @@ import type {
   RangeKind,
   ReviewSide,
 } from "@usepipr/sdk";
+import { findingDropCodes } from "@usepipr/sdk";
 import { defaultMaxStoredFindings, maxStoredFindingsLimit } from "@usepipr/sdk/internal";
 import { z } from "zod";
 import { piProviderProfileSchema } from "./pi/contract.js";
@@ -216,6 +217,7 @@ const diffManifestPromptMetricsSchema = z.strictObject({
 
 const droppedFindingSchema = z.strictObject({
   finding: reviewFindingSchema,
+  code: z.enum(findingDropCodes),
   reason: nonEmptyStringSchema,
 });
 

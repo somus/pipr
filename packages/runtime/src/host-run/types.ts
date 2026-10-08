@@ -1,4 +1,4 @@
-import type { PiprRunSummary } from "@usepipr/sdk";
+import type { FindingOutcomeEvent, FindingThreadResolution, PiprRunSummary } from "@usepipr/sdk";
 import type { InspectRuntimePlan, LoadedRuntimeProject } from "../config/project.js";
 import type { CodeHostAdapter, CommandResponsePublicationResult } from "../hosts/types.js";
 import type { PublishedRunBundle } from "../observability/run-bundle-publication.js";
@@ -57,6 +57,19 @@ export type HostRunCommandOptions = Omit<RuntimeCommandOptions, "rootDir"> & {
    * run store, removes the temporary directory, and reports the package for artifact upload.
    */
   onRunBundlePublished?: (bundle: PublishedRunBundle) => void | Promise<void>;
+  /**
+   * Receives the Finding Outcome events the run recorded once it ends, including when it fails
+   * after recording some, such as a partial publication failure.
+   */
+  onFindingEvents?: (findings: HostRunFindingEvents) => void;
+};
+
+/** Content-free Finding Outcome events of one host run, with the code host context they need. */
+export type HostRunFindingEvents = {
+  repository: string;
+  /** Whether the code host reports native thread resolution. */
+  threadResolution: FindingThreadResolution;
+  events: FindingOutcomeEvent[];
 };
 
 /** Injection bag accepted only at the host-run composition root. */
@@ -127,6 +140,8 @@ export type HostRunCommandResult =
       command?: string;
       review: PublishedReviewRuntimeResult;
       publication: PublicationResult;
+      /** Content-free Finding Outcome events this execution recorded. */
+      findingEvents: FindingOutcomeEvent[];
     }
   | {
       kind: "command-response";
@@ -145,6 +160,8 @@ export type HostRunCommandResult =
       event: ChangeRequestEventContext;
       configSource: string;
       errors: string[];
+      /** Content-free Finding Outcome events this execution recorded. */
+      findingEvents: FindingOutcomeEvent[];
     };
 
 export type TrustedRuntimeProject = LoadedRuntimeProject & {

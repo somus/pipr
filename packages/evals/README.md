@@ -42,6 +42,53 @@ The eval package separates fixtures, live suite selection, and scoring.
 | `src/scoring.ts` | The scorer table and deterministic scoring functions used by live and deterministic evals. |
 | `src/scripted-provider.ts` | Agent worker model provider for deterministic evals: checks the prompt contract and answers from the rendered Diff Manifest. |
 
+## Exported datasets
+
+`pipr runs export --dataset <dir>` turns Finding Outcomes from decrypted Run
+Bundles into labeled cases: fixed and still-valid findings expect the finding at
+its line range, and dismissed findings expect no inline findings. Set
+`PIPR_EVAL_DATASET=<dir>` to add them to `eval:full`; `datasetEvalCases` in
+`src/cases.ts` validates each file against the SDK dataset schema. Exported
+cases contain file contents and finding bodies, so keep them out of the
+repository.
+
+## Improve reviews from outcomes
+
+The user-facing version of this loop is
+`apps/docs/content/docs/guide/improve-reviews.mdx`. For prompt work in this
+repository:
+
+1. **Find the weak spot.** `pipr runs stats --group-by agent|facet|model|config`
+   needs no identity. High dismissal or low acceptance for one agent or field
+   value marks a noisy reviewer; a high drop rate marks validation or cap
+   problems (check the reason codes).
+2. **Export.** `pipr runs export --dataset <dir> --identity <path> --repo .`
+   from a full clone. `index.json` counts skipped findings.
+3. **Baseline.** Run `PIPR_EVAL_DATASET=<dir> bun run --cwd packages/evals
+   eval:full:export` on the current prompt and keep `evalite-export/results.json`
+   outside the repository.
+4. **Change and compare.** Make one prompt or recipe change and rerun. Dataset
+   positives (`fixed`, `still-valid`) should keep passing; dataset negatives
+   (`dismissed`) that failed should now pass. Quieter output that loses
+   positives is a regression.
+5. **Promote.** Follow the `pipr-prompt-regression` skill: reduce a stable,
+   repeatedly failing case to a minimal, non-sensitive fixture in
+   `src/cases.ts`, and add it to `livePromptGateCaseIds` only when the expected
+   behavior is unambiguous and repeated live runs agree.
+6. **Confirm.** After release, `pipr runs stats --group-by config` should show
+   the new config hash with lower dismissal and an unchanged fix rate.
+
+Treat exported labels with care:
+
+- A dismissal can mean deferred work, not a wrong finding, and `fixed` is the
+  verifier's judgement. Read a sample of threads before trusting a rate.
+- Dismissed cases expect zero inline findings for the whole case, so a file
+  that also had a fixed finding fails the negative case on the legitimate one.
+- Positive cases score path and range only (`keywords: []`).
+- Dropped findings appear in stats but are never exported.
+- Exported cases are live-only and noisy; they belong in the advisory
+  `eval:full` suite, never directly in the hard gates.
+
 ## Gate design
 
 Keep hard gates small and stable. Add a case to `livePromptGateCaseIds` only

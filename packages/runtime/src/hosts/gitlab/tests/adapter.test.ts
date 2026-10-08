@@ -60,7 +60,10 @@ describe("GitLab host adapter", () => {
     await adapter.publication?.publish({ change, plan: publicationPlan() });
 
     await expect(adapter.comments?.loadPriorReviewState?.({ change })).resolves.toMatchObject({
-      reviewedHeadSha: "head",
+      threadResolution: "available",
+      state: {
+        reviewedHeadSha: "head",
+      },
     });
     await expect(adapter.comments?.loadInlineThreadContexts?.({ change })).resolves.toMatchObject([
       { findingId: "finding-1", findingHeadSha: "head", threadResolved: false },

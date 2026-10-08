@@ -86,7 +86,7 @@ pipr.config({
 
 ## Reruns and prior findings
 
-Pipr stores bounded state in its own comments so later runs can update the main comment, avoid duplicate inline comments, and recheck prior findings. `publication.maxStoredFindings` controls how many finding records remain available to later runs.
+Pipr stores bounded state in its own comments so later runs can update the main comment, avoid duplicate inline comments, and recheck prior findings. `publication.maxStoredFindings` controls how many finding records remain available to later runs. The stored state is also capped at 24,000 characters so it fits every supported host's comment limit; when it would exceed that, Pipr drops older outcome history first, then resolved and earlier findings, then the oldest open findings.
 
 Custom tasks can read prior state:
 

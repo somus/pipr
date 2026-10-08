@@ -1,12 +1,16 @@
 import { Buffer } from "node:buffer";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { DurationInput, TaskContext } from "@usepipr/sdk";
 import { match } from "ts-pattern";
 import {
   type AgentWorkspaceToolName,
   agentWorkspaceToolNames,
 } from "../../agent-worker/protocol.js";
-import type { AgentAttemptType, RunAgentAttemptObserver } from "../../observability/types.js";
+import type {
+  AgentAttemptType,
+  RunAgentAttemptObserver,
+  RunAgentConversationStart,
+} from "../../observability/types.js";
 import type { PiCustomToolDefinition } from "../../pi/custom-tools.js";
 import { ProviderExecutionError } from "../../pi/provider-failure.js";
 import type { PiConversation, PiRunOptions, PiRunResult } from "../../pi/types.js";
@@ -26,7 +30,6 @@ export type AgentAttempt = {
 type ReviewAttempt = {
   attemptType: AgentAttemptType;
   attemptNumber: 1;
-  attemptId: string;
 };
 
 type PiRunTools = Pick<PiRunOptions, "builtinTools" | "runtimeTools" | "customTools">;
@@ -52,12 +55,8 @@ export async function runPiAttempt(
   };
   const timeoutSeconds = promptTimeoutSeconds(options);
   const observedStarted = Date.now();
-  const attempt: ReviewAttempt = {
-    attemptType: call.attemptType,
-    attemptNumber: 1,
-    attemptId: randomUUID(),
-  };
-  const observedAttempt = await beginObservedAttempt(options, provider, call.prompt, attempt);
+  const attempt: ReviewAttempt = { attemptType: call.attemptType, attemptNumber: 1 };
+  const observedAttempt = await beginObservedAttempt(options, provider, call, attempt);
   logPiStart(options, provider, call.prompt, tools, attempt);
   let result: PiRunResult;
   try {
@@ -83,6 +82,7 @@ export async function runPiAttempt(
         : {}),
       timeoutSeconds,
       eventObserver: observedAttempt ? (event) => observedAttempt.event(event) : undefined,
+      ...(observedAttempt?.capturesConversation ? { captureConversation: true } : {}),
     });
   } catch (error) {
     options.runtime.piRunSink?.({ models: [provider.model] });
@@ -246,7 +246,7 @@ function logPiRun(
 async function beginObservedAttempt(
   options: RunReviewAgentOptions & PreparedAgentContext,
   provider: ProviderConfig,
-  prompt: string,
+  call: AgentAttempt,
   attempt: ReviewAttempt,
 ): Promise<RunAgentAttemptObserver | undefined> {
   try {
@@ -257,7 +257,8 @@ async function beginObservedAttempt(
       provider: provider.id,
       model: provider.model,
       ...attemptContextFields(options, provider),
-      prompt,
+      ...(call.conversation ? { conversation: conversationStart(call.conversation) } : {}),
+      prompt: call.prompt,
     });
   } catch {
     options.runtime.log?.warning("run capture attempt start failed", {
@@ -267,6 +268,13 @@ async function beginObservedAttempt(
     });
     return undefined;
   }
+}
+
+/** How the attempt's conversation began, without a fork's shared prompt. */
+function conversationStart(conversation: PiConversation): RunAgentConversationStart {
+  return conversation.kind === "fork"
+    ? { kind: "fork", parentKey: conversation.parentKey }
+    : conversation;
 }
 
 function attemptContextFields(

@@ -79,5 +79,6 @@ export async function runChangeRequestHostRunCommand(
     configSource: trustedRuntime.settings.source,
     review: completed.review,
     publication: completed.publication,
+    findingEvents: services.findingLedger.events(),
   };
 }
