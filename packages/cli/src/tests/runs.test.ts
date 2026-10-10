@@ -227,6 +227,8 @@ describe("pipr runs", () => {
       destinationRoot: protectedStore,
       recipients: [key.recipient],
     });
+    // Point the default identity lookup at an empty directory so a real local key cannot unlock the bundle.
+    const isolatedEnv = { XDG_STATE_HOME: path.join(outputRoot, "state") };
     const identityPath = path.join(outputRoot, "run.agekey");
     await writeFile(identityPath, `${key.identity}\n`, { mode: 0o600 });
     const wrongIdentityPath = path.join(outputRoot, "wrong.agekey");
@@ -238,7 +240,7 @@ describe("pipr runs", () => {
         { store: protectedStore, json: true },
         {
           cwd: outputRoot,
-          env: {},
+          env: isolatedEnv,
         },
       );
     });
@@ -252,7 +254,7 @@ describe("pipr runs", () => {
       await runRunsShow(
         executionId,
         { store: protectedStore, json: true, identity: [identityPath] },
-        { cwd: outputRoot, env: {} },
+        { cwd: outputRoot, env: isolatedEnv },
       );
     });
     expect(JSON.parse(unlockedOutput)).toMatchObject({
@@ -265,7 +267,7 @@ describe("pipr runs", () => {
       runRunsShow(
         executionId,
         { store: protectedStore, json: true, identity: [wrongIdentityPath] },
-        { cwd: outputRoot, env: {} },
+        { cwd: outputRoot, env: isolatedEnv },
       ),
     ).rejects.toThrow(wrongIdentity);
     const wrongDestination = path.join(outputRoot, "wrong-download");
@@ -273,7 +275,7 @@ describe("pipr runs", () => {
       runRunsDownload(
         executionId,
         { store: protectedStore, output: wrongDestination, identity: [wrongIdentityPath] },
-        { cwd: outputRoot, env: {} },
+        { cwd: outputRoot, env: isolatedEnv },
       ),
     ).rejects.toThrow(wrongIdentity);
     expect(await pathExists(path.join(wrongDestination, "run.json"))).toBe(false);
@@ -282,7 +284,7 @@ describe("pipr runs", () => {
       runRunsDownload(
         executionId,
         { store: protectedStore, output: path.join(outputRoot, "locked-download") },
-        { cwd: outputRoot, env: {} },
+        { cwd: outputRoot, env: isolatedEnv },
       ),
     ).rejects.toThrow("is encrypted");
 
