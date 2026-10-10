@@ -16,7 +16,13 @@ export default definePipr((pipr) => {
     baseUrl: "https://api-gateway.merge.dev/v1/openai",
     apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
     models: {
-      "deepseek/deepseek-v4.1-flash": { cost: { input: 0.15, output: 0.6 } },
+      // The DeepSeek catalog names this model `deepseek-flash`, so declare its limits; unknown
+      // gateway models otherwise default to a 128k window and compact early.
+      "deepseek/deepseek-v4.1-flash": {
+        contextWindow: 1_000_000,
+        maxTokens: 384_000,
+        cost: { input: 0.15, output: 0.6 },
+      },
     },
   });
   const model = pipr.model("merge/deepseek/deepseek-v4.1-flash", { thinking: "high" });
