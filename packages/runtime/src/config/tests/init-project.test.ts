@@ -44,7 +44,7 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     });
 
     expect(documentedWorkflow.replace(" # x-release-please-version", "")).toBe(runtimeWorkflow);
-    expect(runtimeWorkflow).toContain("actions/cache@v4");
+    expect(runtimeWorkflow).toContain("actions/cache@v6");
     expect(runtimeWorkflow).toContain("checks: write");
     expect(runtimeWorkflow).toContain("types: [opened, synchronize, reopened, ready_for_review]");
     expect(runtimeWorkflow).toContain("contents: read");
@@ -80,8 +80,9 @@ describe("initOfficialMinimalProject: project scaffolding and safety", () => {
     expect(await Bun.file(path.join(rootDir, ".pipr", ".gitignore")).text()).toBe("node_modules\n");
     const workflow = await Bun.file(path.join(rootDir, ".github", "workflows", "pipr.yml")).text();
     expect(workflow).toContain("uses: somus/pipr@v0.9.1"); // x-release-please-version
-    expect(workflow).toContain("actions/cache@v4");
-    expect(workflow).toContain("actions/upload-artifact@v6");
+    expect(workflow).toContain("actions/cache@v6");
+    expect(workflow).toContain("uses: actions/checkout@v7");
+    expect(workflow).toContain("actions/upload-artifact@v7");
     expect(workflow).toContain("vars.PIPR_RUN_AGE_RECIPIENTS");
     expect(workflow).toContain("if: always() && steps.pipr.outputs.run-bundle-path != ''");
     expect(workflow).toContain("retention-days: 14");

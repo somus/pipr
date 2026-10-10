@@ -61,32 +61,32 @@
     "check": "bun run lint && bun run typecheck && bun run test"
   },
   "dependencies": {
-    "@earendil-works/chord": "1.0.4",
-    "@earendil-works/pi-ai": "1.0.4",
-    "@earendil-works/pi-durable": "1.0.4",
+    "@earendil-works/chord": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-durable": "1.1.0",
     "@octokit/rest": "22.0.1",
     "@opentelemetry/api": "1.9.1",
-    "@opentelemetry/exporter-logs-otlp-proto": "0.220.0",
-    "@opentelemetry/exporter-metrics-otlp-proto": "0.220.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "0.220.0",
-    "@opentelemetry/resources": "2.9.0",
-    "@opentelemetry/sdk-logs": "0.220.0",
-    "@opentelemetry/sdk-metrics": "2.9.0",
-    "@opentelemetry/sdk-trace-base": "2.9.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "0.223.0",
+    "@opentelemetry/exporter-metrics-otlp-proto": "0.223.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.223.0",
+    "@opentelemetry/resources": "2.12.0",
+    "@opentelemetry/sdk-logs": "0.223.0",
+    "@opentelemetry/sdk-metrics": "2.12.0",
+    "@opentelemetry/sdk-trace-base": "2.12.0",
     "@opentelemetry/semantic-conventions": "1.43.0",
     "@types/bun": "1.4.2",
     "@usepipr/sdk": "0.9.1",
-    "age-encryption": "0.3.0",
+    "age-encryption": "0.3.1",
     "fflate": "0.8.3",
     "lodash-es": "4.18.1",
-    "picomatch": "4.0.5",
+    "picomatch": "4.0.7",
     "ts-pattern": "5.9.0",
     "typescript6": "npm:typescript@6.0.3",
-    "zod": "4.4.3"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/lodash-es": "4.17.12",
-    "@types/node": "26.4.0",
+    "@types/node": "26.6.5",
     "@types/picomatch": "4.0.3"
   }
 }

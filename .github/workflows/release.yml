@@ -72,7 +72,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ env.PIPR_RELEASE_TAG }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -109,7 +109,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   image:
-    needs: [resolve, publish]
+    needs: [ resolve, publish ]
     # Each platform builds on a native runner: emulated arm64 builds on amd64 runners are slow and
     # fail intermittently during dependency installation.
     strategy:
@@ -151,7 +151,8 @@ jobs:
           file: ./Dockerfile
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.PIPR_GHCR_ACTION_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.PIPR_GHCR_ACTION_IMAGE
+            }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=image-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
       - name: Export image digest
@@ -168,7 +169,7 @@ jobs:
           retention-days: 1
 
   image-manifest:
-    needs: [publish, image]
+    needs: [ publish, image ]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -214,7 +215,7 @@ jobs:
           docker buildx imagetools inspect "$PIPR_GHCR_ACTION_IMAGE:v$PIPR_RELEASE_VERSION"
 
   dogfood:
-    needs: [publish, image-manifest]
+    needs: [ publish, image-manifest ]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -223,7 +224,7 @@ jobs:
           fetch-depth: 0
           ref: main
           token: ${{ secrets.PIPR_RELEASE_PLEASE_TOKEN }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           package-manager-cache: false

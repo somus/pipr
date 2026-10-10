@@ -104,10 +104,10 @@ jobs:
   review:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: /home/runner/work/_temp/_github_home/.bun/install/cache
           key: pipr-bun-${{ hashFiles('.pipr/bun.lock') }}
@@ -119,7 +119,7 @@ jobs:
           PIPR_RUN_AGE_RECIPIENTS: ${{ vars.PIPR_RUN_AGE_RECIPIENTS }}
       - name: Upload Pipr run bundle
         if: always() && steps.pipr.outputs.run-bundle-path != ''
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.pipr.outputs.run-artifact-name }}
           path: ${{ steps.pipr.outputs.run-bundle-path }}
