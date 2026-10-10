@@ -37,6 +37,8 @@ type ReleaseWorkflow = {
     {
       env?: Record<string, string>;
       needs?: string | string[];
+      "runs-on"?: string;
+      strategy?: { matrix?: { include?: Array<Record<string, string>> } };
       permissions?: Record<string, string>;
       steps?: WorkflowStep[];
     }
@@ -60,10 +62,13 @@ const webhookCompose = await readText("deploy/webhook/compose.yml");
 const webhookEnvironment = await readText("deploy/webhook/.env.example");
 const bunLock = await readText("bun.lock");
 const releaseVersionExpression = githubExpression("steps.version.outputs.version");
+const publishedVersionExpression = githubExpression("needs.publish.outputs.version");
 const releasePushTokenExpression = githubExpression("secrets.PIPR_RELEASE_PLEASE_TOKEN");
 const shaExpression = githubExpression("github.sha");
 const resolveSteps = parsedReleaseWorkflow.jobs.resolve?.steps ?? [];
 const publishSteps = parsedReleaseWorkflow.jobs.publish?.steps ?? [];
+const imageSteps = parsedReleaseWorkflow.jobs.image?.steps ?? [];
+const imageManifestSteps = parsedReleaseWorkflow.jobs["image-manifest"]?.steps ?? [];
 const dogfoodSteps = parsedReleaseWorkflow.jobs.dogfood?.steps ?? [];
 const workflowSources = {
   ".github/workflows/ci.yml": ciWorkflow,
@@ -167,7 +172,7 @@ assert.equal(
 );
 assert.deepEqual(
   releaseSubcommands,
-  ["resolve", "verify-tag", "dogfood"],
+  ["resolve", "verify-tag", "publish-npm", "dogfood"],
   "typed release workflow must expose exactly the supported subcommands",
 );
 
@@ -304,11 +309,11 @@ assert.equal(
   "release workflow must verify tag metadata through the typed release script",
 );
 assert(
-  releaseWorkflow.includes(`type=raw,value=v${releaseVersionExpression}`),
+  releaseWorkflow.includes(`type=raw,value=v${publishedVersionExpression}`),
   "release workflow must publish v-prefixed image tag",
 );
 assert(
-  releaseWorkflow.includes(`type=raw,value=${releaseVersionExpression}`),
+  releaseWorkflow.includes(`type=raw,value=${publishedVersionExpression}`),
   "release workflow must publish plain version image tag",
 );
 assert(
@@ -334,18 +339,13 @@ const npmTarballCheckIndex = publishSteps.findIndex(
   (step) => step.run === "bun run check:npm-tarballs",
 );
 const dockerVerificationIndex = publishSteps.findIndex((step) => step.run === "bun run docker:e2e");
-const packagePublishIndices = ["sdk", "runtime", "cli"].map((packageName) =>
-  publishSteps.findIndex(
-    (step) =>
-      step.run ===
-      `npm publish "dist/npm/usepipr-${packageName}-${releaseVersionExpression}.tgz" --access public`,
-  ),
+const packagePublishIndex = publishSteps.findIndex(
+  (step) =>
+    step.run === "bun scripts/release.ts publish-npm" &&
+    step.env?.PIPR_RELEASE_VERSION === releaseVersionExpression,
 );
 const releaseUploadIndex = publishSteps.findIndex((step) =>
   step.run?.includes("gh release upload"),
-);
-const imagePublishIndex = publishSteps.findIndex(
-  (step) => step.name === "Publish GHCR image" && step.with?.push === true,
 );
 const publicationOrder = [
   verifyTagIndex,
@@ -353,9 +353,8 @@ const publicationOrder = [
   releaseArtifactCheckIndex,
   npmTarballCheckIndex,
   dockerVerificationIndex,
-  ...packagePublishIndices,
+  packagePublishIndex,
   releaseUploadIndex,
-  imagePublishIndex,
 ];
 assert(
   publicationOrder.every((index) => index >= 0) &&
@@ -363,7 +362,49 @@ assert(
       (index, position) =>
         position === 0 || index > (publicationOrder[position - 1] ?? Number.POSITIVE_INFINITY),
     ),
-  "release workflow must verify, publish packages, upload assets, and publish GHCR in exact order",
+  "release workflow must verify, publish packages, and upload assets in exact order",
+);
+assert(
+  !releaseWorkflow.includes("npm publish"),
+  "release workflow must publish npm packages through the typed, rerunnable release script",
+);
+assert(
+  !releaseWorkflow.includes("setup-qemu-action"),
+  "release workflow must build each image platform on a native runner, not under emulation",
+);
+assert.deepEqual(
+  parsedReleaseWorkflow.jobs.image?.needs,
+  ["resolve", "publish"],
+  "release workflow must build images only after packages and assets are published",
+);
+assert.deepEqual(
+  parsedReleaseWorkflow.jobs.image?.strategy?.matrix?.include?.map(({ platform, runner }) => [
+    platform,
+    runner,
+  ]),
+  [
+    ["linux/amd64", "ubuntu-24.04"],
+    ["linux/arm64", "ubuntu-24.04-arm"],
+  ],
+  "release workflow must build amd64 and arm64 images on matching native runners",
+);
+const imageBuildStep = imageSteps.find((step) => step.name === "Build GHCR image");
+assert(
+  imageBuildStep?.with?.platforms === githubExpression("matrix.platform") &&
+    String(imageBuildStep.with.outputs).includes("push-by-digest=true") &&
+    imageBuildStep.with.tags === undefined,
+  "release image builds must push untagged per-platform digests",
+);
+assert.deepEqual(
+  parsedReleaseWorkflow.jobs["image-manifest"]?.needs,
+  ["publish", "image"],
+  "release workflow must tag the image only after every platform build succeeds",
+);
+const imagePublishStep = imageManifestSteps.find((step) => step.name === "Publish GHCR image");
+assert(
+  imagePublishStep?.run?.includes("docker buildx imagetools create") &&
+    imagePublishStep.run.includes("-ne 2"),
+  "release workflow must publish one multi-platform GHCR image from both platform digests",
 );
 assert(
   !releaseWorkflow.includes("npm pack --dry-run"),
@@ -389,10 +430,10 @@ assert(
   "release workflow must not upload release assets through a glob",
 );
 const dogfoodUpdateStep = dogfoodSteps.find((step) => step.name === "Open dogfood SDK update PR");
-assert.equal(
+assert.deepEqual(
   parsedReleaseWorkflow.jobs.dogfood?.needs,
-  "publish",
-  "release workflow must isolate the dogfood update in a post-publish job",
+  ["publish", "image-manifest"],
+  "release workflow must isolate the dogfood update in a job after packages and the image publish",
 );
 assert.equal(
   dogfoodUpdateStep?.run,
