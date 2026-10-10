@@ -10,7 +10,16 @@ const reviewSummarySchema = z.strictObject({
 });
 
 export default definePipr((pipr) => {
-  const model = pipr.model("deepseek/deepseek-v4-pro", { thinking: "high" });
+  pipr.provider({
+    id: "merge",
+    api: "openai-completions",
+    baseUrl: "https://api-gateway.merge.dev/v1/openai",
+    apiKey: pipr.secret({ name: "MERGE_GATEWAY_API_KEY" }),
+    models: {
+      "deepseek/deepseek-v4.1-flash": { cost: { input: 0.15, output: 0.6 } },
+    },
+  });
+  const model = pipr.model("merge/deepseek/deepseek-v4.1-flash", { thinking: "high" });
 
   pipr.config({
     limits: {
