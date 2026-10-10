@@ -4,6 +4,13 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.9.1](https://github.com/somus/pipr/compare/v0.9.0...v0.9.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **release:** build image platforms natively and make npm publish rerunnable ([#157](https://github.com/somus/pipr/issues/157)) ([2d9df36](https://github.com/somus/pipr/commit/2d9df365c2b3d7669563bd41609ff8048e616435))
+
 ## [0.9.0](https://github.com/somus/pipr/compare/v0.8.0...v0.9.0) (2026-10-08)
 
 
