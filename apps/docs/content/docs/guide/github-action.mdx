@@ -35,7 +35,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: somus/pipr@v0.9.1 # x-release-please-version
@@ -46,7 +46,7 @@ jobs:
           PIPR_RUN_AGE_RECIPIENTS: ${{ vars.PIPR_RUN_AGE_RECIPIENTS }}
       - name: Upload Pipr run bundle
         if: always() && steps.pipr.outputs.run-bundle-path != ''
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.pipr.outputs.run-artifact-name }}
           path: ${{ steps.pipr.outputs.run-bundle-path }}
@@ -106,7 +106,7 @@ If runners cannot reach public registries, provide internal mirrors:
 ```bash
 pipr init \
   --github-enterprise-server \
-  --checkout-action internal-actions/checkout@v6 \
+  --checkout-action internal-actions/checkout@v7 \
   --runtime-image registry.internal.example/pipr:v0.9.1 # x-release-please-version
 ```
 

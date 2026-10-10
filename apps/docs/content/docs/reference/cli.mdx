@@ -60,7 +60,7 @@ Options:
 | `--recipe <recipe>` | none | Starter recipe id. |
 | `--minimal` | false | Scaffold only `.pipr/config.ts` without `package.json` or `tsconfig.json`. |
 | `--runtime-image <image>` | Pipr release image | Container image used by generated adapter setup. |
-| `--checkout-action <ref>` | `actions/checkout@v6` | Checkout action reference used by generated GitHub setup. |
+| `--checkout-action <ref>` | `actions/checkout@v7`; `@v6` for Gitea, Forgejo, and Codeberg | Checkout action reference used by generated GitHub setup. |
 | `--github-runner <label>` | `ubuntu-latest` | Runner label used by generated GitHub setup. Use an instance-specific Linux runner label to override the GHES default. |
 | `--github-enterprise-server` | false | Generate a GHES-compatible workflow targeting `[self-hosted, linux]` with a supported artifact action. |
 | `--force` | false | Overwrite existing Pipr files. |
@@ -76,7 +76,7 @@ pipr init --minimal
 pipr init --config-dir .config/pipr
 pipr init \
   --github-enterprise-server \
-  --checkout-action internal-actions/checkout@v6 \
+  --checkout-action internal-actions/checkout@v7 \
   --runtime-image registry.internal.example/pipr:v0.9.1 # x-release-please-version
 ```
 

@@ -1,10 +1,10 @@
 FROM ghcr.io/somus/ast-grep:0.45.0-alpine3.22@sha256:b6da090fc5db9eb80c57444c628637ed20f5170e214268a9572369a2986dc215 AS ast-grep
 
-FROM oven/bun:1.4.0-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5dbfdd3d3d38058437eb AS base
+FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS base
 
 USER root
 COPY --from=ast-grep /usr/local/bin/ast-grep /usr/local/bin/ast-grep
-RUN apk add --no-cache bash fd git ripgrep su-exec=0.2-r3 \
+RUN apk add --no-cache bash fd git ripgrep su-exec=0.3-r0 \
   && ln -sf /usr/local/bin/bun /usr/local/bin/node \
   && chmod 1777 /tmp \
   && ast-grep outline --help >/dev/null
