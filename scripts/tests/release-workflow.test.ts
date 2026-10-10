@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   type CommandResult,
   dogfoodRelease,
+  publishNpmPackages,
   type ReleaseOperations,
   resolveRelease,
   verifyReleaseTag,
@@ -402,6 +403,64 @@ describe("verifyReleaseTag", () => {
 
     await expect(verifyReleaseTag(operations, { tag: "v1.2.3" })).rejects.toThrow(
       "action.yml image docker://ghcr.io/somus/pipr:v1.2.2 must match release v1.2.3",
+    );
+  });
+});
+
+describe("publishNpmPackages", () => {
+  const viewArgs = (name: string) => ["view", `@usepipr/${name}@1.2.3`, "version"];
+  const publishArgs = (name: string) => [
+    "publish",
+    `dist/npm/usepipr-${name}-1.2.3.tgz`,
+    "--access",
+    "public",
+  ];
+
+  it("publishes every package in dependency order when none is on npm", async () => {
+    const operations = new FakeReleaseOperations();
+    for (const name of ["sdk", "runtime", "cli"]) {
+      operations.respond("npm", viewArgs(name), failure("E404"));
+    }
+
+    await publishNpmPackages(operations, { version: "1.2.3" });
+
+    expect(operations.calls.map(({ command, args }) => [command, args])).toEqual([
+      ["npm", viewArgs("sdk")],
+      ["npm", publishArgs("sdk")],
+      ["npm", viewArgs("runtime")],
+      ["npm", publishArgs("runtime")],
+      ["npm", viewArgs("cli")],
+      ["npm", publishArgs("cli")],
+    ]);
+  });
+
+  it("skips packages already published at the release version so a rerun can continue", async () => {
+    const operations = new FakeReleaseOperations();
+    operations.respond("npm", viewArgs("sdk"), success("1.2.3\n"));
+    operations.respond("npm", viewArgs("runtime"), success("1.2.3\n"));
+    operations.respond("npm", viewArgs("cli"), success(""));
+
+    await publishNpmPackages(operations, { version: "1.2.3" });
+
+    expect(
+      operations.calls.filter(({ args }) => args[0] === "publish").map(({ args }) => args),
+    ).toEqual([publishArgs("cli")]);
+    expect(operations.logs).toEqual([
+      "@usepipr/sdk@1.2.3 is already on npm; skipping publish.",
+      "@usepipr/runtime@1.2.3 is already on npm; skipping publish.",
+    ]);
+  });
+
+  it("stops at the first failed publish without exposing secrets", async () => {
+    const operations = new FakeReleaseOperations();
+    operations.respond("npm", viewArgs("sdk"), failure("E404"));
+    operations.respond("npm", publishArgs("sdk"), failure("E401 token top-secret rejected"));
+
+    await expect(
+      publishNpmPackages(operations, { version: "1.2.3", secretValues: ["top-secret"] }),
+    ).rejects.toThrow("[REDACTED]");
+    expect(operations.calls.some(({ args }) => args.includes("@usepipr/runtime@1.2.3"))).toBe(
+      false,
     );
   });
 });

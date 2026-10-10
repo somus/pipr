@@ -2,12 +2,13 @@
 import {
   type CommandResult,
   dogfoodRelease,
+  publishNpmPackages,
   type ReleaseOperations,
   resolveRelease,
   verifyReleaseTag,
 } from "./release/workflow.js";
 
-export const releaseSubcommands = ["resolve", "verify-tag", "dogfood"] as const;
+export const releaseSubcommands = ["resolve", "verify-tag", "publish-npm", "dogfood"] as const;
 
 class ProductionReleaseOperations implements ReleaseOperations {
   async run(
@@ -60,6 +61,7 @@ type ReleaseCommand = (
 
 const releaseCommands: Record<ReleaseSubcommand, ReleaseCommand> = {
   dogfood: runDogfood,
+  "publish-npm": runPublishNpm,
   resolve: runResolve,
   "verify-tag": runVerifyTag,
 };
@@ -67,7 +69,7 @@ const releaseCommands: Record<ReleaseSubcommand, ReleaseCommand> = {
 async function main(args = process.argv.slice(2)): Promise<void> {
   const command = args[0];
   if (!isReleaseSubcommand(command)) {
-    throw new Error(`usage: bun scripts/release.ts <resolve|verify-tag|dogfood>`);
+    throw new Error(`usage: bun scripts/release.ts <resolve|verify-tag|publish-npm|dogfood>`);
   }
   const operations = new ProductionReleaseOperations();
   const secretValues = [
@@ -101,6 +103,16 @@ async function runVerifyTag(
   await verifyReleaseTag(operations, {
     secretValues,
     tag: requiredEnv("PIPR_RELEASE_TAG"),
+  });
+}
+
+async function runPublishNpm(
+  operations: ReleaseOperations,
+  secretValues: readonly string[],
+): Promise<void> {
+  await publishNpmPackages(operations, {
+    secretValues,
+    version: requiredEnv("PIPR_RELEASE_VERSION"),
   });
 }
 

@@ -93,12 +93,10 @@ jobs:
       - run: bun run check:release-artifacts
       - run: bun run check:npm-tarballs
       - run: bun run docker:e2e
-      - run: npm publish "dist/npm/usepipr-sdk-${{ steps.version.outputs.version }}.tgz"
-          --access public
-      - run: npm publish "dist/npm/usepipr-runtime-${{ steps.version.outputs.version
-          }}.tgz" --access public
-      - run: npm publish "dist/npm/usepipr-cli-${{ steps.version.outputs.version }}.tgz"
-          --access public
+      - name: Publish npm packages
+        run: bun scripts/release.ts publish-npm
+        env:
+          PIPR_RELEASE_VERSION: ${{ steps.version.outputs.version }}
       - run: |
           gh release upload "$PIPR_RELEASE_TAG" \
             dist/release/pipr-linux-x64 \
@@ -109,13 +107,86 @@ jobs:
             --clobber
         env:
           GH_TOKEN: ${{ github.token }}
+
+  image:
+    needs: [resolve, publish]
+    # Each platform builds on a native runner: emulated arm64 builds on amd64 runners are slow and
+    # fail intermittently during dependency installation.
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        id: meta
+        with:
+          images: ${{ env.PIPR_GHCR_ACTION_IMAGE }}
+          # Labels only; the image-manifest job applies tags. This sets the version label.
+          tags: type=raw,value=v${{ needs.publish.outputs.version }}
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build GHCR image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.PIPR_GHCR_ACTION_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+      - name: Export image digest
+        env:
+          PIPR_IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${PIPR_IMAGE_DIGEST#sha256:}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  image-manifest:
+    needs: [publish, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: image-digest-*
+          merge-multiple: true
       - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: meta
         with:
           images: ${{ env.PIPR_GHCR_ACTION_IMAGE }}
           tags: |
-            type=raw,value=v${{ steps.version.outputs.version }}
-            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=v${{ needs.publish.outputs.version }}
+            type=raw,value=${{ needs.publish.outputs.version }}
             type=raw,value=latest
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -124,19 +195,26 @@ jobs:
           password: ${{ github.token }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Publish GHCR image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          PIPR_IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          PIPR_RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          digests=()
+          for digest in *; do digests+=("$PIPR_GHCR_ACTION_IMAGE@sha256:$digest"); done
+          if [ "${#digests[@]}" -ne 2 ]; then
+            echo "expected amd64 and arm64 image digests, found ${#digests[@]}" >&2
+            exit 1
+          fi
+          tags=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then tags+=(--tag "$tag"); fi
+          done <<< "$PIPR_IMAGE_TAGS"
+          docker buildx imagetools create "${tags[@]}" "${digests[@]}"
+          docker buildx imagetools inspect "$PIPR_GHCR_ACTION_IMAGE:v$PIPR_RELEASE_VERSION"
 
   dogfood:
-    needs: publish
+    needs: [publish, image-manifest]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

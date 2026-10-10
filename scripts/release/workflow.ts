@@ -31,6 +31,10 @@ export type VerifyReleaseTagOptions = SecretOptions & {
   tag: string;
 };
 
+export type PublishNpmPackagesOptions = SecretOptions & {
+  version: string;
+};
+
 export type DogfoodReleaseOptions = SecretOptions & {
   version: string;
   npmPollAttempts?: number;
@@ -57,6 +61,8 @@ const defaultReleasePollAttempts = 60;
 const defaultReleasePollDelayMilliseconds = 10_000;
 const defaultNpmPollAttempts = 30;
 const defaultNpmPollDelayMilliseconds = 2_000;
+/** Published in dependency order: the runtime depends on the SDK, and the CLI on both. */
+const npmPackageNames = ["sdk", "runtime", "cli"] as const;
 const dogfoodPaths = [
   ".pipr/package.json",
   ".pipr/bun.lock",
@@ -125,6 +131,30 @@ export async function verifyReleaseTag(
   }
 
   await operations.output("version", version);
+}
+
+/**
+ * Publishes the release npm tarballs, skipping any package already on npm at this version, so a
+ * release job that failed after npm publication can be rerun.
+ */
+export async function publishNpmPackages(
+  operations: ReleaseOperations,
+  options: PublishNpmPackagesOptions,
+): Promise<void> {
+  for (const name of npmPackageNames) {
+    const spec = `@usepipr/${name}@${options.version}`;
+    const published = await operations.run("npm", ["view", spec, "version"]);
+    if (published.exitCode === 0 && published.stdout.trim() === options.version) {
+      await operations.log(`${spec} is already on npm; skipping publish.`);
+      continue;
+    }
+    await runChecked(
+      operations,
+      "npm",
+      ["publish", `dist/npm/usepipr-${name}-${options.version}.tgz`, "--access", "public"],
+      options,
+    );
+  }
 }
 
 export async function dogfoodRelease(
