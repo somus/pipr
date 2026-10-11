@@ -2,7 +2,14 @@ import type { RuntimeTask } from "@usepipr/sdk/internal";
 import type { CodeHostAdapter } from "../hosts/types.js";
 import { recordArtifactSafely } from "../observability/capture-sinks.js";
 import type { RunObserver } from "../observability/types.js";
-import { findingLedgerContext } from "../review/finding-ledger.js";
+import type { ThreadAction } from "../publication/types.js";
+import {
+  type FindingLedger,
+  type FindingLedgerContext,
+  type FindingOutcomeEmission,
+  findingLedgerContext,
+  findingOutcomeAnchors,
+} from "../review/finding-ledger.js";
 import { ReviewProgressSupersededError } from "../review/progress.js";
 import { publicationPlanForHostCapabilities } from "../review/publication-plan.js";
 import { PublicationError } from "../review/publication-result.js";
@@ -139,6 +146,12 @@ async function publishCompletedReview(
   const { services } = options;
   const publish = services.adapter.publication?.publish;
   if (!publish) throw new Error("review publication is not available for this code host");
+  const ledgerContext = findingLedgerContext(
+    { event: options.event, trustedConfigHash: options.trustedRuntime.trustedConfigHash },
+    review.run,
+  );
+  const recordPublished = (findingIds: readonly string[]) =>
+    services.findingLedger.recordPublished(ledgerContext, findingIds);
   try {
     return await services.log.group("publish review", async () => {
       await options.progress?.transition("publishing-review");
@@ -146,6 +159,7 @@ async function publishCompletedReview(
         review.publicationPlan,
         services.adapter.capabilities,
       );
+      recordUnsupportedInlineFindings(services.findingLedger, ledgerContext, review, plan);
       services.log.info("publication plan", {
         inlineItems: plan.inlineItems.length,
         threadActions: plan.threadActions.length,
@@ -154,8 +168,14 @@ async function publishCompletedReview(
         change: options.event,
         plan,
         progressLease: options.progress?.lease,
+        onInlinePosted: (findingId) => recordPublished([findingId]),
+        onThreadActionApplied: threadActionOutcomeRecorder(
+          services.findingLedger,
+          ledgerContext,
+          review.threadActionOutcomes,
+        ),
       });
-      recordPublishedFindings(options, review, result.postedFindingIds);
+      recordPublished(result.postedFindingIds);
       logPublicationResult(services.log, result);
       await recordArtifactSafely(services, {
         kind: "publication-plan",
@@ -169,25 +189,53 @@ async function publishCompletedReview(
   } catch (error) {
     if (error instanceof ReviewProgressSupersededError) throw error;
     const publicationError = asPublicationError(error);
-    recordPublishedFindings(options, review, publicationError.result?.postedFindingIds ?? []);
+    recordPublished(publicationError.result?.postedFindingIds ?? []);
     await recordPublicationError(services, publicationError, error);
     throw publicationError;
   }
 }
 
-/** Records `published` only for inline comments the host actually posted. */
-function recordPublishedFindings(
-  options: ReviewPublishingOptions,
+/** Records inline findings the host cannot post, such as multi-line comments, as dropped. */
+function recordUnsupportedInlineFindings(
+  ledger: FindingLedger,
+  context: FindingLedgerContext,
   review: Extract<RuntimeReview, { kind: "review" }>,
-  findingIds: readonly string[],
+  plan: Extract<RuntimeReview, { kind: "review" }>["publicationPlan"],
 ): void {
-  options.services.findingLedger.recordPublished(
-    findingLedgerContext(
-      { event: options.event, trustedConfigHash: options.trustedRuntime.trustedConfigHash },
-      review.run,
-    ),
-    findingIds,
+  const supported = new Set(plan.inlineItems.map((item) => item.findingId));
+  ledger.record(
+    context,
+    review.publicationPlan.inlineItems
+      .filter((item) => !supported.has(item.findingId))
+      .map((item) => ({
+        kind: "dropped" as const,
+        findingId: item.findingId,
+        reasonCode: "inline-unsupported" as const,
+      })),
   );
+}
+
+/**
+ * Records verifier outcomes once the thread action that leaves their marker is on the host, so
+ * the ledger never holds an outcome whose marker a failed write left unposted.
+ */
+export function threadActionOutcomeRecorder(
+  ledger: FindingLedger,
+  context: FindingLedgerContext,
+  outcomes: readonly FindingOutcomeEmission[],
+): (action: ThreadAction) => void {
+  return (action) => {
+    const anchor =
+      action.kind === "resolve"
+        ? findingOutcomeAnchors.piprResolution(action.findingHeadSha)
+        : findingOutcomeAnchors.verifierResponse(action.responseKey);
+    ledger.record(
+      context,
+      outcomes.filter(
+        (outcome) => outcome.findingId === action.findingId && outcome.anchor === anchor,
+      ),
+    );
+  };
 }
 
 function logPublicationResult(

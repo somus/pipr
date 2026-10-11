@@ -90,10 +90,14 @@ export function createTaskContext(options: CreateTaskContextOptions): TaskContex
       },
     });
     options.output.providerModels.push(...result.providerModels);
-    recordAgentFindingProvenance(options.output, result.value, {
-      agent: resolvedAgent.name?.trim() || undefined,
-      model: result.providerModels.at(-1),
-    });
+    const sources = result.shards ?? [{ value: result.value, model: result.providerModels.at(-1) }];
+    // Record later shards first so the first shard wins, matching merged-finding deduplication.
+    for (const source of sources.toReversed()) {
+      recordAgentFindingProvenance(options.output, source.value, {
+        agent: resolvedAgent.name?.trim() || undefined,
+        model: source.model,
+      });
+    }
     if (result.repairAttempted) {
       options.output.repairAttempted = true;
     }
@@ -262,9 +266,12 @@ function capSelectedFindings<F extends ReviewFinding>(
         code: "unpublishable-fix" as const,
         reason: unpublishableSuggestedFixDropReason,
       })),
-      ...candidates
-        .slice(options.limit)
-        .map((finding) => ({ finding, code: "cap" as const, reason: "cap" })),
+      // slice(undefined) keeps everything, so only a set limit can cap findings.
+      ...(options.limit === undefined ? [] : candidates.slice(options.limit)).map((finding) => ({
+        finding,
+        code: "cap" as const,
+        reason: "cap",
+      })),
     ],
   };
 }

@@ -127,6 +127,65 @@ describe("pipr runs stats", () => {
     ]);
   });
 
+  it("defaults to the Git remote repository for runs and webhook events", async () => {
+    const cwd = await temporaryDirectory();
+    const store = await temporaryDirectory();
+    for (const args of [
+      ["init", "--quiet"],
+      ["remote", "add", "origin", "https://gitlab.com/somus/pipr.git"],
+    ]) {
+      expect(await Bun.spawn(["git", ...args], { cwd, stderr: "ignore" }).exited).toBe(0);
+    }
+    const ledger = (executionId: string, findingId: string) => ({
+      formatVersion: 1 as const,
+      events: [ledgerEvent(executionId, findingId, "proposed")],
+      evidence: {},
+    });
+    await writeLedgerBundle(store, reviewExecution, ledger(reviewExecution, "fnd_mine"), {
+      host: "gitlab",
+    });
+    await writeLedgerBundle(store, verifierExecution, ledger(verifierExecution, "fnd_other"), {
+      host: "gitlab",
+      repository: "acme/other",
+    });
+    const database = path.join(cwd, "webhooks.sqlite");
+    writeWebhookFindingEvents(database, [
+      {
+        host: "gitlab",
+        repository: "somus/pipr",
+        event: ledgerEvent(reviewExecution, "fnd_hook", "published"),
+      },
+      {
+        host: "gitlab",
+        repository: "acme/other",
+        event: ledgerEvent(verifierExecution, "fnd_other_hook", "published"),
+      },
+    ]);
+
+    const output = await captureStdout(() =>
+      runMain({
+        argv: [
+          "bun",
+          "pipr",
+          "runs",
+          "stats",
+          "--store",
+          store,
+          "--webhook-db",
+          database,
+          "--json",
+        ],
+        cwd,
+        env: { PIPR_UPDATE_NOTICE: "0", XDG_STATE_HOME: cwd },
+      }),
+    );
+
+    expect(JSON.parse(output)).toMatchObject({
+      sources: { runs: 1, webhookEvents: 1 },
+      totals: { findings: 2 },
+    });
+  });
+
   it("explains how to initialise a webhook database without finding events", async () => {
     const cwd = await temporaryDirectory();
     const database = path.join(cwd, "webhooks.sqlite");

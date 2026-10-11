@@ -5,6 +5,7 @@ export function loadedBitbucketChange(
   pullRequest: BitbucketPullRequest,
   workspace: string,
   repository: string,
+  headFetchUrl = pullRequest.source.repository.links.html.href,
 ): LoadedChangeRequest {
   return {
     repository: {
@@ -32,7 +33,7 @@ export function loadedBitbucketChange(
       head: {
         sha: pullRequest.source.commit.hash,
         ref: pullRequest.source.branch.name,
-        url: pullRequest.source.repository.links.html.href,
+        url: headFetchUrl,
       },
       isFork: pullRequest.source.repository.uuid !== pullRequest.destination.repository.uuid,
     },

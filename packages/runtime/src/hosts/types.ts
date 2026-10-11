@@ -113,6 +113,10 @@ export type CodeHostPublication = {
     plan: PublicationPlan;
     change: ChangeRequestEventContext;
     progressLease?: ReviewProgressLease;
+    /** Called as each inline comment posts, so a publication interrupted later still reports it. */
+    onInlinePosted?(findingId: string): void;
+    /** Called once a thread action's reply is on the host, whether posted now or found existing. */
+    onThreadActionApplied?(action: ThreadAction): void;
   }): Promise<PublicationResult>;
   publishReviewProgress?(options: {
     change: ChangeRequestEventContext;
@@ -144,6 +148,8 @@ export type CodeHostPublication = {
     change: ChangeRequestEventContext;
     actions: ThreadAction[];
     reviewedHeadSha: string;
+    /** Called once a thread action's reply is on the host, whether posted now or found existing. */
+    onThreadActionApplied?(action: ThreadAction): void;
   }): Promise<{ errors: string[] }>;
 };
 

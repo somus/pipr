@@ -230,6 +230,58 @@ describe("protected Run Bundle packages", () => {
     ).rejects.toThrow("ledger contains diagnostic content");
   });
 
+  it("opens metadata captured with the span and log keys earlier versions published", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await diagnosticBundle(root);
+    const prepared = await prepareRunBundlePackage({
+      bundleDirectory: recorder.directory,
+      destinationRoot: path.join(root, "published"),
+    });
+    await rewriteMetadataSignals(prepared.directory, root, {
+      spans: (span) => ({
+        ...span,
+        attributes: {
+          ...span.attributes,
+          "pipr.process.exit_code": 0,
+          "pipr.response.stdout_bytes": 12,
+          "pipr.response.stderr_bytes": 0,
+        },
+      }),
+      logs: (log) => ({ ...log, fields: { ...log.fields, attemptId: "attempt-1" } }),
+    });
+
+    const opened = await openRunBundlePackage({
+      packageDirectory: prepared.directory,
+      destination: path.join(root, "metadata-view"),
+    });
+    expect(opened.bundle.spans[0]?.attributes["pipr.response.stdout_bytes"]).toBe(12);
+    expect(opened.bundle.logs[0]?.fields.attemptId).toBe("attempt-1");
+  });
+
+  it.each([
+    ["span", { "pipr.response.stdout_bytes": "private stderr" }, {}],
+    ["span", { "pipr.private": 1 }, {}],
+    ["log", {}, { attemptId: 1 }],
+  ])("rejects public metadata with an unsafe %s key", async (kind, attributes, fields) => {
+    const root = await temporaryDirectory();
+    const recorder = await diagnosticBundle(root);
+    const prepared = await prepareRunBundlePackage({
+      bundleDirectory: recorder.directory,
+      destinationRoot: path.join(root, "published"),
+    });
+    await rewriteMetadataSignals(prepared.directory, root, {
+      spans: (span) => ({ ...span, attributes: { ...span.attributes, ...attributes } }),
+      logs: (log) => ({ ...log, fields: { ...log.fields, ...fields } }),
+    });
+
+    await expect(
+      openRunBundlePackage({
+        packageDirectory: prepared.directory,
+        destination: path.join(root, "metadata-view"),
+      }),
+    ).rejects.toThrow(`unsafe ${kind} content`);
+  });
+
   it("rejects conversation counts on any other artifact kind", async () => {
     const root = await temporaryDirectory();
     const recorder = await diagnosticBundle(root);
@@ -488,25 +540,58 @@ async function rewriteMetadataLedger(
   root: string,
   update: (ledger: { formatVersion: 1; events: Record<string, unknown>[] }) => unknown,
 ): Promise<void> {
+  await rewriteMetadata(packageDirectory, root, async (extracted) => {
+    const ledgerPath = path.join(extracted, "artifacts/ledger.json");
+    const contents = Buffer.from(
+      `${JSON.stringify(update(JSON.parse(await readFile(ledgerPath, "utf8"))))}\n`,
+    );
+    await writeFile(ledgerPath, contents);
+    const manifestPath = path.join(extracted, "run.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const descriptor = manifest.artifacts.find(
+      (artifact: { kind: string }) => artifact.kind === "ledger",
+    );
+    descriptor.sizeBytes = contents.byteLength;
+    descriptor.sha256 = sha256(contents);
+    await writeFile(manifestPath, JSON.stringify(manifest));
+  });
+}
+
+/** Rewrites the span and log records inside a packaged metadata archive. */
+async function rewriteMetadataSignals(
+  packageDirectory: string,
+  root: string,
+  update: {
+    spans: (span: { attributes: Record<string, unknown> }) => unknown;
+    logs: (log: { fields: Record<string, unknown> }) => unknown;
+  },
+): Promise<void> {
+  await rewriteMetadata(packageDirectory, root, async (extracted) => {
+    const manifest = JSON.parse(await readFile(path.join(extracted, "run.json"), "utf8"));
+    for (const signal of ["spans", "logs"] as const) {
+      const signalPath = path.join(extracted, manifest.signals[signal]);
+      const records = (await readFile(signalPath, "utf8"))
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.stringify(update[signal](JSON.parse(line))));
+      await writeFile(signalPath, `${records.join("\n")}\n`);
+    }
+  });
+}
+
+/** Re-archives edited package metadata, keeping the envelope hash consistent. */
+async function rewriteMetadata(
+  packageDirectory: string,
+  root: string,
+  edit: (extracted: string) => Promise<void>,
+): Promise<void> {
   const extracted = path.join(root, "tampered-metadata");
   await extractRunArchiveFiles({
     archive: await readFile(path.join(packageDirectory, "metadata.tar.gz")),
     format: "tar.gz",
     destination: extracted,
   });
-  const ledgerPath = path.join(extracted, "artifacts/ledger.json");
-  const contents = Buffer.from(
-    `${JSON.stringify(update(JSON.parse(await readFile(ledgerPath, "utf8"))))}\n`,
-  );
-  await writeFile(ledgerPath, contents);
-  const manifestPath = path.join(extracted, "run.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  const descriptor = manifest.artifacts.find(
-    (artifact: { kind: string }) => artifact.kind === "ledger",
-  );
-  descriptor.sizeBytes = contents.byteLength;
-  descriptor.sha256 = sha256(contents);
-  await writeFile(manifestPath, JSON.stringify(manifest));
+  await edit(extracted);
   const archive = await createRunBundleTarGz(extracted);
   await writeFile(path.join(packageDirectory, "metadata.tar.gz"), archive);
   const envelopePath = path.join(packageDirectory, "envelope.json");

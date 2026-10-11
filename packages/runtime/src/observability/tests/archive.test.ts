@@ -344,6 +344,68 @@ describe("deterministic run diagnosis", () => {
       cacheUsageStatus: "partial",
     });
   });
+
+  it("reads attempts and usage from the model spans earlier versions recorded per attempt", async () => {
+    const root = await temporaryDirectory();
+    const recorder = await completedReview(root, 47);
+    const bundle = await loadValidatedRunBundle(recorder.directory);
+    const attemptSpan = {
+      formatVersion: 1 as const,
+      traceId: recorder.executionId,
+      category: "model" as const,
+      name: "gen_ai.chat",
+      startedAt: "2026-07-20T00:00:00.000Z",
+      durationMs: 40,
+      status: "ok" as const,
+    };
+    bundle.spans = [
+      {
+        ...attemptSpan,
+        spanId: "a".repeat(16),
+        attributes: {
+          "gen_ai.agent.name": "reviewer",
+          "gen_ai.request.model": "gpt-test",
+          "pipr.attempt.type": "initial",
+          "pipr.attempt.number": 1,
+          "gen_ai.usage.input_tokens": 10,
+          "gen_ai.usage.output_tokens": 2,
+          "pipr.usage.cache_read_tokens": 5,
+          "pipr.usage.cache_write_tokens": 1,
+          "pipr.usage.cache_status": "complete",
+          "pipr.process.exit_code": 1,
+        },
+      },
+      {
+        ...attemptSpan,
+        spanId: "b".repeat(16),
+        attributes: {
+          "gen_ai.agent.name": "reviewer",
+          "gen_ai.request.model": "gpt-test",
+          "pipr.attempt.type": "retry",
+          "pipr.attempt.number": 2,
+          "gen_ai.usage.input_tokens": 20,
+          "gen_ai.usage.output_tokens": 4,
+          "pipr.usage.cache_read_tokens": 7,
+          "pipr.usage.cache_write_tokens": 0,
+          "pipr.usage.cache_status": "complete",
+        },
+      },
+    ];
+
+    const diagnosis = diagnoseRunBundle(bundle);
+    expect(diagnosis.modelAttempts).toEqual([
+      expect.objectContaining({ attemptType: "initial", attemptNumber: 1 }),
+      expect.objectContaining({ attemptType: "retry", attemptNumber: 2 }),
+    ]);
+    expect(diagnosis.modelRetryAttempts).toBe(1);
+    expect(diagnosis.usage).toMatchObject({
+      inputTokens: 30,
+      outputTokens: 6,
+      cacheReadTokens: 12,
+      cacheWriteTokens: 1,
+      cacheUsageStatus: "complete",
+    });
+  });
 });
 
 describe("run archive extraction", () => {

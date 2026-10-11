@@ -59,6 +59,54 @@ describe("Bitbucket Data Center client", () => {
     ]);
   });
 
+  it("fetches fork heads from the repository's HTTP clone URL without its user", async () => {
+    const forkRepository = {
+      ...repository(84, "~DEVELOPER", "pipr"),
+      links: {
+        clone: [
+          { name: "ssh", href: "ssh://git@bitbucket.example.com:7999/~developer/pipr.git" },
+          { name: "http", href: "https://pipr-bot@bitbucket.example.com/scm/~developer/pipr.git" },
+        ],
+        self: [{ href: "https://bitbucket.example.com/users/developer/repos/pipr/browse" }],
+      },
+    };
+    const client = createBitbucketClient(env, async () =>
+      Response.json({
+        ...pullRequest,
+        fromRef: { ...pullRequest.fromRef, repository: forkRepository },
+      }),
+    );
+
+    const loaded = await client.loadChange({
+      workspace: "PRJ",
+      repository: "pipr",
+      changeNumber: 7,
+    });
+    expect(loaded.change.head.url).toBe("https://bitbucket.example.com/scm/~developer/pipr.git");
+    expect(loaded.change.base.url).toBe(
+      "https://bitbucket.example.com/projects/PRJ/repos/pipr/browse",
+    );
+    expect(loaded.repository.url).toBe(
+      "https://bitbucket.example.com/projects/PRJ/repos/pipr/browse",
+    );
+  });
+
+  it("falls back to the Data Center SCM path when a fork has no HTTP clone link", async () => {
+    const client = createBitbucketClient(
+      { ...env, BITBUCKET_BASE_URL: "https://bitbucket.example.com/context" },
+      async () => Response.json(pullRequest),
+    );
+
+    const loaded = await client.loadChange({
+      workspace: "PRJ",
+      repository: "pipr",
+      changeNumber: 7,
+    });
+    expect(loaded.change.head.url).toBe(
+      "https://bitbucket.example.com/context/scm/~DEVELOPER/pipr.git",
+    );
+  });
+
   it("maps Data Center comments, multiline anchors, updates, replies, and statuses", async () => {
     const requests: Array<{ url: string; method: string; body?: unknown }> = [];
     const client = createBitbucketClient(env, async (input, init) => {

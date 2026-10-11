@@ -711,6 +711,39 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
     expectPromptCoverage(prompts, 8);
   });
 
+  it("attributes merged shard findings to the model of the shard that produced them", async () => {
+    const ledger = createFindingLedger({ executionId: "0123456789abcdef0123456789abcdef" });
+
+    await runRuntime({
+      plan: fallbackReviewPlan(),
+      config: { ...fallbackConfig, limits: manifestShardConfig(2).limits },
+      trustedConfigHash: "c".repeat(64),
+      findingLedger: ledger,
+      diffManifestBuilder: () => manyFileShardingManifest(),
+      env: { ...process.env, PATH: "" },
+      piRunner: async (options) => {
+        const file = options.runtimeTools?.manifest.files[0];
+        const range = file?.commentableRanges[0];
+        if (!file || !range) throw new Error("expected a shard manifest");
+        const firstShard = file.path === "src/file-0.ts";
+        if (!firstShard && options.provider.model === provider.model) {
+          throw piRunFailure("temporary failure");
+        }
+        return reviewPiResultForPrompt(options.prompt, [
+          finding(
+            firstShard ? "first shard" : "second shard",
+            range.id,
+            range.startLine,
+            file.path,
+          ),
+        ]);
+      },
+    });
+
+    const proposed = ledger.events().filter((event) => event.kind === "proposed");
+    expect(proposed.map((event) => event.model)).toEqual([provider.model, "fallback-model"]);
+  });
+
   it("lets each Pi run override the global Diff Manifest shard limit", async () => {
     const oneShardMarker = "ONE_SHARD_RUN";
     const twoShardMarker = "TWO_SHARD_RUN";
@@ -1720,6 +1753,37 @@ describe("runTaskRuntime: Pi retries, fallbacks, tools, secrets, and publication
       ["No fix.", "suggested fix is missing or not publishable"],
       ["Identical fix.", "suggested fix is missing or not publishable"],
     ]);
+  });
+
+  it("drops nothing for the cap when select has no limit", async () => {
+    let dropped: unknown[] = [];
+    const plan = testPlan((pipr) => {
+      pipr.task({
+        on: { changeRequest: ["opened"] },
+        name: "review",
+        async run(ctx) {
+          const selection = ctx.review.select([
+            finding("first", "range-1", 10),
+            finding("second", "range-2", 20),
+          ]);
+          dropped = selection.dropped.map((item) => [item.finding.body, item.code]);
+          await ctx.comment({ main: "Done.", inlineFindings: selection.findings });
+        },
+      });
+    });
+
+    const { maxInlineComments: _, ...publication } = config.publication;
+    const result = await runRuntime({
+      plan,
+      config: { ...config, publication },
+      diffManifestBuilder: () => reviewTestManifest(),
+    });
+
+    expect(result.inlineCommentDrafts.map((draft) => draft.finding.body)).toEqual([
+      "first body",
+      "second body",
+    ]);
+    expect(dropped).toEqual([]);
   });
 
   it("attributes outcome events to the producing agent, model, and facets", async () => {

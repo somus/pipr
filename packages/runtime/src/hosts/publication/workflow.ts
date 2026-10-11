@@ -185,6 +185,7 @@ async function publishReview<Prepared>(
     options.plan.inlineItems,
     initial,
     beforeWrite,
+    options.onInlinePosted,
   );
   const resolution = await runThreadActions(
     driver,
@@ -192,6 +193,7 @@ async function publishReview<Prepared>(
     options.plan.threadActions,
     initial.threads,
     beforeWrite,
+    options.onThreadActionApplied,
   );
   const partial = publicationPartial(options.plan.metadata, inline, resolution.errors);
   if (inline.errors.length > 0 && options.progressLease) {
@@ -286,7 +288,14 @@ async function publishThreadActions<Prepared>(
     ? await driver.loadOwnedThreads(prepared, options.actions)
     : (await driver.loadOwnedState(prepared, mainCommentMarker)).threads;
   await assertCurrent();
-  return runThreadActions(driver, prepared, options.actions, threads, assertCurrent);
+  return runThreadActions(
+    driver,
+    prepared,
+    options.actions,
+    threads,
+    assertCurrent,
+    options.onThreadActionApplied,
+  );
 }
 
 async function assertCurrentEndpoints<Prepared>(
@@ -306,6 +315,7 @@ async function publishInlineItems<Prepared>(
   items: readonly InlinePublicationItem[],
   state: LoadedPublicationState,
   beforeWrite: () => Promise<void>,
+  onPosted?: (findingId: string) => void,
 ) {
   const markers = new Set(
     extractInlineFindingMarkerRecords(state.inline.map((item) => item.body)).map(
@@ -341,6 +351,7 @@ async function publishInlineItems<Prepared>(
     try {
       await driver.createInline(prepared, item);
       postedFindingIds.push(item.findingId);
+      onPosted?.(item.findingId);
       markers.add(marker);
       locations.push(location);
     } catch (error) {
@@ -356,10 +367,13 @@ async function runThreadActions<Prepared>(
   actions: readonly ThreadAction[],
   threads: readonly InlineThreadContext[],
   beforeWrite: () => Promise<void>,
+  onApplied?: (action: ThreadAction) => void,
 ): Promise<{ errors: string[] }> {
   const errors: string[] = [];
   for (const action of actions) {
-    errors.push(...(await runThreadAction(driver, prepared, action, threads, beforeWrite)));
+    errors.push(
+      ...(await runThreadAction(driver, prepared, action, threads, beforeWrite, onApplied)),
+    );
   }
   return { errors };
 }
@@ -370,13 +384,18 @@ async function runThreadAction<Prepared>(
   action: ThreadAction,
   threads: readonly InlineThreadContext[],
   beforeWrite: () => Promise<void>,
+  onApplied?: (action: ThreadAction) => void,
 ): Promise<string[]> {
   const thread = threadForAction(threads, action);
   if (!thread) return [`${driver.provider} thread not found for comment ${action.commentId}`];
-  if (action.kind === "resolve" && thread.threadResolved) return [];
+  if (action.kind === "resolve" && thread.threadResolved) {
+    if (threadReplyExists(thread, action)) onApplied?.(action);
+    return [];
+  }
   const errors: string[] = [];
   const replyError = await runThreadReply(driver, prepared, action, thread, beforeWrite);
   if (replyError) errors.push(replyError);
+  else onApplied?.(action);
   const resolveError = await runThreadResolution(driver, prepared, action, thread, beforeWrite);
   if (resolveError) errors.push(resolveError);
   return errors;

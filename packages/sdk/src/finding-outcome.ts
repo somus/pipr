@@ -27,6 +27,7 @@ export const findingDropCodes = [
   "unpublishable-fix",
   "cap",
   "inline-cap",
+  "inline-unsupported",
   "empty-body",
   "schema-invalid",
 ] as const;

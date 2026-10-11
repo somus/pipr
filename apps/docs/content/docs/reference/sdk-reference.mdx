@@ -371,7 +371,7 @@ When structural analysis is available, manifest files and ranges can include bes
 
 `ctx.command.reply(...)` emits a normal change-request comment response for command tasks. A task must emit exactly one final output: either `ctx.comment(...)` for review publication or `ctx.command.reply(...)` for command response publication.
 
-When a custom task uses path scoping, pass the same `paths` to `ctx.change.diff(...)` and `ctx.pi.run(...)`. Pipr infers that scope when `ctx.review.select(...)` receives the exact finding arrays returned by `ctx.pi.run(...)`. Pass `{ paths }` after mapping, sorting, or combining arrays.
+When a custom task uses path scoping, pass the same `paths` to `ctx.change.diff(...)` and `ctx.pi.run(...)`. Pipr infers that scope only when `ctx.review.select(...)` receives the exact `inlineFindings` array of a `ctx.pi.run(...)` result. Pass `{ paths }` for finding arrays under other output fields, and after mapping, sorting, or combining arrays.
 
 `ctx.review.select(...)` ranks findings first, so when two findings share a fingerprint the higher-ranked one is kept. It then caps at `limit`, which defaults to `publication.maxInlineComments`, and reports capped findings with reason `cap`. Pass `limit: list.length` before `ctx.check.gate(...)` so the cap cannot hide blockers. Pass `requireSuggestedFix: true` to keep only findings whose `suggestedFix` Pipr can publish as an exact suggestion.
 

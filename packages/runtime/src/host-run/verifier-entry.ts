@@ -24,6 +24,7 @@ import type { HostRunPorts, HostRunServices } from "./composition.js";
 import { hasRequiredRepositoryPermission } from "./entry-dispatch.js";
 import { ignore, logPhase } from "./logging.js";
 import { changeRequestPiStoreDir } from "./pi-store.js";
+import { threadActionOutcomeRecorder } from "./review-publishing.js";
 import {
   loadCommentChangeRequest,
   loadTrustedRuntimeForEvent,
@@ -53,6 +54,11 @@ export async function runReviewCommentReplyHostRunCommand(
       change: prepared.event,
       actions: result.threadActions,
       reviewedHeadSha: prepared.event.change.head.sha,
+      onThreadActionApplied: threadActionOutcomeRecorder(
+        services.findingLedger,
+        result.ledgerContext,
+        result.threadActionOutcomes,
+      ),
     }),
   );
   services.log.notice("verifier publication", {
@@ -229,19 +235,18 @@ async function runReviewCommentVerifier(
       piRuns.push(run);
     },
   });
-  services.findingLedger.record(
-    findingLedgerContext(
-      { event, trustedConfigHash: trustedRuntime.trustedConfigHash },
-      runContext,
-    ),
-    replyOutcomes({
-      threadContexts,
-      reply,
-      actorPermission: prepared.actorPermission,
-      verdicts: result.verdicts,
-      priorReviewState,
-    }),
+  const ledgerContext = findingLedgerContext(
+    { event, trustedConfigHash: trustedRuntime.trustedConfigHash },
+    runContext,
   );
+  const outcomes = replyOutcomes({
+    threadContexts,
+    reply,
+    actorPermission: prepared.actorPermission,
+    verdicts: result.verdicts,
+    priorReviewState,
+  });
+  services.findingLedger.record(ledgerContext, outcomes.immediate);
   const durationMs = Date.now() - started;
   const stats = reviewStatsForRuns(piRuns, durationMs);
   const run = verifierRunSummary({
@@ -255,6 +260,8 @@ async function runReviewCommentVerifier(
   return {
     ...result,
     run,
+    ledgerContext,
+    threadActionOutcomes: outcomes.threadAction,
     threadActions: redactThreadActions({
       threadActions: result.threadActions,
       redactor: services.secretRedactor,
@@ -311,14 +318,21 @@ function replyOutcomes(options: {
   actorPermission: FindingActorPermission;
   verdicts: Awaited<ReturnType<typeof runInternalVerifier>>["verdicts"];
   priorReviewState: PriorReviewState | undefined;
-}): FindingOutcomeEmission[] {
+}): {
+  immediate: FindingOutcomeEmission[];
+  /** Verdict outcomes anchored to the marker their thread action leaves. */
+  threadAction: FindingOutcomeEmission[];
+} {
   const records = new Map(options.priorReviewState?.findings.map((record) => [record.id, record]));
   const attribution = (findingId: string) => {
     const stored = priorFindingAttribution(records.get(findingId));
     return stored ? { attribution: stored } : {};
   };
   const thread = replyThreadContext(options.threadContexts, options.reply);
-  return [
+  const verdicts = options.verdicts.map((verdict) =>
+    verifierVerdictOutcome(verdict, priorFindingAttribution(records.get(verdict.findingId))),
+  );
+  const replied: FindingOutcomeEmission[] = [
     ...(thread
       ? [
           {
@@ -330,10 +344,11 @@ function replyOutcomes(options: {
           },
         ]
       : []),
-    ...options.verdicts.map((verdict) =>
-      verifierVerdictOutcome(verdict, priorFindingAttribution(records.get(verdict.findingId))),
-    ),
   ];
+  return {
+    immediate: [...replied, ...verdicts.filter((outcome) => !outcome.anchor)],
+    threadAction: verdicts.filter((outcome) => outcome.anchor),
+  };
 }
 
 /**

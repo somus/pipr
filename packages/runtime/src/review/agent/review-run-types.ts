@@ -62,6 +62,8 @@ export type RunReviewAgentResult = {
   value: unknown;
   repairAttempted: boolean;
   providerModels: string[];
+  /** Per-shard outputs and the model that produced each, in shard order, when the run was sharded. */
+  shards?: { value: unknown; model: string | undefined }[];
 };
 
 export type ParseAgentResult = { ok: true; value: unknown } | { ok: false; error: string };

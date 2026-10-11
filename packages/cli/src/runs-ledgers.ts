@@ -29,8 +29,11 @@ import type { RunsLedgerOptions } from "./runs-types.js";
 /** Finding Outcome events gathered from Run Bundles and the webhook database. */
 export type CollectedLedgers = {
   sources: FindingOutcomeSource[];
-  /** Diagnostic evidence by finding ID; empty unless bundles were decrypted. */
-  evidence: Map<string, FindingEvidence>;
+  /**
+   * Diagnostic evidence by finding ID, then by the execution ID of the run that recorded it;
+   * empty unless bundles were decrypted.
+   */
+  evidence: Map<string, Map<string, FindingEvidence>>;
   runs: number;
   webhookEvents: number;
   errors: Array<{ source: string; message: string }>;
@@ -50,12 +53,14 @@ export async function collectFindingLedgers(
   const selector = await resolveRepositorySelector({ ...options, cwd: context.cwd }).catch(
     () => undefined,
   );
+  // The flags override the Git remote, which otherwise selects the repository to aggregate.
+  const repository = selector?.repository ?? options.repository;
   const query: RunQuery = {
     kind: "all",
     status: "available",
     limit: parseLimit(options.limit ?? "100"),
-    ...(options.host && selector ? { host: selector.host } : {}),
-    ...(options.repository ? { repository: options.repository } : {}),
+    ...(selector ? { host: selector.host } : {}),
+    ...(repository ? { repository } : {}),
   };
   const collected = await collectRecords(await runSources(options.store, context, selector), query);
   const result: CollectedLedgers = {
@@ -71,7 +76,7 @@ export async function collectFindingLedgers(
   await withTemporaryRoot("pipr-runs-ledgers-", async (temporaryRoot) => {
     for (const record of records) {
       await readRecordLedger(record, temporaryRoot, identities).then(
-        (ledger) => addLedger(result, ledger, since),
+        (ledger) => addLedger(result, record.executionId, ledger, since),
         (error: unknown) =>
           result.errors.push({
             source: record.executionId,
@@ -83,7 +88,7 @@ export async function collectFindingLedgers(
   const databasePath = options.webhookDb ?? context.env.PIPR_WEBHOOK_DB;
   if (databasePath) {
     addWebhookEvents(result, path.resolve(context.cwd, databasePath), {
-      ...(options.repository ? { repository: options.repository } : {}),
+      ...(repository ? { repository } : {}),
       ...(since ? { since } : {}),
       limit: parseEventLimit(options.eventLimit),
     });
@@ -93,6 +98,7 @@ export async function collectFindingLedgers(
 
 function addLedger(
   result: CollectedLedgers,
+  executionId: string,
   ledger: DiagnosticFindingLedger | FindingLedger | undefined,
   since: Date | undefined,
 ): void {
@@ -104,7 +110,8 @@ function addLedger(
   });
   const evidence = "evidence" in ledger ? Object.entries(ledger.evidence) : [];
   for (const [findingId, item] of evidence) {
-    if (!result.evidence.has(findingId)) result.evidence.set(findingId, item);
+    const byExecution = result.evidence.get(findingId) ?? new Map<string, FindingEvidence>();
+    result.evidence.set(findingId, byExecution.set(executionId, item));
   }
 }
 

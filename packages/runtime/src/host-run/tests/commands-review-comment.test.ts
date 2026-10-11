@@ -241,6 +241,28 @@ describe("runHostRunCommand pull_request_review_comment dispatch", () => {
     }
   });
 
+  it("records a still-valid verdict only once its verifier reply is posted", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const publication = verifierPublicationClient(workspace);
+    publication.createReviewCommentReply = async () => {
+      throw new Error("reply rejected");
+    };
+    try {
+      await writeStillValidVerifierOutput(workspace);
+      await writeReviewCommentEvent(path.join(workspace.rootDir, "event.json"));
+      const result = await runReviewCommentAction(workspace, {
+        githubClient: fakeGitHubClient(workspace, "write"),
+        githubPublicationClient: publication,
+      });
+      if (result.kind !== "verifier") throw new Error("expected verifier result");
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.findingEvents.map((event) => event.kind)).toEqual(["replied"]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
   it("runs user-reply verifier and publishes still-valid responses", async () => {
     const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
     const publication = verifierPublicationClient(workspace);

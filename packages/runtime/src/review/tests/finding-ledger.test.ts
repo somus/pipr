@@ -215,6 +215,24 @@ describe("finding outcome ledger", () => {
     ]);
   });
 
+  it("does not outdate prior findings that never got an inline comment", () => {
+    const opened = reviewRun({
+      headSha: "head-1",
+      findings: [finding("Capped before commenting.", 10)],
+      maxInlineComments: 0,
+    });
+    expect(opened.state?.findings).toHaveLength(1);
+    expect(opened.state?.findings[0]?.lastCommentedHeadSha).toBeUndefined();
+
+    const synchronized = reviewRun({
+      headSha: "head-2",
+      findings: [],
+      priorReviewState: opened.state,
+    });
+
+    expect(synchronized.ledger.events().map((event) => event.kind)).not.toContain("outdated");
+  });
+
   it("drops capped findings and carries findings already commented at this head", () => {
     const opened = reviewRun({ headSha: "head-1", findings: [finding("First.", 10)] });
     const rerun = reviewRun({
