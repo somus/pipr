@@ -531,6 +531,26 @@ function publicSpan(span: RunSpanRecord): RunSpanRecord | undefined {
   };
 }
 
+/**
+ * Public keys earlier versions wrote. Packages they captured must still open, so validation
+ * accepts these keys with their original value type; new metadata never includes them.
+ */
+const legacyPublicSpanAttributes = new Map<string, "number" | "string">([
+  ["pipr.process.exit_code", "number"],
+  ["pipr.response.stderr_bytes", "number"],
+  ["pipr.response.stdout_bytes", "number"],
+]);
+const legacyPublicLogFields = new Map<string, "number" | "string">([["attemptId", "string"]]);
+
+function withoutLegacyKeys(
+  record: Record<string, unknown>,
+  legacy: Map<string, "number" | "string">,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([key, value]) => legacy.get(key) !== typeof value),
+  );
+}
+
 async function validatePublicMetadata(bundle: ValidatedRunBundle): Promise<void> {
   if (bundle.manifest.capture.mode !== "metadata") {
     throw new Error("Protected package metadata must use metadata capture mode");
@@ -541,7 +561,8 @@ async function validatePublicMetadata(bundle: ValidatedRunBundle): Promise<void>
       return (
         log.text !== undefined ||
         projected === undefined ||
-        JSON.stringify(projected.fields) !== JSON.stringify(log.fields)
+        JSON.stringify(projected.fields) !==
+          JSON.stringify(withoutLegacyKeys(log.fields, legacyPublicLogFields))
       );
     })
   ) {
@@ -552,7 +573,8 @@ async function validatePublicMetadata(bundle: ValidatedRunBundle): Promise<void>
       const projected = publicSpan(span);
       return (
         projected === undefined ||
-        JSON.stringify(projected.attributes) !== JSON.stringify(span.attributes)
+        JSON.stringify(projected.attributes) !==
+          JSON.stringify(withoutLegacyKeys(span.attributes, legacyPublicSpanAttributes))
       );
     })
   ) {

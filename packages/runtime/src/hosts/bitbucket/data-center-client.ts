@@ -25,6 +25,11 @@ const repositorySchema = z.looseObject({
   name: z.string().min(1),
   slug: z.string().min(1),
   project: z.looseObject({ key: z.string().min(1) }),
+  links: z
+    .looseObject({
+      clone: z.array(z.looseObject({ name: z.string(), href: z.string().url() })).optional(),
+    })
+    .optional(),
 });
 const refSchema = z.looseObject({
   id: z.string().min(1),
@@ -163,8 +168,13 @@ export function createBitbucketDataCenterClient(
       if (options.workspace !== workspace || options.repository !== repository) {
         throw new Error("Bitbucket client coordinates do not match the requested repository");
       }
-      const pullRequest = await this.getPullRequest(options.changeNumber);
-      return loadedBitbucketChange(pullRequest, workspace, repository);
+      const native = await getDataCenterPullRequest(options.changeNumber);
+      return loadedBitbucketChange(
+        normalizePullRequest(native, baseUrl),
+        workspace,
+        repository,
+        repositoryCloneUrl(baseUrl, native.fromRef.repository),
+      );
     },
     async listComments(id) {
       const activities = await listDataCenterPage(
@@ -385,6 +395,21 @@ async function listDataCenterPage<T>(
 
 function repositoryWebUrl(baseUrl: string, projectKey: string, repository: string): string {
   return `${baseUrl}projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repository)}/browse`;
+}
+
+/**
+ * Git remote for a repository. The `/browse` web URL is not a Git endpoint, so fork heads are
+ * fetched from the HTTP clone link, without the user Data Center embeds in it.
+ */
+function repositoryCloneUrl(baseUrl: string, native: z.infer<typeof repositorySchema>): string {
+  const href = native.links?.clone?.find((link) => link.name === "http")?.href;
+  if (!href) {
+    return `${baseUrl}scm/${encodeURIComponent(native.project.key)}/${encodeURIComponent(native.slug)}.git`;
+  }
+  const url = new URL(href);
+  url.username = "";
+  url.password = "";
+  return url.href;
 }
 
 function pullRequestWebUrl(

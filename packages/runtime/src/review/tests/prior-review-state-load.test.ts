@@ -165,6 +165,49 @@ describe("reconcilePriorReviewState", () => {
     expect(reloaded.state.findings[0]?.h).toEqual(loaded.state.findings[0]?.h);
   });
 
+  it("rebuilds still-valid verifier replies to distinct human replies on one finding", () => {
+    const firstKey = `reply-42:thread-7:still-valid:${findingId}`;
+    const secondKey = `reply-43:thread-7:still-valid:${findingId}`;
+    const loaded = reconcilePriorReviewState({
+      prior: stored(),
+      inline: [inline(false)],
+      replyBodies: [
+        `${renderVerifierResponseMarker(findingId, firstKey)}\n\nStill applies.`,
+        `${renderVerifierResponseMarker(findingId, secondKey)}\n\nStill applies.`,
+      ],
+      threadResolution: "available",
+    });
+
+    expect(loaded.events.map((event) => event.anchor)).toEqual([
+      "reply:thread-7:42",
+      `verifier-response:${firstKey}`,
+      "reply:thread-7:43",
+      `verifier-response:${secondKey}`,
+    ]);
+  });
+
+  it("ignores a human resolution of a stale thread when the finding was reposted at a newer head", () => {
+    const newerHead = "b".repeat(40);
+    const loaded = reconcilePriorReviewState({
+      prior: stored(),
+      inline: [
+        inline(true),
+        {
+          body: `${renderInlineFindingMarker(findingId, newerHead)}\n\nUnchecked input.`,
+          resolved: false,
+        },
+      ],
+      replyBodies: [],
+      threadResolution: "available",
+    });
+
+    expect(loaded.state.findings[0]).toMatchObject({
+      status: "open",
+      lastCommentedHeadSha: newerHead,
+    });
+    expect(loaded.events).toEqual([]);
+  });
+
   it("observes no human resolution where the host has no thread resolution", () => {
     const loaded = reconcilePriorReviewState({
       prior: stored(),

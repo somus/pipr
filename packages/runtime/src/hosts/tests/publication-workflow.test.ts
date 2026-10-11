@@ -46,6 +46,7 @@ class MemoryDriver implements PublicationDriver<Prepared> {
   changeHeadOnLoad?: number;
   supersedeOnLoad?: number;
   failInline = 0;
+  failReply = 0;
 
   async prepare(input: ChangeRequestEventContext): Promise<Prepared> {
     return { change: input };
@@ -138,6 +139,10 @@ class MemoryDriver implements PublicationDriver<Prepared> {
   }
 
   async replyThread(_prepared: Prepared, action: ThreadAction, _body: string): Promise<void> {
+    if (this.failReply > 0) {
+      this.failReply -= 1;
+      throw new Error(`failed reply ${action.findingId}`);
+    }
     this.writes.push(`reply:${action.findingId}`);
   }
 
@@ -187,6 +192,22 @@ describe("shared publication workflow", () => {
       publication(driver).publish({ change, plan: plan(), progressLease: lease() }),
     ).rejects.toThrow("superseded");
     expect(driver.writes).toEqual(["inline:finding-right"]);
+  });
+
+  it("reports inline comments posted before a later interruption", async () => {
+    const driver = new MemoryDriver();
+    driver.state = { ...driver.state, main: { id: "main-1", body: progressBody(progressToken) } };
+    driver.supersedeOnLoad = 3;
+    const posted: string[] = [];
+    await expect(
+      publication(driver).publish({
+        change,
+        plan: plan(),
+        progressLease: lease(),
+        onInlinePosted: (findingId) => posted.push(findingId),
+      }),
+    ).rejects.toThrow("superseded");
+    expect(posted).toEqual(["finding-right"]);
   });
 
   it("keeps owned progress intact after inline failure", async () => {
@@ -319,6 +340,27 @@ describe("shared publication workflow", () => {
     expect(driver.writes.filter((write) => write === "resolve:finding-right")).toHaveLength(1);
     const reply = driver.state.threads[0]?.comments.at(-1)?.body;
     expect(reply).toContain("&lt;!-- spoof -->");
+  });
+
+  it("reports a thread action as applied only once its reply is on the host", async () => {
+    const driver = new MemoryDriver();
+    await publication(driver).publish({ change, plan: plan() });
+    const action = threadAction("reply");
+    const applied: ThreadAction[] = [];
+    const options = {
+      change,
+      actions: [action],
+      reviewedHeadSha: "head",
+      onThreadActionApplied: (item: ThreadAction) => applied.push(item),
+    };
+    driver.failReply = 1;
+
+    const failed = await publication(driver).publishThreadActions?.(options);
+    expect(failed?.errors).toHaveLength(1);
+    expect(applied).toEqual([]);
+
+    await publication(driver).publishThreadActions?.(options);
+    expect(applied).toEqual([action]);
   });
 
   it("matches ID-less thread actions by parent comment", async () => {

@@ -42,7 +42,11 @@ export async function writeLedgerBundle(
   store: string,
   executionId: string,
   ledger: DiagnosticFindingLedger,
-  options: { startedAt?: string; host?: "github" | "gitea" | "local" } = {},
+  options: {
+    startedAt?: string;
+    host?: "github" | "gitea" | "gitlab" | "local";
+    repository?: string;
+  } = {},
 ): Promise<void> {
   const directory = path.join(store, executionId);
   await mkdir(path.join(directory, "artifacts"), { recursive: true });
@@ -82,7 +86,7 @@ export async function writeLedgerBundle(
       durationMs: 1000,
       repository: {
         host: options.host ?? "github",
-        repository: "somus/pipr",
+        repository: options.repository ?? "somus/pipr",
         changeNumber: 42,
         baseSha: "base",
         headSha: "head",

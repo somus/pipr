@@ -100,7 +100,7 @@ type AttributedFinding = { finding: ReviewFinding; attribution: FindingAttributi
 /**
  * Derives outcomes decided by one review run: every validated finding is proposed; validation,
  * selection, and publication planning drop some; re-found prior findings are carried, prior open
- * findings not re-found are outdated, and verifier verdicts mark prior findings fixed or still
+ * findings that were commented but not re-found are outdated, and verifier verdicts mark prior findings fixed or still
  * valid. Published outcomes follow publication through {@link FindingLedger.recordPublished}.
  *
  * Valid findings use the IDs publication planning assigned; dropped findings get the ID
@@ -147,7 +147,13 @@ export function deriveReviewFindingOutcomes(input: {
   const judged = new Set(input.verdicts.map((verdict) => verdict.findingId));
   const priorRecords = new Map(prior?.findings.map((record) => [record.id, record]));
   for (const record of prior?.findings ?? []) {
-    if (record.status === "open" && !reported.has(record.id) && !judged.has(record.id)) {
+    // Only findings that got an inline comment were published, so only they can go outdated.
+    if (
+      record.status === "open" &&
+      record.lastCommentedHeadSha &&
+      !reported.has(record.id) &&
+      !judged.has(record.id)
+    ) {
       const attribution = priorFindingAttribution(record);
       emissions.push({
         kind: "outdated",

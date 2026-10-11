@@ -373,6 +373,7 @@ function reviewResult(overrides: Omit<Partial<ResultOf<"review">>, "kind"> = {})
       diffManifest: { baseSha: "base", headSha: "head", mergeBaseSha: "base", files: [] },
       taskChecks: [],
       repairAttempted: true,
+      threadActionOutcomes: [],
       review,
       validated: {
         review,

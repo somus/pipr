@@ -27,7 +27,11 @@ import { parseDiffManifest, parsePiprConfig, parseProviderConfig } from "../../t
 import { type AgentRunBudget, createAgentRunBudget } from "../agent/agent-run-budget.js";
 import { resolveProvider } from "../agent/prompt-assembly.js";
 import type { PiRunStats } from "../agent/review-run-types.js";
-import { deriveReviewFindingOutcomes, findingLedgerContext } from "../finding-ledger.js";
+import {
+  deriveReviewFindingOutcomes,
+  type FindingOutcomeEmission,
+  findingLedgerContext,
+} from "../finding-ledger.js";
 import { priorReviewStateForSelectedTasks } from "../prior-state.js";
 import { buildCommentPublishingPlan, type InlineCommentDraft } from "../publication-plan.js";
 import { redactCommandPublication, redactReviewPublication } from "../publication-redaction.js";
@@ -69,6 +73,11 @@ export type ReviewRuntimeResult =
       publicationPlan: PublicationPlan;
       mainComment: string;
       inlineCommentDrafts: InlineCommentDraft[];
+      /**
+       * Verifier outcomes anchored to the marker a planned thread action leaves; recorded only once
+       * publication puts that marker on the host.
+       */
+      threadActionOutcomes: FindingOutcomeEmission[];
       commandResponse?: never;
     })
   | (ReviewRuntimeBaseResult & {
@@ -399,7 +408,12 @@ async function runTaskRuntimeWithPiRunner(
     },
   });
   const publicationPlan = publishing.publicationPlan;
-  options.findingLedger?.record(findingLedgerContext(options, run), publishing.findingOutcomes);
+  // Only verifier verdicts carry anchors here; each waits for its thread action's host marker.
+  const threadActionOutcomes = publishing.findingOutcomes.filter((outcome) => outcome.anchor);
+  options.findingLedger?.record(
+    findingLedgerContext(options, run),
+    publishing.findingOutcomes.filter((outcome) => !outcome.anchor),
+  );
   publishTaskChecks(options.checkSink, redactedPublication.taskChecks);
   options.log?.info("review validated", {
     validFindings: validated.validFindings.length,
@@ -447,6 +461,7 @@ async function runTaskRuntimeWithPiRunner(
     publicationPlan,
     mainComment: publicationPlan.mainComment,
     inlineCommentDrafts: publishing.inlineCommentDrafts,
+    threadActionOutcomes,
     taskChecks: redactedPublication.taskChecks,
     repairAttempted: output.repairAttempted,
   };

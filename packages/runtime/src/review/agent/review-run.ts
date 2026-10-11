@@ -168,6 +168,7 @@ function mergeScheduledReviewAgentResults(
         }),
         repairAttempted: results.some((result) => result.repairAttempted),
         providerModels: results.flatMap((result) => result.providerModels),
+        shards: shardSources(results),
       };
     })
     .with("review", () => {
@@ -186,9 +187,14 @@ function mergeScheduledReviewAgentResults(
         }),
         repairAttempted: results.some((result) => result.repairAttempted),
         providerModels: results.flatMap((result) => result.providerModels),
+        shards: shardSources(results),
       };
     })
     .exhaustive();
+}
+
+function shardSources(results: readonly RunReviewAgentResult[]): RunReviewAgentResult["shards"] {
+  return results.map((result) => ({ value: result.value, model: result.providerModels.at(-1) }));
 }
 
 /** First occurrence wins for findings sharing a path, range, side, line span, and body. */

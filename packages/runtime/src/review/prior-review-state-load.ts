@@ -122,12 +122,14 @@ type MarkerOutcomes = {
   findingId: string;
   headSha: string;
   recorded: { kind: "fixed" | "still-valid" | "resolved-by-human"; headSha?: string };
+  /** Distinguishes markers of one finding and kind that show separate outcomes, such as replies. */
+  identity?: string;
   emissions: Omit<FindingOutcomeEmission, "findingId" | "attribution">[];
 };
 
 /**
- * Outcomes shown by host markers, once per finding and kind, attributed from the stored finding
- * and flagged when the stored history already notes them.
+ * Outcomes shown by host markers, once per finding, kind, and reply, attributed from the stored
+ * finding and flagged when the stored history already notes them.
  */
 function observedOutcomes(
   state: PriorReviewState,
@@ -151,6 +153,7 @@ function observedOutcomes(
         findingId: marker.id,
         headSha,
         recorded: { kind: "still-valid" as const, headSha },
+        identity: marker.responseKey,
         emissions: [
           {
             kind: "replied" as const,
@@ -164,12 +167,18 @@ function observedOutcomes(
         ],
       };
     }),
-    ...humanResolutions(nativeResolutions, piprResolutions),
+    ...humanResolutions(
+      nativeResolutions.filter(
+        (resolution) =>
+          records.get(resolution.findingId)?.lastCommentedHeadSha === resolution.findingHeadSha,
+      ),
+      piprResolutions,
+    ),
   ];
   const observed = new Set<string>();
   return candidates.flatMap((candidate) => {
     const record = records.get(candidate.findingId);
-    const key = `${candidate.findingId}:${candidate.recorded.kind}`;
+    const key = `${candidate.findingId}:${candidate.recorded.kind}:${candidate.identity ?? ""}`;
     if (!record || observed.has(key)) return [];
     observed.add(key);
     const recorded = findingHistoryHas(record, candidate.recorded.kind, candidate.recorded.headSha);
@@ -182,7 +191,11 @@ function observedOutcomes(
   });
 }
 
-/** Natively resolved threads without a Pipr resolution marker for the same finding and head. */
+/**
+ * Natively resolved threads without a Pipr resolution marker for the same finding and head. Callers
+ * pass only each finding's current thread, so resolving a stale thread of a reposted finding is not
+ * a human resolution.
+ */
 function humanResolutions(
   nativeResolutions: readonly NativeResolution[],
   piprResolutions: readonly { id: string; head: string }[],

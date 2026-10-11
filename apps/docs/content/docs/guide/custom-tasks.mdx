@@ -87,7 +87,7 @@ await ctx.comment({
 });
 ```
 
-Pipr validates against the full runtime Diff Manifest and current event head. It preserves extra fields such as severity on returned findings and reports each dropped finding with its reason. If you map or combine an agent's finding arrays, pass `paths` explicitly; Pipr can infer the scope only from the exact arrays returned by `ctx.pi.run(...)`.
+Pipr validates against the full runtime Diff Manifest and current event head. It preserves extra fields such as severity on returned findings and reports each dropped finding with its reason. Pipr infers the scope only from the exact `inlineFindings` array of a `ctx.pi.run(...)` result. Pass `paths` explicitly for finding arrays under other output fields, and when you map or combine an agent's finding arrays.
 
 `select` caps at `publication.maxInlineComments` by default. Pass `limit` when every valid finding should count toward a check.
 

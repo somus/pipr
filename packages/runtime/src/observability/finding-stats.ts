@@ -191,7 +191,7 @@ function summarizeFindings(sources: readonly FindingOutcomeSource[]): {
   );
   const byFinding = new Map<string, DedupedEvent[]>();
   for (const entry of ordered) {
-    byFinding.set(entry.event.findingId, [...(byFinding.get(entry.event.findingId) ?? []), entry]);
+    appendTo(byFinding, entry.event.findingId, entry);
   }
   const findings = [...byFinding.entries()]
     .map(([findingId, entries]) => summarizeFinding(findingId, entries))
@@ -308,12 +308,19 @@ function groupFindings(
   const groups = new Map<string, FindingSummary[]>();
   for (const finding of findings) {
     for (const key of groupKeys(finding, groupBy)) {
-      groups.set(key, [...(groups.get(key) ?? []), finding]);
+      appendTo(groups, key, finding);
     }
   }
   return [...groups.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, members]) => ({ key, ...countFindings(members) }));
+}
+
+/** Appends in place; copying a bucket per insertion is quadratic over 100,000 events. */
+function appendTo<T>(buckets: Map<string, T[]>, key: string, item: T): void {
+  const bucket = buckets.get(key);
+  if (bucket) bucket.push(item);
+  else buckets.set(key, [item]);
 }
 
 function groupKeys(finding: FindingSummary, groupBy: FindingStatsGroupBy): string[] {

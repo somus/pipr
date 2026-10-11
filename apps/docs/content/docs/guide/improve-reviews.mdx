@@ -18,7 +18,7 @@ review ──► maintainers react ──► Finding Outcomes ──► pipr run
 
 - Capture Run Bundles, or run the webhook runner, so outcomes reach a source `pipr runs` can read. On GitHub Actions, keep the upload step from the generated workflow.
 - To export datasets, set `PIPR_RUN_AGE_RECIPIENTS` and keep the matching identity from `pipr runs keygen`. Without it, bundles hold only the content-free public ledger.
-- Review on a host with thread resolution (GitHub, GitLab, Bitbucket, or Azure DevOps) if you want dismissal signals. Gitea, Forgejo, and Codeberg record fixes and replies but never dismissals.
+- Review on GitHub, GitLab, Bitbucket, or Azure DevOps if you want reply and dismissal signals. Gitea, Forgejo, and Codeberg support neither review comment replies nor thread resolution, so they record fixes the verifier confirms on later pushes but never replies or dismissals.
 - Declare enum fields with [`pipr.finding(...)`](/docs/guide/custom-tasks#define-custom-findings), such as severity or category, if you want to compare outcomes by finding kind.
 
 ## 1. Find the weak spot

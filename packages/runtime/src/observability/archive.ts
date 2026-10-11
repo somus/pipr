@@ -151,8 +151,14 @@ export class FileSystemRunArchiveSource implements RunArchiveSource {
   }
 }
 
-/** One span per agent attempt; it carries the attempt's usage totals. */
-const agentSpanName = "gen_ai.invoke_agent";
+/**
+ * One span per agent attempt; it carries the attempt's usage totals. Bundles captured before
+ * per-turn model spans recorded each attempt as a `gen_ai.chat` span with the same attributes.
+ */
+function agentAttemptSpans(spans: RunSpanRecord[]): RunSpanRecord[] {
+  const attempts = spans.filter((span) => span.name === "gen_ai.invoke_agent");
+  return attempts.length > 0 ? attempts : spans.filter((span) => span.name === "gen_ai.chat");
+}
 
 export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
   const timedSpans = bundle.spans.filter(
@@ -176,7 +182,7 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
       status: span.status,
     }));
   // Each agent attempt carries its usage totals; per-turn model spans repeat them, so they are not summed again.
-  const agentAttempts = bundle.spans.filter((span) => span.name === agentSpanName);
+  const agentAttempts = agentAttemptSpans(bundle.spans);
   const usage = agentAttempts.reduce(
     (total, span) => {
       const cacheRead = addSafeTokenTotal(
@@ -236,7 +242,7 @@ export function diagnoseRunBundle(bundle: ValidatedRunBundle): RunDiagnosis {
   const structuralSpan = timedSpans.find((span) => span.name === "pipr.diff.structural_analysis");
   const budgetSpan = bundle.spans.find((span) => span.name === "pipr.agent.run_budget");
   const modelAttempts = timedSpans
-    .filter((span) => span.name === agentSpanName)
+    .filter((span) => agentAttempts.includes(span))
     .sort(compareSpans)
     .map(modelAttemptDiagnosis);
 
@@ -413,7 +419,7 @@ function numberAttribute(span: RunSpanRecord, key: string): number {
 }
 
 function diagnoseCacheUsageStatus(spans: RunSpanRecord[]): "complete" | "partial" | "unavailable" {
-  const statusSpans = spans.filter((span) => span.name === agentSpanName);
+  const statusSpans = agentAttemptSpans(spans);
   const statuses = statusSpans
     .map((span) => stringAttribute(span, "pipr.usage.cache_status"))
     .filter(

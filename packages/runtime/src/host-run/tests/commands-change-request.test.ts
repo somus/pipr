@@ -1599,6 +1599,156 @@ describe("runHostRunCommand finding outcomes after a failure", () => {
   });
 });
 
+describe("runHostRunCommand finding outcomes of interrupted or filtered publication", () => {
+  const twoFindings = JSON.stringify({
+    summary: { body: "Two issues." },
+    inlineFindings: [
+      { ...changedLineFinding, body: "First issue." },
+      {
+        ...changedLineFinding,
+        path: ".pipr/config.ts",
+        startLine: 4,
+        endLine: 5,
+        body: "Second issue.",
+      },
+    ],
+  });
+
+  it("records published for inline comments posted before the head moved", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const github = statefulGitHubPublicationClient(workspace);
+    const createReviewComment = github.client.createReviewComment.bind(github.client);
+    const reviewedHead = workspace.headSha;
+    let currentHead = reviewedHead;
+    github.client.getPullRequestHeadSha = async () => currentHead;
+    github.client.createReviewComment = async (options) => {
+      const created = await createReviewComment(options);
+      currentHead = "f".repeat(40);
+      return created;
+    };
+    const reported: HostRunFindingEvents[] = [];
+    const eventPath = path.join(workspace.rootDir, "opened.json");
+    await writeChangeRequestEvent(eventPath, workspace, "opened");
+    try {
+      await workspace.pi.answer(twoFindings);
+      await runTestHostCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: pullRequestEnv(workspace.rootDir, eventPath),
+        githubPublicationClient: github.client,
+        piProviderModule: workspace.pi.providerModule,
+        onFindingEvents(findings) {
+          reported.push(findings);
+        },
+      }).catch(() => undefined);
+
+      expect(github.reviewComments).toHaveLength(1);
+      expect(reported[0]?.events.map((event) => event.kind)).toEqual([
+        "proposed",
+        "proposed",
+        "published",
+      ]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("records findings the host cannot post inline as dropped", async () => {
+    const workspace = await createCommandWorkspace({ checkoutBaseBeforeRun: true });
+    const github = statefulGitHubPublicationClient(workspace);
+    const adapter = createGitHubHostAdapter({ publicationClient: github.client });
+    const eventPath = path.join(workspace.rootDir, "opened.json");
+    await writeChangeRequestEvent(eventPath, workspace, "opened");
+    try {
+      await workspace.pi.answer(twoFindings);
+      const result = await runTestHostCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: pullRequestEnv(workspace.rootDir, eventPath),
+        hostAdapter: {
+          ...adapter,
+          capabilities: { ...adapter.capabilities, multilineInlineComments: false },
+        },
+        piProviderModule: workspace.pi.providerModule,
+      });
+      if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
+
+      expect(result.findingEvents.map((event) => [event.kind, event.reasonCode])).toEqual([
+        ["proposed", undefined],
+        ["proposed", undefined],
+        ["dropped", "inline-unsupported"],
+        ["published", undefined],
+      ]);
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+
+  it("records a synchronize verdict only once its thread reply is posted", async () => {
+    const workspace = await createCommandWorkspace({
+      checkoutBaseBeforeRun: true,
+      baseConfigTs: reviewConfigTs().replace(
+        'changeRequest: ["opened"]',
+        'changeRequest: ["opened", "updated"]',
+      ),
+    });
+    const github = statefulGitHubPublicationClient(workspace);
+    const run = async (action: "opened" | "synchronize") => {
+      const eventPath = path.join(workspace.rootDir, `${action}.json`);
+      await writeChangeRequestEvent(eventPath, workspace, action);
+      const result = await runTestHostCommand({
+        rootDir: workspace.rootDir,
+        configDir: ".pipr",
+        eventPath,
+        dryRun: false,
+        env: pullRequestEnv(workspace.rootDir, eventPath),
+        githubPublicationClient: github.client,
+        piProviderModule: workspace.pi.providerModule,
+      });
+      if (result.kind !== "review") throw new Error(`Expected review, received ${result.kind}`);
+      return result;
+    };
+    try {
+      await workspace.pi.answer(
+        JSON.stringify({
+          summary: { body: "One issue." },
+          inlineFindings: [{ ...changedLineFinding, body: "Unchecked value." }],
+        }),
+      );
+      const publishedId = (await run("opened")).publication.postedFindingIds[0];
+
+      runGitCommand(["checkout", "--detach", workspace.headSha], workspace.rootDir);
+      await Bun.write(path.join(workspace.rootDir, "src", "a.ts"), "export const value = 3;\n");
+      runGitCommand(["commit", "--no-verify", "-am", "fix"], workspace.rootDir);
+      workspace.headSha = currentGitHead(workspace.rootDir);
+      runGitCommand(["checkout", "--detach", workspace.baseSha], workspace.rootDir);
+      await workspace.pi.script({
+        responses: [{ text: '{"summary":{"body":"No findings."},"inlineFindings":[]}' }],
+        rules: [
+          {
+            when: { promptIncludes: "currentHeadSha" },
+            response: {
+              text: JSON.stringify({ findings: [{ id: publishedId, status: "fixed" }] }),
+            },
+          },
+        ],
+      });
+      github.client.createReviewCommentReply = async () => {
+        throw new Error("reply rejected");
+      };
+      const synchronized = await run("synchronize");
+
+      expect(synchronized.findingEvents.map((event) => event.kind)).not.toContain("fixed");
+    } finally {
+      await removeWorkspace(workspace.rootDir);
+    }
+  });
+});
+
 describe("runHostRunCommand finding outcome history", () => {
   it("carries outcome history across opened, reply, and synchronize runs", async () => {
     const workspace = await createCommandWorkspace({
