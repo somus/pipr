@@ -52,13 +52,13 @@ export function renderOfficialGithubWorkflow(
     "  review:",
     `    runs-on: ${githubRunner}`,
     "    steps:",
-    `      - uses: ${options.checkoutAction ?? "actions/checkout@v6"}`,
+    `      - uses: ${options.checkoutAction ?? "actions/checkout@v7"}`,
     "        with:",
     "          fetch-depth: 0",
   );
   if (!options.minimal) {
     lines.push(
-      "      - uses: actions/cache@v4",
+      "      - uses: actions/cache@v6",
       "        with:",
       "          path: /home/runner/work/_temp/_github_home/.bun/install/cache",
       `          key: pipr-bun-${githubExpression(`hashFiles('${relativeConfigDir}/bun.lock')`)}`,
@@ -96,7 +96,7 @@ export function renderOfficialGithubWorkflow(
     `        uses: ${
       options.githubEnterpriseServer
         ? githubEnterpriseUploadArtifactAction
-        : "actions/upload-artifact@v6"
+        : "actions/upload-artifact@v7"
     }`,
     "        with:",
     `          name: ${githubExpression("steps.pipr.outputs.run-artifact-name")}`,
