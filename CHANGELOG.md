@@ -4,6 +4,13 @@ This changelog is generated from Conventional Commits by Release Please.
 Published releases and downloadable CLI artifacts are available on
 [GitHub Releases](https://github.com/somus/pipr/releases).
 
+## [0.9.2](https://github.com/somus/pipr/compare/v0.9.1...v0.9.2) (2026-10-11)
+
+
+### Bug Fixes
+
+* correct finding outcome, run export, and Data Center fork defects ([#162](https://github.com/somus/pipr/issues/162)) ([eb44c62](https://github.com/somus/pipr/commit/eb44c6245978ef3cab8d182cfa1b487f73d1eb55))
+
 ## [0.9.1](https://github.com/somus/pipr/compare/v0.9.0...v0.9.1) (2026-10-10)
 
 
