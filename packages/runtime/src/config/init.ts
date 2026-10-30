@@ -409,6 +409,7 @@ function starterGiteaActionsWorkflow(
     "  review:",
     "    runs-on: docker",
     "    steps:",
+    // checkout v7 refuses fork pull requests on pull_request_target, which this workflow uses.
     `      - uses: ${setup.checkoutAction ?? "actions/checkout@v6"}`,
     "        with:",
     "          fetch-depth: 0",
